@@ -1,0 +1,67 @@
+[tool.poetry]
+name = "nexus"
+version = "0.1.0"
+description = ""
+authors = ["Alisson <alissonfilipe937@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+django = "^4.2.6"
+djangorestframework = "^3.14.0"
+markdown = "^3.5"
+django-filter = "^23.3"
+pendulum = "^2.1.2"
+django-environ = "^0.11.2"
+gunicorn = "^21.2.0"
+psycopg2-binary = "^2.9.9"
+whitenoise = "^6.6.0"
+gevent = "^23.9.1"
+
+
+[tool.poetry.group.dev.dependencies]
+ipython = "^8.16.1"
+pytest-cov = "^4.1.0"
+taskipy = "^1.12.0"
+blue = "^0.9.1"
+ruff = "^0.1.3"
+isort = "^5.12.0"
+django-pytest = "^0.2.0"
+ignr = "^2.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.ruff]
+line-length = 79
+exclude = ['.venv', 'migrations', 'manage.py', 'wsgi.py', 'asgi.py',]
+
+[tool.isort]
+profile = "black"
+line_length = 79
+extend_skip = ['migrations', 'manage.py', 'wsgi.py', 'asgi.py',]
+
+[tool.pytest.ini_options]
+pythonpath = "."
+python_files = "tests.py test_*.py *_tests.py"
+
+[tool.blue]
+extend-exclude = '''
+    (
+        migrations/
+        | manage.py
+        | settings.py
+    )
+'''
+
+[tool.taskipy.tasks]
+lint = 'ruff . && blue --check . --diff'
+format = 'blue .  && isort .'
+pre_test = 'task lint'
+test = 'pytest -s -x --cov=fast_zero -vv'
+post_test = 'coverage html'
+run = 'python manage.py runserver'
+makemigrations = 'python manage.py makemigrations'
+migrate = 'python manage.py migrate'
