@@ -10,8 +10,9 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 import os
-import environ
 from pathlib import Path
+
+import environ
 
 environ.Env.read_env(env_file=(environ.Path(__file__) - 2)(".env"))
 
@@ -35,6 +36,7 @@ DEBUG = env.bool("DEBUG")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
+AUTH_USER_MODEL = 'users.User'
 
 # Application definition
 
@@ -46,6 +48,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    # apps
+    'nexus.users',
 ]
 
 MIDDLEWARE = [
@@ -110,6 +114,14 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
+LANGUAGES = (
+    ('en-us', 'English'),
+    ('pt-br', 'Portuguese'),
+    ('es', 'Spanish')
+)
+
+DEFAULT_LANGUAGE = 'en-us'
+
 TIME_ZONE = 'UTC'
 
 USE_I18N = True
@@ -124,7 +136,8 @@ STATIC_URL = 'static/'
 
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# STORAGES = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
