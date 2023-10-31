@@ -179,3 +179,5 @@ cython_debug/
 .ruff_cache/
 
 .tool-versions
+
+staticfiles/
