@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'rest_framework',
     # apps
     'nexus.users',
+    'nexus.db',
 ]
 
 MIDDLEWARE = [
