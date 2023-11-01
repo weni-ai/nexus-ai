@@ -1,12 +1,11 @@
 import pytest
 
 from nexus.db.models import BaseModel, SoftDeleteModel
-from nexus.users.models import User
 
 
 @pytest.mark.django_db
-def test_create_base_model():
-    test_user = User.objects.create_user('test@user.com')
+def test_create_base_model(create_user):
+    test_user = create_user
     BaseModel.objects.create(created_by=test_user)
     assert BaseModel.objects.count() == 1
 
