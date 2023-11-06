@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'nexus.users',
     'nexus.db',
     'nexus.orgs',
+    'nexus.projects',
 ]
 
 MIDDLEWARE = [

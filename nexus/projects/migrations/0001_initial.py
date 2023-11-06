@@ -13,16 +13,26 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Org',
+            name='Project',
             fields=[
                 ('uuid', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('modified_at', models.DateTimeField(blank=True, null=True)),
                 ('is_active', models.BooleanField(default=True)),
                 ('name', models.CharField(max_length=255)),
+                ('is_template', models.BooleanField(default=False)),
             ],
             options={
                 'abstract': False,
             },
+        ),
+        migrations.CreateModel(
+            name='TemplateType',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('uuid', models.UUIDField(blank=True, null=True)),
+                ('name', models.CharField(max_length=255)),
+                ('setup', models.JSONField(default=dict)),
+            ],
         ),
     ]
