@@ -16,6 +16,12 @@ class BaseModel(models.Model):
     )
     modified_at = models.DateTimeField(null=True, blank=True)
 
+    class Meta:
+        abstract = True
+
 
 class SoftDeleteModel(models.Model):
     is_active = models.BooleanField(default=True)
+
+    class Meta:
+        abstract = True
