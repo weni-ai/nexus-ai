@@ -8,11 +8,15 @@ from nexus.users.models import User
 class BaseModel(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid4, editable=False)
     created_by = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name='created_objects'
+        User, on_delete=models.PROTECT, related_name='created_%(class)s'
     )
     created_at = models.DateTimeField(auto_now_add=True)
     modified_by = models.ForeignKey(
-        User, on_delete=models.PROTECT, null=True, blank=True
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='modified_%(class)s',
     )
     modified_at = models.DateTimeField(null=True, blank=True)
 
