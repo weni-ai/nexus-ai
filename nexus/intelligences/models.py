@@ -30,7 +30,7 @@ class ContentBase(BaseModel, SoftDeleteModel):
 
 
 class ContentBaseFile(ContentBase):
-    file = models.FileField(upload_to='')
+    file = models.URLField()
     extension_file = models.CharField(max_length=10)
 
 

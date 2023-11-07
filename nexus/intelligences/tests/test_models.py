@@ -1,8 +1,4 @@
-import tempfile
-
 import pytest
-from django.conf import settings
-from django.core.files.uploadedfile import SimpleUploadedFile
 
 from nexus.intelligences.models import (
     ContentBaseFile,
@@ -52,10 +48,9 @@ def test_create_content_base_link(create_user, create_intelligence):
 
 @pytest.mark.django_db
 def test_create_content_base_file(create_user, create_intelligence):
-    settings.MEDIA_ROOT = tempfile.mkdtemp()
     user = create_user
     intel = create_intelligence
-    file = SimpleUploadedFile('test.txt', b'Lorem Ipsum')
+    file = 'https://test.co'
 
     content_base = ContentBaseFile.objects.create(
         title='Test content base',
@@ -65,7 +60,7 @@ def test_create_content_base_file(create_user, create_intelligence):
         extension_file='txt',
     )
 
-    assert content_base.file
+    assert content_base.file == file
     assert content_base.extension_file == 'txt'
 
 
