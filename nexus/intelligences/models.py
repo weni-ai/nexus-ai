@@ -25,18 +25,24 @@ class ContentBase(BaseModel, SoftDeleteModel):
         related_name='%(class)ss',
     )
 
-    class Meta:
-        abstract = True
-
 
 class ContentBaseFile(ContentBase):
     file = models.URLField()
     extension_file = models.CharField(max_length=10)
+    content_base = models.ForeignKey(
+        ContentBase, related_name='contentbasefiles', on_delete=models.CASCADE
+    )
 
 
 class ContentBaseLink(ContentBase):
     link = models.URLField()
+    content_base = models.ForeignKey(
+        ContentBase, related_name='contentbaselinks', on_delete=models.CASCADE
+    )
 
 
 class ContentBaseText(ContentBase):
     text = models.TextField()
+    content_base = models.ForeignKey(
+        ContentBase, related_name='contentbasetexts', on_delete=models.CASCADE
+    )

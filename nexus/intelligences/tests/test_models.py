@@ -33,24 +33,30 @@ def test_create_integrated_intelligence(
 
 
 @pytest.mark.django_db
-def test_create_content_base_link(create_user, create_intelligence):
+def test_create_content_base_link(
+    create_user, create_intelligence, create_content_base
+):
     user = create_user
     intel = create_intelligence
-
+    content_base = create_content_base
     content_base = ContentBaseLink.objects.create(
         title='Test content base',
         intelligence=intel,
         created_by=user,
         link='https://test.co',
+        content_base=content_base,
     )
     assert content_base.link
 
 
 @pytest.mark.django_db
-def test_create_content_base_file(create_user, create_intelligence):
+def test_create_content_base_file(
+    create_user, create_intelligence, create_content_base
+):
     user = create_user
     intel = create_intelligence
     file = 'https://test.co'
+    content_base = create_content_base
 
     content_base = ContentBaseFile.objects.create(
         title='Test content base',
@@ -58,6 +64,7 @@ def test_create_content_base_file(create_user, create_intelligence):
         created_by=user,
         file=file,
         extension_file='txt',
+        content_base=content_base,
     )
 
     assert content_base.file == file
@@ -65,15 +72,19 @@ def test_create_content_base_file(create_user, create_intelligence):
 
 
 @pytest.mark.django_db
-def test_create_content_base_text(create_user, create_intelligence):
+def test_create_content_base_text(
+    create_user, create_intelligence, create_content_base
+):
     user = create_user
     intel = create_intelligence
     text = 'Lorem Ipsum'
+    content_base = create_content_base
     content_base = ContentBaseText.objects.create(
         title='Test content base',
         intelligence=intel,
         created_by=user,
         text=text,
+        content_base=content_base,
     )
 
     assert content_base.text == text
