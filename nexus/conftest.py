@@ -2,8 +2,9 @@ from uuid import uuid4
 
 from pytest import fixture
 
+from nexus.intelligences.models import ContentBase, Intelligence
 from nexus.orgs.models import Org
-from nexus.projects.models import TemplateType
+from nexus.projects.models import Project, TemplateType
 from nexus.users.models import User
 
 
@@ -24,4 +25,31 @@ def create_template_type():
     return TemplateType.objects.create(
         uuid=uuid4(),
         name='Test Template Type',
+    )
+
+
+@fixture
+def create_intelligence(create_org, create_user):
+    org = create_org
+    user = create_user
+    return Intelligence.objects.create(
+        name='Test Intelligence', org=org, created_by=user
+    )
+
+
+@fixture
+def create_project(create_org, create_user):
+    org = create_org
+    user = create_user
+    return Project.objects.create(
+        name='Test Project', org=org, created_by=user
+    )
+
+
+@fixture
+def create_content_base(create_user, create_intelligence):
+    intelligence = create_intelligence
+    user = create_user
+    return ContentBase.objects.create(
+        title='test content base', intelligence=intelligence, created_by=user
     )
