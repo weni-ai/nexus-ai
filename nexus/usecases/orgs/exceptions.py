@@ -1,0 +1,2 @@
+class OrgDoesNotExists(Exception):
+    pass
