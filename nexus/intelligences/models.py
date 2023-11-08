@@ -7,6 +7,7 @@ from nexus.orgs.models import Org
 class Intelligence(BaseModel, SoftDeleteModel):
     name = models.CharField(max_length=255)
     content_bases_count = models.PositiveBigIntegerField(default=0)
+    description = models.TextField(null=True, blank=True)
     org = models.ForeignKey(
         Org, on_delete=models.CASCADE, related_name='intelligences'
     )
