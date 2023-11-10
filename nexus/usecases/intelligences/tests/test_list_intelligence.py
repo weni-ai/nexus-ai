@@ -1,5 +1,5 @@
 from django.test import TestCase
-from ..list import ListIntelligencesUseCases
+from ..list import ListIntelligencesUseCase
 
 from nexus.orgs.models import Org
 from nexus.users.models import User
@@ -24,6 +24,6 @@ class TestListIntelligenceUseCase(TestCase):
         )
 
     def test_count_intelligence_use_case(self):
-        use_case = ListIntelligencesUseCases()
+        use_case = ListIntelligencesUseCase()
         intelligences_list = use_case.get_org_intelligences(self.org.uuid)
         self.assertEqual(1, len(intelligences_list))

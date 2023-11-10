@@ -3,7 +3,7 @@ from rest_framework.mixins import ListModelMixin
 from rest_framework.pagination import CursorPagination
 
 from .serializers import IntelligenceSerializer
-from nexus.usecases.intelligences import ListIntelligencesUseCases
+from nexus.usecases.intelligences import ListIntelligencesUseCase
 
 
 class CustomCursorPagination(CursorPagination):
@@ -17,9 +17,6 @@ class IntelligecesViewset(ListModelMixin, GenericViewSet):
     pagination_class = CustomCursorPagination
 
     def get_queryset(self):
-        use_case = ListIntelligencesUseCases()
+        use_case = ListIntelligencesUseCase()
         org_uuid = self.kwargs.get('org_uuid')
         return use_case.get_org_intelligences(org_uuid)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)

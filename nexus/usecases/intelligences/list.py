@@ -2,7 +2,7 @@ from nexus.intelligences.models import Intelligence
 from nexus.usecases import orgs
 
 
-class ListIntelligencesUseCases():
+class ListIntelligencesUseCase():
 
     def __init__(self):
         pass

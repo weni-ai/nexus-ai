@@ -1,1 +1,1 @@
-from .list import ListIntelligencesUseCases
+from .list import ListIntelligencesUseCase
