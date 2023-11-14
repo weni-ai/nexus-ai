@@ -22,10 +22,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: push-backend
-        tags: |
-          type=semver,pattern={{version}}-develop
-          type=semver,pattern={{version}}-staging
-          type=semver,pattern={{version}}
+          tags: |
+            type=semver,pattern={{version}}-develop
+            type=semver,pattern={{version}}-staging
+            type=semver,pattern={{version}}
 
       - name: Set variables
         run: |
