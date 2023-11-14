@@ -11,7 +11,7 @@ ARG BUILD_DEPS="\
   build-essential \
   git cmake \
   autoconf pkg-config autoconf libtool automake \
-  libmariadb-dev npm"
+  libmariadb-dev"
 # default-libmysqlclient-dev
 ARG RUNTIME_DEPS="\
   tzdata \
