@@ -12,7 +12,8 @@ from .serializers import IntelligenceSerializer
 from nexus.usecases.intelligences import (
     ListIntelligencesUseCase,
     CreateIntelligencesUseCase,
-    UpdateIntelligenceUseCase
+    UpdateIntelligenceUseCase,
+    DeleteIntelligenceUseCase
 )
 
 
@@ -70,4 +71,17 @@ class IntelligecesViewset(
         return Response(
             IntelligenceSerializer(update_intelligence).data,
             status=status.HTTP_200_OK
+        )
+
+    def destroy(self, request):
+        use_case = DeleteIntelligenceUseCase()
+
+        intelligence_uuid = request.data.get('intelligence_uuid')
+
+        use_case.delete_intelligences(
+            intelligence_uuid=intelligence_uuid
+        )
+
+        return Response(
+            status=status.HTTP_204_NO_CONTENT
         )

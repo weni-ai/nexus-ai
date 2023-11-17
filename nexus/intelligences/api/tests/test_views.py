@@ -15,7 +15,8 @@ class TestIntelligencesViewset(TestCase):
         self.view = IntelligecesViewset.as_view({
             'get': 'list',
             'post': 'create',
-            'put': 'update'
+            'put': 'update',
+            'delete': 'destroy'
         })
         self.user = User.objects.create(
             email='test3@user.com',
@@ -64,3 +65,16 @@ class TestIntelligencesViewset(TestCase):
         response = self.view(request)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['name'], data['name'])
+
+    def test_delete(self):
+        data = {
+            'intelligence_uuid': str(self.intelligence.uuid),
+        }
+        url_delete = f'{self.url}/{self.intelligence.uuid}/'
+        request = self.factory.delete(
+            url_delete,
+            json.dumps(data),
+            content_type='application/json'
+        )
+        response = self.view(request)
+        self.assertEqual(response.status_code, 204)
