@@ -1,0 +1,2 @@
+class IntelligenceDoesNotExist(Exception):
+    pass

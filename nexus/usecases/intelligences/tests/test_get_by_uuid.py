@@ -1,10 +1,12 @@
 from uuid import uuid4
 from django.test import TestCase
 from django.core.exceptions import ValidationError
+
 from ..get_by_uuid import get_by_uuid
-from ..exceptions import OrgDoesNotExists
+from ..exceptions import IntelligenceDoesNotExist
 from nexus.orgs.models import Org
 from nexus.users.models import User
+from nexus.intelligences.models import Intelligence
 
 
 class GetByUuidTestCase(TestCase):
@@ -18,19 +20,24 @@ class GetByUuidTestCase(TestCase):
             name='Test Org',
             created_by=self.user,
         )
+        self.intelligence = Intelligence.objects.create(
+            name='Test Intelligence',
+            created_by=self.user,
+            org=self.org
+        )
 
     def test_get_by_uuid(self):
-        retrieved_org = get_by_uuid(self.org.uuid)
-        self.assertEqual(self.org, retrieved_org)
+        retrieved_intelligence = get_by_uuid(self.intelligence.uuid)
+        self.assertEqual(self.intelligence, retrieved_intelligence)
 
     def test_get_by_uuid_nonexistent(self):
         with self.assertRaises(ValidationError):
             get_by_uuid("nonexistent_uuid")
 
     def test_get_by_uuid_invalid(self):
-        with self.assertRaises(OrgDoesNotExists):
+        with self.assertRaises(IntelligenceDoesNotExist):
             get_by_uuid(uuid4().hex)
 
     def test_get_by_uuid_none(self):
-        with self.assertRaises(OrgDoesNotExists):
+        with self.assertRaises(IntelligenceDoesNotExist):
             get_by_uuid(None)
