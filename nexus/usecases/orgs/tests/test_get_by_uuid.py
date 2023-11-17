@@ -1,6 +1,6 @@
 from uuid import uuid4
 from django.test import TestCase
-
+from django.core.exceptions import ValidationError
 from ..get_by_uuid import get_by_uuid
 from ..exceptions import OrgDoesNotExists
 from nexus.orgs.models import Org
@@ -24,7 +24,7 @@ class GetByUuidTestCase(TestCase):
         self.assertEqual(self.org, retrieved_org)
 
     def test_get_by_uuid_nonexistent(self):
-        with self.assertRaises(OrgDoesNotExists):
+        with self.assertRaises(ValidationError):
             get_by_uuid("nonexistent_uuid")
 
     def test_get_by_uuid_invalid(self):

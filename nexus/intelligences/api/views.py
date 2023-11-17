@@ -16,7 +16,7 @@ class CustomCursorPagination(CursorPagination):
     ordering = "created_at"
 
 
-class IntelligecesViewset(
+class IntelligencesViewset(
     ListModelMixin,
     CreateModelMixin,
     GenericViewSet
