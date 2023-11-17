@@ -1,13 +1,18 @@
 from rest_framework import status
 from rest_framework.viewsets import GenericViewSet
-from rest_framework.mixins import ListModelMixin, CreateModelMixin
+from rest_framework.mixins import (
+    ListModelMixin,
+    CreateModelMixin,
+    UpdateModelMixin
+)
 from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
 
 from .serializers import IntelligenceSerializer
 from nexus.usecases.intelligences import (
     ListIntelligencesUseCase,
-    CreateIntelligencesUseCase
+    CreateIntelligencesUseCase,
+    UpdateIntelligenceUseCase
 )
 
 
@@ -19,6 +24,7 @@ class CustomCursorPagination(CursorPagination):
 class IntelligecesViewset(
     ListModelMixin,
     CreateModelMixin,
+    UpdateModelMixin,
     GenericViewSet
 ):
 
@@ -50,4 +56,18 @@ class IntelligecesViewset(
         return Response(
             IntelligenceSerializer(intelligence).data,
             status=status.HTTP_201_CREATED
+        )
+
+    def update(self, request):
+        use_case = UpdateIntelligenceUseCase()
+
+        update_intelligence = use_case.update_intelligences(
+            intelligence_uuid=request.data.get('intelligence_uuid'),
+            name=request.data.get('name'),
+            description=request.data.get('description')
+        )
+
+        return Response(
+            IntelligenceSerializer(update_intelligence).data,
+            status=status.HTTP_200_OK
         )
