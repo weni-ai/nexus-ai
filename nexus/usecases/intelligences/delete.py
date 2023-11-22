@@ -1,4 +1,4 @@
-from .get_by_uuid import get_by_uuid
+from .get_by_uuid import get_by_intelligence_uuid
 
 
 class DeleteIntelligenceUseCase():
@@ -8,6 +8,6 @@ class DeleteIntelligenceUseCase():
             intelligence_uuid: str
     ):
 
-        intelligence = get_by_uuid(intelligence_uuid)
+        intelligence = get_by_intelligence_uuid(intelligence_uuid)
         intelligence.delete()
         return True

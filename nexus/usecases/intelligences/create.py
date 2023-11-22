@@ -30,7 +30,7 @@ class CreateContentBaseUseCase():
     ) -> ContentBase:
 
         user = users.get_by_email(user_email)
-        intelligence = intelligences.get_by_uuid(intelligence_uuid)
+        intelligence = intelligences.get_by_intelligence_uuid(intelligence_uuid)
         contentbase = ContentBase.objects.create(
             title=title,
             intelligence=intelligence,

@@ -1,4 +1,4 @@
-from .get_by_uuid import get_by_uuid
+from .get_by_uuid import get_by_intelligence_uuid
 
 
 class UpdateIntelligenceUseCase():
@@ -13,7 +13,7 @@ class UpdateIntelligenceUseCase():
             description: str = None,
     ):
 
-        intelligence = get_by_uuid(intelligence_uuid)
+        intelligence = get_by_intelligence_uuid(intelligence_uuid)
 
         if name:
             intelligence.name = name
