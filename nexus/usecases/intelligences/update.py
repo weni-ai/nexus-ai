@@ -1,4 +1,4 @@
-from .get_by_uuid import get_by_intelligence_uuid
+from .get_by_uuid import get_by_intelligence_uuid, get_by_contentbase_uuid
 
 
 class UpdateIntelligenceUseCase():
@@ -24,3 +24,24 @@ class UpdateIntelligenceUseCase():
         intelligence.save()
 
         return intelligence
+
+
+class UpdateContentBaseUseCase():
+
+    def __init__(self):
+        pass
+
+    def update_contentbase(
+            self,
+            contentbase_uuid: str,
+            title: str = None,
+    ):
+
+        contentbase = get_by_contentbase_uuid(contentbase_uuid)
+
+        if title:
+            contentbase.title = title
+
+        contentbase.save()
+
+        return contentbase
