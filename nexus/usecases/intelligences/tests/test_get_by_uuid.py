@@ -4,16 +4,24 @@ from django.core.exceptions import ValidationError
 
 from ..get_by_uuid import (
     get_by_intelligence_uuid,
-    get_by_contentbase_uuid
+    get_by_contentbase_uuid,
+    get_by_contentbasetext_uuid
 )
-from ..exceptions import IntelligenceDoesNotExist, ContentBaseDoesNotExist
-from .intelligence_factory import IntelligenceFactory, ContentBaseFactory
+from ..exceptions import (
+    IntelligenceDoesNotExist,
+    ContentBaseDoesNotExist,
+    ContentBaseTextDoesNotExist
+)
+from .intelligence_factory import (
+    IntelligenceFactory,
+    ContentBaseFactory,
+    ContentBaseTextFactory
+)
 
 
 class GetByIntelligenceUuidTestCase(TestCase):
 
     def setUp(self):
-
         self.intelligence = IntelligenceFactory()
 
     def test_get_by_uuid(self):
@@ -58,3 +66,27 @@ class GetByContentBaseUuidTestCase(TestCase):
     def test_get_by_uuid_none(self):
         with self.assertRaises(ContentBaseDoesNotExist):
             get_by_contentbase_uuid(None)
+
+
+class GetByContentBaseTextUuidTestCase(TestCase):
+
+    def setUp(self):
+        self.contentbasetext = ContentBaseTextFactory()
+
+    def test_get_by_uuid(self):
+        retrieved_contentbasetext = get_by_contentbasetext_uuid(
+            self.contentbasetext.uuid
+        )
+        self.assertEqual(self.contentbasetext, retrieved_contentbasetext)
+
+    def test_get_by_uuid_nonexistent(self):
+        with self.assertRaises(ValidationError):
+            get_by_contentbasetext_uuid("nonexistent_uuid")
+
+    def test_get_by_uuid_invalid(self):
+        with self.assertRaises(ContentBaseTextDoesNotExist):
+            get_by_contentbasetext_uuid(uuid4().hex)
+
+    def test_get_by_uuid_none(self):
+        with self.assertRaises(ContentBaseTextDoesNotExist):
+            get_by_contentbasetext_uuid(None)

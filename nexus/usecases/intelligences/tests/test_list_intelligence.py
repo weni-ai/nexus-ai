@@ -1,7 +1,15 @@
 from django.test import TestCase
 
-from ..list import ListIntelligencesUseCase, ListContentBaseUseCase
-from .intelligence_factory import IntelligenceFactory, ContentBaseFactory
+from ..list import (
+    ListIntelligencesUseCase,
+    ListContentBaseUseCase,
+    ListContentBaseTextUseCase
+)
+from .intelligence_factory import (
+    IntelligenceFactory,
+    ContentBaseFactory,
+    ContentBaseTextFactory
+)
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 
 
@@ -30,3 +38,16 @@ class TestListContentBaseUseCase(TestCase):
             self.intelligence.uuid
         )
         self.assertEqual(1, len(contentbase_list))
+
+
+class TestListContentBaseTextUseCase(TestCase):
+
+    def setUp(self):
+        self.contentbasetext = ContentBaseTextFactory()
+
+    def test_count_contentbasetext_use_case(self):
+        use_case = ListContentBaseTextUseCase()
+        contentbasetext_list = use_case.get_contentbase_contentbasetexts(
+            self.contentbasetext.content_base.uuid
+        )
+        self.assertEqual(1, len(contentbasetext_list))
