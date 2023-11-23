@@ -2,18 +2,16 @@ from django.test import TestCase
 
 from ..get_by_email import get_by_email
 from ..exceptions import UserDoesNotExists
-from nexus.users.models import User
+from .user_factory import UserFactory
 
 
 class TestGetByEmailTestCase(TestCase):
 
     def setUp(self):
-        self.user = User.objects.create(
-            email='test_userg@user.com',
-            language='en'
-        )
+        self.user = UserFactory().build()
 
     def test_get_by_email(self):
+        print(self.user.__dict__)
         retrieved_user = get_by_email(self.user.email)
         self.assertEqual(self.user, retrieved_user)
 
