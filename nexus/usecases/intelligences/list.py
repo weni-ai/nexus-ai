@@ -37,4 +37,4 @@ class ListContentBaseTextUseCase():
 
     def get_contentbase_contentbasetexts(self, contentbase_uuid: str):
         contentbase = get_by_contentbase_uuid(contentbase_uuid)
-        return ContentBaseText.objects.filter(contentbase=contentbase)
+        return ContentBaseText.objects.filter(content_base=contentbase)

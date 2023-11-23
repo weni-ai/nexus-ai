@@ -60,7 +60,8 @@ class CreateContentBaseTextUseCase():
         )
         contentbasetext = ContentBaseText.objects.create(
             text=text,
-            contentbase=contentbase,
-            created_by=user
+            content_base=contentbase,
+            created_by=user,
+            intelligence=contentbase.intelligence
         )
         return contentbasetext
