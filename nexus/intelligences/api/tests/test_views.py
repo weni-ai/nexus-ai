@@ -2,11 +2,19 @@ import json
 
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory
-from ..views import IntelligencesViewset, ContentBaseViewset
+from ..views import (
+    IntelligencesViewset,
+    ContentBaseViewset,
+    ContentBaseTextViewset
+)
 
 from nexus.orgs.models import Org
 from nexus.users.models import User
-from nexus.intelligences.models import Intelligence, ContentBase
+from nexus.intelligences.models import (
+    Intelligence,
+    ContentBase,
+    ContentBaseText
+    )
 
 
 class TestIntelligencesViewset(TestCase):
@@ -108,7 +116,7 @@ class TestContentBaseViewset(TestCase):
             created_by=self.user,
             title="title"
         )
-        self.url = f'{self.org.uuid}/intelligences/'
+        self.url = f'{self.org.uuid}/intelligences/content-bases'
 
     def test_get_queryset(self):
 
@@ -159,3 +167,78 @@ class TestContentBaseViewset(TestCase):
         )
         response = self.view(request)
         self.assertEqual(response.status_code, 204)
+
+
+class TestContentBaseTextViewset(TestCase):
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.view = ContentBaseTextViewset.as_view({
+            'get': 'list',
+            'post': 'create',
+            'put': 'update',
+            'delete': 'destroy'
+        })
+        self.user = User.objects.create(
+            email='test3@user.com',
+            language='en'
+        )
+        self.org = Org.objects.create(
+            name='Test Org',
+            created_by=self.user,
+        )
+        self.intelligence = Intelligence.objects.create(
+            name='Test Intelligence',
+            description='Test Intelligence Description',
+            created_by=self.user,
+            org=self.org
+        )
+        self.content_base = ContentBase.objects.create(
+            intelligence=self.intelligence,
+            created_by=self.user,
+            title="title"
+        )
+        self.contentbasetext = ContentBaseText.objects.create(
+            content_base=self.content_base,
+            created_by=self.user,
+            text="text",
+            intelligence=self.intelligence
+        )
+        self.url = f'{self.org.uuid}/intelligences/content-bases-text'
+
+    def test_get_queryset(self):
+        
+        request = self.factory.get(self.url)
+        response = self.view(
+            request,
+            contentbase_uuid=str(self.content_base.uuid)
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_create(self):
+        data = {
+            'text': 'text',
+            'email': self.user.email,
+            'intelligence_uuid': str(self.intelligence.uuid),
+        }
+        request = self.factory.post(self.url, data)
+        response = self.view(
+            request,
+            contentbase_uuid=str(self.content_base.uuid)
+        )
+        self.assertEqual(response.status_code, 201)
+
+    def test_update(self):
+        data = {
+            'text': 'text',
+            'contentbasetext_uuid': str(self.contentbasetext.uuid),
+        }
+        url_put = f'{self.url}/{self.contentbasetext.uuid}/'
+        request = self.factory.put(
+            url_put,
+            json.dumps(data),
+            content_type='application/json'
+        )
+        response = self.view(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['text'], data['text'])
