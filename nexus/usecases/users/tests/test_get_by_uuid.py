@@ -11,7 +11,6 @@ class TestGetByEmailTestCase(TestCase):
         self.user = UserFactory()
 
     def test_get_by_email(self):
-        print(self.user.__dict__)
         retrieved_user = get_by_email(self.user.email)
         self.assertEqual(self.user, retrieved_user)
 

@@ -11,8 +11,8 @@ from nexus.usecases.users.tests.user_factory import UserFactory
 class TestListIntelligenceUseCase(TestCase):
 
     def setUp(self):
-        self.org = OrgFactory()
         self.user = UserFactory()
+        self.org = OrgFactory(created_by=self.user)
 
     def test_create_intelligence_use_case(self):
         use_case = CreateIntelligencesUseCase()
@@ -28,8 +28,8 @@ class TestListIntelligenceUseCase(TestCase):
 class TestCreateContentBaseUseCase(TestCase):
 
     def setUp(self):
-        self.org = OrgFactory()
         self.user = UserFactory()
+        self.org = OrgFactory(created_by=self.user)
         self.intelligence = CreateIntelligencesUseCase().create_intelligences(
             name="name",
             description="description",
