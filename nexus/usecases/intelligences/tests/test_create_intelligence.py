@@ -4,21 +4,15 @@ from ..create import (
     CreateIntelligencesUseCase,
     CreateContentBaseUseCase
 )
-from nexus.orgs.models import Org
-from nexus.users.models import User
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.usecases.users.tests.user_factory import UserFactory
 
 
 class TestListIntelligenceUseCase(TestCase):
 
     def setUp(self):
-        self.user = User.objects.create(
-            email='test3@user.com',
-            language='en'
-        )
-        self.org = Org.objects.create(
-            name='Test Org',
-            created_by=self.user,
-        )
+        self.org = OrgFactory()
+        self.user = UserFactory()
 
     def test_create_intelligence_use_case(self):
         use_case = CreateIntelligencesUseCase()
@@ -34,14 +28,8 @@ class TestListIntelligenceUseCase(TestCase):
 class TestCreateContentBaseUseCase(TestCase):
 
     def setUp(self):
-        self.user = User.objects.create(
-            email='test3@user.com',
-            language='en'
-        )
-        self.org = Org.objects.create(
-            name='Test Org',
-            created_by=self.user,
-        )
+        self.org = OrgFactory()
+        self.user = UserFactory()
         self.intelligence = CreateIntelligencesUseCase().create_intelligences(
             name="name",
             description="description",
