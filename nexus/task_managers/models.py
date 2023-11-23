@@ -9,12 +9,13 @@ from nexus.users.models import User
 # 
 class TaskManager(models.Model):
     STATUS_WAITING = "waiting"
-    STATUS_UPLOADING = "uploading"
+    STATUS_LOADING = "loading"
+    STATUS_PROCESSING = "Processing"
     STATUS_SUCCESS = "success"
     STATUS_FAIL = "fail"
 
     STATUS_CHOICES = [
-        (STATUS_UPLOADING, "Uploading"),
+        (STATUS_LOADING, "Loading"),
         (STATUS_SUCCESS, "Success"),
         (STATUS_FAIL, "Fail"),
         (STATUS_WAITING, "Wait")
