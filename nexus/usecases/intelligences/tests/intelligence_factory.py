@@ -6,7 +6,7 @@ from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
 
-class IntelligenceFactory(factory.Factory):
+class IntelligenceFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Intelligence
 

@@ -5,7 +5,7 @@ from nexus.orgs.models import Org
 from nexus.usecases.users.tests.user_factory import UserFactory
 
 
-class OrgFactory(factory.Factory):
+class OrgFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Org
 

@@ -8,7 +8,7 @@ from .user_factory import UserFactory
 class TestGetByEmailTestCase(TestCase):
 
     def setUp(self):
-        self.user = UserFactory().build()
+        self.user = UserFactory()
 
     def test_get_by_email(self):
         print(self.user.__dict__)
