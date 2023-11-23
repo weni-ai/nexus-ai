@@ -8,13 +8,13 @@ from ..views import (
     ContentBaseTextViewset
 )
 
-from nexus.orgs.models import Org
-from nexus.users.models import User
-from nexus.intelligences.models import (
-    Intelligence,
-    ContentBase,
-    ContentBaseText
-    )
+from nexus.usecases.users.tests.user_factory import UserFactory
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.usecases.intelligences.tests.intelligence_factory import (
+    IntelligenceFactory,
+    ContentBaseFactory,
+    ContentBaseTextFactory
+)
 
 
 class TestIntelligencesViewset(TestCase):
@@ -26,17 +26,11 @@ class TestIntelligencesViewset(TestCase):
             'put': 'update',
             'delete': 'destroy'
         })
-        self.user = User.objects.create(
-            email='test3@user.com',
-            language='en'
+        self.user = UserFactory()
+        self.org = OrgFactory(
+            created_by=self.user
         )
-        self.org = Org.objects.create(
-            name='Test Org',
-            created_by=self.user,
-        )
-        self.intelligence = Intelligence.objects.create(
-            name='Test Intelligence',
-            description='Test Intelligence Description',
+        self.intelligence = IntelligenceFactory(
             created_by=self.user,
             org=self.org
         )
@@ -97,24 +91,17 @@ class TestContentBaseViewset(TestCase):
             'put': 'update',
             'delete': 'destroy'
         })
-        self.user = User.objects.create(
-            email='test3@user.com',
-            language='en'
+        self.user = UserFactory()
+        self.org = OrgFactory(
+            created_by=self.user
         )
-        self.org = Org.objects.create(
-            name='Test Org',
-            created_by=self.user,
-        )
-        self.intelligence = Intelligence.objects.create(
-            name='Test Intelligence',
-            description='Test Intelligence Description',
+        self.intelligence = IntelligenceFactory(
             created_by=self.user,
             org=self.org
         )
-        self.contentbase = ContentBase.objects.create(
-            intelligence=self.intelligence,
+        self.contentbase = ContentBaseFactory(
             created_by=self.user,
-            title="title"
+            intelligence=self.intelligence
         )
         self.url = f'{self.org.uuid}/intelligences/content-bases'
 
@@ -179,30 +166,21 @@ class TestContentBaseTextViewset(TestCase):
             'put': 'update',
             'delete': 'destroy'
         })
-        self.user = User.objects.create(
-            email='test3@user.com',
-            language='en'
+        self.user = UserFactory()
+        self.org = OrgFactory(
+            created_by=self.user
         )
-        self.org = Org.objects.create(
-            name='Test Org',
-            created_by=self.user,
-        )
-        self.intelligence = Intelligence.objects.create(
-            name='Test Intelligence',
-            description='Test Intelligence Description',
+        self.intelligence = IntelligenceFactory(
             created_by=self.user,
             org=self.org
         )
-        self.content_base = ContentBase.objects.create(
-            intelligence=self.intelligence,
+        self.content_base = ContentBaseFactory(
             created_by=self.user,
-            title="title"
-        )
-        self.contentbasetext = ContentBaseText.objects.create(
-            content_base=self.content_base,
-            created_by=self.user,
-            text="text",
             intelligence=self.intelligence
+        )
+        self.contentbasetext = ContentBaseTextFactory(
+            created_by=self.user,
+            content_base=self.content_base
         )
         self.url = f'{self.org.uuid}/intelligences/content-bases-text'
 
