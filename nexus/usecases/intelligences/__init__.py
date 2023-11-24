@@ -1,8 +1,25 @@
-from .list import ListIntelligencesUseCase
+from .list import (
+    ListIntelligencesUseCase,
+    ListContentBaseUseCase,
+    ListContentBaseTextUseCase
+)
 from .create import (
     CreateIntelligencesUseCase,
-    CreateContentBaseUseCase
+    CreateContentBaseUseCase,
+    CreateContentBaseTextUseCase
 )
-from .update import UpdateIntelligenceUseCase
-from .delete import DeleteIntelligenceUseCase
-from .get_by_uuid import get_by_intelligence_uuid
+from .update import (
+    UpdateIntelligenceUseCase,
+    UpdateContentBaseUseCase,
+    UpdateContentBaseTextUseCase
+)
+from .delete import (
+    DeleteIntelligenceUseCase,
+    DeleteContentBaseUseCase,
+    DeleteContentBaseTextUseCase
+)
+from .get_by_uuid import (
+    get_by_intelligence_uuid,
+    get_by_contentbase_uuid,
+    get_by_contentbasetext_uuid
+)

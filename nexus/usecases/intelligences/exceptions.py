@@ -4,3 +4,7 @@ class IntelligenceDoesNotExist(Exception):
 
 class ContentBaseDoesNotExist(Exception):
     pass
+
+
+class ContentBaseTextDoesNotExist(Exception):
+    pass

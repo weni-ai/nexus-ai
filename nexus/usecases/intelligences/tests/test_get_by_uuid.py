@@ -4,30 +4,25 @@ from django.core.exceptions import ValidationError
 
 from ..get_by_uuid import (
     get_by_intelligence_uuid,
-    get_by_contentbase_uuid
+    get_by_contentbase_uuid,
+    get_by_contentbasetext_uuid
 )
-from ..exceptions import IntelligenceDoesNotExist, ContentBaseDoesNotExist
-from nexus.orgs.models import Org
-from nexus.users.models import User
-from nexus.intelligences.models import Intelligence, ContentBase
+from ..exceptions import (
+    IntelligenceDoesNotExist,
+    ContentBaseDoesNotExist,
+    ContentBaseTextDoesNotExist
+)
+from .intelligence_factory import (
+    IntelligenceFactory,
+    ContentBaseFactory,
+    ContentBaseTextFactory
+)
 
 
 class GetByIntelligenceUuidTestCase(TestCase):
 
     def setUp(self):
-        self.user = User.objects.create(
-            email='test_org@user.com',
-            language='en'
-        )
-        self.org = Org.objects.create(
-            name='Test Org',
-            created_by=self.user,
-        )
-        self.intelligence = Intelligence.objects.create(
-            name='Test Intelligence',
-            created_by=self.user,
-            org=self.org
-        )
+        self.intelligence = IntelligenceFactory()
 
     def test_get_by_uuid(self):
         retrieved_intelligence = get_by_intelligence_uuid(
@@ -52,24 +47,7 @@ class GetByContentBaseUuidTestCase(TestCase):
 
     def setUp(self):
 
-        self.user = User.objects.create(
-            email='test_org@user.com',
-            language='en'
-        )
-        self.org = Org.objects.create(
-            name='Test Org',
-            created_by=self.user,
-        )
-        self.intelligence = Intelligence.objects.create(
-            name='Test Intelligence',
-            created_by=self.user,
-            org=self.org
-        )
-        self.contentbase = ContentBase.objects.create(
-            intelligence=self.intelligence,
-            created_by=self.user,
-            title="title"
-        )
+        self.contentbase = ContentBaseFactory()
 
     def test_get_by_uuid(self):
         retrieved_contentbase = get_by_contentbase_uuid(
@@ -88,3 +66,27 @@ class GetByContentBaseUuidTestCase(TestCase):
     def test_get_by_uuid_none(self):
         with self.assertRaises(ContentBaseDoesNotExist):
             get_by_contentbase_uuid(None)
+
+
+class GetByContentBaseTextUuidTestCase(TestCase):
+
+    def setUp(self):
+        self.contentbasetext = ContentBaseTextFactory()
+
+    def test_get_by_uuid(self):
+        retrieved_contentbasetext = get_by_contentbasetext_uuid(
+            self.contentbasetext.uuid
+        )
+        self.assertEqual(self.contentbasetext, retrieved_contentbasetext)
+
+    def test_get_by_uuid_nonexistent(self):
+        with self.assertRaises(ValidationError):
+            get_by_contentbasetext_uuid("nonexistent_uuid")
+
+    def test_get_by_uuid_invalid(self):
+        with self.assertRaises(ContentBaseTextDoesNotExist):
+            get_by_contentbasetext_uuid(uuid4().hex)
+
+    def test_get_by_uuid_none(self):
+        with self.assertRaises(ContentBaseTextDoesNotExist):
+            get_by_contentbasetext_uuid(None)
