@@ -1,6 +1,14 @@
 from django.test import TestCase
-from ..update import UpdateIntelligenceUseCase, UpdateContentBaseUseCase
-from .intelligence_factory import IntelligenceFactory, ContentBaseFactory
+from ..update import (
+    UpdateIntelligenceUseCase,
+    UpdateContentBaseUseCase,
+    UpdateContentBaseTextUseCase
+)
+from .intelligence_factory import (
+    IntelligenceFactory,
+    ContentBaseFactory,
+    ContentBaseTextFactory
+)
 
 
 class TestUpdateIntelligenceUseCase(TestCase):
@@ -51,3 +59,18 @@ class TestUpdateContentBaseUseCase(TestCase):
             title=new_title
         )
         self.assertEqual(updated_contentbase.title, new_title)
+
+
+class TestUpdateContentBaseTextUseCase(TestCase):
+
+    def setUp(self):
+        self.contentbasetext = ContentBaseTextFactory()
+
+    def test_update_contentbasetext_text(self):
+        new_text = 'New Text'
+        use_case = UpdateContentBaseTextUseCase()
+        updated_contentbasetext = use_case.update_contentbasetext(
+            contentbasetext_uuid=self.contentbasetext.uuid,
+            text=new_text
+        )
+        self.assertEqual(updated_contentbasetext.text, new_text)

@@ -1,4 +1,8 @@
-from nexus.intelligences.models import Intelligence, ContentBase
+from nexus.intelligences.models import (
+    Intelligence,
+    ContentBase,
+    ContentBaseText
+)
 from nexus.usecases import orgs, users, intelligences
 
 
@@ -39,3 +43,25 @@ class CreateContentBaseUseCase():
             created_by=user
         )
         return contentbase
+
+
+class CreateContentBaseTextUseCase():
+
+    def create_contentbasetext(
+            self,
+            contentbase_uuid: str,
+            user_email: str,
+            text: str,
+    ) -> ContentBaseText:
+
+        user = users.get_by_email(user_email)
+        contentbase = intelligences.get_by_contentbase_uuid(
+            contentbase_uuid
+        )
+        contentbasetext = ContentBaseText.objects.create(
+            text=text,
+            content_base=contentbase,
+            created_by=user,
+            intelligence=contentbase.intelligence
+        )
+        return contentbasetext
