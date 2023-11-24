@@ -21,7 +21,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: nexus-ai:backend
+          images: nexus-ai:backend-
           tags: |
             type=semver,pattern={{version}}-develop
             type=semver,pattern={{version}}-staging
