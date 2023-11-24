@@ -1,29 +1,53 @@
 from django.test import TestCase
-from ..list import ListIntelligencesUseCase
 
-from nexus.orgs.models import Org
-from nexus.users.models import User
-from nexus.intelligences.models import Intelligence
+from ..list import (
+    ListIntelligencesUseCase,
+    ListContentBaseUseCase,
+    ListContentBaseTextUseCase
+)
+from .intelligence_factory import (
+    IntelligenceFactory,
+    ContentBaseFactory,
+    ContentBaseTextFactory
+)
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
 
 
 class TestListIntelligenceUseCase(TestCase):
 
     def setUp(self):
-        self.user = User.objects.create(
-            email='test3@user.com',
-            language='en'
-        )
-        self.org = Org.objects.create(
-            name='Test Org',
-            created_by=self.user,
-        )
-        self.intelligence = Intelligence.objects.create(
-            name='Test Intelligence',
-            org=self.org,
-            created_by=self.user,
-        )
+        self.org = OrgFactory()
+        self.intelligence = IntelligenceFactory(org=self.org)
 
     def test_count_intelligence_use_case(self):
         use_case = ListIntelligencesUseCase()
         intelligences_list = use_case.get_org_intelligences(self.org.uuid)
         self.assertEqual(1, len(intelligences_list))
+
+
+class TestListContentBaseUseCase(TestCase):
+
+    def setUp(self):
+
+        self.intelligence = IntelligenceFactory()
+        self.contentbase = ContentBaseFactory(intelligence=self.intelligence)
+
+    def test_count_contentbase_use_case(self):
+        use_case = ListContentBaseUseCase()
+        contentbase_list = use_case.get_intelligence_contentbases(
+            self.intelligence.uuid
+        )
+        self.assertEqual(1, len(contentbase_list))
+
+
+class TestListContentBaseTextUseCase(TestCase):
+
+    def setUp(self):
+        self.contentbasetext = ContentBaseTextFactory()
+
+    def test_count_contentbasetext_use_case(self):
+        use_case = ListContentBaseTextUseCase()
+        contentbasetext_list = use_case.get_contentbase_contentbasetexts(
+            self.contentbasetext.content_base.uuid
+        )
+        self.assertEqual(1, len(contentbasetext_list))

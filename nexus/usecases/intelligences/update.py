@@ -1,4 +1,8 @@
-from .get_by_uuid import get_by_uuid
+from .get_by_uuid import (
+    get_by_intelligence_uuid,
+    get_by_contentbase_uuid,
+    get_by_contentbasetext_uuid
+)
 
 
 class UpdateIntelligenceUseCase():
@@ -13,7 +17,7 @@ class UpdateIntelligenceUseCase():
             description: str = None,
     ):
 
-        intelligence = get_by_uuid(intelligence_uuid)
+        intelligence = get_by_intelligence_uuid(intelligence_uuid)
 
         if name:
             intelligence.name = name
@@ -24,3 +28,43 @@ class UpdateIntelligenceUseCase():
         intelligence.save()
 
         return intelligence
+
+
+class UpdateContentBaseUseCase():
+
+    def __init__(self):
+        pass
+
+    def update_contentbase(
+            self,
+            contentbase_uuid: str,
+            title: str = None,
+    ):
+
+        contentbase = get_by_contentbase_uuid(contentbase_uuid)
+
+        if title:
+            contentbase.title = title
+            contentbase.save(update_fields=['title'])
+
+        return contentbase
+
+
+class UpdateContentBaseTextUseCase():
+
+    def __init__(self):
+        pass
+
+    def update_contentbasetext(
+            self,
+            contentbasetext_uuid: str,
+            text: str = None,
+    ):
+
+        contentbasetext = get_by_contentbasetext_uuid(contentbasetext_uuid)
+
+        if text:
+            contentbasetext.text = text
+            contentbasetext.save(update_fields=['text'])
+
+        return contentbasetext
