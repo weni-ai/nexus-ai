@@ -45,8 +45,7 @@ class UpdateContentBaseUseCase():
 
         if title:
             contentbase.title = title
-
-        contentbase.save()
+            contentbase.save(update_fields=['title'])
 
         return contentbase
 
@@ -66,7 +65,6 @@ class UpdateContentBaseTextUseCase():
 
         if text:
             contentbasetext.text = text
-
-        contentbasetext.save()
+            contentbasetext.save(update_fields=['text'])
 
         return contentbasetext
