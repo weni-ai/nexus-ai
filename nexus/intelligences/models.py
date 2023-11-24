@@ -27,7 +27,7 @@ class ContentBase(BaseModel, SoftDeleteModel):
     )
 
 
-class ContentBaseFile(ContentBase):
+class ContentBaseFile(BaseModel, SoftDeleteModel):
     file = models.URLField()
     extension_file = models.CharField(max_length=10)
     content_base = models.ForeignKey(
@@ -35,14 +35,14 @@ class ContentBaseFile(ContentBase):
     )
 
 
-class ContentBaseLink(ContentBase):
+class ContentBaseLink(BaseModel, SoftDeleteModel):
     link = models.URLField()
     content_base = models.ForeignKey(
         ContentBase, related_name='contentbaselinks', on_delete=models.CASCADE
     )
 
 
-class ContentBaseText(ContentBase):
+class ContentBaseText(BaseModel, SoftDeleteModel):
     text = models.TextField()
     content_base = models.ForeignKey(
         ContentBase, related_name='contentbasetexts', on_delete=models.CASCADE
