@@ -47,11 +47,11 @@ jobs:
             VERSION="${TAG}"
             echo "VERSION=${VERSION}" | tee -a "${GITHUB_ENV}"
             echo "COMMIT_SHA=$GITHUB_SHA" | tee -a "${GITHUB_ENV}"
-            echo "IMAGE_TAG=${{ secrets.ECR }}/nexus-ai-backend:$TAG" | tee -a "${GITHUB_ENV}"
+            echo "IMAGE_TAG=${{ secrets.ECR }}/nexus-ai:backend-$TAG" | tee -a "${GITHUB_ENV}"
             echo "IMAGE_SOURCE_URL=https://github.com/weni-ai/nexus-ai" | tee -a "${GITHUB_ENV}"
             echo "MANIFESTS_REPOSITORY=weni-ai/kubernetes-manifests-connect" | tee -a "${GITHUB_ENV}"
             echo "MANIFESTS_APPLICATION=nexus-ai" | tee -a "${GITHUB_ENV}"
-            echo "MANIFESTS_PATCH_TARGET=deployment-nexus-ai.json" | tee -a "${GITHUB_ENV}"
+            echo "MANIFESTS_PATCH_TARGET=deployment.json" | tee -a "${GITHUB_ENV}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
