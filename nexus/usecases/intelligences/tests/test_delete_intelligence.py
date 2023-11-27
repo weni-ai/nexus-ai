@@ -46,3 +46,4 @@ class TestDeleteContentBaseTextUseCase(TestCase):
         use_case = DeleteContentBaseTextUseCase()
         status = use_case.delete_contentbasetext(self.contentbasetext.uuid)
         self.assertEqual(ContentBaseText.objects.count(), 0)
+        self.assertTrue(status)
