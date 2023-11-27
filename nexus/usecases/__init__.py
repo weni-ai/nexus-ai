@@ -1,3 +1,5 @@
-import .intelligences
-import .orgs
-import .users
+from nexus.usecases import (
+    intelligences,
+    orgs,
+    users
+)
