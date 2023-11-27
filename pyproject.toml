@@ -36,12 +36,12 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 line-length = 79
-exclude = ['.venv', 'migrations', 'manage.py', 'wsgi.py', 'asgi.py',]
+exclude = ['.venv', 'migrations', 'manage.py', 'wsgi.py', 'asgi.py', '__init__.py']
 
 [tool.isort]
 profile = "black"
 line_length = 79
-extend_skip = ['migrations', 'manage.py', 'wsgi.py', 'asgi.py',]
+extend_skip = ['migrations', 'manage.py', 'wsgi.py', 'asgi.py', '__init__.py']
 
 [tool.pytest.ini_options]
 pythonpath = "."
@@ -54,6 +54,7 @@ extend-exclude = '''
         migrations/
         | manage.py
         | settings.py
+        | __init__.py
     )
 '''
 
