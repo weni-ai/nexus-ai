@@ -23,3 +23,8 @@ from .get_by_uuid import (
     get_by_contentbase_uuid,
     get_by_contentbasetext_uuid
 )
+from .retrieve import (
+    RetrieveIntelligenceUseCase,
+    RetrieveContentBaseUseCase,
+    RetrieveContentBaseTextUseCase
+)
