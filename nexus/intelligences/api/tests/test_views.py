@@ -103,7 +103,7 @@ class TestContentBaseViewset(TestCase):
             created_by=self.user,
             intelligence=self.intelligence
         )
-        self.url = f'{self.org.uuid}/intelligences/content-bases'
+        self.url = f'{self.intelligence.uuid}/content-bases'
 
     def test_get_queryset(self):
 
@@ -112,6 +112,7 @@ class TestContentBaseViewset(TestCase):
             request,
             intelligence_uuid=str(self.intelligence.uuid)
         )
+        print("List response: ", response.data)
         self.assertEqual(response.status_code, 200)
 
     def test_create(self):
@@ -124,6 +125,7 @@ class TestContentBaseViewset(TestCase):
             request,
             intelligence_uuid=str(self.intelligence.uuid)
         )
+        print("Create response: ", response.data)
         self.assertEqual(response.status_code, 201)
 
     def test_update(self):
@@ -139,6 +141,7 @@ class TestContentBaseViewset(TestCase):
             content_type='application/json'
         )
         response = self.view(request)
+        print("Update response: ", response.data)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['title'], data['title'])
 
@@ -153,6 +156,7 @@ class TestContentBaseViewset(TestCase):
             content_type='application/json'
         )
         response = self.view(request)
+        print("Delete response: ", response.data)
         self.assertEqual(response.status_code, 204)
 
 
@@ -185,7 +189,7 @@ class TestContentBaseTextViewset(TestCase):
         self.url = f'{self.org.uuid}/intelligences/content-bases-text'
 
     def test_get_queryset(self):
-        
+
         request = self.factory.get(self.url)
         response = self.view(
             request,

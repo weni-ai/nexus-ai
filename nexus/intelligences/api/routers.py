@@ -6,15 +6,24 @@ from .views import (
     ContentBaseTextViewset
 )
 
-router = DefaultRouter()
-router.register(r'', IntelligencesViewset, basename='intelligences')
-router.register(r'content-bases', ContentBaseViewset, basename='content-bases')
-router.register(
+org_router = DefaultRouter()
+intelligence_router = DefaultRouter()
+content_base_router = DefaultRouter()
+
+org_router.register(r'', IntelligencesViewset, basename='intelligences')
+intelligence_router.register(
+    r'content-bases',
+    ContentBaseViewset,
+    basename='content-bases'
+)
+content_base_router.register(
     r'content-bases-text',
     ContentBaseTextViewset,
     basename='content-bases-text'
 )
 
 urlpatterns = [
-    path('<org_uuid>/intelligences/', include(router.urls)),
+    path('<org_uuid>/intelligences/', include(org_router.urls)),
+    path('<intelligence_uuid>/', include(intelligence_router.urls)),
+    path('<content_base_uuid>/', include(content_base_router.urls)),
 ]
