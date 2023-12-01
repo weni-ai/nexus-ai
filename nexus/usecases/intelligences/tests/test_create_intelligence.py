@@ -9,7 +9,6 @@ from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
-    IntelligenceFactory
 )
 
 
