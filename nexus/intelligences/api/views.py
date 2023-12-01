@@ -31,7 +31,18 @@ class IntelligencesViewset(
         use_case_list = use_case.get_org_intelligences(
             org_uuid
         )
+
         return use_case_list
+
+    def retrieve(self, request, *args, **kwargs):
+
+        intelligence_uuid = kwargs.get('intelligence_uuid')
+        use_case = intelligences.RetrieveIntelligenceUseCase()
+        intelligence = use_case.get_intelligence(
+            intelligence_uuid=intelligence_uuid
+        )
+        serializer = IntelligenceSerializer(intelligence)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def create(self, request, org_uuid=str):
         use_case = intelligences.CreateIntelligencesUseCase()
@@ -98,6 +109,16 @@ class ContentBaseViewset(
         )
         return use_case_list
 
+    def retrieve(self, request, *args, **kwargs):
+
+        contentbase_uuid = kwargs.get('content_base_uuid')
+        use_case = intelligences.RetrieveContentBaseUseCase()
+        contentbase = use_case.get_contentbase(
+            contentbase_uuid=contentbase_uuid
+        )
+        serializer = ContentBaseSerializer(contentbase)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     def create(self, request, intelligence_uuid=str):
         use_case = intelligences.CreateContentBaseUseCase()
 
@@ -159,6 +180,16 @@ class ContentBaseTextViewset(
             contentbase_uuid
         )
         return use_case_list
+
+    def retrieve(self, request, *args, **kwargs):
+
+        contentbasetext_uuid = kwargs.get('content_base_text_uuid')
+        use_case = intelligences.RetrieveContentBaseTextUseCase()
+        contentbasetext = use_case.get_contentbasetext(
+            contentbasetext_uuid=contentbasetext_uuid
+        )
+        serializer = ContentBaseTextSerializer(contentbasetext)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def create(self, request, contentbase_uuid=str):
         use_case = intelligences.CreateContentBaseTextUseCase()
