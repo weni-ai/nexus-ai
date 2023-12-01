@@ -13,20 +13,7 @@ from .serializers import (
     ContentBaseSerializer,
     ContentBaseTextSerializer
 )
-from nexus.usecases.intelligences import (
-    ListIntelligencesUseCase,
-    CreateIntelligencesUseCase,
-    UpdateIntelligenceUseCase,
-    DeleteIntelligenceUseCase,
-    ListContentBaseUseCase,
-    CreateContentBaseUseCase,
-    UpdateContentBaseUseCase,
-    DeleteContentBaseUseCase,
-    ListContentBaseTextUseCase,
-    CreateContentBaseTextUseCase,
-    UpdateContentBaseTextUseCase,
-    DeleteContentBaseTextUseCase
-)
+from nexus.usecases import intelligences
 
 
 class CustomCursorPagination(CursorPagination):
@@ -47,12 +34,12 @@ class IntelligencesViewset(
     pagination_class = CustomCursorPagination
 
     def get_queryset(self):
-        use_case = ListIntelligencesUseCase()
+        use_case = intelligences.ListIntelligencesUseCase()
         org_uuid = self.kwargs.get('org_uuid')
         return use_case.get_org_intelligences(org_uuid)
 
     def create(self, request, org_uuid=str):
-        use_case = CreateIntelligencesUseCase()
+        use_case = intelligences.CreateIntelligencesUseCase()
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -74,7 +61,7 @@ class IntelligencesViewset(
         )
 
     def update(self, request):
-        use_case = UpdateIntelligenceUseCase()
+        use_case = intelligences.UpdateIntelligenceUseCase()
 
         update_intelligence = use_case.update_intelligences(
             intelligence_uuid=request.data.get('intelligence_uuid'),
@@ -88,7 +75,7 @@ class IntelligencesViewset(
         )
 
     def destroy(self, request):
-        use_case = DeleteIntelligenceUseCase()
+        use_case = intelligences.DeleteIntelligenceUseCase()
 
         intelligence_uuid = request.data.get('intelligence_uuid')
 
@@ -112,12 +99,12 @@ class ContentBaseViewset(
     serializer_class = ContentBaseSerializer
 
     def get_queryset(self):
-        use_case = ListContentBaseUseCase()
+        use_case = intelligences.ListContentBaseUseCase()
         intelligence_uuid = self.kwargs.get('intelligence_uuid')
         return use_case.get_intelligence_contentbases(intelligence_uuid)
 
     def create(self, request, intelligence_uuid=str):
-        use_case = CreateContentBaseUseCase()
+        use_case = intelligences.CreateContentBaseUseCase()
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -137,7 +124,7 @@ class ContentBaseViewset(
         )
 
     def update(self, request):
-        use_case = UpdateContentBaseUseCase()
+        use_case = intelligences.UpdateContentBaseUseCase()
 
         update_contentbase = use_case.update_contentbase(
             contentbase_uuid=request.data.get('contentbase_uuid'),
@@ -150,7 +137,7 @@ class ContentBaseViewset(
         )
 
     def destroy(self, request):
-        use_case = DeleteContentBaseUseCase()
+        use_case = intelligences.DeleteContentBaseUseCase()
 
         contentbase_uuid = request.data.get('contentbase_uuid')
 
@@ -174,12 +161,12 @@ class ContentBaseTextViewset(
     serializer_class = ContentBaseTextSerializer
 
     def get_queryset(self):
-        use_case = ListContentBaseTextUseCase()
+        use_case = intelligences.ListContentBaseTextUseCase()
         contentbase_uuid = self.kwargs.get('contentbase_uuid')
         return use_case.get_contentbase_contentbasetexts(contentbase_uuid)
 
     def create(self, request, contentbase_uuid=str):
-        use_case = CreateContentBaseTextUseCase()
+        use_case = intelligences.CreateContentBaseTextUseCase()
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -199,7 +186,7 @@ class ContentBaseTextViewset(
         )
 
     def update(self, request):
-        use_case = UpdateContentBaseTextUseCase()
+        use_case = intelligences.UpdateContentBaseTextUseCase()
 
         update_contentbasetext = use_case.update_contentbasetext(
             contentbasetext_uuid=request.data.get('contentbasetext_uuid'),
@@ -212,7 +199,7 @@ class ContentBaseTextViewset(
         )
 
     def destroy(self, request):
-        use_case = DeleteContentBaseTextUseCase()
+        use_case = intelligences.DeleteContentBaseTextUseCase()
 
         contentbasetext_uuid = request.data.get('contentbasetext_uuid')
 
@@ -222,4 +209,4 @@ class ContentBaseTextViewset(
 
         return Response(
             status=status.HTTP_204_NO_CONTENT
-)
+        )
