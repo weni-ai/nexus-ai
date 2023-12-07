@@ -17,6 +17,7 @@ gunicorn = "^21.2.0"
 psycopg2-binary = "^2.9.9"
 whitenoise = "^6.6.0"
 gevent = "^23.9.1"
+factory-boy = "^3.3.0"
 
 
 [tool.poetry.group.dev.dependencies]
