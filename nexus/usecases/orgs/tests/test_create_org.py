@@ -6,7 +6,7 @@ from nexus.usecases.users.exceptions import UserDoesNotExists
 from ..create import CreateOrgUseCase
 
 
-class TestCreateOrgTestCase(TestCase):
+class CreateOrgTestCase(TestCase):
     def setUp(self):
         self.user = UserFactory()
         self.usecase = CreateOrgUseCase()

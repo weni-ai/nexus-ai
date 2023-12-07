@@ -1,7 +1,7 @@
 from django.test import TestCase
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
-from nexus.usecases.orgs.create import create_org_auth
+from nexus.usecases.orgs.create_org_auth import CreateOrgAuthUseCase
 
 from nexus.orgs import permissions
 from nexus.orgs.models import Role
@@ -13,7 +13,7 @@ class TestAdminPermissionTestCase(TestCase):
     def setUp(self):
         self.org = OrgFactory()
         self.user = self.org.created_by
-        self.admin_auth = create_org_auth(str(self.org.uuid), self.org.created_by, role=Role.ADMIN.value)
+        self.admin_auth = CreateOrgAuthUseCase().create_org_auth(str(self.org.uuid), self.org.created_by, role=Role.ADMIN.value)
 
     def test_is_admin(self):
         self.assertTrue(permissions.is_admin(self.admin_auth))
@@ -62,7 +62,7 @@ class TestContributorPermissionTestCase(TestCase):
     def setUp(self):
         self.org = OrgFactory()
         self.user = self.org.created_by
-        self.admin_auth = create_org_auth(str(self.org.uuid), self.org.created_by, role=Role.CONTRIBUTOR.value)
+        self.admin_auth = CreateOrgAuthUseCase().create_org_auth(str(self.org.uuid), self.org.created_by, role=Role.CONTRIBUTOR.value)
 
     def test_is_not_admin(self):
         self.assertFalse(permissions.is_admin(self.admin_auth))
@@ -111,7 +111,7 @@ class TestViewerPermissionTestCase(TestCase):
     def setUp(self):
         self.org = OrgFactory()
         self.user = self.org.created_by
-        self.admin_auth = create_org_auth(str(self.org.uuid), self.org.created_by, role=Role.VIEWER.value)
+        self.admin_auth = CreateOrgAuthUseCase().create_org_auth(str(self.org.uuid), self.org.created_by, role=Role.VIEWER.value)
 
     def test_is_not_admin(self):
         self.assertFalse(permissions.is_admin(self.admin_auth))
