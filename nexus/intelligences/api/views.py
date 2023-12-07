@@ -1,10 +1,5 @@
 from rest_framework import status
-from rest_framework.viewsets import GenericViewSet
-from rest_framework.mixins import (
-    ListModelMixin,
-    CreateModelMixin,
-    UpdateModelMixin
-)
+from rest_framework.viewsets import ModelViewSet
 from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
 
@@ -24,10 +19,7 @@ class CustomCursorPagination(CursorPagination):
 
 
 class IntelligencesViewset(
-    ListModelMixin,
-    CreateModelMixin,
-    UpdateModelMixin,
-    GenericViewSet
+    ModelViewSet
 ):
 
     serializer_class = IntelligenceSerializer
@@ -36,7 +28,21 @@ class IntelligencesViewset(
     def get_queryset(self):
         use_case = intelligences.ListIntelligencesUseCase()
         org_uuid = self.kwargs.get('org_uuid')
-        return use_case.get_org_intelligences(org_uuid)
+        use_case_list = use_case.get_org_intelligences(
+            org_uuid
+        )
+
+        return use_case_list
+
+    def retrieve(self, request, *args, **kwargs):
+
+        intelligence_uuid = kwargs.get('intelligence_uuid')
+        use_case = intelligences.RetrieveIntelligenceUseCase()
+        intelligence = use_case.get_intelligence(
+            intelligence_uuid=intelligence_uuid
+        )
+        serializer = IntelligenceSerializer(intelligence)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def create(self, request, org_uuid=str):
         use_case = intelligences.CreateIntelligencesUseCase()
@@ -89,10 +95,7 @@ class IntelligencesViewset(
 
 
 class ContentBaseViewset(
-    ListModelMixin,
-    CreateModelMixin,
-    UpdateModelMixin,
-    GenericViewSet
+    ModelViewSet
 ):
 
     pagination_class = CustomCursorPagination
@@ -101,7 +104,20 @@ class ContentBaseViewset(
     def get_queryset(self):
         use_case = intelligences.ListContentBaseUseCase()
         intelligence_uuid = self.kwargs.get('intelligence_uuid')
-        return use_case.get_intelligence_contentbases(intelligence_uuid)
+        use_case_list = use_case.get_intelligence_contentbases(
+            intelligence_uuid
+        )
+        return use_case_list
+
+    def retrieve(self, request, *args, **kwargs):
+
+        contentbase_uuid = kwargs.get('content_base_uuid')
+        use_case = intelligences.RetrieveContentBaseUseCase()
+        contentbase = use_case.get_contentbase(
+            contentbase_uuid=contentbase_uuid
+        )
+        serializer = ContentBaseSerializer(contentbase)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def create(self, request, intelligence_uuid=str):
         use_case = intelligences.CreateContentBaseUseCase()
@@ -151,10 +167,7 @@ class ContentBaseViewset(
 
 
 class ContentBaseTextViewset(
-    ListModelMixin,
-    CreateModelMixin,
-    UpdateModelMixin,
-    GenericViewSet
+    ModelViewSet
 ):
 
     pagination_class = CustomCursorPagination
@@ -163,7 +176,20 @@ class ContentBaseTextViewset(
     def get_queryset(self):
         use_case = intelligences.ListContentBaseTextUseCase()
         contentbase_uuid = self.kwargs.get('contentbase_uuid')
-        return use_case.get_contentbase_contentbasetexts(contentbase_uuid)
+        use_case_list = use_case.get_contentbase_contentbasetexts(
+            contentbase_uuid
+        )
+        return use_case_list
+
+    def retrieve(self, request, *args, **kwargs):
+
+        contentbasetext_uuid = kwargs.get('content_base_text_uuid')
+        use_case = intelligences.RetrieveContentBaseTextUseCase()
+        contentbasetext = use_case.get_contentbasetext(
+            contentbasetext_uuid=contentbasetext_uuid
+        )
+        serializer = ContentBaseTextSerializer(contentbasetext)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def create(self, request, contentbase_uuid=str):
         use_case = intelligences.CreateContentBaseTextUseCase()

@@ -24,7 +24,7 @@ class TestIntelligencesViewset(TestCase):
             'get': 'list',
             'post': 'create',
             'put': 'update',
-            'delete': 'destroy'
+            'delete': 'destroy',
         })
         self.user = UserFactory()
         self.org = OrgFactory(
@@ -40,6 +40,17 @@ class TestIntelligencesViewset(TestCase):
 
         request = self.factory.get(self.url)
         response = self.view(request, org_uuid=str(self.org.uuid))
+        self.assertEqual(response.status_code, 200)
+
+    def test_retrieve(self):
+
+        url_retrieve = f'{self.url}/{self.intelligence.uuid}/'
+        request = self.factory.get(url_retrieve)
+        response = IntelligencesViewset.as_view({'get': 'retrieve'})(
+            request,
+            org_uuid=str(self.org.uuid),
+            intelligence_uuid=str(self.intelligence.uuid)
+        )
         self.assertEqual(response.status_code, 200)
 
     def test_create(self):
@@ -103,7 +114,7 @@ class TestContentBaseViewset(TestCase):
             created_by=self.user,
             intelligence=self.intelligence
         )
-        self.url = f'{self.org.uuid}/intelligences/content-bases'
+        self.url = f'{self.intelligence.uuid}/content-bases'
 
     def test_get_queryset(self):
 
@@ -111,6 +122,17 @@ class TestContentBaseViewset(TestCase):
         response = self.view(
             request,
             intelligence_uuid=str(self.intelligence.uuid)
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_retrieve(self):
+
+        url_retrieve = f'{self.url}/{self.contentbase.uuid}/'
+        request = self.factory.get(url_retrieve)
+        response = ContentBaseViewset.as_view({'get': 'retrieve'})(
+            request,
+            intelligence_uuid=str(self.intelligence.uuid),
+            content_base_uuid=str(self.contentbase.uuid)
         )
         self.assertEqual(response.status_code, 200)
 
@@ -182,14 +204,25 @@ class TestContentBaseTextViewset(TestCase):
             created_by=self.user,
             content_base=self.content_base
         )
-        self.url = f'{self.org.uuid}/intelligences/content-bases-text'
+        self.url = f'{self.content_base.uuid}/content-bases-text'
 
     def test_get_queryset(self):
-        
+
         request = self.factory.get(self.url)
         response = self.view(
             request,
             contentbase_uuid=str(self.content_base.uuid)
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_retrieve(self):
+
+        url_retrieve = f'{self.url}/{self.contentbasetext.uuid}/'
+        request = self.factory.get(url_retrieve)
+        response = ContentBaseTextViewset.as_view({'get': 'retrieve'})(
+            request,
+            contentbase_uuid=str(self.content_base.uuid),
+            content_base_text_uuid=str(self.contentbasetext.uuid)
         )
         self.assertEqual(response.status_code, 200)
 
