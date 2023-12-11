@@ -1,7 +1,6 @@
 import factory
 
 from nexus.orgs.models import Org
-
 from nexus.usecases.users.tests.user_factory import UserFactory
 
 
