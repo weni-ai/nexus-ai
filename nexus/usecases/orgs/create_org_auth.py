@@ -4,7 +4,7 @@ from nexus.users.models import User
 from .exceptions import OrgRoleDoesNotExists
 
 
-def create_org_auth(org: Org, user: User, role: int):
+def _create_org_auth(org: Org, user: User, role: int):
     if not Role.has_value(role):
         raise OrgRoleDoesNotExists()
 
@@ -16,4 +16,4 @@ class CreateOrgAuthUseCase:
         user = users.get_by_email(user_email)
         org = orgs.get_by_uuid(org_uuid)
 
-        return create_org_auth(org, user, role)
+        return _create_org_auth(org, user, role)
