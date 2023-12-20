@@ -1,8 +1,7 @@
 from __future__ import absolute_import, unicode_literals
 import os
-import sys
 
-from celery import Celery, schedules
+from celery import Celery
 
 from nexus import settings
 
