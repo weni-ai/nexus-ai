@@ -36,13 +36,16 @@ do_gosu(){
 
 
 if [[ "start" == "$1" ]]; then
+    echo "starting server"
     do_gosu "${APP_USER}:${APP_GROUP}" python manage.py collectstatic --noinput
-    do_gosu "${APP_USER}:${APP_GROUP}" exec gunicorn "${GUNICORN_APP}" \
-      --name="${APP_NAME}" \
-      --chdir="${APP_PATH}" \
-      --bind=0.0.0.0:8080 \
-      --log-config="${GUNICORN_LOG_CONF}" \
-      -c "${GUNICORN_CONF}"
+    echo "collectstatic runned start gunicorn"
+    # do_gosu "${APP_USER}:${APP_GROUP}" exec gunicorn "${GUNICORN_APP}" \
+    #   --name="${APP_NAME}" \
+    #   --chdir="${APP_PATH}" \
+    #   --bind=0.0.0.0:8080 \
+    #   --log-config="${GUNICORN_LOG_CONF}" \
+    #   -c "${GUNICORN_CONF}"
+    do_gosu "${APP_USER}:${APP_GROUP}" exec gunicorn "${GUNICORN_APP}" -c "${GUNICORN_CONF}"
 elif [ "celery-worker" == "$1" ] ; then
     celery_queue="celery"
     if [ "${2}" ] ; then
