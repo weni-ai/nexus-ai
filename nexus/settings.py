@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'nexus.orgs',
     'nexus.projects',
     'nexus.intelligences',
+    "nexus.task_manager",
 ]
 
 MIDDLEWARE = [

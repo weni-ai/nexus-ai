@@ -58,7 +58,8 @@ FROM base as build-poetry
 
 ARG POETRY_VERSION
 
-COPY pyproject.toml poetry.lock .
+COPY pyproject.toml .
+COPY poetry.lock .
 
 RUN --mount=type=cache,mode=0755,target=/pip_cache,id=pip pip install --cache-dir /pip_cache -U poetry=="${POETRY_VERSION}" \
   && poetry export --without-hashes --output requirements.txt
@@ -91,7 +92,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 COPY --from=build /install /usr/local
 COPY --chown=${APP_USER}:${APP_GROUP} . ${APP_PATH}
 
-USER "${APP_USER}:${APP_USER}"
+USER "${APP_USER}:${APP_GROUP}"
 EXPOSE 8080
 COPY entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["bash", "-e", "/entrypoint.sh"]
