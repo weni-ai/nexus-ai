@@ -1,4 +1,4 @@
-from rest_framework import status
+from rest_framework import status, parsers
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
@@ -6,10 +6,17 @@ from rest_framework.response import Response
 from .serializers import (
     IntelligenceSerializer,
     ContentBaseSerializer,
-    ContentBaseTextSerializer
+    ContentBaseTextSerializer,
+    ContentBaseFileSerializer
 )
 from nexus.usecases import intelligences
+from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
+from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
+from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
 
+from django.core.files.uploadedfile import InMemoryUploadedFile
+import os
+from django.conf import settings
 
 class CustomCursorPagination(CursorPagination):
     page_size = 10
@@ -26,6 +33,8 @@ class IntelligencesViewset(
     pagination_class = CustomCursorPagination
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Intelligence.objects.none()  # pragma: no cover
         use_case = intelligences.ListIntelligencesUseCase()
         org_uuid = self.kwargs.get('org_uuid')
         use_case_list = use_case.get_org_intelligences(
@@ -35,7 +44,6 @@ class IntelligencesViewset(
         return use_case_list
 
     def retrieve(self, request, *args, **kwargs):
-
         intelligence_uuid = kwargs.get('intelligence_uuid')
         use_case = intelligences.RetrieveIntelligenceUseCase()
         intelligence = use_case.get_intelligence(
@@ -102,6 +110,8 @@ class ContentBaseViewset(
     serializer_class = ContentBaseSerializer
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return ContentBase.objects.none()  # pragma: no cover
         use_case = intelligences.ListContentBaseUseCase()
         intelligence_uuid = self.kwargs.get('intelligence_uuid')
         use_case_list = use_case.get_intelligence_contentbases(
@@ -174,6 +184,8 @@ class ContentBaseTextViewset(
     serializer_class = ContentBaseTextSerializer
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return ContentBaseText.objects.none()  # pragma: no cover
         use_case = intelligences.ListContentBaseTextUseCase()
         contentbase_uuid = self.kwargs.get('contentbase_uuid')
         use_case_list = use_case.get_contentbase_contentbasetexts(
@@ -236,3 +248,43 @@ class ContentBaseTextViewset(
         return Response(
             status=status.HTTP_204_NO_CONTENT
         )
+
+
+class ContentBaseFileViewset(ModelViewSet):
+    
+    serializer_class = ContentBaseFileSerializer
+    pagination_class = CustomCursorPagination
+    parser_classes = (parsers.MultiPartParser,)
+
+    def create(self, request, content_base_uuid=str):
+        file = request.FILES['file']
+        
+        user_email = request.data.get("user_email")
+        extension_file = request.data.get("extension_file")
+        file_database = s3FileDatabase()
+        file_manager = CeleryFileManager(file_database=file_database)
+        response = file_manager.upload_file(file, content_base_uuid, extension_file, user_email)
+        
+        return Response(
+            response,
+            status=status.HTTP_201_CREATED
+        )
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return ContentBaseFile.objects.none()  # pragma: no cover
+        use_case = intelligences.ListContentBaseFileUseCase()
+        contentbase_uuid = self.kwargs.get('contentbase_uuid')
+        return use_case.get_contentbase_file(contentbase_uuid=contentbase_uuid)
+
+    def retrieve(self, request, *args, **kwargs):
+
+        contentbasefile_uuid = kwargs.get('contentbase_file_uuid')
+        use_case = intelligences.RetrieveContentBaseFileUseCase()
+        contentbasetext = use_case.get_contentbasefile(
+            contentbasefile_uuid=contentbasefile_uuid
+        )
+        serializer = ContentBaseTextSerializer(contentbasetext)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    

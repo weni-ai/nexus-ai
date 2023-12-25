@@ -13,6 +13,8 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 
 app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
+task_create_missing_queues = True
+
 if "test" in sys.argv or getattr(settings, "CELERY_ALWAYS_EAGER", False):
     from celery import current_app
 

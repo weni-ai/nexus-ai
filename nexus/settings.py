@@ -51,12 +51,14 @@ INSTALLED_APPS = [
     "django_celery_results",
     "django_celery_beat",
     'rest_framework',
+    'drf_yasg',
     # apps
     'nexus.users',
     'nexus.db',
     'nexus.orgs',
     'nexus.projects',
     'nexus.intelligences',
+    'nexus.task_managers'
 ]
 
 MIDDLEWARE = [
@@ -151,8 +153,22 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Celery config
+
+REDIS_URL = env.str("CELERY_BROKER_URL", default="redis://localhost:6379/1")
+
 CELERY_RESULT_BACKEND = "django-db"
-CELERY_BROKER_URL = env.str("CELERY_BROKER_URL")
+CELERY_BROKER_URL = REDIS_URL
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TASK_SERIALIZER = "json"
+
+# Swagger
+
+SWAGGER_SETTINGS = {
+    "USE_SESSION_AUTH": False,
+    "DOC_EXPANSION": "list",
+    "APIS_SORTER": "alpha",
+    "SECURITY_DEFINITIONS": {
+        "OIDC": {"type": "apiKey", "name": "Authorization", "in": "header"}
+    },
+}
