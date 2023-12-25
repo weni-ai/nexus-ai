@@ -3,8 +3,10 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     IntelligencesViewset,
     ContentBaseViewset,
-    ContentBaseTextViewset
+    ContentBaseTextViewset,
+    ContentBaseFileViewset,
 )
+
 
 org_router = DefaultRouter()
 intelligence_router = DefaultRouter()
@@ -20,6 +22,12 @@ content_base_router.register(
     r'content-bases-text',
     ContentBaseTextViewset,
     basename='content-bases-text'
+)
+
+content_base_router.register(
+    r'content-bases-file',
+    ContentBaseFileViewset,
+    basename='content-base-file'
 )
 
 urlpatterns = [

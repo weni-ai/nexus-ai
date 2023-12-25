@@ -1,9 +1,11 @@
 from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
-    ContentBaseText
+    ContentBaseText,
+    ContentBaseFile
 )
 from nexus.usecases import orgs, users, intelligences
+from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 
 
 class CreateIntelligencesUseCase():
@@ -65,3 +67,16 @@ class CreateContentBaseTextUseCase():
             intelligence=contentbase.intelligence
         )
         return contentbasetext
+
+class CreateContentBaseFileUseCase():
+
+    def create_content_base_file(self, content_base_file: ContentBaseFileDTO) -> ContentBaseFile:
+        user = users.get_by_email(content_base_file.user_email)
+        content_base = intelligences.get_by_contentbase_uuid(contentbase_uuid=content_base_file.content_base_uuid)
+        content_base_file = ContentBaseFile.objects.create(
+            file=content_base_file.file_url,
+            extension_file=content_base_file.extension_file,
+            content_base=content_base,
+            created_by=user
+        )
+        return content_base_file

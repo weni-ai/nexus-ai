@@ -8,7 +8,8 @@ from .exceptions import (
 from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
-    ContentBaseText
+    ContentBaseText,
+    ContentBaseFile
 )
 
 
@@ -37,3 +38,11 @@ def get_by_contentbasetext_uuid(contentbasetext_uuid: str) -> ContentBaseText:
         raise ContentBaseTextDoesNotExist()
     except ValidationError:
         raise ValidationError(message='Invalid UUID')
+
+def get_by_content_base_file_uuid(content_base_uuid: str) -> ContentBaseFile:
+    try:
+        return ContentBaseFile.objects.get(uuid=content_base_uuid)
+    except ContentBaseFile.DoesNotExist:
+        raise Exception(f"[ ContentBaseFile ] - ContentBaseFile with uuid `{content_base_uuid}` does not exists.")
+    except Exception as exception:
+        raise(f"[ ContentBaseFile ] - ContentBaseFile error to get - error: `{exception}`")
