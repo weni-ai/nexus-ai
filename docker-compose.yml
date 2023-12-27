@@ -27,7 +27,29 @@ services:
       - DEBUG=${DEBUG:-true}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-*}
       - DEFAULT_DATABASE=${DEFAULT_DATABASE:-postgres://nexus:nexus@database:5432/nexus}
-
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+  celery:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - nexus
+      - redis
+      - database
+    networks:
+      - default
+      - nexus
+    command: "celery -A nexus worker -l info -B"
+    environment:
+        - SECRET_KEY=${SECRET_KEY:-SK}
+        - DEBUG=${DEBUG:-true}
+        - ALLOWED_HOSTS=${ALLOWED_HOSTS:-*}
+        - DEFAULT_DATABASE=${DEFAULT_DATABASE:-postgres://nexus:nexus@database:5432/nexus}
+        - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+  redis:
+    image: redis
+    ports:
+      - 6379:6379
 networks:
   nexus:
     external: true
