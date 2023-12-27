@@ -21,8 +21,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 env = environ.Env(
+    SECRET_KEY=(str, "SK"),
     DEBUG=(bool, False),
-    ALLOWED_HOSTS=(lambda v: [s.strip() for s in v.split(",")], "*"),
+    ALLOWED_HOSTS=(lambda v: [s.strip() for s in v.split(",")], list("*")),
     CELERY_BROKER_URL=(str, "redis://localhost:6379/0"),
 )
 
