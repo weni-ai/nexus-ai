@@ -5,7 +5,7 @@ from ..create import (
     CreateContentBaseUseCase,
     CreateContentBaseTextUseCase
 )
-from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.usecases.orgs.tests.org_factory import OrgFactory, OrgAuthFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
@@ -17,6 +17,7 @@ class TestListIntelligenceUseCase(TestCase):
     def setUp(self):
         self.user = UserFactory()
         self.org = OrgFactory(created_by=self.user)
+        self.auth = OrgAuthFactory(org=self.org, user=self.user)
 
     def test_create_intelligence_use_case(self):
         use_case = CreateIntelligencesUseCase()
@@ -34,6 +35,7 @@ class TestCreateContentBaseUseCase(TestCase):
     def setUp(self):
         self.user = UserFactory()
         self.org = OrgFactory(created_by=self.user)
+        self.auth = OrgAuthFactory(org=self.org, user=self.user)
         self.intelligence = CreateIntelligencesUseCase().create_intelligences(
             name="name",
             description="description",
