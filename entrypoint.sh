@@ -47,9 +47,6 @@ if [[ "start" == "$1" ]]; then
       --bind=0.0.0.0:8000 \
       --log-config="${GUNICORN_LOG_CONF}" \
       -c "${GUNICORN_CONF}"
-    # echo "=> ${APP_USER}:${APP_GROUP}" exec gunicorn "${GUNICORN_APP}" -c "${GUNICORN_CONF}"
-    # do_gosu "${APP_USER}:${APP_GROUP}" exec gunicorn "${GUNICORN_APP}" -c "${GUNICORN_CONF}"
-    # echo "===> ${APP_USER}:${APP_GROUP}" exec gunicorn "${GUNICORN_APP}" -c "${GUNICORN_CONF}"
 elif [[ "celery-worker" == "$1" ]]; then
     celery_queue="celery"
     echo "celery worker"
