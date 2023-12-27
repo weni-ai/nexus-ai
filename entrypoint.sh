@@ -2,6 +2,7 @@
 
 export GUNICORN_APP=${GUNICORN_APP:-"nexus.wsgi"}
 export GUNICORN_CONF=${GUNICORN_CONF:-"${APP_PATH}/gunicorn.conf.py"}
+export GUNICORN_LOG_CONF=${GUNICORN_LOG_CONF:-"${APP_PATH}/gunicorn-logging.conf"}
 export LOG_LEVEL=${LOG_LEVEL:-"INFO"}
 export CELERY_APP=${CELERY_APP:-"nexus.celery"}
 export CELERY_MAX_WORKERS=${CELERY_MAX_WORKERS:-'6'}
@@ -40,13 +41,15 @@ if [[ "start" == "$1" ]]; then
     echo "starting server"
     do_gosu "${APP_USER}:${APP_GROUP}" python manage.py collectstatic --noinput
     echo "collectstatic runned start gunicorn"
-    # do_gosu "${APP_USER}:${APP_GROUP}" exec gunicorn "${GUNICORN_APP}" \
-    #   --name="${APP_NAME}" \
-    #   --chdir="${APP_PATH}" \
-    #   --bind=0.0.0.0:8080 \
-    #   --log-config="${GUNICORN_LOG_CONF}" \
-    #   -c "${GUNICORN_CONF}"
-    do_gosu "${APP_USER}:${APP_GROUP}" exec gunicorn "${GUNICORN_APP}" -c "${GUNICORN_CONF}"
+    do_gosu "${APP_USER}:${APP_GROUP}" exec gunicorn "${GUNICORN_APP}" \
+      --name="${APP_NAME}" \
+      --chdir="${APP_PATH}" \
+      --bind=0.0.0.0:8080 \
+      --log-config="${GUNICORN_LOG_CONF}" \
+      -c "${GUNICORN_CONF}"
+    # echo "=> ${APP_USER}:${APP_GROUP}" exec gunicorn "${GUNICORN_APP}" -c "${GUNICORN_CONF}"
+    # do_gosu "${APP_USER}:${APP_GROUP}" exec gunicorn "${GUNICORN_APP}" -c "${GUNICORN_CONF}"
+    # echo "===> ${APP_USER}:${APP_GROUP}" exec gunicorn "${GUNICORN_APP}" -c "${GUNICORN_CONF}"
 elif [[ "celery-worker" == "$1" ]]; then
     celery_queue="celery"
     echo "celery worker"
