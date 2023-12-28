@@ -73,7 +73,7 @@ class CreateContentBaseTextUseCase():
     ) -> ContentBaseText:
 
         org_usecase = orgs.GetOrgByIntelligenceUseCase()
-        org = org_usecase.get_org_by_contentbase_uuid(contentbase_uuid)
+        org = org_usecase.get_org_by_contentbasetext_uuid(contentbase_uuid)
         user = users.get_by_email(user_email)
 
         has_permission = permissions.can_create_content_bases(user, org)
