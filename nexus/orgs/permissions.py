@@ -53,6 +53,11 @@ def can_delete_content_bases(user: User, org: Org):
     return can_contribute(auth)
 
 
+def can_edit_content_bases(user: User, org: Org):
+    auth = get_user_auth(user, org)
+    return can_contribute(auth)
+
+
 def can_add_content_base_file(user: User, org: Org):
     auth = get_user_auth(user, org)
     return can_contribute(auth)

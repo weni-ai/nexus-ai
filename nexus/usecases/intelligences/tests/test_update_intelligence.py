@@ -21,7 +21,8 @@ class TestUpdateIntelligenceUseCase(TestCase):
         new_name = 'New Intelligence Name'
         updated_intelligence = self.use_case.update_intelligences(
             intelligence_uuid=self.intelligence.uuid,
-            name=new_name
+            name=new_name,
+            user_email=self.intelligence.created_by.email
         )
         self.assertEqual(updated_intelligence.name, new_name)
 
@@ -29,7 +30,8 @@ class TestUpdateIntelligenceUseCase(TestCase):
         new_description = 'New Intelligence Description'
         updated_intelligence = self.use_case.update_intelligences(
             intelligence_uuid=self.intelligence.uuid,
-            description=new_description
+            description=new_description,
+            user_email=self.intelligence.created_by.email
         )
         self.assertEqual(updated_intelligence.description, new_description)
 
@@ -39,7 +41,8 @@ class TestUpdateIntelligenceUseCase(TestCase):
         updated_intelligence = self.use_case.update_intelligences(
             intelligence_uuid=self.intelligence.uuid,
             name=new_name,
-            description=new_description
+            description=new_description,
+            user_email=self.intelligence.created_by.email
         )
         self.assertEqual(updated_intelligence.name, new_name)
         self.assertEqual(updated_intelligence.description, new_description)
@@ -48,7 +51,6 @@ class TestUpdateIntelligenceUseCase(TestCase):
 class TestUpdateContentBaseUseCase(TestCase):
 
     def setUp(self):
-
         self.contentbase = ContentBaseFactory()
 
     def test_update_contentbase_title(self):
@@ -56,7 +58,8 @@ class TestUpdateContentBaseUseCase(TestCase):
         use_case = UpdateContentBaseUseCase()
         updated_contentbase = use_case.update_contentbase(
             contentbase_uuid=self.contentbase.uuid,
-            title=new_title
+            title=new_title,
+            user_email=self.contentbase.created_by.email
         )
         self.assertEqual(updated_contentbase.title, new_title)
 
@@ -71,6 +74,7 @@ class TestUpdateContentBaseTextUseCase(TestCase):
         use_case = UpdateContentBaseTextUseCase()
         updated_contentbasetext = use_case.update_contentbasetext(
             contentbasetext_uuid=self.contentbasetext.uuid,
-            text=new_text
+            text=new_text,
+            user_email=self.contentbasetext.created_by.email
         )
         self.assertEqual(updated_contentbasetext.text, new_text)
