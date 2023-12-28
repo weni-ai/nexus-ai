@@ -21,18 +21,12 @@ from nexus.usecases.users.tests.user_factory import UserFactory
 class TestDeleteIntelligenceUseCase(TestCase):
     def setUp(self):
         self.use_case = DeleteIntelligenceUseCase()
-        self.user = UserFactory()
-        self.org = OrgFactory(created_by=self.user)
-        self.org_auth = OrgAuthFactory(org=self.org, user=self.user)
-        self.intelligence = IntelligenceFactory(
-            org=self.org,
-            created_by=self.user
-        )
+        self.intelligence = IntelligenceFactory()
 
     def test_delete_intelligence(self):
         self.use_case.delete_intelligences(
-            self.intelligence.uuid,
-            self.user.email
+            intelligence_uuid=self.intelligence.uuid,
+            user_email=self.intelligence.created_by.email
         )
         self.assertEqual(Intelligence.objects.count(), 0)
 
@@ -40,22 +34,13 @@ class TestDeleteIntelligenceUseCase(TestCase):
 class TestDeleteContentBaseUseCase(TestCase):
 
     def setUp(self):
-        self.user = UserFactory()
-        self.org = OrgFactory(created_by=self.user)
-        self.auth = OrgAuthFactory(org=self.org, user=self.user)
-        self.intelligence = IntelligenceFactory(
-            org=self.org,
-            created_by=self.user
-        )
-        self.contentbase = ContentBaseFactory(
-            intelligence=self.intelligence
-        )
+        self.contentbase = ContentBaseFactory()
 
     def test_delete_contentbase(self):
         use_case = DeleteContentBaseUseCase()
         use_case.delete_contentbase(
-            self.contentbase.uuid,
-            self.user.email
+            contentbase_uuid=self.contentbase.uuid,
+            user_email=self.contentbase.created_by.email
         )
         self.assertEqual(ContentBase.objects.count(), 0)
 
@@ -63,24 +48,13 @@ class TestDeleteContentBaseUseCase(TestCase):
 class TestDeleteContentBaseTextUseCase(TestCase):
 
     def setUp(self):
-        self.user = UserFactory()
-        self.org = OrgFactory(created_by=self.user)
-        self.auth = OrgAuthFactory(org=self.org, user=self.user)
-        self.intelligence = IntelligenceFactory(
-            org=self.org,
-            created_by=self.user
-        )
-        self.contentbase = ContentBaseFactory(intelligence=self.intelligence)
-        self.contentbasetext = ContentBaseTextFactory(
-            content_base=self.contentbase,
-            created_by=self.user
-        )
+        self.contentbasetext = ContentBaseTextFactory()
 
     def test_delete_contentbasetext(self):
         use_case = DeleteContentBaseTextUseCase()
         status = use_case.delete_contentbasetext(
             contentbasetext_uuid=self.contentbasetext.uuid,
-            user_email=self.user.email
+            user_email=self.contentbasetext.created_by.email
         )
         self.assertEqual(ContentBaseText.objects.count(), 0)
         self.assertTrue(status)
