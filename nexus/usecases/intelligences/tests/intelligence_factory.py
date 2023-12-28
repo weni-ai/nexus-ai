@@ -15,7 +15,10 @@ class IntelligenceFactory(factory.django.DjangoModelFactory):
         model = Intelligence
 
     name = factory.Sequence(lambda n: 'test%d' % n)
-    org = factory.SubFactory(OrgFactory)
+    org = factory.SubFactory(
+        OrgFactory,
+        created_by=factory.SelfAttribute('..created_by')
+    )
     created_by = factory.SubFactory(UserFactory)
     description = factory.Sequence(lambda n: 'test%d' % n)
 
@@ -25,7 +28,10 @@ class ContentBaseFactory(factory.django.DjangoModelFactory):
         model = ContentBase
 
     title = factory.Sequence(lambda n: 'test%d' % n)
-    intelligence = factory.SubFactory(IntelligenceFactory)
+    intelligence = factory.SubFactory(
+        IntelligenceFactory,
+        created_by=factory.SelfAttribute('..created_by')
+    )
     created_by = factory.SubFactory(UserFactory)
 
 
@@ -34,5 +40,8 @@ class ContentBaseTextFactory(factory.django.DjangoModelFactory):
         model = ContentBaseText
 
     created_by = factory.SubFactory(UserFactory)
-    content_base = factory.SubFactory(ContentBaseFactory)
+    content_base = factory.SubFactory(
+        ContentBaseFactory,
+        created_by=factory.SelfAttribute('..created_by')
+    )
     text = factory.Sequence(lambda n: 'test%d' % n)

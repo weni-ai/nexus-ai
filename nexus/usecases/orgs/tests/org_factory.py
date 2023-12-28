@@ -10,6 +10,11 @@ class OrgFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: 'test%d' % n)
     created_by = factory.SubFactory(UserFactory)
+    org_auth = factory.RelatedFactory(
+        'nexus.usecases.orgs.tests.org_factory.OrgAuthFactory',
+        'org',
+        user=factory.SelfAttribute('..created_by')
+    )
 
 
 class OrgAuthFactory(factory.django.DjangoModelFactory):
