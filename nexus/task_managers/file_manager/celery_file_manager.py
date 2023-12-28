@@ -15,21 +15,23 @@ class CeleryFileManager:
         self._file_database = file_database
 
     def upload_file(self, file: bytes, content_base_uuid: str, extension_file: str, user_email: str):
+        file_database_response = self._file_database.add_file(file)
+        if file_database_response.status != 0:
+            return {
+                "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
+                "error": file_database_response.err
+            }
         content_base_file_dto = ContentBaseFileDTO(
             file=file,
             user_email=user_email,
             content_base_uuid=content_base_uuid,
             extension_file=extension_file,
-            file_url=""
+            file_url=file_database_response.file_url
         )
-        
-        destination_path = os.path.join(settings.STATIC_ROOT, file.name)
-        with open(destination_path, 'wb') as destination_file:
-            destination_file.write(file.read())
         content_base_file = CreateContentBaseFileUseCase().create_content_base_file(content_base_file=content_base_file_dto)
         task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
-        print(f"[ FILEMANAGER] task_manager: {task_manager.uuid} - destination_path: {destination_path}")
-        add_file.apply_async(args=[str(task_manager.uuid), destination_path])
+        print(f"[ FILEMANAGER] task_manager: {task_manager.uuid}")
+        add_file.apply_async(args=[str(task_manager.uuid)])
         response = {
             "task_uuid": task_manager.uuid,
             "task_status": task_manager.status,
