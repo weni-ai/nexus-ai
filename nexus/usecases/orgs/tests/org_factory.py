@@ -1,6 +1,6 @@
 import factory
 
-from nexus.orgs.models import Org, OrgAuth
+from nexus.orgs.models import Org, OrgAuth, Role
 from nexus.usecases.users.tests.user_factory import UserFactory
 
 
@@ -18,4 +18,4 @@ class OrgAuthFactory(factory.django.DjangoModelFactory):
 
     org = factory.SubFactory(OrgFactory)
     user = factory.SubFactory(UserFactory)
-    role = 4
+    role = Role.ADMIN.value

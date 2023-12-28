@@ -22,7 +22,7 @@ class GetOrgByIntelligenceUseCase():
         )
         return org
 
-    def get_by_contentbasetext_uuid(
+    def get_org_by_contentbasetext_uuid(
             self,
             contentbasetext_uuid: str
     ) -> Org:
