@@ -8,3 +8,7 @@ class ContentBaseDoesNotExist(Exception):
 
 class ContentBaseTextDoesNotExist(Exception):
     pass
+
+
+class IntelligencePermissionDenied(Exception):
+    pass

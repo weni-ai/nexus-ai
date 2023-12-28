@@ -14,6 +14,8 @@ from .intelligence_factory import (
     ContentBaseFactory,
     ContentBaseTextFactory
 )
+from nexus.usecases.orgs.tests.org_factory import OrgFactory, OrgAuthFactory
+from nexus.usecases.users.tests.user_factory import UserFactory
 
 
 class TestDeleteIntelligenceUseCase(TestCase):
@@ -22,7 +24,10 @@ class TestDeleteIntelligenceUseCase(TestCase):
         self.intelligence = IntelligenceFactory()
 
     def test_delete_intelligence(self):
-        self.use_case.delete_intelligences(self.intelligence.uuid)
+        self.use_case.delete_intelligences(
+            intelligence_uuid=self.intelligence.uuid,
+            user_email=self.intelligence.created_by.email
+        )
         self.assertEqual(Intelligence.objects.count(), 0)
 
 
@@ -33,7 +38,10 @@ class TestDeleteContentBaseUseCase(TestCase):
 
     def test_delete_contentbase(self):
         use_case = DeleteContentBaseUseCase()
-        use_case.delete_contentbase(self.contentbase.uuid)
+        use_case.delete_contentbase(
+            contentbase_uuid=self.contentbase.uuid,
+            user_email=self.contentbase.created_by.email
+        )
         self.assertEqual(ContentBase.objects.count(), 0)
 
 
@@ -44,6 +52,9 @@ class TestDeleteContentBaseTextUseCase(TestCase):
 
     def test_delete_contentbasetext(self):
         use_case = DeleteContentBaseTextUseCase()
-        status = use_case.delete_contentbasetext(self.contentbasetext.uuid)
+        status = use_case.delete_contentbasetext(
+            contentbasetext_uuid=self.contentbasetext.uuid,
+            user_email=self.contentbasetext.created_by.email
+        )
         self.assertEqual(ContentBaseText.objects.count(), 0)
         self.assertTrue(status)
