@@ -22,3 +22,19 @@ class SentenXFileDataBase:
         }
         response = requests.post(url=url, headers=headers, body=body)
         return response.json() if response.status_code == 200 else response.text
+
+
+    def search_data(self, content_base_uuid: str, text: str):
+        url = settings.SENTENX_BASE_URL + "/content_base/search"
+        headers = {
+            "Content-Type": "application/json; charset: utf-8",
+            "Authorization": f"Bearer {settings.SENTENX_AUTH_TOKEN}",
+        }
+        body = {
+            "search": text,
+            "filter": {
+                "content_base_uuid": content_base_uuid
+            },
+        }
+        response = requests.post(url=url, headers=headers, body=body)
+        return {"status": response.status_code, "data": response.json() if response.status_code == 200 else response.text}
