@@ -16,7 +16,7 @@ class s3FileDatabase(FileDataBase):
             region_name=settings.AWS_S3_REGION_NAME
         )
         file_name = file.name + str(uuid.uuid4())
-        response = FileResponseDTO()
+        response = FileResponseDTO(err="", file_url="", status=1)
         try:
             s3_client.upload_fileobj(file, settings.AWS_STORAGE_BUCKET_NAME, file_name)
             response.status = 0
