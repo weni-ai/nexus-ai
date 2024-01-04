@@ -2,7 +2,7 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.task_managers.file_database.wenigpt_database import WeniGPTDatabase
 
 
-class IntelligenceGenerateSearchUseCase():
+class IntelligenceGenerativeSearchUseCase():
 
     def search(self, content_base_uuid: str, text: str):
         response = SentenXFileDataBase().search_data(content_base_uuid, text)

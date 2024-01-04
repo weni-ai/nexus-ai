@@ -37,5 +37,5 @@ from .retrieve import (
 )
 
 from .search import (
-    IntelligenceGenerateSearchUseCase
+    IntelligenceGenerativeSearchUseCase
 )
