@@ -1,4 +1,7 @@
-from rest_framework import status, parsers
+from django.core.exceptions import PermissionDenied
+from django.conf import settings
+
+from rest_framework import status, parsers, views
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
@@ -10,13 +13,11 @@ from .serializers import (
     ContentBaseFileSerializer
 )
 from nexus.usecases import intelligences
+from nexus.orgs import permissions
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
 
-from django.core.files.uploadedfile import InMemoryUploadedFile
-import os
-from django.conf import settings
 
 class CustomCursorPagination(CursorPagination):
     page_size = 10
@@ -100,6 +101,32 @@ class IntelligencesViewset(
         return Response(
             status=status.HTTP_204_NO_CONTENT
         )
+
+
+class FlowsIntelligencesApiView(views.APIView):
+    
+    def get(self, request, project_uuid):
+        authorization_header = request.headers.get('Authorization')
+        if not permissions.is_super_user(authorization_header):
+            raise PermissionDenied("You has not permission to do that.")
+        list_use_case = intelligences.ListAllIntelligenceContentUseCase()
+        return Response(data=list_use_case.get_project_intelligences(project_uuid=project_uuid), status=200)
+
+
+class GenerateIntelligenceQuestion(views.APIView):
+
+    def post(self, request):
+        authorization_header = request.headers.get("Authorization")
+        if not permissions.is_super_user(authorization_header):
+            return PermissionDenied("You has not permission to do that.")
+        data = request.data
+        intelligence_usecase = intelligences.IntelligenceGenerateSearchUseCase()
+        return Response(
+            data=intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text")),
+            status=200
+        )
+        
+
 
 
 class ContentBaseViewset(

@@ -25,6 +25,8 @@ env = environ.Env(
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(lambda v: [s.strip() for s in v.split(",")], list("*")),
     CELERY_BROKER_URL=(str, "redis://localhost:6379/0"),
+    WENIGPT_FLOWS_SEARCH_TOKEN=(str, ""),
+    WENIGPT_FLOWS_CLASSIFY_TOKEN=(str, ""),
 )
 
 # Quick-start development settings - unsuitable for production
@@ -173,3 +175,11 @@ SWAGGER_SETTINGS = {
         "OIDC": {"type": "apiKey", "name": "Authorization", "in": "header"}
     },
 }
+
+WENIGPT_FLOWS_CLASSIFY_TOKEN = env.str("WENIGPT_FLOWS_CLASSIFY_TOKEN")
+WENIGPT_FLOWS_SEARCH_TOKEN = env.str("WENIGPT_FLOWS_SEARCH_TOKEN")
+
+EXTERNAL_FLOWS_TOKENS = [
+    WENIGPT_FLOWS_CLASSIFY_TOKEN,
+    WENIGPT_FLOWS_SEARCH_TOKEN
+]
