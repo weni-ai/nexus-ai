@@ -27,6 +27,7 @@ env = environ.Env(
     CELERY_BROKER_URL=(str, "redis://localhost:6379/0"),
     WENIGPT_FLOWS_SEARCH_TOKEN=(str, ""),
     WENIGPT_FLOWS_CLASSIFY_TOKEN=(str, ""),
+    AWS_S3_REGION_NAME=(str, )
 )
 
 # Quick-start development settings - unsuitable for production
@@ -183,3 +184,5 @@ EXTERNAL_FLOWS_TOKENS = [
     WENIGPT_FLOWS_CLASSIFY_TOKEN,
     WENIGPT_FLOWS_SEARCH_TOKEN
 ]
+
+AWS_S3_REGION_NAME = env.str("AWS_S3_REGION_NAME")
