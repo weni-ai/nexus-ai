@@ -6,6 +6,7 @@ from .views import (
     ContentBaseViewset,
     ContentBaseTextViewset,
     ContentBaseFileViewset,
+    GenerativeIntelligenceQuestionAPIView,
 )
 
 
@@ -37,4 +38,5 @@ urlpatterns = [
     path('<intelligence_uuid>/', include(intelligence_router.urls)),
     path('<content_base_uuid>/', include(content_base_router.urls)),
     path('v1/intelligences/content_bases/<project_uuid>/', FlowsIntelligencesApiView.as_view(), name="project-intelligences"),
+    path('v1/wenigpt_question', GenerativeIntelligenceQuestionAPIView.as_view(), name="wenigpt-question")
 ]

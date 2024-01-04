@@ -113,14 +113,14 @@ class FlowsIntelligencesApiView(views.APIView):
         return Response(data=list_use_case.get_project_intelligences(project_uuid=project_uuid), status=200)
 
 
-class GenerateIntelligenceQuestion(views.APIView):
+class GenerativeIntelligenceQuestionAPIView(views.APIView):
 
     def post(self, request):
         authorization_header = request.headers.get("Authorization")
         if not permissions.is_super_user(authorization_header):
             return PermissionDenied("You has not permission to do that.")
         data = request.data
-        intelligence_usecase = intelligences.IntelligenceGenerateSearchUseCase()
+        intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
         return Response(
             data=intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text")),
             status=200
