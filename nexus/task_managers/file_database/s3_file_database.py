@@ -8,7 +8,7 @@ from .file_database import FileDataBase, FileResponseDTO
 
 class s3FileDatabase(FileDataBase):
 
-    def add_file(file) -> FileResponseDTO:
+    def add_file(self, file) -> FileResponseDTO:
         s3_client = boto3.client(
             's3',
             # aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
