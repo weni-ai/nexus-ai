@@ -301,7 +301,8 @@ class ContentBaseFileViewset(ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return ContentBaseFile.objects.none()  # pragma: no cover
         use_case = intelligences.ListContentBaseFileUseCase()
-        contentbase_uuid = self.kwargs.get('contentbase_uuid')
+        contentbase_uuid = self.kwargs.get('content_base_uuid')
+        print(f"contentbase_uuid: {contentbase_uuid}")
         return use_case.get_contentbase_file(contentbase_uuid=contentbase_uuid)
 
     def retrieve(self, request, *args, **kwargs):

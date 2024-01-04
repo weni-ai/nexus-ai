@@ -37,7 +37,7 @@ class ListContentBaseFileUseCase():
 
     def get_contentbase_file(self, contentbase_uuid: str):
         contentbase = get_by_contentbase_uuid(contentbase_uuid=contentbase_uuid)
-        return ContentBaseFile.objects.filter(contentbase=contentbase)
+        return ContentBaseFile.objects.filter(content_base=contentbase)
 
 
 class ListAllIntelligenceContentUseCase():
