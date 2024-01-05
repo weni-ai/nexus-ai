@@ -1,6 +1,6 @@
 # Weni
 
-[![Build Status](https://github.com/ilhasoft/nexus-ai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ilhasoft/nexus-ai/actions/workflows/ci.yml?query=branch%3Amain)
+[![Build Status](https://github.com/weni-ai/nexus-ai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Ilhasoft/nexus-ai/actions/workflows/ci.yml?query=branch%3Amain)
 [![Coverage Status](https://coveralls.io/repos/github/Ilhasoft/nexus-ai/badge.svg?branch=main)](https://coveralls.io/github/Ilhasoft/nexus-ai?branch=main)
 [![Python Version](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
