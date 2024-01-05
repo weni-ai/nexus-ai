@@ -18,10 +18,12 @@ class s3FileDatabase(FileDataBase):
         file_name = file.name + str(uuid.uuid4())
         response = FileResponseDTO(err="", file_url="", status=1)
         try:
+            print(f"[ S3FileDatabase ] - uploading {file_name}")
             s3_client.upload_fileobj(file, settings.AWS_S3_BUCKET_NAME, file_name)
             response.status = 0
             response.file_url = f"https://{settings.AWS_S3_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{file_name}"
         except Exception as exception:
             response.status = 1
             response.err = str(exception)
+        print(f"[ S3FileDatabase ] - uploaded {file_name}")
         return response
