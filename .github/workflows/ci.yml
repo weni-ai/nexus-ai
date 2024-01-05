@@ -30,4 +30,13 @@ jobs:
           poetry install
       - name: Run Tests
         run: task test
+      
+      - name: Update Coverage Badge
+        # GitHub actions: default branch variable
+        # https://stackoverflow.com/questions/64781462/github-actions-default-branch-variable
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: we-cli/coverage-badge-action@main
 
+
+<!-- README.md -->
++ [![cov](https://weni-ai.github.io/nexus-ai/badges/coverage.svg)](https://github.com/weni-ai/nexus-ai/actions)
