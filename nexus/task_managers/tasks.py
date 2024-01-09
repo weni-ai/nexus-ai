@@ -47,7 +47,8 @@ def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_e
         user_email=user_email,
         content_base_uuid=content_base_uuid,
         extension_file=extension_file,
-        file_url=file_database_response.file_url
+        file_url=file_database_response.file_url,
+        file_name=file_database_response.file_name
     )
 
     content_base_file = CreateContentBaseFileUseCase().create_content_base_file(content_base_file=content_base_file_dto)

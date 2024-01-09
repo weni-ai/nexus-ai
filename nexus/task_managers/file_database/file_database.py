@@ -7,6 +7,7 @@ class FileResponseDTO:
     status: int
     file_url: str
     err: str
+    file_name: str
 
 class FileDataBase(ABC):
 
