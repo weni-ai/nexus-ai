@@ -20,7 +20,7 @@ class SentenXFileDataBase:
             "task_uuid": str(task.uuid),
             "content_base": str(task.content_base_file.content_base.uuid)
         }
-        response = requests.post(url=url, headers=headers, body=body)
+        response = requests.post(url=url, headers=headers, json=body)
         return response.json() if response.status_code == 200 else response.text
 
 
