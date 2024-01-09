@@ -62,6 +62,5 @@ class CreateContentBaseTextUseCase():
             text=text,
             content_base=contentbase,
             created_by=user,
-            intelligence=contentbase.intelligence
         )
         return contentbasetext
