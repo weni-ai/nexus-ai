@@ -36,4 +36,3 @@ class ContentBaseTextFactory(factory.django.DjangoModelFactory):
     created_by = factory.SubFactory(UserFactory)
     content_base = factory.SubFactory(ContentBaseFactory)
     text = factory.Sequence(lambda n: 'test%d' % n)
-    intelligence = factory.SubFactory(IntelligenceFactory)
