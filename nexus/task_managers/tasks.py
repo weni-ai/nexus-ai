@@ -20,6 +20,8 @@ def add_file(task_manager_uuid):
         print(f"[ ADD FILE ] - error: {exception}")
         return
     sentenx_file_database = SentenXFileDataBase()
+    print("[ ADD FILE ]", type(task_manager))
+    print("[ ADD FILE ]", task_manager.__dict__)
     sentenx_response = sentenx_file_database.add_file(task_manager)
     if sentenx_response.status_code == 200:
         task_manager.update_status(ContentBaseFileTaskManager.STATUS_SUCCESS)
