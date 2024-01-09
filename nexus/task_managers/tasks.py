@@ -23,6 +23,7 @@ def add_file(task_manager_uuid):
     print("[ ADD FILE ]", type(task_manager))
     print("[ ADD FILE ]", task_manager.__dict__)
     status_code, sentenx_response = sentenx_file_database.add_file(task_manager)
+    print("[ ADD FILE ]", status_code, sentenx_response)
     if status_code == 200:
         task_manager.update_status(ContentBaseFileTaskManager.STATUS_SUCCESS)
         print(f"ADD FILE TASK ] - success on index new file `{task_manager.content_base_file.uuid}`")
