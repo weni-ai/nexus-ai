@@ -125,8 +125,6 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
             data=intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text")),
             status=200
         )
-        
-
 
 
 class ContentBaseViewset(

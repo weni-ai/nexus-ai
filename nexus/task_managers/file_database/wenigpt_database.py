@@ -47,7 +47,7 @@ class WeniGPTDatabase:
                 }
             }
         }
-
+        print(f"data: {json.dumps(data)}")
         text_answers = None
         try:
             response = requests.request("POST", self.url, headers=headers, data=json.dumps(data))

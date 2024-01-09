@@ -15,7 +15,9 @@ class s3FileDatabase(FileDataBase):
             # aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
             region_name=settings.AWS_S3_REGION_NAME
         )
-        file_name = file.name + str(uuid.uuid4())
+
+        name, extension = file.name.split(".")
+        file_name = f"{name}-{uuid.uuid4()}.{extension}"
         response = FileResponseDTO(err="", file_url="", status=1)
         try:
             print(f"[ S3FileDatabase ] - uploading {file_name}")
