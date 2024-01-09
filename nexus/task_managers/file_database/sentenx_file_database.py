@@ -5,8 +5,7 @@ from nexus.task_managers.models import TaskManager
 
 
 class SentenXFileDataBase:
-    def __init__(self):
-        pass
+
     def add_file(self, task: TaskManager):
         url = settings.SENTENX_BASE_URL + "/content_base/index"
         headers = {
@@ -21,7 +20,11 @@ class SentenXFileDataBase:
             "content_base": str(task.content_base_file.content_base.uuid)
         }
         response = requests.post(url=url, headers=headers, json=body)
-        return response.status_code, response.json() if response.status_code == 200 else response.status_code, response.text
+
+        if response.status_code == 200:
+            return response.status_code, response.json()
+
+        return response.status_code, response.text
 
 
     def search_data(self, content_base_uuid: str, text: str):
