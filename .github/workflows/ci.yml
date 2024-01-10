@@ -28,5 +28,9 @@ jobs:
           pip install poetry
           poetry config virtualenvs.create false --local
           poetry install
-      - name: Run Tests
-        run: task test
+      - name: Run Django Unittests with Coverage
+        run: coverage run manage.py test --verbosity=2 --noinput
+      - name: Coverage Report
+        run: coverage report
+      - name: Flake8
+        run: flake8 nexus/

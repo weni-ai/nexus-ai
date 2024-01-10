@@ -29,9 +29,6 @@ class TestAdminPermissionTestCase(TestCase):
 
     def test_can_list_org_intelligences(self):
         self.assertTrue(permissions.can_list_org_intelligences(self.user, self.org))
-    
-    def test_can_edit_intelligence_of_org(self):
-        self.assertTrue(permissions.can_edit_intelligence_of_org(self.user, self.org))
 
     def test_can_edit_intelligence_of_org(self):
         self.assertTrue(permissions.can_edit_intelligence_of_org(self.user, self.org))
@@ -44,7 +41,7 @@ class TestAdminPermissionTestCase(TestCase):
 
     def test_can_create_content_bases(self):
         self.assertTrue(permissions.can_create_content_bases(self.user, self.org))
-    
+
     def test_can_add_content_base_file(self):
         self.assertTrue(permissions.can_add_content_base_file(self.user, self.org))
 
@@ -78,9 +75,6 @@ class TestContributorPermissionTestCase(TestCase):
 
     def test_can_list_org_intelligences(self):
         self.assertTrue(permissions.can_list_org_intelligences(self.user, self.org))
-    
-    def test_can_edit_intelligence_of_org(self):
-        self.assertTrue(permissions.can_edit_intelligence_of_org(self.user, self.org))
 
     def test_can_edit_intelligence_of_org(self):
         self.assertTrue(permissions.can_edit_intelligence_of_org(self.user, self.org))
@@ -93,7 +87,7 @@ class TestContributorPermissionTestCase(TestCase):
 
     def test_can_create_content_bases(self):
         self.assertTrue(permissions.can_create_content_bases(self.user, self.org))
-    
+
     def test_can_add_content_base_file(self):
         self.assertTrue(permissions.can_add_content_base_file(self.user, self.org))
 
@@ -127,9 +121,6 @@ class TestViewerPermissionTestCase(TestCase):
 
     def test_cant_list_org_intelligences(self):
         self.assertTrue(permissions.can_list_org_intelligences(self.user, self.org))
-    
-    def test_cant_edit_intelligence_of_org(self):
-        self.assertFalse(permissions.can_edit_intelligence_of_org(self.user, self.org))
 
     def test_cant_edit_intelligence_of_org(self):
         self.assertFalse(permissions.can_edit_intelligence_of_org(self.user, self.org))
@@ -142,7 +133,7 @@ class TestViewerPermissionTestCase(TestCase):
 
     def test_cant_create_content_bases(self):
         self.assertFalse(permissions.can_create_content_bases(self.user, self.org))
-    
+
     def test_cant_add_content_base_file(self):
         self.assertFalse(permissions.can_add_content_base_file(self.user, self.org))
 
