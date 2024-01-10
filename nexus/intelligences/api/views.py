@@ -123,7 +123,7 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
         intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
         print(f"[GenerativeIntelligenceQuestionAPIView] {data}")
         return Response(
-            data=intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text")),
+            data=intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("message")),
             status=200
         )
 

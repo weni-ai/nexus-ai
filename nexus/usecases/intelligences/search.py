@@ -7,6 +7,7 @@ class IntelligenceGenerativeSearchUseCase():
     def search(self, content_base_uuid: str, text: str):
         print(f"[IntelligenceGenerativeSearchUseCase] {content_base_uuid} {text}")
         response = SentenXFileDataBase().search_data(content_base_uuid, text)
+        print(f"[IntelligenceGenerativeSearchUseCase] {response}")
         if response.get("status") != 200:
             raise Exception(response.get("data"))
         wenigpt_database = WeniGPTDatabase()
