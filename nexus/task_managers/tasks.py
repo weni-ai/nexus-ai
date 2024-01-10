@@ -1,6 +1,5 @@
 from nexus.celery import app
 
-from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
