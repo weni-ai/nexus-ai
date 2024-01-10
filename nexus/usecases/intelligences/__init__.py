@@ -36,5 +36,5 @@ from .retrieve import (
     RetrieveContentBaseFileUseCase
 )
 from .search import (
-    IntelligenceGenerateSearchUseCase
+    IntelligenceGenerativeSearchUseCase
 )

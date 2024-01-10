@@ -119,7 +119,7 @@ class GenerateIntelligenceQuestion(views.APIView):
         if not permissions.is_super_user(authorization_header):
             return PermissionDenied("You has not permission to do that.")
         data = request.data
-        intelligence_usecase = intelligences.IntelligenceGenerateSearchUseCase()
+        intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
         return Response(
             data=intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text")),
             status=200
