@@ -15,6 +15,12 @@ app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
 task_create_missing_queues = True
 
+app.conf.event_serializer = 'pickle'
+app.conf.task_serializer = 'pickle'
+app.conf.result_serializer = 'pickle'
+app.conf.accept_content = ['application/json', 'application/x-python-serialize']
+
+
 if "test" in sys.argv or getattr(settings, "CELERY_ALWAYS_EAGER", False):
     from celery import current_app
 
