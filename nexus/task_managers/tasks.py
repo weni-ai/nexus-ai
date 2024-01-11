@@ -19,10 +19,11 @@ def add_file(task_manager_uuid):
     except Exception as exception:
         print(f"[ ADD FILE ] - error: {exception}")
         return
+    file_database = s3FileDatabase()
     sentenx_file_database = SentenXFileDataBase()
     print("[ ADD FILE ]", type(task_manager))
     print("[ ADD FILE ]", task_manager.__dict__)
-    status_code, sentenx_response = sentenx_file_database.add_file(task_manager)
+    status_code, sentenx_response = sentenx_file_database.add_file(task_manager, file_database)
     print("[ ADD FILE ]", status_code, sentenx_response)
     if status_code == 200:
         task_manager.update_status(ContentBaseFileTaskManager.STATUS_SUCCESS)

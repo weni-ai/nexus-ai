@@ -2,18 +2,19 @@ import requests
 from django.conf import settings
 
 from nexus.task_managers.models import TaskManager
+from .file_database import FileDataBase
 
 
 class SentenXFileDataBase:
 
-    def add_file(self, task: TaskManager):
+    def add_file(self, task: TaskManager, file_database: FileDataBase):
         url = settings.SENTENX_BASE_URL + "/content_base/index"
         headers = {
             "Content-Type": "application/json; charset: utf-8",
             "Authorization": f"Bearer {settings.SENTENX_AUTH_TOKEN}",
         }
         body = {
-            "file": task.content_base_file.file,
+            "file": file_database.create_presigned_url(task.content_base_file.file_name),
             "filename": task.content_base_file.file_name,
             "extension_file": task.content_base_file.extension_file,
             "task_uuid": str(task.uuid),
