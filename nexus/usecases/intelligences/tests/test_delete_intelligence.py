@@ -14,8 +14,6 @@ from .intelligence_factory import (
     ContentBaseFactory,
     ContentBaseTextFactory
 )
-from nexus.usecases.orgs.tests.org_factory import OrgFactory, OrgAuthFactory
-from nexus.usecases.users.tests.user_factory import UserFactory
 
 
 class TestDeleteIntelligenceUseCase(TestCase):

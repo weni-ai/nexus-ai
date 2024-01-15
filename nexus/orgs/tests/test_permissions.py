@@ -11,7 +11,7 @@ from nexus.orgs.models import Role
 
 class TestAdminPermissionTestCase(TestCase):
     def setUp(self):
-        self.org = OrgFactory()
+        self.org = OrgFactory(org_auth=None)
         self.user = self.org.created_by
         self.admin_auth = CreateOrgAuthUseCase().create_org_auth(str(self.org.uuid), self.org.created_by, role=Role.ADMIN.value)
 
@@ -57,7 +57,7 @@ class TestAdminPermissionTestCase(TestCase):
 
 class TestContributorPermissionTestCase(TestCase):
     def setUp(self):
-        self.org = OrgFactory()
+        self.org = OrgFactory(org_auth=None)
         self.user = self.org.created_by
         self.admin_auth = CreateOrgAuthUseCase().create_org_auth(str(self.org.uuid), self.org.created_by, role=Role.CONTRIBUTOR.value)
 
@@ -103,7 +103,7 @@ class TestContributorPermissionTestCase(TestCase):
 
 class TestViewerPermissionTestCase(TestCase):
     def setUp(self):
-        self.org = OrgFactory()
+        self.org = OrgFactory(org_auth=None)
         self.user = self.org.created_by
         self.admin_auth = CreateOrgAuthUseCase().create_org_auth(str(self.org.uuid), self.org.created_by, role=Role.VIEWER.value)
 

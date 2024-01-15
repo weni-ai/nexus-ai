@@ -12,7 +12,7 @@ from uuid import uuid4
 
 class CreateOrgAuthTestCase(TestCase):
     def setUp(self):
-        self.org = OrgFactory()
+        self.org = OrgFactory(org_auth=None)
         self.user = self.org.created_by
         self.usecase = CreateOrgAuthUseCase()
 

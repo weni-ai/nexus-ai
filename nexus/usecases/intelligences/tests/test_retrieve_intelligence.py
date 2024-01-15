@@ -27,7 +27,7 @@ class TestRetrieveIntelligenceUseCase(TestCase):
         intelligences_retrieve = use_case.get_intelligence(
             intelligence_uuid=self.intelligence.uuid,
             user_email=self.intelligence.created_by.email
-            )
+        )
         self.assertIsNotNone(intelligences_retrieve)
         self.assertIsInstance(intelligences_retrieve, Intelligence)
 
