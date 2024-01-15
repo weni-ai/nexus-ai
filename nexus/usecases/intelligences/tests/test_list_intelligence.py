@@ -24,7 +24,7 @@ class TestListIntelligenceUseCase(TestCase):
         intelligences_list = use_case.get_org_intelligences(
             org_uuid=self.org.uuid,
             user_email=self.org.created_by.email
-            )
+        )
         self.assertEqual(1, len(intelligences_list))
 
 
