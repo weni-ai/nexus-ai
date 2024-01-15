@@ -26,3 +26,9 @@ class CeleryTaskManagerUseCase:
         except Exception as exception:
             raise Exception(f"[ ContentBaseFile ] - ContentBaseFile error to get - error: `{exception}`")
         return content_base_task_manager
+
+    def update_task_status(self, task_uuid, status):
+        task_manager = self.get_task_manager_by_uuid(task_uuid=task_uuid)
+        task_manager.status = status
+        task_manager.end_at = pendulum.now()
+        task_manager.save(update_fields=["end_at", "status"])
