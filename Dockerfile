@@ -10,7 +10,7 @@ ARG BUILD_DEPS="\
   python3-dev default-libmysqlclient-dev build-essential \
   build-essential \
   git cmake \
-  autoconf pkg-config autoconf libtool automake \
+  autoconf pkg-config libtool automake \
   libmariadb-dev"
 # default-libmysqlclient-dev
 ARG RUNTIME_DEPS="\
@@ -92,7 +92,7 @@ COPY --from=build /install /usr/local
 COPY --chown=${APP_USER}:${APP_GROUP} . ${APP_PATH}
 
 USER "${APP_USER}:${APP_GROUP}"
-EXPOSE 8080
+EXPOSE 8000
 COPY entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["bash", "-e", "/entrypoint.sh"]
 CMD ["start"]

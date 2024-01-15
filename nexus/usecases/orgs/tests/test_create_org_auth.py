@@ -16,7 +16,6 @@ class CreateOrgAuthTestCase(TestCase):
         self.user = self.org.created_by
         self.usecase = CreateOrgAuthUseCase()
 
-
     def test_create_org_auth_admin(self):
         role: int = 3
         org_auth = self.usecase.create_org_auth(str(self.org.uuid), self.user.email, role)
