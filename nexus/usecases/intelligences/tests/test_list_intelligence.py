@@ -21,7 +21,10 @@ class TestListIntelligenceUseCase(TestCase):
 
     def test_count_intelligence_use_case(self):
         use_case = ListIntelligencesUseCase()
-        intelligences_list = use_case.get_org_intelligences(self.org.uuid)
+        intelligences_list = use_case.get_org_intelligences(
+            org_uuid=self.org.uuid,
+            user_email=self.org.created_by.email
+            )
         self.assertEqual(1, len(intelligences_list))
 
 
@@ -35,7 +38,8 @@ class TestListContentBaseUseCase(TestCase):
     def test_count_contentbase_use_case(self):
         use_case = ListContentBaseUseCase()
         contentbase_list = use_case.get_intelligence_contentbases(
-            self.intelligence.uuid
+            self.intelligence.uuid,
+            user_email=self.intelligence.created_by.email
         )
         self.assertEqual(1, len(contentbase_list))
 
@@ -48,6 +52,7 @@ class TestListContentBaseTextUseCase(TestCase):
     def test_count_contentbasetext_use_case(self):
         use_case = ListContentBaseTextUseCase()
         contentbasetext_list = use_case.get_contentbase_contentbasetexts(
-            self.contentbasetext.content_base.uuid
+            self.contentbasetext.content_base.uuid,
+            user_email=self.contentbasetext.created_by.email
         )
         self.assertEqual(1, len(contentbasetext_list))

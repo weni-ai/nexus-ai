@@ -3,20 +3,31 @@ from nexus.intelligences.models import (
     ContentBase,
     ContentBaseText
 )
-from nexus.usecases import orgs, users, intelligences
+from nexus.usecases import (
+    orgs,
+    users,
+    intelligences
+)
+from nexus.orgs import permissions
+from .exceptions import IntelligencePermissionDenied
 
 
 class CreateIntelligencesUseCase():
 
-    def __init__(self):
-        pass
-
     def create_intelligences(
-            self, org_uuid: str, user_email: str,
-            name: str, description: str
+            self,
+            org_uuid: str,
+            user_email: str,
+            name: str,
+            description: str
     ):
         org = orgs.get_by_uuid(org_uuid)
         user = users.get_by_email(user_email)
+
+        has_permission = permissions.can_create_intelligence_in_org(user, org)
+        if not has_permission:
+            raise IntelligencePermissionDenied()
+
         intelligence = Intelligence.objects.create(
             name=name, description=description,
             org=org, created_by=user
@@ -33,7 +44,14 @@ class CreateContentBaseUseCase():
             title: str,
     ) -> ContentBase:
 
+        org_usecase = orgs.GetOrgByIntelligenceUseCase()
+        org = org_usecase.get_org_by_intelligence_uuid(intelligence_uuid)
         user = users.get_by_email(user_email)
+
+        has_permission = permissions.can_create_content_bases(user, org)
+        if not has_permission:
+            raise IntelligencePermissionDenied()
+
         intelligence = intelligences.get_by_intelligence_uuid(
             intelligence_uuid
         )
@@ -54,7 +72,14 @@ class CreateContentBaseTextUseCase():
             text: str,
     ) -> ContentBaseText:
 
+        org_usecase = orgs.GetOrgByIntelligenceUseCase()
+        org = org_usecase.get_org_by_contentbase_uuid(contentbase_uuid)
         user = users.get_by_email(user_email)
+
+        has_permission = permissions.can_create_content_bases(user, org)
+        if not has_permission:
+            raise IntelligencePermissionDenied()
+
         contentbase = intelligences.get_by_contentbase_uuid(
             contentbase_uuid
         )

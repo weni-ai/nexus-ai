@@ -6,7 +6,6 @@ from ..create import (
     CreateContentBaseTextUseCase
 )
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
-from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
 )
@@ -15,8 +14,7 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
 class TestListIntelligenceUseCase(TestCase):
 
     def setUp(self):
-        self.user = UserFactory()
-        self.org = OrgFactory(created_by=self.user)
+        self.org = OrgFactory()
 
     def test_create_intelligence_use_case(self):
         use_case = CreateIntelligencesUseCase()
@@ -24,7 +22,7 @@ class TestListIntelligenceUseCase(TestCase):
             name="name",
             description="description",
             org_uuid=self.org.uuid,
-            user_email=self.user.email
+            user_email=self.org.created_by
         )
         self.assertEqual(intelligences_create.name, "name")
 
@@ -32,33 +30,29 @@ class TestListIntelligenceUseCase(TestCase):
 class TestCreateContentBaseUseCase(TestCase):
 
     def setUp(self):
-        self.user = UserFactory()
-        self.org = OrgFactory(created_by=self.user)
+        self.org = OrgFactory()
         self.intelligence = CreateIntelligencesUseCase().create_intelligences(
             name="name",
             description="description",
             org_uuid=self.org.uuid,
-            user_email=self.user.email
+            user_email=self.org.created_by
         )
 
     def test_create_content_base_use_case(self):
         use_case = CreateContentBaseUseCase()
         content_base_create = use_case.create_contentbase(
             intelligence_uuid=self.intelligence.uuid,
-            user_email=self.user.email,
+            user_email=self.org.created_by,
             title="title"
         )
         self.assertEqual(content_base_create.title, "title")
 
     def test_create_content_base_text_use_case(self):
-        contentbase = ContentBaseFactory(
-            intelligence=self.intelligence,
-            created_by=self.user
-        )
+        contentbase = ContentBaseFactory()
         use_case = CreateContentBaseTextUseCase()
         content_base_text_create = use_case.create_contentbasetext(
             contentbase_uuid=contentbase.uuid,
-            user_email=self.user.email,
+            user_email=contentbase.created_by.email,
             text="text"
         )
         self.assertEqual(content_base_text_create.text, "text")
