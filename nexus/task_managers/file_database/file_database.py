@@ -4,9 +4,11 @@ from dataclasses import dataclass
 
 @dataclass
 class FileResponseDTO:
-    status: int
-    file_url: str
-    err: str
+    status: int = None
+    file_url: str = None
+    err: str = None
+    file_name: str = None
+
 
 class FileDataBase(ABC):
 

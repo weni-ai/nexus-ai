@@ -29,6 +29,7 @@ class ContentBase(BaseModel, SoftDeleteModel):
 
 class ContentBaseFile(BaseModel, SoftDeleteModel):
     file = models.URLField()
+    file_name = models.CharField(max_length=255)
     extension_file = models.CharField(max_length=10)
     content_base = models.ForeignKey(
         ContentBase, related_name='contentbasefiles', on_delete=models.CASCADE

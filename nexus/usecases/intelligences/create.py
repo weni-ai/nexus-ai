@@ -99,6 +99,7 @@ class CreateContentBaseFileUseCase():
         user = users.get_by_email(content_base_file.user_email)
         content_base = intelligences.get_by_contentbase_uuid(contentbase_uuid=content_base_file.content_base_uuid)
         content_base_file = ContentBaseFile.objects.create(
+            file_name=content_base_file.file_name,
             file=content_base_file.file_url,
             extension_file=content_base_file.extension_file,
             content_base=content_base,
