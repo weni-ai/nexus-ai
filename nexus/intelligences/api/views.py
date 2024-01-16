@@ -16,6 +16,8 @@ from nexus.orgs import permissions
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
+from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
+from nexus.task_managers.models import ContentBaseFileTaskManager
 
 
 class CustomCursorPagination(CursorPagination):
@@ -132,6 +134,16 @@ class GenerateIntelligenceQuestion(views.APIView):
             data=intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text")),
             status=200
         )
+
+
+class SentenxIndexerUpdateFile(views.APIView):
+
+    def patch(self, request):
+        data = request.data
+        task_manager_usecase = CeleryTaskManagerUseCase()
+        sentenx_status = [ContentBaseFileTaskManager.STATUS_SUCCESS, ContentBaseFileTaskManager.STATUS_FAIL]
+        task_manager_usecase.update_task_status(task_uuid=data.get("task_uuid"), status=sentenx_status[data.get("status")])
+        return Response(status=200, data=data)
 
 
 class ContentBaseViewset(
