@@ -115,7 +115,7 @@ class IntelligencesViewset(
 class FlowsIntelligencesApiView(views.APIView):
 
     def get(self, request, project_uuid):
-        authorization_header = request.headers.get('Authorization')
+        authorization_header = request.headers.get('Authorization', "Bearer unauthorized")
         if not permissions.is_super_user(authorization_header):
             raise PermissionDenied("You has not permission to do that.")
         list_use_case = intelligences.ListAllIntelligenceContentUseCase()
@@ -125,7 +125,7 @@ class FlowsIntelligencesApiView(views.APIView):
 class GenerateIntelligenceQuestion(views.APIView):
 
     def post(self, request):
-        authorization_header = request.headers.get("Authorization")
+        authorization_header = request.headers.get("Authorization", "Bearer unauthorized")
         if not permissions.is_super_user(authorization_header):
             return PermissionDenied("You has not permission to do that.")
         data = request.data
@@ -139,6 +139,9 @@ class GenerateIntelligenceQuestion(views.APIView):
 class SentenxIndexerUpdateFile(views.APIView):
 
     def patch(self, request):
+        authorization_header = request.headers.get('Authorization', "Bearer unauthorized")
+        if not permissions.is_super_user(authorization_header):
+            raise PermissionDenied("You has not permission to do that.")
         data = request.data
         task_manager_usecase = CeleryTaskManagerUseCase()
         sentenx_status = [ContentBaseFileTaskManager.STATUS_SUCCESS, ContentBaseFileTaskManager.STATUS_FAIL]

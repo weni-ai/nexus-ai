@@ -9,8 +9,8 @@ def get_user_auth(user: User, org: Org):
 
 
 def is_super_user(token: str):
-    token = token.split(":")[1].strip()
-    return token in settings.EXTERNAL_FLOWS_TOKENS
+    token = token.split("Bearer")[1].strip()
+    return token in settings.EXTERNAL_SUPERUSERS_TOKENS
 
 
 def is_admin(auth: OrgAuth) -> bool:
