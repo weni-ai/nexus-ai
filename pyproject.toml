@@ -17,7 +17,12 @@ gunicorn = "^21.2.0"
 psycopg2-binary = "^2.9.9"
 whitenoise = "^6.6.0"
 gevent = "^23.9.1"
-factory-boy = "^3.3.0"
+celery = "^5.3.6"
+django-celery-results = "^2.5.1"
+django-celery-beat = "^2.5.0"
+boto3 = "^1.34.1"
+requests = "^2.31.0"
+redis = "^5.0.1"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -37,12 +42,12 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 line-length = 79
-exclude = ['.venv', 'migrations', 'manage.py', 'wsgi.py', 'asgi.py', '__init__.py']
+exclude = ['.venv', 'migrations', 'manage.py', 'wsgi.py', 'asgi.py',]
 
 [tool.isort]
 profile = "black"
 line_length = 79
-extend_skip = ['migrations', 'manage.py', 'wsgi.py', 'asgi.py', '__init__.py']
+extend_skip = ['migrations', 'manage.py', 'wsgi.py', 'asgi.py',]
 
 [tool.pytest.ini_options]
 pythonpath = "."
@@ -55,7 +60,6 @@ extend-exclude = '''
         migrations/
         | manage.py
         | settings.py
-        | __init__.py
     )
 '''
 

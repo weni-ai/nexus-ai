@@ -23,6 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env(
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(lambda v: [s.strip() for s in v.split(",")], "*"),
+    CELERY_BROKER_URL=(str, "redis://localhost:6379/0"),
 )
 
 # Quick-start development settings - unsuitable for production
@@ -47,6 +48,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    "django_celery_results",
+    "django_celery_beat",
     'rest_framework',
     # apps
     'nexus.users',
@@ -54,6 +57,7 @@ INSTALLED_APPS = [
     'nexus.orgs',
     'nexus.projects',
     'nexus.intelligences',
+    "nexus.task_manager",
 ]
 
 MIDDLEWARE = [
@@ -146,3 +150,10 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Celery config
+CELERY_RESULT_BACKEND = "django-db"
+CELERY_BROKER_URL = env.str("CELERY_BROKER_URL")
+CELERY_ACCEPT_CONTENT = ["application/json"]
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TASK_SERIALIZER = "json"
