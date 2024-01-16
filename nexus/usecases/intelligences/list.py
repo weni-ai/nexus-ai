@@ -7,6 +7,8 @@ from nexus.intelligences.models import (
 from nexus.usecases import orgs, users
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
+from nexus.usecases import orgs
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from .get_by_uuid import (
     get_by_intelligence_uuid,
     get_by_contentbase_uuid,
@@ -27,6 +29,22 @@ class ListIntelligencesUseCase():
         if not has_permission:
             raise IntelligencePermissionDenied()
         return Intelligence.objects.filter(org=org)
+
+
+class ListAllIntelligenceContentUseCase():
+
+    def get_project_intelligences(self, project_uuid: str):
+        project_usecase = ProjectsUseCase()
+        response = []
+        project = project_usecase.get_by_uuid(project_uuid)
+        intelligences = ListIntelligencesUseCase().get_org_intelligences(project.org.uuid)
+        for intelligence in intelligences:
+            cur_data = {"intelligence_name": intelligence.name, "content_bases": []}
+            content_bases = ListContentBaseUseCase().get_intelligence_contentbases(intelligence_uuid=str(intelligence.uuid))
+            for content_base in content_bases:
+                cur_data["content_bases"].append({"uuid": str(content_base.uuid), "content_base_name": content_base.title})
+            response.append(cur_data)
+        return response
 
 
 class ListContentBaseUseCase():

@@ -1,9 +1,16 @@
+from django.conf import settings
+
 from nexus.orgs.models import Org, OrgAuth, Role
 from nexus.users.models import User
 
 
 def get_user_auth(user: User, org: Org):
     return OrgAuth.objects.get(user=user, org=org)
+
+
+def is_super_user(token: str):
+    token = token.split(":")[1].strip()
+    return token in settings.EXTERNAL_FLOWS_TOKENS
 
 
 def is_admin(auth: OrgAuth) -> bool:

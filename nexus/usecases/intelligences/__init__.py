@@ -3,6 +3,7 @@ from .list import (
     ListContentBaseUseCase,
     ListContentBaseTextUseCase,
     ListContentBaseFileUseCase,
+    ListAllIntelligenceContentUseCase,
 )
 from .create import (
     CreateIntelligencesUseCase,
@@ -33,4 +34,7 @@ from .retrieve import (
     RetrieveContentBaseUseCase,
     RetrieveContentBaseTextUseCase,
     RetrieveContentBaseFileUseCase
+)
+from .search import (
+    IntelligenceGenerativeSearchUseCase
 )
