@@ -1,7 +1,8 @@
 from .get_by_uuid import (
     get_by_intelligence_uuid,
     get_by_contentbase_uuid,
-    get_by_contentbasetext_uuid
+    get_by_contentbasetext_uuid,
+    get_by_content_base_file_uuid
 )
 from nexus.usecases import orgs, users
 from nexus.orgs import permissions
@@ -61,3 +62,9 @@ class RetrieveContentBaseTextUseCase():
         if not has_permission:
             raise IntelligencePermissionDenied()
         return get_by_contentbasetext_uuid(contentbasetext_uuid)
+
+
+class RetrieveContentBaseFileUseCase():
+
+    def get_contentbasefile(self, contentbasefile_uuid: str):
+        return get_by_content_base_file_uuid(contentbasefile_uuid)

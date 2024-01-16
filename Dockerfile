@@ -58,7 +58,8 @@ FROM base as build-poetry
 
 ARG POETRY_VERSION
 
-COPY pyproject.toml poetry.lock .
+COPY pyproject.toml .
+COPY poetry.lock .
 
 RUN --mount=type=cache,mode=0755,target=/pip_cache,id=pip pip install --cache-dir /pip_cache -U poetry=="${POETRY_VERSION}" \
   && poetry export --without-hashes --output requirements.txt

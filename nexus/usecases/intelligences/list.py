@@ -1,14 +1,15 @@
 from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
-    ContentBaseText
+    ContentBaseText,
+    ContentBaseFile
 )
 from nexus.usecases import orgs, users
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
 from .get_by_uuid import (
     get_by_intelligence_uuid,
-    get_by_contentbase_uuid
+    get_by_contentbase_uuid,
 )
 
 
@@ -63,3 +64,10 @@ class ListContentBaseTextUseCase():
             raise IntelligencePermissionDenied()
         contentbase = get_by_contentbase_uuid(contentbase_uuid)
         return ContentBaseText.objects.filter(content_base=contentbase)
+
+
+class ListContentBaseFileUseCase():
+
+    def get_contentbase_file(self, contentbase_uuid: str):
+        contentbase = get_by_contentbase_uuid(contentbase_uuid=contentbase_uuid)
+        return ContentBaseFile.objects.filter(contentbase=contentbase)
