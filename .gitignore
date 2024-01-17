@@ -181,3 +181,5 @@ cython_debug/
 .tool-versions
 
 staticfiles/
+
+.idea/

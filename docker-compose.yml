@@ -50,6 +50,14 @@ services:
     image: redis
     ports:
       - 6379:6379
+  rabbitmq:
+    image: rabbitmq:3.9.7-management
+    ports:
+      - "5672:5672"  # Porta para conexão com o RabbitMQ
+      - "15672:15672"  # Porta para acessar a interface de gerenciamento do RabbitMQ
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
 networks:
   nexus:
     external: true
