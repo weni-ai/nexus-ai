@@ -66,5 +66,15 @@ class RetrieveContentBaseTextUseCase():
 
 class RetrieveContentBaseFileUseCase():
 
-    def get_contentbasefile(self, contentbasefile_uuid: str):
+    def get_contentbasefile(self, contentbasefile_uuid: str, user_email: str):
+        org_use_case = orgs.GetOrgByIntelligenceUseCase()
+        user = users.get_by_email(user_email)
+
+        org = org_use_case.get_org_by_contentbasefile_uuid(
+            contentbasefile_uuid
+        )
+        has_permission = permissions.can_list_content_bases(user, org)
+
+        if not has_permission:
+            raise IntelligencePermissionDenied()
         return get_by_content_base_file_uuid(contentbasefile_uuid)

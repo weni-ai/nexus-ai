@@ -25,6 +25,7 @@ redis = "^5.0.1"
 requests = "^2.31.0"
 drf-yasg = "^1.21.7"
 boto3 = "^1.34.6"
+mozilla-django-oidc = "^4.0.0"
 
 
 [tool.poetry.group.dev.dependencies]

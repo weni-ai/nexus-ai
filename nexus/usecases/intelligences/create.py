@@ -4,7 +4,6 @@ from nexus.intelligences.models import (
     ContentBaseText,
     ContentBaseFile
 )
-from nexus.usecases import orgs, users, intelligences
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 from nexus.usecases import (
     orgs,

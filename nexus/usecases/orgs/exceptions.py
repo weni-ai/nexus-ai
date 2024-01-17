@@ -4,3 +4,7 @@ class OrgDoesNotExists(Exception):
 
 class OrgRoleDoesNotExists(Exception):
     pass
+
+
+class OrgAuthDoesNotExists(Exception):
+    pass
