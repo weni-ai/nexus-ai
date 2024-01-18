@@ -337,7 +337,7 @@ class ContentBaseTextViewset(
 
             text = serializer.validated_data.get('text')
 
-            upload_text_file.deley(text, content_base_uuid, user_email)
+            upload_text_file.delay(text, content_base_uuid, user_email)
 
             return Response(
                 status=status.HTTP_201_CREATED
