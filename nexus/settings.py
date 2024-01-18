@@ -63,7 +63,8 @@ INSTALLED_APPS = [
     'nexus.orgs',
     'nexus.projects',
     'nexus.intelligences',
-    'nexus.task_managers'
+    'nexus.task_managers',
+    'nexus.event_driven'
 ]
 
 MIDDLEWARE = [
@@ -250,3 +251,21 @@ if TESTING:
     REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"].append(
         "rest_framework.authentication.TokenAuthentication"
     )
+
+# Event Driven Architecture configurations
+
+USE_EDA = env.bool("USE_EDA", default=False)
+
+if USE_EDA:
+    EDA_CONNECTION_BACKEND = "nexus.event_driven.connection.pymqp_connection.PyAMQPConnectionBackend"
+    EDA_CONSUMERS_HANDLE = "nexus.event_driven.handle.handle_consumers"
+
+    EDA_BROKER_HOST = env("EDA_BROKER_HOST", default="localhost")
+    EDA_VIRTUAL_HOST = env("EDA_VIRTUAL_HOST", default="/")
+    EDA_BROKER_PORT = env.int("EDA_BROKER_PORT", default=5672)
+    EDA_BROKER_USER = env("EDA_BROKER_USER", default="guest")
+    EDA_BROKER_PASSWORD = env("EDA_BROKER_PASSWORD", default="guest")
+    EDA_WAIT_TIME_RETRY = env("EDA_WAIT_TIME_RETRY", default=5)
+
+RABBITMQ_DEFAULT_USER=env.str("RABBITMQ_DEFAULT_USER")
+RABBITMQ_DEFAULT_PASS=env.str("RABBITMQ_DEFAULT_PASS")
