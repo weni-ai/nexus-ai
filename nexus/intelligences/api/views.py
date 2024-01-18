@@ -405,7 +405,7 @@ class ContentBaseFileViewset(ModelViewSet):
         try:
             file = request.FILES['file']
             self.get_queryset()
-            user_email = request.data.get("user_email")
+            user_email = request.user.email
             extension_file = request.data.get("extension_file")
             file_database = s3FileDatabase()
             file_manager = CeleryFileManager(file_database=file_database)
