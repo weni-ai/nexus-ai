@@ -328,23 +328,18 @@ class ContentBaseTextViewset(
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def create(self, request, content_base_uuid: str):
+        from nexus.task_managers.tasks import upload_text_file
         try:
             user_email = request.user.email
-            use_case = intelligences.CreateContentBaseTextUseCase()
 
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
 
             text = serializer.validated_data.get('text')
 
-            contentbasetext = use_case.create_contentbasetext(
-                contentbase_uuid=content_base_uuid,
-                text=text,
-                user_email=user_email
-            )
+            upload_text_file.deley(text, content_base_uuid, user_email)
 
             return Response(
-                ContentBaseTextSerializer(contentbasetext).data,
                 status=status.HTTP_201_CREATED
             )
         except IntelligencePermissionDenied:
