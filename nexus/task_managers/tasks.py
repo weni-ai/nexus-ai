@@ -6,7 +6,6 @@ from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUs
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
-from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
 
 
 @app.task
@@ -29,6 +28,8 @@ def add_file(task_manager_uuid, type):
 
 @app.task
 def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_email: str):
+    from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
+
     file = pickle.loads(file)
     file_database_response = s3FileDatabase().add_file(file)
 
@@ -63,6 +64,7 @@ def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_e
 
 @app.task
 def upload_text_file(text: str, content_base_uuid: str, user_email: str):
+    from nexus.usecases.intelligences.create import CreateContentBaseTextUseCase
     content_base_text = CreateContentBaseTextUseCase().create_contentbasetext(contentbase_uuid=content_base_uuid, user_email=user_email, text=text)
     with open(f"/tmp/{content_base_text.content_base.title}.txt", "w") as file:
         file.write(text)
