@@ -21,7 +21,7 @@ class SentenXFileDataBase:
             "task_uuid": str(task.uuid),
             "content_base": str(task.content_base_file.content_base.uuid)
         }
-        response = requests.post(url=url, headers=self.headers, json=body)
+        response = requests.put(url=url, headers=self.headers, json=body)
 
         if response.status_code == 200:
             return response.status_code, response.json()
@@ -38,7 +38,7 @@ class SentenXFileDataBase:
             "task_uuid": str(task.uuid),
             "content_base": str(task.content_base_text.content_base.uuid)
         }
-        response = requests.post(url=url, headers=self.headers, json=body)
+        response = requests.put(url=url, headers=self.headers, json=body)
 
         if response.status_code == 200:
             return response.status_code, response.json()
