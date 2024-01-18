@@ -28,6 +28,23 @@ class SentenXFileDataBase:
 
         return response.status_code, response.text
 
+    def add_text_file(self, task: TaskManager):
+        url = settings.SENTENX_BASE_URL + "/content_base/index"
+
+        body = {
+            "file": task.file_url,
+            "filename": task.file_name,
+            "extension_file": 'txt',
+            "task_uuid": str(task.uuid),
+            "content_base": str(task.content_base_text.content_base.uuid)
+        }
+        response = requests.post(url=url, headers=self.headers, json=body)
+
+        if response.status_code == 200:
+            return response.status_code, response.json()
+
+        return response.status_code, response.text
+
     def search_data(self, content_base_uuid: str, text: str):
         url = settings.SENTENX_BASE_URL + "/content_base/search"
 
