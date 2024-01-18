@@ -69,11 +69,6 @@ def upload_text_file(text: str, content_base_uuid: str, user_email: str):
     with open(f"/tmp/{content_base_text.content_base.title}.txt", "w") as file:
         file.write(text)
 
-    file = None
-    with open(f"/tmp/{content_base_text.content_base.title}.txt", 'r') as f:
-        file = f.read()
-
-    file = pickle.loads(file)
     file_database_response = s3FileDatabase().add_file(file)
 
     if file_database_response.status != 0:
