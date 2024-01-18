@@ -7,3 +7,4 @@ class ContentBaseFileDTO:
     extension_file: str
     user_email: str
     content_base_uuid: str
+    file_name: str
