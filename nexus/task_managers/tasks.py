@@ -9,21 +9,25 @@ from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 
 
 @app.task
-def add_file(task_manager_uuid, type):
+def add_file(task_manager_uuid, type) -> bool:
     try:
         task_manager = CeleryTaskManagerUseCase().get_task_manager_by_uuid(task_uuid=task_manager_uuid)
         task_manager.update_status(ContentBaseFileTaskManager.STATUS_LOADING)
     except Exception:
-        return
+        return False
+
     sentenx_file_database = SentenXFileDataBase()
     if type == 'text':
         status_code, sentenx_response = sentenx_file_database.add_text_file(task_manager)
     else:
         status_code, sentenx_response = sentenx_file_database.add_file(task_manager)
+
     if status_code == 200:
         task_manager.update_status(ContentBaseFileTaskManager.STATUS_SUCCESS)
-    else:
-        task_manager.update_status(ContentBaseFileTaskManager.STATUS_FAIL)
+        return True
+
+    task_manager.update_status(ContentBaseFileTaskManager.STATUS_FAIL)
+    return False
 
 
 @app.task
@@ -69,7 +73,9 @@ def upload_text_file(text: str, content_base_uuid: str, user_email: str):
     with open(f"/tmp/{content_base_text.content_base.title}.txt", "w") as file:
         file.write(text)
 
-    file_database_response = s3FileDatabase().add_file(file)
+    with open(f"/tmp/{content_base_text.content_base.title}.txt", "rb") as file:
+        file_database_response = s3FileDatabase().add_file(file)
+
 
     if file_database_response.status != 0:
         return {
@@ -78,6 +84,7 @@ def upload_text_file(text: str, content_base_uuid: str, user_email: str):
         }
 
     task_manager = CeleryTaskManagerUseCase().create_celery_text_file_manager(content_base_text=content_base_text)
+    print("[++++] PASSOU POR AQUI", task_manager)
     add_file.apply_async(args=[str(task_manager.uuid), "text"])
     response = {
         "task_uuid": task_manager.uuid,
