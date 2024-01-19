@@ -1,10 +1,13 @@
 from django.core.exceptions import PermissionDenied
+from django.utils.datastructures import MultiValueDictKeyError
 
 from rest_framework import status, parsers, views
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 
+from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 from .serializers import (
     IntelligenceSerializer,
     ContentBaseSerializer,
@@ -34,6 +37,13 @@ class IntelligencesViewset(
     serializer_class = IntelligenceSerializer
     pagination_class = CustomCursorPagination
 
+    permission_classes = [IsAuthenticated]
+
+    def validate_kwargs(self, kwargs: dict):
+        if kwargs.get("pk"):
+            return
+        return Response(status=status.HTTP_400_BAD_REQUEST)
+
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return Intelligence.objects.none()  # pragma: no cover
@@ -47,83 +57,108 @@ class IntelligencesViewset(
 
         return use_case_list
 
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
     def retrieve(self, request, *args, **kwargs):
-        user_email = request.user.email
-        intelligence_uuid = kwargs.get('intelligence_uuid')
-        use_case = intelligences.RetrieveIntelligenceUseCase()
-        intelligence = use_case.get_intelligence(
-            intelligence_uuid=intelligence_uuid,
-            user_email=user_email
-        )
-        serializer = IntelligenceSerializer(intelligence)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        self.validate_kwargs(kwargs)
+        try:
+            user_email = request.user.email
+            intelligence_uuid = kwargs.get('pk')
+            use_case = intelligences.RetrieveIntelligenceUseCase()
+            intelligence = use_case.get_intelligence(
+                intelligence_uuid=intelligence_uuid,
+                user_email=user_email
+            )
+            serializer = IntelligenceSerializer(intelligence)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def create(self, request, org_uuid=str):
-        user_email = request.user.email
-        use_case = intelligences.CreateIntelligencesUseCase()
+        try:
+            user_email = request.user.email
+            use_case = intelligences.CreateIntelligencesUseCase()
 
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
 
-        name = serializer.validated_data.get('name')
-        description = serializer.validated_data.get('description')
+            name = serializer.validated_data.get('name')
+            description = serializer.validated_data.get('description')
 
-        intelligence = use_case.create_intelligences(
-            org_uuid=org_uuid,
-            name=name,
-            description=description,
-            user_email=user_email
-        )
+            intelligence = use_case.create_intelligences(
+                org_uuid=org_uuid,
+                name=name,
+                description=description,
+                user_email=user_email
+            )
 
-        return Response(
-            IntelligenceSerializer(intelligence).data,
-            status=status.HTTP_201_CREATED
-        )
+            return Response(
+                IntelligenceSerializer(intelligence).data,
+                status=status.HTTP_201_CREATED
+            )
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def update(self, request):
-        user_email = request.user.email
-        use_case = intelligences.UpdateIntelligenceUseCase()
+    def update(self, request, *args, **kwargs):
+        self.validate_kwargs(kwargs)
+        try:
+            user_email = request.user.email
+            use_case = intelligences.UpdateIntelligenceUseCase()
+ 
+            update_intelligence = use_case.update_intelligences(
+                intelligence_uuid=kwargs.get("pk"),
+                name=request.data.get('name'),
+                description=request.data.get('description'),
+                user_email=user_email
+            )
 
-        update_intelligence = use_case.update_intelligences(
-            intelligence_uuid=request.data.get('intelligence_uuid'),
-            name=request.data.get('name'),
-            description=request.data.get('description'),
-            user_email=user_email
-        )
+            return Response(
+                IntelligenceSerializer(update_intelligence).data,
+                status=status.HTTP_200_OK
+            )
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-        return Response(
-            IntelligenceSerializer(update_intelligence).data,
-            status=status.HTTP_200_OK
-        )
+    def destroy(self, request, **kwargs):
+        self.validate_kwargs(kwargs)
+        try:
+            user_email = request.user.email
+            use_case = intelligences.DeleteIntelligenceUseCase()
 
-    def destroy(self, request):
-        user_email = request.user.email
-        use_case = intelligences.DeleteIntelligenceUseCase()
+            intelligence_uuid = kwargs.get('pk')
 
-        intelligence_uuid = request.data.get('intelligence_uuid')
+            use_case.delete_intelligences(
+                intelligence_uuid=intelligence_uuid,
+                user_email=user_email
+            )
 
-        use_case.delete_intelligences(
-            intelligence_uuid=intelligence_uuid,
-            user_email=user_email
-        )
-
-        return Response(
-            status=status.HTTP_204_NO_CONTENT
-        )
+            return Response(
+                status=status.HTTP_204_NO_CONTENT
+            )
+        except IntelligencePermissionDenied:
+                return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
 class FlowsIntelligencesApiView(views.APIView):
-
+    authentication_classes = []
     def get(self, request, project_uuid):
         authorization_header = request.headers.get('Authorization', "Bearer unauthorized")
-        if not permissions.is_super_user(authorization_header):
-            raise PermissionDenied("You has not permission to do that.")
+
+        is_super_user = permissions.is_super_user(authorization_header)
+
+        if not is_super_user:
+            raise PermissionDenied('You do not have permission to perform this action.')
+
         list_use_case = intelligences.ListAllIntelligenceContentUseCase()
-        return Response(data=list_use_case.get_project_intelligences(project_uuid=project_uuid), status=200)
+        return Response(data=list_use_case.get_project_intelligences(project_uuid=project_uuid, is_super_user=is_super_user), status=200)
 
 
 class GenerateIntelligenceQuestion(views.APIView):
-
+    authentication_classes = []
     def post(self, request):
         authorization_header = request.headers.get("Authorization", "Bearer unauthorized")
         if not permissions.is_super_user(authorization_header):
@@ -137,7 +172,7 @@ class GenerateIntelligenceQuestion(views.APIView):
 
 
 class SentenxIndexerUpdateFile(views.APIView):
-
+    authentication_classes = []
     def patch(self, request):
         authorization_header = request.headers.get('Authorization', "Bearer unauthorized")
         if not permissions.is_super_user(authorization_header):
@@ -155,6 +190,8 @@ class ContentBaseViewset(
 
     pagination_class = CustomCursorPagination
     serializer_class = ContentBaseSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_url_kwarg = "contentbase_uuid"
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
@@ -167,67 +204,84 @@ class ContentBaseViewset(
             user_email=user_email
         )
         return use_case_list
+    
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def retrieve(self, request, *args, **kwargs):
-        user_email = request.user.email
-        contentbase_uuid = kwargs.get('content_base_uuid')
-        use_case = intelligences.RetrieveContentBaseUseCase()
-        contentbase = use_case.get_contentbase(
-            contentbase_uuid=contentbase_uuid,
-            user_email=user_email
-        )
-        serializer = ContentBaseSerializer(contentbase)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        try:
+            user_email = request.user.email
+            use_case = intelligences.RetrieveContentBaseUseCase()
+            contentbase = use_case.get_contentbase(
+                contentbase_uuid=kwargs.get('contentbase_uuid'),
+                user_email=user_email
+            )
+            serializer = ContentBaseSerializer(contentbase)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def create(self, request, intelligence_uuid=str):
-        user_email = request.user.email
-        use_case = intelligences.CreateContentBaseUseCase()
+        try:
+            user_email = request.user.email
+            use_case = intelligences.CreateContentBaseUseCase()
 
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
 
-        title = serializer.validated_data.get('title')
+            title = serializer.validated_data.get('title')
 
-        contentbase = use_case.create_contentbase(
-            intelligence_uuid=intelligence_uuid,
-            title=title,
-            user_email=user_email
-        )
+            contentbase = use_case.create_contentbase(
+                intelligence_uuid=intelligence_uuid,
+                title=title,
+                user_email=user_email
+            )
 
-        return Response(
-            ContentBaseSerializer(contentbase).data,
-            status=status.HTTP_201_CREATED
-        )
+            return Response(
+                ContentBaseSerializer(contentbase).data,
+                status=status.HTTP_201_CREATED
+            )
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def update(self, request):
-        user_email = request.user.email
-        use_case = intelligences.UpdateContentBaseUseCase()
+    def update(self, request, intelligence_uuid: str, **kwargs):
+        try:
+            user_email = request.user.email
+            use_case = intelligences.UpdateContentBaseUseCase()
 
-        update_contentbase = use_case.update_contentbase(
-            contentbase_uuid=request.data.get('contentbase_uuid'),
-            title=request.data.get('title'),
-            user_email=user_email
-        )
+            update_contentbase = use_case.update_contentbase(
+                contentbase_uuid=kwargs.get('contentbase_uuid'),
+                title=request.data.get('title'),
+                user_email=user_email
+            )
 
-        return Response(
-            ContentBaseSerializer(update_contentbase).data,
-            status=status.HTTP_200_OK
-        )
+            return Response(
+                ContentBaseSerializer(update_contentbase).data,
+                status=status.HTTP_200_OK
+            )
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def destroy(self, request):
-        user_email = request.user.email
-        use_case = intelligences.DeleteContentBaseUseCase()
+    def destroy(self, request, intelligence_uuid: str, **kwargs):
+        try:
+            user_email = request.user.email
+            use_case = intelligences.DeleteContentBaseUseCase()
 
-        contentbase_uuid = request.data.get('contentbase_uuid')
+            contentbase_uuid = kwargs.get('contentbase_uuid')
 
-        use_case.delete_contentbase(
-            contentbase_uuid=contentbase_uuid,
-            user_email=user_email
-        )
+            use_case.delete_contentbase(
+                contentbase_uuid=contentbase_uuid,
+                user_email=user_email
+            )
 
-        return Response(
-            status=status.HTTP_204_NO_CONTENT
-        )
+            return Response(
+                status=status.HTTP_204_NO_CONTENT
+            )
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
 class ContentBaseTextViewset(
@@ -236,81 +290,100 @@ class ContentBaseTextViewset(
 
     pagination_class = CustomCursorPagination
     serializer_class = ContentBaseTextSerializer
+    lookup_url_kwarg = "contentbasetext_uuid"
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return ContentBaseText.objects.none()  # pragma: no cover
         user_email = self.request.user.email
         use_case = intelligences.ListContentBaseTextUseCase()
-        contentbase_uuid = self.kwargs.get('contentbase_uuid')
+        contentbase_uuid = self.kwargs.get('content_base_uuid')
         use_case_list = use_case.get_contentbase_contentbasetexts(
             contentbase_uuid,
             user_email=user_email
         )
         return use_case_list
 
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
     def retrieve(self, request, *args, **kwargs):
-        user_email = request.user.email
-        contentbasetext_uuid = kwargs.get('content_base_text_uuid')
+        try:
+            user_email = request.user.email
+            contentbasetext_uuid = kwargs.get('content_base_text_uuid')
 
-        use_case = intelligences.RetrieveContentBaseTextUseCase()
-        contentbasetext = use_case.get_contentbasetext(
-            contentbasetext_uuid=contentbasetext_uuid,
-            user_email=user_email
-        )
+            use_case = intelligences.RetrieveContentBaseTextUseCase()
+            contentbasetext = use_case.get_contentbasetext(
+                contentbasetext_uuid=contentbasetext_uuid,
+                user_email=user_email
+            )
 
-        serializer = ContentBaseTextSerializer(contentbasetext)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+            serializer = ContentBaseTextSerializer(contentbasetext)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def create(self, request, contentbase_uuid=str):
-        user_email = request.user.email
-        use_case = intelligences.CreateContentBaseTextUseCase()
+    def create(self, request, content_base_uuid: str):
+        try:
+            user_email = request.user.email
+            use_case = intelligences.CreateContentBaseTextUseCase()
 
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
 
-        text = serializer.validated_data.get('text')
+            text = serializer.validated_data.get('text')
 
-        contentbasetext = use_case.create_contentbasetext(
-            contentbase_uuid=contentbase_uuid,
-            text=text,
-            user_email=user_email
-        )
+            contentbasetext = use_case.create_contentbasetext(
+                contentbase_uuid=content_base_uuid,
+                text=text,
+                user_email=user_email
+            )
 
-        return Response(
-            ContentBaseTextSerializer(contentbasetext).data,
-            status=status.HTTP_201_CREATED
-        )
+            return Response(
+                ContentBaseTextSerializer(contentbasetext).data,
+                status=status.HTTP_201_CREATED
+            )
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def update(self, request):
-        user_email = request.user.email
-        use_case = intelligences.UpdateContentBaseTextUseCase()
+    def update(self, request, **kwargs):
+        try:
+            user_email = request.user.email
+            use_case = intelligences.UpdateContentBaseTextUseCase()
 
-        update_contentbasetext = use_case.update_contentbasetext(
-            contentbasetext_uuid=request.data.get('contentbasetext_uuid'),
-            text=request.data.get('text'),
-            user_email=user_email
-        )
+            update_contentbasetext = use_case.update_contentbasetext(
+                contentbasetext_uuid=kwargs.get('contentbasetext_uuid'),
+                text=request.data.get('text'),
+                user_email=user_email
+            )
 
-        return Response(
-            ContentBaseTextSerializer(update_contentbasetext).data,
-            status=status.HTTP_200_OK
-        )
+            return Response(
+                ContentBaseTextSerializer(update_contentbasetext).data,
+                status=status.HTTP_200_OK
+            )
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def destroy(self, request):
-        user_email = request.user.email
-        use_case = intelligences.DeleteContentBaseTextUseCase()
+    def destroy(self, request, **kwargs):
+        try:
+            user_email = request.user.email
+            use_case = intelligences.DeleteContentBaseTextUseCase()
 
-        contentbasetext_uuid = request.data.get('contentbasetext_uuid')
+            contentbasetext_uuid = kwargs.get('contentbasetext_uuid')
+            use_case.delete_contentbasetext(
+                contentbasetext_uuid=contentbasetext_uuid,
+                user_email=user_email
+            )
 
-        use_case.delete_contentbasetext(
-            contentbasetext_uuid=contentbasetext_uuid,
-            user_email=user_email
-        )
-
-        return Response(
-            status=status.HTTP_204_NO_CONTENT
-        )
+            return Response(
+                status=status.HTTP_204_NO_CONTENT
+            )
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
 class ContentBaseFileViewset(ModelViewSet):
@@ -318,36 +391,52 @@ class ContentBaseFileViewset(ModelViewSet):
     serializer_class = ContentBaseFileSerializer
     pagination_class = CustomCursorPagination
     parser_classes = (parsers.MultiPartParser,)
+    permission_classes = [IsAuthenticated]
+    lookup_url_kwarg = "contentbase_file_uuid"
+
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def create(self, request, content_base_uuid=str):
-        file = request.FILES['file']
+        
+        try:
+            file = request.FILES['file']
+            self.get_queryset()
+            user_email = request.data.get("user_email")
+            extension_file = request.data.get("extension_file")
+            file_database = s3FileDatabase()
+            file_manager = CeleryFileManager(file_database=file_database)
+            response = file_manager.upload_file(file, content_base_uuid, extension_file, user_email)
 
-        user_email = request.data.get("user_email")
-        extension_file = request.data.get("extension_file")
-        file_database = s3FileDatabase()
-        file_manager = CeleryFileManager(file_database=file_database)
-        response = file_manager.upload_file(file, content_base_uuid, extension_file, user_email)
-
-        return Response(
-            response,
-            status=status.HTTP_201_CREATED
-        )
+            return Response(
+                response,
+                status=status.HTTP_201_CREATED
+            )
+        except MultiValueDictKeyError:
+            return Response(data={"message": "file is required"}, status=status.HTTP_400_BAD_REQUEST)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return ContentBaseFile.objects.none()  # pragma: no cover
         use_case = intelligences.ListContentBaseFileUseCase()
-        contentbase_uuid = self.kwargs.get('contentbase_uuid')
-        return use_case.get_contentbase_file(contentbase_uuid=contentbase_uuid)
+        contentbase_uuid = self.kwargs.get('content_base_uuid')
+        return use_case.get_contentbase_file(contentbase_uuid=contentbase_uuid, user_email=self.request.user.email)
 
     def retrieve(self, request, *args, **kwargs):
-
-        contentbasefile_uuid = kwargs.get('contentbase_file_uuid')
-        use_case = intelligences.RetrieveContentBaseFileUseCase()
-        contentbasetext = use_case.get_contentbasefile(
-            contentbasefile_uuid=contentbasefile_uuid
-        )
-        serializer = ContentBaseTextSerializer(contentbasetext)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-
+        try:
+            user_email:str = self.request.user.email
+            contentbasefile_uuid:str = kwargs.get('contentbase_file_uuid')
+            use_case = intelligences.RetrieveContentBaseFileUseCase()
+            contentbasetext = use_case.get_contentbasefile(
+                contentbasefile_uuid=contentbasefile_uuid,
+                user_email=user_email
+            )
+            serializer = self.get_serializer(contentbasetext)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)

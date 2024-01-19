@@ -6,6 +6,7 @@ from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUs
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
+from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 
 
@@ -14,7 +15,7 @@ def add_file(task_manager_uuid, type):
     try:
         task_manager = CeleryTaskManagerUseCase().get_task_manager_by_uuid(task_uuid=task_manager_uuid)
         task_manager.update_status(ContentBaseFileTaskManager.STATUS_LOADING)
-    except Exception as exception:
+    except Exception:
         return
     sentenx_file_database = SentenXFileDataBase()
     if type == 'text':
@@ -60,6 +61,7 @@ def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_e
         }
     }
     return response
+
 
 @app.task
 def upload_text_file(text: str, content_base_uuid: str, user_email: str):

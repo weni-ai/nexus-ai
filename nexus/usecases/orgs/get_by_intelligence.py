@@ -7,7 +7,6 @@ class GetOrgByIntelligenceUseCase():
             self,
             intelligence_uuid: str
     ) -> Org:
-
         org = Org.objects.get(
             intelligences__uuid=intelligence_uuid
         )
@@ -28,5 +27,14 @@ class GetOrgByIntelligenceUseCase():
     ) -> Org:
         org = Org.objects.get(
             intelligences__contentbases__contentbasetexts__uuid=contentbasetext_uuid
+        )
+        return org
+
+    def get_org_by_contentbasefile_uuid(
+            self,
+            contentbasefile_uuid: str
+    ) -> Org:
+        org = Org.objects.get(
+            intelligences__contentbases__contentbasefiles__uuid=contentbasefile_uuid
         )
         return org
