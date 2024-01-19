@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 import os
+import sys
 from pathlib import Path
 
 import environ
@@ -18,6 +19,7 @@ environ.Env.read_env(env_file=(environ.Path(__file__) - 2)(".env"))
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
 
 
 env = environ.Env(
@@ -46,6 +48,7 @@ AUTH_USER_MODEL = 'users.User'
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
+    'mozilla_django_oidc',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
@@ -237,3 +240,31 @@ if USE_EDA:
 
 RABBITMQ_DEFAULT_USER=env.str("RABBITMQ_DEFAULT_USER")
 RABBITMQ_DEFAULT_PASS=env.str("RABBITMQ_DEFAULT_PASS")
+
+# OIDC
+
+OIDC_RP_SERVER_URL = env.str("OIDC_RP_SERVER_URL")
+OIDC_RP_REALM_NAME = env.str("OIDC_RP_REALM_NAME")
+OIDC_OP_JWKS_ENDPOINT = env.str("OIDC_OP_JWKS_ENDPOINT")
+OIDC_RP_CLIENT_ID = env.str("OIDC_RP_CLIENT_ID")
+OIDC_RP_CLIENT_SECRET = env.str("OIDC_RP_CLIENT_SECRET")
+OIDC_OP_AUTHORIZATION_ENDPOINT = env.str("OIDC_OP_AUTHORIZATION_ENDPOINT")
+OIDC_OP_TOKEN_ENDPOINT = env.str("OIDC_OP_TOKEN_ENDPOINT")
+OIDC_OP_USER_ENDPOINT = env.str("OIDC_OP_USER_ENDPOINT")
+OIDC_DRF_AUTH_BACKEND = env.str(
+    "OIDC_DRF_AUTH_BACKEND",
+    default="nexus.authentication.authentication.WeniOIDCAuthenticationBackend",
+)
+OIDC_RP_SCOPES = env.str("OIDC_RP_SCOPES", default="openid email")
+
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "mozilla_django_oidc.contrib.drf.OIDCAuthentication"
+    ],
+}
+
+if TESTING:
+    REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"].append(
+        "rest_framework.authentication.TokenAuthentication"
+    )

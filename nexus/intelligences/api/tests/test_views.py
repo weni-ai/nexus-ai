@@ -52,7 +52,7 @@ class TestIntelligencesViewset(TestCase):
         response = IntelligencesViewset.as_view({'get': 'retrieve'})(
             request,
             org_uuid=str(self.org.uuid),
-            intelligence_uuid=str(self.intelligence.uuid),
+            pk=str(self.intelligence.uuid),
         )
         self.assertEqual(response.status_code, 200)
 
@@ -73,7 +73,7 @@ class TestIntelligencesViewset(TestCase):
         data = {
             'name': 'intelligence_name',
             'description': 'intelligence_description',
-            'intelligence_uuid': str(self.intelligence.uuid),
+            'pk': str(self.intelligence.uuid),
         }
         request = self.factory.put(
             url_put,
@@ -81,14 +81,14 @@ class TestIntelligencesViewset(TestCase):
             content_type='application/json'
         )
         force_authenticate(request, user=self.user)
-        response = self.view(request)
+        response = self.view(request, pk=str(self.intelligence.uuid))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['name'], data['name'])
 
     def test_delete(self):
         url_delete = f'{self.url}/{self.intelligence.uuid}/'
         data = {
-            'intelligence_uuid': str(self.intelligence.uuid),
+            'pk': str(self.intelligence.uuid),
         }
 
         request = self.factory.delete(
@@ -98,7 +98,7 @@ class TestIntelligencesViewset(TestCase):
         )
         force_authenticate(request, user=self.user)
 
-        response = self.view(request)
+        response = self.view(request, pk=str(self.intelligence.uuid))
         self.assertEqual(response.status_code, 204)
 
 
@@ -135,7 +135,7 @@ class TestContentBaseViewset(TestCase):
         response = ContentBaseViewset.as_view({'get': 'retrieve'})(
             request,
             intelligence_uuid=str(self.intelligence.uuid),
-            content_base_uuid=str(self.contentbase.uuid)
+            contentbase_uuid=str(self.contentbase.uuid)
         )
         self.assertEqual(response.status_code, 200)
 
@@ -155,7 +155,6 @@ class TestContentBaseViewset(TestCase):
         data = {
             'title': 'title',
             'description': 'description',
-            'contentbase_uuid': str(self.contentbase.uuid),
         }
         url_put = f'{self.url}/{self.contentbase.uuid}/'
         request = self.factory.put(
@@ -164,7 +163,11 @@ class TestContentBaseViewset(TestCase):
             content_type='application/json'
         )
         force_authenticate(request, user=self.user)
-        response = self.view(request)
+        response = self.view(
+            request,
+            intelligence_uuid=str(self.intelligence.uuid),
+            contentbase_uuid=str(self.contentbase.uuid)
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['title'], data['title'])
 
@@ -179,7 +182,11 @@ class TestContentBaseViewset(TestCase):
             content_type='application/json'
         )
         force_authenticate(request, user=self.user)
-        response = self.view(request)
+        response = self.view(
+            request,
+            intelligence_uuid=str(self.intelligence.uuid),
+            contentbase_uuid=str(self.contentbase.uuid),
+        )
         self.assertEqual(response.status_code, 204)
 
 
@@ -205,7 +212,7 @@ class TestContentBaseTextViewset(TestCase):
         force_authenticate(request, user=self.user)
         response = self.view(
             request,
-            contentbase_uuid=str(self.content_base.uuid)
+            content_base_uuid=str(self.content_base.uuid)
         )
         self.assertEqual(response.status_code, 200)
 
@@ -230,7 +237,7 @@ class TestContentBaseTextViewset(TestCase):
         force_authenticate(request, user=self.user)
         response = self.view(
             request,
-            contentbase_uuid=str(self.content_base.uuid)
+            content_base_uuid=str(self.content_base.uuid)
         )
         self.assertEqual(response.status_code, 201)
 
@@ -245,7 +252,7 @@ class TestContentBaseTextViewset(TestCase):
             json.dumps(data),
             content_type='application/json'
         )
-        force_authenticate(request, user=self.user)
-        response = self.view(request)
+        force_authenticate(request,user=self.user)
+        response = self.view(request, contentbasetext_uuid=str(self.contentbasetext.uuid))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['text'], data['text'])

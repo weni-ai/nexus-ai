@@ -4,7 +4,6 @@ from nexus.intelligences.models import (
     ContentBaseText,
     ContentBaseFile
 )
-from nexus.usecases import orgs, users, intelligences
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 from nexus.usecases import (
     orgs,
@@ -12,6 +11,7 @@ from nexus.usecases import (
     intelligences
 )
 from nexus.orgs import permissions
+from nexus.task_managers.tasks import upload_text_file
 from .exceptions import IntelligencePermissionDenied
 
 
