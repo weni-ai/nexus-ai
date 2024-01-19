@@ -1,7 +1,7 @@
 import pendulum
 
-from nexus.task_managers.models import ContentBaseFileTaskManager
-from nexus.intelligences.models import ContentBaseFile
+from nexus.task_managers.models import ContentBaseFileTaskManager, ContentBaseTextTaskManager
+from nexus.intelligences.models import ContentBaseFile, ContentBaseText
 
 
 class CeleryTaskManagerUseCase:
@@ -16,6 +16,15 @@ class CeleryTaskManagerUseCase:
         print(f"[ CeleryTaskManagerUseCase ] - creating {content_base_task_manager.uuid}")
         return content_base_task_manager
 
+    def create_celery_text_file_manager(self, content_base_text: ContentBaseText) -> ContentBaseTextTaskManager:
+        content_base_task_manager = ContentBaseTextTaskManager.objects.create(
+            status=ContentBaseFileTaskManager.STATUS_WAITING,
+            created_by=content_base_text.created_by,
+            end_at=pendulum.now(),
+            content_base_text=content_base_text
+        )
+        print(f"[ CeleryTaskManagerUseCase ] - creating {content_base_task_manager.uuid}")
+        return content_base_task_manager
 
     def get_task_manager_by_uuid(self, task_uuid) -> ContentBaseFileTaskManager:
         try:
