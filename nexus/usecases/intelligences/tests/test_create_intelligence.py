@@ -1,3 +1,4 @@
+from uuid import uuid4
 from django.test import TestCase
 
 from ..create import (
@@ -9,6 +10,7 @@ from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
 )
+from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO
 
 
 class TestListIntelligenceUseCase(TestCase):
@@ -49,10 +51,21 @@ class TestCreateContentBaseUseCase(TestCase):
 
     def test_create_content_base_text_use_case(self):
         contentbase = ContentBaseFactory()
+        content_base_dto = ContentBaseDTO(
+            uuid=contentbase.uuid,
+            title=contentbase.title,
+            intelligence_uuid=str(contentbase.intelligence.uuid),
+            created_by_email=contentbase.created_by.email
+        )
+        content_base_text_dto = ContentBaseTextDTO(
+            file="http://file.url/file.txt",
+            file_name="text file",
+            text="text",
+            content_base_uuid=content_base_dto.uuid,
+            user_email=content_base_dto.created_by_email
+        )
         use_case = CreateContentBaseTextUseCase()
         content_base_text_create = use_case.create_contentbasetext(
-            contentbase_uuid=contentbase.uuid,
-            user_email=contentbase.created_by.email,
-            text="text"
+            content_base_dto, content_base_text_dto
         )
         self.assertEqual(content_base_text_create.text, "text")
