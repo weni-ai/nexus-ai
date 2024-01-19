@@ -12,7 +12,6 @@ from nexus.usecases import (
     intelligences
 )
 from nexus.orgs import permissions
-from nexus.task_managers.tasks import upload_text_file
 from .exceptions import IntelligencePermissionDenied
 
 
