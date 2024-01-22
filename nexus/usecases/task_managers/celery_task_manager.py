@@ -60,8 +60,8 @@ class CeleryTaskManagerUseCase:
         content_base_task_manager = task_manager(task_uuid=task_uuid)
         return content_base_task_manager
 
-    def update_task_status(self, task_uuid, status):
-        task_manager = self.get_task_manager_by_uuid(task_uuid=task_uuid)
+    def update_task_status(self, task_uuid, status, file_type):
+        task_manager = self.get_task_manager_by_uuid(task_uuid=task_uuid, file_type=file_type)
         task_manager.status = status
         task_manager.end_at = pendulum.now()
         task_manager.save(update_fields=["end_at", "status"])
