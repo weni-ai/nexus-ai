@@ -44,7 +44,8 @@ class TestCreateContentBaseUseCase(TestCase):
         content_base_create = use_case.create_contentbase(
             intelligence_uuid=self.intelligence.uuid,
             user_email=self.org.created_by,
-            title="title"
+            title="title",
+            description="description"
         )
         self.assertEqual(content_base_create.title, "title")
 

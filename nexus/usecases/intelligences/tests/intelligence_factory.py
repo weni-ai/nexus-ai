@@ -33,6 +33,7 @@ class ContentBaseFactory(factory.django.DjangoModelFactory):
         created_by=factory.SelfAttribute('..created_by')
     )
     created_by = factory.SubFactory(UserFactory)
+    description = factory.Sequence(lambda n: 'test%d' % n)
 
 
 class ContentBaseTextFactory(factory.django.DjangoModelFactory):

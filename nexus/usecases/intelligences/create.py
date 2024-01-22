@@ -44,6 +44,7 @@ class CreateContentBaseUseCase():
             intelligence_uuid: str,
             user_email: str,
             title: str,
+            description: str
     ) -> ContentBase:
 
         org_usecase = orgs.GetOrgByIntelligenceUseCase()
@@ -60,7 +61,8 @@ class CreateContentBaseUseCase():
         contentbase = ContentBase.objects.create(
             title=title,
             intelligence=intelligence,
-            created_by=user
+            created_by=user,
+            description=description
         )
         return contentbase
 
