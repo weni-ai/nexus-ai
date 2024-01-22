@@ -64,11 +64,13 @@ INSTALLED_APPS = [
     'nexus.projects',
     'nexus.intelligences',
     'nexus.task_managers',
-    'nexus.event_driven'
+    'nexus.event_driven',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -268,3 +270,5 @@ if TESTING:
     REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"].append(
         "rest_framework.authentication.TokenAuthentication"
     )
+
+CORS_ORIGIN_ALLOW_ALL = True
