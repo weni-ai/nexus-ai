@@ -16,13 +16,14 @@ class IntelligenceSerializer(serializers.ModelSerializer):
 class ContentBaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBase
-        fields = ['title', 'uuid']
+        fields = ['uuid', 'title', 'description']
 
 
 class ContentBaseTextSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseText
         fields = ['text', 'uuid']
+
 
 class ContentBaseFileSerializer(serializers.ModelSerializer):
     class Meta:

@@ -141,7 +141,8 @@ class TestContentBaseViewset(TestCase):
 
     def test_create(self):
         data = {
-            'title': 'title'
+            'title': 'title',
+            'description': 'description',
         }
         request = self.factory.post(self.url, data)
         force_authenticate(request, user=self.user)
