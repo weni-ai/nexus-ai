@@ -39,3 +39,7 @@ class ContentBaseTextTaskManager(TaskManager):
     content_base_text = models.ForeignKey(ContentBaseText, on_delete=models.CASCADE, related_name="upload_tasks", blank=True, null=True)
     file_url = models.URLField()
     file_name = models.CharField(max_length=255)
+
+    def update_status(self, new_status):
+        self.status = new_status
+        self.save(update_fields=["status"])
