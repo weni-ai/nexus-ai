@@ -5,7 +5,6 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
-from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO, ContentBaseDTO, ContentBaseTextDTO
 from nexus.usecases.intelligences.create import CreateContentBaseTextUseCase
@@ -53,7 +52,6 @@ def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_e
         content_base_uuid=content_base_uuid,
         extension_file=extension_file,
         file_url=file_database_response.file_url,
-        file_name=file_database_response.file_name
     )
 
     content_base_file = CreateContentBaseFileUseCase().create_content_base_file(content_base_file=content_base_file_dto)
