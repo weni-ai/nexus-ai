@@ -236,6 +236,7 @@ class ContentBaseViewset(
 
             title = serializer.validated_data.get('title')
 
+
             contentbase = use_case.create_contentbase(
                 intelligence_uuid=intelligence_uuid,
                 title=title,
