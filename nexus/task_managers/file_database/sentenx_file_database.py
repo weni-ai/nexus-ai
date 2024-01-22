@@ -2,6 +2,7 @@ import requests
 from django.conf import settings
 
 from nexus.task_managers.models import TaskManager
+from .file_database import FileDataBase
 
 
 class SentenXFileDataBase:
@@ -11,34 +12,34 @@ class SentenXFileDataBase:
             "Authorization": f"Bearer {settings.SENTENX_AUTH_TOKEN}",
         }
 
-    def add_file(self, task: TaskManager):
+    def add_file(self, task: TaskManager, file_database: FileDataBase):
         url = settings.SENTENX_BASE_URL + "/content_base/index"
 
         body = {
-            "file": task.content_base_file.file,
+            "file": file_database.create_presigned_url(task.content_base_file.file_name),
             "filename": task.content_base_file.file_name,
             "extension_file": task.content_base_file.extension_file,
             "task_uuid": str(task.uuid),
             "content_base": str(task.content_base_file.content_base.uuid)
         }
-        response = requests.post(url=url, headers=self.headers, json=body)
+        response = requests.put(url=url, headers=self.headers, json=body)
 
         if response.status_code == 200:
             return response.status_code, response.json()
 
         return response.status_code, response.text
 
-    def add_text_file(self, task: TaskManager):
+    def add_text_file(self, task: TaskManager, file_database: FileDataBase):
         url = settings.SENTENX_BASE_URL + "/content_base/index"
 
         body = {
-            "file": task.file_url,
-            "filename": task.file_name,
+            "file": file_database.create_presigned_url(task.content_base_text.file_name),
+            "filename": task.content_base_text.file_name,
             "extension_file": 'txt',
             "task_uuid": str(task.uuid),
             "content_base": str(task.content_base_text.content_base.uuid)
         }
-        response = requests.post(url=url, headers=self.headers, json=body)
+        response = requests.put(url=url, headers=self.headers, json=body)
 
         if response.status_code == 200:
             return response.status_code, response.json()

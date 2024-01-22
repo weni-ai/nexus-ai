@@ -16,9 +16,11 @@ from .serializers import (
 )
 from nexus.usecases import intelligences
 from nexus.orgs import permissions
+from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
+
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
-from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
+from nexus.task_managers.tasks import upload_text_file
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
 
@@ -180,7 +182,7 @@ class SentenxIndexerUpdateFile(views.APIView):
         data = request.data
         task_manager_usecase = CeleryTaskManagerUseCase()
         sentenx_status = [ContentBaseFileTaskManager.STATUS_SUCCESS, ContentBaseFileTaskManager.STATUS_FAIL]
-        task_manager_usecase.update_task_status(task_uuid=data.get("task_uuid"), status=sentenx_status[data.get("status")])
+        task_manager_usecase.update_task_status(task_uuid=data.get("task_uuid"), status=sentenx_status[data.get("status")], file_type=data.get("file_type"))
         return Response(status=200, data=data)
 
 
@@ -330,21 +332,15 @@ class ContentBaseTextViewset(
     def create(self, request, content_base_uuid: str):
         try:
             user_email = request.user.email
-            use_case = intelligences.CreateContentBaseTextUseCase()
 
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
 
             text = serializer.validated_data.get('text')
 
-            contentbasetext = use_case.create_contentbasetext(
-                contentbase_uuid=content_base_uuid,
-                text=text,
-                user_email=user_email
-            )
+            upload_text_file.delay(text, content_base_uuid, user_email)
 
             return Response(
-                ContentBaseTextSerializer(contentbasetext).data,
                 status=status.HTTP_201_CREATED
             )
         except IntelligencePermissionDenied:
@@ -405,7 +401,7 @@ class ContentBaseFileViewset(ModelViewSet):
         try:
             file = request.FILES['file']
             self.get_queryset()
-            user_email = request.data.get("user_email")
+            user_email = request.user.email
             extension_file = request.data.get("extension_file")
             file_database = s3FileDatabase()
             file_manager = CeleryFileManager(file_database=file_database)

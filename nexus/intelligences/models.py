@@ -44,6 +44,8 @@ class ContentBaseLink(BaseModel, SoftDeleteModel):
 
 
 class ContentBaseText(BaseModel, SoftDeleteModel):
+    file = models.URLField()
+    file_name = models.CharField(max_length=255)
     text = models.TextField()
     content_base = models.ForeignKey(
         ContentBase, related_name='contentbasetexts', on_delete=models.CASCADE
