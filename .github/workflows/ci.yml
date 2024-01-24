@@ -28,6 +28,7 @@ jobs:
           pip install poetry
           poetry config virtualenvs.create false --local
           poetry install
+          python contrib/gen_env.py
       - name: Run Django Unittests with Coverage
         run: coverage run manage.py test --verbosity=2 --noinput
       - name: Coverage Report
