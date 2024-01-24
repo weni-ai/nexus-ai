@@ -3,11 +3,25 @@ from dataclasses import dataclass
 @dataclass
 class ContentBaseFileDTO:
     file: bytes
-    file_url: str
     extension_file: str
     user_email: str
     content_base_uuid: str
-    file_name: str
+    file_url: str = None
+    file_name: str = None
+
+
+@dataclass
+class UpdateContentBaseFileDTO:
+    file: bytes = None
+    extension_file: str = None
+    user_email: str = None
+    content_base_uuid: str = None
+    file_url: str = None
+    file_name: str = None
+
+    def dict(self):
+        return {key: value for key, value in self.__dict__.items() if value is not None}
+
 
 @dataclass
 class ContentBaseTextDTO:

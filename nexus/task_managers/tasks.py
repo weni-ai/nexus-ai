@@ -6,9 +6,10 @@ from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
-from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO, ContentBaseDTO, ContentBaseTextDTO
-from nexus.usecases.intelligences.create import CreateContentBaseTextUseCase, CreateContentBaseFileUseCase
+from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO, UpdateContentBaseFileDTO
+from nexus.usecases.intelligences.create import CreateContentBaseTextUseCase
 from nexus.usecases.intelligences.retrieve import RetrieveContentBaseUseCase
+from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
 
 
 @app.task
@@ -37,7 +38,7 @@ def add_file(task_manager_uuid: str, file_type: str) -> bool:
 
 
 @app.task
-def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_email: str):
+def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_email: str, content_base_file_uuid: str):
     file = pickle.loads(file)
     file_database_response = s3FileDatabase().add_file(file)
 
@@ -47,15 +48,17 @@ def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_e
             "error": file_database_response.err
         }
 
-    content_base_file_dto = ContentBaseFileDTO(
-        file=file,
-        user_email=user_email,
-        content_base_uuid=content_base_uuid,
-        extension_file=extension_file,
+    content_base_file_dto = UpdateContentBaseFileDTO(
         file_url=file_database_response.file_url,
         file_name=file_database_response.file_name
     )
-    content_base_file = CreateContentBaseFileUseCase().create_content_base_file(content_base_file=content_base_file_dto)
+
+    content_base_file = UpdateContentBaseFileUseCase().update_content_base_file(
+        content_base_file_uuid=content_base_file_uuid,
+        user_email=user_email,
+        update_content_base_file_dto=content_base_file_dto
+    )
+
     task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
 
     add_file.apply_async(args=[str(task_manager.uuid), "file"])

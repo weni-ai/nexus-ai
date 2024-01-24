@@ -17,6 +17,7 @@ class TemplateTypeUseCase:
 
 
     def create_template_type(self, template_type_dto: TemplateTypeDTO):
+        from nexus.usecases.projects.projects_use_case import ProjectsUseCase
         try:
             project = ProjectsUseCase.get_by_uuid(project_uuid=template_type_dto.project_uuid)
         except Project.DoesNotExist:
