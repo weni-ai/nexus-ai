@@ -54,7 +54,7 @@ def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_e
     )
 
     content_base_file = UpdateContentBaseFileUseCase().update_content_base_file(
-        content_base_file_uuid=content_base_uuid,
+        content_base_file_uuid=content_base_file_uuid,
         user_email=user_email,
         update_content_base_file_dto=content_base_file_dto
     )
