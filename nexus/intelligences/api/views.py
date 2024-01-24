@@ -164,7 +164,7 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
     def post(self, request):
         authorization_header = request.headers.get("Authorization", "Bearer unauthorized")
         if not permissions.is_super_user(authorization_header):
-            return PermissionDenied("You has not permission to do that.")
+            raise PermissionDenied('You do not have permission to perform this action.')
         data = request.data
         intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
         return Response(
