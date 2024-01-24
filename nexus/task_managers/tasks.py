@@ -53,8 +53,12 @@ def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_e
         file_name=file_database_response.file_name
     )
 
-    content_base_file = UpdateContentBaseFileUseCase().update_content_base_file(update_content_base_file=content_base_file_dto)
-    
+    content_base_file = UpdateContentBaseFileUseCase().update_content_base_file(
+        content_base_file_uuid=content_base_uuid,
+        user_email=user_email,
+        update_content_base_file_dto=content_base_file_dto
+    )
+
     task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
 
     add_file.apply_async(args=[str(task_manager.uuid), "file"])
