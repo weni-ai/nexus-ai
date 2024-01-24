@@ -24,4 +24,4 @@ class CeleryFileManager:
         print(content_base_file_dto)
         content_base_file = CreateContentBaseFileUseCase().create_content_base_file(content_base_file=content_base_file_dto)
         tasks.upload_file.delay(pickled_file, content_base_uuid, extension_file, user_email, str(content_base_file.uuid))
-        return {"content_base_file": str(content_base_file.uuid)}
+        return {"uuid": str(content_base_file.uuid),  "extension_file": extension_file}
