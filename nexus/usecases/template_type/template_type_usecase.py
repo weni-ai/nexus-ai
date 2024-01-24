@@ -1,6 +1,6 @@
 from .template_type_dto import TemplateTypeDTO
 from nexus.projects.models import TemplateType, Project
-
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
 class TemplateTypeUseCase:
 
