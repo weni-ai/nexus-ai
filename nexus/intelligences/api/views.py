@@ -23,6 +23,7 @@ from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManag
 from nexus.task_managers.tasks import upload_text_file
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
+from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 
 
 class CustomCursorPagination(CursorPagination):
@@ -170,9 +171,32 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
         data = request.data
         intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
         return Response(
-            data=intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text")),
+            data=intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text"), language=data.get("language")),
             status=200
         )
+
+
+class QuickTestAIAPIView(views.APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        try:
+            
+            data = request.data
+            content_base_uuid=data.get("content_base_uuid")
+
+            user = request.user
+            org = get_org_by_content_base_uuid(content_base_uuid)
+            has_permission = permissions.can_list_content_bases(user, org)
+
+            if has_permission:
+                intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
+                return Response(
+                    data=intelligence_usecase.search(content_base_uuid=content_base_uuid, text=data.get("text"), language=data.get("language")),
+                    status=200
+                )
+            raise IntelligencePermissionDenied()
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
 class SentenxIndexerUpdateFile(views.APIView):
