@@ -3,6 +3,7 @@ import requests
 
 from django.conf import settings
 from typing import List
+from nexus.usecases.task_managers.wenigpt_database import get_prompt_by_language
 
 class WeniGPTDatabase:
 
@@ -27,8 +28,8 @@ class WeniGPTDatabase:
 
     def request_wenigpt(self, contexts: List, question: str, language: str):
         context = "\n".join([str(ctx) for ctx in contexts])
-        # base_prompt = f"{settings.WENIGPT_PROMPT_INTRODUCTION}{settings.WENIGPT_PROMPT_TEXT}{context}{settings.WENIGPT_PROMPT_QUESTION}{question}{settings.WENIGPT_PROMPT_REINFORCEMENT_INSTRUCTION}{settings.WENIGPT_PROMPT_ANSWER}"
-        base_prompt = self.format_base_prompt(language=language, context=context, question=question)
+        base_prompt = get_prompt_by_language(language=language, context=context, question=question)
+        print(base_prompt)
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.token}",
@@ -58,14 +59,3 @@ class WeniGPTDatabase:
             response = {"error": str(e)}
 
         return {"answers": self.format_output(text_answers), "id": "0"}
-
-    def format_base_prompt(self, language: str, context: str, question: str):
-        prompt_introduction = settings.WENIGPT_PROMPT_INTRODUCTION.get(language)
-        prompt_text = settings.WENIGPT_PROMPT_TEXT.get(language)
-        prompt_question = settings.WENIGPT_PROMPT_QUESTION.get(language)
-        prompt_reinforcement = settings.WENIGPT_PROMPT_REINFORCEMENT_INSTRUCTION.get(language)
-        prompt_answer = settings.WENIGPT_PROMPT_ANSWER.get(language)
-
-        base_prompt = f"{prompt_introduction}{prompt_text}{context}{prompt_question}{question}{prompt_reinforcement}{prompt_answer}"
-
-        return base_prompt
