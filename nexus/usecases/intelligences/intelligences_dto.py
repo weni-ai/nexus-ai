@@ -25,8 +25,8 @@ class UpdateContentBaseFileDTO:
 
 @dataclass
 class ContentBaseTextDTO:
-    file: str
-    file_name: str
+    file: str = None
+    file_name: str = None
     text: str
     content_base_uuid: str
     user_email: str
