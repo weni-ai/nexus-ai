@@ -5,6 +5,8 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
+from nexus.intelligences.models import ContentBaseText
+
 from nexus.usecases.intelligences.exceptions import ContentBaseTextDoesNotExist
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO, UpdateContentBaseFileDTO
@@ -77,16 +79,9 @@ def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_e
 
 
 @app.task
-def upload_text_file(text: str, content_base_uuid: str, user_email: str):
+def upload_text_file(text: str, cb_dto: ContentBaseDTO, cbt: ContentBaseText):
 
-    content_base = RetrieveContentBaseUseCase().get_contentbase(content_base_uuid, user_email)
-
-    content_base_dto = ContentBaseDTO(
-        uuid=str(content_base.uuid),
-        title=content_base.title,
-        intelligence_uuid=str(content_base.intelligence.uuid),
-        created_by_email=user_email
-    )
+    content_base_dto = cb_dto
 
     file_name = f"{content_base_dto.title}.txt"
 
@@ -96,28 +91,9 @@ def upload_text_file(text: str, content_base_uuid: str, user_email: str):
     with open(f"/tmp/{file_name}", "rb") as file:
         file_database_response = s3FileDatabase().add_file(file)
 
-    content_base_text_dto = ContentBaseTextDTO(
-        file=file_database_response.file_url,
-        file_name=file_database_response.file_name,
-        text=text,
-        content_base_uuid=content_base_dto.uuid,
-        user_email=content_base_dto.created_by_email
-    )
-
-    try:
-        content_base_text = get_contentbasetext_by_contentbase_uuid(content_base_dto.uuid)
-        content_base_text_dto.uuid = str(content_base_text.uuid)
-        usecase = UpdateContentBaseTextUseCase()
-        usecase.update_contentbasetext(
-            contentbasetext_uuid=content_base_text_dto.uuid,
-            user_email=user_email,
-            text=content_base_text_dto.text
-        )
-    except ContentBaseTextDoesNotExist():
-        content_base_text = CreateContentBaseTextUseCase().create_contentbasetext(
-            content_base_dto=content_base_dto,
-            content_base_text_dto=content_base_text_dto
-        )
+    cbt.file = file_database_response.file_url
+    cbt.file_name = file_database_response.file_name
+    cbt.save()
 
     if file_database_response.status != 0:
         return {
@@ -125,15 +101,15 @@ def upload_text_file(text: str, content_base_uuid: str, user_email: str):
             "error": file_database_response.err
         }
 
-    task_manager = CeleryTaskManagerUseCase().create_celery_text_file_manager(content_base_text=content_base_text)
+    task_manager = CeleryTaskManagerUseCase().create_celery_text_file_manager(content_base_text=cbt)
     add_file.apply_async(args=[str(task_manager.uuid), "text"])
     response = {
         "task_uuid": task_manager.uuid,
         "task_status": task_manager.status,
         "content_base_text": {
-            "uuid": content_base_text.uuid,
+            "uuid": cbt.uuid,
             "extension_file": 'txt',
-            "text": content_base_text.text,
+            "text": cbt.text,
         }
     }
     return response

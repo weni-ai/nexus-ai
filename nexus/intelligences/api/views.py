@@ -22,6 +22,7 @@ from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 from nexus.task_managers.tasks import upload_text_file
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
+from nexus.usecases import intelligences
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 
@@ -366,8 +367,28 @@ class ContentBaseTextViewset(
             serializer.is_valid(raise_exception=True)
 
             text = serializer.validated_data.get('text')
+            content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
+            cb_dto = intelligences.ContentBaseDTO(
+                uuid=content_base.uuid,
+                title=content_base.title,
+                intelligence_uuid=content_base.intelligence.uuid,
+            )
+            cbt_dto = intelligences.ContentBaseTextDTO(
+                text=text,
+                content_base_uuid=content_base_uuid,
+                user_email=user_email
+            )
+            content_base_text = intelligences.CreateContentBaseTextUseCase.create_contentbasetext(
+                content_base_dto=cb_dto,
+                content_base_text_dto=cbt_dto
+            )
 
-            response = upload_text_file.delay(text, content_base_uuid, user_email)
+            upload_text_file.delay(
+                cb_dto=cb_dto,
+                cbt=content_base_text
+            )
+
+            response = ContentBaseTextSerializer(content_base_text).data
 
             return Response(
                 response,
@@ -382,7 +403,28 @@ class ContentBaseTextViewset(
             text = request.data.get('text')
             content_base_uuid = kwargs.get('content_base_uuid')
 
-            response = upload_text_file.delay(text, content_base_uuid, user_email)
+            content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
+            cb_dto = intelligences.ContentBaseDTO(
+                uuid=content_base.uuid,
+                title=content_base.title,
+                intelligence_uuid=content_base.intelligence.uuid,
+            )
+            cbt_dto = intelligences.ContentBaseTextDTO(
+                text=text,
+                content_base_uuid=content_base_uuid,
+                user_email=user_email
+            )
+            content_base_text = intelligences.UpdateContentBaseTextUseCase.update_contentbasetext(
+                content_base_dto=cb_dto,
+                content_base_text_dto=cbt_dto
+            )
+
+            upload_text_file.delay(
+                cb_dto=cb_dto,
+                cbt=content_base_text
+            )
+
+            response = ContentBaseTextSerializer(content_base_text).data
 
             return Response(
                 response,
