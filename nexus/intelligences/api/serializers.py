@@ -28,4 +28,4 @@ class ContentBaseTextSerializer(serializers.ModelSerializer):
 class ContentBaseFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseFile
-        fields = ["file", "extension_file", "uuid"]
+        fields = ["file", "extension_file", "uuid", "created_file_name"]
