@@ -9,4 +9,4 @@ class IntelligenceGenerativeSearchUseCase():
         if response.get("status") != 200:
             raise Exception(response.get("data"))
         wenigpt_database = WeniGPTDatabase()
-        return wenigpt_database.request_wenigpt(contexts=response.get("data", []), question=text)
+        return wenigpt_database.request_wenigpt(contexts=response.get("data", []).get("response"), question=text)
