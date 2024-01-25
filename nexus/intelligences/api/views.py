@@ -461,3 +461,25 @@ class ContentBaseFileViewset(ModelViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+class DownloadFileViewSet(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            file_name = request.data.get('file_name')
+            contentbasefile_uuid = request.data.get('content_base_file')
+            user_email = request.user.email
+
+            print(file_name, contentbasefile_uuid, user_email)
+
+            use_case = intelligences.RetrieveContentBaseFileUseCase()
+            use_case.get_contentbasefile(
+                contentbasefile_uuid=contentbasefile_uuid,
+                user_email=user_email
+            )
+            file = s3FileDatabase().create_presigned_url(file_name)
+            return Response(data={"file": file}, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
