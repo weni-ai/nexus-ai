@@ -2,7 +2,8 @@ import json
 import requests
 
 from django.conf import settings
-
+from typing import List
+from nexus.usecases.task_managers.wenigpt_database import get_prompt_by_language
 
 class WeniGPTDatabase:
 
@@ -25,9 +26,11 @@ class WeniGPTDatabase:
         return answers
 
 
-    def request_wenigpt(self, contexts, question):
+    def request_wenigpt(self, contexts: List, question: str, language: str):
         context = "\n".join([str(ctx) for ctx in contexts])
-        base_prompt = f"{settings.WENIGPT_PROMPT_INTRODUCTION}{settings.WENIGPT_PROMPT_TEXT}{context}{settings.WENIGPT_PROMPT_QUESTION}{question}{settings.WENIGPT_PROMPT_REINFORCEMENT_INSTRUCTION}{settings.WENIGPT_PROMPT_ANSWER}"
+        # base_prompt = f"{settings.WENIGPT_PROMPT_INTRODUCTION}{settings.WENIGPT_PROMPT_TEXT}{context}{settings.WENIGPT_PROMPT_QUESTION}{question}{settings.WENIGPT_PROMPT_REINFORCEMENT_INSTRUCTION}{settings.WENIGPT_PROMPT_ANSWER}"
+        base_prompt = get_prompt_by_language(language=language, context=context, question=question)
+        print(base_prompt)
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.token}",
