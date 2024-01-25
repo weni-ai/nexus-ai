@@ -479,6 +479,7 @@ class DownloadFileViewSet(views.APIView):
                 contentbasefile_uuid=contentbasefile_uuid,
                 user_email=user_email
             )
-            return s3FileDatabase().create_presigned_url(file_name)
+            file = s3FileDatabase().create_presigned_url(file_name)
+            return Response(data={"file": file}, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
