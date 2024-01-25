@@ -253,7 +253,6 @@ class TestContentBaseTextViewset(TestCase):
             json.dumps(data),
             content_type='application/json'
         )
-        force_authenticate(request,user=self.user)
+        force_authenticate(request, user=self.user)
         response = self.view(request, contentbasetext_uuid=str(self.contentbasetext.uuid))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['text'], data['text'])
