@@ -372,20 +372,22 @@ class ContentBaseTextViewset(
                 uuid=content_base.uuid,
                 title=content_base.title,
                 intelligence_uuid=content_base.intelligence.uuid,
+                created_by_email=content_base.created_by.email,
             )
             cbt_dto = intelligences.ContentBaseTextDTO(
                 text=text,
                 content_base_uuid=content_base_uuid,
                 user_email=user_email
             )
-            content_base_text = intelligences.CreateContentBaseTextUseCase.create_contentbasetext(
+            content_base_text = intelligences.CreateContentBaseTextUseCase().create_contentbasetext(
                 content_base_dto=cb_dto,
                 content_base_text_dto=cbt_dto
             )
 
             upload_text_file.delay(
                 cb_dto=cb_dto,
-                cbt=content_base_text
+                cbt=content_base_text,
+                text=text
             )
 
             response = ContentBaseTextSerializer(content_base_text).data
@@ -402,26 +404,26 @@ class ContentBaseTextViewset(
             user_email = request.user.email
             text = request.data.get('text')
             content_base_uuid = kwargs.get('content_base_uuid')
+            content_base_text_uuid = kwargs.get('content_base_text_uuid')
 
             content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
+            content_base_text = intelligences.get_by_contentbasetext_uuid(content_base_text_uuid)
             cb_dto = intelligences.ContentBaseDTO(
                 uuid=content_base.uuid,
                 title=content_base.title,
                 intelligence_uuid=content_base.intelligence.uuid,
+                created_by_email=content_base.created_by.email,
             )
-            cbt_dto = intelligences.ContentBaseTextDTO(
-                text=text,
-                content_base_uuid=content_base_uuid,
-                user_email=user_email
-            )
-            content_base_text = intelligences.UpdateContentBaseTextUseCase.update_contentbasetext(
-                content_base_dto=cb_dto,
-                content_base_text_dto=cbt_dto
+            content_base_text = intelligences.UpdateContentBaseTextUseCase().update_contentbasetext(
+                contentbasetext_uuid=content_base_text_uuid,
+                user_email=user_email,
+                text=text
             )
 
             upload_text_file.delay(
                 cb_dto=cb_dto,
-                cbt=content_base_text
+                cbt=content_base_text,
+                text=text
             )
 
             response = ContentBaseTextSerializer(content_base_text).data
