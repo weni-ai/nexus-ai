@@ -28,4 +28,10 @@ class ContentBaseTextSerializer(serializers.ModelSerializer):
 class ContentBaseFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseFile
-        fields = ["file", "extension_file", "uuid", "created_file_name"]
+        fields = ["file", "extension_file", "uuid", "created_file_name", "status"]
+    
+    status = serializers.SerializerMethodField()
+
+    def get_status(self, obj):
+        task_manager = obj.upload_tasks.get()
+        return task_manager.status_from

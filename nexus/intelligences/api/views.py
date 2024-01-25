@@ -208,7 +208,7 @@ class SentenxIndexerUpdateFile(views.APIView):
             raise PermissionDenied("You has not permission to do that.")
         data = request.data
         task_manager_usecase = CeleryTaskManagerUseCase()
-        sentenx_status = [ContentBaseFileTaskManager.STATUS_SUCCESS, ContentBaseFileTaskManager.STATUS_FAIL]
+        sentenx_status = [ContentBaseFileTaskManager.STATUS_FAIL, ContentBaseFileTaskManager.STATUS_SUCCESS]
         task_manager_usecase.update_task_status(task_uuid=data.get("task_uuid"), status=sentenx_status[data.get("status")], file_type=data.get("file_type"))
         return Response(status=200, data=data)
 
