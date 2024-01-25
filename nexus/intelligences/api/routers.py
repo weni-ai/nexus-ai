@@ -7,6 +7,7 @@ from .views import (
     ContentBaseTextViewset,
     ContentBaseFileViewset,
     SentenxIndexerUpdateFile,
+    GenerativeIntelligenceQuestionAPIView,
 )
 
 
@@ -38,4 +39,5 @@ urlpatterns = [
     path('<content_base_uuid>/', include(content_base_router.urls)),
     path('v1/intelligences/content_bases/<project_uuid>/', FlowsIntelligencesApiView.as_view(), name="project-intelligences"),
     path('v1/content-base-file', SentenxIndexerUpdateFile.as_view(), name="sentenx-content-base-file"),
+    path('v1/wenigpt_question', GenerativeIntelligenceQuestionAPIView.as_view(), name="wenigpt-question")
 ]
