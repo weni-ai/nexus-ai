@@ -36,6 +36,12 @@ class ContentBaseFile(BaseModel, SoftDeleteModel):
         ContentBase, related_name='contentbasefiles', on_delete=models.CASCADE
     )
 
+    @property
+    def created_file_name(self):
+        file_name_without_extension = self.file_name.split('.')[0]
+        file_name_without_uuid = file_name_without_extension[:-37]
+        return file_name_without_uuid
+
 
 class ContentBaseLink(BaseModel, SoftDeleteModel):
     link = models.URLField()
