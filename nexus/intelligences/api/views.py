@@ -367,9 +367,10 @@ class ContentBaseTextViewset(
 
             text = serializer.validated_data.get('text')
 
-            upload_text_file.delay(text, content_base_uuid, user_email)
+            response = upload_text_file.delay(text, content_base_uuid, user_email)
 
             return Response(
+                response,
                 status=status.HTTP_201_CREATED
             )
         except IntelligencePermissionDenied:
@@ -381,9 +382,10 @@ class ContentBaseTextViewset(
             text = request.data.get('text')
             content_base_uuid = kwargs.get('content_base_uuid')
 
-            upload_text_file.delay(text, content_base_uuid, user_email)
+            response = upload_text_file.delay(text, content_base_uuid, user_email)
 
             return Response(
+                response,
                 status=status.HTTP_200_OK
             )
         except IntelligencePermissionDenied:

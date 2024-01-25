@@ -130,9 +130,10 @@ def upload_text_file(text: str, content_base_uuid: str, user_email: str):
     response = {
         "task_uuid": task_manager.uuid,
         "task_status": task_manager.status,
-        "content_base": {
+        "content_base_text": {
             "uuid": content_base_text.uuid,
             "extension_file": 'txt',
+            "text": content_base_text.text,
         }
     }
     return response
