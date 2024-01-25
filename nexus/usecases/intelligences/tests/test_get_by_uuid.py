@@ -5,7 +5,8 @@ from django.core.exceptions import ValidationError
 from ..get_by_uuid import (
     get_by_intelligence_uuid,
     get_by_contentbase_uuid,
-    get_by_contentbasetext_uuid
+    get_by_contentbasetext_uuid,
+    get_contentbasetext_by_contentbase_uuid
 )
 from ..exceptions import (
     IntelligenceDoesNotExist,
@@ -90,3 +91,9 @@ class GetByContentBaseTextUuidTestCase(TestCase):
     def test_get_by_uuid_none(self):
         with self.assertRaises(ContentBaseTextDoesNotExist):
             get_by_contentbasetext_uuid(None)
+
+    def test_get_contentbasetext_by_contentbase_uuid(self):
+        retrieved_contentbasetext = get_contentbasetext_by_contentbase_uuid(
+            self.contentbasetext.content_base.uuid
+        )
+        self.assertEqual(self.contentbasetext, retrieved_contentbasetext)

@@ -5,11 +5,14 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
+from nexus.usecases.intelligences.exceptions import ContentBaseTextDoesNotExist
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO, UpdateContentBaseFileDTO
 from nexus.usecases.intelligences.create import CreateContentBaseTextUseCase
 from nexus.usecases.intelligences.retrieve import RetrieveContentBaseUseCase
 from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
+from nexus.usecases.intelligences.update import UpdateContentBaseTextUseCase
+from nexus.usecases.intelligences.get_by_uuid import get_contentbasetext_by_contentbase_uuid
 
 
 @app.task
@@ -101,10 +104,20 @@ def upload_text_file(text: str, content_base_uuid: str, user_email: str):
         user_email=content_base_dto.created_by_email
     )
 
-    content_base_text = CreateContentBaseTextUseCase().create_contentbasetext(
-        content_base_dto=content_base_dto,
-        content_base_text_dto=content_base_text_dto
-    )
+    try:
+        content_base_text = get_contentbasetext_by_contentbase_uuid(content_base_dto.uuid)
+        content_base_text_dto.uuid = str(content_base_text.uuid)
+        usecase = UpdateContentBaseTextUseCase()
+        usecase.update_contentbasetext(
+            contentbasetext_uuid=content_base_text_dto.uuid,
+            user_email=user_email,
+            text=content_base_text_dto.text
+        )
+    except ContentBaseTextDoesNotExist():
+        content_base_text = CreateContentBaseTextUseCase().create_contentbasetext(
+            content_base_dto=content_base_dto,
+            content_base_text_dto=content_base_text_dto
+        )
 
     if file_database_response.status != 0:
         return {

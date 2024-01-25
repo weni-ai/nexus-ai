@@ -111,7 +111,7 @@ class IntelligencesViewset(
         try:
             user_email = request.user.email
             use_case = intelligences.UpdateIntelligenceUseCase()
- 
+
             update_intelligence = use_case.update_intelligences(
                 intelligence_uuid=kwargs.get("pk"),
                 name=request.data.get('name'),
@@ -143,11 +143,12 @@ class IntelligencesViewset(
                 status=status.HTTP_204_NO_CONTENT
             )
         except IntelligencePermissionDenied:
-                return Response(status=status.HTTP_401_UNAUTHORIZED)
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
 class FlowsIntelligencesApiView(views.APIView):
     authentication_classes = []
+
     def get(self, request, project_uuid):
         authorization_header = request.headers.get('Authorization', "Bearer unauthorized")
 
@@ -162,6 +163,7 @@ class FlowsIntelligencesApiView(views.APIView):
 
 class GenerativeIntelligenceQuestionAPIView(views.APIView):
     authentication_classes = []
+
     def post(self, request):
         authorization_header = request.headers.get("Authorization", "Bearer unauthorized")
         if not permissions.is_super_user(authorization_header):
@@ -199,6 +201,7 @@ class QuickTestAIAPIView(views.APIView):
 
 class SentenxIndexerUpdateFile(views.APIView):
     authentication_classes = []
+
     def patch(self, request):
         authorization_header = request.headers.get('Authorization', "Bearer unauthorized")
         if not permissions.is_super_user(authorization_header):
@@ -230,7 +233,7 @@ class ContentBaseViewset(
             user_email=user_email
         )
         return use_case_list
-    
+
     def list(self, request, *args, **kwargs):
         try:
             return super().list(request, *args, **kwargs)
@@ -375,16 +378,12 @@ class ContentBaseTextViewset(
     def update(self, request, **kwargs):
         try:
             user_email = request.user.email
-            use_case = intelligences.UpdateContentBaseTextUseCase()
+            text = request.data.get('text')
+            content_base_uuid = kwargs.get('content_base_uuid')
 
-            update_contentbasetext = use_case.update_contentbasetext(
-                contentbasetext_uuid=kwargs.get('contentbasetext_uuid'),
-                text=request.data.get('text'),
-                user_email=user_email
-            )
+            upload_text_file.delay(text, content_base_uuid, user_email)
 
             return Response(
-                ContentBaseTextSerializer(update_contentbasetext).data,
                 status=status.HTTP_200_OK
             )
         except IntelligencePermissionDenied:
@@ -423,7 +422,7 @@ class ContentBaseFileViewset(ModelViewSet):
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def create(self, request, content_base_uuid=str):
-        
+
         try:
             file = request.FILES['file']
             self.get_queryset()
@@ -451,8 +450,8 @@ class ContentBaseFileViewset(ModelViewSet):
 
     def retrieve(self, request, *args, **kwargs):
         try:
-            user_email:str = self.request.user.email
-            contentbasefile_uuid:str = kwargs.get('contentbase_file_uuid')
+            user_email: str = self.request.user.email
+            contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
             use_case = intelligences.RetrieveContentBaseFileUseCase()
             contentbasetext = use_case.get_contentbasefile(
                 contentbasefile_uuid=contentbasefile_uuid,
