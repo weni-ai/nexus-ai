@@ -179,11 +179,12 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
 
 class QuickTestAIAPIView(views.APIView):
     permission_classes = [IsAuthenticated]
+
     def post(self, request):
         try:
-            
+
             data = request.data
-            content_base_uuid=data.get("content_base_uuid")
+            content_base_uuid = data.get("content_base_uuid")
 
             user = request.user
             org = get_org_by_content_base_uuid(content_base_uuid)
@@ -192,7 +193,7 @@ class QuickTestAIAPIView(views.APIView):
             if has_permission:
                 intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
                 return Response(
-                    data=intelligence_usecase.search(content_base_uuid=content_base_uuid, text=data.get("text"), language=data.get("language")),
+                    data=intelligence_usecase.search(content_base_uuid=content_base_uuid, text=data.get("text"), language=data.get("language", "pt-br")),
                     status=200
                 )
             raise IntelligencePermissionDenied()
