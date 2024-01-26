@@ -404,7 +404,7 @@ class ContentBaseTextViewset(
             user_email = request.user.email
             text = request.data.get('text')
             content_base_uuid = kwargs.get('content_base_uuid')
-            content_base_text_uuid = kwargs.get('content_base_text_uuid')
+            content_base_text_uuid = kwargs.get('contentbasetext_uuid')
 
             content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
             content_base_text = intelligences.get_by_contentbasetext_uuid(content_base_text_uuid)
