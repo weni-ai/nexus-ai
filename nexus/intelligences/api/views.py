@@ -385,8 +385,8 @@ class ContentBaseTextViewset(
             )
 
             upload_text_file.delay(
-                cb_dto=cb_dto,
-                cbt=content_base_text,
+                cb_dto=cb_dto.__dict__,
+                cbt_uuid=content_base_text.uuid,
                 text=text
             )
 
@@ -422,7 +422,7 @@ class ContentBaseTextViewset(
 
             upload_text_file.delay(
                 cb_dto=cb_dto.__dict__,
-                cbt=content_base_text.uuid,
+                cbt_uuid=content_base_text.uuid,
                 text=text
             )
 
