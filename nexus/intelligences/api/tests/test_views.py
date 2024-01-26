@@ -257,6 +257,6 @@ class TestContentBaseTextViewset(TestCase):
         response = self.view(
             request,
             content_base_uuid=str(self.content_base.uuid),
-            content_base_text_uuid=str(self.contentbasetext.uuid)
+            contentbasetext_uuid=str(self.contentbasetext.uuid)
         )
         self.assertEqual(response.status_code, 200)

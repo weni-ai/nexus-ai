@@ -179,11 +179,12 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
 
 class QuickTestAIAPIView(views.APIView):
     permission_classes = [IsAuthenticated]
+
     def post(self, request):
         try:
-            
+
             data = request.data
-            content_base_uuid=data.get("content_base_uuid")
+            content_base_uuid = data.get("content_base_uuid")
 
             user = request.user
             org = get_org_by_content_base_uuid(content_base_uuid)
@@ -192,7 +193,7 @@ class QuickTestAIAPIView(views.APIView):
             if has_permission:
                 intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
                 return Response(
-                    data=intelligence_usecase.search(content_base_uuid=content_base_uuid, text=data.get("text"), language=data.get("language")),
+                    data=intelligence_usecase.search(content_base_uuid=content_base_uuid, text=data.get("text"), language=data.get("language", "pt-br")),
                     status=200
                 )
             raise IntelligencePermissionDenied()
@@ -209,7 +210,7 @@ class SentenxIndexerUpdateFile(views.APIView):
             raise PermissionDenied("You has not permission to do that.")
         data = request.data
         task_manager_usecase = CeleryTaskManagerUseCase()
-        sentenx_status = [ContentBaseFileTaskManager.STATUS_SUCCESS, ContentBaseFileTaskManager.STATUS_FAIL]
+        sentenx_status = [ContentBaseFileTaskManager.STATUS_FAIL, ContentBaseFileTaskManager.STATUS_SUCCESS]
         task_manager_usecase.update_task_status(task_uuid=data.get("task_uuid"), status=sentenx_status[data.get("status")], file_type=data.get("file_type"))
         return Response(status=200, data=data)
 
@@ -385,8 +386,8 @@ class ContentBaseTextViewset(
             )
 
             upload_text_file.delay(
-                cb_dto=cb_dto,
-                cbt=content_base_text,
+                cb_dto=cb_dto.__dict__,
+                cbt_uuid=content_base_text.uuid,
                 text=text
             )
 
@@ -404,7 +405,7 @@ class ContentBaseTextViewset(
             user_email = request.user.email
             text = request.data.get('text')
             content_base_uuid = kwargs.get('content_base_uuid')
-            content_base_text_uuid = kwargs.get('content_base_text_uuid')
+            content_base_text_uuid = kwargs.get('contentbasetext_uuid')
 
             content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
             content_base_text = intelligences.get_by_contentbasetext_uuid(content_base_text_uuid)
@@ -421,8 +422,8 @@ class ContentBaseTextViewset(
             )
 
             upload_text_file.delay(
-                cb_dto=cb_dto,
-                cbt=content_base_text,
+                cb_dto=cb_dto.__dict__,
+                cbt_uuid=content_base_text.uuid,
                 text=text
             )
 
@@ -505,5 +506,27 @@ class ContentBaseFileViewset(ModelViewSet):
             )
             serializer = self.get_serializer(contentbasetext)
             return Response(serializer.data, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+class DownloadFileViewSet(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            file_name = request.data.get('file_name')
+            contentbasefile_uuid = request.data.get('content_base_file')
+            user_email = request.user.email
+
+            print(file_name, contentbasefile_uuid, user_email)
+
+            use_case = intelligences.RetrieveContentBaseFileUseCase()
+            use_case.get_contentbasefile(
+                contentbasefile_uuid=contentbasefile_uuid,
+                user_email=user_email
+            )
+            file = s3FileDatabase().create_presigned_url(file_name)
+            return Response(data={"file": file}, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
