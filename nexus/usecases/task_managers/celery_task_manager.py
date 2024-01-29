@@ -63,9 +63,14 @@ class CeleryTaskManagerUseCase:
         return content_base_task_manager
 
     def get_task_manager_by_uuid(self, task_uuid, file_type: str) -> TaskManager:
-        task_manager = self._get_task_manager_func(file_type)
-        content_base_task_manager = task_manager(task_uuid=task_uuid)
-        return content_base_task_manager
+        try:
+            task_manager = self._get_task_manager_func(file_type)
+            content_base_task_manager = task_manager(task_uuid=task_uuid)
+            return content_base_task_manager
+        except ContentBaseTextTaskManagerNotExists as err:
+            if file_type == "text":
+                return self.get_task_manager_by_uuid(task_uuid, "file")
+            raise ContentBaseTextTaskManagerNotExists(f"{task_uuid} - {err}")
 
     def update_task_status(self, task_uuid, status, file_type):
         task_manager = self.get_task_manager_by_uuid(task_uuid=task_uuid, file_type=file_type)
