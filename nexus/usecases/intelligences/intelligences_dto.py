@@ -8,6 +8,7 @@ class ContentBaseFileDTO:
     content_base_uuid: str
     file_url: str = None
     file_name: str = None
+    uuid: str = None
 
 
 @dataclass
