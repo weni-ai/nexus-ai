@@ -213,7 +213,7 @@ class SentenxIndexerUpdateFile(views.APIView):
             raise PermissionDenied("You has not permission to do that.")
         data = request.data
         task_manager_usecase = CeleryTaskManagerUseCase()
-        sentenx_status = [ContentBaseFileTaskManager.STATUS_SUCCESS, ContentBaseFileTaskManager.STATUS_FAIL]
+        sentenx_status = [ContentBaseFileTaskManager.STATUS_FAIL, ContentBaseFileTaskManager.STATUS_SUCCESS]
         task_manager_usecase.update_task_status(task_uuid=data.get("task_uuid"), status=sentenx_status[data.get("status")], file_type=data.get("file_type"))
         return Response(status=200, data=data)
 
@@ -509,5 +509,27 @@ class ContentBaseFileViewset(ModelViewSet):
             )
             serializer = self.get_serializer(contentbasetext)
             return Response(serializer.data, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+class DownloadFileViewSet(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            file_name = request.data.get('file_name')
+            contentbasefile_uuid = request.data.get('content_base_file')
+            user_email = request.user.email
+
+            print(file_name, contentbasefile_uuid, user_email)
+
+            use_case = intelligences.RetrieveContentBaseFileUseCase()
+            use_case.get_contentbasefile(
+                contentbasefile_uuid=contentbasefile_uuid,
+                user_email=user_email
+            )
+            file = s3FileDatabase().create_presigned_url(file_name)
+            return Response(data={"file": file}, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
