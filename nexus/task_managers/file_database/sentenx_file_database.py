@@ -14,10 +14,10 @@ class SentenXFileDataBase:
 
     def add_file(self, task: TaskManager, file_database: FileDataBase):
         url = settings.SENTENX_BASE_URL + "/content_base/index"
-
         body = {
             "file": file_database.create_presigned_url(task.content_base_file.file_name),
             "filename": task.content_base_file.file_name,
+            "file_uuid": str(task.content_base_file.uuid),
             "extension_file": task.content_base_file.extension_file,
             "task_uuid": str(task.uuid),
             "content_base": str(task.content_base_file.content_base.uuid)
@@ -31,10 +31,10 @@ class SentenXFileDataBase:
 
     def add_text_file(self, task: TaskManager, file_database: FileDataBase):
         url = settings.SENTENX_BASE_URL + "/content_base/index"
-
         body = {
             "file": file_database.create_presigned_url(task.content_base_text.file_name),
             "filename": task.content_base_text.file_name,
+            "file_uuid": str(task.content_base_text.uuid),
             "extension_file": 'txt',
             "task_uuid": str(task.uuid),
             "content_base": str(task.content_base_text.content_base.uuid)

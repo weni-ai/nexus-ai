@@ -350,7 +350,7 @@ class ContentBaseTextViewset(
     def retrieve(self, request, *args, **kwargs):
         try:
             user_email = request.user.email
-            contentbasetext_uuid = kwargs.get('content_base_text_uuid')
+            contentbasetext_uuid = kwargs.get('contentbasetext_uuid')
 
             use_case = intelligences.RetrieveContentBaseTextUseCase()
             contentbasetext = use_case.get_contentbasetext(
@@ -408,8 +408,7 @@ class ContentBaseTextViewset(
             user_email = request.user.email
             text = request.data.get('text')
             content_base_uuid = kwargs.get('content_base_uuid')
-            content_base_text_uuid = kwargs.get('content_base_text_uuid')
-
+            content_base_text_uuid = kwargs.get('contentbasetext_uuid')
             content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
             content_base_text = intelligences.get_by_contentbasetext_uuid(content_base_text_uuid)
             cb_dto = intelligences.ContentBaseDTO(
@@ -521,8 +520,6 @@ class DownloadFileViewSet(views.APIView):
             file_name = request.data.get('file_name')
             contentbasefile_uuid = request.data.get('content_base_file')
             user_email = request.user.email
-
-            print(file_name, contentbasefile_uuid, user_email)
 
             use_case = intelligences.RetrieveContentBaseFileUseCase()
             use_case.get_contentbasefile(
