@@ -243,9 +243,9 @@ class TestContentBaseTextViewset(TestCase):
         self.assertEqual(response.status_code, 201)
 
     def test_update(self):
+
         data = {
             'text': 'text',
-            'contentbasetext_uuid': str(self.contentbasetext.uuid),
         }
         url_put = f'{self.url}/{self.contentbasetext.uuid}/'
         request = self.factory.put(
@@ -254,5 +254,9 @@ class TestContentBaseTextViewset(TestCase):
             content_type='application/json'
         )
         force_authenticate(request, user=self.user)
-        response = self.view(request, contentbasetext_uuid=str(self.contentbasetext.uuid))
+        response = self.view(
+            request,
+            content_base_uuid=str(self.content_base.uuid),
+            content_base_text_uuid=str(self.contentbasetext.uuid)
+        )
         self.assertEqual(response.status_code, 200)
