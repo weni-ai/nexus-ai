@@ -25,8 +25,7 @@ class CeleryTaskManagerUseCase:
             content_base_task_manager = ContentBaseFileTaskManager.objects.get(uuid=task_uuid)
             return content_base_task_manager
         except ContentBaseFileTaskManager.DoesNotExist:
-            msg = f"[ CeleryTaskManagerUseCase ] - {task_uuid} does not exist"
-            print(msg)
+            msg = f"[ CeleryTaskManagerUseCase:ContentBaseFileTaskManager ] - {task_uuid} does not exist"
             raise ContentBaseFileTaskManagerNotExists(msg)
         except Exception as exception:
             raise Exception(f"[ ContentBaseFile ] - ContentBaseFile error to get - error: `{exception}`")
@@ -36,8 +35,10 @@ class CeleryTaskManagerUseCase:
             content_base_task_manager = ContentBaseTextTaskManager.objects.get(uuid=task_uuid)
             return content_base_task_manager
         except ContentBaseTextTaskManager.DoesNotExist:
-            msg = f"[ CeleryTaskManagerUseCase ] - {task_uuid} does not exist"
-            print(msg)
+            msg = f"[ CeleryTaskManagerUseCase:ContentBaseTextTaskManager ] - {task_uuid} does not exist"
+            content_base_task_manager = ContentBaseFileTaskManager.objects.filter(uuid=task_uuid)
+            if content_base_task_manager.exists():
+                return content_base_task_manager.first()
             return ContentBaseTextTaskManagerNotExists(msg)
         except Exception as exception:
             raise Exception(f"[ ContentBaseFile ] - ContentBaseFile error to get - error: `{exception}`")
