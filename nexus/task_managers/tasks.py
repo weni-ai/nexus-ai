@@ -79,9 +79,7 @@ def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_e
 
 
 @app.task
-def upload_text_file(text: str, cb_dto: ContentBaseDTO, cbt: ContentBaseText):
-
-    content_base_dto = cb_dto
+def upload_text_file(text: str, content_base_dto: ContentBaseDTO, content_base_text_uuid: ContentBaseText):
 
     file_name = f"{content_base_dto.title}.txt"
 
@@ -91,9 +89,10 @@ def upload_text_file(text: str, cb_dto: ContentBaseDTO, cbt: ContentBaseText):
     with open(f"/tmp/{file_name}", "rb") as file:
         file_database_response = s3FileDatabase().add_file(file)
 
-    cbt.file = file_database_response.file_url
-    cbt.file_name = file_database_response.file_name
-    cbt.save()
+    content_base_text = ContentBaseText.objects.get(uuid=content_base_text_uuid)
+    content_base_text.file = file_database_response.file_url
+    content_base_text.file_name = file_database_response.file_name
+    content_base_text.save(update_fields=['file', 'file_name'])
 
     if file_database_response.status != 0:
         return {
@@ -101,15 +100,15 @@ def upload_text_file(text: str, cb_dto: ContentBaseDTO, cbt: ContentBaseText):
             "error": file_database_response.err
         }
 
-    task_manager = CeleryTaskManagerUseCase().create_celery_text_file_manager(content_base_text=cbt)
+    task_manager = CeleryTaskManagerUseCase().create_celery_text_file_manager(content_base_text=content_base_text)
     add_file.apply_async(args=[str(task_manager.uuid), "text"])
     response = {
         "task_uuid": task_manager.uuid,
         "task_status": task_manager.status,
         "content_base_text": {
-            "uuid": cbt.uuid,
+            "uuid": content_base_text.uuid,
             "extension_file": 'txt',
-            "text": cbt.text,
+            "text": content_base_text.text,
         }
     }
     return response
