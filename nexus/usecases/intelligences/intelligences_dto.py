@@ -25,11 +25,11 @@ class UpdateContentBaseFileDTO:
 
 @dataclass
 class ContentBaseTextDTO:
-    file: str
-    file_name: str
     text: str
     content_base_uuid: str
     user_email: str
+    file: str = None
+    file_name: str = None
 
 
 @dataclass

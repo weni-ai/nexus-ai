@@ -39,3 +39,8 @@ from .retrieve import (
 from .search import (
     IntelligenceGenerativeSearchUseCase
 )
+from .intelligences_dto import (
+    ContentBaseDTO,
+    ContentBaseTextDTO,
+    ContentBaseFileDTO
+)

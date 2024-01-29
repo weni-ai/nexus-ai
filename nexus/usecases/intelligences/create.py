@@ -95,6 +95,7 @@ class CreateContentBaseTextUseCase():
         )
         return contentbasetext
 
+
 class CreateContentBaseFileUseCase():
 
     def create_content_base_file(self, content_base_file: ContentBaseFileDTO) -> ContentBaseFile:
