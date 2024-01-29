@@ -25,8 +25,7 @@ class CeleryTaskManagerUseCase:
             content_base_task_manager = ContentBaseFileTaskManager.objects.get(uuid=task_uuid)
             return content_base_task_manager
         except ContentBaseFileTaskManager.DoesNotExist:
-            msg = f"[ CeleryTaskManagerUseCase ] - {task_uuid} does not exist"
-            print(msg)
+            msg = f"[ CeleryTaskManagerUseCase:ContentBaseFileTaskManager ] - {task_uuid} does not exist"
             raise ContentBaseFileTaskManagerNotExists(msg)
         except Exception as exception:
             raise Exception(f"[ ContentBaseFile ] - ContentBaseFile error to get - error: `{exception}`")
@@ -36,8 +35,10 @@ class CeleryTaskManagerUseCase:
             content_base_task_manager = ContentBaseTextTaskManager.objects.get(uuid=task_uuid)
             return content_base_task_manager
         except ContentBaseTextTaskManager.DoesNotExist:
-            msg = f"[ CeleryTaskManagerUseCase ] - {task_uuid} does not exist"
-            print(msg)
+            msg = f"[ CeleryTaskManagerUseCase:ContentBaseTextTaskManager ] - {task_uuid} does not exist"
+            content_base_task_manager = ContentBaseFileTaskManager.objects.filter(uuid=task_uuid)
+            if content_base_task_manager.exists():
+                return content_base_task_manager.first()
             return ContentBaseTextTaskManagerNotExists(msg)
         except Exception as exception:
             raise Exception(f"[ ContentBaseFile ] - ContentBaseFile error to get - error: `{exception}`")
@@ -63,14 +64,9 @@ class CeleryTaskManagerUseCase:
         return content_base_task_manager
 
     def get_task_manager_by_uuid(self, task_uuid, file_type: str) -> TaskManager:
-        try:
-            task_manager = self._get_task_manager_func(file_type)
-            content_base_task_manager = task_manager(task_uuid=task_uuid)
-            return content_base_task_manager
-        except ContentBaseTextTaskManagerNotExists as err:
-            if file_type == "text":
-                return self.get_task_manager_by_uuid(task_uuid, "file")
-            raise ContentBaseTextTaskManagerNotExists(f"{task_uuid} - {err}")
+        task_manager = self._get_task_manager_func(file_type)
+        content_base_task_manager = task_manager(task_uuid=task_uuid)
+        return content_base_task_manager
 
     def update_task_status(self, task_uuid, status, file_type):
         task_manager = self.get_task_manager_by_uuid(task_uuid=task_uuid, file_type=file_type)
