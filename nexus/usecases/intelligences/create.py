@@ -64,6 +64,7 @@ class CreateContentBaseUseCase():
             created_by=user,
             description=description
         )
+        intelligence.increase_content_bases_count()
         return contentbase
 
 

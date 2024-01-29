@@ -12,6 +12,14 @@ class Intelligence(BaseModel, SoftDeleteModel):
         Org, on_delete=models.CASCADE, related_name='intelligences'
     )
 
+    def increase_content_bases_count(self):
+        self.content_bases_count += 1
+        self.save(update_fields=["content_bases_count"])
+
+    def decrease_content_bases_count(self):
+        self.content_bases_count -= 1
+        self.save(update_fields=["content_bases_count"])
+
 
 class IntegratedIntelligence(BaseModel):
     intelligence = models.ForeignKey(Intelligence, on_delete=models.CASCADE)
