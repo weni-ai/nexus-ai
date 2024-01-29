@@ -15,6 +15,7 @@ from nexus.usecases.intelligences.retrieve import RetrieveContentBaseUseCase
 from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
 from nexus.usecases.intelligences.update import UpdateContentBaseTextUseCase
 from nexus.usecases.intelligences.get_by_uuid import get_contentbasetext_by_contentbase_uuid
+from typing import Dict
 
 
 @app.task
@@ -79,9 +80,9 @@ def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_e
 
 
 @app.task
-def upload_text_file(text: str, content_base_dto: ContentBaseDTO, content_base_text_uuid: ContentBaseText):
+def upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: Dict):
 
-    file_name = f"{content_base_dto.title}.txt"
+    file_name = f"{content_base_dto.get('title')}.txt"
 
     with open(f"/tmp/{file_name}", "w") as file:
         file.write(text)
