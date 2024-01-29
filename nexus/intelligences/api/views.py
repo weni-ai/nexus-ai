@@ -192,7 +192,11 @@ class QuickTestAIAPIView(views.APIView):
             if has_permission:
                 intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
                 return Response(
-                    data=intelligence_usecase.search(content_base_uuid=content_base_uuid, text=data.get("text"), language=data.get("language")),
+                    data=intelligence_usecase.search(
+                        content_base_uuid=content_base_uuid,
+                        text=data.get("text"),
+                        language=data.get("language", "pt-br")
+                    ),
                     status=200
                 )
             raise IntelligencePermissionDenied()
@@ -385,8 +389,8 @@ class ContentBaseTextViewset(
             )
 
             upload_text_file.delay(
-                cb_dto=cb_dto,
-                cbt=content_base_text,
+                content_base_dto=cb_dto.__dict__,
+                content_base_text_uuid=content_base_text.uuid,
                 text=text
             )
 
@@ -421,9 +425,9 @@ class ContentBaseTextViewset(
             )
 
             upload_text_file.delay(
-                cb_dto=cb_dto,
-                cbt=content_base_text,
-                text=text
+                content_base_dto=cb_dto.__dict__,
+                content_base_text_uuid=content_base_text.uuid,
+                text=text,
             )
 
             response = ContentBaseTextSerializer(content_base_text).data

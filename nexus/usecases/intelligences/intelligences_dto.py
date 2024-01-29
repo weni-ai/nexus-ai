@@ -41,3 +41,6 @@ class ContentBaseDTO:
     created_by_email: str = None
     modified_by_email: str = None
     modified_at: str = None
+
+    def dict(self):
+        return {key: value for key, value in self.__dict__.items() if value is not None}
