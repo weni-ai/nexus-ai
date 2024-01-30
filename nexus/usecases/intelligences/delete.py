@@ -48,6 +48,8 @@ class DeleteContentBaseUseCase():
 
         contentbase = get_by_contentbase_uuid(contentbase_uuid)
         contentbase.delete()
+        contentbase.intelligence.decrease_content_bases_count()
+        
         return True
 
 

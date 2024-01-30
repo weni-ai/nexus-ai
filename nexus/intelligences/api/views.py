@@ -19,12 +19,14 @@ from nexus.orgs import permissions
 from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
 
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
+from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 from nexus.task_managers.tasks import upload_text_file
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.usecases import intelligences
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
+from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 
 
 class CustomCursorPagination(CursorPagination):
@@ -350,7 +352,7 @@ class ContentBaseTextViewset(
     def retrieve(self, request, *args, **kwargs):
         try:
             user_email = request.user.email
-            contentbasetext_uuid = kwargs.get('content_base_text_uuid')
+            contentbasetext_uuid = kwargs.get('contentbasetext_uuid')
 
             use_case = intelligences.RetrieveContentBaseTextUseCase()
             contentbasetext = use_case.get_contentbasetext(
@@ -408,8 +410,7 @@ class ContentBaseTextViewset(
             user_email = request.user.email
             text = request.data.get('text')
             content_base_uuid = kwargs.get('content_base_uuid')
-            content_base_text_uuid = kwargs.get('content_base_text_uuid')
-
+            content_base_text_uuid = kwargs.get('contentbasetext_uuid')
             content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
             content_base_text = intelligences.get_by_contentbasetext_uuid(content_base_text_uuid)
             cb_dto = intelligences.ContentBaseDTO(
@@ -512,6 +513,25 @@ class ContentBaseFileViewset(ModelViewSet):
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
+    def destroy(self, request, *args, **kwargs):
+        user_email: str = self.request.user.email
+        contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
+
+        use_case = intelligences.RetrieveContentBaseFileUseCase()
+        content_base_file = use_case.get_contentbasefile(
+            contentbasefile_uuid=contentbasefile_uuid,
+            user_email=user_email
+        )
+
+        sentenx_file_database = SentenXFileDataBase()
+        sentenx_file_database.delete(
+            content_base_uuid=str(content_base_file.content_base.uuid),
+            content_base_file_uuid=str(content_base_file.uuid),
+            filename=content_base_file.file_name
+        )
+
+        return super().destroy(request, *args, **kwargs)
+
 
 class DownloadFileViewSet(views.APIView):
     permission_classes = [IsAuthenticated]
@@ -521,8 +541,6 @@ class DownloadFileViewSet(views.APIView):
             file_name = request.data.get('file_name')
             contentbasefile_uuid = request.data.get('content_base_file')
             user_email = request.user.email
-
-            print(file_name, contentbasefile_uuid, user_email)
 
             use_case = intelligences.RetrieveContentBaseFileUseCase()
             use_case.get_contentbasefile(
