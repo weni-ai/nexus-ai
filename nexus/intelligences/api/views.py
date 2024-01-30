@@ -196,14 +196,17 @@ class QuickTestAIAPIView(views.APIView):
 
             if has_permission:
                 intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
-                return Response(
-                    data=intelligence_usecase.search(
+                data = intelligence_usecase.search(
                         content_base_uuid=content_base_uuid,
                         text=data.get("text"),
                         language=data.get("language", "pt-br")
-                    ),
-                    status=200
-                )
+                    )
+                if data.get("answers"):
+                    return Response(
+                        data=data,
+                        status=200
+                    )
+                return Response(status=404, data={"message": data.get("message")})
             raise IntelligencePermissionDenied()
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
