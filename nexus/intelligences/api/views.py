@@ -173,10 +173,13 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
             raise PermissionDenied('You do not have permission to perform this action.')
         data = request.data
         intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
-        return Response(
-            data=intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text"), language=data.get("language")),
-            status=200
-        )
+        data  = intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text"), language=data.get("language"))
+        if data.get("answers"):
+            return Response(
+                data=data,
+                status=200
+            )
+        return Response(status=404, data={"message": data.get("message")})
 
 
 class QuickTestAIAPIView(views.APIView):
