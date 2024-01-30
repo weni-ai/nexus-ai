@@ -53,9 +53,24 @@ class WeniGPTDatabase:
 
         text_answers = None
         try:
+            print("====================Question============================")
+            print(question)
+            print("=======================================================")
+            print("====================language============================")
+            print(language)
+            print("=======================================================")
+            print("=====================Context============================")
+            print(context)
+            print("======================================================")
+            print("=====================Data============================")
+            print(data)
+            print("======================================================")
             response = requests.request("POST", self.url, headers=headers, data=json.dumps(data))
             response_json = response.json()
             text_answers = response_json["output"].get("text")
+            print("=====================Answers============================")
+            print(text_answers)
+            print("======================================================")
         except Exception as e:
             response = {"error": str(e)}
 
