@@ -44,7 +44,8 @@ class CreateContentBaseUseCase():
             intelligence_uuid: str,
             user_email: str,
             title: str,
-            description: str
+            description: str,
+            language: str = 'pt-br'
     ) -> ContentBase:
 
         org_usecase = orgs.GetOrgByIntelligenceUseCase()
@@ -62,7 +63,8 @@ class CreateContentBaseUseCase():
             title=title,
             intelligence=intelligence,
             created_by=user,
-            description=description
+            description=description,
+            language=language
         )
         intelligence.increase_content_bases_count()
         return contentbase

@@ -45,7 +45,8 @@ class TestCreateContentBaseUseCase(TestCase):
             intelligence_uuid=self.intelligence.uuid,
             user_email=self.org.created_by,
             title="title",
-            description="description"
+            description="description",
+            language='en-us'
         )
         self.assertEqual(content_base_create.title, "title")
 
