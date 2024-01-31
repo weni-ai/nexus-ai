@@ -81,8 +81,8 @@ def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_e
 
 @app.task
 def upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: Dict):
-
-    file_name = f"{content_base_dto.get('title')}.txt"
+    content_base_title = content_base_dto.get('title', '').replace("/", "-").replace(" ", "-")
+    file_name = f"{content_base_title}.txt"
 
     with open(f"/tmp/{file_name}", "w") as file:
         file.write(text)
