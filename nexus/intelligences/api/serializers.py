@@ -17,7 +17,7 @@ class IntelligenceSerializer(serializers.ModelSerializer):
 class ContentBaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBase
-        fields = ['uuid', 'title', 'description']
+        fields = ['uuid', 'title', 'description', 'language']
 
 
 class ContentBaseTextSerializer(serializers.ModelSerializer):

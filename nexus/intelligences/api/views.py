@@ -273,12 +273,14 @@ class ContentBaseViewset(
 
             title = serializer.validated_data.get('title')
             description = serializer.validated_data.get('description')
+            language = serializer.validated_data.get('language')
 
             contentbase = use_case.create_contentbase(
                 intelligence_uuid=intelligence_uuid,
                 title=title,
                 user_email=user_email,
-                description=description
+                description=description,
+                language=language
             )
 
             return Response(

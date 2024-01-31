@@ -59,7 +59,8 @@ class TestIntelligencesViewset(TestCase):
     def test_create(self):
         data = {
             'name': 'intelligence_name',
-            'description': 'intelligence_description'
+            'description': 'intelligence_description',
+            'language': 'es'
         }
         request = self.factory.post(self.url, data)
         force_authenticate(request, user=self.user)
@@ -143,6 +144,7 @@ class TestContentBaseViewset(TestCase):
         data = {
             'title': 'title',
             'description': 'description',
+            'language': 'pt-br'
         }
         request = self.factory.post(self.url, data)
         force_authenticate(request, user=self.user)
@@ -225,7 +227,7 @@ class TestContentBaseTextViewset(TestCase):
         response = ContentBaseTextViewset.as_view({'get': 'retrieve'})(
             request,
             contentbase_uuid=str(self.content_base.uuid),
-            content_base_text_uuid=str(self.contentbasetext.uuid)
+            contentbasetext_uuid=str(self.contentbasetext.uuid)
         )
         self.assertEqual(response.status_code, 200)
 
@@ -257,6 +259,6 @@ class TestContentBaseTextViewset(TestCase):
         response = self.view(
             request,
             content_base_uuid=str(self.content_base.uuid),
-            content_base_text_uuid=str(self.contentbasetext.uuid)
+            contentbasetext_uuid=str(self.contentbasetext.uuid)
         )
         self.assertEqual(response.status_code, 200)

@@ -2,6 +2,7 @@ from django.db import models
 
 from nexus.db.models import BaseModel, SoftDeleteModel
 from nexus.orgs.models import Org
+from enum import Enum
 
 
 class Intelligence(BaseModel, SoftDeleteModel):
@@ -17,8 +18,9 @@ class Intelligence(BaseModel, SoftDeleteModel):
         self.save(update_fields=["content_bases_count"])
 
     def decrease_content_bases_count(self):
-        self.content_bases_count -= 1
-        self.save(update_fields=["content_bases_count"])
+        if self.content_bases_count > 0:
+            self.content_bases_count -= 1
+            self.save(update_fields=["content_bases_count"])
 
 
 class IntegratedIntelligence(BaseModel):
@@ -26,13 +28,31 @@ class IntegratedIntelligence(BaseModel):
     project = models.ForeignKey('projects.Project', on_delete=models.CASCADE)
 
 
+class Languages(Enum):
+    PORTUGUESE = 'pt-br'
+    ENGLISH = 'en-us'
+    SPANISH = 'es'
+
+
 class ContentBase(BaseModel, SoftDeleteModel):
+
+    LANGUAGES = (
+        (Languages.ENGLISH.value, "English"),
+        (Languages.PORTUGUESE.value, "Portuguese"),
+        (Languages.SPANISH.value, "Spanish")
+    )
+
     title = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     intelligence = models.ForeignKey(
         Intelligence,
         on_delete=models.CASCADE,
         related_name='%(class)ss',
+    )
+    language = models.CharField(
+        max_length=10,
+        default=Languages.PORTUGUESE.value,
+        choices=LANGUAGES
     )
 
 
