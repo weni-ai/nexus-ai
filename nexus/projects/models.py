@@ -22,6 +22,7 @@ class Project(BaseModel, SoftDeleteModel):
         TemplateType,
         on_delete=models.SET_NULL,
         null=True,
+        blank=True,
         related_name='template_type',
     )
     is_template = models.BooleanField(default=False)
