@@ -2,14 +2,14 @@ import pickle
 from nexus.celery import app
 
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
-from nexus.intelligences.models import ContentBaseText
+from nexus.task_managers.models import ContentBaseFileTaskManager
+from nexus.intelligences.models import ContentBaseText, ContentBaseLogs, ContentBase
 
 from nexus.usecases.intelligences.exceptions import ContentBaseTextDoesNotExist
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
-from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO, UpdateContentBaseFileDTO
+from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO, UpdateContentBaseFileDTO, ContentBaseLogsDTO
 from nexus.usecases.intelligences.create import CreateContentBaseTextUseCase
 from nexus.usecases.intelligences.retrieve import RetrieveContentBaseUseCase
 from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
@@ -113,3 +113,16 @@ def upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: 
         }
     }
     return response
+
+
+@app.task(name="create_wenigpt_logs")
+def create_wenigpt_logs(log: ContentBaseLogsDTO):
+    content_base = ContentBase.objects.get(uuid=log.content_base_uuid)
+    ContentBaseLogs.objects.create(
+        content_base=content_base,
+        question=log.question,
+        language=log.language,
+        texts_chunks=log.texts_chunks,
+        full_prompt=log.full_prompt,
+        weni_gpt_response=log.weni_gpt_response,
+    )

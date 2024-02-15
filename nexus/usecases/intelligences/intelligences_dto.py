@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from typing import List
+
 
 @dataclass
 class ContentBaseFileDTO:
@@ -45,3 +47,13 @@ class ContentBaseDTO:
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
+
+
+@dataclass
+class ContentBaseLogsDTO:
+    content_base_uuid: str
+    question: str
+    language: str
+    texts_chunks: List
+    full_prompt: str
+    weni_gpt_response: str
