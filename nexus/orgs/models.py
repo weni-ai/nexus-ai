@@ -7,7 +7,7 @@ from nexus.db.models import BaseModel, SoftDeleteModel
 
 class Org(BaseModel, SoftDeleteModel):
     name = models.CharField(max_length=255)
-    inteligence_organization = models.PositiveIntegerField()  # for migrating purposes 
+    inteligence_organization = models.PositiveIntegerField(null=True, blank=True)  # for migrating purposes 
 
 
 class Role(Enum):
