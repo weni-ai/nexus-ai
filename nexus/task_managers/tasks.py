@@ -117,12 +117,18 @@ def upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: 
 
 @app.task(name="create_wenigpt_logs")
 def create_wenigpt_logs(log: ContentBaseLogsDTO):
-    content_base = ContentBase.objects.get(uuid=log.content_base_uuid)
-    ContentBaseLogs.objects.create(
-        content_base=content_base,
-        question=log.question,
-        language=log.language,
-        texts_chunks=log.texts_chunks,
-        full_prompt=log.full_prompt,
-        weni_gpt_response=log.weni_gpt_response,
-    )
+    print("[Creating Log]")
+    try:
+        content_base = ContentBase.objects.get(uuid=log.content_base_uuid)
+        ContentBaseLogs.objects.create(
+            content_base=content_base,
+            question=log.question,
+            language=log.language,
+            texts_chunks=log.texts_chunks,
+            full_prompt=log.full_prompt,
+            weni_gpt_response=log.weni_gpt_response,
+        )
+        return True
+    except Exception as e:
+        print(e)
+        return False

@@ -28,12 +28,12 @@ class WeniGPTDatabase:
         return answers
 
 
-    def request_wenigpt(self, contexts: List, question: str, language: str):
+    def request_wenigpt(self, contexts: List, question: str, language: str, content_base_uuid: str):
         from nexus.task_managers.tasks import create_wenigpt_logs
         if contexts:
             context = "\n".join([str(ctx) for ctx in contexts])
             base_prompt = get_prompt_by_language(language=language, context=context, question=question)
-            print(base_prompt)
+            # print(base_prompt)
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.token}",
@@ -60,17 +60,17 @@ class WeniGPTDatabase:
                 response_json = response.json()
                 text_answers = response_json["output"].get("text")
                 logs = ContentBaseLogsDTO(
-                    content_base_uuid="216e2a7d-4e5e-43c5-9828-53905400e730",
+                    content_base_uuid=content_base_uuid,
                     question=question,
                     language=language,
                     texts_chunks=contexts,
                     full_prompt=base_prompt,
                     weni_gpt_response=text_answers
                 )
-                print("=================================================")
-                print(logs)
+                # print("=================================================")
+                # print(logs)
                 create_wenigpt_logs.delay(logs)
-                print("=================================================")
+                # print("=================================================")
             except Exception as e:
                 response = {"error": str(e)}
 
