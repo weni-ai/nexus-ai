@@ -6,7 +6,7 @@ from nexus.users.models import User
 
 
 class BaseModel(models.Model):
-    uuid = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    uuid = models.UUIDField(primary_key=True, default=uuid4, editable=True)
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name='created_%(class)ss'
     )

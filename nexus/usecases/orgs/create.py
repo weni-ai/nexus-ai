@@ -6,7 +6,11 @@ from nexus.orgs.org_dto import OrgCreationDTO
 
 class CreateOrgUseCase:
     def create_orgs(self, user_email: str, org_dto: OrgCreationDTO):
-        user = users.get_by_email(user_email)
+        try:
+            user = users.get_by_email(user_email)
+        except users.exceptions.UserDoesNotExists:
+            user = users.CreateUserUseCase().create_user(email=user_email)
+
         org = Org.objects.create(uuid=org_dto.uuid, created_by=user, name=org_dto.name)
 
         org_auth_usecase = CreateOrgAuthUseCase()
