@@ -59,7 +59,7 @@ class WeniGPTDatabase:
                 response = requests.request("POST", self.url, headers=headers, data=json.dumps(data))
                 response_json = response.json()
                 text_answers = response_json["output"].get("text")
-                logs = ContentBaseLogsDTO(
+                log = ContentBaseLogsDTO(
                     content_base_uuid=content_base_uuid,
                     question=question,
                     language=language,
@@ -69,7 +69,7 @@ class WeniGPTDatabase:
                 )
                 # print("=================================================")
                 # print(logs)
-                create_wenigpt_logs.delay(logs)
+                create_wenigpt_logs.delay(log.__dict__)
                 # print("=================================================")
             except Exception as e:
                 response = {"error": str(e)}
