@@ -25,5 +25,6 @@ class IntelligenceGenerativeSearchUseCase():
         return wenigpt_database.request_wenigpt(
             contexts=response.get("data", []).get("response"),
             question=text,
-            language=language
+            language=language,
+            content_base_uuid=content_base_uuid,
         )

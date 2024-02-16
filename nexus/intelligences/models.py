@@ -1,9 +1,10 @@
 from django.db import models
+from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 
 from nexus.db.models import BaseModel, SoftDeleteModel
 from nexus.orgs.models import Org
 from enum import Enum
-
 
 class Intelligence(BaseModel, SoftDeleteModel):
     name = models.CharField(max_length=255)
@@ -85,3 +86,28 @@ class ContentBaseText(BaseModel, SoftDeleteModel):
     content_base = models.ForeignKey(
         ContentBase, related_name='contentbasetexts', on_delete=models.CASCADE
     )
+
+
+class ContentBaseLogs(models.Model):
+    content_base = models.ForeignKey(
+        ContentBase,
+        related_name="logs",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    question = models.TextField()
+    language = models.CharField(max_length=10)
+    texts_chunks = ArrayField(
+        models.TextField()
+    )
+    full_prompt = models.TextField()
+    weni_gpt_response = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    wenigpt_version = models.CharField(
+        default=settings.WENIGPT_VERSION,
+        max_length=255
+    )
+
+    def __str__(self) -> str:
+        return f"{self.wenigpt_version}: {self.content_base} - {self.question}"
