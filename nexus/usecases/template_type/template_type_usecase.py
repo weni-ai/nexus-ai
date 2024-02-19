@@ -15,7 +15,6 @@ class TemplateTypeUseCase:
             )
         return info
 
-
     def create_template_type(self, template_type_dto: TemplateTypeDTO):
         from nexus.usecases.projects.projects_use_case import ProjectsUseCase
         try:
@@ -29,7 +28,7 @@ class TemplateTypeUseCase:
             template_type.name = template_type_dto.name
             template_type.save()
         return template_type
-    
+
     def get_by_uuid(self, template_type_uuid: str):
         try:
             template_type = TemplateType.objects.get(uuid=template_type_uuid)

@@ -23,10 +23,8 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 from nexus.task_managers.tasks import upload_text_file
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
-from nexus.usecases import intelligences
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
-from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 
 
 class CustomCursorPagination(CursorPagination):
@@ -173,7 +171,7 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
             raise PermissionDenied('You do not have permission to perform this action.')
         data = request.data
         intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
-        data  = intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text"), language=data.get("language"))
+        data = intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text"), language=data.get("language"))
         if data.get("answers"):
             return Response(
                 data=data,
@@ -184,11 +182,12 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
 
 class QuickTestAIAPIView(views.APIView):
     permission_classes = [IsAuthenticated]
+
     def post(self, request):
         try:
-            
+
             data = request.data
-            content_base_uuid=data.get("content_base_uuid")
+            content_base_uuid = data.get("content_base_uuid")
 
             user = request.user
             org = get_org_by_content_base_uuid(content_base_uuid)
