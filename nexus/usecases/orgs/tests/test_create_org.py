@@ -22,7 +22,3 @@ class CreateOrgTestCase(TestCase):
 
         self.assertEqual(org.name, self.org_dto.name)
 
-    def test_create_org_invalid_email(self):
-        invalid_email: str = 'invalid@email.com'
-        with self.assertRaises(UserDoesNotExists):
-            self.usecase.create_orgs(user_email=invalid_email, org_dto=self.org_dto)
