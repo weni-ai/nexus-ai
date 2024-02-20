@@ -7,6 +7,7 @@ class OrgCreationDTO:
     name: str
     authorizations: list
 
+
 @dataclass
 class OrgAuthCreationDTO:
     user_email: str

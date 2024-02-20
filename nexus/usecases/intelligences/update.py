@@ -98,7 +98,7 @@ class UpdateContentBaseFileUseCase():
             self,
             content_base_file_uuid: str,
             user_email: str,
-            update_content_base_file_dto: UpdateContentBaseFileDTO 
+            update_content_base_file_dto: UpdateContentBaseFileDTO
     ):
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         user = users.get_by_email(user_email)
