@@ -1,7 +1,6 @@
 from django.test import TestCase
 
 from nexus.usecases.users.tests.user_factory import UserFactory
-from nexus.usecases.users.exceptions import UserDoesNotExists
 from nexus.orgs.org_dto import OrgCreationDTO
 
 from ..create import CreateOrgUseCase
@@ -21,4 +20,3 @@ class CreateOrgTestCase(TestCase):
         org = self.usecase.create_orgs(user_email=self.user.email, org_dto=self.org_dto)
 
         self.assertEqual(org.name, self.org_dto.name)
-
