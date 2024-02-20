@@ -183,3 +183,9 @@ cython_debug/
 staticfiles/
 
 .idea/
+weni-script.*
+weni-scripts/
+
+.streamlit
+
+*.sqlite

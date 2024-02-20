@@ -271,3 +271,7 @@ if TESTING:
     )
 
 CORS_ORIGIN_ALLOW_ALL = True
+
+# Trulens
+OPENAI_API_KEY = env.str("OPENAI_API_KEY")
+TRULENS_DATABASE_URL = env.str("TRULENS_DATABASE_URL", "sqlite:///default.sqlite")

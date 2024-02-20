@@ -1,5 +1,9 @@
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-from nexus.task_managers.file_database.wenigpt_database import WeniGPTDatabase
+
+from django.conf import settings
+from nexus.evaluation import f_qa_relevance, f_groundedness, f_qs_relevance
+from nexus.usecases.trulens import WeniGPTWrapper
+
+from trulens_eval import TruCustomApp
 
 
 class IntelligenceGenerativeSearchUseCase():
@@ -17,14 +21,12 @@ class IntelligenceGenerativeSearchUseCase():
         return codes.get(language, "pt")
 
     def search(self, content_base_uuid: str, text: str, language: str):
-        response = SentenXFileDataBase().search_data(content_base_uuid, text)
-        if response.get("status") != 200:
-            raise Exception(response.get("data"))
-        wenigpt_database = WeniGPTDatabase()
         language = self._language_code(language.lower())
-        return wenigpt_database.request_wenigpt(
-            contexts=response.get("data", []).get("response"),
-            question=text,
-            language=language,
-            content_base_uuid=content_base_uuid,
+        wenigpt = WeniGPTWrapper(content_base_uuid, language)
+        tru_recorder = TruCustomApp(wenigpt, 
+            app_id=f"WeniGPT v{settings.WENIGPT_VERSION}",
+            feedbacks=[f_qa_relevance, f_qs_relevance, f_groundedness]
         )
+        with tru_recorder as recording:
+            response = wenigpt.respond_to_query(text)
+            return response

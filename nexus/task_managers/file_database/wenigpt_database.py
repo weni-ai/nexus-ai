@@ -72,4 +72,4 @@ class WeniGPTDatabase:
                 response = {"error": str(e)}
 
             return {"answers": self.format_output(text_answers), "id": "0"}
-        return {"answers": None, "id": "0", "message": "No context found for this question"}
+        return {"answers": [{"text": f"No context found for the question: {question}"}], "id": "0", "message": "No context found for this question"}
