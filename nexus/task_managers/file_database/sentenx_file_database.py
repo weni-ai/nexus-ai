@@ -3,7 +3,6 @@ from django.conf import settings
 
 from nexus.task_managers.models import TaskManager
 from .file_database import FileDataBase
-from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 
 
 class SentenXFileDataBase:
@@ -66,9 +65,9 @@ class SentenXFileDataBase:
             }
 
         return {
-                "status": response.status_code,
-                "data": response.text
-            }
+            "status": response.status_code,
+            "data": response.text
+        }
 
     def delete(self, content_base_uuid: str, content_base_file_uuid: str, filename: str):
         url = settings.SENTENX_BASE_URL + "/content_base/delete"
@@ -83,6 +82,6 @@ class SentenXFileDataBase:
                 "status": response.status_code,
             }
         return {
-                "status": response.status_code,
-                "data": response.text
-            }
+            "status": response.status_code,
+            "data": response.text
+        }

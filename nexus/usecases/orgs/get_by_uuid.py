@@ -13,6 +13,7 @@ def get_by_uuid(org_uuid: str) -> Org:
     except ValidationError:
         raise ValidationError(message="Invalid UUID")
 
+
 def get_org_by_content_base_uuid(content_base_uuid: str) -> Org:
     try:
         content_base = ContentBase.objects.get(uuid=content_base_uuid)

@@ -11,6 +11,7 @@ from nexus.usecases.task_managers.exceptions import (
     ContentBaseTextTaskManagerNotExists
 )
 
+
 class CeleryTaskManagerUseCase:
 
     def _get_task_manager_func(self, file_type: str) -> callable:
