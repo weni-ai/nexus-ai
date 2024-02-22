@@ -111,3 +111,12 @@ class ContentBaseLogs(models.Model):
 
     def __str__(self) -> str:
         return f"{self.wenigpt_version}: {self.content_base} - {self.question}"
+
+    @property
+    def answer(self):
+        """Format question answer"""
+        response = eval(self.weni_gpt_response)
+        if isinstance(response, list):
+            answer = response[0]
+            return answer.split("PERGUNTA")[0]
+        return self.weni_gpt_response

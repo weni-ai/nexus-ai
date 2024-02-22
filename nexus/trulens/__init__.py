@@ -39,7 +39,7 @@ class WeniGPTLogEvaluation:
     def get_answer(self, log: ContentBaseLogs):
         self.get_question(log)
         self.get_chunks(log)
-        return log.weni_gpt_response
+        return log.answer
 
 
 # Feedback Functions
