@@ -47,6 +47,7 @@ class UpdateContentBaseUseCase():
             contentbase_uuid: str,
             user_email: str,
             title: str = None,
+            language: str = None
     ):
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         user = users.get_by_email(user_email)
@@ -61,6 +62,9 @@ class UpdateContentBaseUseCase():
         if title:
             contentbase.title = title
             contentbase.save(update_fields=['title'])
+        if language:
+            contentbase.language = language
+            contentbase.save(update_fields=['language'])
 
         return contentbase
 

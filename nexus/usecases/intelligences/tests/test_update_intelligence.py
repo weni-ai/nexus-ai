@@ -55,13 +55,16 @@ class TestUpdateContentBaseUseCase(TestCase):
 
     def test_update_contentbase_title(self):
         new_title = 'New Title'
+        new_language = 'pt-br'
         use_case = UpdateContentBaseUseCase()
         updated_contentbase = use_case.update_contentbase(
             contentbase_uuid=self.contentbase.uuid,
             title=new_title,
-            user_email=self.contentbase.created_by.email
+            user_email=self.contentbase.created_by.email,
+            language=new_language
         )
         self.assertEqual(updated_contentbase.title, new_title)
+        self.assertEqual(updated_contentbase.language, new_language)
 
 
 class TestUpdateContentBaseTextUseCase(TestCase):

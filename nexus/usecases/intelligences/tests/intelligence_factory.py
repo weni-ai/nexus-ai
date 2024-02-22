@@ -34,6 +34,7 @@ class ContentBaseFactory(factory.django.DjangoModelFactory):
     )
     created_by = factory.SubFactory(UserFactory)
     description = factory.Sequence(lambda n: 'test%d' % n)
+    language = 'en'
 
 
 class ContentBaseTextFactory(factory.django.DjangoModelFactory):
