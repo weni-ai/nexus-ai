@@ -5,13 +5,15 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
-from nexus.intelligences.models import ContentBaseText, ContentBaseLogs, ContentBase
+from nexus.intelligences.models import ContentBaseText, ContentBaseLogs
 
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
-from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO, ContentBaseLogsDTO
+from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
 from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
 from nexus.usecases.intelligences.get_by_uuid import get_by_contentbase_uuid
 from typing import Dict
+
+from nexus.trulens import wenigpt_evaluation, tru_recorder
 
 
 @app.task
@@ -113,10 +115,9 @@ def upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: 
 
 @app.task(name="create_wenigpt_logs")
 def create_wenigpt_logs(log: Dict):
-    print("[Creating Log]")
     try:
         content_base = get_by_contentbase_uuid(log.get("content_base_uuid"))
-        ContentBaseLogs.objects.create(
+        log = ContentBaseLogs.objects.create(
             content_base=content_base,
             question=log.get("question"),
             language=log.get("language"),
@@ -124,7 +125,17 @@ def create_wenigpt_logs(log: Dict):
             full_prompt=log.get("full_prompt"),
             weni_gpt_response=log.get("weni_gpt_response"),
         )
+        print("[Creating Log]")
+        trulens_evaluation.delay(log.id)
         return True
     except Exception as e:
         print(e)
         return False
+
+
+@app.task(name="trulens_evaluation")
+def trulens_evaluation(log_id: str):
+    log = ContentBaseLogs.objects.get(id=log_id)
+    with tru_recorder as recording:
+        wenigpt_evaluation.get_answer(log)
+    return True
