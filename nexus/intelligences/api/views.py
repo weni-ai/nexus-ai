@@ -297,6 +297,7 @@ class ContentBaseViewset(
             update_contentbase = use_case.update_contentbase(
                 contentbase_uuid=kwargs.get('contentbase_uuid'),
                 title=request.data.get('title'),
+                language=request.data.get('language'),
                 user_email=user_email
             )
 
