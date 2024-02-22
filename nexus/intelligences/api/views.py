@@ -298,6 +298,7 @@ class ContentBaseViewset(
                 contentbase_uuid=kwargs.get('contentbase_uuid'),
                 title=request.data.get('title'),
                 language=request.data.get('language'),
+                description=request.data.get('description'),
                 user_email=user_email
             )
 
