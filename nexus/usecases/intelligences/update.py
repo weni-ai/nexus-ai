@@ -8,6 +8,7 @@ from nexus.usecases import orgs, users
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
 from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
+from nexus.intelligences.models import ContentBase
 
 
 class UpdateIntelligenceUseCase():
@@ -47,8 +48,9 @@ class UpdateContentBaseUseCase():
             contentbase_uuid: str,
             user_email: str,
             title: str = None,
-            language: str = None
-    ):
+            language: str = None,
+            description: str = None,
+    ) -> ContentBase:
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         user = users.get_by_email(user_email)
         org = org_use_case.get_org_by_contentbase_uuid(contentbase_uuid)
@@ -59,12 +61,20 @@ class UpdateContentBaseUseCase():
 
         contentbase = get_by_contentbase_uuid(contentbase_uuid)
 
+        update_fields = []
         if title:
             contentbase.title = title
-            contentbase.save(update_fields=['title'])
+            update_fields.append('title')
+
         if language:
             contentbase.language = language
-            contentbase.save(update_fields=['language'])
+            update_fields.append('language')
+
+        if description:
+            contentbase.description = description
+            update_fields.append('description')
+
+        contentbase.save(update_fields=update_fields)
 
         return contentbase
 
