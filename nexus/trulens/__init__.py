@@ -72,10 +72,3 @@ tru_recorder = TruCustomApp(
     app_id=f"WeniGPT v{settings.WENIGPT_VERSION}",
     feedbacks=[f_qa_relevance, f_context_relevance, f_groundedness]
 )
-
-
-if __name__ == "__main__":
-    log = ContentBaseLogs.objects.first()
-
-    with tru_recorder as recording:
-        wenigpt_evaluation.get_answer(log)
