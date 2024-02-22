@@ -5,6 +5,7 @@ from nexus.users.models import User
 from nexus.usecases.orgs.exceptions import OrgAuthDoesNotExists
 from nexus.usecases.orgs.get_org_auth import GetOrgAuthUseCase
 
+
 def get_user_auth(user: User, org: Org):
     return OrgAuth.objects.get(user=user, org=org)
 

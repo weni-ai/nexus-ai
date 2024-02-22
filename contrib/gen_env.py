@@ -47,6 +47,7 @@ def generate_env():
         "WENIGPT_TOP_K": "",
         "WENIGPT_TEMPERATURE": "",
         "WENIGPT_STOP": "",
+        "WENIGPT_VERSION": "",
         "AWS_S3_BUCKET_NAME": "",
         "AWS_S3_REGION_NAME": "",
         "RABBITMQ_DEFAULT_USER": "",

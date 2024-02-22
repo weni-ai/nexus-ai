@@ -27,7 +27,6 @@ class WeniGPTDatabase:
                 answers.append({"text": ans})
         return answers
 
-
     def request_wenigpt(self, contexts: List, question: str, language: str, content_base_uuid: str):
         from nexus.task_managers.tasks import create_wenigpt_logs
         if contexts:

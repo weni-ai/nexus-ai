@@ -158,6 +158,7 @@ class TestContentBaseViewset(TestCase):
         data = {
             'title': 'title',
             'description': 'description',
+            'language': 'pt-br'
         }
         url_put = f'{self.url}/{self.contentbase.uuid}/'
         request = self.factory.put(

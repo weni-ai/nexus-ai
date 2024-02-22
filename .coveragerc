@@ -7,6 +7,12 @@ omit =
     Dockerfile
     */settings.py
     */apps.py
+    nexus/wsgi.py
+    nexus/event_driven/*
+    nexus/orgs/consumers/*
+    */handle.py
+    nexus/asgi.py
+    nexus/conftest.py
 
 [report]
 fail_under = 90

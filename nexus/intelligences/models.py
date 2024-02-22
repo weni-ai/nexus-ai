@@ -6,6 +6,7 @@ from nexus.db.models import BaseModel, SoftDeleteModel
 from nexus.orgs.models import Org
 from enum import Enum
 
+
 class Intelligence(BaseModel, SoftDeleteModel):
     name = models.CharField(max_length=255)
     content_bases_count = models.PositiveBigIntegerField(default=0)
