@@ -1,13 +1,18 @@
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-from nexus.task_managers.file_database.wenigpt_database import WeniGPTDatabase
+from nexus.intelligences.models import ContentBase
 
 
 class IntelligenceGenerativeSearchUseCase():
-    def _language_code(self, language):
+    def __init__(self, search_file_database, generative_ai_database) -> None:
+        self.search_file_database = search_file_database
+        self.generative_ai_database = generative_ai_database
+
+    def _language_code(self, language: str, content_base_uuid: str = None) -> str:
+        if language == "base":
+            return ContentBase.objects.get(uuid=content_base_uuid).language
+
         codes = {
             "por": "pt",
             "pt-br": "pt",
-            "base": "pt",
             "eng": "en",
             "en-us": "en",
             "spa": "es",
@@ -17,11 +22,13 @@ class IntelligenceGenerativeSearchUseCase():
         return codes.get(language, "pt")
 
     def search(self, content_base_uuid: str, text: str, language: str):
-        response = SentenXFileDataBase().search_data(content_base_uuid, text)
+        response = self.search_file_database.search_data(content_base_uuid, text)
+
         if response.get("status") != 200:
             raise Exception(response.get("data"))
-        wenigpt_database = WeniGPTDatabase()
-        language = self._language_code(language.lower())
+
+        wenigpt_database = self.generative_ai_database
+        language = self._language_code(language.lower(), content_base_uuid)
         return wenigpt_database.request_wenigpt(
             contexts=response.get("data", []).get("response"),
             question=text,
