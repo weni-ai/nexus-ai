@@ -20,6 +20,8 @@ from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseTex
 
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
+from nexus.task_managers.file_database.wenigpt_database import WeniGPTDatabase
+
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 from nexus.task_managers.tasks import upload_text_file
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
@@ -170,7 +172,10 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
         if not permissions.is_super_user(authorization_header):
             raise PermissionDenied('You do not have permission to perform this action.')
         data = request.data
-        intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
+        intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
+            search_file_database=SentenXFileDataBase(),
+            generative_ai_database=WeniGPTDatabase()
+        )
         data = intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text"), language=data.get("language"))
         if data.get("answers"):
             return Response(
@@ -194,7 +199,10 @@ class QuickTestAIAPIView(views.APIView):
             has_permission = permissions.can_list_content_bases(user, org)
 
             if has_permission:
-                intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase()
+                intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
+                    search_file_database=SentenXFileDataBase(),
+                    generative_ai_database=WeniGPTDatabase()
+                )
                 return Response(
                     data=intelligence_usecase.search(
                         content_base_uuid=content_base_uuid,
