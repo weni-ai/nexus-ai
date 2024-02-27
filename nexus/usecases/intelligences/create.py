@@ -12,6 +12,7 @@ from nexus.usecases import (
 )
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
+from .recent_activities import create_recent_activity
 
 
 class CreateIntelligencesUseCase():
@@ -34,6 +35,14 @@ class CreateIntelligencesUseCase():
             name=name, description=description,
             org=org, created_by=user
         )
+        create_recent_activity(
+            user_email=user_email,
+            entity_name=name,
+            intelligence_id=intelligence.uuid,
+            org_uuid=org_uuid
+        )
+
+
         return intelligence
 
 

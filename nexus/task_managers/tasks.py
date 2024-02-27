@@ -6,6 +6,7 @@ from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
 from nexus.intelligences.models import ContentBaseText, ContentBaseLogs
+from nexus.event_driven.publisher.rabbitmq_publisher import RabbitMQPublisher
 
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
@@ -128,3 +129,15 @@ def create_wenigpt_logs(log: Dict):
     except Exception as e:
         print(e)
         return False
+
+
+@app.task(name="send_recent_activities")
+def send_recent_activities(
+    activities: Dict
+) -> None:
+
+    publisher = RabbitMQPublisher()
+    exchange = "recent-activities.topic"
+    routing_key = ""
+    body = activities
+    publisher.send_message(body, exchange, routing_key)
