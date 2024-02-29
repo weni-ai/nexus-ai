@@ -3,7 +3,8 @@ import factory
 from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
-    ContentBaseText
+    ContentBaseText,
+    ContentBaseFile
 )
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -47,3 +48,17 @@ class ContentBaseTextFactory(factory.django.DjangoModelFactory):
         created_by=factory.SelfAttribute('..created_by')
     )
     text = factory.Sequence(lambda n: 'test%d' % n)
+
+
+class ContentBaseFileFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ContentBaseFile
+
+    created_by = factory.SubFactory(UserFactory)
+    content_base = factory.SubFactory(
+        ContentBaseFactory,
+        created_by=factory.SelfAttribute('..created_by')
+    )
+    file = factory.Sequence(lambda n: 'test%d' % n)
+    file_name = factory.Sequence(lambda n: 'test%d' % n)
+    extension_file = 'pdf'
