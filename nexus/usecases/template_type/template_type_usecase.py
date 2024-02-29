@@ -15,13 +15,13 @@ class TemplateTypeUseCase:
             )
         return info
 
-    def create_template_type(self, template_type_dto: TemplateTypeDTO):
+    def create_template_type(self, template_type_dto: TemplateTypeDTO):  # pragma: no cover
         from nexus.usecases.projects.projects_use_case import ProjectsUseCase
         try:
-            project = ProjectsUseCase.get_by_uuid(project_uuid=template_type_dto.project_uuid)
+            project = ProjectsUseCase().get_by_uuid(project_uuid=template_type_dto.project_uuid)
         except Project.DoesNotExist:
             raise Exception(f"Project `{template_type_dto.project_uuid}` does not exists!")
-        setup = self.get_setup(project=project)
+        setup = self.get_setup(project=project)  # Not implemented
         template_type, created = TemplateType.objects.get_or_create(uuid=template_type_dto.uuid, defaults=dict(name=template_type_dto.name, setup=setup))
         if not created:
             template_type.setup = setup

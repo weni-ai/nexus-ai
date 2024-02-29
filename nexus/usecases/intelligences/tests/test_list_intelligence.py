@@ -3,14 +3,18 @@ from django.test import TestCase
 from ..list import (
     ListIntelligencesUseCase,
     ListContentBaseUseCase,
-    ListContentBaseTextUseCase
+    ListContentBaseTextUseCase,
+    ListAllIntelligenceContentUseCase,
+    ListContentBaseFileUseCase
 )
 from .intelligence_factory import (
     IntelligenceFactory,
     ContentBaseFactory,
-    ContentBaseTextFactory
+    ContentBaseTextFactory,
+    ContentBaseFileFactory
 )
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
 class TestListIntelligenceUseCase(TestCase):
@@ -56,3 +60,40 @@ class TestListContentBaseTextUseCase(TestCase):
             user_email=self.contentbasetext.created_by.email
         )
         self.assertEqual(1, len(contentbasetext_list))
+
+
+class TestListAllIntelligenceContentUseCase(TestCase):
+
+    def setUp(self):
+        self.project = ProjectFactory()
+        self.intelligence = IntelligenceFactory(org=self.project.org)
+        self.contentbase = ContentBaseFactory(intelligence=self.intelligence)
+
+    def test_count_all_intelligence_content_use_case(self):
+        use_case = ListAllIntelligenceContentUseCase()
+        all_intelligence_content = use_case.get_project_intelligences(
+            project_uuid=self.project.uuid,
+            user_email=self.project.created_by.email
+        )
+        self.assertEqual(1, len(all_intelligence_content))
+        self.assertEqual(1, len(all_intelligence_content[0]['content_bases']))
+        self.assertEqual(str(self.contentbase.uuid), all_intelligence_content[0]['content_bases'][0]['uuid'])
+        self.assertEqual(self.contentbase.title, all_intelligence_content[0]['content_bases'][0]['content_base_name'])
+        self.assertEqual(self.intelligence.name, all_intelligence_content[0]['intelligence_name'])
+
+
+class TestListContentBaseFileUseCase(TestCase):
+
+    def setUp(self):
+        self.contentbase = ContentBaseFactory()
+        self.contentbase_file = ContentBaseFileFactory(
+            content_base=self.contentbase
+        )
+
+    def test_count_contentbasefile_use_case(self):
+        use_case = ListContentBaseFileUseCase()
+        contentbasefile_list = use_case.get_contentbase_file(
+            self.contentbase.uuid,
+            user_email=self.contentbase.created_by.email
+        )
+        self.assertEqual(1, len(contentbasefile_list))

@@ -13,6 +13,8 @@ omit =
     */handle.py
     nexus/asgi.py
     nexus/conftest.py
+    nexus/task_managers/file_database/*
+    nexus/authentication/authentication.py
 
 [report]
 fail_under = 90

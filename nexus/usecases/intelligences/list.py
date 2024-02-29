@@ -35,11 +35,20 @@ class ListIntelligencesUseCase():
 
 class ListAllIntelligenceContentUseCase():
 
-    def get_project_intelligences(self, project_uuid: str, user_email: str = None, is_super_user: bool = False):
+    def get_project_intelligences(
+            self,
+            project_uuid: str,
+            user_email: str = None,
+            is_super_user: bool = False
+    ):
         project_usecase = ProjectsUseCase()
         response = []
         project = project_usecase.get_by_uuid(project_uuid)
-        intelligences = ListIntelligencesUseCase().get_org_intelligences(project.org.uuid, user_email=user_email, is_super_user=is_super_user)
+        intelligences = ListIntelligencesUseCase().get_org_intelligences(
+            project.org.uuid,
+            user_email=user_email,
+            is_super_user=is_super_user
+        )
         for intelligence in intelligences:
             cur_data = {"intelligence_name": intelligence.name, "content_bases": []}
             content_bases = ListContentBaseUseCase().get_intelligence_contentbases(
