@@ -137,5 +137,5 @@ def create_wenigpt_logs(log: Dict):
 def trulens_evaluation(log_id: str):
     log = ContentBaseLogs.objects.get(id=log_id)
     with tru_recorder as recording:
-        wenigpt_evaluation.get_answer(log)
+        wenigpt_evaluation.get_answer(log.question, log)
     return True

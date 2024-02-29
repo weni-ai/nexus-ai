@@ -36,7 +36,7 @@ class WeniGPTLogEvaluation:
         return log.question
 
     @instrument
-    def get_answer(self, log: ContentBaseLogs):
+    def get_answer(self, question: str, log: ContentBaseLogs):
         self.get_question(log)
         self.get_chunks(log)
         return log.answer
@@ -47,7 +47,9 @@ class WeniGPTLogEvaluation:
 f_qa_relevance = Feedback(
     openai.relevance_with_cot_reasons,
     name="Answer Relevance"
-).on(Select.RecordCalls.get_question.rets).on_output()
+).on(Select.RecordCalls.get_answer.args.question).on_output()
+
+Select.RecordArgs
 
 # Groundedness
 grounded = Groundedness(groundedness_provider=openai)
