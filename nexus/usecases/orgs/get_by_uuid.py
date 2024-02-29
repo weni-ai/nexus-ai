@@ -21,4 +21,4 @@ def get_org_by_content_base_uuid(content_base_uuid: str) -> Org:
     except ContentBase.DoesNotExist:
         raise ContentBaseDoesNotExist(f"ContentBaseDoesNotExist `{content_base_uuid}` does not exists!")
     except Org.DoesNotExist:
-        raise OrgDoesNotExists()
+        raise OrgDoesNotExists()  # pragma: no cover
