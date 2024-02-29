@@ -1,21 +1,22 @@
-import pytest
+from django.test import TestCase
 
-from nexus.users.models import User
-
-
-@pytest.mark.django_db
-def test_user_create():
-    User.objects.create_user('test@user.com')
-    assert User.objects.count() == 1
+from ..models import User
 
 
-@pytest.mark.django_db
-def test_fail_user_create():
-    with pytest.raises(ValueError):
-        User.objects.create_user(None)
+class TestUserManager(TestCase):
 
+    def setUp(self) -> None:
+        self.user_email = 'test@test.com'
 
-@pytest.mark.django_db
-def test_fail_superuser_create():
-    with pytest.raises(NotImplementedError):
-        User.objects.create_superuser('test@user.com')
+    def test_create_user(self):
+        user = User.objects.create_user(email=self.user_email)
+        self.assertEqual(user.email, self.user_email)
+        self.assertFalse(user.is_superuser)
+
+    def test_create_super_user(self):
+        with self.assertRaises(NotImplementedError):
+            User.objects.create_superuser(email=self.user_email)
+
+    def test_create_user_without_email(self):
+        with self.assertRaises(ValueError):
+            User.objects.create_user(email='')
