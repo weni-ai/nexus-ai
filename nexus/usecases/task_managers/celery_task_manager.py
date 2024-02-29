@@ -40,7 +40,7 @@ class CeleryTaskManagerUseCase:
             content_base_task_manager = ContentBaseFileTaskManager.objects.filter(uuid=task_uuid)
             if content_base_task_manager.exists():
                 return content_base_task_manager.first()
-            return ContentBaseTextTaskManagerNotExists(msg)
+            raise ContentBaseTextTaskManagerNotExists(msg)
         except Exception as exception:
             raise Exception(f"[ ContentBaseFile ] - ContentBaseFile error to get - error: `{exception}`")
 
