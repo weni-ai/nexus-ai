@@ -60,6 +60,8 @@ def generate_env():
         "OIDC_OP_AUTHORIZATION_ENDPOINT": "",
         "OIDC_OP_TOKEN_ENDPOINT": "",
         "OIDC_OP_USER_ENDPOINT": "",
+        "OPENAI_API_KEY": "",
+        "DJANGO_ALLOW_ASYNC_UNSAFE": False
     }
 
     with open(env_path, "w") as configfile:
