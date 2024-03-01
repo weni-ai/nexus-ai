@@ -49,8 +49,6 @@ f_qa_relevance = Feedback(
     name="Answer Relevance"
 ).on(Select.RecordCalls.get_answer.args.question).on_output()
 
-Select.RecordArgs
-
 # Groundedness
 grounded = Groundedness(groundedness_provider=openai)
 f_groundedness = (
