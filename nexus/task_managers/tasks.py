@@ -1,4 +1,6 @@
 import pickle
+from django.conf import settings
+
 from nexus.celery import app
 
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
@@ -124,6 +126,7 @@ def create_wenigpt_logs(log: Dict):
             texts_chunks=log.get("texts_chunks"),
             full_prompt=log.get("full_prompt"),
             weni_gpt_response=log.get("weni_gpt_response"),
+            wenigpt_version=settings.WENIGPT_VERSION,
         )
         print("[Creating Log]")
         trulens_evaluation.delay(log.id)
@@ -137,5 +140,5 @@ def create_wenigpt_logs(log: Dict):
 def trulens_evaluation(log_id: str):
     log = ContentBaseLogs.objects.get(id=log_id)
     with tru_recorder as recording:
-        wenigpt_evaluation.get_answer(log)
+        wenigpt_evaluation.get_answer(log.question, log)
     return True
