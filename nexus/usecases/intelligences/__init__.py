@@ -10,6 +10,7 @@ from .create import (
     CreateContentBaseUseCase,
     CreateContentBaseTextUseCase,
     CreateContentBaseFileUseCase,
+    CreateContentBaseLinkUseCase,
 )
 from .update import (
     UpdateIntelligenceUseCase,
@@ -42,5 +43,6 @@ from .search import (
 from .intelligences_dto import (
     ContentBaseDTO,
     ContentBaseTextDTO,
-    ContentBaseFileDTO
+    ContentBaseFileDTO,
+    ContentBaseLinkDTO,
 )

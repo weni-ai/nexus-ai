@@ -12,7 +12,8 @@ from .serializers import (
     IntelligenceSerializer,
     ContentBaseSerializer,
     ContentBaseTextSerializer,
-    ContentBaseFileSerializer
+    ContentBaseFileSerializer,
+    ContentBaseLinkSerializer,
 )
 from nexus.usecases import intelligences
 from nexus.orgs import permissions
@@ -23,7 +24,7 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.task_managers.file_database.wenigpt_database import WeniGPTDatabase
 
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
-from nexus.task_managers.tasks import upload_text_file
+from nexus.task_managers.tasks import upload_text_file, send_link
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
@@ -545,6 +546,39 @@ class ContentBaseFileViewset(ModelViewSet):
         )
 
         return super().destroy(request, *args, **kwargs)
+
+
+class ContentBaseLinkViewset(ModelViewSet):
+
+    serializer_class = ContentBaseLinkSerializer
+
+    def create(self, request, content_base_uuid: str):
+        try:
+            user_email = request.user.email
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
+            link = serializer.validated_data.get('link')
+            content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
+            link_dto = intelligences.ContentBaseLinkDTO(
+                link=link,
+                user_email=user_email,
+                content_base_uuid=str(content_base.uuid)
+            )
+            content_base_link = intelligences.CreateContentBaseLinkUseCase(
+            ).create_content_base_link(link_dto)
+
+            send_link.delay(
+                link=link,
+                user_email=user_email,
+                content_base_link_uuid=str(content_base_link.uuid)
+            )
+
+            response = ContentBaseLinkSerializer(content_base_link).data
+
+            return Response(response, status=status.HTTP_201_CREATED)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
 
 class DownloadFileViewSet(views.APIView):

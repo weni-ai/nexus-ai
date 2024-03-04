@@ -2,9 +2,15 @@ from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
     ContentBaseText,
-    ContentBaseFile
+    ContentBaseFile,
+    ContentBaseLink,
 )
-from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO, ContentBaseDTO, ContentBaseTextDTO
+from nexus.usecases.intelligences.intelligences_dto import (
+    ContentBaseFileDTO,
+    ContentBaseDTO,
+    ContentBaseTextDTO,
+    ContentBaseLinkDTO,
+)
 from nexus.usecases import (
     orgs,
     users,
@@ -112,3 +118,14 @@ class CreateContentBaseFileUseCase():
             created_by=user
         )
         return content_base_file
+
+class CreateContentBaseLinkUseCase():
+    def create_content_base_link(self, content_base_link: ContentBaseLinkDTO) -> ContentBaseLink:
+        user = users.get_by_email(content_base_link.user_email)
+        content_base = intelligences.get_by_contentbase_uuid(contentbase_uuid=content_base_link.content_base_uuid)
+        content_base_link = ContentBaseLink.objects.create(
+            link=content_base_link.link,
+            content_base=content_base,
+            created_by=user
+        )
+        return content_base_link

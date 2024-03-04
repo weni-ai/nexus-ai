@@ -57,3 +57,11 @@ class ContentBaseLogsDTO:
     texts_chunks: List
     full_prompt: str
     weni_gpt_response: str
+
+
+@dataclass
+class ContentBaseLinkDTO:
+    link: str
+    user_email: str
+    content_base_uuid: str
+    uuid: str = None

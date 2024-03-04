@@ -4,6 +4,7 @@ from nexus.intelligences.models import (
     ContentBase,
     ContentBaseText,
     ContentBaseFile,
+    ContentBaseLink,
 )
 from nexus.task_managers.models import ContentBaseFileTaskManager
 
@@ -39,3 +40,9 @@ class ContentBaseFileSerializer(serializers.ModelSerializer):
             return task_manager.status
         except Exception:
             return ContentBaseFileTaskManager.STATUS_FAIL
+
+
+class ContentBaseLinkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentBaseLink
+        fields = ["uuid", "link"]
