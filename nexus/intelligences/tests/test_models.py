@@ -8,6 +8,8 @@ from nexus.intelligences.models import (
     Intelligence,
     ContentBaseLogs
 )
+from django.test import TestCase
+from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory
 
 
 @pytest.mark.django_db
@@ -89,10 +91,6 @@ def test_create_content_base_text(
     )
 
     assert content_base.text == text
-
-
-from django.test import TestCase
-from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory
 
 
 class ContentBaseLogsTestCase(TestCase):
