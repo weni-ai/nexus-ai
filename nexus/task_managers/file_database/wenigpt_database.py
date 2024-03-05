@@ -27,7 +27,7 @@ class WeniGPTDatabase:
                 answers.append({"text": ans})
         return answers
 
-    def request_wenigpt(self, contexts: List, question: str, language: str, content_base_uuid: str):
+    def request_wenigpt(self, contexts: List, question: str, language: str, content_base_uuid: str, testing: bool = False):
         from nexus.task_managers.tasks import create_wenigpt_logs
         if contexts:
             context = "\n".join([str(ctx) for ctx in contexts])
@@ -58,17 +58,24 @@ class WeniGPTDatabase:
                 response = requests.request("POST", self.url, headers=headers, data=json.dumps(data))
                 response_json = response.json()
                 text_answers = response_json["output"].get("text")
-                log = ContentBaseLogsDTO(
+                log_dto = ContentBaseLogsDTO(
                     content_base_uuid=content_base_uuid,
                     question=question,
                     language=language,
                     texts_chunks=contexts,
                     full_prompt=base_prompt,
-                    weni_gpt_response=text_answers
+                    weni_gpt_response=text_answers,
+                    testing=testing
                 )
-                create_wenigpt_logs.delay(log.__dict__)
+                log = create_wenigpt_logs(log_dto.__dict__)
+                return {
+                    "answers": self.format_output(text_answers),
+                    "id": "0",
+                    "question_uuid": str(log.user_question.uuid)
+                }
+
             except Exception as e:
                 response = {"error": str(e)}
+                print(response)
 
-            return {"answers": self.format_output(text_answers), "id": "0"}
         return {"answers": None, "id": "0", "message": "No context found for this question"}

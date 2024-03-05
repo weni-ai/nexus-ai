@@ -7,7 +7,7 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
-from nexus.intelligences.models import ContentBaseText, ContentBaseLogs
+from nexus.intelligences.models import ContentBaseText, ContentBaseLogs, UserQuestion
 
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
@@ -128,9 +128,13 @@ def create_wenigpt_logs(log: Dict):
             weni_gpt_response=log.get("weni_gpt_response"),
             wenigpt_version=settings.WENIGPT_VERSION,
         )
+        UserQuestion.objects.create(
+            text=log.question,
+            content_base_log=log
+        )
         print("[Creating Log]")
         trulens_evaluation.delay(log.id)
-        return True
+        return log
     except Exception as e:
         print(e)
         return False
