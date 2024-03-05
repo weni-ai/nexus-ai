@@ -12,11 +12,18 @@ from .serializers import (
     IntelligenceSerializer,
     ContentBaseSerializer,
     ContentBaseTextSerializer,
-    ContentBaseFileSerializer
+    ContentBaseFileSerializer,
+    ContentBaseLogsSerializer
 )
 from nexus.usecases import intelligences
 from nexus.orgs import permissions
-from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
+from nexus.intelligences.models import (
+    Intelligence,
+    ContentBase,
+    ContentBaseText,
+    ContentBaseFile,
+    ContentBaseLogs
+)
 
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
@@ -600,3 +607,27 @@ class LogsViewSet(views.APIView):
             raise IntelligencePermissionDenied()
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+class ContentBaseLogsViewSet(ModelViewSet):
+    serializer_class = ContentBaseLogsSerializer
+    pagination_class = CustomCursorPagination
+    lookup_url_kwarg = "content_base_log"
+    authentication_classes = []
+
+    def get_queryset(self):
+        testing = self.request.data.get("testing")
+
+        authorization_header = self.request.headers.get('Authorization', "Bearer unauthorized")
+        is_super_user = permissions.is_super_user(authorization_header)
+
+        if not is_super_user:
+            raise PermissionDenied('You do not have permission to perform this action.')
+
+        if getattr(self, "swagger_fake_view", False):
+            return ContentBaseLogs.objects.none()  # pragma: no cover
+
+        use_case = intelligences.ListContentBaseLogs()
+        use_case_list = use_case.get_contentbase_logs(testing)
+
+        return use_case_list

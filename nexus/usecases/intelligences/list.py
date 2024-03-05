@@ -2,7 +2,8 @@ from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
     ContentBaseText,
-    ContentBaseFile
+    ContentBaseFile,
+    ContentBaseLogs
 )
 from nexus.usecases import orgs, users
 from nexus.orgs import permissions
@@ -114,3 +115,10 @@ class ListContentBaseFileUseCase():
 
         content_base = get_by_contentbase_uuid(contentbase_uuid=contentbase_uuid)
         return ContentBaseFile.objects.filter(content_base=content_base)
+
+class ListContentBaseLogs():
+    def get_contentbase_logs(self, testing: bool = True):
+        return ContentBaseLogs.objects.filter(
+            user_question__isnull=False,
+            testing=testing
+        )
