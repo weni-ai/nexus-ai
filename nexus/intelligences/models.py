@@ -142,7 +142,7 @@ class ContentBaseLogs(models.Model):
     def update_user_feedback(self, correct_answer: bool, feedback: Optional[int] = None) -> None:
         update_fields = ["correct_answer"]
         self.correct_answer = correct_answer
-        if feedback:
+        if feedback is not None:
             self.user_feedback = feedback
             update_fields.append("user_feedback")
         self.save(update_fields=update_fields)
