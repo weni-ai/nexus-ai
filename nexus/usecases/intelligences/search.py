@@ -5,6 +5,7 @@ class IntelligenceGenerativeSearchUseCase():
     def __init__(self, search_file_database, generative_ai_database, testing: bool = False) -> None:
         self.search_file_database = search_file_database
         self.generative_ai_database = generative_ai_database
+        self.testing = testing
 
     def _language_code(self, language: str, content_base_uuid: str = None) -> str:
         if language == "base":
