@@ -3,13 +3,16 @@ from django.core.exceptions import ValidationError
 from .exceptions import (
     IntelligenceDoesNotExist,
     ContentBaseDoesNotExist,
-    ContentBaseTextDoesNotExist
+    ContentBaseTextDoesNotExist,
+    UserQuestionDoesNotExist
 )
 from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
     ContentBaseText,
-    ContentBaseFile
+    ContentBaseFile,
+    ContentBaseLogs,
+    UserQuestion
 )
 
 
@@ -58,3 +61,14 @@ def get_contentbasetext_by_contentbase_uuid(
         raise ContentBaseTextDoesNotExist()
     except ValidationError:
         raise ValidationError(message='Invalid UUID')
+
+def get_user_question_by_uuid(user_question_uuid: str):
+    try:
+        return UserQuestion.objects.get(uuid=user_question_uuid)
+    except UserQuestion.DoesNotExist:
+        raise UserQuestionDoesNotExist()
+
+
+def get_log_by_question_uuid(user_question_uuid: str) -> ContentBaseLogs:
+    question = get_user_question_by_uuid(user_question_uuid)
+    return question.content_base_log

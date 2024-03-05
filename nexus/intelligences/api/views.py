@@ -201,7 +201,8 @@ class QuickTestAIAPIView(views.APIView):
             if has_permission:
                 intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
                     search_file_database=SentenXFileDataBase(),
-                    generative_ai_database=WeniGPTDatabase()
+                    generative_ai_database=WeniGPTDatabase(),
+                    testing=True
                 )
                 return Response(
                     data=intelligence_usecase.search(
@@ -563,5 +564,27 @@ class DownloadFileViewSet(views.APIView):
             )
             file = s3FileDatabase().create_presigned_url(file_name)
             return Response(data={"file": file}, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+class LogsViewSet(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, content_base_uuid, log_uuid):
+        try:
+            user = request.user
+            org = get_org_by_content_base_uuid(content_base_uuid)
+
+            has_permission = permissions.can_list_content_bases(user, org)
+            if has_permission:
+                feedback: int = request.data.get("feedback")
+                log = intelligences.get_log_by_question_uuid(log_uuid)
+                log.update_user_feedback(feedback)
+                return Response(
+                    data={"question": log.question,"feedback": log.feedback},
+                    status=200
+                )
+            raise IntelligencePermissionDenied()
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)

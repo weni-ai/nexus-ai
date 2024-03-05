@@ -2,7 +2,7 @@ from nexus.intelligences.models import ContentBase
 
 
 class IntelligenceGenerativeSearchUseCase():
-    def __init__(self, search_file_database, generative_ai_database) -> None:
+    def __init__(self, search_file_database, generative_ai_database, testing: bool = False) -> None:
         self.search_file_database = search_file_database
         self.generative_ai_database = generative_ai_database
 
@@ -34,4 +34,5 @@ class IntelligenceGenerativeSearchUseCase():
             question=text,
             language=language,
             content_base_uuid=content_base_uuid,
+            testing=self.testing
         )
