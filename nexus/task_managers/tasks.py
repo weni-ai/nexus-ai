@@ -127,7 +127,7 @@ def create_wenigpt_logs(log: Dict):
             full_prompt=log.get("full_prompt"),
             weni_gpt_response=log.get("weni_gpt_response"),
             wenigpt_version=settings.WENIGPT_VERSION,
-            testing=log.testing,
+            testing=log.get("testing"),
         )
         UserQuestion.objects.create(
             text=log.question,
