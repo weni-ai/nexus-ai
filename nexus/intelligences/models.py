@@ -143,7 +143,7 @@ class ContentBaseLogs(models.Model):
         update_fields = ["correct_answer"]
         self.correct_answer = correct_answer
         if feedback is not None:
-            self.user_feedback = feedback
+            self.user_feedback = int(feedback)
             update_fields.append("user_feedback")
         self.save(update_fields=update_fields)
 
