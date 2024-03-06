@@ -93,10 +93,10 @@ class ContentBaseText(BaseModel, SoftDeleteModel):
 
 class ContentBaseLogs(models.Model):
     FEEDBACK_CHOICES = [
-        (0 ,"Resposta foi em um assunto completamente diferente do perguntado."),
-        (1 ,"Resposta foi parcialmente correta, pois além da parte correta, trouxe informações no mesmo tema mas fora do contexto disponível."),
-        (2 ,"Resposta foi parcialmente correta, pois além da parte correta, trouxe informações de um tema completamente diferente."),
-        (3 ,"Respondeu que não possui a informação para fornecer a resposta, porém a informação consta no contexto disponível."),
+        ('0' ,"Resposta foi em um assunto completamente diferente do perguntado."),
+        ('1' ,"Resposta foi parcialmente correta, pois além da parte correta, trouxe informações no mesmo tema mas fora do contexto disponível."),
+        ('2' ,"Resposta foi parcialmente correta, pois além da parte correta, trouxe informações de um tema completamente diferente."),
+        ('3' ,"Respondeu que não possui a informação para fornecer a resposta, porém a informação consta no contexto disponível."),
     ]
 
     content_base = models.ForeignKey(
@@ -143,7 +143,7 @@ class ContentBaseLogs(models.Model):
         update_fields = ["correct_answer"]
         self.correct_answer = correct_answer
         if feedback is not None:
-            self.user_feedback = int(feedback)
+            self.user_feedback = str(feedback)
             update_fields.append("user_feedback")
         self.save(update_fields=update_fields)
 
