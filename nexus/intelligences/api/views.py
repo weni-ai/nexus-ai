@@ -14,10 +14,17 @@ from .serializers import (
     ContentBaseTextSerializer,
     ContentBaseFileSerializer,
     ContentBaseLinkSerializer,
+    ContentBaseLogsSerializer,
 )
 from nexus.usecases import intelligences
 from nexus.orgs import permissions
-from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
+from nexus.intelligences.models import (
+    Intelligence,
+    ContentBase,
+    ContentBaseText,
+    ContentBaseFile,
+    ContentBaseLogs,
+)
 
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
@@ -202,7 +209,8 @@ class QuickTestAIAPIView(views.APIView):
             if has_permission:
                 intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
                     search_file_database=SentenXFileDataBase(),
-                    generative_ai_database=WeniGPTDatabase()
+                    generative_ai_database=WeniGPTDatabase(),
+                    testing=True
                 )
                 return Response(
                     data=intelligence_usecase.search(
@@ -599,3 +607,61 @@ class DownloadFileViewSet(views.APIView):
             return Response(data={"file": file}, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+class LogsViewSet(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, content_base_uuid, log_uuid):
+        try:
+            user = request.user
+            org = get_org_by_content_base_uuid(content_base_uuid)
+
+            has_permission = permissions.can_list_content_bases(user, org)
+            if has_permission:
+
+                feedback: int | None = request.data.get("feedback")
+
+                if request.data.get("value") == "liked":
+                    correct_answer = True
+                else:
+                    correct_answer = False
+
+                log = intelligences.get_log_by_question_uuid(log_uuid)
+                log.update_user_feedback(correct_answer, feedback)
+
+                return Response(
+                    data={
+                        "question": log.question,
+                        "feedback": log.feedback,
+                        "value": "liked" if log.correct_answer else "disliked",
+                    },
+                    status=200
+                )
+            raise IntelligencePermissionDenied()
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+class ContentBaseLogsViewSet(ModelViewSet):
+    serializer_class = ContentBaseLogsSerializer
+    pagination_class = CustomCursorPagination
+    lookup_url_kwarg = "content_base_log"
+    authentication_classes = []
+
+    def get_queryset(self):
+        testing = self.request.data.get("testing")
+
+        authorization_header = self.request.headers.get('Authorization', "Bearer unauthorized")
+        is_super_user = permissions.is_super_user(authorization_header)
+
+        if not is_super_user:
+            raise PermissionDenied('You do not have permission to perform this action.')
+
+        if getattr(self, "swagger_fake_view", False):
+            return ContentBaseLogs.objects.none()  # pragma: no cover
+
+        use_case = intelligences.ListContentBaseLogs()
+        use_case_list = use_case.get_contentbase_logs(testing)
+
+        return use_case_list

@@ -5,6 +5,7 @@ from nexus.intelligences.models import (
     ContentBaseText,
     ContentBaseFile,
     ContentBaseLink,
+    ContentBaseLogs
 )
 from nexus.task_managers.models import ContentBaseFileTaskManager
 
@@ -46,3 +47,19 @@ class ContentBaseLinkSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseLink
         fields = ["uuid", "link"]
+
+
+class ContentBaseLogsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentBaseLogs
+        fields = [
+            "question",
+            "language",
+            "texts_chunks",
+            "full_prompt",
+            "weni_gpt_response",
+            "wenigpt_version",
+            "testing",
+            "feedback",
+            "correct_answer",
+        ]

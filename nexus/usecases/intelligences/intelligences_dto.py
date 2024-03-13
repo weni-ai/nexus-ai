@@ -57,6 +57,7 @@ class ContentBaseLogsDTO:
     texts_chunks: List
     full_prompt: str
     weni_gpt_response: str
+    testing: bool = False
 
 
 @dataclass
