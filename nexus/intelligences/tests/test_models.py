@@ -6,10 +6,14 @@ from nexus.intelligences.models import (
     ContentBaseText,
     IntegratedIntelligence,
     Intelligence,
-    ContentBaseLogs
+    ContentBaseLogs,
+    Prompt,
 )
 from django.test import TestCase
-from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory
+from nexus.usecases.intelligences.tests.intelligence_factory import (
+    ContentBaseFactory,
+    IntelligenceFactory
+)
 
 
 @pytest.mark.django_db
@@ -113,3 +117,17 @@ class ContentBaseLogsTestCase(TestCase):
         log.update_user_feedback(feedback)
 
         self.assertEqual(feedback, log.user_feedback)
+
+
+class PromptTestCase(TestCase):
+    def setUp(self) -> None:
+        self.intelligence = IntelligenceFactory()
+        self.user = self.intelligence.created_by
+
+    def test_create(self):
+        prompt = Prompt.objects.create(
+            prompt="",
+            intelligence=self.intelligence,
+            created_by=self.user
+        )
+        self.assertIsInstance(prompt, Prompt)
