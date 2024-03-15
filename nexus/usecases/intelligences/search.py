@@ -9,7 +9,7 @@ class IntelligenceGenerativeSearchUseCase():
 
     def _language_code(self, language: str, content_base_uuid: str = None) -> str:
         if language == "base":
-            return ContentBase.objects.get(uuid=content_base_uuid).language
+            language = ContentBase.objects.get(uuid=content_base_uuid).language
 
         codes = {
             "por": "pt",
