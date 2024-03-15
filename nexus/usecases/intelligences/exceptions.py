@@ -12,3 +12,6 @@ class ContentBaseTextDoesNotExist(Exception):
 
 class IntelligencePermissionDenied(Exception):
     pass
+
+class ContentBaseLinkDoesNotExist(Exception):
+    pass

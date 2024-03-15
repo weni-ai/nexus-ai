@@ -14,6 +14,7 @@ from .serializers import (
     ContentBaseTextSerializer,
     ContentBaseFileSerializer,
     ContentBaseLinkSerializer,
+    CreatedContentBaseLinkSerializer,
 )
 from nexus.usecases import intelligences
 from nexus.orgs import permissions
@@ -551,6 +552,20 @@ class ContentBaseFileViewset(ModelViewSet):
 class ContentBaseLinkViewset(ModelViewSet):
 
     serializer_class = ContentBaseLinkSerializer
+    lookup_url_kwarg = "contentbaselink_uuid"
+
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+    
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return ContentBaseFile.objects.none()  # pragma: no cover
+        use_case = intelligences.ListContentBaseLinkUseCase()
+        contentbase_uuid = self.kwargs.get('content_base_uuid')
+        return use_case.get_contentbase_link(contentbase_uuid=contentbase_uuid, user_email=self.request.user.email)
 
     def create(self, request, content_base_uuid: str):
         try:
@@ -574,11 +589,30 @@ class ContentBaseLinkViewset(ModelViewSet):
                 content_base_link_uuid=str(content_base_link.uuid)
             )
 
-            response = ContentBaseLinkSerializer(content_base_link).data
+            response = CreatedContentBaseLinkSerializer(content_base_link).data
 
             return Response(response, status=status.HTTP_201_CREATED)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+    
+    def destroy(self, request, *args, **kwargs):
+        user_email: str = self.request.user.email
+        contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
+
+        use_case = intelligences.RetrieveContentBaseLinkUseCase()
+        content_base_file = use_case.get_contentbasefile(
+            contentbaselink_uuid=contentbaselink_uuid,
+            user_email=user_email
+        )
+
+        sentenx_file_database = SentenXFileDataBase()
+        sentenx_file_database.delete(
+            content_base_uuid=str(content_base_file.content_base.uuid),
+            content_base_file_uuid=str(content_base_file.uuid),
+            filename=content_base_file.file_name
+        )
+
+        return super().destroy(request, *args, **kwargs)
 
 
 class DownloadFileViewSet(views.APIView):

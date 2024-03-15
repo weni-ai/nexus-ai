@@ -4,6 +4,7 @@ from .list import (
     ListContentBaseTextUseCase,
     ListContentBaseFileUseCase,
     ListAllIntelligenceContentUseCase,
+    ListContentBaseLinkUseCase,
 )
 from .create import (
     CreateIntelligencesUseCase,
