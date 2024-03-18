@@ -5,13 +5,15 @@ from ..list import (
     ListContentBaseUseCase,
     ListContentBaseTextUseCase,
     ListAllIntelligenceContentUseCase,
-    ListContentBaseFileUseCase
+    ListContentBaseFileUseCase,
+    ListPromptsUseCase
 )
 from .intelligence_factory import (
     IntelligenceFactory,
     ContentBaseFactory,
     ContentBaseTextFactory,
-    ContentBaseFileFactory
+    ContentBaseFileFactory,
+    PromptFactory
 )
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
@@ -97,3 +99,16 @@ class TestListContentBaseFileUseCase(TestCase):
             user_email=self.contentbase.created_by.email
         )
         self.assertEqual(1, len(contentbasefile_list))
+
+
+class TestListPromptsUseCase(TestCase):
+
+    def setUp(self):
+        self.prompt = PromptFactory()
+
+    def test_count_prompts_use_case(self):
+        use_case = ListPromptsUseCase()
+        prompts_list = use_case.get_prompts(
+            user_email=self.prompt.created_by.email
+        )
+        self.assertEqual(1, len(prompts_list))
