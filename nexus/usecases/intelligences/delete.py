@@ -1,7 +1,8 @@
 from .get_by_uuid import (
     get_by_intelligence_uuid,
     get_by_contentbase_uuid,
-    get_by_contentbasetext_uuid
+    get_by_contentbasetext_uuid,
+    get_prompt_by_uuid
 )
 from nexus.usecases import (
     users,
@@ -72,4 +73,24 @@ class DeleteContentBaseTextUseCase():
 
         contentbasetext = get_by_contentbasetext_uuid(contentbasetext_uuid)
         contentbasetext.delete()
+        return True
+
+
+class DeletePromptUseCase():
+
+    def delete_prompt(
+            self,
+            prompt_uuid: str,
+            user_email: str
+    ) -> bool:
+
+        prompt = get_prompt_by_uuid(prompt_uuid)
+        org = prompt.intelligence.org
+        user = users.get_by_email(user_email)
+
+        has_permission = permissions.can_delete_content_bases(user, org)
+        if not has_permission:
+            raise IntelligencePermissionDenied()
+
+        prompt.delete()
         return True
