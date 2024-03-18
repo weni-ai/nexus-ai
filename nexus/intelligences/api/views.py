@@ -12,11 +12,18 @@ from .serializers import (
     IntelligenceSerializer,
     ContentBaseSerializer,
     ContentBaseTextSerializer,
-    ContentBaseFileSerializer
+    ContentBaseFileSerializer,
+    PromptSerializer
 )
 from nexus.usecases import intelligences
 from nexus.orgs import permissions
-from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
+from nexus.intelligences.models import (
+    Intelligence,
+    ContentBase,
+    ContentBaseText,
+    ContentBaseFile,
+    Prompt
+)
 
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
@@ -24,8 +31,9 @@ from nexus.task_managers.file_database.wenigpt_database import WeniGPTDatabase
 
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 from nexus.task_managers.tasks import upload_text_file
-from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
+
+from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 
 
@@ -600,3 +608,94 @@ class LogsViewSet(views.APIView):
             raise IntelligencePermissionDenied()
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+class PromptViewset(ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = PromptSerializer
+    pagination_class = CustomCursorPagination
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Prompt.objects.none()
+        user_email = self.request.user.email
+        use_case = intelligences.ListPromptsUseCase()
+        intelligence_uuid = self.kwargs.get('intelligence_uuid')
+        use_case_list = use_case.get_intelligence_prompts(
+            intelligence_uuid,
+            user_email=user_email
+        )
+        return use_case_list
+
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def retrieve(self, request, *args, **kwargs):
+
+        user_email = request.user.email
+        prompt_uuid = kwargs.get('prompt_uuid')
+
+        use_case = intelligences.RetrievePromptUseCase()
+        prompt = use_case.get_prompt(
+            prompt_uuid=prompt_uuid,
+            user_email=user_email
+        )
+
+        serializer = PromptSerializer(prompt)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def create(self, request, intelligence_uuid: str):
+
+        user_email = request.user.email
+        use_case = intelligences.CreatePromptUseCase()
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        prompt = serializer.validated_data.get('prompt')
+
+        prompt = use_case.create_prompt(
+            intelligence_uuid=intelligence_uuid,
+            user_email=user_email,
+            prompt=prompt
+        )
+
+        return Response(
+            PromptSerializer(prompt).data,
+            status=status.HTTP_201_CREATED
+        )
+
+    def update(self, request, intelligence_uuid: str, **kwargs):
+
+        user_email = request.user.email
+        use_case = intelligences.UpdatePromptUseCase()
+
+        prompt = use_case.update_prompt(
+            prompt_uuid=kwargs.get('prompt_uuid'),
+            user_email=user_email,
+            prompt=request.data.get('prompt')
+        )
+
+        return Response(
+            PromptSerializer(prompt).data,
+            status=status.HTTP_200_OK
+        )
+
+    def destroy(self, request, intelligence_uuid: str, **kwargs):
+
+        user_email = request.user.email
+        use_case = intelligences.DeletePromptUseCase()
+
+        prompt_uuid = kwargs.get('prompt_uuid')
+
+        use_case.delete_prompt(
+            prompt_uuid=prompt_uuid,
+            user_email=user_email
+        )
+
+        return Response(
+            status=status.HTTP_204_NO_CONTENT
+        )
