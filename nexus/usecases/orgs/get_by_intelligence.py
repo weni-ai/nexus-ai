@@ -38,3 +38,12 @@ class GetOrgByIntelligenceUseCase():
             intelligences__contentbases__contentbasefiles__uuid=contentbasefile_uuid
         )
         return org
+
+    def get_org_by_contentbaselink_uuid(
+            self,
+            contentbaselink_uuid: str
+    ) -> Org:
+        org = Org.objects.get(
+            intelligences__contentbases__contentbaselinks__uuid=contentbaselink_uuid
+        )
+        return org
