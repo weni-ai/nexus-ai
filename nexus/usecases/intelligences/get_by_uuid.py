@@ -9,7 +9,8 @@ from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
     ContentBaseText,
-    ContentBaseFile
+    ContentBaseFile,
+    ContentBaseLink,
 )
 
 
