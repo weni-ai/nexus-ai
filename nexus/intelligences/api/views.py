@@ -600,7 +600,7 @@ class ContentBaseLinkViewset(ModelViewSet):
         contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
 
         use_case = intelligences.RetrieveContentBaseLinkUseCase()
-        content_base_file = use_case.get_contentbasefile(
+        content_base_file = use_case.get_contentbaselink(
             contentbaselink_uuid=contentbaselink_uuid,
             user_email=user_email
         )
