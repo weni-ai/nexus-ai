@@ -33,4 +33,4 @@ class ChatGPTDatabase(GPTDatabase):
             model=settings.CHATGPT_MODEL
         )
         text_answers = chat_completion.choices[0].message.content
-        return {"answers": text_answers, "id": "0"}
+        return {"answers":[{"text": text_answers}],"id":"0"}
