@@ -22,7 +22,7 @@ from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseTex
 
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-from nexus.task_managers.file_database.wenigpt_database import WeniGPTDatabase
+from nexus.usecases.task_managers.file_database import get_gpt_by_content_base_uuid
 
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 from nexus.task_managers.tasks import upload_text_file, send_link
@@ -171,14 +171,20 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
 
     def post(self, request):
         authorization_header = request.headers.get("Authorization", "Bearer unauthorized")
+
         if not permissions.is_super_user(authorization_header):
             raise PermissionDenied('You do not have permission to perform this action.')
+        
         data = request.data
+
+        content_base_uuid = data.get("content_base_uuid")
+        generative_ai_database = get_gpt_by_content_base_uuid(content_base_uuid)
+
         intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
             search_file_database=SentenXFileDataBase(),
-            generative_ai_database=WeniGPTDatabase()
+            generative_ai_database=generative_ai_database()
         )
-        data = intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text"), language=data.get("language"))
+        data = intelligence_usecase.search(content_base_uuid=content_base_uuid, text=data.get("text"), language=data.get("language"))
         if data.get("answers"):
             return Response(
                 data=data,
@@ -201,10 +207,13 @@ class QuickTestAIAPIView(views.APIView):
             has_permission = permissions.can_list_content_bases(user, org)
 
             if has_permission:
+                generative_ai_database = get_gpt_by_content_base_uuid(content_base_uuid)
+
                 intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
                     search_file_database=SentenXFileDataBase(),
-                    generative_ai_database=WeniGPTDatabase()
+                    generative_ai_database=generative_ai_database()
                 )
+
                 return Response(
                     data=intelligence_usecase.search(
                         content_base_uuid=content_base_uuid,
