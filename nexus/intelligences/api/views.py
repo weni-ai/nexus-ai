@@ -609,7 +609,7 @@ class ContentBaseLinkViewset(ModelViewSet):
         sentenx_file_database.delete(
             content_base_uuid=str(content_base_file.content_base.uuid),
             content_base_file_uuid=str(content_base_file.uuid),
-            filename=content_base_file.file_name
+            filename=content_base_file.link
         )
 
         return super().destroy(request, *args, **kwargs)
