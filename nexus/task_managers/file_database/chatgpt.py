@@ -12,17 +12,17 @@ class ChatGPTDatabase(GPTDatabase):
         self.api_key = settings.OPENAI_API_KEY
         self.chatgpt_model = settings.CHATGPT_MODEL
         self.client = self.get_client()
-    
+
     def get_client(self):
         return OpenAI(api_key=self.api_key)
-
+    
     def request_gpt(self, contexts: List, question: str, language: str, content_base_uuid: str):
         if not contexts:
             return {"answers": None, "id": "0", "message": "No context found for this question"}
 
+        context = "\n".join([str(ctx) for ctx in contexts])
         base_prompt = get_prompt_by_language(language=language, context=context, question=question)
 
-        context = "\n".join([str(ctx) for ctx in contexts])
         chat_completion = self.client.chat.completions.create(
             messages=[
                 {
