@@ -16,7 +16,7 @@ class ChatGPTDatabase(GPTDatabase):
     def get_client(self):
         return OpenAI(api_key=self.api_key)
     
-    def request_gpt(self, contexts: List, question: str, language: str, content_base_uuid: str):
+    def request_gpt(self, contexts: List, question: str, language: str, content_base_uuid: str, testing: bool = False):
         if not contexts:
             return {"answers": None, "id": "0", "message": "No context found for this question"}
 
