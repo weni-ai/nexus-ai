@@ -22,7 +22,8 @@ class ChatGPTDatabase(GPTDatabase):
 
         context = "\n".join([str(ctx) for ctx in contexts])
         base_prompt = get_prompt_by_language(language=language, context=context, question=question)
-
+        print("[+] ChatGPT [+]")
+        print(base_prompt)
         chat_completion = self.client.chat.completions.create(
             messages=[
                 {

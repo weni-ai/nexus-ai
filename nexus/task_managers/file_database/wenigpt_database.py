@@ -19,6 +19,7 @@ class WeniGPTDatabase(GPTDatabase):
         if contexts:
             context = "\n".join([str(ctx) for ctx in contexts])
             base_prompt = get_prompt_by_language(language=language, context=context, question=question)
+            print("[+]WeniGPT[+]")
             print(base_prompt)
             headers = {
                 "Content-Type": "application/json",
