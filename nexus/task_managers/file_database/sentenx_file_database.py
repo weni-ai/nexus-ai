@@ -20,9 +20,10 @@ class SentenXFileDataBase:
             "file_uuid": str(task.content_base_file.uuid),
             "extension_file": task.content_base_file.extension_file,
             "task_uuid": str(task.uuid),
-            "content_base": str(task.content_base_file.content_base.uuid),
-            "load_type": load_type
+            "content_base": str(task.content_base_file.content_base.uuid)
         }
+        if load_type:
+            body.update({"load_type": load_type})
         response = requests.put(url=url, headers=self.headers, json=body)
 
         if response.status_code == 200:
