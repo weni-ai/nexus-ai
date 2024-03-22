@@ -12,7 +12,7 @@ class SentenXFileDataBase:
             "Authorization": f"Bearer {settings.SENTENX_AUTH_TOKEN}",
         }
 
-    def add_file(self, task: TaskManager, file_database: FileDataBase):
+    def add_file(self, task: TaskManager, file_database: FileDataBase, load_type: str):
         url = settings.SENTENX_BASE_URL + "/content_base/index"
         body = {
             "file": file_database.create_presigned_url(task.content_base_file.file_name),
@@ -20,7 +20,8 @@ class SentenXFileDataBase:
             "file_uuid": str(task.content_base_file.uuid),
             "extension_file": task.content_base_file.extension_file,
             "task_uuid": str(task.uuid),
-            "content_base": str(task.content_base_file.content_base.uuid)
+            "content_base": str(task.content_base_file.content_base.uuid),
+            "load_type": load_type
         }
         response = requests.put(url=url, headers=self.headers, json=body)
 

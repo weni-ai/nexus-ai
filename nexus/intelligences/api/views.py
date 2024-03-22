@@ -494,9 +494,16 @@ class ContentBaseFileViewset(ModelViewSet):
             self.get_queryset()
             user_email = request.user.email
             extension_file = request.data.get("extension_file")
+            load_type = request.data.get("load_type")
             file_database = s3FileDatabase()
             file_manager = CeleryFileManager(file_database=file_database)
-            response = file_manager.upload_file(file, content_base_uuid, extension_file, user_email)
+            response = file_manager.upload_file(
+                file,
+                content_base_uuid,
+                extension_file,
+                user_email,
+                load_type
+            )
 
             return Response(
                 response,
