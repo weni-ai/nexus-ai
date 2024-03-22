@@ -3,12 +3,18 @@ import pendulum
 from nexus.task_managers.models import (
     ContentBaseFileTaskManager,
     ContentBaseTextTaskManager,
+    ContentBaseLinkTaskManager,
     TaskManager
 )
-from nexus.intelligences.models import ContentBaseFile, ContentBaseText
+from nexus.intelligences.models import (
+    ContentBaseFile,
+    ContentBaseText,
+    ContentBaseLink,
+)
 from nexus.usecases.task_managers.exceptions import (
     ContentBaseFileTaskManagerNotExists,
-    ContentBaseTextTaskManagerNotExists
+    ContentBaseTextTaskManagerNotExists,
+    ContentBaseLinkTaskManagerNotExists
 )
 
 
@@ -17,9 +23,20 @@ class CeleryTaskManagerUseCase:
     def _get_task_manager_func(self, file_type: str) -> callable:
         task_managers = {
             "file": self._get_content_base_file_task_manager,
-            "text": self._get_content_base_text_task_manager
+            "text": self._get_content_base_text_task_manager,
+            "link": self._get_content_base_link_task_manager,
         }
         return task_managers.get(file_type)
+
+    def _get_content_base_link_task_manager(self, task_uuid: str):
+        try:
+            content_base_task_manager = ContentBaseLinkTaskManager.objects.get(uuid=task_uuid)
+            return content_base_task_manager
+        except ContentBaseLinkTaskManager.DoesNotExist:
+            msg = f"[ CeleryTaskManagerUseCase:ContentBaseLinkTaskManager ] - {task_uuid} does not exist"
+            raise ContentBaseLinkTaskManagerNotExists(msg)
+        except Exception as exception:
+            raise Exception(f"[ ContentBaseLink ] - ContentBaseLink error to get - error: `{exception}`")
 
     def _get_content_base_file_task_manager(self, task_uuid: str):
         try:
@@ -74,3 +91,13 @@ class CeleryTaskManagerUseCase:
         task_manager.status = status
         task_manager.end_at = pendulum.now()
         task_manager.save(update_fields=["end_at", "status"])
+
+    def create_celery_link_manager(self, content_base_link: ContentBaseLink) -> ContentBaseLinkTaskManager:
+        content_base_task_manager = ContentBaseLinkTaskManager.objects.create(
+            status=ContentBaseLinkTaskManager.STATUS_WAITING,
+            created_by=content_base_link.created_by,
+            end_at=pendulum.now(),
+            content_base_link=content_base_link
+        )
+        print(f"[ CeleryTaskManagerUseCase ] - creating {content_base_task_manager.uuid}")
+        return content_base_task_manager

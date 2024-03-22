@@ -4,7 +4,8 @@ from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
     ContentBaseText,
-    ContentBaseFile
+    ContentBaseFile,
+    ContentBaseLink,
 )
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -62,3 +63,15 @@ class ContentBaseFileFactory(factory.django.DjangoModelFactory):
     file = factory.Sequence(lambda n: 'test%d' % n)
     file_name = factory.Sequence(lambda n: 'test%d' % n)
     extension_file = 'pdf'
+
+
+class ContentBaseLinkFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ContentBaseLink
+    
+    created_by = factory.SubFactory(UserFactory)
+    content_base = factory.SubFactory(
+        ContentBaseFactory,
+        created_by=factory.SelfAttribute('..created_by')
+    )
+    link = factory.Sequence(lambda n: 'test%d' % n)

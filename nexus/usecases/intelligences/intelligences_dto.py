@@ -58,3 +58,11 @@ class ContentBaseLogsDTO:
     full_prompt: str
     weni_gpt_response: str
     testing: bool = False
+
+
+@dataclass
+class ContentBaseLinkDTO:
+    link: str
+    user_email: str
+    content_base_uuid: str
+    uuid: str = None
