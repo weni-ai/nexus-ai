@@ -19,7 +19,12 @@ from nexus.trulens import wenigpt_evaluation, tru_recorder
 
 
 @app.task
-def add_file(task_manager_uuid: str, file_type: str) -> bool:
+def add_file(
+    task_manager_uuid: str,
+    file_type: str,
+    load_type: str
+) -> bool:
+
     try:
         task_manager = CeleryTaskManagerUseCase().get_task_manager_by_uuid(task_uuid=task_manager_uuid, file_type=file_type)
         task_manager.update_status(ContentBaseFileTaskManager.STATUS_LOADING)
@@ -33,7 +38,7 @@ def add_file(task_manager_uuid: str, file_type: str) -> bool:
     if file_type == 'text':
         status_code, _ = sentenx_file_database.add_text_file(task_manager, file_database)
     else:
-        status_code, _ = sentenx_file_database.add_file(task_manager, file_database)
+        status_code, _ = sentenx_file_database.add_file(task_manager, file_database, load_type)
 
     if status_code == 200:
         task_manager.update_status(ContentBaseFileTaskManager.STATUS_SUCCESS)
@@ -44,7 +49,14 @@ def add_file(task_manager_uuid: str, file_type: str) -> bool:
 
 
 @app.task
-def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_email: str, content_base_file_uuid: str):
+def upload_file(
+    file: bytes,
+    content_base_uuid: str,
+    extension_file: str,
+    user_email: str,
+    content_base_file_uuid: str,
+    load_type: str = None
+):
     file = pickle.loads(file)
     file_database_response = s3FileDatabase().add_file(file)
 
@@ -67,7 +79,7 @@ def upload_file(file: bytes, content_base_uuid: str, extension_file: str, user_e
 
     task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
 
-    add_file.apply_async(args=[str(task_manager.uuid), "file"])
+    add_file.apply_async(args=[str(task_manager.uuid), "file", load_type])
     response = {
         "task_uuid": task_manager.uuid,
         "task_status": task_manager.status,
