@@ -28,9 +28,9 @@ class IntelligenceGenerativeSearchUseCase():
         if response.get("status") != 200:
             raise Exception(response.get("data"))
 
-        wenigpt_database = self.generative_ai_database
         language = self._language_code(language.lower(), content_base_uuid)
-        return wenigpt_database.request_wenigpt(
+
+        return self.generative_ai_database.request_gpt(
             contexts=response.get("data", []).get("response"),
             question=text,
             language=language,

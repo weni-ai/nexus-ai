@@ -5,33 +5,21 @@ from django.conf import settings
 from typing import List
 from nexus.usecases.task_managers.wenigpt_database import get_prompt_by_language
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseLogsDTO
+from nexus.task_managers.file_database import GPTDatabase
 
-
-class WeniGPTDatabase:
+class WeniGPTDatabase(GPTDatabase):
 
     def __init__(self):
         self.url = settings.WENIGPT_API_URL
         self.token = settings.WENIGPT_API_TOKEN
         self.cookie = settings.WENIGPT_COOKIE
 
-    def format_output(self, text_answers):
-        answers = []
-        if text_answers:
-            for answer in text_answers:
-                answer = answer.strip()
-                ans = ""
-                for ch in answer:
-                    if ch == '\n':
-                        break
-                    ans += ch
-                answers.append({"text": ans})
-        return answers
-
-    def request_wenigpt(self, contexts: List, question: str, language: str, content_base_uuid: str, testing: bool = False):
+    def request_gpt(self, contexts: List, question: str, language: str, content_base_uuid: str, testing: bool = False):
         from nexus.task_managers.tasks import create_wenigpt_logs
         if contexts:
             context = "\n".join([str(ctx) for ctx in contexts])
             base_prompt = get_prompt_by_language(language=language, context=context, question=question)
+            print("[+]WeniGPT[+]")
             print(base_prompt)
             headers = {
                 "Content-Type": "application/json",
