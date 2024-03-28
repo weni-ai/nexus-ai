@@ -7,7 +7,12 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
-from nexus.intelligences.models import ContentBaseText, ContentBaseLogs, UserQuestion
+from nexus.intelligences.models import (
+    ContentBaseText,
+    ContentBaseLogs,
+    ContentBaseLink,
+    UserQuestion,
+)
 
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
@@ -37,6 +42,8 @@ def add_file(
 
     if file_type == 'text':
         status_code, _ = sentenx_file_database.add_text_file(task_manager, file_database)
+    elif file_type == 'link':
+        status_code, _ = sentenx_file_database.add_link(task_manager, file_database)
     else:
         status_code, _ = sentenx_file_database.add_file(task_manager, file_database, load_type)
 
@@ -122,6 +129,23 @@ def upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: 
             "uuid": content_base_text.uuid,
             "extension_file": 'txt',
             "text": content_base_text.text,
+        }
+    }
+    return response
+
+
+@app.task
+def send_link(link: str, user_email: str, content_base_link_uuid: str):
+    content_base_link = ContentBaseLink.objects.get(uuid=content_base_link_uuid)
+    task_manager = CeleryTaskManagerUseCase().create_celery_link_manager(content_base_link=content_base_link)
+    add_file.apply_async(args=[str(task_manager.uuid), "link"])
+    response = {
+        "task_uuid": task_manager.uuid,
+        "task_status": task_manager.status,
+        "content_base_text": {
+            "uuid": content_base_link.uuid,
+            "extension_file": 'url',
+            "link": content_base_link.link,
         }
     }
     return response

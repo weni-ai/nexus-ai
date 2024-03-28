@@ -20,3 +20,7 @@ class UserQuestionDoesNotExist(Exception):
 
 class ContentBaseLogsDoesNotExist(Exception):
     pass
+
+
+class ContentBaseLinkDoesNotExist(Exception):
+    pass
