@@ -4,7 +4,8 @@ from nexus.intelligences.models import (
     ContentBase,
     ContentBaseText,
     ContentBaseFile,
-    ContentBaseLogs
+    ContentBaseLogs,
+    Prompt
 )
 from nexus.task_managers.models import ContentBaseFileTaskManager
 
@@ -55,4 +56,15 @@ class ContentBaseLogsSerializer(serializers.ModelSerializer):
             "testing",
             "feedback",
             "correct_answer",
+        ]
+
+
+class PromptSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Prompt
+        fields = [
+            "uuid",
+            "prompt",
+            "modified_at",
         ]

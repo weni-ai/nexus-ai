@@ -2,17 +2,20 @@ from django.test import TestCase
 from ..delete import (
     DeleteIntelligenceUseCase,
     DeleteContentBaseUseCase,
-    DeleteContentBaseTextUseCase
+    DeleteContentBaseTextUseCase,
+    DeletePromptUseCase
 )
 from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
-    ContentBaseText
+    ContentBaseText,
+    Prompt
 )
 from .intelligence_factory import (
     IntelligenceFactory,
     ContentBaseFactory,
-    ContentBaseTextFactory
+    ContentBaseTextFactory,
+    PromptFactory
 )
 
 
@@ -55,4 +58,19 @@ class TestDeleteContentBaseTextUseCase(TestCase):
             user_email=self.contentbasetext.created_by.email
         )
         self.assertEqual(ContentBaseText.objects.count(), 0)
+        self.assertTrue(status)
+
+
+class TestDeletePromptUseCase(TestCase):
+
+    def setUp(self) -> None:
+        self.prompt = PromptFactory()
+
+    def test_delete_prompt(self):
+        use_case = DeletePromptUseCase()
+        status = use_case.delete_prompt(
+            prompt_uuid=self.prompt.uuid,
+            user_email=self.prompt.created_by.email
+        )
+        self.assertEqual(Prompt.objects.count(), 0)
         self.assertTrue(status)

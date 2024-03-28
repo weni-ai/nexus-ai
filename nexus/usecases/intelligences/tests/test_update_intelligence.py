@@ -2,12 +2,14 @@ from django.test import TestCase
 from ..update import (
     UpdateIntelligenceUseCase,
     UpdateContentBaseUseCase,
-    UpdateContentBaseTextUseCase
+    UpdateContentBaseTextUseCase,
+    UpdatePromptUseCase
 )
 from .intelligence_factory import (
     IntelligenceFactory,
     ContentBaseFactory,
-    ContentBaseTextFactory
+    ContentBaseTextFactory,
+    PromptFactory
 )
 
 
@@ -81,3 +83,19 @@ class TestUpdateContentBaseTextUseCase(TestCase):
             user_email=self.contentbasetext.created_by.email
         )
         self.assertEqual(updated_contentbasetext.text, new_text)
+
+
+class TestUpdatePromptUseCase(TestCase):
+
+    def setUp(self):
+        self.prompt = PromptFactory()
+
+    def test_update_prompt(self):
+        new_prompt = 'New Prompt'
+        use_case = UpdatePromptUseCase()
+        updated_prompt = use_case.update_prompt(
+            prompt_uuid=self.prompt.uuid,
+            prompt=new_prompt,
+            user_email=self.prompt.created_by.email
+        )
+        self.assertEqual(updated_prompt.prompt, new_prompt)

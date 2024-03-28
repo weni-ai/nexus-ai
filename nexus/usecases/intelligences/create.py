@@ -2,7 +2,8 @@ from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
     ContentBaseText,
-    ContentBaseFile
+    ContentBaseFile,
+    Prompt,
 )
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO, ContentBaseDTO, ContentBaseTextDTO
 from nexus.usecases import (
@@ -112,3 +113,23 @@ class CreateContentBaseFileUseCase():
             created_by=user
         )
         return content_base_file
+
+
+class CreatePromptUseCase():
+
+    def create_prompt(
+        self,
+        intelligence_uuid: str,
+        user_email: str,
+        prompt: str
+    ) -> Prompt:
+
+        user = users.get_by_email(user_email)
+        intelligence = intelligences.get_by_intelligence_uuid(intelligence_uuid)
+        prompt = Prompt.objects.create(
+            intelligence=intelligence,
+            prompt=prompt,
+            created_by=user
+        )
+
+        return prompt

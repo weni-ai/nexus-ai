@@ -12,7 +12,8 @@ from nexus.intelligences.models import (
     ContentBaseText,
     ContentBaseFile,
     ContentBaseLogs,
-    UserQuestion
+    UserQuestion,
+    Prompt
 )
 
 
@@ -62,6 +63,7 @@ def get_contentbasetext_by_contentbase_uuid(
     except ValidationError:
         raise ValidationError(message='Invalid UUID')
 
+
 def get_user_question_by_uuid(user_question_uuid: str):
     try:
         return UserQuestion.objects.get(uuid=user_question_uuid)
@@ -72,3 +74,14 @@ def get_user_question_by_uuid(user_question_uuid: str):
 def get_log_by_question_uuid(user_question_uuid: str) -> ContentBaseLogs:
     question = get_user_question_by_uuid(user_question_uuid)
     return question.content_base_log
+
+
+def get_prompt_by_uuid(
+        prompt_uuid: str
+) -> Prompt:
+    try:
+        return Prompt.objects.get(uuid=prompt_uuid)
+    except Prompt.DoesNotExist:
+        raise Exception(f"[ Prompt ] - Prompt with uuid `{prompt_uuid}` does not exists.")
+    except Exception as exception:
+        raise (f"[ Prompt ] - Prompt error to get - error: `{exception}`")

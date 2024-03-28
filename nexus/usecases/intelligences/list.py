@@ -2,7 +2,8 @@ from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
     ContentBaseText,
-    ContentBaseFile
+    ContentBaseFile,
+    Prompt
 )
 from nexus.usecases import orgs, users
 from nexus.orgs import permissions
@@ -114,3 +115,21 @@ class ListContentBaseFileUseCase():
 
         content_base = get_by_contentbase_uuid(contentbase_uuid=contentbase_uuid)
         return ContentBaseFile.objects.filter(content_base=content_base)
+
+
+class ListPromptsUseCase():
+
+    def get_intelligence_prompts(
+            self,
+            intelligence_uuid: str,
+            user_email: str,
+    ):
+
+        user = users.get_by_email(user_email)
+        intelligence = get_by_intelligence_uuid(intelligence_uuid)
+        org = intelligence.org
+        has_permission = permissions.can_list_content_bases(user, org)
+        if not has_permission:
+            raise IntelligencePermissionDenied()
+
+        return Prompt.objects.filter(intelligence=intelligence)

@@ -3,17 +3,20 @@ from django.test import TestCase
 from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
-    ContentBaseText
+    ContentBaseText,
+    Prompt
 )
 from ..retrieve import (
     RetrieveContentBaseTextUseCase,
     RetrieveContentBaseUseCase,
-    RetrieveIntelligenceUseCase
+    RetrieveIntelligenceUseCase,
+    RetrievePromptUseCase
 )
 from .intelligence_factory import (
     IntelligenceFactory,
     ContentBaseFactory,
-    ContentBaseTextFactory
+    ContentBaseTextFactory,
+    PromptFactory
 )
 
 
@@ -60,3 +63,18 @@ class TestRetrieveContentBaseTextUseCase(TestCase):
         )
         self.assertIsNotNone(contentbasetext_retrieve)
         self.assertIsInstance(contentbasetext_retrieve, ContentBaseText)
+
+
+class TestRetrievePromptUseCase(TestCase):
+
+    def setUp(self):
+        self.prompt = PromptFactory()
+
+    def test_count_prompt_use_case(self):
+        use_case = RetrievePromptUseCase()
+        prompt_retrieve = use_case.get_prompt(
+            prompt_uuid=self.prompt.uuid,
+            user_email=self.prompt.created_by.email
+        )
+        self.assertIsNotNone(prompt_retrieve)
+        self.assertIsInstance(prompt_retrieve, Prompt)

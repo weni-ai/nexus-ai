@@ -138,7 +138,7 @@ class ContentBaseLogs(models.Model):
             answer = response[0]
             return answer.split("PERGUNTA")[0]
         return self.weni_gpt_response
-    
+
     def update_user_feedback(self, correct_answer: bool, feedback: Optional[int] = None) -> None:
         update_fields = ["correct_answer"]
         self.correct_answer = correct_answer
@@ -160,3 +160,15 @@ class UserQuestion(models.Model):
         on_delete=models.CASCADE,
         related_name="user_question",
     )
+
+
+class Prompt(BaseModel, SoftDeleteModel):
+    prompt = models.TextField()
+    intelligence = models.ForeignKey(
+        Intelligence,
+        on_delete=models.CASCADE,
+        related_name='prompts',
+    )
+
+    def __str__(self) -> str:
+        return f"{self.uuid}"

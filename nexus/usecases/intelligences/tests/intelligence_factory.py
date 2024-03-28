@@ -4,7 +4,8 @@ from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
     ContentBaseText,
-    ContentBaseFile
+    ContentBaseFile,
+    Prompt
 )
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -62,3 +63,16 @@ class ContentBaseFileFactory(factory.django.DjangoModelFactory):
     file = factory.Sequence(lambda n: 'test%d' % n)
     file_name = factory.Sequence(lambda n: 'test%d' % n)
     extension_file = 'pdf'
+
+
+class PromptFactory(factory.django.DjangoModelFactory):
+
+    class Meta:
+        model = Prompt
+
+    created_by = factory.SubFactory(UserFactory)
+    intelligence = factory.SubFactory(
+        IntelligenceFactory,
+        created_by=factory.SelfAttribute('..created_by')
+    )
+    prompt = factory.Sequence(lambda n: 'test%d' % n)

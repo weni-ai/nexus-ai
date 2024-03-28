@@ -3,6 +3,7 @@ from .get_by_uuid import (
     get_by_contentbase_uuid,
     get_by_contentbasetext_uuid,
     get_by_content_base_file_uuid,
+    get_prompt_by_uuid
 )
 from nexus.usecases import orgs, users
 from nexus.orgs import permissions
@@ -131,3 +132,25 @@ class UpdateContentBaseFileUseCase():
         content_base_file.save()
 
         return content_base_file
+
+
+class UpdatePromptUseCase():
+
+    def update_prompt(
+            self,
+            prompt_uuid: str,
+            user_email: str,
+            prompt: str
+    ):
+        user = users.get_by_email(user_email)
+        prompt = get_prompt_by_uuid(prompt_uuid)
+        org = prompt.intelligence.org
+
+        has_permission = permissions.can_edit_intelligence_of_org(user, org)
+        if not has_permission:
+            raise IntelligencePermissionDenied()
+
+        prompt.prompt = prompt
+        prompt.save()
+
+        return prompt

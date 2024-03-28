@@ -3,11 +3,13 @@ from django.test import TestCase
 from ..create import (
     CreateIntelligencesUseCase,
     CreateContentBaseUseCase,
-    CreateContentBaseTextUseCase
+    CreateContentBaseTextUseCase,
+    CreatePromptUseCase
 )
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
+    IntelligenceFactory
 )
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO
 
@@ -71,3 +73,19 @@ class TestCreateContentBaseUseCase(TestCase):
             content_base_text_dto
         )
         self.assertEqual(content_base_text_create.text, "text")
+
+
+class TestCreatePromptUseCase(TestCase):
+
+    def setUp(self) -> None:
+        self.intelligence = IntelligenceFactory()
+        self.user = self.intelligence.created_by
+
+    def test_create_prompt_use_case(self):
+        use_case = CreatePromptUseCase()
+        prompt_create = use_case.create_prompt(
+            intelligence_uuid=self.intelligence.uuid,
+            user_email=self.user.email,
+            prompt="text"
+        )
+        self.assertEqual(prompt_create.prompt, "text")
