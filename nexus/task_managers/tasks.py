@@ -27,7 +27,7 @@ from nexus.trulens import wenigpt_evaluation, tru_recorder
 def add_file(
     task_manager_uuid: str,
     file_type: str,
-    load_type: str
+    load_type: str = None,
 ) -> bool:
 
     try:
