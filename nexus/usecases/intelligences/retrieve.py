@@ -2,7 +2,8 @@ from .get_by_uuid import (
     get_by_intelligence_uuid,
     get_by_contentbase_uuid,
     get_by_contentbasetext_uuid,
-    get_by_content_base_file_uuid
+    get_by_content_base_file_uuid,
+    get_default_content_base_by_project
 )
 from nexus.usecases import orgs, users
 from nexus.orgs import permissions
@@ -43,6 +44,21 @@ class RetrieveContentBaseUseCase():
             raise IntelligencePermissionDenied()
 
         return get_by_contentbase_uuid(contentbase_uuid)
+
+    def get_default_by_project(
+            self,
+            project_uuid: str,
+            user_email: str
+    ):
+        org_use_case = orgs.GetOrgByIntelligenceUseCase()
+        user = users.get_by_email(user_email)
+        org = org_use_case.get_org_by_project_uuid(project_uuid)
+
+        has_permission = permissions.can_list_content_bases(user, org)
+        if not has_permission:
+            raise IntelligencePermissionDenied()
+
+        return get_default_content_base_by_project(project_uuid)
 
 
 class RetrieveContentBaseTextUseCase():

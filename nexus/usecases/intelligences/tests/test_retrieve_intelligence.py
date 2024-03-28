@@ -3,17 +3,18 @@ from django.test import TestCase
 from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
-    ContentBaseText
+    ContentBaseText,
 )
 from ..retrieve import (
     RetrieveContentBaseTextUseCase,
     RetrieveContentBaseUseCase,
-    RetrieveIntelligenceUseCase
+    RetrieveIntelligenceUseCase,
 )
 from .intelligence_factory import (
     IntelligenceFactory,
     ContentBaseFactory,
-    ContentBaseTextFactory
+    ContentBaseTextFactory,
+    IntegratedIntelligenceFactory
 )
 
 
@@ -35,13 +36,36 @@ class TestRetrieveIntelligenceUseCase(TestCase):
 class TestRetrieveContentBaseUseCase(TestCase):
 
     def setUp(self):
-        self.contentbase = ContentBaseFactory()
+
+        integrated_intelligence = IntegratedIntelligenceFactory()
+        created_by = integrated_intelligence.intelligence.created_by
+
+        self.project = integrated_intelligence.project
+        self.contentbase = ContentBaseFactory(
+            intelligence=integrated_intelligence.intelligence,
+            created_by=created_by
+        )
+        self.router = ContentBaseFactory(
+            intelligence=integrated_intelligence.intelligence,
+            created_by=created_by,
+            is_router=True
+        )
 
     def test_count_contentbase_use_case(self):
         use_case = RetrieveContentBaseUseCase()
         contentbase_retrieve = use_case.get_contentbase(
             contentbase_uuid=self.contentbase.uuid,
             user_email=self.contentbase.created_by.email
+        )
+        self.assertIsNotNone(contentbase_retrieve)
+        self.assertIsInstance(contentbase_retrieve, ContentBase)
+
+    def test_get_default_by_project(self):
+
+        use_case = RetrieveContentBaseUseCase()
+        contentbase_retrieve = use_case.get_default_by_project(
+            project_uuid=self.project.uuid,
+            user_email=self.router.created_by.email
         )
         self.assertIsNotNone(contentbase_retrieve)
         self.assertIsInstance(contentbase_retrieve, ContentBase)
