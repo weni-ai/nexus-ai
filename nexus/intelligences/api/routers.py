@@ -11,6 +11,7 @@ from .views import (
     GenerativeIntelligenceQuestionAPIView,
     QuickTestAIAPIView,
     DownloadFileViewSet,
+    LogsViewSet,
 )
 
 
@@ -51,4 +52,5 @@ urlpatterns = [
     path('v1/wenigpt_question', GenerativeIntelligenceQuestionAPIView.as_view(), name="wenigpt-question"),
     path('v1/wenigpt_question/quick-test', QuickTestAIAPIView.as_view(), name="wenigpt-quick-test"),
     path('v1/download-file', DownloadFileViewSet.as_view(), name="download-file"),
+    path('<content_base_uuid>/content-base-logs/<log_uuid>', LogsViewSet.as_view(), name="content-base-logs")
 ]

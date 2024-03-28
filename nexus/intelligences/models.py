@@ -5,6 +5,8 @@ from django.contrib.postgres.fields import ArrayField
 from nexus.db.models import BaseModel, SoftDeleteModel
 from nexus.orgs.models import Org
 from enum import Enum
+from uuid import uuid4
+from typing import Optional
 
 
 class Intelligence(BaseModel, SoftDeleteModel):
@@ -90,6 +92,13 @@ class ContentBaseText(BaseModel, SoftDeleteModel):
 
 
 class ContentBaseLogs(models.Model):
+    FEEDBACK_CHOICES = [
+        (0 ,"Resposta foi em um assunto completamente diferente do perguntado."),
+        (1 ,"Resposta foi parcialmente correta, pois além da parte correta, trouxe informações no mesmo tema mas fora do contexto disponível."),
+        (2 ,"Resposta foi parcialmente correta, pois além da parte correta, trouxe informações de um tema completamente diferente."),
+        (3 ,"Respondeu que não possui a informação para fornecer a resposta, porém a informação consta no contexto disponível."),
+    ]
+
     content_base = models.ForeignKey(
         ContentBase,
         related_name="logs",
@@ -109,6 +118,14 @@ class ContentBaseLogs(models.Model):
         default=settings.WENIGPT_VERSION,
         max_length=255
     )
+    testing = models.BooleanField(default=False)
+    user_feedback = models.CharField(
+        max_length=100,
+        choices=FEEDBACK_CHOICES,
+        null=True,
+        blank=True
+    )
+    correct_answer = models.BooleanField(default=True)
 
     def __str__(self) -> str:
         return f"{self.wenigpt_version}: {self.content_base} - {self.question}"
@@ -121,3 +138,25 @@ class ContentBaseLogs(models.Model):
             answer = response[0]
             return answer.split("PERGUNTA")[0]
         return self.weni_gpt_response
+    
+    def update_user_feedback(self, correct_answer: bool, feedback: Optional[int] = None) -> None:
+        update_fields = ["correct_answer"]
+        self.correct_answer = correct_answer
+        if feedback is not None:
+            self.user_feedback = feedback
+            update_fields.append("user_feedback")
+        self.save(update_fields=update_fields)
+
+    @property
+    def feedback(self):
+        return self.get_user_feedback_display()
+
+
+class UserQuestion(models.Model):
+    uuid = models.UUIDField(primary_key=True, default=uuid4)
+    text = models.TextField()
+    content_base_log = models.OneToOneField(
+        ContentBaseLogs,
+        on_delete=models.CASCADE,
+        related_name="user_question",
+    )

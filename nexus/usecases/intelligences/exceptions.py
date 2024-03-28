@@ -13,5 +13,13 @@ class ContentBaseTextDoesNotExist(Exception):
 class IntelligencePermissionDenied(Exception):
     pass
 
+
 class ContentBaseLinkDoesNotExist(Exception):
+
+
+class UserQuestionDoesNotExist(Exception):
+    pass
+
+
+class ContentBaseLogsDoesNotExist(Exception):
     pass

@@ -22,7 +22,7 @@ from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseTex
 
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-from nexus.task_managers.file_database.wenigpt_database import WeniGPTDatabase
+from nexus.usecases.task_managers.file_database import get_gpt_by_content_base_uuid
 
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 from nexus.task_managers.tasks import upload_text_file, send_link
@@ -171,14 +171,20 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
 
     def post(self, request):
         authorization_header = request.headers.get("Authorization", "Bearer unauthorized")
+
         if not permissions.is_super_user(authorization_header):
             raise PermissionDenied('You do not have permission to perform this action.')
+        
         data = request.data
+
+        content_base_uuid = data.get("content_base_uuid")
+        generative_ai_database = get_gpt_by_content_base_uuid(content_base_uuid)
+
         intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
             search_file_database=SentenXFileDataBase(),
-            generative_ai_database=WeniGPTDatabase()
+            generative_ai_database=generative_ai_database()
         )
-        data = intelligence_usecase.search(content_base_uuid=data.get("content_base_uuid"), text=data.get("text"), language=data.get("language"))
+        data = intelligence_usecase.search(content_base_uuid=content_base_uuid, text=data.get("text"), language=data.get("language"))
         if data.get("answers"):
             return Response(
                 data=data,
@@ -201,10 +207,14 @@ class QuickTestAIAPIView(views.APIView):
             has_permission = permissions.can_list_content_bases(user, org)
 
             if has_permission:
+                generative_ai_database = get_gpt_by_content_base_uuid(content_base_uuid)
+
                 intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
                     search_file_database=SentenXFileDataBase(),
-                    generative_ai_database=WeniGPTDatabase()
+                    generative_ai_database=generative_ai_database(),
+                    testing=True,
                 )
+
                 return Response(
                     data=intelligence_usecase.search(
                         content_base_uuid=content_base_uuid,
@@ -495,9 +505,16 @@ class ContentBaseFileViewset(ModelViewSet):
             self.get_queryset()
             user_email = request.user.email
             extension_file = request.data.get("extension_file")
+            load_type = request.data.get("load_type")
             file_database = s3FileDatabase()
             file_manager = CeleryFileManager(file_database=file_database)
-            response = file_manager.upload_file(file, content_base_uuid, extension_file, user_email)
+            response = file_manager.upload_file(
+                file,
+                content_base_uuid,
+                extension_file,
+                user_email,
+                load_type
+            )
 
             return Response(
                 response,
@@ -631,5 +648,39 @@ class DownloadFileViewSet(views.APIView):
             )
             file = s3FileDatabase().create_presigned_url(file_name)
             return Response(data={"file": file}, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+class LogsViewSet(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, content_base_uuid, log_uuid):
+        try:
+            user = request.user
+            org = get_org_by_content_base_uuid(content_base_uuid)
+
+            has_permission = permissions.can_list_content_bases(user, org)
+            if has_permission:
+
+                feedback: int | None = request.data.get("feedback")
+
+                if request.data.get("value") == "liked":
+                    correct_answer = True
+                else:
+                    correct_answer = False
+
+                log = intelligences.get_log_by_question_uuid(log_uuid)
+                log.update_user_feedback(correct_answer, feedback)
+
+                return Response(
+                    data={
+                        "question": log.question,
+                        "feedback": log.feedback,
+                        "value": "liked" if log.correct_answer else "disliked",
+                    },
+                    status=200
+                )
+            raise IntelligencePermissionDenied()
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)

@@ -9,6 +9,7 @@ from nexus.intelligences.models import (
 from nexus.task_managers.models import (
     ContentBaseFileTaskManager,
     ContentBaseLinkTaskManager,
+    ContentBaseLogs,
 )
 
 
@@ -65,3 +66,19 @@ class ContentBaseLinkSerializer(serializers.ModelSerializer):
         except Exception as e:
             print(e)
             return ContentBaseLinkTaskManager.STATUS_FAIL
+
+
+class ContentBaseLogsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentBaseLogs
+        fields = [
+            "question",
+            "language",
+            "texts_chunks",
+            "full_prompt",
+            "weni_gpt_response",
+            "wenigpt_version",
+            "testing",
+            "feedback",
+            "correct_answer",
+        ]

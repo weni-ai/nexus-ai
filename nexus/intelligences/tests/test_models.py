@@ -6,7 +6,10 @@ from nexus.intelligences.models import (
     ContentBaseText,
     IntegratedIntelligence,
     Intelligence,
+    ContentBaseLogs
 )
+from django.test import TestCase
+from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory
 
 
 @pytest.mark.django_db
@@ -88,3 +91,25 @@ def test_create_content_base_text(
     )
 
     assert content_base.text == text
+
+
+class ContentBaseLogsTestCase(TestCase):
+    def setUp(self) -> None:
+        self.content_base = ContentBaseFactory()
+
+    def test_create(self):
+        log = ContentBaseLogs.objects.create(
+            content_base=self.content_base,
+            question="",
+            language="pt",
+            texts_chunks=[""],
+            full_prompt="",
+            weni_gpt_response="",
+            testing=True,
+        )
+        self.assertIsInstance(log, ContentBaseLogs)
+
+        feedback = 1
+        log.update_user_feedback(feedback)
+
+        self.assertEqual(feedback, log.user_feedback)

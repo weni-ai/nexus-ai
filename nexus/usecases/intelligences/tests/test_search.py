@@ -33,7 +33,7 @@ class GenerativeAIDatabase:
         "es": spa_answer
     }
 
-    def request_wenigpt(
+    def request_gpt(
             self,
             contexts: List,
             question: str,
