@@ -12,7 +12,8 @@ from nexus.intelligences.models import (
     ContentBaseText,
     ContentBaseFile,
     ContentBaseLogs,
-    UserQuestion
+    UserQuestion,
+    IntegratedIntelligence
 )
 
 
@@ -62,6 +63,7 @@ def get_contentbasetext_by_contentbase_uuid(
     except ValidationError:
         raise ValidationError(message='Invalid UUID')
 
+
 def get_user_question_by_uuid(user_question_uuid: str):
     try:
         return UserQuestion.objects.get(uuid=user_question_uuid)
@@ -72,3 +74,27 @@ def get_user_question_by_uuid(user_question_uuid: str):
 def get_log_by_question_uuid(user_question_uuid: str) -> ContentBaseLogs:
     question = get_user_question_by_uuid(user_question_uuid)
     return question.content_base_log
+
+
+def get_integretade_intelligence_by_project(
+    project_uuid: str
+) -> IntegratedIntelligence:
+    try:
+        return IntegratedIntelligence.objects.get(project__uuid=project_uuid)
+    except IntegratedIntelligence.DoesNotExist:
+        raise Exception(f"[ IntegratedIntelligence ] - IntegratedIntelligence with project uuid `{project_uuid}` does not exists.")
+    except Exception as exception:
+        raise Exception(f"[ IntegratedIntelligence ] - IntegratedIntelligence error to get - error: `{exception}`")
+
+
+def get_default_content_base_by_project(
+    project_uuid: str
+) -> ContentBase:
+    try:
+        integrated_intelligence = get_integretade_intelligence_by_project(project_uuid)
+        content_bases = integrated_intelligence.intelligence.contentbases.all()
+        return content_bases.get(is_router=True)
+    except ContentBase.DoesNotExist:
+        raise ContentBaseDoesNotExist()
+    except ValidationError:
+        raise ValidationError(message='Invalid UUID')
