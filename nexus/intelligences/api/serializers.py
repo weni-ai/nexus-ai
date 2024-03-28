@@ -5,11 +5,11 @@ from nexus.intelligences.models import (
     ContentBaseText,
     ContentBaseFile,
     ContentBaseLink,
+    ContentBaseLogs,
 )
 from nexus.task_managers.models import (
     ContentBaseFileTaskManager,
     ContentBaseLinkTaskManager,
-    ContentBaseLogs,
 )
 
 
