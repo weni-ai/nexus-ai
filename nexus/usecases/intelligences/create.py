@@ -21,7 +21,7 @@ class CreateIntelligencesUseCase():
             org_uuid: str,
             user_email: str,
             name: str,
-            description: str
+            description: str = None
     ):
         org = orgs.get_by_uuid(org_uuid)
         user = users.get_by_email(user_email)
@@ -44,8 +44,9 @@ class CreateContentBaseUseCase():
             intelligence_uuid: str,
             user_email: str,
             title: str,
-            description: str,
-            language: str = 'pt-br'
+            description: str = None,
+            language: str = 'pt-br',
+            is_router: bool = False
     ) -> ContentBase:
 
         org_usecase = orgs.GetOrgByIntelligenceUseCase()
@@ -64,7 +65,8 @@ class CreateContentBaseUseCase():
             intelligence=intelligence,
             created_by=user,
             description=description,
-            language=language
+            language=language,
+            is_router=is_router
         )
         intelligence.increase_content_bases_count()
         return contentbase
