@@ -2,7 +2,8 @@ from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
     ContentBaseText,
-    ContentBaseFile
+    ContentBaseFile,
+    ContentBaseLink,
 )
 from nexus.usecases import orgs, users
 from nexus.orgs import permissions
@@ -114,3 +115,18 @@ class ListContentBaseFileUseCase():
 
         content_base = get_by_contentbase_uuid(contentbase_uuid=contentbase_uuid)
         return ContentBaseFile.objects.filter(content_base=content_base)
+
+
+class ListContentBaseLinkUseCase():
+    def get_contentbase_link(self, contentbase_uuid: str, user_email: str):
+        org_use_case = orgs.GetOrgByIntelligenceUseCase()
+        org = org_use_case.get_org_by_contentbase_uuid(contentbase_uuid)
+
+        user= users.get_by_email(user_email)
+
+        has_permission = permissions.can_list_content_bases(user, org)
+        if not has_permission:
+            raise IntelligencePermissionDenied()
+        
+        content_base = get_by_contentbase_uuid(contentbase_uuid=contentbase_uuid)
+        return ContentBaseLink.objects.filter(content_base=content_base)

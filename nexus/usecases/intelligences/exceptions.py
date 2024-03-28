@@ -14,6 +14,9 @@ class IntelligencePermissionDenied(Exception):
     pass
 
 
+class ContentBaseLinkDoesNotExist(Exception):
+
+
 class UserQuestionDoesNotExist(Exception):
     pass
 

@@ -4,12 +4,14 @@ from .list import (
     ListContentBaseTextUseCase,
     ListContentBaseFileUseCase,
     ListAllIntelligenceContentUseCase,
+    ListContentBaseLinkUseCase,
 )
 from .create import (
     CreateIntelligencesUseCase,
     CreateContentBaseUseCase,
     CreateContentBaseTextUseCase,
     CreateContentBaseFileUseCase,
+    CreateContentBaseLinkUseCase,
 )
 from .update import (
     UpdateIntelligenceUseCase,
@@ -36,7 +38,8 @@ from .retrieve import (
     RetrieveIntelligenceUseCase,
     RetrieveContentBaseUseCase,
     RetrieveContentBaseTextUseCase,
-    RetrieveContentBaseFileUseCase
+    RetrieveContentBaseFileUseCase,
+    RetrieveContentBaseLinkUseCase,
 )
 from .search import (
     IntelligenceGenerativeSearchUseCase
@@ -44,5 +47,6 @@ from .search import (
 from .intelligences_dto import (
     ContentBaseDTO,
     ContentBaseTextDTO,
-    ContentBaseFileDTO
+    ContentBaseFileDTO,
+    ContentBaseLinkDTO,
 )

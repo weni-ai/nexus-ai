@@ -4,9 +4,13 @@ from nexus.intelligences.models import (
     ContentBase,
     ContentBaseText,
     ContentBaseFile,
-    ContentBaseLogs
+    ContentBaseLink,
 )
-from nexus.task_managers.models import ContentBaseFileTaskManager
+from nexus.task_managers.models import (
+    ContentBaseFileTaskManager,
+    ContentBaseLinkTaskManager,
+    ContentBaseLogs,
+)
 
 
 class IntelligenceSerializer(serializers.ModelSerializer):
@@ -40,6 +44,28 @@ class ContentBaseFileSerializer(serializers.ModelSerializer):
             return task_manager.status
         except Exception:
             return ContentBaseFileTaskManager.STATUS_FAIL
+
+
+class CreatedContentBaseLinkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentBaseLink
+        fields = ["uuid", "link"]
+
+
+class ContentBaseLinkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentBaseLink
+        fields = ["uuid", "link", "status"]
+
+    status = serializers.SerializerMethodField()
+
+    def get_status(self, obj):
+        try:
+            task_manager = obj.upload_tasks.get()
+            return task_manager.status
+        except Exception as e:
+            print(e)
+            return ContentBaseLinkTaskManager.STATUS_FAIL
 
 
 class ContentBaseLogsSerializer(serializers.ModelSerializer):
