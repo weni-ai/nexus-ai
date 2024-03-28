@@ -3,12 +3,15 @@ from django.test import TestCase
 from ..create import (
     CreateIntelligencesUseCase,
     CreateContentBaseUseCase,
-    CreateContentBaseTextUseCase
+    CreateContentBaseTextUseCase,
+    create_integrated_intelligence
 )
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
+    IntelligenceFactory
 )
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO
 
 
@@ -71,3 +74,24 @@ class TestCreateContentBaseUseCase(TestCase):
             content_base_text_dto
         )
         self.assertEqual(content_base_text_create.text, "text")
+
+
+class TestCreateIntegratedIntelligence(TestCase):
+
+    def setUp(self) -> None:
+        self.intelligence = IntelligenceFactory()
+        self.org = self.intelligence.org
+        self.user = self.intelligence.created_by
+        self.project = ProjectFactory(
+            org=self.org,
+            created_by=self.user
+        )
+
+    def test_create_integrated_intelligence(self):
+        integrated_intelligence = create_integrated_intelligence(
+            intelligence_uuid=self.intelligence.uuid,
+            user_email=self.user.email,
+            project_uuid=self.project.uuid
+        )
+        self.assertEqual(integrated_intelligence.intelligence.uuid, self.intelligence.uuid)
+        self.assertEqual(integrated_intelligence.project.uuid, self.project.uuid)

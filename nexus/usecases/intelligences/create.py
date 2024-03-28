@@ -2,13 +2,15 @@ from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
     ContentBaseText,
-    ContentBaseFile
+    ContentBaseFile,
+    IntegratedIntelligence
 )
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO, ContentBaseDTO, ContentBaseTextDTO
 from nexus.usecases import (
     orgs,
     users,
-    intelligences
+    intelligences,
+    projects
 )
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
@@ -114,3 +116,26 @@ class CreateContentBaseFileUseCase():
             created_by=user
         )
         return content_base_file
+
+
+def create_integrated_intelligence(
+    intelligence_uuid: str,
+    user_email: str,
+    project_uuid: str,
+) -> IntegratedIntelligence:
+    intelligence = intelligences.get_by_intelligence_uuid(intelligence_uuid)
+    org = intelligence.org
+    project_usecase = projects.ProjectsUseCase()
+    project = project_usecase.get_by_uuid(project_uuid)
+
+    user = users.get_by_email(user_email)
+    has_permission = permissions.can_create_intelligence_in_org(user, org)
+    if not has_permission:
+        raise IntelligencePermissionDenied()
+
+    integrated_intelligence = IntegratedIntelligence.objects.create(
+        intelligence=intelligence,
+        project=project,
+        created_by=user
+    )
+    return integrated_intelligence
