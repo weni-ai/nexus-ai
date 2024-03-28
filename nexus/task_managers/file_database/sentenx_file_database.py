@@ -56,7 +56,6 @@ class SentenXFileDataBase:
             "task_uuid": str(task.uuid),
             "content_base": str(task.content_base_link.content_base.uuid)
         }
-        print(f"BODY: {body}")
         response = requests.put(url=url, headers=self.headers, json=body)
 
         if response.status_code == 200:
