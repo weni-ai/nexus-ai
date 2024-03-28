@@ -8,7 +8,7 @@ from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
 
 
-class ProjectConsumer(EDAConsumer):  # pragma: no cover
+class ProjectConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
         print(f"[ProjectConsumer] - Consuming a message. Body: {message.body}")
         try:
