@@ -2,7 +2,11 @@ from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.users.get_by_email import get_by_email
 from nexus.usecases.template_type.template_type_usecase import TemplateTypeUseCase
-from nexus.usecases.intelligences.create import CreateIntelligencesUseCase, CreateContentBaseUseCase
+from nexus.usecases.intelligences.create import (
+    CreateIntelligencesUseCase,
+    CreateContentBaseUseCase,
+    create_integrated_intelligence
+)
 from nexus.usecases import orgs
 
 
@@ -36,6 +40,11 @@ class ProjectsUseCase:
             org_uuid=project_dto.org_uuid,
             user_email=user_email,
             name=project_dto.name,
+        )
+
+        create_integrated_intelligence(
+            intelligence_uuid=base_intelligence.uuid,
+            project_uuid=project.uuid
         )
 
         usecase = CreateContentBaseUseCase()
