@@ -58,6 +58,7 @@ class ContentBase(BaseModel, SoftDeleteModel):
         default=Languages.PORTUGUESE.value,
         choices=LANGUAGES
     )
+    is_router = models.BooleanField(default=False)
 
 
 class ContentBaseFile(BaseModel, SoftDeleteModel):
@@ -93,10 +94,10 @@ class ContentBaseText(BaseModel, SoftDeleteModel):
 
 class ContentBaseLogs(models.Model):
     FEEDBACK_CHOICES = [
-        (0 ,"Resposta foi em um assunto completamente diferente do perguntado."),
-        (1 ,"Resposta foi parcialmente correta, pois além da parte correta, trouxe informações no mesmo tema mas fora do contexto disponível."),
-        (2 ,"Resposta foi parcialmente correta, pois além da parte correta, trouxe informações de um tema completamente diferente."),
-        (3 ,"Respondeu que não possui a informação para fornecer a resposta, porém a informação consta no contexto disponível."),
+        (0, "Resposta foi em um assunto completamente diferente do perguntado."),
+        (1, "Resposta foi parcialmente correta, pois além da parte correta, trouxe informações no mesmo tema mas fora do contexto disponível."),
+        (2, "Resposta foi parcialmente correta, pois além da parte correta, trouxe informações de um tema completamente diferente."),
+        (3, "Respondeu que não possui a informação para fornecer a resposta, porém a informação consta no contexto disponível."),
     ]
 
     content_base = models.ForeignKey(
@@ -138,7 +139,7 @@ class ContentBaseLogs(models.Model):
             answer = response[0]
             return answer.split("PERGUNTA")[0]
         return self.weni_gpt_response
-    
+
     def update_user_feedback(self, correct_answer: bool, feedback: Optional[int] = None) -> None:
         update_fields = ["correct_answer"]
         self.correct_answer = correct_answer
