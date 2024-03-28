@@ -172,7 +172,7 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
 
         if not permissions.is_super_user(authorization_header):
             raise PermissionDenied('You do not have permission to perform this action.')
-        
+
         data = request.data
 
         content_base_uuid = data.get("content_base_uuid")
@@ -616,3 +616,13 @@ class LogsViewSet(views.APIView):
             raise IntelligencePermissionDenied()
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+class RouterContentBaseViewSet(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_uuid):
+        user_email = request.user.email
+        use_case = intelligences.RetrieveContentBaseUseCase()
+        content_base = use_case.get_default_by_project(project_uuid, user_email)
+        return Response(data=ContentBaseSerializer(content_base).data, status=200)
