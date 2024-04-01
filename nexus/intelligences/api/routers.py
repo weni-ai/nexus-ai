@@ -12,14 +12,17 @@ from .views import (
     QuickTestAIAPIView,
     DownloadFileViewSet,
     LogsViewSet,
+    RouterContentBaseViewSet
 )
 
 
 org_router = DefaultRouter()
+project_router = DefaultRouter()
 intelligence_router = DefaultRouter()
 content_base_router = DefaultRouter()
 
 org_router.register(r'', IntelligencesViewset, basename='intelligences')
+project_router.register(r'', RouterContentBaseViewSet, basename='router-content-base')
 intelligence_router.register(
     r'content-bases',
     ContentBaseViewset,
@@ -45,6 +48,7 @@ content_base_router.register(
 
 urlpatterns = [
     path('<org_uuid>/intelligences/', include(org_router.urls)),
+    path('<project_uuid>/content-bases/', include(project_router.urls)),
     path('<intelligence_uuid>/', include(intelligence_router.urls)),
     path('<content_base_uuid>/', include(content_base_router.urls)),
     path('v1/intelligences/content_bases/<project_uuid>/', FlowsIntelligencesApiView.as_view(), name="project-intelligences"),

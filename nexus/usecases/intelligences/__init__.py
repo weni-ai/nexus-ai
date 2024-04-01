@@ -12,6 +12,7 @@ from .create import (
     CreateContentBaseTextUseCase,
     CreateContentBaseFileUseCase,
     CreateContentBaseLinkUseCase,
+    create_integrated_intelligence
 )
 from .update import (
     UpdateIntelligenceUseCase,
