@@ -123,6 +123,7 @@ def create_integrated_intelligence(
     user_email: str,
     project_uuid: str,
 ) -> IntegratedIntelligence:
+
     intelligence = intelligences.get_by_intelligence_uuid(intelligence_uuid)
     org = intelligence.org
     project_usecase = projects.ProjectsUseCase()

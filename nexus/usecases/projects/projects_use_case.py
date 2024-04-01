@@ -44,7 +44,8 @@ class ProjectsUseCase:
 
         create_integrated_intelligence(
             intelligence_uuid=base_intelligence.uuid,
-            project_uuid=project.uuid
+            project_uuid=project.uuid,
+            user_email=user_email
         )
 
         usecase = CreateContentBaseUseCase()
