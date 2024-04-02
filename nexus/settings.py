@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'nexus.intelligences',
     'nexus.task_managers',
     'nexus.event_driven',
+    'nexus.actions',
     'corsheaders',
 ]
 
@@ -278,3 +279,5 @@ CHATGPT_ORGS = env.list("CHATGPT_ORGS")
 
 DJANGO_ALLOW_ASYNC_UNSAFE = env.bool("DJANGO_ALLOW_ASYNC_UNSAFE")
 TRULENS_DATABASE_URL = env.str("TRULENS_DATABASE_URL", "sqlite:///default.sqlite")
+
+FLOWS_REST_ENDPOINT = env.str("FLOWS_REST_ENDPOINT")
