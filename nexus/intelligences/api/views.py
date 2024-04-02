@@ -12,7 +12,8 @@ from .serializers import (
     IntelligenceSerializer,
     ContentBaseSerializer,
     ContentBaseTextSerializer,
-    ContentBaseFileSerializer
+    ContentBaseFileSerializer,
+    RouterContentBaseSerializer
 )
 from nexus.usecases import intelligences
 from nexus.orgs import permissions
@@ -625,4 +626,4 @@ class RouterContentBaseViewSet(views.APIView):
         user_email = request.user.email
         use_case = intelligences.RetrieveContentBaseUseCase()
         content_base = use_case.get_default_by_project(project_uuid, user_email)
-        return Response(data=ContentBaseSerializer(content_base).data, status=200)
+        return Response(data=RouterContentBaseSerializer(content_base).data, status=200)
