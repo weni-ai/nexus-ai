@@ -12,7 +12,7 @@ class SentenXFileDataBase:
             "Authorization": f"Bearer {settings.SENTENX_AUTH_TOKEN}",
         }
 
-    def add_file(self, task: TaskManager, file_database: FileDataBase, load_type: str):
+    def add_file(self, task: TaskManager, file_database: FileDataBase, load_type: str = None):
         url = settings.SENTENX_BASE_URL + "/content_base/index"
         body = {
             "file": file_database.create_presigned_url(task.content_base_file.file_name),
@@ -46,6 +46,22 @@ class SentenXFileDataBase:
         if response.status_code == 200:
             return response.status_code, response.json()
 
+        return response.status_code, response.text
+
+    def add_link(self, task: TaskManager, file_database: FileDataBase):
+        url = settings.SENTENX_BASE_URL + "/content_base/index"
+        body = {
+            "file": task.content_base_link.link,
+            "filename": task.content_base_link.link,
+            "file_uuid": str(task.content_base_link.uuid),
+            "extension_file": 'urls',
+            "task_uuid": str(task.uuid),
+            "content_base": str(task.content_base_link.content_base.uuid)
+        }
+        response = requests.put(url=url, headers=self.headers, json=body)
+
+        if response.status_code == 200:
+            return response.status_code, response.json()
         return response.status_code, response.text
 
     def search_data(self, content_base_uuid: str, text: str):

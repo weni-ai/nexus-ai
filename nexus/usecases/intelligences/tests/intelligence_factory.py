@@ -5,7 +5,8 @@ from nexus.intelligences.models import (
     ContentBase,
     ContentBaseText,
     ContentBaseFile,
-    IntegratedIntelligence
+    IntegratedIntelligence,
+    ContentBaseLink,
 )
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -78,3 +79,16 @@ class IntegratedIntelligenceFactory(factory.django.DjangoModelFactory):
         org=factory.SelfAttribute('..intelligence.org')
     )
     created_by = factory.SelfAttribute('intelligence.created_by')
+
+
+class ContentBaseLinkFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ContentBaseLink
+    
+    created_by = factory.SubFactory(UserFactory)
+    content_base = factory.SubFactory(
+        ContentBaseFactory,
+        created_by=factory.SelfAttribute('..created_by')
+    )
+    link = factory.Sequence(lambda n: 'test%d' % n)
+

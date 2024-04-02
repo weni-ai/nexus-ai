@@ -39,11 +39,20 @@ class GetOrgByIntelligenceUseCase():
         )
         return org
 
+
     def get_org_by_project_uuid(
             self,
             project_uuid: str
     ) -> Org:
         org = Org.objects.get(
             projects__uuid=project_uuid
+
+
+    def get_org_by_contentbaselink_uuid(
+            self,
+            contentbaselink_uuid: str
+    ) -> Org:
+        org = Org.objects.get(
+            intelligences__contentbases__contentbaselinks__uuid=contentbaselink_uuid
         )
         return org

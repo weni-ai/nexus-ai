@@ -4,3 +4,7 @@ class ContentBaseFileTaskManagerNotExists(Exception):
 
 class ContentBaseTextTaskManagerNotExists(Exception):
     pass
+
+
+class ContentBaseLinkTaskManagerNotExists(Exception):
+    pass
