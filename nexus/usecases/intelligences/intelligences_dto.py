@@ -27,6 +27,21 @@ class UpdateContentBaseFileDTO:
 
 
 @dataclass
+class UpdateLLMDTO:
+    model: str = None
+    temperature: float = None
+    top_p: float = None
+    top_k: float = None
+    max_length: int = None
+    threshold: float = None
+    user_email: str = None
+    project_uuid: str = None
+
+    def dict(self):
+        return {key: value for key, value in self.__dict__.items() if value is not None}
+
+
+@dataclass
 class ContentBaseTextDTO:
     text: str
     content_base_uuid: str

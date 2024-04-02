@@ -3,11 +3,12 @@ from .get_by_uuid import (
     get_by_contentbase_uuid,
     get_by_contentbasetext_uuid,
     get_by_content_base_file_uuid,
+    get_llm_by_project_uuid,
 )
-from nexus.usecases import orgs, users
+from nexus.usecases import orgs, users, projects
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
-from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
+from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO, UpdateLLMDTO
 from nexus.intelligences.models import ContentBase
 
 
@@ -131,3 +132,24 @@ class UpdateContentBaseFileUseCase():
         content_base_file.save()
 
         return content_base_file
+
+
+def update_llm_by_project(
+    update_llm_dto: UpdateLLMDTO
+):
+    project_usecase = projects.ProjectsUseCase()
+    project = project_usecase.get_by_uuid(update_llm_dto.project_uuid)
+    org = project.org
+    user = users.get_by_email(update_llm_dto.user_email)
+
+    has_permission = permissions.can_edit_intelligence_of_org(user, org)
+    if not has_permission:
+        raise IntelligencePermissionDenied()
+
+    llm = get_llm_by_project_uuid(project.uuid)
+
+    for attr, value in update_llm_dto.dict().items():
+        setattr(llm, attr, value)
+    llm.save()
+
+    return llm

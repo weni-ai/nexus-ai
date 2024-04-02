@@ -165,7 +165,9 @@ class CreateContentBaseLinkUseCase():
 def create_llm(
     llm_dto: LLMDTO,
 ) -> LLM:
-    project = projects.ProjectsUseCase.get_by_uuid(llm_dto.project_uuid)
+    usecase = projects.ProjectsUseCase()
+    project = usecase.get_by_uuid(llm_dto.project_uuid)
+
     org = project.org
     user = users.get_by_email(llm_dto.user_email)
 
@@ -183,7 +185,7 @@ def create_llm(
         top_k=llm_dto.top_k,
         max_length=llm_dto.max_length,
         threshold=llm_dto.threshold,
-        user_email=llm_dto.user_email,
+        created_by=user,
         intelligence=intelligence
     )
     return llm

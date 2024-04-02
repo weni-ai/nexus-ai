@@ -14,7 +14,8 @@ from nexus.intelligences.models import (
     ContentBaseLink,
     ContentBaseLogs,
     UserQuestion,
-    IntegratedIntelligence
+    IntegratedIntelligence,
+    LLM
 )
 
 
@@ -108,3 +109,15 @@ def get_default_content_base_by_project(
         raise ContentBaseDoesNotExist()
     except ValidationError:
         raise ValidationError(message='Invalid UUID')
+
+
+def get_llm_by_project_uuid(
+    project_uuid: str
+) -> LLM:
+    try:
+        integrated_intelligence = get_integretade_intelligence_by_project(project_uuid)
+        return LLM.objects.get(intelligence=integrated_intelligence)
+    except LLM.DoesNotExist:
+        raise Exception(f"[ LLM ] - LLM with project uuid `{project_uuid}` does not exists.")
+    except Exception as exception:
+        raise Exception(f"[ LLM ] - LLM error to get - error: `{exception}`")
