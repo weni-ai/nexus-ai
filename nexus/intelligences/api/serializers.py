@@ -12,7 +12,7 @@ from nexus.task_managers.models import ContentBaseFileTaskManager
 class IntelligenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Intelligence
-        fields = ['name', 'uuid', 'content_bases_count', 'description']
+        fields = ['name', 'uuid', 'content_bases_count', 'description', 'is_router']
 
 
 class ContentBaseSerializer(serializers.ModelSerializer):

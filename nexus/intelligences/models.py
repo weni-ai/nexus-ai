@@ -17,6 +17,10 @@ class Intelligence(BaseModel, SoftDeleteModel):
         Org, on_delete=models.CASCADE, related_name='intelligences'
     )
 
+    @property
+    def is_router(self):
+        return self.contentbases.filter(is_router=True).exists()
+
     def increase_content_bases_count(self):
         self.content_bases_count += 1
         self.save(update_fields=["content_bases_count"])
