@@ -25,6 +25,7 @@ class Project(BaseModel, SoftDeleteModel):
         related_name='template_type',
     )
     is_template = models.BooleanField(default=False)
+    brain_on = models.BooleanField(default=False)
 
     def __str__(self):
         return f'{self.uuid} - Project: {self.name} - Org: {self.org.name}'
