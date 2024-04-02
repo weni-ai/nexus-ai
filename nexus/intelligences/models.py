@@ -120,7 +120,7 @@ class ContentBaseLogs(models.Model):
     weni_gpt_response = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     wenigpt_version = models.CharField(
-        default=settings.WENIGPT_VERSION,
+        null=True,
         max_length=255
     )
     testing = models.BooleanField(default=False)
