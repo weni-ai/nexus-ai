@@ -5,11 +5,13 @@ from nexus.intelligences.models import (
     ContentBase,
     ContentBaseText,
     ContentBaseFile,
+    IntegratedIntelligence,
     ContentBaseLink,
 )
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
 class IntelligenceFactory(factory.django.DjangoModelFactory):
@@ -37,6 +39,7 @@ class ContentBaseFactory(factory.django.DjangoModelFactory):
     created_by = factory.SubFactory(UserFactory)
     description = factory.Sequence(lambda n: 'test%d' % n)
     language = 'en'
+    is_router = False
 
 
 class ContentBaseTextFactory(factory.django.DjangoModelFactory):
@@ -65,6 +68,19 @@ class ContentBaseFileFactory(factory.django.DjangoModelFactory):
     extension_file = 'pdf'
 
 
+class IntegratedIntelligenceFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = IntegratedIntelligence
+
+    intelligence = factory.SubFactory(IntelligenceFactory)
+    project = factory.SubFactory(
+        ProjectFactory,
+        created_by=factory.SelfAttribute('..created_by'),
+        org=factory.SelfAttribute('..intelligence.org')
+    )
+    created_by = factory.SelfAttribute('intelligence.created_by')
+
+
 class ContentBaseLinkFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = ContentBaseLink
@@ -75,3 +91,4 @@ class ContentBaseLinkFactory(factory.django.DjangoModelFactory):
         created_by=factory.SelfAttribute('..created_by')
     )
     link = factory.Sequence(lambda n: 'test%d' % n)
+

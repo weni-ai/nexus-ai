@@ -6,7 +6,9 @@ from ..get_by_uuid import (
     get_by_intelligence_uuid,
     get_by_contentbase_uuid,
     get_by_contentbasetext_uuid,
-    get_contentbasetext_by_contentbase_uuid
+    get_contentbasetext_by_contentbase_uuid,
+    get_integretade_intelligence_by_project,
+    get_default_content_base_by_project
 )
 from ..exceptions import (
     IntelligenceDoesNotExist,
@@ -16,8 +18,10 @@ from ..exceptions import (
 from .intelligence_factory import (
     IntelligenceFactory,
     ContentBaseFactory,
-    ContentBaseTextFactory
+    ContentBaseTextFactory,
+    IntegratedIntelligenceFactory
 )
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
 class GetByIntelligenceUuidTestCase(TestCase):
@@ -97,3 +101,33 @@ class GetByContentBaseTextUuidTestCase(TestCase):
             self.contentbasetext.content_base.uuid
         )
         self.assertEqual(self.contentbasetext, retrieved_contentbasetext)
+
+
+class TestGetByIntegratedIntelligence(TestCase):
+
+    def setUp(self) -> None:
+        self.integrated_intelligence = IntegratedIntelligenceFactory()
+        self.content_base = ContentBaseFactory(
+            is_router=True,
+            intelligence=self.integrated_intelligence.intelligence,
+            created_by=self.integrated_intelligence.intelligence.created_by
+        )
+
+    def test_get_integrated_intelligence_by_project(self):
+
+        retrieved_integrated_intelligence = get_integretade_intelligence_by_project(
+            self.integrated_intelligence.project.uuid
+        )
+        self.assertEqual(
+            self.integrated_intelligence,
+            retrieved_integrated_intelligence
+        )
+
+    def test_get_default_content_base_by_project(self):
+        retrieved_content_base = get_default_content_base_by_project(
+            self.integrated_intelligence.project.uuid
+        )
+        self.assertEqual(
+            self.integrated_intelligence.intelligence.contentbases.get(is_router=True),
+            retrieved_content_base
+        )

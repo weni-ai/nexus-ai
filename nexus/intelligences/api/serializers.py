@@ -16,13 +16,19 @@ from nexus.task_managers.models import (
 class IntelligenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Intelligence
-        fields = ['name', 'uuid', 'content_bases_count', 'description']
+        fields = ['name', 'uuid', 'content_bases_count', 'description', 'is_router']
 
 
 class ContentBaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBase
-        fields = ['uuid', 'title', 'description', 'language']
+        fields = ['uuid', 'title', 'description', 'language', 'is_router']
+
+
+class RouterContentBaseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentBase
+        fields = '__all__'
 
 
 class ContentBaseTextSerializer(serializers.ModelSerializer):

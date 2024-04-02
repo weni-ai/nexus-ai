@@ -3,6 +3,7 @@ from nexus.intelligences.models import (
     ContentBase,
     ContentBaseText,
     ContentBaseFile,
+    IntegratedIntelligence,
     ContentBaseLink,
 )
 from nexus.usecases.intelligences.intelligences_dto import (
@@ -14,7 +15,8 @@ from nexus.usecases.intelligences.intelligences_dto import (
 from nexus.usecases import (
     orgs,
     users,
-    intelligences
+    intelligences,
+    projects
 )
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
@@ -27,7 +29,7 @@ class CreateIntelligencesUseCase():
             org_uuid: str,
             user_email: str,
             name: str,
-            description: str
+            description: str = None
     ):
         org = orgs.get_by_uuid(org_uuid)
         user = users.get_by_email(user_email)
@@ -50,8 +52,9 @@ class CreateContentBaseUseCase():
             intelligence_uuid: str,
             user_email: str,
             title: str,
-            description: str,
-            language: str = 'pt-br'
+            description: str = None,
+            language: str = 'pt-br',
+            is_router: bool = False
     ) -> ContentBase:
 
         org_usecase = orgs.GetOrgByIntelligenceUseCase()
@@ -70,7 +73,8 @@ class CreateContentBaseUseCase():
             intelligence=intelligence,
             created_by=user,
             description=description,
-            language=language
+            language=language,
+            is_router=is_router
         )
         intelligence.increase_content_bases_count()
         return contentbase
@@ -119,6 +123,31 @@ class CreateContentBaseFileUseCase():
         )
         return content_base_file
 
+
+def create_integrated_intelligence(
+    intelligence_uuid: str,
+    user_email: str,
+    project_uuid: str,
+) -> IntegratedIntelligence:
+
+    intelligence = intelligences.get_by_intelligence_uuid(intelligence_uuid)
+    org = intelligence.org
+    project_usecase = projects.ProjectsUseCase()
+    project = project_usecase.get_by_uuid(project_uuid)
+
+    user = users.get_by_email(user_email)
+    has_permission = permissions.can_create_intelligence_in_org(user, org)
+    if not has_permission:
+        raise IntelligencePermissionDenied()
+
+    integrated_intelligence = IntegratedIntelligence.objects.create(
+        intelligence=intelligence,
+        project=project,
+        created_by=user
+    )
+    return integrated_intelligence
+
+ 
 class CreateContentBaseLinkUseCase():
     def create_content_base_link(self, content_base_link: ContentBaseLinkDTO) -> ContentBaseLink:
         user = users.get_by_email(content_base_link.user_email)
@@ -129,3 +158,4 @@ class CreateContentBaseLinkUseCase():
             created_by=user
         )
         return content_base_link
+
