@@ -86,11 +86,11 @@ class ContentBaseLinkDTO:
 
 @dataclass
 class LLMDTO:
+    user_email: str
+    project_uuid: str
     model: str = "WeniGPT"
     temperature: float = settings.WENIGPT_TEMPERATURE
     top_p: float = settings.WENIGPT_TOP_P
     top_k: float = settings.WENIGPT_TOP_K
-    max_length: int = settings.WENIGPT_MAX_LENGTH
+    max_length: int = settings.WENIGPT_MAX_LENGHT
     threshold: float = None
-    user_email: str
-    project_uuid: str
