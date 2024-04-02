@@ -5,12 +5,14 @@ from nexus.intelligences.models import (
     ContentBaseFile,
     IntegratedIntelligence,
     ContentBaseLink,
+    LLM,
 )
 from nexus.usecases.intelligences.intelligences_dto import (
     ContentBaseFileDTO,
     ContentBaseDTO,
     ContentBaseTextDTO,
     ContentBaseLinkDTO,
+    LLMDTO,
 )
 from nexus.usecases import (
     orgs,
@@ -147,7 +149,7 @@ def create_integrated_intelligence(
     )
     return integrated_intelligence
 
- 
+
 class CreateContentBaseLinkUseCase():
     def create_content_base_link(self, content_base_link: ContentBaseLinkDTO) -> ContentBaseLink:
         user = users.get_by_email(content_base_link.user_email)
@@ -159,3 +161,29 @@ class CreateContentBaseLinkUseCase():
         )
         return content_base_link
 
+
+def create_llm(
+    llm_dto: LLMDTO,
+) -> LLM:
+    project = projects.ProjectsUseCase.get_by_uuid(llm_dto.project_uuid)
+    org = project.org
+    user = users.get_by_email(llm_dto.user_email)
+
+    has_permission = permissions.can_create_intelligence_in_org(user, org)
+    if not has_permission:
+        raise IntelligencePermissionDenied()
+
+    intelligence = intelligences.get_integretade_intelligence_by_project(
+        project_uuid=llm_dto.project_uuid
+    )
+    llm = LLM.objects.create(
+        model=llm_dto.model,
+        temperature=llm_dto.temperature,
+        top_p=llm_dto.top_p,
+        top_k=llm_dto.top_k,
+        max_length=llm_dto.max_length,
+        threshold=llm_dto.threshold,
+        user_email=llm_dto.user_email,
+        intelligence=intelligence
+    )
+    return llm

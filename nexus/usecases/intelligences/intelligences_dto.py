@@ -66,3 +66,15 @@ class ContentBaseLinkDTO:
     user_email: str
     content_base_uuid: str
     uuid: str = None
+
+
+@dataclass
+class LLMDTO:
+    model: str
+    temperature: float
+    top_p: float
+    top_k: float
+    max_length: int
+    threshold: float
+    user_email: str
+    project_uuid: str

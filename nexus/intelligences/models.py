@@ -165,3 +165,14 @@ class UserQuestion(models.Model):
         on_delete=models.CASCADE,
         related_name="user_question",
     )
+
+
+class LLM(BaseModel, SoftDeleteModel):
+
+    model = models.CharField(max_length=255)
+    temperature = models.FloatField()
+    top_p = models.FloatField()
+    top_k = models.FloatField()
+    threshold = models.FloatField()
+    max_length = models.PositiveIntegerField()
+    intelligence = models.OneToOneField(IntegratedIntelligence, on_delete=models.CASCADE)
