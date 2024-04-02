@@ -5,6 +5,7 @@ from .list import (
     ListContentBaseFileUseCase,
     ListAllIntelligenceContentUseCase,
     ListContentBaseLinkUseCase,
+    get_llm_config
 )
 from .create import (
     CreateIntelligencesUseCase,
@@ -20,6 +21,7 @@ from .update import (
     UpdateContentBaseUseCase,
     UpdateContentBaseTextUseCase,
     # UpdateContentBaseFileUseCase,
+    update_llm_by_project,
 )
 from .delete import (
     DeleteIntelligenceUseCase,
@@ -52,4 +54,6 @@ from .intelligences_dto import (
     ContentBaseTextDTO,
     ContentBaseFileDTO,
     ContentBaseLinkDTO,
+    LLMDTO,
+    UpdateLLMDTO
 )

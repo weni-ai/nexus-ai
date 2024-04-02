@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import List
+from django.conf import settings
 
 
 @dataclass
@@ -85,11 +86,11 @@ class ContentBaseLinkDTO:
 
 @dataclass
 class LLMDTO:
-    model: str
-    temperature: float
-    top_p: float
-    top_k: float
-    max_length: int
-    threshold: float
+    model: str = "WeniGPT"
+    temperature: float = settings.WENIGPT_TEMPERATURE
+    top_p: float = settings.WENIGPT_TOP_P
+    top_k: float = settings.WENIGPT_TOP_K
+    max_length: int = settings.WENIGPT_MAX_LENGTH
+    threshold: float = None
     user_email: str
     project_uuid: str
