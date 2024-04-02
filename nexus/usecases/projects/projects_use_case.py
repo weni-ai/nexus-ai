@@ -1,11 +1,13 @@
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
+from nexus.usecases.intelligences.intelligences_dto import LLMDTO
 from nexus.usecases.users.get_by_email import get_by_email
 from nexus.usecases.template_type.template_type_usecase import TemplateTypeUseCase
 from nexus.usecases.intelligences.create import (
     CreateIntelligencesUseCase,
     CreateContentBaseUseCase,
-    create_integrated_intelligence
+    create_integrated_intelligence,
+    create_llm
 )
 from nexus.usecases import orgs
 
@@ -55,5 +57,11 @@ class ProjectsUseCase:
             title=project_dto.name,
             is_router=True
         )
+
+        llm_dto = LLMDTO(
+            user_email=user_email,
+            project_uuid=project.uuid
+        )
+        create_llm(llm_dto=llm_dto)
 
         return project
