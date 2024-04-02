@@ -10,7 +10,8 @@ from ..create import (
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
-    IntelligenceFactory
+    IntelligenceFactory,
+    IntegratedIntelligenceFactory
 )
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO, LLMDTO
@@ -102,6 +103,9 @@ class TestLLM(TestCase):
 
     def setUp(self) -> None:
         self.content_base = ContentBaseFactory()
+        self.integrated_inteligence = IntegratedIntelligenceFactory(
+            intelligence=self.content_base.intelligence
+        )
 
         self.dto = LLMDTO(
             model="gpt2",
@@ -111,7 +115,7 @@ class TestLLM(TestCase):
             max_length=100,
             threshold=0.5,
             user_email=self.content_base.created_by.email,
-            project_uuid=self.content_base.intelligence.project.uuid
+            project_uuid=self.integrated_inteligence.project.uuid
         )
 
     def test_create_llm(self):

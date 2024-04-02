@@ -7,6 +7,7 @@ from nexus.intelligences.models import (
     ContentBaseFile,
     IntegratedIntelligence,
     ContentBaseLink,
+    LLM,
 )
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -79,12 +80,17 @@ class IntegratedIntelligenceFactory(factory.django.DjangoModelFactory):
         org=factory.SelfAttribute('..intelligence.org')
     )
     created_by = factory.SelfAttribute('intelligence.created_by')
+    org_auth = factory.RelatedFactory(
+        'nexus.usecases.orgs.tests.org_factory.OrgAuthFactory',
+        org=factory.SelfAttribute('..project.org'),
+        user=factory.SelfAttribute('..created_by'),
+    )
 
 
 class ContentBaseLinkFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = ContentBaseLink
-    
+
     created_by = factory.SubFactory(UserFactory)
     content_base = factory.SubFactory(
         ContentBaseFactory,
@@ -92,3 +98,19 @@ class ContentBaseLinkFactory(factory.django.DjangoModelFactory):
     )
     link = factory.Sequence(lambda n: 'test%d' % n)
 
+
+class LLMFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = LLM
+
+    model = 'gpt2'
+    created_by = factory.SubFactory(UserFactory)
+    top_p = 0.9
+    top_k = 0.9
+    temperature = 0.5
+    threshold = 0.5
+    max_length = 100
+    intelligence = factory.SubFactory(
+        IntegratedIntelligenceFactory,
+        created_by=factory.SelfAttribute('..created_by')
+    )
