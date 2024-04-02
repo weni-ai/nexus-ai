@@ -695,3 +695,37 @@ class RouterContentBaseViewSet(views.APIView):
         use_case = intelligences.RetrieveContentBaseUseCase()
         content_base = use_case.get_default_by_project(project_uuid, user_email)
         return Response(data=RouterContentBaseSerializer(content_base).data, status=200)
+
+
+class LLMViewset(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_uuid):
+        user_email = request.user.email
+        use_case = intelligences.get_llm_config(
+            user_email=user_email,
+            project_uuid=project_uuid
+        )
+        return Response(
+            data=use_case.get_llm_config(project_uuid, user_email),
+            status=200
+        )
+
+    def patch(self, request, project_uuid):
+        user_email = request.user.email
+        llm_update_dto = intelligences.UpdateLLMDTO(
+            user_email=user_email,
+            project_uuid=project_uuid,
+            model=request.data.get("model"),
+            temperature=request.data.get("temperature"),
+            top_p=request.data.get("top_p"),
+            top_k=request.data.get("top_k"),
+            max_length=request.data.get("max_length"),
+            threshold=request.data.get("threshold"),
+        )
+        use_case = intelligences.update_llm_by_project(llm_update_dto)
+
+        return Response(
+            data=use_case.dict(),
+            status=200
+        )
