@@ -51,10 +51,20 @@ class FlowsORMRepository(Repository):
     def delete(self, uuid: str):
         return super().delete(uuid)
 
-    def project_flows(project_uuid) -> List[FlowDTO]:
-
+    def project_flow_fallback(self, project_uuid: str, fallback: bool) -> FlowDTO:
         content_base = get_default_content_base_by_project(project_uuid)
-        flows = Flow.objects.filter(content_base=content_base)
+        flow = Flow.objects.filter(content_base=content_base, fallback=fallback).first()
+        return FlowDTO(
+                    uuid=str(flow.uuid),
+                    name=flow.name,
+                    prompt=flow.prompt,
+                    fallback=flow.fallback,
+                    content_base_uuid=str(flow.content_base.uuid)
+                )
+
+    def project_flows(self, project_uuid: str, fallback: bool = False) -> List[FlowDTO]:
+        content_base = get_default_content_base_by_project(project_uuid)
+        flows = Flow.objects.filter(content_base=content_base, fallback=fallback)
 
         flows_list = []
 

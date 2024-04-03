@@ -25,7 +25,6 @@ class ZeroshotClassifier(Classifier):
         print("25 ", response)
 
         if response.get("other"):
-            print("28 ", self.CLASSIFICATION_OTHER)
             return self.CLASSIFICATION_OTHER
 
         return response.get("classification")
