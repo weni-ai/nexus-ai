@@ -1,5 +1,6 @@
 from django.core.exceptions import PermissionDenied
 from django.utils.datastructures import MultiValueDictKeyError
+from django.conf import settings
 
 from rest_framework import status, parsers, views
 from rest_framework.viewsets import ModelViewSet
@@ -725,5 +726,29 @@ class LLMViewset(views.APIView):
 
         return Response(
             data=LLMConfigSerializer(updated_llm).data,
+            status=200
+        )
+
+
+class LLMDefaultViewset(views.APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_uuid):
+        user_email = request.user.email
+        llm_update_dto = dict(
+            user_email=user_email,
+            project_uuid=project_uuid,
+            model="WeniGPT",
+            setup={
+                "top_k": settings.WENIGPT_TOP_K,
+                "top_p": settings.WENIGPT_TOP_P,
+                "max_length": settings.WENIGPT_MAX_LENGTH,
+                "temperature": settings.WENIGPT_TEMPERATURE,
+            },
+            advanced_options={}
+        )
+
+        return Response(
+            data=llm_update_dto,
             status=200
         )
