@@ -147,4 +147,4 @@ def get_llm_config(
     if not has_permission:
         raise IntelligencePermissionDenied()
 
-    return LLM.objects.filter(integrated_intelligence=integrated_intelligence)
+    return LLM.objects.filter(integrated_intelligence=integrated_intelligence).order_by('created_at').first()
