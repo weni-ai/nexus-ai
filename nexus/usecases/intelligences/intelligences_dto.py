@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import List
+from django.conf import settings
 
 
 @dataclass
@@ -21,6 +22,18 @@ class UpdateContentBaseFileDTO:
     content_base_uuid: str = None
     file_url: str = None
     file_name: str = None
+
+    def dict(self):
+        return {key: value for key, value in self.__dict__.items() if value is not None}
+
+
+@dataclass
+class UpdateLLMDTO:
+    project_uuid: str = None
+    user_email: str = None
+    model: str = None
+    setup: dict = None
+    advanced_options: dict = None
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
@@ -66,3 +79,12 @@ class ContentBaseLinkDTO:
     user_email: str
     content_base_uuid: str
     uuid: str = None
+
+
+@dataclass
+class LLMDTO:
+    user_email: str
+    project_uuid: str
+    setup: dict
+    advanced_options: dict = None
+    model: str = "WeniGPT"

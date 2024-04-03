@@ -2,13 +2,16 @@ from django.test import TestCase
 from ..update import (
     UpdateIntelligenceUseCase,
     UpdateContentBaseUseCase,
-    UpdateContentBaseTextUseCase
+    UpdateContentBaseTextUseCase,
+    update_llm_by_project
 )
 from .intelligence_factory import (
     IntelligenceFactory,
     ContentBaseFactory,
-    ContentBaseTextFactory
+    ContentBaseTextFactory,
+    LLMFactory
 )
+from nexus.usecases.intelligences.intelligences_dto import UpdateLLMDTO
 
 
 class TestUpdateIntelligenceUseCase(TestCase):
@@ -81,3 +84,34 @@ class TestUpdateContentBaseTextUseCase(TestCase):
             user_email=self.contentbasetext.created_by.email
         )
         self.assertEqual(updated_contentbasetext.text, new_text)
+
+
+class TestUpdateLLM(TestCase):
+
+    def setUp(self) -> None:
+        self.llm = LLMFactory()
+        self.project = self.llm.integrated_intelligence.project
+
+    def test_update_llm(self):
+        new_temperature = 0.5
+        new_top_p = 0.5
+        setup = {
+            'temperature': new_temperature,
+            'top_p': new_top_p
+        }
+        advanced_options = {
+            'test': 'test'
+        }
+        update_dto = UpdateLLMDTO(
+            user_email=self.llm.created_by.email,
+            project_uuid=self.project.uuid,
+            setup=setup,
+            advanced_options=advanced_options
+        )
+
+        updated_llm = update_llm_by_project(
+            update_dto
+        )
+
+        self.assertEqual(updated_llm.temperature, new_temperature)
+        self.assertEqual(updated_llm.top_p, new_top_p)

@@ -4,15 +4,17 @@ from ..create import (
     CreateIntelligencesUseCase,
     CreateContentBaseUseCase,
     CreateContentBaseTextUseCase,
-    create_integrated_intelligence
+    create_integrated_intelligence,
+    create_llm
 )
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
-    IntelligenceFactory
+    IntelligenceFactory,
+    IntegratedIntelligenceFactory
 )
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
-from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO
+from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO, LLMDTO
 
 
 class TestListIntelligenceUseCase(TestCase):
@@ -95,3 +97,31 @@ class TestCreateIntegratedIntelligence(TestCase):
         )
         self.assertEqual(integrated_intelligence.intelligence.uuid, self.intelligence.uuid)
         self.assertEqual(integrated_intelligence.project.uuid, self.project.uuid)
+
+
+class TestLLM(TestCase):
+
+    def setUp(self) -> None:
+        self.content_base = ContentBaseFactory()
+        self.integrated_inteligence = IntegratedIntelligenceFactory(
+            intelligence=self.content_base.intelligence,
+            created_by=self.content_base.created_by
+        )
+        setup = {
+            'temperature': 0.5,
+            'top_p': 0.9,
+            'top_k': 0.9,
+            'max_length': 100,
+            'threshold': 0.5,
+        }
+        self.dto = LLMDTO(
+            model="gpt2",
+            user_email=self.content_base.created_by.email,
+            project_uuid=self.integrated_inteligence.project.uuid,
+            setup=setup
+        )
+
+    def test_create_llm(self):
+        created_llm = create_llm(self.dto)
+        self.assertEqual(created_llm.model, self.dto.model)
+        self.assertEqual(created_llm.temperature, self.dto.temperature)

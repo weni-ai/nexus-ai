@@ -5,13 +5,15 @@ from ..list import (
     ListContentBaseUseCase,
     ListContentBaseTextUseCase,
     ListAllIntelligenceContentUseCase,
-    ListContentBaseFileUseCase
+    ListContentBaseFileUseCase,
+    get_llm_config,
 )
 from .intelligence_factory import (
     IntelligenceFactory,
     ContentBaseFactory,
     ContentBaseTextFactory,
-    ContentBaseFileFactory
+    ContentBaseFileFactory,
+    LLMFactory,
 )
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
@@ -97,3 +99,19 @@ class TestListContentBaseFileUseCase(TestCase):
             user_email=self.contentbase.created_by.email
         )
         self.assertEqual(1, len(contentbasefile_list))
+
+
+class TestGetLLMConfig(TestCase):
+
+    def setUp(self) -> None:
+        self.llm = LLMFactory()
+        self.project_uuid = self.llm.intelligence.project.uuid
+        self.created_by_email = self.llm.created_by.email
+
+    def test_list_llm_config(self):
+
+        llm_config = get_llm_config(
+            project_uuid=self.project_uuid,
+            user_email=self.created_by_email
+        )
+        self.assertEqual(1, len(llm_config))
