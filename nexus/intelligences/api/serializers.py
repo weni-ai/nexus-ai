@@ -6,6 +6,7 @@ from nexus.intelligences.models import (
     ContentBaseFile,
     ContentBaseLink,
     ContentBaseLogs,
+    LLM
 )
 from nexus.task_managers.models import (
     ContentBaseFileTaskManager,
@@ -87,4 +88,15 @@ class ContentBaseLogsSerializer(serializers.ModelSerializer):
             "testing",
             "feedback",
             "correct_answer",
+        ]
+
+
+class LLMConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LLM
+        fields = [
+            "uuid",
+            "model",
+            "setup",
+            "advanced_options",
         ]

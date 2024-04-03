@@ -16,6 +16,7 @@ from .serializers import (
     RouterContentBaseSerializer,
     ContentBaseLinkSerializer,
     CreatedContentBaseLinkSerializer,
+    LLMConfigSerializer
 )
 from nexus.usecases import intelligences
 from nexus.orgs import permissions
@@ -707,7 +708,7 @@ class LLMViewset(views.APIView):
             project_uuid=project_uuid
         )
         return Response(
-            data=llm_config,
+            data=LLMConfigSerializer(llm_config).data,
             status=200
         )
 
@@ -720,9 +721,9 @@ class LLMViewset(views.APIView):
             setup=request.data.get("setup"),
             advanced_options=request.data.get("advanced_options")
         )
-        use_case = intelligences.update_llm_by_project(llm_update_dto)
+        updated_llm = intelligences.update_llm_by_project(llm_update_dto)
 
         return Response(
-            data=use_case.dict(),
+            data=LLMConfigSerializer(updated_llm).data,
             status=200
         )
