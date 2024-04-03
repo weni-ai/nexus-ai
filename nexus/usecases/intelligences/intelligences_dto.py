@@ -29,14 +29,10 @@ class UpdateContentBaseFileDTO:
 
 @dataclass
 class UpdateLLMDTO:
-    model: str = None
-    temperature: float = None
-    top_p: float = None
-    top_k: float = None
-    max_length: int = None
-    threshold: float = None
-    user_email: str = None
     project_uuid: str = None
+    user_email: str = None
+    model: str = None
+    setup: dict = None
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
@@ -88,9 +84,5 @@ class ContentBaseLinkDTO:
 class LLMDTO:
     user_email: str
     project_uuid: str
+    setup: dict
     model: str = "WeniGPT"
-    temperature: float = settings.WENIGPT_TEMPERATURE
-    top_p: float = settings.WENIGPT_TOP_P
-    top_k: float = settings.WENIGPT_TOP_K
-    max_length: int = settings.WENIGPT_MAX_LENGHT
-    threshold: float = None

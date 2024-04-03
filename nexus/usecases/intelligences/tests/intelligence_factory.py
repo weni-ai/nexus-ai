@@ -74,16 +74,11 @@ class IntegratedIntelligenceFactory(factory.django.DjangoModelFactory):
         model = IntegratedIntelligence
 
     intelligence = factory.SubFactory(IntelligenceFactory)
+    created_by = factory.SelfAttribute('intelligence.created_by')
     project = factory.SubFactory(
         ProjectFactory,
         created_by=factory.SelfAttribute('..created_by'),
         org=factory.SelfAttribute('..intelligence.org')
-    )
-    created_by = factory.SelfAttribute('intelligence.created_by')
-    org_auth = factory.RelatedFactory(
-        'nexus.usecases.orgs.tests.org_factory.OrgAuthFactory',
-        org=factory.SelfAttribute('..project.org'),
-        user=factory.SelfAttribute('..created_by'),
     )
 
 
@@ -105,12 +100,15 @@ class LLMFactory(factory.django.DjangoModelFactory):
 
     model = 'gpt2'
     created_by = factory.SubFactory(UserFactory)
-    top_p = 0.9
-    top_k = 0.9
-    temperature = 0.5
-    threshold = 0.5
-    max_length = 100
-    intelligence = factory.SubFactory(
+    setup = {
+        'top_p': 0.9,
+        'top_k': 0.9,
+        'temperature': 0.5,
+        'threshold': 0.5,
+        'max_length': 100
+    }
+
+    integrated_intelligence = factory.SubFactory(
         IntegratedIntelligenceFactory,
         created_by=factory.SelfAttribute('..created_by')
     )

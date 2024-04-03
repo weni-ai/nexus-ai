@@ -22,6 +22,7 @@ class TestCreateProject(TestCase):
     def test_create_project(self):
         project = ProjectsUseCase().create_project(
             project_dto=self.project_dto,
-            user_email=self.user.email
+            user_email=self.user.email,
+            brain_on=False
         )
         self.assertEqual(project.uuid, self.project_dto.uuid)

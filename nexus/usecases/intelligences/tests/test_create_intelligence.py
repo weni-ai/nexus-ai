@@ -104,18 +104,21 @@ class TestLLM(TestCase):
     def setUp(self) -> None:
         self.content_base = ContentBaseFactory()
         self.integrated_inteligence = IntegratedIntelligenceFactory(
-            intelligence=self.content_base.intelligence
+            intelligence=self.content_base.intelligence,
+            created_by=self.content_base.created_by
         )
-
+        setup = {
+            'temperature': 0.5,
+            'top_p': 0.9,
+            'top_k': 0.9,
+            'max_length': 100,
+            'threshold': 0.5,
+        }
         self.dto = LLMDTO(
             model="gpt2",
-            temperature=0.5,
-            top_p=0.9,
-            top_k=0.9,
-            max_length=100,
-            threshold=0.5,
             user_email=self.content_base.created_by.email,
-            project_uuid=self.integrated_inteligence.project.uuid
+            project_uuid=self.integrated_inteligence.project.uuid,
+            setup=setup
         )
 
     def test_create_llm(self):

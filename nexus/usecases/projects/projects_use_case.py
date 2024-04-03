@@ -11,6 +11,8 @@ from nexus.usecases.intelligences.create import (
 )
 from nexus.usecases import orgs
 
+from django.conf import settings
+
 
 class ProjectsUseCase:
 
@@ -60,7 +62,13 @@ class ProjectsUseCase:
 
         llm_dto = LLMDTO(
             user_email=user_email,
-            project_uuid=project.uuid
+            project_uuid=project.uuid,
+            setup={
+                'temperature': settings.WENIGPT_TEMPERATURE,
+                'top_p': settings.WENIGPT_TOP_P,
+                'top_k': settings.WENIGPT_TOP_K,
+                'max_length': settings.WENIGPT_MAX_LENGHT,
+            }
         )
         create_llm(llm_dto=llm_dto)
 

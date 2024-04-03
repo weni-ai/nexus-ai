@@ -179,13 +179,9 @@ def create_llm(
         project_uuid=llm_dto.project_uuid
     )
     llm = LLM.objects.create(
-        model=llm_dto.model,
-        temperature=llm_dto.temperature,
-        top_p=llm_dto.top_p,
-        top_k=llm_dto.top_k,
-        max_length=llm_dto.max_length,
-        threshold=llm_dto.threshold,
         created_by=user,
-        intelligence=intelligence
+        intelligence=intelligence,
+        model=llm_dto.model,
+        setup=llm_dto.setup
     )
     return llm

@@ -90,16 +90,19 @@ class TestUpdateLLM(TestCase):
 
     def setUp(self) -> None:
         self.llm = LLMFactory()
-        self.project = self.llm.intelligence.project
+        self.project = self.llm.integrated_intelligence.project
 
     def test_update_llm(self):
         new_temperature = 0.5
         new_top_p = 0.5
+        setup = {
+            'temperature': new_temperature,
+            'top_p': new_top_p
+        }
         update_dto = UpdateLLMDTO(
-            temperature=new_temperature,
-            top_p=new_top_p,
             user_email=self.llm.created_by.email,
-            project_uuid=self.project.uuid
+            project_uuid=self.project.uuid,
+            setup=setup,
         )
 
         updated_llm = update_llm_by_project(

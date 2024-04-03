@@ -702,12 +702,12 @@ class LLMViewset(views.APIView):
 
     def get(self, request, project_uuid):
         user_email = request.user.email
-        use_case = intelligences.get_llm_config(
+        llm_config = intelligences.get_llm_config(
             user_email=user_email,
             project_uuid=project_uuid
         )
         return Response(
-            data=use_case.get_llm_config(project_uuid, user_email),
+            data=llm_config,
             status=200
         )
 
@@ -717,11 +717,7 @@ class LLMViewset(views.APIView):
             user_email=user_email,
             project_uuid=project_uuid,
             model=request.data.get("model"),
-            temperature=request.data.get("temperature"),
-            top_p=request.data.get("top_p"),
-            top_k=request.data.get("top_k"),
-            max_length=request.data.get("max_length"),
-            threshold=request.data.get("threshold"),
+            setup=request.data.get("setup"),
         )
         use_case = intelligences.update_llm_by_project(llm_update_dto)
 
