@@ -742,7 +742,7 @@ class LLMDefaultViewset(views.APIView):
             setup={
                 "top_k": settings.WENIGPT_TOP_K,
                 "top_p": settings.WENIGPT_TOP_P,
-                "max_length": settings.WENIGPT_MAX_LENGTH,
+                "max_length": settings.WENIGPT_MAX_LENGHT,
                 "temperature": settings.WENIGPT_TEMPERATURE,
             },
             advanced_options={}
