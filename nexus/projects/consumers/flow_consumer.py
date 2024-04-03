@@ -7,9 +7,9 @@ from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
 
 
-class TriggerConsumer(EDAConsumer):
+class FlowConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
-        print(f"[TriggerConsumer] - Consuming a message. Body: {message.body}")
+        print(f"[FlowConsumer] - Consuming a message. Body: {message.body}")
         try:
             body = JSONParser.parse(message.body)
 
@@ -17,15 +17,15 @@ class TriggerConsumer(EDAConsumer):
                 action=body["action"],
                 entity=body["entity"],
                 entity_name=body["entity_name"],
-                user_email=body["user_email"],
+                user_email=body["user"],
                 flow_organization=body["flow_organization"],
                 entity_uuid=body["entity_uuid"],  # This is the flow_uuid
                 project_uuid=body["project_uuid"],
             )
             # TODO - Implement the logic to handle the trigger, deleting the flow action
             message.channel.basic_ack(message.delivery_tag)
-            print(f"[TriggerConsumer] - Trigger readed: {trigger}")
+            print(f"[FlowConsumer] - Flow readed: {trigger}")
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
-            print(f"[TriggerConsumer] - Message rejected by: {exception}")
+            print(f"[FlowConsumer] - Flow rejected by: {exception}")
