@@ -99,10 +99,14 @@ class TestUpdateLLM(TestCase):
             'temperature': new_temperature,
             'top_p': new_top_p
         }
+        advanced_options = {
+            'test': 'test'
+        }
         update_dto = UpdateLLMDTO(
             user_email=self.llm.created_by.email,
             project_uuid=self.project.uuid,
             setup=setup,
+            advanced_options=advanced_options
         )
 
         updated_llm = update_llm_by_project(

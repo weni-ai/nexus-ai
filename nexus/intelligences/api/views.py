@@ -718,6 +718,7 @@ class LLMViewset(views.APIView):
             project_uuid=project_uuid,
             model=request.data.get("model"),
             setup=request.data.get("setup"),
+            advanced_options=request.data.get("advanced_options")
         )
         use_case = intelligences.update_llm_by_project(llm_update_dto)
 

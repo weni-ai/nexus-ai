@@ -33,6 +33,7 @@ class UpdateLLMDTO:
     user_email: str = None
     model: str = None
     setup: dict = None
+    advanced_options: dict = None
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
@@ -85,4 +86,5 @@ class LLMDTO:
     user_email: str
     project_uuid: str
     setup: dict
+    advanced_options: dict = None
     model: str = "WeniGPT"

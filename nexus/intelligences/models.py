@@ -171,4 +171,5 @@ class LLM(BaseModel, SoftDeleteModel):
 
     model = models.CharField(max_length=255, default="WeniGPT")
     setup = models.JSONField()
+    advanced_options = models.JSONField(null=True, blank=True)
     integrated_intelligence = models.OneToOneField(IntegratedIntelligence, on_delete=models.CASCADE)

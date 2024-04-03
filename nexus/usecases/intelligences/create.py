@@ -180,8 +180,9 @@ def create_llm(
     )
     llm = LLM.objects.create(
         created_by=user,
-        intelligence=intelligence,
+        integrated_intelligence=intelligence,
         model=llm_dto.model,
-        setup=llm_dto.setup
+        setup=llm_dto.setup,
+        advanced_options=llm_dto.advanced_options
     )
     return llm
