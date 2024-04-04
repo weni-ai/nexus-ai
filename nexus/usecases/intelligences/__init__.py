@@ -57,3 +57,6 @@ from .intelligences_dto import (
     LLMDTO,
     UpdateLLMDTO
 )
+from .exceptions import (
+    IntelligencePermissionDenied,
+)
