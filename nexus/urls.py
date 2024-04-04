@@ -5,6 +5,9 @@ from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 
+from nexus.intelligences.api.routers import urlpatterns as intelligence_routes
+from nexus.actions.api.routers import urlpatterns as actions_routes
+
 schema_view = get_schema_view(
     openapi.Info(
         title="API Documentation",
@@ -15,9 +18,14 @@ schema_view = get_schema_view(
     permission_classes=(permissions.AllowAny,),
 )
 
+url_api = []
+
+url_api += intelligence_routes
+url_api += actions_routes
+
 urlpatterns = [
     path("", schema_view.with_ui("redoc")),
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls')),
-    path('api/', include('nexus.intelligences.api.routers')),
+    path('api/', include(url_api)),
 ]
