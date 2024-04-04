@@ -36,7 +36,7 @@ class TestIntelligencesViewset(TestCase):
         self.intelligence = IntelligenceFactory()
         self.user = self.intelligence.created_by
         self.org = self.intelligence.org
-        self.url = f'{self.org.uuid}/intelligences/'
+        self.url = f'{self.org.uuid}/intelligences/project'
 
     def test_get_queryset(self):
 
