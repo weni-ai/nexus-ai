@@ -39,8 +39,8 @@ class SearchFlowView(APIView):
 
         project_uuid = kwargs.get('project_uuid')
         name = request.query_params.get("name")
-        page_size = kwargs.get('page_size')
-        page = kwargs.get('page')
+        page_size = request.query_params.get('page_size')
+        page = request.query_params.get('page')
 
         data: Dict = ListFlowsUseCase().search_flows_by_project(project_uuid, name, page_size, page)
 
