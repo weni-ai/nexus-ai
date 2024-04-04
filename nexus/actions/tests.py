@@ -103,8 +103,6 @@ class FlowsViewsetTestCase(TestCase):
             project_uuid=str(self.project.uuid)
         )
         response.render()
-        import json
-        print(json.loads(response.content))
 
         self.assertEqual(response.status_code, 200)
 
@@ -205,7 +203,6 @@ class SearchFlowViewTestCase(TestCase):
 
         response.render()
         content = json.loads(response.content)
-        print(content)
         self.assertEqual(response.status_code, 200)
         self.assertEquals(list(content.keys()), ["count", "next", "previous", "results"])
 
