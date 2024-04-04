@@ -33,6 +33,7 @@ class FlowConsumer(EDAConsumer):
             try:
                 usecase = delete.DeleteFlowsUseCase()
                 usecase.hard_delete_flow(flow_dto=dto)
+                print(f"[FlowConsumer] - Flow {flow.entity_name} deleted")
             except retrieve.FlowDoesNotExist:
                 print(f"[FlowConsumer] - Flow {flow.entity_name} not found")
 
