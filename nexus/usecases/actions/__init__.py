@@ -1,1 +1,1 @@
-from .delete import DeleteFlowsUseCase
+from .delete import DeleteFlowsUseCase, DeleteFlowDTO

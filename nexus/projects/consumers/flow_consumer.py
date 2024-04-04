@@ -25,8 +25,10 @@ class FlowConsumer(EDAConsumer):
                 project_uuid=body["project_uuid"],
             )
 
+            dto = delete.DeleteFlowDTO(flow_uuid=flow.entity_uuid)
+
             usecase = delete.DeleteFlowsUseCase()
-            usecase.hard_delete_flow(flow_uuid=flow.entity_uuid)
+            usecase.hard_delete_flow(flow_dto=dto)
 
             message.channel.basic_ack(message.delivery_tag)
             print(f"[FlowConsumer] - Flow readed: {flow}")
