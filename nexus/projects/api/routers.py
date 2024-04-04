@@ -3,5 +3,5 @@ from .views import ProjectUpdateViewset
 
 
 urlpatterns = [
-    path('<project_uuid>/', ProjectUpdateViewset.as_view(), name="project-update"),
+    path('<project_uuid>/project', ProjectUpdateViewset.as_view(), name="project-update"),
 ]
