@@ -11,4 +11,5 @@ flows_router.register(r'', FlowsViewset, basename='flows')
 
 urlpatterns = [
     path('<project_uuid>/flows/', include(flows_router.urls)),
+    path('<project_uuid>/search-flows/', include(flows_router.urls)),
 ]
