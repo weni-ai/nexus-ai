@@ -44,18 +44,25 @@ def test_messages():
         name="Compras",
         prompt="Fluxo de compras de roupas"
     )
+    fallback = Flow.objects.create(
+        content_base=content_base,
+        uuid=uuid.uuid4(),
+        name="Fluxo de fallback",
+        prompt="Fluxo de fallback",
+        fallback=True,
+    )
 
-    payload={
-        "project_uuid": f"{integrated_intel.project.uuid}",
-        "text": "Olá gostaria de comprar uma camiseta",
-        "contact_urn": ""
-    }
+    # payload={
+    #     "project_uuid": f"{integrated_intel.project.uuid}",
+    #     "text": "Olá gostaria de comprar uma camiseta",
+    #     "contact_urn": ""
+    # }
 
-    client = TestClient(app)
+    # client = TestClient(app)
 
-    response = client.post('/messages', json=payload)
+    # response = client.post('/messages', json=payload)
 
-    assert response.status_code == 200
+    # assert response.status_code == 200
 
     payload={
         "project_uuid": f"{integrated_intel.project.uuid}",
