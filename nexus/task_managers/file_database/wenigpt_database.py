@@ -7,6 +7,7 @@ from nexus.usecases.task_managers.wenigpt_database import get_prompt_by_language
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseLogsDTO
 from nexus.task_managers.file_database import GPTDatabase
 
+
 class WeniGPTDatabase(GPTDatabase):
 
     def __init__(self):

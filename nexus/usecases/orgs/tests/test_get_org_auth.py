@@ -2,7 +2,6 @@ from django.test import TestCase
 
 from .org_factory import OrgAuthFactory, OrgFactory
 from ..get_org_auth import GetOrgAuthUseCase
-from nexus.orgs.models import OrgAuth
 from nexus.usecases.orgs.exceptions import OrgAuthDoesNotExists
 
 

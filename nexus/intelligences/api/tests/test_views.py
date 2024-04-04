@@ -279,7 +279,6 @@ class TestContentBaseTextViewset(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
-
 class TestContentBaseLinkViewset(TestCase):
 
     def setUp(self):
@@ -319,7 +318,7 @@ class TestContentBaseLinkViewset(TestCase):
         response = SentenxIndexerUpdateFile.as_view()(
             request
         )
-        self.assertEqual(response.status_code, 200)   
+        self.assertEqual(response.status_code, 200)
 
     def test_list(self):
         url_retrieve = f'{self.url}'
@@ -334,7 +333,7 @@ class TestContentBaseLinkViewset(TestCase):
         )
         print(response.data)
         self.assertEqual(response.status_code, 200)
-    
+
     def test_retrieve(self):
         url_retrieve = f'{self.url}/{self.contentbaselink.uuid}/'
         request = self.factory.get(url_retrieve)
