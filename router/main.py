@@ -4,18 +4,20 @@ from typing import List, Dict
 
 from fastapi import FastAPI
 
-from router.repositories.orm import FlowsORMRepository
+from router.repositories.orm import FlowsORMRepository, ContentBaseRepository
 from router.classifiers.zeroshot import ZeroshotClassifier
 from router.classifiers import Classifier
 from router.classifiers import classify
-from router.entities import FlowDTO, Message, DBCon
+from router.entities import (
+    FlowDTO, Message, DBCon, AgentDTO, InstructionDTO
+)
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 
 from nexus.event_driven.signals import message_started, message_finished
 from nexus.intelligences.llms import ChatGPTClient
 
-app = FastAPI()
 
+app = FastAPI()
 
 
 def start_flow(flow: FlowDTO, message: Message, params: Dict):
@@ -23,7 +25,14 @@ def start_flow(flow: FlowDTO, message: Message, params: Dict):
     print(f"[+ Message: {params} +]")
 
 
-def call_llm(indexer, llm_model, message: Message, fallback_flow: FlowDTO):
+def call_llm(
+        indexer,
+        llm_model,
+        message: Message,
+        fallback_flow: FlowDTO,
+        agent: AgentDTO,
+        instructions: List[InstructionDTO]
+    ):
 
     chunks: List[str] = get_chunks(
         indexer,
@@ -34,8 +43,13 @@ def call_llm(indexer, llm_model, message: Message, fallback_flow: FlowDTO):
     if not chunks:
         raise Exception  # tratar depois
     
-    response = llm_model.request_gpt()
-    gpt_message = response.get("answers").get("text")
+    response = llm_model.request_gpt(
+        instructions,
+        chunks,
+        agent.__dict__,
+        message.text,
+    )
+    gpt_message = response.get("answers")[0].get("text")
 
     params = {
         "gpt_message": gpt_message
@@ -67,10 +81,13 @@ def messages(message: Message):
 
         if classification == Classifier.CLASSIFICATION_OTHER:
             print(f"[- Fallback -]")
+            content_base_repository = ContentBaseRepository()
             fallback_flow: FlowDTO = flows_repository.project_flow_fallback(message.project_uuid, True)
+            agent: AgentDTO = content_base_repository.get_agent(fallback_flow.content_base_uuid)
+            instructions: List[InstructionDTO] = content_base_repository.list_instructions(fallback_flow.content_base_uuid)
 
             # call_llm(SentenXFileDataBase(), message, fallback_flow)
-            call_llm(Indexer(), ChatGPTClient(), message, fallback_flow)
+            call_llm(Indexer(), ChatGPTClient(), message, fallback_flow, agent, instructions)
 
             return {}
 

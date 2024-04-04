@@ -6,8 +6,9 @@ from nexus.users.models import User
 from nexus.orgs.models import Org
 from nexus.projects.models import Project
 from nexus.actions.models import Flow
-from nexus.intelligences.models import Intelligence, IntegratedIntelligence, ContentBase
-
+from nexus.intelligences.models import (
+    Intelligence, IntegratedIntelligence, ContentBase, ContentBaseAgent, ContentBaseInstruction
+)
 
 def clean_db():
     Org.objects.all().delete()
@@ -36,6 +37,13 @@ def test_messages():
 
     content_base = ContentBase.objects.create(
         title='test content base', intelligence=intelligence, created_by=user, is_router=True
+    )
+    agent = ContentBaseAgent.objects.create(
+        name="Doris",
+        role="Vendas",
+        personality="Criativa",
+        goal="",
+        content_base=content_base
     )
 
     flow = Flow.objects.create(

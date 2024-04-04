@@ -9,20 +9,53 @@ from typing import List
 from dataclasses import dataclass
 from router.repositories import Repository
 
-from nexus.intelligences.models import ContentBase
-from nexus.projects.models import Project
+from nexus.intelligences.models import (
+    ContentBase,
+    ContentBaseAgent,
+)
 from nexus.actions.models import Flow
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
-from router.entities import FlowDTO
+from router.entities import (
+    AgentDTO,
+    FlowDTO,
+    InstructionDTO,
+)
 
 
-class ProjectORMRepository(Repository):
-    pass
 class ContentBaseRepository(Repository):
-    def get_instructions(self, content_base_uuid: str):
+    def _get_content_base(self, content_base_uuid: str) -> ContentBase:
+        return ContentBase.objects.get(uuid=content_base_uuid)
+    def get_agent(self, content_base_uuid: str) -> AgentDTO:
+
         content_base = ContentBase.objects.get(uuid=content_base_uuid)
+        agent: ContentBaseAgent = content_base.agent
+
+        return AgentDTO(
+            name=agent.name,
+            role=agent.role,
+            personality=agent.personality,
+            goal=agent.goal,
+            content_base_uuid=content_base_uuid
+        )
+
+    def list_instructions(self, content_base_uuid: str) -> List[InstructionDTO]:
+        content_base: ContentBase = self._get_content_base(content_base_uuid)
+
+        instructions = content_base.instructions.all()
+
+        instructions_list = []
+
+        for instruction in instructions:
+            instructions_list.append(
+                InstructionDTO(
+                    instruction=instruction.instruction,
+                    content_base_uuid=str(instruction.content_base_uuid)
+                )
+            )
+
+        return instructions_list
 
 
 class FlowsORMRepository(Repository):
