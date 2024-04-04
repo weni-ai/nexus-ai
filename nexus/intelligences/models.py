@@ -172,3 +172,16 @@ class LLM(BaseModel, SoftDeleteModel):
     setup = models.JSONField()
     advanced_options = models.JSONField(null=True, blank=True)
     integrated_intelligence = models.OneToOneField(IntegratedIntelligence, on_delete=models.CASCADE)
+
+
+class ContentBaseAgent(models.Model):
+    name = models.CharField(max_length=255, null=True)
+    role = models.CharField(max_length=255, null=True)
+    personality = models.CharField(max_length=255, null=True)
+    goal = models.TextField()
+    content_base = models.OneToOneField(ContentBase, related_name='agent', on_delete=models.CASCADE)
+
+
+class ContentBaseInstruction(models.Model):
+    instruction = models.TextField()
+    content_base = models.ForeignKey(ContentBase, related_name='instructions', on_delete=models.CASCADE)

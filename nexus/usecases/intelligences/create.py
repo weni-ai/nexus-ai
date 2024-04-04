@@ -6,6 +6,7 @@ from nexus.intelligences.models import (
     IntegratedIntelligence,
     ContentBaseLink,
     LLM,
+    ContentBaseAgent,
 )
 from nexus.usecases.intelligences.intelligences_dto import (
     ContentBaseFileDTO,
@@ -78,6 +79,7 @@ class CreateContentBaseUseCase():
             language=language,
             is_router=is_router
         )
+        ContentBaseAgent.objects.create(content_base=contentbase)
         intelligence.increase_content_bases_count()
         return contentbase
 
