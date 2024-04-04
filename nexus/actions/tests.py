@@ -1,4 +1,7 @@
 import uuid
+import json
+from unittest import skip
+from typing import List, Dict
 
 from django.test import TestCase
 from nexus.actions.models import Flow
@@ -14,7 +17,8 @@ from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.projects.project_dto import ProjectCreationDTO
 
 from nexus.actions.api.views import (
-    FlowsViewset
+    FlowsViewset,
+    SearchFlowView,
 )
 
 from nexus.usecases.intelligences.get_by_uuid import (
@@ -22,6 +26,7 @@ from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
 
+from nexus.usecases.actions.list import ListFlowsUseCase
 
 class FlowsTestCase(TestCase):
     def setUp(self) -> None:
@@ -97,6 +102,10 @@ class FlowsViewsetTestCase(TestCase):
             request,
             project_uuid=str(self.project.uuid)
         )
+        response.render()
+        import json
+        print(json.loads(response.content))
+
         self.assertEqual(response.status_code, 200)
 
     def test_retrieve(self):
@@ -167,3 +176,78 @@ class FlowsViewsetTestCase(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data.get("uuid"), flow_uuid)
+
+@skip("Testing View")
+class SearchFlowViewTestCase(TestCase):
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+        self.view = SearchFlowView.as_view()
+
+        self.org = OrgFactory()
+        self.user = self.org.authorizations.first().user
+        self.project_uuid = "45d9efca-2848-4be0-a218-73af48f04a4d"
+        self.url = f'{self.project_uuid}/search-flows'
+
+    def test_list(self):
+        page_size=1
+        page=2
+        url_list = f'{self.url}?page_size={page_size}&page={page}'
+        request = self.factory.get(url_list)
+
+        force_authenticate(request, user=self.user)
+
+        response = SearchFlowView.as_view()(
+            request,
+            project_uuid=str(self.project_uuid),
+            page_size=page_size,
+            page=page
+        )
+
+        response.render()
+        content = json.loads(response.content)
+        print(content)
+        self.assertEqual(response.status_code, 200)
+        self.assertEquals(list(content.keys()), ["count", "next", "previous", "results"])
+
+    
+    def test_get(self):
+        flow_name = "Why"
+        url_list = f'{self.url}?name={flow_name}'
+        request = self.factory.get(url_list)
+
+        force_authenticate(request, user=self.user)
+
+        response = SearchFlowView.as_view()(
+            request,
+            project_uuid=str(self.project_uuid),
+            name=flow_name
+        )
+        response.render()
+        content = json.loads(response.content)
+        self.assertEquals(list(content.keys()), ["count", "next", "previous", "results"])
+
+
+class RestClient:
+
+    flow_dict = {'uuid': '2c273a84-c32c-4b2b-8f9c-20fcc60b55d2', 'name': 'Test Menu'}
+
+    def get_project_flows(self, project_uuid: str, name: str) -> List[Dict]:
+        return [self.flow_dict]
+
+    def list_project_flows(self, project_uuid: str, page_size: int, page: int):
+        return {'count': 2, 'next': '', 'previous': '', 'results': [self.flow_dict, self.flow_dict]}
+
+
+class TestListFlowsUseCase(TestCase):
+    def setUp(self) -> None:
+        self.project_uuid = "45d9efca-2848-4be0-a218-73af48f04a4d"
+        self.usecase = ListFlowsUseCase(RestClient())
+    
+    def test_search_flows_by_project_get_project_flows(self):
+        expected_response = {'count': len([RestClient.flow_dict]), 'next': None, 'previous': None, 'results': [RestClient.flow_dict]}
+        data = self.usecase.search_flows_by_project(project_uuid=self.project_uuid, name="Test Menu")
+        self.assertDictEqual(expected_response, data)
+
+    def test_search_flows_by_project_list_project_flows(self):
+        data = self.usecase.search_flows_by_project(project_uuid=self.project_uuid, page_size=2, page=1)
+        self.assertIsInstance(data, dict)
