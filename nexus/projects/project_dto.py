@@ -12,7 +12,7 @@ class ProjectCreationDTO:
 
 
 @dataclass
-class TriggerConsumerDTO:
+class FlowConsumerDTO:
     action: str
     entity: str
     entity_name: str

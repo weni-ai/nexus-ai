@@ -1,10 +1,12 @@
 import amqp
 from sentry_sdk import capture_exception
 
-from nexus.projects.project_dto import TriggerConsumerDTO
+from nexus.projects.project_dto import FlowConsumerDTO
 
 from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
+
+from nexus.usecases.actions import delete, retrieve
 
 
 class FlowConsumer(EDAConsumer):
@@ -13,18 +15,28 @@ class FlowConsumer(EDAConsumer):
         try:
             body = JSONParser.parse(message.body)
 
-            trigger = TriggerConsumerDTO(
+            flow = FlowConsumerDTO(
                 action=body["action"],
                 entity=body["entity"],
                 entity_name=body["entity_name"],
                 user_email=body["user"],
                 flow_organization=body["flow_organization"],
-                entity_uuid=body["entity_uuid"],  # This is the flow_uuid
+                entity_uuid=body["entity_uuid"],
                 project_uuid=body["project_uuid"],
             )
-            # TODO - Implement the logic to handle the trigger, deleting the flow action
+
+            dto = delete.DeleteFlowDTO(flow_uuid=flow.entity_uuid)
+
             message.channel.basic_ack(message.delivery_tag)
-            print(f"[FlowConsumer] - Flow readed: {trigger}")
+            print(f"[FlowConsumer] - Flow readed: {flow}")
+
+            try:
+                usecase = delete.DeleteFlowsUseCase()
+                usecase.hard_delete_flow(flow_dto=dto)
+                print(f"[FlowConsumer] - Flow {flow.entity_name} deleted")
+            except retrieve.FlowDoesNotExist:
+                print(f"[FlowConsumer] - Flow {flow.entity_name} not found")
+
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
