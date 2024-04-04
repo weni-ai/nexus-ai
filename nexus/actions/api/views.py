@@ -1,6 +1,9 @@
+from typing import Dict
+
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.views import APIView
 
 from nexus.actions.models import Flow
 
@@ -14,6 +17,34 @@ from nexus.usecases.actions.update import UpdateFlowsUseCase, UpdateFlowDTO
 from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase, FlowDoesNotExist
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 from nexus.orgs import permissions
+
+from nexus.internals.flows import FlowsRESTClient
+
+
+class SearchFlowView(APIView):
+    def format_response(self, data: Dict) -> Dict:
+
+        if data.get('next'):
+            next_page = data.get('next').split("?")
+            next_page = f'?{next_page[1]}'
+            data.update({'next': next_page})
+        if data.get('previous'):
+            prev_page = data.get('previous').split("?")
+            prev_page = f'?{prev_page[1]}'
+            data.update({'previous': prev_page})
+        
+        return data
+
+    def get(self, request, *args, **kwargs):
+
+        project_uuid = kwargs.get('project_uuid')
+        name = request.query_params.get("name")
+        page_size = request.query_params.get('page_size')
+        page = request.query_params.get('page')
+
+        data: Dict = ListFlowsUseCase().search_flows_by_project(project_uuid, name, page_size, page)
+
+        return Response(self.format_response(data))
 
 
 class FlowsViewset(
