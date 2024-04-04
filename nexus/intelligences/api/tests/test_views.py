@@ -1,3 +1,4 @@
+import uuid
 import json
 
 from django.conf import settings
@@ -13,7 +14,8 @@ from ..views import (
     ContentBaseViewset,
     ContentBaseTextViewset,
     ContentBaseLinkViewset,
-    SentenxIndexerUpdateFile
+    SentenxIndexerUpdateFile,
+    ContentBasePersonalizationViewSet,
 )
 
 from nexus.usecases.intelligences.tests.intelligence_factory import (
@@ -22,6 +24,11 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseTextFactory,
     ContentBaseLinkFactory,
 )
+
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.projects.project_dto import ProjectCreationDTO
+from nexus.usecases.intelligences.retrieve import get_default_content_base_by_project
 
 
 class TestIntelligencesViewset(TestCase):
@@ -367,3 +374,97 @@ class TestContentBaseLinkViewset(TestCase):
         content_base_task_manager = ContentBaseLinkTaskManager.objects.get(content_base_link__uuid=obj_uuid)
         self.assertEqual(content_base_task_manager.status, TaskManager.STATUS_SUCCESS)
 
+
+class TestContentBasePersonalizationViewSet(TestCase):
+    def _create_project(self, org_uuid: str, user_email: str):
+
+        project_dto = ProjectCreationDTO(
+            uuid=str(uuid.uuid4()),
+            name="Test Project",
+            is_template=False,
+            template_type_uuid=None,
+            org_uuid=org_uuid,
+            brain_on=True
+        )
+        return ProjectsUseCase().create_project(project_dto, user_email)
+
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+        self.org = OrgFactory()
+        self.user = self.org.created_by
+        self.project = self._create_project(str(self.org.uuid), str(self.org.created_by.email))
+        self.content_base = get_default_content_base_by_project(str(self.project.uuid))
+        self.url = f'{self.project.uuid}/customization'
+        agent = self.content_base.agent
+        agent.name = "Doris"
+        agent.role = "Marketing"
+        agent.personality = "Relaxed"
+        agent.goal = "Marketing"
+        agent.save()
+        self.content_base.instructions.create(instruction="Instruction 1")
+        self.content_base.instructions.create(instruction="Instruction 2")
+        
+
+    def test_get_personalization(self):
+        url_retrieve = f'{self.url}/'
+        request = self.factory.get(url_retrieve)
+
+        force_authenticate(request, user=self.user)
+
+        response = ContentBasePersonalizationViewSet.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_update_personalization(self):
+        url_update = f'{self.url}/'
+
+        data = {
+            "agent": {
+                "name": "Doris Update",
+                "role": "Sales",
+                "personality": "Creative",
+                "goal": "Sell"
+            },
+            "instructions": [
+                {
+                    "id": 1,
+                    "instruction": "Be friendly"
+                }
+            ]
+        }
+        request = self.factory.put(url_update, data=data, format='json')
+        force_authenticate(request, user=self.user)
+
+        response = ContentBasePersonalizationViewSet.as_view({'put': 'update'})(
+            request,
+            data,
+            project_uuid=str(self.project.uuid),
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_delete_personalization(self):
+        url_update = f'{self.url}/'
+        data = {
+        "instructions": [
+                {
+                    "id": 1,
+                },
+                {
+                    "id": 2,
+                }
+            ]
+        }
+        request = self.factory.delete(url_update, data=data, format='json')
+        force_authenticate(request, user=self.user)
+
+        response = ContentBasePersonalizationViewSet.as_view({'delete': 'destroy'})(
+            request,
+            data,
+            project_uuid=str(self.project.uuid),
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)

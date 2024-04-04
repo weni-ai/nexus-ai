@@ -17,7 +17,8 @@ from .serializers import (
     RouterContentBaseSerializer,
     ContentBaseLinkSerializer,
     CreatedContentBaseLinkSerializer,
-    LLMConfigSerializer
+    LLMConfigSerializer,
+    ContentBasePersonalizationSerializer,
 )
 from nexus.usecases import intelligences
 from nexus.orgs import permissions
@@ -752,3 +753,49 @@ class LLMDefaultViewset(views.APIView):
             data=llm_update_dto,
             status=200
         )
+
+
+class ContentBasePersonalizationViewSet(ModelViewSet):
+    serializer_class = ContentBasePersonalizationSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        if getattr(self, "swagger_fake_view", False):
+            return ContentBase.objects.none()  # pragma: no cover
+        super().get_serializer(*args, **kwargs)
+
+    def list(self, request, *args, **kwargs):
+        try:
+            project_uuid = kwargs.get('project_uuid')
+            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, request.user.email)
+            data = ContentBasePersonalizationSerializer(content_base, context={"request": request}).data
+            return Response(data=data, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def update(self, request, *args, **kwargs):
+        try:
+            project_uuid = kwargs.get('project_uuid')
+            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, request.user.email)
+            serializer = ContentBasePersonalizationSerializer(content_base, data=request.data, partial=True, context={"request": request})
+            if serializer.is_valid():
+                serializer.save()
+                data = serializer.data
+                return Response(data=data, status=status.HTTP_200_OK)
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            project_uuid = kwargs.get('project_uuid')
+            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, request.user.email)
+
+            instructions = request.data.get('instructions')
+            ids = [iid.get("id") for iid in instructions]
+            intelligences.DeleteContentBaseUseCase().bulk_delete_instruction_by_id(content_base, ids)
+            data = ContentBasePersonalizationSerializer(content_base, context={"request": request}).data
+            return Response(status=status.HTTP_200_OK, data=data)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+    
+    

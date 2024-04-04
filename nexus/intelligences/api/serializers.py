@@ -6,7 +6,9 @@ from nexus.intelligences.models import (
     ContentBaseFile,
     ContentBaseLink,
     ContentBaseLogs,
-    LLM
+    LLM,
+    ContentBaseInstruction,
+    ContentBaseAgent,
 )
 from nexus.task_managers.models import (
     ContentBaseFileTaskManager,
@@ -100,3 +102,59 @@ class LLMConfigSerializer(serializers.ModelSerializer):
             "setup",
             "advanced_options",
         ]
+
+class ContentBaseInstructionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentBaseInstruction
+        fields = ['instruction']
+
+
+class ContentBaseAgentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentBaseAgent
+        fields = ["name", "role", "personality", "goal"]
+
+class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentBase
+        fields =  ["agent", "instructions"]
+
+    agent = ContentBaseAgentSerializer()
+    instructions = serializers.SerializerMethodField('get_instructions')
+
+    def get_instructions(self, obj):
+        instructions = []
+        for instruction in obj.instructions.all():
+            instructions.append(
+                {
+                    "id": instruction.id,
+                    "instruction": instruction.instruction,
+                }
+            )
+
+        return instructions
+
+    def update(self, instance, validated_data):
+        agent_data = validated_data.get("agent")
+        if agent_data:
+
+            agent = instance.agent
+            agent.name = agent_data.get("name", agent.name)
+            agent.role = agent_data.get("role", agent.role)
+            agent.personality = agent_data.get("personality", agent.personality)
+            agent.goal = agent_data.get("goal", agent.goal)
+            agent.save()
+
+        instructions_data = self.context.get('request').data.get('instructions')
+        if instructions_data:
+            for instruction_data in instructions_data:
+                serializer = ContentBaseInstructionSerializer(data=instruction_data, partial=True)
+                if serializer.is_valid():
+                    instruction = instance.instructions.get(id=instruction_data.get('id'))
+                    instruction.instruction = instruction_data.get('instruction')
+                    instruction.save()
+                    instruction.refresh_from_db()
+
+        instance.refresh_from_db()
+        return instance
+
