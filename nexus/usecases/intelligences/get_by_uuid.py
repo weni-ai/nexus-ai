@@ -87,7 +87,7 @@ def get_log_by_question_uuid(user_question_uuid: str) -> ContentBaseLogs:
     return question.content_base_log
 
 
-def get_integretade_intelligence_by_project(
+def get_integrated_intelligence_by_project(
     project_uuid: str
 ) -> IntegratedIntelligence:
     try:
@@ -102,7 +102,7 @@ def get_default_content_base_by_project(
     project_uuid: str
 ) -> ContentBase:
     try:
-        integrated_intelligence = get_integretade_intelligence_by_project(project_uuid)
+        integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
         content_bases = integrated_intelligence.intelligence.contentbases.all()
         return content_bases.get(is_router=True)
     except ContentBase.DoesNotExist:
@@ -115,8 +115,8 @@ def get_llm_by_project_uuid(
     project_uuid: str
 ) -> LLM:
     try:
-        integrated_intelligence = get_integretade_intelligence_by_project(project_uuid)
-        return LLM.objects.get(intelligence=integrated_intelligence)
+        integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
+        return LLM.objects.get(integrated_intelligence=integrated_intelligence)
     except LLM.DoesNotExist:
         raise Exception(f"[ LLM ] - LLM with project uuid `{project_uuid}` does not exists.")
     except Exception as exception:

@@ -73,8 +73,11 @@ class IntegratedIntelligenceFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = IntegratedIntelligence
 
-    intelligence = factory.SubFactory(IntelligenceFactory)
-    created_by = factory.SelfAttribute('intelligence.created_by')
+    created_by = factory.SubFactory(UserFactory)
+    intelligence = factory.SubFactory(
+        IntelligenceFactory,
+        created_by=factory.SelfAttribute('..created_by'),
+    )
     project = factory.SubFactory(
         ProjectFactory,
         created_by=factory.SelfAttribute('..created_by'),

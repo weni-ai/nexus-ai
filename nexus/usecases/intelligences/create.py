@@ -175,7 +175,7 @@ def create_llm(
     if not has_permission:
         raise IntelligencePermissionDenied()
 
-    intelligence = intelligences.get_integretade_intelligence_by_project(
+    intelligence = intelligences.get_integrated_intelligence_by_project(
         project_uuid=llm_dto.project_uuid
     )
     llm = LLM.objects.create(

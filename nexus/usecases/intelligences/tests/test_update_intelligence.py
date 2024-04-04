@@ -11,6 +11,7 @@ from .intelligence_factory import (
     ContentBaseTextFactory,
     LLMFactory
 )
+from nexus.usecases.orgs.tests.org_factory import OrgAuthFactory
 from nexus.usecases.intelligences.intelligences_dto import UpdateLLMDTO
 
 
@@ -113,5 +114,4 @@ class TestUpdateLLM(TestCase):
             update_dto
         )
 
-        self.assertEqual(updated_llm.temperature, new_temperature)
-        self.assertEqual(updated_llm.top_p, new_top_p)
+        self.assertEqual(updated_llm.setup, setup)

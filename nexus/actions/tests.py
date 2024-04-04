@@ -17,7 +17,7 @@ from nexus.actions.api.views import (
 )
 
 from nexus.usecases.intelligences.get_by_uuid import (
-    get_integretade_intelligence_by_project,
+    get_integrated_intelligence_by_project,
     get_default_content_base_by_project,
 )
 
@@ -74,7 +74,7 @@ class FlowsViewsetTestCase(TestCase):
         self.org = OrgFactory()
         self.user = self.org.authorizations.first().user
         self.project = self.setUp_project()
-        self.integrated_intel = get_integretade_intelligence_by_project(self.project.uuid)
+        self.integrated_intel = get_integrated_intelligence_by_project(self.project.uuid)
         self.intelligence = self.integrated_intel.intelligence
         self.contentbase = get_default_content_base_by_project(self.project.uuid)
 
