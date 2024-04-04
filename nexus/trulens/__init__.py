@@ -52,7 +52,7 @@ f_qa_relevance = Feedback(
 # Groundedness
 grounded = Groundedness(groundedness_provider=openai)
 f_groundedness = (
-    Feedback(grounded.groundedness_measure_with_cot_reasons, name = "Groundedness")
+    Feedback(grounded.groundedness_measure_with_cot_reasons, name="Groundedness")
     .on(Select.RecordCalls.get_chunks.rets.collect())
     .on_output()
     .aggregate(grounded.grounded_statements_aggregator)
@@ -60,7 +60,7 @@ f_groundedness = (
 
 # Question/statement relevance between question and each context chunk.
 f_context_relevance = (
-    Feedback(openai.qs_relevance_with_cot_reasons, name = "Context Relevance")
+    Feedback(openai.qs_relevance_with_cot_reasons, name="Context Relevance")
     .on(Select.RecordCalls.get_question.rets)
     .on(Select.RecordCalls.get_chunks.rets.collect())
     .aggregate(np.mean)
@@ -68,7 +68,7 @@ f_context_relevance = (
 
 wenigpt_evaluation = WeniGPTLogEvaluation()
 tru_recorder = TruCustomApp(
-    wenigpt_evaluation, 
+    wenigpt_evaluation,
     app_id=f"WeniGPT v{settings.WENIGPT_VERSION}",
     feedbacks=[f_qa_relevance, f_context_relevance, f_groundedness]
 )

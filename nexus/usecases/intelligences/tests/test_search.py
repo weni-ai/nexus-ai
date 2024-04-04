@@ -1,12 +1,9 @@
 from django.test import TestCase
 from nexus.usecases.intelligences.search import IntelligenceGenerativeSearchUseCase
 from .intelligence_factory import (
-    IntelligenceFactory,
     ContentBaseFactory,
-    ContentBaseTextFactory
 )
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-from nexus.task_managers.file_database.wenigpt_database import WeniGPTDatabase
+
 from typing import List
 
 
@@ -20,6 +17,7 @@ class SearchFileDatabase:
                 "response": ["Text1", "Text2", "Text3"]
             }
         }
+
 
 class GenerativeAIDatabase:
 
@@ -39,7 +37,7 @@ class GenerativeAIDatabase:
             question: str,
             language: str,
             content_base_uuid: str
-        ):
+    ):
         answer = self.answers.get(language)
         return {"answers": [answer], "id": "0"}
 
@@ -67,7 +65,7 @@ class IntelligenceGenerativeSearchUseCaseTestCase(TestCase):
             GenerativeAIDatabase.eng_answer,
             response.get("answers")[0]
         )
-    
+
     def test_search_spa(self):
         content_base = self.content_base
         content_base.language = "es"
@@ -81,7 +79,7 @@ class IntelligenceGenerativeSearchUseCaseTestCase(TestCase):
             GenerativeAIDatabase.spa_answer,
             response.get("answers")[0]
         )
-    
+
     def test_search_por(self):
         content_base = self.content_base
         content_base.language = "pt-br"
@@ -95,7 +93,7 @@ class IntelligenceGenerativeSearchUseCaseTestCase(TestCase):
             GenerativeAIDatabase.por_answer,
             response.get("answers")[0]
         )
-    
+
     def test_search_base(self):
         content_base = self.content_base
         content_base.language = "en"

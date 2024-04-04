@@ -1,5 +1,4 @@
 from nexus.actions.models import Flow
-from django.db.models import QuerySet
 
 
 class FlowDoesNotExist(BaseException):

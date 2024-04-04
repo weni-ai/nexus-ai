@@ -21,7 +21,6 @@ from .intelligence_factory import (
     ContentBaseTextFactory,
     IntegratedIntelligenceFactory
 )
-from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
 class GetByIntelligenceUuidTestCase(TestCase):
