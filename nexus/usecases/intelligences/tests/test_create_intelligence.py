@@ -124,4 +124,4 @@ class TestLLM(TestCase):
     def test_create_llm(self):
         created_llm = create_llm(self.dto)
         self.assertEqual(created_llm.model, self.dto.model)
-        self.assertEqual(created_llm.temperature, self.dto.temperature)
+        self.assertEqual(created_llm.setup.get('temperature'), self.dto.setup.get('temperature'))

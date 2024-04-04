@@ -13,7 +13,7 @@ from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from .get_by_uuid import (
     get_by_intelligence_uuid,
     get_by_contentbase_uuid,
-    get_integretade_intelligence_by_project
+    get_integrated_intelligence_by_project
 )
 
 
@@ -124,7 +124,7 @@ class ListContentBaseLinkUseCase():
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         org = org_use_case.get_org_by_contentbase_uuid(contentbase_uuid)
 
-        user= users.get_by_email(user_email)
+        user = users.get_by_email(user_email)
 
         has_permission = permissions.can_list_content_bases(user, org)
         if not has_permission:
@@ -138,7 +138,7 @@ def get_llm_config(
     project_uuid: str,
     user_email: str,
 ) -> LLM:
-    integrated_intelligence = get_integretade_intelligence_by_project(project_uuid)
+    integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
 
     org = integrated_intelligence.intelligence.org
     user = users.get_by_email(user_email)

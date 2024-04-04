@@ -7,6 +7,8 @@ from drf_yasg import openapi
 
 from nexus.intelligences.api.routers import urlpatterns as intelligence_routes
 from nexus.actions.api.routers import urlpatterns as actions_routes
+from nexus.projects.api.routers import urlpatterns as projects_routes
+
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -22,6 +24,7 @@ url_api = []
 
 url_api += intelligence_routes
 url_api += actions_routes
+url_api += projects_routes
 
 urlpatterns = [
     path("", schema_view.with_ui("redoc")),

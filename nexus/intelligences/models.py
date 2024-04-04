@@ -1,5 +1,4 @@
 from django.db import models
-from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 
 from nexus.db.models import BaseModel, SoftDeleteModel

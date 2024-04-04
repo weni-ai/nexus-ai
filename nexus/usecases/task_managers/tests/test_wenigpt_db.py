@@ -9,6 +9,7 @@ from nexus.usecases.intelligences.intelligences_dto import ContentBaseLogsDTO
 from nexus.intelligences.models import ContentBaseLogs
 from nexus.task_managers.file_database.wenigpt_database import WeniGPTDatabase
 
+
 class Requests:
     def json(self):
         return {
@@ -16,6 +17,7 @@ class Requests:
                 "text": "response"
             }
         }
+
 
 class TestWenigptDB(TestCase):
 
@@ -45,7 +47,6 @@ class TestWenigptDB(TestCase):
         )
         log = create_wenigpt_logs(log_dto.__dict__)
         self.assertIsInstance(log, ContentBaseLogs)
-
 
     @patch("nexus.task_managers.tasks.trulens_evaluation")
     @patch("requests.request")

@@ -17,3 +17,4 @@ class ProjectFactory(factory.django.DjangoModelFactory):
         OrgFactory,
         created_by=factory.SelfAttribute('..created_by')
     )
+    brain_on = False

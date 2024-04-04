@@ -8,7 +8,7 @@ class ProjectCreationDTO:
     org_uuid: str
     template_type_uuid: str
     is_template: bool
-    brain_on: bool
+    brain_on: bool = False
 
 
 @dataclass

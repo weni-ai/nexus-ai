@@ -37,7 +37,7 @@ from .get_by_uuid import (
     get_contentbasetext_by_contentbase_uuid,
     get_log_by_question_uuid,
     get_user_question_by_uuid,
-    get_integretade_intelligence_by_project,
+    get_integrated_intelligence_by_project,
 )
 from .retrieve import (
     RetrieveIntelligenceUseCase,
@@ -56,4 +56,7 @@ from .intelligences_dto import (
     ContentBaseLinkDTO,
     LLMDTO,
     UpdateLLMDTO
+)
+from .exceptions import (
+    IntelligencePermissionDenied,
 )

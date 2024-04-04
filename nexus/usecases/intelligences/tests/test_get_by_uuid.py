@@ -7,7 +7,7 @@ from ..get_by_uuid import (
     get_by_contentbase_uuid,
     get_by_contentbasetext_uuid,
     get_contentbasetext_by_contentbase_uuid,
-    get_integretade_intelligence_by_project,
+    get_integrated_intelligence_by_project,
     get_default_content_base_by_project
 )
 from ..exceptions import (
@@ -21,7 +21,6 @@ from .intelligence_factory import (
     ContentBaseTextFactory,
     IntegratedIntelligenceFactory
 )
-from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
 class GetByIntelligenceUuidTestCase(TestCase):
@@ -115,7 +114,7 @@ class TestGetByIntegratedIntelligence(TestCase):
 
     def test_get_integrated_intelligence_by_project(self):
 
-        retrieved_integrated_intelligence = get_integretade_intelligence_by_project(
+        retrieved_integrated_intelligence = get_integrated_intelligence_by_project(
             self.integrated_intelligence.project.uuid
         )
         self.assertEqual(

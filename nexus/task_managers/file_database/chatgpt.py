@@ -15,8 +15,15 @@ class ChatGPTDatabase(GPTDatabase):
 
     def get_client(self):
         return OpenAI(api_key=self.api_key)
-    
-    def request_gpt(self, contexts: List, question: str, language: str, content_base_uuid: str, testing: bool = False):
+
+    def request_gpt(
+        self,
+        contexts: List,
+        question: str,
+        language: str,
+        content_base_uuid: str,
+        testing: bool = False
+    ):
         if not contexts:
             return {"answers": None, "id": "0", "message": "No context found for this question"}
 
@@ -34,4 +41,4 @@ class ChatGPTDatabase(GPTDatabase):
             model=settings.CHATGPT_MODEL
         )
         text_answers = chat_completion.choices[0].message.content
-        return {"answers":[{"text": text_answers}],"id":"0"}
+        return {"answers": [{"text": text_answers}], "id": "0"}

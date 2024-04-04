@@ -49,7 +49,6 @@ class SearchFlowView(APIView):
 
 class FlowsViewset(
     ModelViewSet,
-    
 ):
     serializer_class = FlowSerializer
     lookup_url_kwarg = 'flow_uuid'

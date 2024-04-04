@@ -16,13 +16,12 @@ class TestCreateProject(TestCase):
             name="test_name",
             org_uuid=org.uuid,
             is_template=False,
-            template_type_uuid=None
+            template_type_uuid=None,
         )
 
     def test_create_project(self):
         project = ProjectsUseCase().create_project(
             project_dto=self.project_dto,
-            user_email=self.user.email,
-            brain_on=False
+            user_email=self.user.email
         )
         self.assertEqual(project.uuid, self.project_dto.uuid)

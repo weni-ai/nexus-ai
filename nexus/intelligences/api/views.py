@@ -580,7 +580,7 @@ class ContentBaseLinkViewset(ModelViewSet):
             return super().list(request, *args, **kwargs)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
-    
+
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return ContentBaseFile.objects.none()  # pragma: no cover
@@ -615,7 +615,7 @@ class ContentBaseLinkViewset(ModelViewSet):
             return Response(response, status=status.HTTP_201_CREATED)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
-    
+
     def destroy(self, request, *args, **kwargs):
         user_email: str = self.request.user.email
         contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
