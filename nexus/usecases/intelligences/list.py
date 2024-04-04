@@ -124,7 +124,7 @@ class ListContentBaseLinkUseCase():
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         org = org_use_case.get_org_by_contentbase_uuid(contentbase_uuid)
 
-        user= users.get_by_email(user_email)
+        user = users.get_by_email(user_email)
 
         has_permission = permissions.can_list_content_bases(user, org)
         if not has_permission:
