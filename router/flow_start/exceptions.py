@@ -1,0 +1,2 @@
+class UnableToStartFlow(Exception):
+    pass
