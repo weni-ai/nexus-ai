@@ -754,7 +754,7 @@ class LLMDefaultViewset(views.APIView):
             status=200
         )
 
-    def patch(self, request, project_uuid):
+    def post(self, request, project_uuid):
         user_email = request.user.email
         llm_update_dto = intelligences.UpdateLLMDTO(
             user_email=user_email,
