@@ -754,6 +754,28 @@ class LLMDefaultViewset(views.APIView):
             status=200
         )
 
+    def patch(self, request, project_uuid):
+        user_email = request.user.email
+        llm_update_dto = intelligences.UpdateLLMDTO(
+            user_email=user_email,
+            project_uuid=project_uuid,
+            model="WeniGPT",
+            setup={
+                "top_k": settings.WENIGPT_TOP_K,
+                "top_p": settings.WENIGPT_TOP_P,
+                "max_length": settings.WENIGPT_MAX_LENGHT,
+                "temperature": settings.WENIGPT_TEMPERATURE,
+            },
+            advanced_options={}
+        )
+
+        updated_llm = intelligences.update_llm_by_project(llm_update_dto)
+
+        return Response(
+            data=LLMConfigSerializer(updated_llm).data,
+            status=200
+        )
+
 
 class ContentBasePersonalizationViewSet(ModelViewSet):
     serializer_class = ContentBasePersonalizationSerializer
@@ -797,5 +819,3 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
             return Response(status=status.HTTP_200_OK, data=data)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
-    
-    
