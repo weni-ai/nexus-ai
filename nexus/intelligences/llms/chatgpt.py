@@ -7,6 +7,7 @@ from django.conf import settings
 
 
 class ChatGPTClient(LLMClient):
+    code = "chatgpt"
     def __init__(self):
         self.api_key = settings.OPENAI_API_KEY
         self.chatgpt_model = settings.CHATGPT_MODEL

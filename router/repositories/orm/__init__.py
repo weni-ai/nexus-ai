@@ -21,12 +21,24 @@ from router.entities import (
     AgentDTO,
     FlowDTO,
     InstructionDTO,
+    ContentBaseDTO,
 )
 
 
-class ContentBaseRepository(Repository):
+class ContentBaseORMRepository(Repository):
     def _get_content_base(self, content_base_uuid: str) -> ContentBase:
         return ContentBase.objects.get(uuid=content_base_uuid)
+
+    def get_content_base_by_project(self, project_uuid: str) -> ContentBase:
+
+        content_base = get_default_content_base_by_project(project_uuid)
+
+        return ContentBaseDTO(
+            uuid=str(content_base.uuid),
+            title=content_base.title,
+            intelligence_uuid=str(content_base.intelligence.uuid),
+        )
+
     def get_agent(self, content_base_uuid: str) -> AgentDTO:
 
         content_base = ContentBase.objects.get(uuid=content_base_uuid)
@@ -59,7 +71,16 @@ class ContentBaseRepository(Repository):
 
 
 class FlowsORMRepository(Repository):
-    pass
+    def get_project_flow_by_name(self, project_uuid: str, name: str):
+        content_base = get_default_content_base_by_project(project_uuid)
+        flow = Flow.objects.filter(content_base=content_base, name=name).first()
+        return FlowDTO(
+                    uuid=str(flow.uuid),
+                    name=flow.name,
+                    prompt=flow.prompt,
+                    fallback=flow.fallback,
+                    content_base_uuid=str(flow.content_base.uuid)
+                )
 
     def project_flow_fallback(self, project_uuid: str, fallback: bool) -> FlowDTO:
         content_base = get_default_content_base_by_project(project_uuid)

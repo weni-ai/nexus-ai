@@ -5,3 +5,6 @@ from router.entities.intelligences import (
     AgentDTO,
     InstructionDTO
 )
+from nexus.usecases.intelligences.intelligences_dto import (
+    ContentBaseDTO,
+)

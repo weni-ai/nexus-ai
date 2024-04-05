@@ -60,17 +60,17 @@ def test_messages():
         fallback=True,
     )
 
-    # payload={
-    #     "project_uuid": f"{integrated_intel.project.uuid}",
-    #     "text": "Olá gostaria de comprar uma camiseta",
-    #     "contact_urn": ""
-    # }
+    payload={
+        "project_uuid": f"{integrated_intel.project.uuid}",
+        "text": "Olá gostaria de comprar uma camiseta",
+        "contact_urn": ""
+    }
 
-    # client = TestClient(app)
+    client = TestClient(app)
 
-    # response = client.post('/messages', json=payload)
+    response = client.post('/messages', json=payload)
 
-    # assert response.status_code == 200
+    assert response.status_code == 200
 
     payload={
         "project_uuid": f"{integrated_intel.project.uuid}",

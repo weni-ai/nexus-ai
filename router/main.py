@@ -4,41 +4,35 @@ from typing import List, Dict
 
 from fastapi import FastAPI
 
-from router.repositories.orm import FlowsORMRepository, ContentBaseRepository
+from router.repositories.orm import FlowsORMRepository, ContentBaseORMRepository
 from router.repositories import Repository
 from router.classifiers.zeroshot import ZeroshotClassifier
 from router.classifiers import Classifier
 from router.classifiers import classify
 from router.entities import (
-    FlowDTO, Message, DBCon, AgentDTO, InstructionDTO
+    FlowDTO, Message, DBCon, AgentDTO, InstructionDTO, ContentBaseDTO
 )
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 
 from nexus.event_driven.signals import message_started, message_finished
-from nexus.intelligences.llms import ChatGPTClient
 
 from router.direct_message import DirectMessage
 from router.flow_start import FlowStart
+from nexus.intelligences.llms.client import LLMClient
+
 
 app = FastAPI()
 
 
-def route(direct_message: DirectMessage, flow_start: FlowStart):
+class Indexer:
     pass
 
 
-def start_flow(flow: FlowDTO, message: Message, params: Dict):
-    print(f"[+ Iniciando fluxo para contato {message.contact_urn} +]")
-    print(f"[+ Message: {params} +]")
-    client = FlowStartHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
-    client.start_flow(flow.uuid, "crm@weni.ai", [message.contact_urn])
-
-
 def call_llm(
-        indexer,
-        llm_model,
+        indexer: Indexer,
+        llm_model: LLMClient,
         message: Message,
-        fallback_flow: FlowDTO,
+        content_base_uuid: str,
         agent: AgentDTO,
         instructions: List[InstructionDTO]
     ) -> str:
@@ -46,7 +40,7 @@ def call_llm(
     chunks: List[str] = get_chunks(
         indexer,
         text=message.text,
-        content_base_uuid=fallback_flow.content_base_uuid
+        content_base_uuid=content_base_uuid
     )
 
     if not chunks:
@@ -58,6 +52,7 @@ def call_llm(
         agent.__dict__,
         message.text,
     )
+
     gpt_message = response.get("answers")[0].get("text")
 
     return gpt_message
@@ -75,28 +70,93 @@ from router.clients.flows.http.broadcast import BroadcastHTTPClient
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
 
 
-def dispatch(classification: str, message: Message, content_base_repository: Repository, flows_repository: Repository):
-    if classification == Classifier.CLASSIFICATION_OTHER:
+def route(
+        classification: str,
+        message: Message,
+        content_base_repository: Repository,
+        flows_repository: Repository,
+        flows: List[FlowDTO],  # TODO: talvez não seja necessário, remover
+        indexer: Indexer,
+        llm_client: LLMClient,
+        direct_message: DirectMessage,
+        flow_start: FlowStart
 
+    ):
+
+    if classification == Classifier.CLASSIFICATION_OTHER:
         print(f"[- Fallback -]")
 
         fallback_flow: FlowDTO = flows_repository.project_flow_fallback(message.project_uuid, True)
-        agent: AgentDTO = content_base_repository.get_agent(fallback_flow.content_base_uuid)
-        instructions: List[InstructionDTO] = content_base_repository.list_instructions(fallback_flow.content_base_uuid)
 
-        # call_llm(SentenXFileDataBase(), message, fallback_flow)
-        llm_response: str = call_llm(Indexer(), ChatGPTClient(), message, fallback_flow, agent, instructions)
-        broadcast = BroadcastHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
-        broadcast.send_direct_message(llm_response, [message.contact_urn], message.project_uuid, "crm@weni.ai")
+        content_base: ContentBaseDTO = content_base_repository.get_content_base(message.project_uuid)
+        agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
+        instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
 
-        return {}
+        llm_response: str = call_llm(
+            indexer=indexer,
+            llm_model=llm_client,
+            message=message,
+            content_base_uuid=content_base.uuid,
+            agent=agent,
+            instructions=instructions
+        )
 
-    for flow in flows:
-        if classification == flow.name:
-            print("[+ Fluxo +]")
-            start_flow(flow, message, params={"input": message.text}))
+        if fallback_flow:
+            dispatch(
+                message=message,
+                flow=fallback_flow.uuid,
+                flow_start=flow_start,
+                llm_response=llm_response,
+                user_email="CRM@WENI.AI" # TODO: Descobrir quem é esse email/mandar o crm sempre?
+            )
+            return
+
+        dispatch(
+            llm_response=llm_response,
+            message=message,
+            direct_message=direct_message,
+            user_email="CRM@WENI.AI" # TODO: Descobrir quem é esse email/mandar o crm sempre?
+        )
+        return
+
+    flow: FlowDTO = flows_repository.get_project_flow_by_name(message.project_uuid, classification)
+
+    dispatch(
+        message=message,
+        flow_start=flow_start,
+        flow=flow.uuid,
+        user_email="CRM@WENI.AI" # TODO: Descobrir quem é esse email/mandar o crm sempre?
+    )
 
 
+def dispatch(
+        message: Message,
+        user_email: str,
+        flow: str = None,
+        llm_response: str = None,
+        direct_message: DirectMessage = None,
+        flow_start: FlowStart = None
+    ):
+    urns = [message.contact_urn]
+
+    if direct_message:
+
+        print(f"[+ sending direct message to {message.contact_urn} +]")
+    
+        return direct_message.send_direct_message(
+            llm_response,
+            urns,
+            message.project_uuid,
+            user_email
+        )
+    
+    print(f"[+ starting flow {flow} +]")
+
+    return flow_start.start_flow(
+        flow=flow,
+        user=user_email,
+        urns=urns,
+    )
 
 
 @app.post('/messages')
@@ -108,25 +168,32 @@ def messages(message: Message):
 
         flows_repository = FlowsORMRepository()
         content_base_repository = ContentBaseORMRepository()
+
         flows: List[FlowDTO] = flows_repository.project_flows(message.project_uuid, False)
 
         classification: str = classify(ZeroshotClassifier(), message.text, flows)
 
         print(f"[+ Mensagem classificada: {classification} +]")
-        dispatch(classification)
-        
+
+        llm_client = LLMClient.get_by_type("chatgpt")  # TODO: get llm model from user
+
+        broadcast = BroadcastHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
+        flow_start = FlowStartHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
+
+        route(
+            classification=classification,
+            message=message,
+            content_base_repository=content_base_repository,
+            flows_repository=flows_repository,
+            flows=flows,
+            indexer=SentenXFileDataBase(),
+            llm_client=llm_client(),
+            direct_message=broadcast,
+            flow_start=flow_start
+        )
+
     finally:
         message_finished.send(sender=DBCon)
     return {}
 
 
-class LLM:
-    def request_gpt(self):
-        return {"answers":[{"text": "Resposta do LLM"}],"id":"0"}
-
-class Indexer:
-    def search_data(self, content_base_uuid: str, text: str):
-        return {
-            "status": 200,
-            "data": ["Lorem Ipsum"]
-        }
