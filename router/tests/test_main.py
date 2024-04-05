@@ -25,7 +25,7 @@ def test_messages():
     user  = User.objects.create(email='test@user.com')
 
     org = Org.objects.create(created_by=user, name='Test Org')
-    project = org.projects.create(name="Test Project", created_by=user)
+    project = org.projects.create(uuid="7886d8d1-7bdc-4e85-a7fc-220e2256c11b", name="Test Project", created_by=user)
 
     intelligence = org.intelligences.create(name="Test Intel", created_by=user)
 
@@ -75,7 +75,7 @@ def test_messages():
     payload={
         "project_uuid": f"{integrated_intel.project.uuid}",
         "text": "Olá gostaria de uma indicação de leitura",
-        "contact_urn": ""
+        "contact_urn": "telegram:844380532"
     }
 
     client = TestClient(app)
