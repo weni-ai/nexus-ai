@@ -17,6 +17,8 @@ class BroadcastHTTPClient(DirectMessage):
         payload = {"user": user, "project": project_uuid, "urns": urns, "text": text}
         params = {"token": self.__access_token}
 
+        print(payload)
+
         response = requests.post(url, data=payload, params=params)
 
         try:
