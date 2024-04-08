@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'nexus.event_driven',
     'nexus.actions',
     'corsheaders',
+    'router',
 ]
 
 MIDDLEWARE = [
