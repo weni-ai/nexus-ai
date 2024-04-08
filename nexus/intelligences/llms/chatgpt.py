@@ -35,7 +35,7 @@ class ChatGPTClient(LLMClient):
         """
         return prompt
 
-    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str):
+    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config):
         prompt = self.format_prompt(instructions, chunks, agent)
 
         chat_completion = self.client.chat.completions.create(
@@ -49,7 +49,11 @@ class ChatGPTClient(LLMClient):
                     "content": question,
                 }
             ],
-            model=settings.CHATGPT_MODEL
+            model=settings.CHATGPT_MODEL,
+            temperature=llm_config.setup.get("temperature"),
+            top_p=llm_config.setup.get("top_p"),
+            # top_k=llm_config.setup.get("top_k"),  # não existe a opção do top k e o max length != max tokens
+            max_tokens=llm_config.setup.get("max_length")
         )
 
         text_answers = chat_completion.choices[0].message.content

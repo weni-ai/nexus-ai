@@ -14,3 +14,8 @@ class AgentDTO:
 class InstructionDTO:
     instruction: str
     content_base_uuid: str
+
+
+@dataclass
+class LLMConfigDTO:
+    pass

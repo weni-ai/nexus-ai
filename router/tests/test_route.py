@@ -20,7 +20,8 @@ from nexus.intelligences.models import (
 
 from router.tests.test_main import clean_db
 from router.classifiers import Classifier
-from router.main import dispatch, route
+# from router.main import dispatch, route
+from router.route import route
 from router.entities import (
     FlowDTO, Message
 )
@@ -127,6 +128,7 @@ class TestRoute(unittest.TestCase):
         clean_db()
 
     def setUp(self):
+        clean_db()
         self.user  = User.objects.create(email='test@user.com')
 
         self.org = Org.objects.create(created_by=self.user, name='Test Org')

@@ -14,7 +14,7 @@ class ContentBaseTestRepository(Repository):
         self.agent = agent
         self.content_base = content_base
 
-    def get_content_base(self, project_uuid):
+    def get_content_base_by_project(self, project_uuid):
         return ContentBaseDTO(
             uuid=str(self.content_base.uuid),
             title=self.content_base.title,

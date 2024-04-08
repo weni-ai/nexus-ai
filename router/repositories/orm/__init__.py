@@ -85,13 +85,14 @@ class FlowsORMRepository(Repository):
     def project_flow_fallback(self, project_uuid: str, fallback: bool) -> FlowDTO:
         content_base = get_default_content_base_by_project(project_uuid)
         flow = Flow.objects.filter(content_base=content_base, fallback=fallback).first()  # o que fazer se o fallback vier vazio??
-        return FlowDTO(
-                    uuid=str(flow.uuid),
-                    name=flow.name,
-                    prompt=flow.prompt,
-                    fallback=flow.fallback,
-                    content_base_uuid=str(flow.content_base.uuid)
-                )
+        if flow:
+            return FlowDTO(
+                        uuid=str(flow.uuid),
+                        name=flow.name,
+                        prompt=flow.prompt,
+                        fallback=flow.fallback,
+                        content_base_uuid=str(flow.content_base.uuid)
+                    )
 
     def project_flows(self, project_uuid: str, fallback: bool = False) -> List[FlowDTO]:
         content_base = get_default_content_base_by_project(project_uuid)

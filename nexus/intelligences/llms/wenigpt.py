@@ -24,7 +24,7 @@ class WeniGPTClient(LLMClient):
             "Cookie": self.cookie
         }
 
-    def format_prompt(self, instructions: List, chunks: List, agent: Dict):
+    def format_prompt(self, instructions: List, chunks: List, agent: Dict, question: str):
         instructions_formatted = "\n".join([f"- {instruction}" for instruction in instructions])
         context = "\n".join([chunk for chunk in chunks])
         prompt = f"""
@@ -40,20 +40,22 @@ class WeniGPTClient(LLMClient):
         - Nunca mencione a pergunta fornecida.
         - Gere a resposta mais útil possível para a pergunta usando informações do conexto acima.
         - Nunca elabore sobre o porque e como você fez a tarefa, apenas responda.
+
+        {question}
         """
         return prompt
 
-    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str):
-        prompt = self.format_prompt(instructions, chunks, agent)
+    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config):
+        prompt = self.format_prompt(instructions, chunks, agent, question)
         data = {
             "input": {
                 "prompt": prompt,
                 "sampling_params": {
                     "max_new_tokens": settings.WENIGPT_MAX_NEW_TOKENS,
-                    "max_length": settings.WENIGPT_MAX_LENGHT,
-                    "top_p": settings.WENIGPT_TOP_P,
-                    "top_k": settings.WENIGPT_TOP_K,
-                    "temperature": settings.WENIGPT_TEMPERATURE,
+                    "max_length": llm_config.setup.get("max_length", settings.WENIGPT_MAX_LENGHT),
+                    "top_p": llm_config.setup.get("top_p", settings.WENIGPT_TOP_P),
+                    "top_k": llm_config.setup.get("top_k", settings.WENIGPT_TOP_K),
+                    "temperature": llm_config.setup.get("temperature", settings.WENIGPT_TEMPERATURE),
                     "do_sample": False,
                     "stop": settings.WENIGPT_STOP,
                 }
