@@ -20,6 +20,7 @@ def update_message(UpdateProjectDTO: UpdateProjectDTO):
         "entity": entity,
         "user": user,
         "project_uuid": project_uuid,
+        "brain_on": UpdateProjectDTO.brain_on
     }
 
     publisher.send_message(
@@ -43,6 +44,8 @@ def update_project(
 
     for attr, value in UpdateProjectDTO.dict().items():
         setattr(project, attr, value)
+        if attr == "brain_on":
+            update_message(UpdateProjectDTO)
     project.save()
 
     return project
