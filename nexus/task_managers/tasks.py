@@ -17,7 +17,7 @@ from nexus.intelligences.models import (
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
 from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
-from nexus.usecases.intelligences.get_by_uuid import get_by_contentbase_uuid, get_by_content_base_file_uuid
+from nexus.usecases.intelligences.get_by_uuid import get_by_contentbase_uuid
 from typing import Dict
 
 from nexus.trulens import wenigpt_evaluation, tru_recorder
