@@ -64,28 +64,25 @@ def upload_file(
     content_base_file_uuid: str,
     load_type: str = None
 ):
-    if file != None:
-        file = pickle.loads(file)
-        file_database_response = s3FileDatabase().add_file(file)
+    file = pickle.loads(file)
+    file_database_response = s3FileDatabase().add_file(file)
 
-        if file_database_response.status != 0:
-            return {
-                "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
-                "error": file_database_response.err
-            }
+    if file_database_response.status != 0:
+        return {
+            "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
+            "error": file_database_response.err
+        }
 
-        content_base_file_dto = UpdateContentBaseFileDTO(
-            file_url=file_database_response.file_url,
-            file_name=file_database_response.file_name
-        )
+    content_base_file_dto = UpdateContentBaseFileDTO(
+        file_url=file_database_response.file_url,
+        file_name=file_database_response.file_name
+    )
 
-        content_base_file = UpdateContentBaseFileUseCase().update_content_base_file(
-            content_base_file_uuid=content_base_file_uuid,
-            user_email=user_email,
-            update_content_base_file_dto=content_base_file_dto
-        )
-    else:
-        content_base_file = get_by_content_base_file_uuid(content_base_file_uuid)
+    content_base_file = UpdateContentBaseFileUseCase().update_content_base_file(
+        content_base_file_uuid=content_base_file_uuid,
+        user_email=user_email,
+        update_content_base_file_dto=content_base_file_dto
+    )
 
     task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
 
