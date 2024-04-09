@@ -2,13 +2,21 @@ from rest_framework import views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .serializers import UpdateProjectSerializer
+from .serializers import ProjectSerializer
 
 from nexus.usecases import projects
 
 
 class ProjectUpdateViewset(views.APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_uuid):
+        user_email = request.user.email
+        project = projects.get_project(project_uuid, user_email)
+
+        return Response(
+            ProjectSerializer(project).data
+        )
 
     def patch(self, request, project_uuid):
         user_email = request.user.email
@@ -20,5 +28,5 @@ class ProjectUpdateViewset(views.APIView):
         updated_project = projects.update_project(dto)
 
         return Response(
-            UpdateProjectSerializer(updated_project).data
+            ProjectSerializer(updated_project).data
         )

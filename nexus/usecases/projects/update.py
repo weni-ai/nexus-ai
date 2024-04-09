@@ -1,9 +1,10 @@
 from nexus.event_driven.publisher.rabbitmq_publisher import RabbitMQPublisher
-from nexus.projects.models import Project
-from nexus.usecases import users, intelligences
-from nexus.orgs import permissions
 from .dto import UpdateProjectDTO
 from .get_by_uuid import get_project_by_uuid
+from nexus.projects.models import Project
+from nexus.orgs import permissions
+from nexus.usecases import users
+from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 
 
 def update_message(UpdateProjectDTO: UpdateProjectDTO):
@@ -40,7 +41,7 @@ def update_project(
 
     has_permission = permissions.can_edit_intelligence_of_org(user, org)
     if not has_permission:
-        raise intelligences.IntelligencePermissionDenied()
+        raise IntelligencePermissionDenied()
 
     for attr, value in UpdateProjectDTO.dict().items():
         setattr(project, attr, value)
