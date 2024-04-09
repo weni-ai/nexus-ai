@@ -1,16 +1,49 @@
-from fastapi import FastAPI
-from router.repositories.orm import ProjectORMRepository
-import json
+
+import os
+from typing import Annotated
+
+from fastapi import FastAPI, Request, HTTPException
+
+from nexus.event_driven.signals import message_started, message_finished
+
+from router.entities import (
+    Message, DBCon
+)
+from router.tasks import start_route
+
 
 app = FastAPI()
 
 
-@app.get('/message')
-def message():
-    projects = ProjectORMRepository().get_all()
-    return {"projects": projects}
+def authenticate(token: str):
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication credentials not provided")
 
-@app.post('/message')
-def message():
-    projects = ProjectORMRepository().get_all()
-    return {"projects": projects}
+    if os.environ.get("ROUTER_TOKEN") == token:
+        return
+    
+    raise HTTPException(status_code=403, detail="Wrong credentials")
+
+@app.post("/")
+def healthcheck():
+    return {}
+
+
+@app.post('/messages')
+def messages(request: Request, message: Message):
+    message_started.send(sender=DBCon)
+
+    authenticate(request.query_params.get("token"))
+
+    try:
+
+        print("[+ Mensagem recebida +]")
+        print(message)
+        print("[+ ----------------- +]")
+
+
+        start_route.delay(message.dict())
+
+    finally:
+        message_finished.send(sender=DBCon)
+    return {}
