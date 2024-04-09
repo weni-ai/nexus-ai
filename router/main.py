@@ -24,7 +24,7 @@ def authenticate(token: str):
     
     raise HTTPException(status_code=403, detail="Wrong credentials")
 
-@app.post("/")
+@app.get("/")
 def healthcheck():
     return {}
 
