@@ -11,7 +11,7 @@ from nexus.usecases.intelligences.intelligences_dto import ContentBaseLogsDTO
 from router.entities import LLMSetupDTO
 
 class WeniGPTClient(LLMClient):
-    code = "wenipgt"
+    code = "wenigpt"
     def __init__(self):
         self.url = settings.WENIGPT_API_URL
         self.token = settings.WENIGPT_API_TOKEN
@@ -55,6 +55,7 @@ class WeniGPTClient(LLMClient):
         try:
             response = requests.request("POST", self.url, headers=self.headers, data=json.dumps(data))
             response_json = response.json()
+            print(f"Resposta Json do WeniGPT: {response_json}")
             text_answers = response_json["output"].get("text")
 
             # log_dto = ContentBaseLogsDTO(
