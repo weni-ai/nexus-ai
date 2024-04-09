@@ -39,12 +39,10 @@ class WeniGPTClient(LLMClient):
             "input": {
                 "prompt": prompt,
                 "sampling_params": {
-                    "max_new_tokens": settings.WENIGPT_MAX_NEW_TOKENS,
-                    "max_length": llm_config.max_length,
+                    "max_tokens": llm_config.max_length,
                     "top_p": llm_config.top_p,
                     "top_k": llm_config.top_k,
                     "temperature": llm_config.temperature,
-                    "do_sample": False,
                     "stop": settings.WENIGPT_STOP,
                 }
             }
