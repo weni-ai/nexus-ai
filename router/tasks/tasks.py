@@ -11,6 +11,7 @@ from router.classifiers import classify
 from router.entities import (
     FlowDTO,
     Message,
+    LLMSetupDTO,
 )
 
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
@@ -41,27 +42,41 @@ def start_route(message: Dict) -> bool:
 
     print(f"[+ Mensagem classificada: {classification} +]")
 
-    llm_config = get_llm_by_project_uuid(project_uuid)
+    llm_model = get_llm_by_project_uuid(project_uuid)
 
-    llm_client = LLMClient.get_by_type(llm_config.model.lower())  # TODO: get llm model from user
+    llm_config = LLMSetupDTO(
+        model=llm_model.model.lower(),
+        model_version=llm_model.setup.get("version"),
+        temperature=llm_model.setup.get("temperature"),
+        top_k=llm_model.setup.get("top_k"),
+        top_p=llm_model.setup.get("top_p"),
+        token=llm_model.setup.get("token"),
+        max_length=llm_model.setup.get("max_length"),
+        max_tokens=llm_model.setup.get("max_tokens"),
+    )
+
+    llm_client = LLMClient.get_by_type(llm_config.model)
 
     llm_client = list(llm_client)[0]()
 
     if llm_config.model.lower() != "wenigpt":
-        llm_client.token = llm_config.setup.get("token")
+        llm_client.token = llm_config.token
+
+    print(f"[+ Modelo escolhido: {llm_config.model} +]")
 
     broadcast = BroadcastHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
     flow_start = FlowStartHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
+    flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
     route(
         classification=classification,
         message=message,
         content_base_repository=content_base_repository,
         flows_repository=flows_repository,
-        flows=flows,
         indexer=SentenXFileDataBase(),
         llm_client=llm_client,
         direct_message=broadcast,
         flow_start=flow_start,
         llm_config=llm_config,
+        flows_user_email=flows_user_email
     )

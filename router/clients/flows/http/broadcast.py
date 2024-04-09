@@ -20,7 +20,7 @@ class BroadcastHTTPClient(DirectMessage):
         print(payload)
 
         response = requests.post(url, data=payload, params=params)
-
+        print("Resposta: ", response.text)
         try:
             response.raise_for_status()
         except Exception as error:

@@ -1,7 +1,7 @@
 
 from typing import List
 from router.entities import (
-    FlowDTO, Message, DBCon, AgentDTO, InstructionDTO, ContentBaseDTO
+    Message, AgentDTO, InstructionDTO, LLMSetupDTO
 )
 
 from nexus.intelligences.llms.client import LLMClient
@@ -18,7 +18,7 @@ def call_llm(
         content_base_uuid: str,
         agent: AgentDTO,
         instructions: List[InstructionDTO],
-        llm_config
+        llm_config: LLMSetupDTO
     ) -> str:
 
     chunks: List[str] = get_chunks(
@@ -27,9 +27,8 @@ def call_llm(
         content_base_uuid=content_base_uuid
     )
 
-    if not chunks:
-        raise Exception  # TODO: treat exception
-    
+    print(f"[+ Contexto do Sentenx: {chunks} +]")
+
     response = llm_model.request_gpt(
         instructions,
         chunks,

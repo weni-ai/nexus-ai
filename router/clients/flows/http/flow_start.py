@@ -3,7 +3,7 @@ from typing import List
 import requests
 
 from router.flow_start import FlowStart, exceptions
-
+import json
 
 class FlowStartHTTPClient(FlowStart):
 
@@ -20,11 +20,16 @@ class FlowStartHTTPClient(FlowStart):
         payload = {"user": user, "flow": flow, "urns": urns}
 
         params = {"token": self.__access_token}
-
-        response = requests.post(url, data=payload, params=params)
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        response = requests.post(url, data=json.dumps(payload), params=params, headers=headers)
 
         print("==========Resposta do flows ======================")
+        print(url)
+        print(payload)
         print(f"{response}")
+        print(f"{response.text}")
         print("================================")
 
         try:

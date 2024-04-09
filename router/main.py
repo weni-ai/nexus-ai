@@ -1,42 +1,49 @@
 
 import os
-from typing import List, Dict
+from typing import Annotated
 
-from fastapi import FastAPI
-
-from router.repositories.orm import FlowsORMRepository, ContentBaseORMRepository
-from router.repositories import Repository
-from router.classifiers.zeroshot import ZeroshotClassifier
-from router.classifiers import Classifier
-from router.classifiers import classify
-from router.entities import (
-    FlowDTO, Message, DBCon, AgentDTO, InstructionDTO, ContentBaseDTO
-)
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
+from fastapi import FastAPI, Request, HTTPException
 
 from nexus.event_driven.signals import message_started, message_finished
 
-from router.direct_message import DirectMessage
-from router.flow_start import FlowStart
-from nexus.intelligences.llms.client import LLMClient
-
+from router.entities import (
+    Message, DBCon
+)
 from router.tasks import start_route
 
 
 app = FastAPI()
 
 
+def authenticate(token: str):
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication credentials not provided")
+
+    if os.environ.get("ROUTER_TOKEN") == token:
+        return
+    
+    raise HTTPException(status_code=403, detail="Wrong credentials")
+
+@app.post("/")
+def healthcheck():
+    return {}
+
+
 @app.post('/messages')
-def messages(message: Message):
+def messages(request: Request, message: Message):
     message_started.send(sender=DBCon)
+
+    authenticate(request.query_params.get("token"))
+
     try:
 
         print("[+ Mensagem recebida +]")
+        print(message)
+        print("[+ ----------------- +]")
+
 
         start_route.delay(message.dict())
 
     finally:
         message_finished.send(sender=DBCon)
     return {}
-
-

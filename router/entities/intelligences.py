@@ -19,3 +19,15 @@ class InstructionDTO:
 @dataclass
 class LLMConfigDTO:
     pass
+
+
+@dataclass
+class LLMSetupDTO:
+    model: str
+    model_version: str
+    temperature: str
+    top_p: str
+    top_k: str = None
+    token: str = None
+    max_length: str = None
+    max_tokens: str = None

@@ -3,7 +3,8 @@ from router.entities.mailroom import Message
 from router.entities.db import DBCon
 from router.entities.intelligences import (
     AgentDTO,
-    InstructionDTO
+    InstructionDTO,
+    LLMSetupDTO,
 )
 from nexus.usecases.intelligences.intelligences_dto import (
     ContentBaseDTO,

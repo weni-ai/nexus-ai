@@ -8,7 +8,7 @@ from router.classifiers.zeroshot import ZeroshotClassifier
 from router.classifiers import Classifier
 from router.classifiers import classify
 from router.entities import (
-    FlowDTO, Message, DBCon, AgentDTO, InstructionDTO, ContentBaseDTO
+    FlowDTO, Message, AgentDTO, InstructionDTO, ContentBaseDTO, LLMSetupDTO
 )
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 
@@ -28,12 +28,12 @@ def route(
         message: Message,
         content_base_repository: Repository,
         flows_repository: Repository,
-        flows: List[FlowDTO],  # TODO: talvez não seja necessário, remover
         indexer: Indexer,
         llm_client: LLMClient,
         direct_message: DirectMessage,
         flow_start: FlowStart,
-        llm_config,
+        llm_config: LLMSetupDTO,
+        flows_user_email,
 
     ):
 
@@ -57,7 +57,7 @@ def route(
         )
 
         print("=============LLM===================")
-        print(llm_response)
+        print(f"[+ Resposta do LLM: {llm_response}+]")
         print("===================================")
 
         if fallback_flow:
@@ -66,7 +66,7 @@ def route(
                 flow=fallback_flow.uuid,
                 flow_start=flow_start,
                 llm_response=llm_response,
-                user_email="crm@weni.ai" # TODO: Descobrir quem é esse email/mandar o crm sempre?
+                user_email=flows_user_email
             )
             return
 
@@ -74,7 +74,7 @@ def route(
             llm_response=llm_response,
             message=message,
             direct_message=direct_message,
-            user_email="crm@weni.ai" # TODO: Descobrir quem é esse email/mandar o crm sempre?
+            user_email=flows_user_email
         )
         return
 
@@ -84,6 +84,6 @@ def route(
         message=message,
         flow_start=flow_start,
         flow=flow.uuid,
-        user_email="crm@weni.ai" # TODO: Descobrir quem é esse email/mandar o crm sempre?
+        user_email=flows_user_email
     )
 

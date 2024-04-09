@@ -30,6 +30,8 @@ from router.entities import (
     FlowDTO, Message
 )
 from router.tests.mocks import *
+from nexus.intelligences.llms.chatgpt import ChatGPTClient
+from nexus.intelligences.llms.wenigpt import WeniGPTClient
 
 
 class RouteTestCase(TestCase):
@@ -53,7 +55,7 @@ class RouteTestCase(TestCase):
             name="Doris",
             role="Vendas",
             personality="Criativa",
-            goal="",
+            goal="Vender os produtos",
             content_base=self.content_base
         )
         self.flow = Flow.objects.create(
@@ -80,7 +82,68 @@ class RouteTestCase(TestCase):
             }
         )
         self.llm = create_llm(llm_dto=llm_dto)
+
+    def test_chatgpt_prompt(self):
+        from router.repositories.orm import ContentBaseORMRepository
+
+        content_base = self.content_base
+
+        content_base_repository = ContentBaseORMRepository()
+        instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
+        agent = self.agent
+
+        chunks = ["Lorem Ipsum", "Dolor Sit Amet"]
+
+        prompt = ChatGPTClient().format_prompt(instructions, chunks, agent.__dict__)
+        # print(prompt)
+        assert "{{" not in prompt
     
+    def test_wenigpt_prompt(self):
+        from router.repositories.orm import ContentBaseORMRepository
+
+        content_base = self.content_base
+
+        content_base_repository = ContentBaseORMRepository()
+        instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
+        agent = self.agent
+
+        chunks = ["Lorem Ipsum", "Dolor Sit Amet"]
+        question = "Ipsum Lorem"
+
+        prompt = WeniGPTClient().format_prompt(instructions, chunks, agent.__dict__, question)
+        assert "{{" not in prompt
+    
+    def test_wenigpt_no_context_prompt(self):
+        from router.repositories.orm import ContentBaseORMRepository
+
+        content_base = self.content_base
+
+        content_base_repository = ContentBaseORMRepository()
+        instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
+        agent = self.agent
+
+        chunks = []
+        question = "Ipsum Lorem"
+
+        prompt = WeniGPTClient().format_prompt(instructions, chunks, agent.__dict__, question)
+        print(prompt)
+        assert "{{" not in prompt
+    
+    def test_chatgpt_no_context_prompt(self):
+        from router.repositories.orm import ContentBaseORMRepository
+
+        content_base = self.content_base
+
+        content_base_repository = ContentBaseORMRepository()
+        instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
+        agent = self.agent
+
+        chunks = []
+
+        prompt = ChatGPTClient().format_prompt(instructions, chunks, agent.__dict__)
+        print(prompt)
+        assert "{{" not in prompt
+
     def mock_messages(
             self,
             classification: str,
@@ -120,17 +183,19 @@ class RouteTestCase(TestCase):
         if llm_config.model.lower() != "wenigpt":
             llm_client.token = llm_config.setup.get("token")
 
+        flow_user_email = "email@test.com"
+
         route(
             classification=classification,
             message=message,
             content_base_repository=content_base_repository,
             flows_repository=flows_repository,
-            flows=flows,
             indexer=MockIndexer(),
             llm_client=llm_client(),
             direct_message=MockBroadcastHTTPClient(),
             flow_start=MockFlowStartHTTPClient(),
             llm_config=llm_config,
+            flows_user_email=flow_user_email,
         )
     
     def test_route_other(self):
