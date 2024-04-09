@@ -402,7 +402,6 @@ class TestContentBasePersonalizationViewSet(TestCase):
         agent.save()
         self.content_base.instructions.create(instruction="Instruction 1")
         self.content_base.instructions.create(instruction="Instruction 2")
-        
 
     def test_get_personalization(self):
         url_retrieve = f'{self.url}/'
@@ -448,7 +447,7 @@ class TestContentBasePersonalizationViewSet(TestCase):
     def test_delete_personalization(self):
         url_update = f'{self.url}/'
         data = {
-        "instructions": [
+            "instructions": [
                 {
                     "id": 1,
                 },
