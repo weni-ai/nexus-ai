@@ -14,6 +14,7 @@ class CreateFlowDTO:
     name: str
     prompt: str
     fallback: bool = False
+    product_handler: bool = False
 
 
 class CreateFlowsUseCase():
@@ -26,5 +27,6 @@ class CreateFlowsUseCase():
             name=create_dto.name,
             prompt=create_dto.prompt,
             fallback=create_dto.fallback,
+            product_handler=create_dto.product_handler,
             content_base=content_base
         )

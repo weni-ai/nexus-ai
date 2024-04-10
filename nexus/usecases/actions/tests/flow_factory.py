@@ -21,3 +21,4 @@ class FlowFactory(factory.django.DjangoModelFactory):
         created_by=factory.SelfAttribute('..created_by')
     )
     fallback = False
+    product_handler = False
