@@ -61,8 +61,6 @@ class WeniGPTClient(LLMClient):
 
         text_answers = None
 
-        print(data)
-
         try:
             response = requests.request("POST", self.url, headers=self.headers, data=json.dumps(data))
             response_json = response.json()
