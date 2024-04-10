@@ -50,7 +50,7 @@ def route(
         agent = agent.set_default_if_null()
 
         if instructions == []:
-            instructions.append(settings.DEFAULT_INSTRUCTIONS)
+            instructions += settings.DEFAULT_INSTRUCTIONS
 
         llm_response: str = call_llm(
             indexer=indexer,
