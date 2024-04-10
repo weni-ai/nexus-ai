@@ -66,6 +66,8 @@ def route(
         print(f"[+ Resposta do LLM: {llm_response}+]")
         print("===================================")
 
+        llm_response = llm_response[:settings.LLM_CHAR_LIMIT]
+
         if fallback_flow:
             dispatch(
                 message=message,
