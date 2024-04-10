@@ -51,6 +51,9 @@ def route(
 
         if instructions == []:
             instructions += settings.DEFAULT_INSTRUCTIONS
+            instructions += [""]
+        
+        instructions.append(settings.LLM_DEFAULT_CHAR_INSTRUCTION)
 
         llm_response: str = call_llm(
             indexer=indexer,
