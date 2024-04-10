@@ -39,7 +39,7 @@ class WeniGPTClient(LLMClient):
         }
 
     def format_prompt(self, instructions: List, chunks: List, agent: Dict, question: str = None) -> str:
-        instructions_formatted = "\n".join([f"- {instruction.instruction}" for instruction in instructions])
+        instructions_formatted = "\n".join([f"- {instruction}" for instruction in instructions])
         context = "\n".join([chunk for chunk in chunks])
         prompt = self.get_prompt(instructions_formatted, context, agent, question)
         return prompt
