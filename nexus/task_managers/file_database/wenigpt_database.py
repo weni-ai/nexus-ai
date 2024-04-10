@@ -46,7 +46,7 @@ class WeniGPTDatabase(GPTDatabase):
             )
             log = create_wenigpt_logs(log_dto.__dict__)
             return {
-                "answers": text_answer,
+                "answers": [{"text": text_answer}],
                 "id": "0",
                 "question_uuid": str(log.user_question.uuid)
             }
