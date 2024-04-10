@@ -62,6 +62,7 @@ class WeniGPTClient(LLMClient):
         text_answers = None
 
         try:
+            print("Request to wenigpt: ", data)
             response = requests.request("POST", self.url, headers=self.headers, data=json.dumps(data))
             response_json = response.json()
             print(f"Resposta Json do WeniGPT: {response_json}")
