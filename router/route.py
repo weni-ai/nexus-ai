@@ -1,6 +1,7 @@
 import os
-from typing import List, Dict
 
+from typing import List, Dict
+from django.conf import settings
 
 from router.repositories.orm import FlowsORMRepository, ContentBaseORMRepository
 from router.repositories import Repository
@@ -45,6 +46,11 @@ def route(
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
         agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
         instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
+
+        agent = agent.set_default_if_null()
+
+        if instructions == []:
+            instructions.append(settings.DEFAULT_INSTRUCTIONS)
 
         llm_response: str = call_llm(
             indexer=indexer,
