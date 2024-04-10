@@ -150,11 +150,12 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
             for instruction_data in instructions_data:
                 serializer = ContentBaseInstructionSerializer(data=instruction_data, partial=True)
                 if serializer.is_valid():
-                    instruction = instance.instructions.get(id=instruction_data.get('id'))
-                    instruction.instruction = instruction_data.get('instruction')
-                    instruction.save()
-                    instruction.refresh_from_db()
-
+                    if instruction_data.get('id'):
+                        instruction = instance.instructions.get(id=instruction_data.get('id'))
+                        instruction.instruction = instruction_data.get('instruction')
+                        instruction.save()
+                        instruction.refresh_from_db()
+                    else:
+                        instance.instructions.create(instruction=instruction_data.get('instruction'))
         instance.refresh_from_db()
         return instance
-
