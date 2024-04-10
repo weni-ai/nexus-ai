@@ -1,5 +1,9 @@
 from abc import ABC
-from typing import Dict
+from typing import Dict, List
+
+from openai import OpenAI
+
+from router.entities import LLMSetupDTO
 
 
 class LLMClient(ABC):
@@ -7,6 +11,9 @@ class LLMClient(ABC):
     @classmethod
     def get_by_type(cls, type):
         return filter(lambda llm: llm.code==type, cls.__subclasses__())
+    
+    def get_client(self):
+        return OpenAI(api_key=self.api_key)
     
     def replace_vars(self, prompt: str, replace_variables: Dict) -> str:
         for key in replace_variables.keys():
@@ -22,8 +29,10 @@ class LLMClient(ABC):
             "agent_personality": agent.get("personality"),
             "instructions_formatted": instructions_formatted,
             "context": context,
-            "question": question,
         }
+
+        if question:
+            variables.update({"question": question})
 
         if context:
             return self.replace_vars(self.prompt_with_context, variables)
@@ -31,3 +40,37 @@ class LLMClient(ABC):
 
     def request_gpt(self):
         pass
+
+    def chat_completion(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
+        prompt = self.format_prompt(instructions, chunks, agent)
+
+        print(f"[+ prompt enviado ao LLM: {prompt} +]")
+
+        kwargs = dict(
+            temperature=float(llm_config.temperature) if llm_config.temperature else None,
+            top_p=float(llm_config.top_p) if llm_config.top_p else None,
+            max_tokens=int(llm_config.max_tokens) if llm_config.max_tokens else None
+        )
+
+        print(f"[+ Parametros enviados para o LLM: {kwargs} +]")
+
+        chat_completion = self.client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": prompt
+                },
+                {
+                    "role": "user",
+                    "content": question,
+                }
+            ],
+            model=llm_config.model_version,
+            **{k: v for k, v in kwargs.items() if v is not None}
+        )
+
+        text_answers = chat_completion.choices[0].message.content
+
+        print(f"[+ Resposta do LLM: {text_answers} +]")
+
+        return {"answers":[{"text": text_answers}],"id":"0"}

@@ -55,14 +55,15 @@ def start_route(message: Dict) -> bool:
         max_tokens=llm_model.setup.get("max_tokens"),
     )
 
-    llm_client = LLMClient.get_by_type(llm_config.model)
+    print(f"[+ LLM escolhido {llm_config.model} +]")
 
-    llm_client = list(llm_client)[0]()
+    llm_client = LLMClient.get_by_type(llm_config.model)
+    llm_client: LLMClient = list(llm_client)[0](model_version=llm_config.model_version)
 
     if llm_config.model.lower() != "wenigpt":
-        llm_client.token = llm_config.token
+        llm_client.api_key = llm_config.token
 
-    print(f"[+ Modelo escolhido: {llm_config.model} +]")
+    print(f"[+ Modelo escolhido: {llm_config.model} :{llm_config.model_version} +]")
 
     broadcast = BroadcastHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
     flow_start = FlowStartHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
