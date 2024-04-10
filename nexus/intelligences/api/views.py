@@ -787,15 +787,13 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         try:
+            instruction_id = request.query_params.get("id")
             project_uuid = kwargs.get('project_uuid')
             content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, request.user.email)
 
-            instructions = request.data.get('instructions')
-            ids = [iid.get("id") for iid in instructions]
+            ids = [instruction_id]
             intelligences.DeleteContentBaseUseCase().bulk_delete_instruction_by_id(content_base, ids)
             data = ContentBasePersonalizationSerializer(content_base, context={"request": request}).data
             return Response(status=status.HTTP_200_OK, data=data)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
-    
-    
