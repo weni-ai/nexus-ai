@@ -17,8 +17,10 @@ class BroadcastHTTPClient(DirectMessage):
         payload = {"user": user, "project": project_uuid, "urns": urns, "text": text}
         params = {"token": self.__access_token}
 
-        response = requests.post(url, data=payload, params=params)
+        print(payload)
 
+        response = requests.post(url, data=payload, params=params)
+        print("Resposta: ", response.text)
         try:
             response.raise_for_status()
         except Exception as error:

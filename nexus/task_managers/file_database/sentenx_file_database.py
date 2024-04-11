@@ -75,6 +75,7 @@ class SentenXFileDataBase:
         }
 
         response = requests.post(url=url, headers=self.headers, json=body)
+        response.raise_for_status()
 
         if response.status_code == 200:
             return {

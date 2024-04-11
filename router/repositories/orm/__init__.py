@@ -5,52 +5,109 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
 django.setup()
-
-
+from typing import List
+from dataclasses import dataclass
 from router.repositories import Repository
 
-from django.db import reset_queries, close_old_connections
-from django.dispatch import Signal
+from nexus.intelligences.models import (
+    ContentBase,
+    ContentBaseAgent,
+)
+from nexus.actions.models import Flow
+from nexus.usecases.intelligences.get_by_uuid import (
+    get_default_content_base_by_project,
+)
+from router.entities import (
+    AgentDTO,
+    FlowDTO,
+    InstructionDTO,
+    ContentBaseDTO,
+)
 
 
-message_started = Signal()
-message_finished = Signal()
+class ContentBaseORMRepository(Repository):
+    def _get_content_base(self, content_base_uuid: str) -> ContentBase:
+        return ContentBase.objects.get(uuid=content_base_uuid)
 
-message_started.connect(reset_queries)
-message_started.connect(close_old_connections)
-message_finished.connect(close_old_connections)
+    def get_content_base_by_project(self, project_uuid: str) -> ContentBase:
 
-from nexus.projects.models import Project
-from django.db import connections
+        content_base = get_default_content_base_by_project(project_uuid)
 
+        return ContentBaseDTO(
+            uuid=str(content_base.uuid),
+            title=content_base.title,
+            intelligence_uuid=str(content_base.intelligence.uuid),
+        )
 
-class ProjectORMRepository(Repository):
-    def __init__(self) -> None:
-        self.check_connection()
+    def get_agent(self, content_base_uuid: str) -> AgentDTO:
 
-    def check_connection(self):
-        message_started.send(sender=self)
-        try:
-            db_conn = connections['default']
-            db_conn.cursor()
-        finally:
-            message_finished.send(sender=self)
+        content_base = ContentBase.objects.get(uuid=content_base_uuid)
+        agent: ContentBaseAgent = content_base.agent
 
-    def get(self, uuid: str):
-        return Project.objects.get(uuid=uuid)
+        return AgentDTO(
+            name=agent.name,
+            role=agent.role,
+            personality=agent.personality,
+            goal=agent.goal,
+            content_base_uuid=content_base_uuid
+        )
 
-    def get_all(self):
-        return Project.objects.all()[::1]
-    
-    def add(self):
-        return super().add()
+    def list_instructions(self, content_base_uuid: str) -> List[InstructionDTO]:
+        content_base: ContentBase = self._get_content_base(content_base_uuid)
 
-    def update(self, uuid: str):
-        return super().update(uuid)
-    
-    def delete(self, uuid: str):
-        return super().delete(uuid)
+        instructions = content_base.instructions.all()
+
+        instructions_list = []
+
+        for instruction in instructions:
+            instructions_list.append(
+                InstructionDTO(
+                    instruction=instruction.instruction,
+                    content_base_uuid=str(instruction.content_base_uuid)
+                )
+            )
+
+        return instructions_list
 
 
 class FlowsORMRepository(Repository):
-    ...
+    def get_project_flow_by_name(self, project_uuid: str, name: str):
+        content_base = get_default_content_base_by_project(project_uuid)
+        flow = Flow.objects.filter(content_base=content_base, name=name).first()
+        return FlowDTO(
+                    uuid=str(flow.uuid),
+                    name=flow.name,
+                    prompt=flow.prompt,
+                    fallback=flow.fallback,
+                    content_base_uuid=str(flow.content_base.uuid)
+                )
+
+    def project_flow_fallback(self, project_uuid: str, fallback: bool) -> FlowDTO:
+        content_base = get_default_content_base_by_project(project_uuid)
+        flow = Flow.objects.filter(content_base=content_base, fallback=fallback).first()  # o que fazer se o fallback vier vazio??
+        if flow:
+            return FlowDTO(
+                        uuid=str(flow.uuid),
+                        name=flow.name,
+                        prompt=flow.prompt,
+                        fallback=flow.fallback,
+                        content_base_uuid=str(flow.content_base.uuid)
+                    )
+
+    def project_flows(self, project_uuid: str, fallback: bool = False) -> List[FlowDTO]:
+        content_base = get_default_content_base_by_project(project_uuid)
+        flows = Flow.objects.filter(content_base=content_base, fallback=fallback)
+
+        flows_list = []
+        for flow in flows:
+            flows_list.append(
+                FlowDTO(
+                    uuid=str(flow.uuid),
+                    name=flow.name,
+                    prompt=flow.prompt,
+                    fallback=flow.fallback,
+                    content_base_uuid=str(flow.content_base.uuid)
+                )
+            )
+        
+        return flows_list

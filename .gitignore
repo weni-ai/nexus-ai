@@ -183,9 +183,14 @@ cython_debug/
 staticfiles/
 
 .idea/
+.vscode/
 
 weni-script.*
 weni-script-*
 weni-scripts/
 .streamlit/
 *.sqlite
+
+# Celery
+
+celerybeat-schedule.*
