@@ -94,16 +94,17 @@ def get_integrated_intelligence_by_project(
     try:
         return IntegratedIntelligence.objects.get(project__uuid=project_uuid)
     except IntegratedIntelligence.DoesNotExist:
-        proj = Project.objects.get(uuid=project_uuid)
-        default_content_base = ContentBase.objects.get(
-            is_router=True,
-            intelligence__org__uuid=proj.org.uuid
-        )
-        integrated_intelligence = IntegratedIntelligence.objects.create(
-            project=proj,
-            intelligence=default_content_base.intelligence,
-            created_by=proj.created_by
-        )
+
+        project = Project.objects.get(uuid=project_uuid)
+        org = project.org
+        intelligence = org.intelligences.get(name=project.name)
+
+        if intelligence.is_router:
+            integrated_intelligence = IntegratedIntelligence.objects.create(
+                project=project,
+                intelligence=intelligence,
+                created_by=project.created_by
+            )
         return integrated_intelligence
     except Exception as exception:
         raise Exception(f"[ IntegratedIntelligence ] - IntegratedIntelligence error to get - error: `{exception}`")
