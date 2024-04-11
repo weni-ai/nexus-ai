@@ -20,11 +20,11 @@ class ZeroshotClassifier(Classifier):
             flows_list.append(
                 {
                     "class": flow.name,
-                    "context": self.chatbot_goal,
+                    "context": flow.prompt,
                 }
             )
 
-        response: dict = ZeroshotClient().fast_predict(message, flows_list, language)
+        response: dict = ZeroshotClient(self.chatbot_goal).fast_predict(message, flows_list, language)
 
         print("25 ", response)
 
