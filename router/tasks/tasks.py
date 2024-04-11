@@ -27,6 +27,9 @@ from router.route import route
 
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 
+from router.entities import (
+    FlowDTO, Message, AgentDTO, InstructionDTO, ContentBaseDTO, LLMSetupDTO
+)
 
 @celery_app.task
 def start_route(message: Dict) -> bool:
@@ -38,7 +41,12 @@ def start_route(message: Dict) -> bool:
 
     flows: List[FlowDTO] = flows_repository.project_flows(project_uuid, False)
 
-    classification: str = classify(ZeroshotClassifier(), message.text, flows)
+    content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
+
+    agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
+    agent = agent.set_default_if_null()
+
+    classification: str = classify(ZeroshotClassifier(agent.goal), message.text, flows)
 
     print(f"[+ Mensagem classificada: {classification} +]")
 

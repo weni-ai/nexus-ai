@@ -7,9 +7,9 @@ import requests
 
 
 class ZeroshotClient:
-    def __init__(self) -> None:
+    def __init__(self, prompt: str) -> None:
         self.base_url = os.environ.get("ZEROSHOT_URL")
-        self.prompt = os.environ.get("ZEROSHOT_PROMPT")
+        self.prompt = prompt
         self.token = os.environ.get("ZEROSHOT_TOKEN")
     
     def fast_predict(self, message: str, actions: List[Dict], language: str =" por"):

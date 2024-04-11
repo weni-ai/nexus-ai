@@ -5,10 +5,14 @@ from router.clients.zeroshot import ZeroshotClient
 
 from router.entities.flow import FlowDTO
 
+from django.conf import settings
+
+
 class ZeroshotClassifier(Classifier):
 
-    def __init__(self, version: str = None) -> None:
+    def __init__(self, version: str = None, chatbot_goal: str = settings.DEFAULT_AGENT_GOAL) -> None:
         self.__version = version
+        self.chatbot_goal = chatbot_goal
 
     def predict(self, message: str, flows: List[FlowDTO], language: str = "por") -> str:
         flows_list = []
@@ -20,7 +24,7 @@ class ZeroshotClassifier(Classifier):
                 }
             )
 
-        response: dict = ZeroshotClient().fast_predict(message, flows_list, language)
+        response: dict = ZeroshotClient(self.chatbot_goal).fast_predict(message, flows_list, language)
 
         print("25 ", response)
 
