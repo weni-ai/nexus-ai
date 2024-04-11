@@ -101,7 +101,8 @@ def get_integrated_intelligence_by_project(
         )
         integrated_intelligence = IntegratedIntelligence.objects.create(
             project=proj,
-            intelligence=default_content_base.intelligence
+            intelligence=default_content_base.intelligence,
+            created_by=proj.created_by
         )
         return integrated_intelligence
     except Exception as exception:
