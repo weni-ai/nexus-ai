@@ -17,6 +17,7 @@ from nexus.intelligences.models import (
     IntegratedIntelligence,
     LLM
 )
+from nexus.projects.models import Project
 
 
 def get_by_intelligence_uuid(intelligence_uuid: str) -> Intelligence:
@@ -93,7 +94,16 @@ def get_integrated_intelligence_by_project(
     try:
         return IntegratedIntelligence.objects.get(project__uuid=project_uuid)
     except IntegratedIntelligence.DoesNotExist:
-        raise Exception(f"[ IntegratedIntelligence ] - IntegratedIntelligence with project uuid `{project_uuid}` does not exists.")
+        proj = Project.objects.get(uuid=project_uuid)
+        default_content_base = ContentBase.objects.get(
+            is_router=True,
+            intelligence__org__uuid=proj.org.uuid
+        )
+        integrated_intelligence = IntegratedIntelligence.objects.create(
+            project=proj,
+            intelligence=default_content_base.intelligence
+        )
+        return integrated_intelligence
     except Exception as exception:
         raise Exception(f"[ IntegratedIntelligence ] - IntegratedIntelligence error to get - error: `{exception}`")
 
