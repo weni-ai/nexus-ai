@@ -63,7 +63,7 @@ class ContentBaseORMRepository(Repository):
             instructions_list.append(
                 InstructionDTO(
                     instruction=instruction.instruction,
-                    content_base_uuid=str(instruction.content_base_uuid)
+                    content_base_uuid=str(instruction.content_base.uuid)
                 )
             )
 

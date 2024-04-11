@@ -50,7 +50,7 @@ class WeniGPTClient(LLMClient):
             "input": {
                 "prompt": prompt,
                 "sampling_params": {
-                    "max_tokens": int(llm_config.max_length),
+                    "max_tokens": int(llm_config.max_length) if isinstance(llm_config.max_length, int) else int(settings.WENIGPT_MAX_LENGHT),
                     "top_p": float(llm_config.top_p),
                     "top_k": float(llm_config.top_k),
                     "temperature": float(llm_config.temperature),
@@ -62,6 +62,7 @@ class WeniGPTClient(LLMClient):
         text_answers = None
 
         try:
+            print(f"Request para o Wenigpt: {prompt}")
             response = requests.request("POST", self.url, headers=self.headers, data=json.dumps(data))
             response_json = response.json()
             print(f"Resposta Json do WeniGPT: {response_json}")

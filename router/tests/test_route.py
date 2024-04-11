@@ -17,7 +17,7 @@ from nexus.users.models import User
 from nexus.orgs.models import Org
 from nexus.actions.models import Flow
 from nexus.intelligences.models import (
-    IntegratedIntelligence, ContentBase, ContentBaseAgent
+    IntegratedIntelligence, ContentBase, ContentBaseAgent, ContentBaseInstruction
 )
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.intelligences.intelligences_dto import LLMDTO
@@ -71,6 +71,8 @@ class RouteTestCase(TestCase):
             prompt="Fluxo de fallback",
             fallback=True,
         )
+        self.instruction = ContentBaseInstruction.objects.create(content_base=self.content_base, instruction="Teste Instruction")
+
         llm_dto = LLMDTO(
             user_email=self.user.email,
             project_uuid=str(self.project.uuid),
@@ -90,6 +92,7 @@ class RouteTestCase(TestCase):
 
         content_base_repository = ContentBaseORMRepository()
         instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
+        instructions: List[str] = [instruction.instruction for instruction in instructions]
         agent = self.agent
 
         chunks = ["Lorem Ipsum", "Dolor Sit Amet"]
@@ -105,12 +108,13 @@ class RouteTestCase(TestCase):
 
         content_base_repository = ContentBaseORMRepository()
         instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
+        instructions: List[str] = [instruction.instruction for instruction in instructions]
         agent = self.agent
 
         chunks = ["Lorem Ipsum", "Dolor Sit Amet"]
         question = "Ipsum Lorem"
 
-        prompt = WeniGPTClient().format_prompt(instructions, chunks, agent.__dict__, question)
+        prompt = WeniGPTClient(model_version=settings.WENIGPT_FINE_TUNNING_DEFAULT_VERSION).format_prompt(instructions, chunks, agent.__dict__, question)
         assert "{{" not in prompt
     
     def test_wenigpt_no_context_prompt(self):
@@ -120,12 +124,13 @@ class RouteTestCase(TestCase):
 
         content_base_repository = ContentBaseORMRepository()
         instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
+        instructions: List[str] = [instruction.instruction for instruction in instructions]
         agent = self.agent
 
         chunks = []
         question = "Ipsum Lorem"
 
-        prompt = WeniGPTClient().format_prompt(instructions, chunks, agent.__dict__, question)
+        prompt = WeniGPTClient(model_version=settings.WENIGPT_FINE_TUNNING_DEFAULT_VERSION).format_prompt(instructions, chunks, agent.__dict__, question)
         print(prompt)
         assert "{{" not in prompt
     
@@ -159,7 +164,7 @@ class RouteTestCase(TestCase):
         message = Message(
             project_uuid=project_uuid,
             text="Lorem Ipsum",
-            contact_urn="telegram:844380532"
+            contact_urn="telegram:123455667"
         )
 
         content_base_repository = ContentBaseTestRepository(content_base, agent)

@@ -24,11 +24,10 @@ class ChatGPTClient(LLMClient):
         self.prompt_without_context = prompt_without_context
 
     def format_prompt(self, instructions: List, chunks: List, agent: Dict):
-        instructions_formatted: str = "\n".join([f"- {instruction}" for instruction in instructions])
+        instructions_formatted = "\n".join([f"- {instruction}" for instruction in instructions])
         context: str = "\n".join([chunk for chunk in chunks])
         prompt: str = self.get_prompt(instructions_formatted, context, agent)
         return prompt
 
     def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
         return self.chat_completion(instructions, chunks, agent, question, llm_config)
-    

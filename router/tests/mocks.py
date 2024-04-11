@@ -37,7 +37,7 @@ class ContentBaseTestRepository(Repository):
             instructions_list.append(
                 InstructionDTO(
                     instruction=instruction.instruction,
-                    content_base_uuid=str(instruction.content_base_uuid)
+                    content_base_uuid=str(instruction.content_base.uuid)
                 )
             )
 
@@ -88,7 +88,7 @@ class MockIndexer:
     def search_data(self, content_base_uuid: str, text: str):
         return {
             "status": 200,
-            "data": ["Lorem Ipsum"]
+            "data": {"response": ["Lorem Ipsum"]}
         }
 
 class MockBroadcastHTTPClient():

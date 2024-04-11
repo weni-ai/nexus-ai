@@ -1,6 +1,7 @@
 import os
-from typing import List, Dict
 
+from typing import List, Dict
+from django.conf import settings
 
 from router.repositories.orm import FlowsORMRepository, ContentBaseORMRepository
 from router.repositories import Repository
@@ -43,8 +44,17 @@ def route(
         fallback_flow: FlowDTO = flows_repository.project_flow_fallback(message.project_uuid, True)
 
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
+
         agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
-        instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
+        agent = agent.set_default_if_null()
+
+        instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)        
+        instructions: List[str] = [instruction.instruction for instruction in instructions]
+
+        if instructions == []:
+            instructions += settings.DEFAULT_INSTRUCTIONS
+        
+        instructions.append(settings.LLM_DEFAULT_CHAR_INSTRUCTION)
 
         llm_response: str = call_llm(
             indexer=indexer,
@@ -59,6 +69,8 @@ def route(
         print("=============LLM===================")
         print(f"[+ Resposta do LLM: {llm_response}+]")
         print("===================================")
+
+        llm_response = llm_response[:settings.LLM_CHAR_LIMIT]
 
         if fallback_flow:
             dispatch(
