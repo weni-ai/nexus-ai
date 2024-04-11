@@ -97,7 +97,7 @@ def get_integrated_intelligence_by_project(
 
         project = Project.objects.get(uuid=project_uuid)
         org = project.org
-        intelligence = org.intelligences.get(name=project.name)
+        intelligence = org.intelligences.filter(name=project.name).order_by("created_at").first()
 
         if intelligence.is_router:
             integrated_intelligence = IntegratedIntelligence.objects.create(
