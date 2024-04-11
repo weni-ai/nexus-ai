@@ -46,7 +46,7 @@ def start_route(message: Dict) -> bool:
     agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
     agent = agent.set_default_if_null()
 
-    classification: str = classify(ZeroshotClassifier(agent.goal), message.text, flows)
+    classification: str = classify(ZeroshotClassifier(chatbot_goal=agent.goal), message.text, flows)
 
     print(f"[+ Mensagem classificada: {classification} +]")
 
