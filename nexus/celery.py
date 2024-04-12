@@ -18,7 +18,7 @@ task_create_missing_queues = True
 app.conf.event_serializer = 'pickle'
 app.conf.task_serializer = 'pickle'
 app.conf.result_serializer = 'pickle'
-app.conf.accept_content = ['application/json', 'application/x-python-serialize']
+app.conf.accept_content = ['application/json', 'application/x-python-serialize', 'pickle']
 
 
 if "test" in sys.argv or getattr(settings, "CELERY_ALWAYS_EAGER", False):
