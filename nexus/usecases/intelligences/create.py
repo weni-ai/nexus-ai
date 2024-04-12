@@ -219,6 +219,7 @@ def create_base_brain_structure(
         created_by=user,
         integrated_intelligence=integrated_intelligence,
         setup={
+            "version": settings.WENIGPT_FINE_TUNNING_DEFAULT_VERSION,
             'temperature': settings.WENIGPT_TEMPERATURE,
             'top_p': settings.WENIGPT_TOP_P,
             'top_k': settings.WENIGPT_TOP_K,
