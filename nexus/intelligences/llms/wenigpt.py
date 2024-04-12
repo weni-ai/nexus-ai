@@ -42,7 +42,7 @@ class WeniGPTClient(LLMClient):
         instructions_formatted = "\n".join([f"- {instruction}" for instruction in instructions])
         context = "\n".join([chunk for chunk in chunks])
         prompt = self.get_prompt(instructions_formatted, context, agent, question)
-        return prompt
+        return prompt.replace("\\n", "\n")
 
     def request_runpod(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
         prompt = self.format_prompt(instructions, chunks, agent, question)
