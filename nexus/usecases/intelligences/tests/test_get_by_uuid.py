@@ -8,7 +8,8 @@ from ..get_by_uuid import (
     get_by_contentbasetext_uuid,
     get_contentbasetext_by_contentbase_uuid,
     get_integrated_intelligence_by_project,
-    get_default_content_base_by_project
+    get_default_content_base_by_project,
+    get_or_create_default_integrated_intelligence_by_project
 )
 from ..exceptions import (
     IntelligenceDoesNotExist,
@@ -21,6 +22,7 @@ from .intelligence_factory import (
     ContentBaseTextFactory,
     IntegratedIntelligenceFactory
 )
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
 class GetByIntelligenceUuidTestCase(TestCase):
@@ -129,4 +131,14 @@ class TestGetByIntegratedIntelligence(TestCase):
         self.assertEqual(
             self.integrated_intelligence.intelligence.contentbases.get(is_router=True),
             retrieved_content_base
+        )
+
+    def test_get_or_create_default_integrated_intelligence_by_project(self):
+        project = ProjectFactory()
+        integrated_intelligence = get_or_create_default_integrated_intelligence_by_project(
+            project.uuid
+        )
+        self.assertEqual(
+            integrated_intelligence.project.uuid,
+            project.uuid
         )

@@ -1,3 +1,5 @@
+from django.conf import settings
+
 from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
@@ -22,6 +24,7 @@ from nexus.usecases import (
     projects
 )
 from nexus.orgs import permissions
+from nexus.projects.models import Project
 from .exceptions import IntelligencePermissionDenied
 
 
@@ -188,3 +191,39 @@ def create_llm(
         advanced_options=llm_dto.advanced_options
     )
     return llm
+
+
+def create_base_brain_structure(
+    proj: Project,
+) -> IntegratedIntelligence:
+    org = proj.org
+    user = org.created_by
+
+    inteligence = Intelligence.objects.create(
+        name=proj.name,
+        org=org,
+        created_by=user,
+    )
+    ContentBase.objects.create(
+        title=proj.name,
+        intelligence=inteligence,
+        created_by=user,
+        is_router=True
+    )
+    integrated_intelligence = IntegratedIntelligence.objects.create(
+        project=proj,
+        intelligence=inteligence,
+        created_by=user
+    )
+    LLM.objects.create(
+        created_by=user,
+        integrated_intelligence=integrated_intelligence,
+        setup={
+            'temperature': settings.WENIGPT_TEMPERATURE,
+            'top_p': settings.WENIGPT_TOP_P,
+            'top_k': settings.WENIGPT_TOP_K,
+            'max_length': settings.WENIGPT_MAX_LENGHT,
+        },
+        advanced_options={}
+    )
+    return integrated_intelligence

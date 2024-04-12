@@ -5,7 +5,8 @@ from ..create import (
     CreateContentBaseUseCase,
     CreateContentBaseTextUseCase,
     create_integrated_intelligence,
-    create_llm
+    create_llm,
+    create_base_brain_structure
 )
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import (
@@ -125,3 +126,20 @@ class TestLLM(TestCase):
         created_llm = create_llm(self.dto)
         self.assertEqual(created_llm.model, self.dto.model)
         self.assertEqual(created_llm.setup.get('temperature'), self.dto.setup.get('temperature'))
+
+
+class TestBrain(TestCase):
+
+    def setUp(self) -> None:
+        self.project = ProjectFactory()
+
+    def test_create_brain(self):
+        brain = create_base_brain_structure(self.project)
+        self.assertEqual(brain.intelligence.name, self.project.name)
+        self.assertEqual(brain.intelligence.org, self.project.org)
+        self.assertEqual(brain.intelligence.created_by, self.project.created_by)
+        self.assertEqual(brain.intelligence.contentbases.first().title, self.project.name)
+        self.assertEqual(brain.intelligence.contentbases.first().created_by, self.project.created_by)
+        self.assertTrue(brain.intelligence.contentbases.first().is_router)
+        self.assertEqual(brain.project, self.project)
+        self.assertEqual(brain.created_by, self.project.created_by)
