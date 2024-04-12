@@ -199,20 +199,20 @@ def create_base_brain_structure(
     org = proj.org
     user = org.created_by
 
-    inteligence = Intelligence.objects.create(
+    intelligence = Intelligence.objects.create(
         name=proj.name,
         org=org,
         created_by=user,
     )
     ContentBase.objects.create(
         title=proj.name,
-        intelligence=inteligence,
+        intelligence=intelligence,
         created_by=user,
         is_router=True
     )
     integrated_intelligence = IntegratedIntelligence.objects.create(
         project=proj,
-        intelligence=inteligence,
+        intelligence=intelligence,
         created_by=user
     )
     LLM.objects.create(
