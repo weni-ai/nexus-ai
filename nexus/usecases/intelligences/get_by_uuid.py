@@ -100,7 +100,7 @@ def get_or_create_default_integrated_intelligence_by_project(
         ).order_by("created_at").first()
         if not intelligence or intelligence.is_router is False:
             integrated_intelligence = create_base_brain_structure(project)
-        return integrated_intelligence
+            return integrated_intelligence
     except IntegratedIntelligence.DoesNotExist:
         return integrated_intelligence
     except Exception as exception:
