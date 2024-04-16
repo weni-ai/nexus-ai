@@ -7,7 +7,7 @@ from nexus.usecases import users
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 
 
-def update_message(UpdateProjectDTO: UpdateProjectDTO):
+def update_message(UpdateProjectDTO: UpdateProjectDTO):  # pragma: no cover
 
     publisher = RabbitMQPublisher()
 
