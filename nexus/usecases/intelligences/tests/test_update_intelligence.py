@@ -11,7 +11,6 @@ from .intelligence_factory import (
     ContentBaseTextFactory,
     LLMFactory
 )
-from nexus.usecases.orgs.tests.org_factory import OrgAuthFactory
 from nexus.usecases.intelligences.intelligences_dto import UpdateLLMDTO
 
 

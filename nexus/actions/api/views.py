@@ -18,8 +18,6 @@ from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase, FlowDoesNotExi
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 from nexus.orgs import permissions
 
-from nexus.internals.flows import FlowsRESTClient
-
 
 class SearchFlowView(APIView):
     def format_response(self, data: Dict) -> Dict:
@@ -32,7 +30,7 @@ class SearchFlowView(APIView):
             prev_page = data.get('previous').split("?")
             prev_page = f'?{prev_page[1]}'
             data.update({'previous': prev_page})
-        
+
         return data
 
     def get(self, request, *args, **kwargs):

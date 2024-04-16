@@ -1,13 +1,11 @@
 from django.conf import settings
 
-import os
 import requests
 
 from nexus.internals import InternalAuthentication, RestClient
 
 
 class FlowsRESTClient(RestClient):
-
 
     def __init__(self):
         self.base_url = settings.FLOWS_REST_ENDPOINT
