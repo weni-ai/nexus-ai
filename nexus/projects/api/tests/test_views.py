@@ -1,5 +1,6 @@
 from django.test import TestCase
 
+from unittest.mock import patch
 from rest_framework.test import force_authenticate
 from rest_framework.test import APIRequestFactory
 
@@ -16,7 +17,10 @@ class TestProjectUpdateViewSet(TestCase):
         self.user = self.project.created_by
         self.url = f"/api/{self.project.uuid}/"
 
-    def test_update(self):
+    @patch("nexus.usecases.projects.update.update_message")
+    def test_update(self, mock_update_message):
+        mock_update_message.return_value = None
+
         request = self.factory.patch(self.url, {"brain_on": True})
         force_authenticate(request, user=self.user)
         response = self.view(request, project_uuid=self.project.uuid)
