@@ -21,8 +21,9 @@ from nexus.usecases import (
     orgs,
     users,
     intelligences,
-    projects
+    projects,
 )
+from .publishers_msg import recent_activity_message
 from nexus.orgs import permissions
 from nexus.projects.models import Project
 from .exceptions import IntelligencePermissionDenied
@@ -48,6 +49,13 @@ class CreateIntelligencesUseCase():
             name=name, description=description,
             org=org, created_by=user
         )
+        recent_activity_message(
+            org=org,
+            user=user,
+            entity_name=intelligence.name,
+            action="CREATE"
+        )
+
         return intelligence
 
 
@@ -84,6 +92,14 @@ class CreateContentBaseUseCase():
         )
         ContentBaseAgent.objects.create(content_base=contentbase)
         intelligence.increase_content_bases_count()
+
+        recent_activity_message(
+            org=org,
+            user=user,
+            entity_name=contentbase.title,
+            action="CREATE"
+        )
+
         return contentbase
 
 

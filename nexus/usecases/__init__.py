@@ -2,5 +2,6 @@ from nexus.usecases import (
     intelligences,
     orgs,
     users,
-    projects
+    projects,
+    event_driven
 )
