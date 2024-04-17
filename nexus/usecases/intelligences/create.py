@@ -23,6 +23,7 @@ from nexus.usecases import (
     intelligences,
     projects,
 )
+from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
 from .publishers_msg import recent_activity_message
 from nexus.orgs import permissions
 from nexus.projects.models import Project
@@ -30,6 +31,12 @@ from .exceptions import IntelligencePermissionDenied
 
 
 class CreateIntelligencesUseCase():
+
+    def __init__(
+        self,
+        intelligence_activity_message=intelligence_activity_message
+    ) -> None:
+        self.intelligence_activity_message = intelligence_activity_message
 
     def create_intelligences(
             self,
@@ -53,7 +60,8 @@ class CreateIntelligencesUseCase():
             org=org,
             user=user,
             entity_name=intelligence.name,
-            action="CREATE"
+            action="CREATE",
+            intelligence_activity_message=self.intelligence_activity_message
         )
 
         return intelligence

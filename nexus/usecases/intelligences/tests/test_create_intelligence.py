@@ -17,6 +17,8 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO, LLMDTO
 
+from nexus.usecases.event_driven.mocks import mock_recent_activity_message
+
 
 class TestListIntelligenceUseCase(TestCase):
 
@@ -24,7 +26,8 @@ class TestListIntelligenceUseCase(TestCase):
         self.org = OrgFactory()
 
     def test_create_intelligence_use_case(self):
-        use_case = CreateIntelligencesUseCase()
+
+        use_case = CreateIntelligencesUseCase(mock_recent_activity_message)
         intelligences_create = use_case.create_intelligences(
             name="name",
             description="description",
@@ -38,12 +41,7 @@ class TestCreateContentBaseUseCase(TestCase):
 
     def setUp(self):
         self.org = OrgFactory()
-        self.intelligence = CreateIntelligencesUseCase().create_intelligences(
-            name="name",
-            description="description",
-            org_uuid=self.org.uuid,
-            user_email=self.org.created_by
-        )
+        self.intelligence = IntelligenceFactory(org=self.org)
 
     def test_create_content_base_use_case(self):
         use_case = CreateContentBaseUseCase()
@@ -103,11 +101,8 @@ class TestCreateIntegratedIntelligence(TestCase):
 class TestLLM(TestCase):
 
     def setUp(self) -> None:
-        self.content_base = ContentBaseFactory()
-        self.integrated_inteligence = IntegratedIntelligenceFactory(
-            intelligence=self.content_base.intelligence,
-            created_by=self.content_base.created_by
-        )
+
+        self.integrated_inteligence = IntegratedIntelligenceFactory()
         setup = {
             'temperature': 0.5,
             'top_p': 0.9,
@@ -117,7 +112,7 @@ class TestLLM(TestCase):
         }
         self.dto = LLMDTO(
             model="gpt2",
-            user_email=self.content_base.created_by.email,
+            user_email=self.integrated_inteligence.created_by.email,
             project_uuid=self.integrated_inteligence.project.uuid,
             setup=setup
         )
