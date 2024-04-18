@@ -1,4 +1,6 @@
 import pickle
+from typing import Dict
+
 from django.conf import settings
 
 from nexus.celery import app
@@ -18,7 +20,7 @@ from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUs
 from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
 from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
 from nexus.usecases.intelligences.get_by_uuid import get_by_contentbase_uuid
-from typing import Dict
+from nexus.usecases.logs.delete import DeleteLogUsecase
 
 from nexus.trulens import wenigpt_evaluation, tru_recorder
 
@@ -182,3 +184,9 @@ def trulens_evaluation(log_id: str):
     with tru_recorder as recording:
         wenigpt_evaluation.get_answer(log.question, log)
     return True
+
+
+@app.task(name="log_cleanup_routine")
+def log_cleanup_routine():
+    usecase = DeleteLogUsecase()
+    usecase.delete_logs_routine(months=1)
