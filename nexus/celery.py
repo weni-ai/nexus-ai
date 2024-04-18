@@ -2,7 +2,7 @@ from __future__ import absolute_import, unicode_literals
 import os
 import sys
 
-from celery import Celery
+from celery import Celery, schedules
 
 from django.conf import settings
 
@@ -20,6 +20,12 @@ app.conf.task_serializer = 'pickle'
 app.conf.result_serializer = 'pickle'
 app.conf.accept_content = ['application/json', 'application/x-python-serialize']
 
+app.conf.beat_schedule = {
+    "log_cleanup_routine": {
+        "task": "log_cleanup_routine",
+        "schedule": schedules.crontab(hour=23, minute=0)
+    }
+}
 
 if "test" in sys.argv or getattr(settings, "CELERY_ALWAYS_EAGER", False):
     from celery import current_app
