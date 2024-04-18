@@ -36,7 +36,8 @@ class GenerativeAIDatabase:
             contexts: List,
             question: str,
             language: str,
-            content_base_uuid: str
+            content_base_uuid: str,
+            testing: bool = True,
     ):
         answer = self.answers.get(language)
         return {"answers": [answer], "id": "0"}
