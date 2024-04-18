@@ -99,4 +99,4 @@ class WeniGPTClient(LLMClient):
 
             return self.chat_completion(instructions, chunks, agent, question, llm_config)
 
-        return self.request_runpod(instructions, chunks, agent, question, llm_config)
+        return self.request_runpod(instructions, chunks, agent, question, llm_config, settings.FEW_SHOT_BOTO)
