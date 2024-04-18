@@ -8,13 +8,14 @@ from router.entities.intelligences import LLMSetupDTO
 
 class ChatGPTClient(LLMClient):
     code = "chatgpt"
+
     def __init__(
             self,
             api_key: str = None,
             model_version: str = settings.CHATGPT_MODEL,
             prompt_with_context: str = settings.CHATGPT_CONTEXT_PROMPT,
             prompt_without_context: str = settings.CHATGPT_NO_CONTEXT_PROMPT
-            ):
+    ):
 
         self.api_key = api_key
         self.chatgpt_model = model_version

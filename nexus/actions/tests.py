@@ -27,6 +27,7 @@ from nexus.usecases.intelligences.get_by_uuid import (
 
 from nexus.usecases.actions.list import ListFlowsUseCase
 
+
 class FlowsTestCase(TestCase):
     def setUp(self) -> None:
         self.contentbase = ContentBaseFactory()
@@ -174,6 +175,7 @@ class FlowsViewsetTestCase(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data.get("uuid"), flow_uuid)
 
+
 @skip("Testing View")
 class SearchFlowViewTestCase(TestCase):
     def setUp(self) -> None:
@@ -186,8 +188,8 @@ class SearchFlowViewTestCase(TestCase):
         self.url = f'{self.project_uuid}/search-flows'
 
     def test_list(self):
-        page_size=1
-        page=2
+        page_size = 1
+        page = 2
         url_list = f'{self.url}?page_size={page_size}&page={page}'
         request = self.factory.get(url_list)
 
@@ -205,7 +207,6 @@ class SearchFlowViewTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEquals(list(content.keys()), ["count", "next", "previous", "results"])
 
-    
     def test_get(self):
         flow_name = "Why"
         url_list = f'{self.url}?name={flow_name}'
@@ -238,7 +239,7 @@ class TestListFlowsUseCase(TestCase):
     def setUp(self) -> None:
         self.project_uuid = "45d9efca-2848-4be0-a218-73af48f04a4d"
         self.usecase = ListFlowsUseCase(RestClient())
-    
+
     def test_search_flows_by_project_get_project_flows(self):
         expected_response = {'count': len([RestClient.flow_dict]), 'next': None, 'previous': None, 'results': [RestClient.flow_dict]}
         data = self.usecase.search_flows_by_project(project_uuid=self.project_uuid, name="Test Menu")

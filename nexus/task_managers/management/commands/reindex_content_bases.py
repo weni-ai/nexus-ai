@@ -3,6 +3,7 @@ from nexus.intelligences.models import ContentBaseFile, ContentBaseLink, Content
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.tasks import add_file
 
+
 class Command(BaseCommand):
     help = 'Command to reindex all the content bases into sentenx'
 

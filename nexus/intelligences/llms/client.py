@@ -10,11 +10,11 @@ class LLMClient(ABC):
 
     @classmethod
     def get_by_type(cls, type):
-        return filter(lambda llm: llm.code==type, cls.__subclasses__())
-    
+        return filter(lambda llm: llm.code == type, cls.__subclasses__())
+
     def get_client(self):
         return OpenAI(api_key=self.api_key)
-    
+
     def replace_vars(self, prompt: str, replace_variables: Dict) -> str:
         for key in replace_variables.keys():
             replace_str = "{{" + key + "}}"
@@ -73,4 +73,11 @@ class LLMClient(ABC):
 
         print(f"[+ Resposta do LLM: {text_answers} +]")
 
-        return {"answers":[{"text": text_answers}],"id":"0"}
+        return {
+            "answers": [
+                {
+                    "text": text_answers
+                }
+            ],
+            "id": "0"
+        }

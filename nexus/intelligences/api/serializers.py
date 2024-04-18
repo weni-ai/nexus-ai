@@ -103,6 +103,7 @@ class LLMConfigSerializer(serializers.ModelSerializer):
             "advanced_options",
         ]
 
+
 class ContentBaseInstructionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseInstruction
@@ -114,10 +115,11 @@ class ContentBaseAgentSerializer(serializers.ModelSerializer):
         model = ContentBaseAgent
         fields = ["name", "role", "personality", "goal"]
 
+
 class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBase
-        fields =  ["agent", "instructions"]
+        fields = ["agent", "instructions"]
 
     agent = ContentBaseAgentSerializer()
     instructions = serializers.SerializerMethodField('get_instructions')

@@ -6,13 +6,12 @@ import requests
 from django.conf import settings
 
 from nexus.intelligences.llms.client import LLMClient
-from nexus.task_managers.tasks import create_wenigpt_logs
-from nexus.usecases.intelligences.intelligences_dto import ContentBaseLogsDTO
 from router.entities import LLMSetupDTO
 
 
 class WeniGPTClient(LLMClient):
     code = "wenigpt"
+
     def __init__(self, model_version: str):
         self.url = settings.WENIGPT_API_URL
         self.token = settings.WENIGPT_API_TOKEN
@@ -80,7 +79,11 @@ class WeniGPTClient(LLMClient):
             # log = create_wenigpt_logs(log_dto.__dict__)
 
             return {
-                "answers":[{"text": text_answers}],
+                "answers": [
+                    {
+                        "text": text_answers
+                    }
+                ],
                 "id": "0",
                 # "question_uuid": str(log.user_question.uuid)
             }
