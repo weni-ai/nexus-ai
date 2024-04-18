@@ -99,3 +99,7 @@ class MockBroadcastHTTPClient():
 class MockFlowStartHTTPClient():
     def start_flow(self, flow: str, user: str, urns: List):
         print(f"[+ Test: Starting flow {flow} +]")
+
+
+class TestException(BaseException):
+    pass

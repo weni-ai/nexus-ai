@@ -20,6 +20,8 @@ from nexus.celery import app as celery_app
 
 from nexus.intelligences.llms.client import LLMClient
 
+from nexus.usecases.logs.create import CreateLogUsecase
+
 from router.clients.flows.http.broadcast import BroadcastHTTPClient
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
 
@@ -28,8 +30,9 @@ from router.route import route
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 
 from router.entities import (
-    FlowDTO, Message, AgentDTO, InstructionDTO, ContentBaseDTO, LLMSetupDTO
+    FlowDTO, Message, AgentDTO, ContentBaseDTO, LLMSetupDTO
 )
+
 
 @celery_app.task
 def start_route(message: Dict) -> bool:
@@ -37,16 +40,21 @@ def start_route(message: Dict) -> bool:
     content_base_repository = ContentBaseORMRepository()
 
     message = Message(**message)
+
+    log_usecase = CreateLogUsecase()
+    log_usecase.create_message_log(message.text, message.contact_urn)
+
     project_uuid: str = message.project_uuid
 
     flows: List[FlowDTO] = flows_repository.project_flows(project_uuid, False)
-
     content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
-
     agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
     agent = agent.set_default_if_null()
 
-    classification: str = classify(ZeroshotClassifier(chatbot_goal=agent.goal), message.text, flows)
+    try:
+        classification: str = classify(ZeroshotClassifier(chatbot_goal=agent.goal), message.text, flows)
+    except Exception as e:
+        log_usecase.update_status("F", exception_text=e)
 
     print(f"[+ Mensagem classificada: {classification} +]")
 
@@ -87,5 +95,8 @@ def start_route(message: Dict) -> bool:
         direct_message=broadcast,
         flow_start=flow_start,
         llm_config=llm_config,
-        flows_user_email=flows_user_email
+        flows_user_email=flows_user_email,
+        log_usecase=log_usecase
     )
+
+    log_usecase.update_status("S")
