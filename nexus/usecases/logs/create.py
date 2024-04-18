@@ -40,23 +40,3 @@ class CreateLogUsecase:
             setattr(log, key, kwargs.get(key))
 
         log.save()
-
-        
-
-
-# message = models.OneToOneField(Message, on_delete=models.CASCADE)
-# chunks = ArrayField(models.TextField())
-# prompt = models.TextField()
-# project = models.ForeignKey(Project, on_delete=models.CASCADE)
-# content_base = models.ForeignKey(ContentBase, on_delete=models.CASCADE)
-# classification = models.CharField(max_length=255)
-# llm_model = models.CharField(max_length=255)
-# llm_response = models.TextField()
-# created_at = models.DateTimeField(auto_now_add=True)
-# metadata = models.JSONField()
-
-# class Teste:
-#     def update_log_field(self, **kwargs):
-#         print(kwargs)
-
-# Teste().update_log_field(nome="adlkasd", contato=1232312)
