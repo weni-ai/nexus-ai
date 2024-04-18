@@ -31,4 +31,4 @@ class ChatGPTClient(LLMClient):
         return prompt
 
     def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
-        return self.chat_completion(instructions, chunks, agent, question, llm_config)
+        return self.chat_completion(instructions, chunks, agent, question, llm_config, settings.FEW_SHOT_CHATGPT)
