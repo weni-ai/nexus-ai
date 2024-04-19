@@ -11,7 +11,10 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 import os
 import sys
+import sentry_sdk
+
 from pathlib import Path
+from sentry_sdk.integrations.django import DjangoIntegration
 
 import environ
 
@@ -250,6 +253,18 @@ if USE_EDA:
 
 RABBITMQ_DEFAULT_USER = env.str("RABBITMQ_DEFAULT_USER")
 RABBITMQ_DEFAULT_PASS = env.str("RABBITMQ_DEFAULT_PASS")
+
+# Sentry config
+
+USE_SENTRY = env.bool("USE_SENTRY")
+
+if USE_SENTRY:
+    sentry_sdk.init(
+        dsn=env.str("SENTRY_URL"),
+        integrations=[DjangoIntegration()],
+        environment=env.str("ENVIRONMENT"),
+    )
+
 
 # OIDC
 
