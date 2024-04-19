@@ -85,6 +85,8 @@ def generate_env():
         "DEFAULT_AGENT_ROLE": "",
         "DEFAULT_AGENT_PERSONALITY": "",
         "DEFAULT_AGENT_GOAL": "",
+        "USE_SENTRY": False,
+        "SENTRY_URL": "",
     }
 
     with open(env_path, "w") as configfile:
