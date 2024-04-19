@@ -64,6 +64,8 @@ def generate_env():
         "DJANGO_ALLOW_ASYNC_UNSAFE": False,
         "CHATGPT_ORGS": "",
         "CHATGPT_MODEL": "",
+        "USE_SENTRY": False,
+        "SENTRY_URL": "",
     }
 
     with open(env_path, "w") as configfile:
