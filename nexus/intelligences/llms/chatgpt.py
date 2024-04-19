@@ -23,6 +23,8 @@ class ChatGPTClient(LLMClient):
         self.prompt_with_context = prompt_with_context
         self.prompt_without_context = prompt_without_context
 
+        self.few_shot = settings.FEW_SHOT_CHATGPT
+
     def format_prompt(self, instructions: List, chunks: List, agent: Dict):
         instructions_formatted = "\n".join([f"- {instruction}" for instruction in instructions])
         context: str = "\n".join([chunk for chunk in chunks])
@@ -30,4 +32,4 @@ class ChatGPTClient(LLMClient):
         return prompt
 
     def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
-        return self.chat_completion(instructions, chunks, agent, question, llm_config, settings.FEW_SHOT_CHATGPT)
+        return self.chat_completion(instructions, chunks, agent, question, llm_config, self.few_shot)

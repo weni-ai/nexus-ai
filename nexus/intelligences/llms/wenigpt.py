@@ -29,6 +29,8 @@ class WeniGPTClient(LLMClient):
         self.fine_tunning_prompt_with_context = settings.CHATGPT_CONTEXT_PROMPT
         self.fine_tunning_prompt_without_context = settings.CHATGPT_NO_CONTEXT_PROMPT
 
+        self.few_shot = settings.FEW_SHOT_BOTO
+
         self.headers = self._get_headers()
 
     def _get_headers(self):
@@ -99,4 +101,4 @@ class WeniGPTClient(LLMClient):
 
             return self.chat_completion(instructions, chunks, agent, question, llm_config)
 
-        return self.request_runpod(instructions, chunks, agent, question, llm_config, settings.FEW_SHOT_BOTO)
+        return self.request_runpod(instructions, chunks, agent, question, llm_config, self.few_shot)
