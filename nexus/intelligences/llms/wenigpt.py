@@ -28,7 +28,7 @@ class WeniGPTClient(LLMClient):
         self.fine_tunning_prompt_with_context = settings.CHATGPT_CONTEXT_PROMPT
         self.fine_tunning_prompt_without_context = settings.CHATGPT_NO_CONTEXT_PROMPT
 
-        self.few_shot = self.FEW_SHOT_BOTO
+        self.few_shot = settings.FEW_SHOT_BOTO
 
         self.headers = self._get_headers()
 
