@@ -46,10 +46,10 @@ class WeniGPTClient(LLMClient):
         return prompt.replace("\\n", "\n")
 
     def request_runpod(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
-        prompt = self.format_prompt(instructions, chunks, agent, question)
+        self.prompt = self.format_prompt(instructions, chunks, agent, question)
         data = {
             "input": {
-                "prompt": prompt,
+                "prompt": self.prompt,
                 "sampling_params": {
                     "max_tokens": int(llm_config.max_length) if isinstance(llm_config.max_length, int) else int(settings.WENIGPT_MAX_LENGHT),
                     "top_p": float(llm_config.top_p),
@@ -63,7 +63,7 @@ class WeniGPTClient(LLMClient):
         text_answers = None
 
         try:
-            print(f"Request para o Wenigpt: {prompt}")
+            print(f"Request para o Wenigpt: {self.prompt}")
             response = requests.request("POST", self.url, headers=self.headers, data=json.dumps(data))
             response_json = response.json()
             print(f"Resposta Json do WeniGPT: {response_json}")
