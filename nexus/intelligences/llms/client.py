@@ -5,6 +5,8 @@ from openai import OpenAI
 
 from router.entities import LLMSetupDTO
 
+from django.conf import settings
+
 
 class LLMClient(ABC):
 
@@ -51,6 +53,9 @@ class LLMClient(ABC):
             top_p=float(llm_config.top_p) if llm_config.top_p else None,
             max_tokens=int(llm_config.max_tokens) if llm_config.max_tokens else None
         )
+
+        if settings.TOKEN_LIMIT:
+            kwargs.update({"max_tokens": settings.TOKEN_LIMIT})
 
         print(f"[+ Parametros enviados para o LLM: {kwargs} +]")
 

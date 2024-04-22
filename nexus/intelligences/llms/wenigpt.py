@@ -58,6 +58,9 @@ class WeniGPTClient(LLMClient):
             }
         }
 
+        if settings.TOKEN_LIMIT:
+            data.get("input").get("sampling_params").update({"max_tokens": settings.TOKEN_LIMIT})
+
         text_answers = None
 
         try:
@@ -66,17 +69,6 @@ class WeniGPTClient(LLMClient):
             response_json = response.json()
             print(f"Resposta Json do WeniGPT: {response_json}")
             text_answers = response_json["output"][0].get("choices")[0].get("tokens")[0]
-
-            # log_dto = ContentBaseLogsDTO(
-            #     content_base_uuid=content_base_uuid,
-            #     question=question,
-            #     language=language,
-            #     texts_chunks=contexts,
-            #     full_prompt=base_prompt,
-            #     weni_gpt_response=text_answers,
-            #     testing=testing
-            # )
-            # log = create_wenigpt_logs(log_dto.__dict__)
 
             return {
                 "answers": [
