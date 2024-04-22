@@ -54,7 +54,7 @@ class TestWenigptDB(TestCase):
         trulens_evaluation.return_value = True
         requests.return_value = Requests()
         weni_db = WeniGPTDatabase()
-        response = weni_db.request_wenigpt(
+        response = weni_db.request_gpt(
             contexts=[""],
             question=self.question,
             language="pt",
