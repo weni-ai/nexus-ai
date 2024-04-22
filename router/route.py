@@ -93,7 +93,7 @@ def route(
                 project_id=message.project_uuid,
                 content_base_id=content_base.uuid,
                 classification=classification,
-                llm_model=llm_config.model,
+                llm_model=f"{llm_config.model}:{llm_config.model_version}",
                 llm_response=llm_response,
                 metadata=metadata.dict
             )
