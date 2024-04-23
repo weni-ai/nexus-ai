@@ -1,6 +1,5 @@
 
 import os
-from typing import Annotated
 
 from fastapi import FastAPI, Request, HTTPException
 
