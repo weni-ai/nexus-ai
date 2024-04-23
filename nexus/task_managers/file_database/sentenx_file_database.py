@@ -69,6 +69,7 @@ class SentenXFileDataBase:
 
         body = {
             "search": text,
+            "threshold": settings.SENTENX_THRESHOLD,
             "filter": {
                 "content_base_uuid": content_base_uuid
             },
