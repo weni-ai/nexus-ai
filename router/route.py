@@ -101,7 +101,6 @@ def route(
             if fallback_flow:
                 return dispatch(
                     message=message,
-                    flow=fallback_flow.uuid,
                     flow=fallback_flow,
                     flow_start=flow_start,
                     llm_response=llm_response,
