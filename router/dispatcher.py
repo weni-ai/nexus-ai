@@ -1,5 +1,6 @@
 from router.entities import (
-    Message
+    Message,
+    FlowDTO,
 )
 from router.direct_message import DirectMessage
 from router.flow_start import FlowStart
@@ -8,7 +9,7 @@ from router.flow_start import FlowStart
 def dispatch(
         message: Message,
         user_email: str,
-        flow: str = None,
+        flow: FlowDTO = None,
         llm_response: str = None,
         direct_message: DirectMessage = None,
         flow_start: FlowStart = None
