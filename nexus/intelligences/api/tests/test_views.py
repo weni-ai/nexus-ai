@@ -400,8 +400,8 @@ class TestContentBasePersonalizationViewSet(TestCase):
         agent.personality = "Relaxed"
         agent.goal = "Marketing"
         agent.save()
-        self.content_base.instructions.create(instruction="Instruction 1")
-        self.content_base.instructions.create(instruction="Instruction 2")
+        self.instruction_1 = self.content_base.instructions.create(instruction="Instruction 1")
+        self.instruction_2 = self.content_base.instructions.create(instruction="Instruction 2")
 
     def test_get_personalization(self):
         url_retrieve = f'{self.url}/'
@@ -428,7 +428,7 @@ class TestContentBasePersonalizationViewSet(TestCase):
             },
             "instructions": [
                 {
-                    "id": 1,
+                    "id": self.instruction_1.id,
                     "instruction": "Be friendly"
                 }
             ]
@@ -445,23 +445,12 @@ class TestContentBasePersonalizationViewSet(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_delete_personalization(self):
-        url_update = f'{self.url}/'
-        data = {
-            "instructions": [
-                {
-                    "id": 1,
-                },
-                {
-                    "id": 2,
-                }
-            ]
-        }
-        request = self.factory.delete(url_update, data=data, format='json')
+        url_update = f'{self.url}/?id={self.instruction_1.id}'
+        request = self.factory.delete(url_update, format='json')
         force_authenticate(request, user=self.user)
 
         response = ContentBasePersonalizationViewSet.as_view({'delete': 'destroy'})(
             request,
-            data,
             project_uuid=str(self.project.uuid),
             format='json',
         )

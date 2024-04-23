@@ -12,22 +12,13 @@ class Indexer:
     pass
 
 def call_llm(
-        indexer: Indexer,
+        chunks: List[str],
         llm_model: LLMClient,
         message: Message,
-        content_base_uuid: str,
         agent: AgentDTO,
         instructions: List[InstructionDTO],
         llm_config: LLMSetupDTO
     ) -> str:
-
-    chunks: List[str] = get_chunks(
-        indexer,
-        text=message.text,
-        content_base_uuid=content_base_uuid
-    )
-
-    print(f"[+ Contexto do Sentenx: {chunks} +]")
 
     response = llm_model.request_gpt(
         instructions,

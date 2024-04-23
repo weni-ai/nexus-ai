@@ -42,9 +42,9 @@ class LLMClient(ABC):
         pass
 
     def chat_completion(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
-        prompt = self.format_prompt(instructions, chunks, agent)
+        self.prompt = self.format_prompt(instructions, chunks, agent)
 
-        print(f"[+ prompt enviado ao LLM: {prompt} +]")
+        print(f"[+ prompt enviado ao LLM: {self.prompt} +]")
 
         kwargs = dict(
             temperature=float(llm_config.temperature) if llm_config.temperature else None,
@@ -58,7 +58,7 @@ class LLMClient(ABC):
             messages=[
                 {
                     "role": "system",
-                    "content": prompt
+                    "content": self.prompt
                 },
                 {
                     "role": "user",
