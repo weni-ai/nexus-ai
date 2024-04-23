@@ -5,6 +5,8 @@ from typing import List, Dict
 
 from django.test import TestCase
 from nexus.actions.models import Flow
+from nexus.projects.models import Project
+from nexus.intelligences.models import ContentBaseAgent
 
 from rest_framework.test import APIRequestFactory
 from rest_framework.test import force_authenticate
@@ -18,6 +20,7 @@ from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.actions.api.views import (
     FlowsViewset,
     SearchFlowView,
+    MessagePreviewView
 )
 
 from nexus.usecases.intelligences.get_by_uuid import (
@@ -248,3 +251,90 @@ class TestListFlowsUseCase(TestCase):
     def test_search_flows_by_project_list_project_flows(self):
         data = self.usecase.search_flows_by_project(project_uuid=self.project_uuid, page_size=2, page=1)
         self.assertIsInstance(data, dict)
+
+
+@skip("View Testing")
+class MessagePreviewTestCase(TestCase):
+    def setUp_project(self):
+        return Project.objects.create(
+            uuid=str(uuid.uuid4()),
+            name="Router",
+            is_template=False,
+            org=self.org,
+            brain_on=True,
+            created_by=self.user
+        )
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.view = MessagePreviewView.as_view()
+        self.org = OrgFactory()
+        self.user = self.org.authorizations.first().user
+        self.project = self.setUp_project()
+        self.integrated_intel = get_integrated_intelligence_by_project(self.project.uuid)
+        self.intelligence = self.integrated_intel.intelligence
+        self.contentbase = get_default_content_base_by_project(self.project.uuid)
+        self.agent = ContentBaseAgent.objects.create(
+            name="Doris",
+            role="Vendas",
+            personality="Extrovertida",
+            goal="Auxiliar o cliente nas vendas",
+            content_base=self.contentbase
+        )
+        self.flow = Flow.objects.create(
+            uuid=uuid.uuid4(),
+            name="Test Flow",
+            prompt="Quando o usuário estiver interessado em testar o router",
+            content_base=self.contentbase,
+        )
+        self.url = f'/simulate-messages'
+
+    def test_other(self):
+        url_create = f'{self.url}/'
+
+        data = {
+            "project_uuid": str(self.project.uuid),
+            "text": "Test",
+            "contact_urn": "82391837:telegram",
+        }
+
+        request = self.factory.post(url_create, data=data)
+
+        force_authenticate(request, user=self.user)
+
+        response = MessagePreviewView.as_view()(
+            request,
+            data,
+            project_uuid=str(self.project.uuid)
+        )
+
+        response.render()
+
+        content = json.loads(response.content)
+
+        self.assertEquals(content.get("type"), "broadcast")
+    
+    def test_classify(self):
+        url_create = f'{self.url}/'
+
+        data = {
+            "project_uuid": str(self.project.uuid),
+            "text": "Olá, gostaria de testar o router",
+            "contact_urn": "82391837:telegram",
+        }
+
+        request = self.factory.post(url_create, data=data)
+
+        force_authenticate(request, user=self.user)
+
+        response = MessagePreviewView.as_view()(
+            request,
+            data,
+            project_uuid=str(self.project.uuid)
+        )
+
+        response.render()
+
+        content = json.loads(response.content)
+
+        self.assertEquals(content.get("type"), "flowstart")
