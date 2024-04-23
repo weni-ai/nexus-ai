@@ -41,6 +41,9 @@ class LLMClient(ABC):
     def request_gpt(self):
         pass
 
+    def format_post_prompt(self, question: str) -> str:
+        return self.post_prompt.replace("{{question}}", question)
+
     def chat_completion(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
         self.prompt = self.format_prompt(instructions, chunks, agent)
 
@@ -54,6 +57,8 @@ class LLMClient(ABC):
 
         print(f"[+ Parametros enviados para o LLM: {kwargs} +]")
 
+        post_prompt = self.format_post_prompt(question)
+
         chat_completion = self.client.chat.completions.create(
             messages=[
                 {
@@ -62,7 +67,7 @@ class LLMClient(ABC):
                 },
                 {
                     "role": "user",
-                    "content": question,
+                    "content": post_prompt,
                 }
             ],
             model=llm_config.model_version,

@@ -28,6 +28,8 @@ class WeniGPTClient(LLMClient):
         self.fine_tunning_prompt_with_context = settings.CHATGPT_CONTEXT_PROMPT
         self.fine_tunning_prompt_without_context = settings.CHATGPT_NO_CONTEXT_PROMPT
 
+        self.post_prompt = settings.WENIGPT_POST_PROMPT
+
         self.headers = self._get_headers()
 
     def _get_headers(self):

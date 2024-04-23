@@ -24,6 +24,8 @@ class ChatGPTClient(LLMClient):
         self.prompt_with_context = prompt_with_context
         self.prompt_without_context = prompt_without_context
 
+        self.post_prompt = settings.CHATGPT_POST_PROMPT
+
     def format_prompt(self, instructions: List, chunks: List, agent: Dict):
         instructions_formatted = "\n".join([f"- {instruction}" for instruction in instructions])
         context: str = "\n".join([chunk for chunk in chunks])
