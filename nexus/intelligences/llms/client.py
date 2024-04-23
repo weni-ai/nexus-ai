@@ -43,7 +43,13 @@ class LLMClient(ABC):
     def request_gpt(self):
         pass
 
-    def chat_completion(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
+    def format_few_shot(self, few_shot: str) -> List[Dict]:
+        return list(eval(few_shot))
+
+    def format_post_prompt(self, question: str) -> str:
+        return self.post_prompt.replace("{{question}}", question)
+
+    def chat_completion(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, few_shot: str = None):
         self.prompt = self.format_prompt(instructions, chunks, agent)
 
         print(f"[+ prompt enviado ao LLM: {self.prompt} +]")
@@ -59,17 +65,29 @@ class LLMClient(ABC):
 
         print(f"[+ Parametros enviados para o LLM: {kwargs} +]")
 
+        messages=[
+            {
+                "role": "system",
+                "content": self.prompt
+            }
+        ]
+
+        if few_shot:
+            messages += self.format_few_shot(few_shot)
+
+        post_prompt = self.format_post_prompt(question)
+
+        messages.append(
+            {
+                "role": "user",
+                "content": post_prompt,
+            }
+        )
+
+        print("Messages: ", messages)
+
         chat_completion = self.client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": self.prompt
-                },
-                {
-                    "role": "user",
-                    "content": question,
-                }
-            ],
+            messages=messages,
             model=llm_config.model_version,
             **{k: v for k, v in kwargs.items() if v is not None}
         )
