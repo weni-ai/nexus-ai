@@ -99,30 +99,30 @@ def route(
             )
 
             if fallback_flow:
-                dispatch(
+                return dispatch(
                     message=message,
-                    flow=fallback_flow.uuid,
+                    flow=fallback_flow,
                     flow_start=flow_start,
                     llm_response=llm_response,
                     user_email=flows_user_email
                 )
-                return
-
-            dispatch(
+            
+            return dispatch(
                 llm_response=llm_response,
                 message=message,
                 direct_message=direct_message,
                 user_email=flows_user_email
             )
-            return
 
         flow: FlowDTO = flows_repository.get_project_flow_by_name(message.project_uuid, classification)
 
-        dispatch(
+        return dispatch(
             message=message,
             flow_start=flow_start,
-            flow=flow.uuid,
+            flow=flow,
             user_email=flows_user_email
         )
+
     except Exception as e:
         log_usecase.update_status("F", exception_text=e)
+ 

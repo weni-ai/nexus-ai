@@ -40,17 +40,21 @@ from router.tests.mocks import *
 
 
 
+from router.clients.preview.simulator.broadcast import SimulateBroadcast
+from router.clients.preview.simulator.flow_start import SimulateFlowStart
 
 class RouteTestCase(TestCase):
     def setUp(self) -> None:
         self.user  = User.objects.create(email='test@user.com')
 
+        project_name = "Test Project"
+
         self.org = Org.objects.create(created_by=self.user, name='Test Org')
         self.org.authorizations.create(role=3, user=self.user)
-        self.project = self.org.projects.create(uuid="7886d8d1-7bdc-4e85-a7fc-220e2256c11b", name="Test Project", created_by=self.user)
-        self.intelligence = self.org.intelligences.create(name="Test Project", created_by=self.user)
+        self.project = self.org.projects.create(uuid="7886d8d1-7bdc-4e85-a7fc-220e2256c11b", name=project_name, created_by=self.user)
+        self.intelligence = self.org.intelligences.create(name=project_name, created_by=self.user)
         self.content_base = ContentBase.objects.create(
-            title='test content base', intelligence=self.intelligence, created_by=self.user, is_router=True
+            title=project_name, intelligence=self.intelligence, created_by=self.user, is_router=True
         )
         self.integrated_intel = IntegratedIntelligence.objects.create(
             project=self.project,
@@ -156,7 +160,9 @@ class RouteTestCase(TestCase):
     def mock_messages(
             self,
             classification: str,
-            fallback_flow = None
+            fallback_flow = None,
+            direct_message = MockBroadcastHTTPClient(),
+            flow_start = MockFlowStartHTTPClient(),
 
         ):
         content_base = self.content_base
@@ -197,15 +203,15 @@ class RouteTestCase(TestCase):
 
         flow_user_email = "email@test.com"
 
-        route(
+        return route(
             classification=classification,
             message=message,
             content_base_repository=content_base_repository,
             flows_repository=flows_repository,
             indexer=MockIndexer(),
             llm_client=llm_client(),
-            direct_message=MockBroadcastHTTPClient(),
-            flow_start=MockFlowStartHTTPClient(),
+            direct_message=direct_message,
+            flow_start=flow_start,
             llm_config=llm_config,
             flows_user_email=flow_user_email,
             log_usecase=log_usecase
@@ -232,6 +238,32 @@ class RouteTestCase(TestCase):
             self.mock_messages(self.flow.name)
         except Exception as e:
             self.fail(f" test_route_other raised {e}!")
+    
+    def test_route_preview_other_with_fallback_flow(self):
+        response = self.mock_messages(
+            Classifier.CLASSIFICATION_OTHER,
+            fallback_flow=self.fallback,
+            direct_message=SimulateBroadcast(host=None, access_token=None),
+            flow_start=SimulateFlowStart(host=None, access_token=None)
+        )
+        self.assertEquals(response.get("type"), "flowstart")
+
+    def test_route_preview_other_no_fallback_flow(self):
+        response = self.mock_messages(
+            Classifier.CLASSIFICATION_OTHER,
+            direct_message=SimulateBroadcast(host=None, access_token=None),
+            flow_start=SimulateFlowStart(host=None, access_token=None)
+        )
+        self.assertEquals(response.get("type"), "broadcast")
+
+    def test_route_preview_classify(self):
+        response = self.mock_messages(
+            self.flow.name,
+            fallback_flow=self.fallback,
+            direct_message=SimulateBroadcast(host=None, access_token=None),
+            flow_start=SimulateFlowStart(host=None, access_token=None)
+        )
+        self.assertEquals(response.get("type"), "flowstart")
 
 
 @skip("Integration test, shouldn't run for coverage")
