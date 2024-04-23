@@ -1,9 +1,10 @@
+import json
 from typing import List
 
 import requests
 
 from router.flow_start import FlowStart, exceptions
-import json
+from router.entities.flow import FlowDTO
 
 class FlowStartHTTPClient(FlowStart):
 
@@ -11,13 +12,13 @@ class FlowStartHTTPClient(FlowStart):
         self.__host = host
         self.__access_token = access_token
 
-    def start_flow(self, flow: str, user: str, urns: List) -> None:
+    def start_flow(self, flow: FlowDTO, user: str, urns: List) -> None:
         print("================================")
         print(f"chamando o fluxo {flow} para {urns}")
         print("================================")
         url = f"{self.__host}/api/v2/internals/flow_starts/"
 
-        payload = {"user": user, "flow": flow, "urns": urns}
+        payload = {"user": user, "flow": flow.uuid, "urns": urns}
 
         params = {"token": self.__access_token}
         headers = {
