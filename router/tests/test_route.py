@@ -9,6 +9,7 @@ django.setup()
 
 
 import uuid
+from unittest import skip
 
 from django.conf import settings
 from django.test import TestCase
@@ -22,16 +23,22 @@ from nexus.intelligences.models import (
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.intelligences.intelligences_dto import LLMDTO
 from nexus.usecases.intelligences.create import create_llm
+from nexus.usecases.logs.create import CreateLogUsecase
+
+from nexus.intelligences.llms.chatgpt import ChatGPTClient
+from nexus.intelligences.llms.wenigpt import WeniGPTClient
+from nexus.logs.models import MessageLog, Message as MessageModel
 
 
 from router.classifiers import Classifier
 from router.route import route
+from router.tasks.tasks import start_route
 from router.entities import (
     FlowDTO, Message
 )
 from router.tests.mocks import *
-from nexus.intelligences.llms.chatgpt import ChatGPTClient
-from nexus.intelligences.llms.wenigpt import WeniGPTClient
+
+
 
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
@@ -102,7 +109,6 @@ class RouteTestCase(TestCase):
         chunks = ["Lorem Ipsum", "Dolor Sit Amet"]
 
         prompt = ChatGPTClient().format_prompt(instructions, chunks, agent.__dict__)
-        # print(prompt)
         assert "{{" not in prompt
     
     def test_wenigpt_prompt(self):
@@ -135,7 +141,6 @@ class RouteTestCase(TestCase):
         question = "Ipsum Lorem"
 
         prompt = WeniGPTClient(model_version=settings.WENIGPT_FINE_TUNNING_DEFAULT_VERSION).format_prompt(instructions, chunks, agent.__dict__, question)
-        print(prompt)
         assert "{{" not in prompt
     
     def test_chatgpt_no_context_prompt(self):
@@ -150,7 +155,6 @@ class RouteTestCase(TestCase):
         chunks = []
 
         prompt = ChatGPTClient().format_prompt(instructions, chunks, agent.__dict__)
-        print(prompt)
         assert "{{" not in prompt
 
     def mock_messages(
@@ -172,6 +176,9 @@ class RouteTestCase(TestCase):
             text="Lorem Ipsum",
             contact_urn="telegram:123455667"
         )
+
+        log_usecase = CreateLogUsecase()
+        log_usecase.create_message_log(message.text, message.contact_urn)
 
         content_base_repository = ContentBaseTestRepository(content_base, agent)
         flows_repository = FlowsTestRepository(flow, fallback_flow)
@@ -207,11 +214,11 @@ class RouteTestCase(TestCase):
             flow_start=flow_start,
             llm_config=llm_config,
             flows_user_email=flow_user_email,
+            log_usecase=log_usecase
         )
     
     def test_route_other(self):
         try:
-            print("\n[Test: Other]")
             self.mock_messages(
                 Classifier.CLASSIFICATION_OTHER,
                 fallback_flow=self.fallback
@@ -221,7 +228,6 @@ class RouteTestCase(TestCase):
 
     def test_route_other_no_fallback(self):
         try:
-            print("\n[Test: Other no fallback]")
             self.fallback.delete()
             self.mock_messages(Classifier.CLASSIFICATION_OTHER)
         except Exception as e:
@@ -229,11 +235,10 @@ class RouteTestCase(TestCase):
 
     def test_route_classify(self):
         try:
-            print("\n[Test: Classify]")
             self.mock_messages(self.flow.name)
         except Exception as e:
             self.fail(f" test_route_other raised {e}!")
-
+    
     def test_route_preview_other_with_fallback_flow(self):
         response = self.mock_messages(
             Classifier.CLASSIFICATION_OTHER,
@@ -260,3 +265,116 @@ class RouteTestCase(TestCase):
         )
         self.assertEquals(response.get("type"), "flowstart")
 
+
+@skip("Integration test, shouldn't run for coverage")
+class StartRouteTestCase(TestCase):
+    def setUp(self) -> None:
+        project_uuid = "e8326ee9-ca88-49da-aaf3-8f35eb60e7dc"
+
+        self.user  = User.objects.create(email='test@user.com')
+
+        self.org = Org.objects.create(created_by=self.user, name="org_name")
+        self.auth = self.org.authorizations.create(user=self.user, role=3)
+        self.project = self.org.projects.create(
+            uuid=project_uuid, name="Projeto", created_by=self.user
+            )
+        self.intelligence = self.org.intelligences.create(
+            created_by=self.user, name=self.project.name
+            )
+        self.integrated_intelligence = IntegratedIntelligence.objects.create(
+            project=self.project,
+            intelligence=self.intelligence,
+            created_by=self.user
+        )
+        self.content_base = self.intelligence.contentbases.create(
+            uuid="0aa8d243-0f99-4c75-8309-21a73d6bd223",
+            created_by=self.user,
+            title=self.project.name,
+            is_router=True
+        )
+        self.agent = ContentBaseAgent.objects.create(
+            name="Doris",
+            role="Vendas",
+            personality="Criativa",
+            goal="Vender",
+            content_base=self.content_base
+        )
+        self.flow = Flow.objects.create(
+            uuid="da2c0365-cabe-410b-bc15-4a42a237d91e",
+            name="Teste router",
+            prompt="Caso esteja interessado em testar o router",
+            content_base=self.content_base
+        )
+        self.instruction = ContentBaseInstruction.objects.create(content_base=self.content_base, instruction="Responda sempre em esperanto")
+
+        llm_dto = LLMDTO(
+            model="chatGPT",
+            user_email=self.user.email,
+            project_uuid=str(self.project.uuid),
+            setup={
+                'token': settings.OPENAI_API_KEY,
+                'version': 'gpt-4-turbo',
+                'temperature': settings.WENIGPT_TEMPERATURE,
+                'top_p': settings.WENIGPT_TOP_P,
+                'top_k': settings.WENIGPT_TOP_K,
+                'max_length': settings.WENIGPT_MAX_LENGHT,
+            }
+        )
+        self.llm = create_llm(llm_dto=llm_dto)
+
+    def test_start_route(self):
+        self.message = Message(
+            project_uuid=str(self.project.uuid),
+            text='quero comprar uma camisa',
+            contact_urn='',
+        )
+        start_route(self.message.__dict__)
+
+        msg = MessageModel.objects.first()
+        self.assertEquals(msg.status, "S")
+
+
+class LogUseCaseTestCase(TestCase):
+
+    def setUp(self) -> None:
+        project_uuid = "e8326ee9-ca88-49da-aaf3-8f35eb60e7dc"
+
+        self.user  = User.objects.create(email='test@user.com')
+
+        self.org = Org.objects.create(created_by=self.user, name="org_name")
+        self.auth = self.org.authorizations.create(user=self.user, role=3)
+        self.project = self.org.projects.create(
+            uuid=project_uuid, name="Projeto", created_by=self.user
+            )
+
+        self.message = Message(
+            project_uuid=project_uuid,
+            text='quero comprar uma camisa',
+            contact_urn='telegram:123321#test',
+        )
+        self.log_usecase = CreateLogUsecase()
+        self.log_usecase.create_message_log(
+            self.message.text,
+            self.message.contact_urn
+        )
+
+    def test_create(self):
+        self.assertIsInstance(self.log_usecase.message, MessageModel)
+        self.assertIsInstance(self.log_usecase.log, MessageLog)
+        self.assertEquals(self.log_usecase.message.status, "P")
+    
+    def test_update_status_with_exception(self):
+        try:
+            raise TestException("Test Exception")
+        except TestException as e:
+            self.log_usecase.update_status("F", e)
+
+        self.assertEquals(self.log_usecase.message.status, "F")
+
+    def test_update_log_field(self):
+        self.assertIsNone(self.log_usecase.log.chunks)
+
+        chunks = ["Chunk 1", "Chunk 2", "Chunk 3"]
+
+        self.log_usecase.update_log_field(chunks=chunks, project_id=self.project.uuid)
+        self.assertEquals(self.log_usecase.log.chunks, chunks)
