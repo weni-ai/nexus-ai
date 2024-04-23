@@ -30,23 +30,29 @@ class FlowsRESTClient(RestClient):
             "page_size": page_size,
             "page": page
         }
-
-        response = requests.get(
-            self._get_url("/api/v2/internals/flows"),
-            headers=self.authentication_instance.headers,
-            params=params
-        )
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = requests.get(
+                self._get_url("/api/v2/internals/flows"),
+                headers=self.authentication_instance.headers,
+                params=params
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError:
+            return {'count': 0, 'next': None, 'previous': None, 'results': []}
 
     def get_project_flows(self, project_uuid: str, flow_name: str):
-        params = dict(
-            flow_name=flow_name,
-            project=project_uuid
-        )
-        response = requests.get(
-            url=self._get_url("/api/v2/internals/project-flows/"),
-            headers=self.authentication_instance.headers,
-            params=params
-        )
-        return response.json()
+        try:
+            params = dict(
+                flow_name=flow_name,
+                project=project_uuid
+            )
+            response = requests.get(
+                url=self._get_url("/api/v2/internals/project-flows/"),
+                headers=self.authentication_instance.headers,
+                params=params
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError:
+            return []

@@ -28,6 +28,7 @@ class WeniGPTClient(LLMClient):
         self.fine_tunning_prompt_with_context = settings.CHATGPT_CONTEXT_PROMPT
         self.fine_tunning_prompt_without_context = settings.CHATGPT_NO_CONTEXT_PROMPT
 
+        self.few_shot = settings.FEW_SHOT_BOTO
         self.post_prompt = settings.WENIGPT_POST_PROMPT
 
         self.headers = self._get_headers()
@@ -60,6 +61,9 @@ class WeniGPTClient(LLMClient):
             }
         }
 
+        if settings.TOKEN_LIMIT:
+            data.get("input").get("sampling_params").update({"max_tokens": settings.TOKEN_LIMIT})
+
         text_answers = None
 
         try:
@@ -68,17 +72,6 @@ class WeniGPTClient(LLMClient):
             response_json = response.json()
             print(f"Resposta Json do WeniGPT: {response_json}")
             text_answers = response_json["output"][0].get("choices")[0].get("tokens")[0]
-
-            # log_dto = ContentBaseLogsDTO(
-            #     content_base_uuid=content_base_uuid,
-            #     question=question,
-            #     language=language,
-            #     texts_chunks=contexts,
-            #     full_prompt=base_prompt,
-            #     weni_gpt_response=text_answers,
-            #     testing=testing
-            # )
-            # log = create_wenigpt_logs(log_dto.__dict__)
 
             return {
                 "answers": [
@@ -102,6 +95,6 @@ class WeniGPTClient(LLMClient):
             self.prompt_with_context = self.fine_tunning_prompt_with_context
             self.prompt_without_context = self.fine_tunning_prompt_without_context
 
-            return self.chat_completion(instructions, chunks, agent, question, llm_config)
+            return self.chat_completion(instructions, chunks, agent, question, llm_config, self.few_shot)
 
         return self.request_runpod(instructions, chunks, agent, question, llm_config)

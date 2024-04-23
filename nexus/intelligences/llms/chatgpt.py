@@ -24,6 +24,7 @@ class ChatGPTClient(LLMClient):
         self.prompt_with_context = prompt_with_context
         self.prompt_without_context = prompt_without_context
 
+        self.few_shot = settings.FEW_SHOT_CHATGPT
         self.post_prompt = settings.CHATGPT_POST_PROMPT
 
     def format_prompt(self, instructions: List, chunks: List, agent: Dict):
@@ -33,4 +34,4 @@ class ChatGPTClient(LLMClient):
         return prompt
 
     def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
-        return self.chat_completion(instructions, chunks, agent, question, llm_config)
+        return self.chat_completion(instructions, chunks, agent, question, llm_config, self.few_shot)
