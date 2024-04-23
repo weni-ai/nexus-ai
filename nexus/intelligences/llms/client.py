@@ -45,7 +45,10 @@ class LLMClient(ABC):
 
     def format_few_shot(self, few_shot: str) -> List[Dict]:
         return list(eval(few_shot))
-        
+
+    def format_post_prompt(self, question: str) -> str:
+        return self.post_prompt.replace("{{question}}", question)
+
     def chat_completion(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, few_shot: str = None):
         self.prompt = self.format_prompt(instructions, chunks, agent)
 
@@ -72,10 +75,12 @@ class LLMClient(ABC):
         if few_shot:
             messages += self.format_few_shot(few_shot)
 
+        post_prompt = self.format_post_prompt(question)
+
         messages.append(
             {
                 "role": "user",
-                "content": question,
+                "content": post_prompt,
             }
         )
 
