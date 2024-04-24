@@ -24,21 +24,12 @@ class ProjectsUseCase:
         except Exception as exception:
             raise Exception(f"[ ProjectsUseCase ] error: {str(exception)}")
 
-    def create_project(self, project_dto: ProjectCreationDTO, user_email: str) -> Project:
-        user = get_by_email(user_email=user_email)
-        org = orgs.get_by_uuid(org_uuid=project_dto.org_uuid)
-        template_type = None
-        if project_dto.is_template:
-            template_type = TemplateTypeUseCase().get_by_uuid(project_dto.template_type_uuid)
-        project = Project.objects.create(
-            uuid=project_dto.uuid,
-            name=project_dto.name,
-            org=org,
-            template_type=template_type,
-            is_template=project_dto.is_template,
-            created_by=user
-        )
-
+    def create_brain_project_base(
+        self,
+        project_dto,
+        user_email: str,
+        project: Project
+    ) -> None:
         usecase = CreateIntelligencesUseCase()
         base_intelligence = usecase.create_intelligences(
             org_uuid=project_dto.org_uuid,
@@ -72,5 +63,30 @@ class ProjectsUseCase:
             }
         )
         create_llm(llm_dto=llm_dto)
+
+    def create_project(
+        self,
+        project_dto: ProjectCreationDTO,
+        user_email: str
+    ) -> Project:
+        user = get_by_email(user_email=user_email)
+        org = orgs.get_by_uuid(org_uuid=project_dto.org_uuid)
+        template_type = None
+        if project_dto.is_template:
+            template_type = TemplateTypeUseCase().get_by_uuid(project_dto.template_type_uuid)
+        project = Project.objects.create(
+            uuid=project_dto.uuid,
+            name=project_dto.name,
+            org=org,
+            template_type=template_type,
+            is_template=project_dto.is_template,
+            created_by=user
+        )
+
+        self.create_brain_project_base(
+            project_dto=project_dto,
+            user_email=user_email,
+            project=project
+        )
 
         return project

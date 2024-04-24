@@ -26,8 +26,6 @@ class FlowConsumerDTO:
 
 @dataclass
 class ProjectAuthCreationDTO:
-    uuid: str
-    created_by: User
     project: Project
     role: ProjectAuthorizationRole
     user: User
