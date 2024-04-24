@@ -15,9 +15,10 @@ class ProjectAuthConsumer(EDAConsumer):
             body = JSONParser.parse(message.body)
 
             project_usecase = ProjectAuthUseCase()
-            project_usecase.create_project_auth(body)
+            auth = project_usecase.create_project_auth(body)
 
             message.channel.basic_ack(message.delivery_tag)
+            print(f"[ProjectConsumer] - Authorization created: {auth.email} - {auth.project} - {auth.role}")
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
