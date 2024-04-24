@@ -1,7 +1,9 @@
-from nexus.usecases import users, projects
+from nexus.usecases import projects
 
 from nexus.projects.models import ProjectAuth
 from nexus.projects.project_dto import ProjectAuthCreationDTO
+
+from nexus.users.models import User
 
 
 class ProjectAuthUseCase:
@@ -12,7 +14,14 @@ class ProjectAuthUseCase:
 
         role = consumer_msg.get("role")
         uuid = consumer_msg.get("uuid")
-        user = users.get_by_email(consumer_msg.get("user"))
+
+        if not role:
+            raise ValueError("Role is required")
+        if not uuid:
+            raise ValueError("UUID is required")
+
+        user, created = User.objects.get_or_create(consumer_msg.get("user"))
+
         project = projects.get_by_uuid(consumer_msg.get("project_uuid"))
 
         return ProjectAuthCreationDTO(

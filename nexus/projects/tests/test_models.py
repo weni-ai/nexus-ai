@@ -1,52 +1,65 @@
-import pytest
+from uuid import uuid4
 
-from nexus.projects.models import Project
+from django.test import TestCase
 
+from ..models import (
+    Project,
+    ProjectAuthorizationRole,
+    ProjectAuth,
+    TemplateType
+)
 
-@pytest.mark.django_db
-def test_create_project(create_user, create_org):
-    project_name = 'Test Project'
-    org = create_org
-    user = create_user
-    project = Project.objects.create(
-        name=project_name, org=org, created_by=user
-    )
-
-    assert Project.objects.count() == 1
-    assert project.is_active
-    assert project.name == project_name
-    assert project.org == org
-    assert project.created_by == user
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
 
 
-@pytest.mark.django_db
-def test_create_template_project(
-    create_user, create_org, create_template_type
-):
-    project_name = 'Test Template Project'
-    org = create_org
-    user = create_user
-    template_type = create_template_type
+class ProjectTestCase(TestCase):
 
-    project = Project.objects.create(
-        name=project_name,
-        org=org,
-        created_by=user,
-        is_template=True,
-        template_type=template_type,
-    )
+    def setUp(self) -> None:
+        self.org = OrgFactory()
+        self.user = self.org.created_by
 
-    assert (
-        template_type.__str__()
-        == f'{template_type.uuid} - {template_type.name}'
-    )
-    assert Project.objects.count() == 1
-    assert project.is_active
-    assert project.is_template
-    assert project.name == project_name
-    assert project.org == org
-    assert project.created_by == user
-    assert (
-        project.__str__()
-        == f'{project.uuid} - Project: {project.name} - Org: {project.org.name}'
-    )
+    def test_create_project(self):
+        project = Project.objects.create(
+            name="Test Project",
+            org=self.org,
+            created_by=self.user
+        )
+
+        self.assertEqual(project.name, "Test Project")
+        self.assertEqual(project.org, self.org)
+        self.assertEqual(project.created_by, self.user)
+        self.assertFalse(project.brain_on)
+        self.assertFalse(project.is_template)
+        self.assertIsNone(project.template_type)
+
+
+class ProjectAuthTestCase(TestCase):
+
+    def setUp(self) -> None:
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+
+    def test_create_project_auth(self):
+        project_auth = ProjectAuth.objects.create(
+            project=self.project,
+            user=self.user,
+            role=ProjectAuthorizationRole.VIEWER.value
+        )
+
+        self.assertEqual(project_auth.project, self.project)
+        self.assertEqual(project_auth.user, self.user)
+        self.assertEqual(project_auth.role, ProjectAuthorizationRole.VIEWER.value)
+
+
+class TemplateTypeTestCase(TestCase):
+
+    def test_create_template_type(self):
+        template_type = TemplateType.objects.create(
+            name="Test Template Type",
+            setup={},
+            uuid=uuid4().hex
+        )
+
+        self.assertEqual(template_type.name, "Test Template Type")
+        self.assertEqual(template_type.setup, {})
