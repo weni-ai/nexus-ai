@@ -40,6 +40,7 @@ from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
 
 from router.route import route
+from nexus.usecases.logs.create import CreateLogUsecase
 
 
 class SearchFlowView(APIView):
@@ -191,19 +192,24 @@ class MessagePreviewView(APIView):
 
     def post(self, request, *args, **kwargs):
         try:
-
             data = request.data
+
             project_uuid = kwargs.get("project_uuid")
+            text = data.get("text")
+            contact_urn = data.get("contact_urn")
 
             self.check_user_permissions(request, project_uuid, "read")
+
+            log_usecase = CreateLogUsecase()
+            log_usecase.create_message_log(text, contact_urn)
 
             flows_repository = FlowsORMRepository()
             content_base_repository = ContentBaseORMRepository()
 
             message = Message(
                 project_uuid=project_uuid,
-                text=data.get("text"),
-                contact_urn=data.get("contact_urn"),
+                text=text,
+                contact_urn=contact_urn,
             )
 
             project_uuid: str = message.project_uuid
@@ -256,8 +262,12 @@ class MessagePreviewView(APIView):
                 direct_message=broadcast,
                 flow_start=flow_start,
                 llm_config=llm_config,
-                flows_user_email=flows_user_email
+                flows_user_email=flows_user_email,
+                log_usecase=log_usecase,
             )
+
+            log_usecase.update_status("S")
+
             return Response(data=response)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
