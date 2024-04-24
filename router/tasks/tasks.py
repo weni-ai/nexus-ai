@@ -22,7 +22,7 @@ from nexus.intelligences.llms.client import LLMClient
 
 from nexus.usecases.logs.create import CreateLogUsecase
 
-from router.clients.flows.http.broadcast import BroadcastHTTPClient
+from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
 
 from router.route import route
@@ -80,7 +80,7 @@ def start_route(message: Dict) -> bool:
 
         print(f"[+ Modelo escolhido: {llm_config.model} :{llm_config.model_version} +]")
 
-        broadcast = BroadcastHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
+        broadcast = SendMessageHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'))
         flow_start = FlowStartHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 

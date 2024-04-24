@@ -78,8 +78,6 @@ def route(
             print(f"[+ Resposta do LLM: {llm_response}+]")
             print("===================================")
 
-            llm_response = llm_response[:settings.LLM_CHAR_LIMIT]
-
             metadata = LogMetadata(
                 agent_name=agent.name,
                 agent_role=agent.role,
