@@ -13,14 +13,15 @@ class ProjectAuthUseCase:
         consumer_msg: dict
     ) -> ProjectAuthCreationDTO:
         role = consumer_msg.get("role")
-        user_email = consumer_msg.get("user_email")
+        user_email = consumer_msg.get("user")
+        project_uuid = consumer_msg.get("project")
 
         if not role:
             raise ValueError("Role is required")
 
         user, created = User.objects.get_or_create(email=user_email)
 
-        project = projects.get_project_by_uuid(consumer_msg.get("project_uuid"))
+        project = projects.get_project_by_uuid(project_uuid=project_uuid)
 
         return ProjectAuthCreationDTO(
             user=user,
