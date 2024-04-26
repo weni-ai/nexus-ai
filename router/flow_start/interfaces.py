@@ -4,5 +4,5 @@ from abc import ABC, abstractmethod
 
 class FlowStart(ABC):
     @abstractmethod
-    def start_flow(self, flow: str, user: str, urns: List) -> None:
+    def start_flow(self, flow: str, user: str, urns: List, user_message: str) -> None:
         pass
