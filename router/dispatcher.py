@@ -18,19 +18,16 @@ def dispatch(
 
     if direct_message:
 
-        print(f"[+ sending direct message to {message.contact_urn} +]")
-    
         return direct_message.send_direct_message(
             llm_response,
             urns,
             message.project_uuid,
             user_email
         )
-    
-    print(f"[+ starting flow {flow} +]")
 
     return flow_start.start_flow(
         flow=flow,
         user=user_email,
         urns=urns,
+        user_message=message.text
     )
