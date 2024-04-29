@@ -278,7 +278,7 @@ class RouteTestCase(TestCase):
         self.assertEquals(response.get("type"), "flowstart")
 
 
-# @skip("Integration test, shouldn't run for coverage")
+@skip("Integration test, shouldn't run for coverage")
 class StartRouteTestCase(TestCase):
     def setUp(self) -> None:
         project_uuid = "e8326ee9-ca88-49da-aaf3-8f35eb60e7dc"
