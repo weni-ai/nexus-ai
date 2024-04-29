@@ -16,6 +16,8 @@ from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
+from django.conf import settings
+
 
 class IntelligenceFactory(factory.django.DjangoModelFactory):
     class Meta:
@@ -91,6 +93,7 @@ class IntegratedIntelligenceFactory(factory.django.DjangoModelFactory):
     )
     project = factory.SubFactory(
         ProjectFactory,
+        name=factory.SelfAttribute('..intelligence.name'),
         created_by=factory.SelfAttribute('..created_by'),
         org=factory.SelfAttribute('..intelligence.org')
     )
@@ -115,9 +118,9 @@ class LLMFactory(factory.django.DjangoModelFactory):
     model = 'gpt2'
     created_by = factory.SubFactory(UserFactory)
     setup = {
-        'top_p': 0.9,
-        'top_k': 0.9,
-        'temperature': 0.5,
+        'top_p': settings.WENIGPT_TOP_P,
+        'top_k': settings.WENIGPT_TOP_K,
+        'temperature': settings.WENIGPT_TEMPERATURE,
         'threshold': 0.5,
         'max_length': 100
     }

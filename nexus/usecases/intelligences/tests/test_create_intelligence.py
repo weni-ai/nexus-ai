@@ -44,7 +44,7 @@ class TestCreateContentBaseUseCase(TestCase):
         self.intelligence = IntelligenceFactory(org=self.org)
 
     def test_create_content_base_use_case(self):
-        use_case = CreateContentBaseUseCase()
+        use_case = CreateContentBaseUseCase(mock_recent_activity_message)
         content_base_create = use_case.create_contentbase(
             intelligence_uuid=self.intelligence.uuid,
             user_email=self.org.created_by,
@@ -103,6 +103,12 @@ class TestLLM(TestCase):
     def setUp(self) -> None:
 
         self.integrated_inteligence = IntegratedIntelligenceFactory()
+        ContentBaseFactory(
+            intelligence=self.integrated_inteligence.intelligence,
+            created_by=self.integrated_inteligence.intelligence.created_by,
+            is_router=True
+        )
+
         setup = {
             'temperature': 0.5,
             'top_p': 0.9,
@@ -113,7 +119,7 @@ class TestLLM(TestCase):
         self.dto = LLMDTO(
             model="gpt2",
             user_email=self.integrated_inteligence.created_by.email,
-            project_uuid=self.integrated_inteligence.project.uuid,
+            project_uuid=str(self.integrated_inteligence.project.uuid),
             setup=setup
         )
 
