@@ -343,7 +343,6 @@ class StartRouteTestCase(TestCase):
         start_route(self.message.__dict__)
 
         msg = MessageModel.objects.first()
-        print(msg.exception)
         self.assertEquals(msg.status, "S")
 
 
