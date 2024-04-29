@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
+from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
 from .serializers import (
     IntelligenceSerializer,
     ContentBaseSerializer,
@@ -90,10 +91,15 @@ class IntelligencesViewset(
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def create(self, request, org_uuid=str):
+    def create(
+        self,
+        request,
+        org_uuid=str,
+        intelligence_activity_message=intelligence_activity_message,
+    ):
         try:
             user_email = request.user.email
-            use_case = intelligences.CreateIntelligencesUseCase()
+            use_case = intelligences.CreateIntelligencesUseCase(intelligence_activity_message)
 
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -286,10 +292,17 @@ class ContentBaseViewset(
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def create(self, request, intelligence_uuid=str):
+    def create(
+        self,
+        request,
+        intelligence_uuid=str,
+        intelligence_activity_message=intelligence_activity_message
+    ):
         try:
             user_email = request.user.email
-            use_case = intelligences.CreateContentBaseUseCase()
+            use_case = intelligences.CreateContentBaseUseCase(
+                intelligence_activity_message
+            )
 
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
