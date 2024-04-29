@@ -8,6 +8,8 @@ from nexus.intelligences.models import (
     IntegratedIntelligence,
     ContentBaseLink,
     LLM,
+    ContentBaseAgent,
+    ContentBaseInstruction,
 )
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -33,14 +35,23 @@ class ContentBaseFactory(factory.django.DjangoModelFactory):
         model = ContentBase
 
     title = factory.Sequence(lambda n: 'test%d' % n)
+    created_by = factory.SubFactory(UserFactory)
     intelligence = factory.SubFactory(
         IntelligenceFactory,
         created_by=factory.SelfAttribute('..created_by')
     )
-    created_by = factory.SubFactory(UserFactory)
     description = factory.Sequence(lambda n: 'test%d' % n)
     language = 'en'
     is_router = False
+
+    agent = factory.RelatedFactory(
+        "nexus.usecases.intelligences.tests.intelligence_factory.ContentBaseAgentFactory",
+        'content_base'
+    )
+    instruction = factory.RelatedFactory(
+        "nexus.usecases.intelligences.tests.intelligence_factory.ContentBaseInstructionFactory",
+        'content_base'
+    )
 
 
 class ContentBaseTextFactory(factory.django.DjangoModelFactory):
@@ -115,3 +126,18 @@ class LLMFactory(factory.django.DjangoModelFactory):
         IntegratedIntelligenceFactory,
         created_by=factory.SelfAttribute('..created_by')
     )
+
+
+class ContentBaseAgentFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ContentBaseAgent
+
+    content_base = factory.SubFactory(ContentBaseFactory)
+
+
+class ContentBaseInstructionFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ContentBaseInstruction
+
+    content_base = factory.SubFactory(ContentBaseFactory)
+    instruction = factory.Sequence(lambda n: 'test%d' % n)
