@@ -12,6 +12,7 @@ from rest_framework.test import APIRequestFactory
 from rest_framework.test import force_authenticate
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory
 
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -67,7 +68,6 @@ class FlowsViewsetTestCase(TestCase):
             org_uuid=str(self.org.uuid),
             brain_on=True,
         )
-
         project_creation = ProjectsUseCase()
         return project_creation.create_project(project_dto=project_dto, user_email=self.user.email)
 
@@ -79,10 +79,12 @@ class FlowsViewsetTestCase(TestCase):
             'put': 'update',
             'delete': 'destroy'
         })
-
-        self.org = OrgFactory()
-        self.user = self.org.authorizations.first().user
-        self.project = self.setUp_project()
+        self.project = ProjectFactory(
+            name="Router",
+            brain_on=True,
+        )
+        self.org = self.project.org
+        self.user = self.project.created_by
         self.integrated_intel = get_integrated_intelligence_by_project(self.project.uuid)
         self.intelligence = self.integrated_intel.intelligence
         self.contentbase = get_default_content_base_by_project(self.project.uuid)
