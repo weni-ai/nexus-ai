@@ -69,6 +69,12 @@ class CreateIntelligencesUseCase():
 
 class CreateContentBaseUseCase():
 
+    def __init__(
+        self,
+        intelligence_activity_message=intelligence_activity_message
+    ) -> None:
+        self.intelligence_activity_message = intelligence_activity_message
+
     def create_contentbase(
             self,
             intelligence_uuid: str,
@@ -105,7 +111,8 @@ class CreateContentBaseUseCase():
             org=org,
             user=user,
             entity_name=contentbase.title,
-            action="CREATE"
+            action="CREATE",
+            intelligence_activity_message=self.intelligence_activity_message
         )
 
         return contentbase
