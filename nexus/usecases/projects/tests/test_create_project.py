@@ -4,6 +4,7 @@ from django.test import TestCase
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from ..projects_use_case import ProjectsUseCase
 from nexus.projects.project_dto import ProjectCreationDTO
+from nexus.usecases.event_driven.mocks import mock_recent_activity_message
 
 
 class TestCreateProject(TestCase):
@@ -20,7 +21,9 @@ class TestCreateProject(TestCase):
         )
 
     def test_create_project(self):
-        project = ProjectsUseCase().create_project(
+        project = ProjectsUseCase(
+            intelligence_activity_message=mock_recent_activity_message
+        ).create_project(
             project_dto=self.project_dto,
             user_email=self.user.email
         )
