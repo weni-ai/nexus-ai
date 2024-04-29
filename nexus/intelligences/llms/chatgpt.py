@@ -3,7 +3,7 @@ from typing import List, Dict
 from nexus.intelligences.llms.client import LLMClient
 from django.conf import settings
 
-from router.entities.intelligences import LLMSetupDTO
+from router.entities import LLMSetupDTO, ContactMessageDTO
 
 
 class ChatGPTClient(LLMClient):
@@ -33,5 +33,13 @@ class ChatGPTClient(LLMClient):
         prompt: str = self.get_prompt(instructions_formatted, context, agent)
         return prompt
 
-    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
-        return self.chat_completion(instructions, chunks, agent, question, llm_config, self.few_shot)
+    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO]):
+        return self.chat_completion(
+            instructions=instructions,
+            chunks=chunks,
+            agent=agent,
+            question=question,
+            llm_config=llm_config,
+            few_shot=self.few_shot,
+            last_messages=last_messages
+        )

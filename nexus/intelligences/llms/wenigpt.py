@@ -6,7 +6,7 @@ import requests
 from django.conf import settings
 
 from nexus.intelligences.llms.client import LLMClient
-from router.entities import LLMSetupDTO
+from router.entities import LLMSetupDTO, ContactMessageDTO
 
 
 class WeniGPTClient(LLMClient):
@@ -87,7 +87,7 @@ class WeniGPTClient(LLMClient):
             response = {"error": str(e)}
             return {"answers": None, "id": "0", "message": response.get("error")}
 
-    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
+    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO]):
 
         if self.model_version in self.fine_tunning_models:
             self.client = self.get_client()
@@ -95,6 +95,14 @@ class WeniGPTClient(LLMClient):
             self.prompt_with_context = self.fine_tunning_prompt_with_context
             self.prompt_without_context = self.fine_tunning_prompt_without_context
 
-            return self.chat_completion(instructions, chunks, agent, question, llm_config, self.few_shot)
+            return self.chat_completion(
+                instructions=instructions,
+                chunks=chunks,
+                agent=agent,
+                question=question,
+                llm_config=llm_config,
+                few_shot=self.few_shot,
+                last_messages=last_messages
+            )
 
         return self.request_runpod(instructions, chunks, agent, question, llm_config)

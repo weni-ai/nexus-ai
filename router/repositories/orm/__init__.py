@@ -14,6 +14,8 @@ from nexus.intelligences.models import (
     ContentBaseAgent,
 )
 from nexus.actions.models import Flow
+from nexus.logs.models import Message, MessageLog
+
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
@@ -22,6 +24,7 @@ from router.entities import (
     FlowDTO,
     InstructionDTO,
     ContentBaseDTO,
+    ContactMessageDTO,
 )
 
 
@@ -111,3 +114,28 @@ class FlowsORMRepository(Repository):
             )
         
         return flows_list
+
+
+class MessageLogsRepository(Repository):
+    def list_last_messages(self, project_uuid: str, contact_urn: str, number_of_messages: int) -> List[ContactMessageDTO]:
+        content_base = get_default_content_base_by_project(project_uuid)
+        contact_messages = []
+        messages = Message.objects.filter(
+            contact_urn=contact_urn,
+            messagelog__content_base=content_base,
+            status="S"
+        ).order_by("created_at")[:number_of_messages]
+        for message in messages:
+
+            message_log: MessageLog = message.messagelog
+
+            contact_messages.append(
+                ContactMessageDTO(
+                    contact_urn=message.contact_urn,
+                    text=message.text,
+                    llm_respose=message_log.llm_response,
+                    content_base_uuid=str(message_log.content_base.uuid),
+                    project_uuid=project_uuid
+                )
+            )
+        return contact_messages

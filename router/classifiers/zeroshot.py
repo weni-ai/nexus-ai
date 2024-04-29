@@ -26,14 +26,10 @@ class ZeroshotClassifier(Classifier):
 
         response: dict = ZeroshotClient(self.chatbot_goal).fast_predict(message, flows_list, language)
 
-        print("25 ", response)
-
         if response.get("other"):
             return self.CLASSIFICATION_OTHER
 
         return response.get("classification")
-
-
 
 if __name__ == "__main__":
     client = ZeroshotClient()
