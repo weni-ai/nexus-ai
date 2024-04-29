@@ -19,7 +19,7 @@ class SearchFileDatabase:
         }
 
 
-class GenerativeAIDatabase:
+class MockGenerativeAIDatabase:
 
     eng_answer = "ENGLISH ANSWER"
     spa_answer = "SPANISH ANSWER"
@@ -47,7 +47,7 @@ class IntelligenceGenerativeSearchUseCaseTestCase(TestCase):
     def setUp(self) -> None:
         self.usecase = IntelligenceGenerativeSearchUseCase(
             search_file_database=SearchFileDatabase(),
-            generative_ai_database=GenerativeAIDatabase(),
+            generative_ai_database=MockGenerativeAIDatabase(),
         )
         self.content_base = ContentBaseFactory()
 
@@ -63,7 +63,7 @@ class IntelligenceGenerativeSearchUseCaseTestCase(TestCase):
             language=content_base.language
         )
         self.assertEqual(
-            GenerativeAIDatabase.eng_answer,
+            MockGenerativeAIDatabase.eng_answer,
             response.get("answers")[0]
         )
 
@@ -77,7 +77,7 @@ class IntelligenceGenerativeSearchUseCaseTestCase(TestCase):
             language=content_base.language
         )
         self.assertEqual(
-            GenerativeAIDatabase.spa_answer,
+            MockGenerativeAIDatabase.spa_answer,
             response.get("answers")[0]
         )
 
@@ -91,20 +91,22 @@ class IntelligenceGenerativeSearchUseCaseTestCase(TestCase):
             language=content_base.language
         )
         self.assertEqual(
-            GenerativeAIDatabase.por_answer,
+            MockGenerativeAIDatabase.por_answer,
             response.get("answers")[0]
         )
 
     def test_search_base(self):
         content_base = self.content_base
-        content_base.language = "en"
+        content_base.language = "en-us"
         content_base.save()
+        print("Content base language: ", content_base.language)
         response = self.usecase.search(
-            content_base_uuid=str(self.content_base.uuid),
+            content_base_uuid=str(content_base.uuid),
             text="text",
             language="base"
         )
+        print("Response answer: ", response.get("answers")[0])
         self.assertEqual(
-            GenerativeAIDatabase.answers.get(content_base.language),
+            MockGenerativeAIDatabase.answers.get("en"),
             response.get("answers")[0]
         )
