@@ -64,6 +64,18 @@ def generate_env():
         "DJANGO_ALLOW_ASYNC_UNSAFE": False,
         "CHATGPT_ORGS": "",
         "CHATGPT_MODEL": "",
+        "WENIGPT_FINE_TUNNING_DEFAULT_VERSION": "",
+        "WENIGPT_FINE_TUNNING_VERSIONS": "",
+        "WENIGPT_OPENAI_TOKEN": "",
+        "DEFAULT_INSTRUCTIONS": "",
+        "LLM_DEFAULT_CHAR_INSTRUCTION": "",
+        "SENTRY_URL": "",
+        "USE_SENTRY": False,
+        "ENVIRONMENT": "",
+        "FEW_SHOT_BOTO": "",
+        "CHATGPT_POST_PROMPT": "",
+        "WENIGPT_POST_PROMPT": "",
+        "FLOWS_SEND_MESSAGE_INTERNAL_TOKEN": "",
     }
 
     with open(env_path, "w") as configfile:
