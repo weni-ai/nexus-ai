@@ -36,7 +36,6 @@ class CreateLogUsecase:
         log = self.log
 
         for key in keys:
-            print(log, key, kwargs.get(key))
             setattr(log, key, kwargs.get(key))
 
         log.save()

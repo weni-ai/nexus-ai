@@ -3,7 +3,7 @@ from typing import Dict, List
 
 from openai import OpenAI
 
-from router.entities import LLMSetupDTO
+from router.entities import LLMSetupDTO, ContactMessageDTO
 
 from django.conf import settings
 
@@ -40,7 +40,7 @@ class LLMClient(ABC):
             return self.replace_vars(self.prompt_with_context, variables)
         return self.replace_vars(self.prompt_without_context, variables)
 
-    def request_gpt(self):
+    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO]):
         pass
 
     def format_few_shot(self, few_shot: str) -> List[Dict]:
@@ -49,10 +49,8 @@ class LLMClient(ABC):
     def format_post_prompt(self, question: str) -> str:
         return self.post_prompt.replace("{{question}}", question)
 
-    def chat_completion(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, few_shot: str = None):
+    def chat_completion(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO], few_shot: str = None):
         self.prompt = self.format_prompt(instructions, chunks, agent)
-
-        print(f"[+ prompt enviado ao LLM: {self.prompt} +]")
 
         kwargs = dict(
             temperature=float(llm_config.temperature) if llm_config.temperature else None,
@@ -60,12 +58,10 @@ class LLMClient(ABC):
             max_tokens=int(llm_config.max_tokens) if llm_config.max_tokens else None
         )
 
-        if settings.TOKEN_LIMIT:
+        if settings.TOKEN_LIMIT:  # TODO: remove token limit
             kwargs.update({"max_tokens": settings.TOKEN_LIMIT})
 
-        print(f"[+ Parametros enviados para o LLM: {kwargs} +]")
-
-        messages=[
+        messages = [
             {
                 "role": "system",
                 "content": self.prompt
@@ -74,6 +70,21 @@ class LLMClient(ABC):
 
         if few_shot:
             messages += self.format_few_shot(few_shot)
+
+        if last_messages:
+            for last_message in last_messages:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": last_message.text
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": last_message.llm_respose
+                    }
+                )
 
         post_prompt = self.format_post_prompt(question)
 
@@ -84,8 +95,6 @@ class LLMClient(ABC):
             }
         )
 
-        print("Messages: ", messages)
-
         chat_completion = self.client.chat.completions.create(
             messages=messages,
             model=llm_config.model_version,
@@ -93,8 +102,6 @@ class LLMClient(ABC):
         )
 
         text_answers = chat_completion.choices[0].message.content
-
-        print(f"[+ Resposta do LLM: {text_answers} +]")
 
         return {
             "answers": [

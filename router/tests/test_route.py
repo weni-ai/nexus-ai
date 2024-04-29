@@ -34,7 +34,7 @@ from router.classifiers import Classifier
 from router.route import route
 from router.tasks.tasks import start_route
 from router.entities import (
-    FlowDTO, Message
+    FlowDTO, Message, LLMSetupDTO
 )
 from router.tests.mocks import *
 
@@ -182,6 +182,7 @@ class RouteTestCase(TestCase):
 
         content_base_repository = ContentBaseTestRepository(content_base, agent)
         flows_repository = FlowsTestRepository(flow, fallback_flow)
+        message_logs_repository = MessageLogsTestRepository(str(self.content_base.uuid))
 
         flows = [
             FlowDTO(
@@ -196,7 +197,17 @@ class RouteTestCase(TestCase):
         llm_type = "chatgpt"
         llm_client = MockLLMClient.get_by_type(llm_type)
 
-        llm_config = get_llm_by_project_uuid(project_uuid)
+        llm_model = get_llm_by_project_uuid(project_uuid)
+        llm_config = LLMSetupDTO(
+            model=llm_model.model.lower(),
+            model_version=llm_model.setup.get("version"),
+            temperature=llm_model.setup.get("temperature"),
+            top_k=llm_model.setup.get("top_k"),
+            top_p=llm_model.setup.get("top_p"),
+            token=llm_model.setup.get("token"),
+            max_length=llm_model.setup.get("max_length"),
+            max_tokens=llm_model.setup.get("max_tokens"),
+        )
 
         if llm_config.model.lower() != "wenigpt":
             llm_client.token = llm_config.setup.get("token")
@@ -208,6 +219,7 @@ class RouteTestCase(TestCase):
             message=message,
             content_base_repository=content_base_repository,
             flows_repository=flows_repository,
+            message_logs_repository=message_logs_repository,
             indexer=MockIndexer(),
             llm_client=llm_client(),
             direct_message=direct_message,

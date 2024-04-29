@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List
 
 from router.flow_start import FlowStart
 
@@ -10,5 +10,5 @@ class SimulateFlowStart(FlowStart):
         self.__host = host
         self.__access_token = access_token
 
-    def start_flow(self, flow: FlowDTO, user: str, urns: List) -> None:
+    def start_flow(self, flow: FlowDTO, user: str, urns: List, user_message: str) -> None:
         return {"type": "flowstart", "uuid": flow.uuid, "name": flow.name}

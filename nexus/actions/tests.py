@@ -23,6 +23,8 @@ from nexus.actions.api.views import (
     MessagePreviewView
 )
 
+from nexus.logs.models import Message as ContactMessage, MessageLog
+
 from nexus.usecases.intelligences.get_by_uuid import (
     get_integrated_intelligence_by_project,
     get_default_content_base_by_project,
@@ -265,7 +267,27 @@ class MessagePreviewTestCase(TestCase):
             created_by=self.user
         )
 
+    def setUp_message(self, number_of_messages: int):
+        contact_message = ContactMessage.objects.create(
+            text=f"Message {number_of_messages}",
+            contact_urn=self.contact_urn,
+            status="F"
+        )
+        for i in range(number_of_messages):
+            contact_message = ContactMessage.objects.create(
+                text=f"Message {i}",
+                contact_urn=self.contact_urn,
+                status="S"
+            )
+            MessageLog.objects.create(
+                message=contact_message,
+                content_base=self.contentbase,
+                project=self.project,
+                llm_response=f"Response {i}"
+            )
+
     def setUp(self):
+        self.contact_urn = "82391837:telegram"
         self.factory = APIRequestFactory()
         self.view = MessagePreviewView.as_view()
         self.org = OrgFactory()
@@ -287,7 +309,8 @@ class MessagePreviewTestCase(TestCase):
             prompt="Quando o usuário estiver interessado em testar o router",
             content_base=self.contentbase,
         )
-        self.url = f'/simulate-messages'
+        self.url = '/simulate-messages'
+        self.setUp_message(5)
 
     def test_other(self):
         url_create = f'{self.url}/'
@@ -295,7 +318,7 @@ class MessagePreviewTestCase(TestCase):
         data = {
             "project_uuid": str(self.project.uuid),
             "text": "Test",
-            "contact_urn": "82391837:telegram",
+            "contact_urn": self.contact_urn,
         }
 
         request = self.factory.post(url_create, data=data)
@@ -313,14 +336,14 @@ class MessagePreviewTestCase(TestCase):
         content = json.loads(response.content)
 
         self.assertEquals(content.get("type"), "broadcast")
-    
+
     def test_classify(self):
         url_create = f'{self.url}/'
 
         data = {
             "project_uuid": str(self.project.uuid),
             "text": "Olá, gostaria de testar o router",
-            "contact_urn": "82391837:telegram",
+            "contact_urn": self.contact_urn,
         }
 
         request = self.factory.post(url_create, data=data)

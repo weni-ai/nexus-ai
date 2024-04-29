@@ -6,7 +6,7 @@ from router.entities import (
     InstructionDTO,
     FlowDTO,
     ContentBaseDTO,
-
+    ContactMessageDTO,
 )
 
 class ContentBaseTestRepository(Repository):
@@ -43,6 +43,25 @@ class ContentBaseTestRepository(Repository):
 
         return instructions_list
 
+
+class MessageLogsTestRepository(Repository):
+    def __init__(self, content_base_uuid: str) -> None:
+        self.content_base_uuid = content_base_uuid
+    def list_last_messages(self, contact_urn: str, project_uuid: str, number_of_messages: int):
+        messages = []
+        for i in range(number_of_messages):
+            messages.append(
+                ContactMessageDTO(
+                    text=f"Text {i}",
+                    contact_urn=contact_urn,
+                    llm_respose=f"Response {i}",
+                    project_uuid=project_uuid,
+                    content_base_uuid=self.content_base_uuid
+                )
+            )
+        return messages
+
+
 class FlowsTestRepository(Repository):
 
     def __init__(self, flow, fallback_flow) -> None:
@@ -70,8 +89,9 @@ class FlowsTestRepository(Repository):
         return
 
 class MockGPTClient:
-    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: Dict):
-        return {"answers":[{"text": "Resposta do LLM"}],"id":"0"}
+    prompt = "Prompt: Lorem Ipsum"
+    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: Dict, last_messages: List):
+        return {"answers":[{"text": "LLM Response"}],"id":"0"}
 
 
 class MockLLMClient:
@@ -97,7 +117,7 @@ class MockBroadcastHTTPClient():
 
 
 class MockFlowStartHTTPClient():
-    def start_flow(self, flow: str, user: str, urns: List):
+    def start_flow(self, flow: str, user: str, urns: List, user_message: str):
         print(f"[+ Test: Starting flow {flow} +]")
 
 

@@ -25,7 +25,11 @@ from nexus.intelligences.llms.client import LLMClient
 
 from nexus.orgs import permissions
 
-from router.repositories.orm import FlowsORMRepository, ContentBaseORMRepository
+from router.repositories.orm import (
+    ContentBaseORMRepository,
+    FlowsORMRepository,
+    MessageLogsRepository
+)
 from router.classifiers.zeroshot import ZeroshotClassifier
 from router.classifiers import classify
 from router.entities import (
@@ -205,6 +209,7 @@ class MessagePreviewView(APIView):
 
             flows_repository = FlowsORMRepository()
             content_base_repository = ContentBaseORMRepository()
+            message_logs_repository = MessageLogsRepository()
 
             message = Message(
                 project_uuid=project_uuid,
@@ -223,8 +228,6 @@ class MessagePreviewView(APIView):
 
             classification: str = classify(ZeroshotClassifier(chatbot_goal=agent.goal), message.text, flows)
 
-            print(f"[+ Mensagem classificada: {classification} +]")
-
             llm_model = get_llm_by_project_uuid(project_uuid)
 
             llm_config = LLMSetupDTO(
@@ -238,15 +241,11 @@ class MessagePreviewView(APIView):
                 max_tokens=llm_model.setup.get("max_tokens"),
             )
 
-            print(f"[+ LLM escolhido {llm_config.model} +]")
-
             llm_client = LLMClient.get_by_type(llm_config.model)
             llm_client: LLMClient = list(llm_client)[0](model_version=llm_config.model_version)
 
             if llm_config.model.lower() != "wenigpt":
                 llm_client.api_key = llm_config.token
-
-            print(f"[+ Modelo escolhido: {llm_config.model} :{llm_config.model_version} +]")
 
             broadcast = SimulateBroadcast(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
             flow_start = SimulateFlowStart(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
@@ -257,6 +256,7 @@ class MessagePreviewView(APIView):
                 message=message,
                 content_base_repository=content_base_repository,
                 flows_repository=flows_repository,
+                message_logs_repository=message_logs_repository,
                 indexer=SentenXFileDataBase(),
                 llm_client=llm_client,
                 direct_message=broadcast,
