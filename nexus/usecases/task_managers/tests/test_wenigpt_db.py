@@ -1,4 +1,5 @@
 from django.test import TestCase
+from unittest import skip
 from unittest.mock import patch
 
 from ..wenigpt_database import get_prompt_by_language
@@ -19,6 +20,7 @@ class Requests:
         }
 
 
+@skip("External request test")
 class TestWenigptDB(TestCase):
 
     def setUp(self) -> None:

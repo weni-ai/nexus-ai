@@ -110,6 +110,9 @@ class ContentBaseLogsTestCase(TestCase):
         self.assertIsInstance(log, ContentBaseLogs)
 
         feedback = 1
-        log.update_user_feedback(feedback)
+        log.update_user_feedback(
+            correct_answer=True,
+            feedback=feedback
+        )
 
         self.assertEqual(feedback, log.user_feedback)
