@@ -76,6 +76,15 @@ def generate_env():
         "CHATGPT_POST_PROMPT": "",
         "WENIGPT_POST_PROMPT": "",
         "FLOWS_SEND_MESSAGE_INTERNAL_TOKEN": "",
+        "CHATGPT_CONTEXT_PROMPT": "",
+        "WENIGPT_CONTEXT_PROMPT": "",
+        "CHATGPT_NO_CONTEXT_PROMPT": "",
+        "WENIGPT_NO_CONTEXT_PROMPT": "",
+        "FLOWS_REST_ENDPOINT": "",
+        "DEFAULT_AGENT_NAME": "",
+        "DEFAULT_AGENT_ROLE": "",
+        "DEFAULT_AGENT_PERSONALITY": "",
+        "DEFAULT_AGENT_GOAL": "",
     }
 
     with open(env_path, "w") as configfile:
