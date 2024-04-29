@@ -99,13 +99,11 @@ class IntelligenceGenerativeSearchUseCaseTestCase(TestCase):
         content_base = self.content_base
         content_base.language = "en-us"
         content_base.save()
-        print("Content base language: ", content_base.language)
         response = self.usecase.search(
             content_base_uuid=str(content_base.uuid),
             text="text",
             language="base"
         )
-        print("Response answer: ", response.get("answers")[0])
         self.assertEqual(
             MockGenerativeAIDatabase.answers.get("en"),
             response.get("answers")[0]
