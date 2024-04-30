@@ -52,6 +52,8 @@ class ProjectAuthUseCase:
                 project_auth.save(update_fields=["role"])
                 return project_auth
 
+            return project_auth
+
         except ProjectAuth.DoesNotExist:
             if action != "delete":
                 project_auth = ProjectAuth.objects.create(
