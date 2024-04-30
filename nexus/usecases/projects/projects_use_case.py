@@ -10,11 +10,17 @@ from nexus.usecases.intelligences.create import (
     create_llm
 )
 from nexus.usecases import orgs
-
+from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
 from django.conf import settings
 
 
 class ProjectsUseCase:
+
+    def __init__(
+        self,
+        intelligence_activity_message=intelligence_activity_message
+    ) -> None:
+        self.intelligence_activity_message = intelligence_activity_message
 
     def get_by_uuid(self, project_uuid: str) -> Project:
         try:
@@ -39,7 +45,9 @@ class ProjectsUseCase:
             created_by=user
         )
 
-        usecase = CreateIntelligencesUseCase()
+        usecase = CreateIntelligencesUseCase(
+            intelligence_activity_message=self.intelligence_activity_message
+        )
         base_intelligence = usecase.create_intelligences(
             org_uuid=project_dto.org_uuid,
             user_email=user_email,
@@ -52,7 +60,9 @@ class ProjectsUseCase:
             user_email=user_email
         )
 
-        usecase = CreateContentBaseUseCase()
+        usecase = CreateContentBaseUseCase(
+            intelligence_activity_message=self.intelligence_activity_message
+        )
         usecase.create_contentbase(
             intelligence_uuid=base_intelligence.uuid,
             user_email=user_email,

@@ -1,4 +1,5 @@
 import factory
+from uuid import uuid4
 
 from nexus.users.models import User
 
@@ -7,5 +8,8 @@ class UserFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = User
 
-    email = factory.Sequence(lambda n: 'test%d@test.com' % n)
     language = 'en'
+
+    @factory.lazy_attribute
+    def email(self):
+        return f"test{uuid4().hex}@test.com"
