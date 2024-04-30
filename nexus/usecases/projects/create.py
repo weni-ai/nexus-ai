@@ -14,7 +14,7 @@ class ProjectAuthUseCase:
     ) -> ProjectAuthCreationDTO:
         role = consumer_msg.get("role")
         user_email = consumer_msg.get("user")
-        project_uuid = consumer_msg.get("project")
+        project_uuid = consumer_msg.get("project_uuid")
 
         if not role:
             raise ValueError("Role is required")
