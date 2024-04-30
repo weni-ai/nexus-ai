@@ -20,7 +20,8 @@ class ProjectConsumer(EDAConsumer):
                 is_template=body.get("is_template"),
                 template_type_uuid=body.get("template_type_uuid"),
                 org_uuid=body.get("organization_uuid"),
-                brain_on=body.get("brain_on")
+                brain_on=body.get("brain_on"),
+                authorizations=body.get("authorizations"),
             )
 
             project_creation = ProjectsUseCase()
