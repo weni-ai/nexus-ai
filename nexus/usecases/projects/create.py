@@ -39,8 +39,8 @@ class ProjectAuthUseCase:
 
         try:
             project_auth = ProjectAuth.objects.get(
-                project__uuid=auth_dto.project,
-                user__email=auth_dto.user
+                project=auth_dto.project,
+                user=auth_dto.user
             )
 
             if action == "delete":
