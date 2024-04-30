@@ -103,7 +103,7 @@ class ProjectsUseCase:
         for auth in auths:
             auth_consumer_msg = {
                 "role": auth.get("role"),
-                "user": auth.get("user"),
+                "user": auth.get("user_email"),
                 "project": project.uuid
             }
             auth_usecase.create_project_auth(
