@@ -1,10 +1,13 @@
 from uuid import uuid4
 from django.test import TestCase
 
-from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from .project_factory import ProjectFactory
 from ..projects_use_case import ProjectsUseCase
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.event_driven.mocks import mock_recent_activity_message
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.usecases.projects.create import ProjectAuthUseCase
+from nexus.usecases.users.tests.user_factory import UserFactory
 
 
 class TestCreateProject(TestCase):
@@ -28,3 +31,24 @@ class TestCreateProject(TestCase):
             user_email=self.user.email
         )
         self.assertEqual(project.uuid, self.project_dto.uuid)
+        mock_recent_activity_message.assert_called_once()
+
+
+class ProjectAuthUseCaseTestCase(TestCase):
+
+    def setUp(self) -> None:
+        self.project = ProjectFactory()
+        self.user_email = UserFactory().email
+
+    def test_create_project_auth(self):
+        consumer_msg = {
+            'project_uuid': str(self.project.uuid),
+            'role': 3,
+            'user_email': self.user_email
+        }
+        project_auth = ProjectAuthUseCase().create_project_auth(
+            consumer_msg
+        )
+        self.assertEqual(project_auth.project, self.project)
+        self.assertEqual(project_auth.user.email, self.user_email)
+        self.assertEqual(project_auth.role, 3)

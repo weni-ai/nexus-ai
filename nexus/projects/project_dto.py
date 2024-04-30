@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from nexus.users.models import User
+from nexus.projects.models import Project, ProjectAuthorizationRole
 
 @dataclass
 class ProjectCreationDTO:
@@ -20,3 +22,10 @@ class FlowConsumerDTO:
     flow_organization: str
     entity_uuid: str
     project_uuid: str
+
+
+@dataclass
+class ProjectAuthCreationDTO:
+    project: Project
+    role: ProjectAuthorizationRole
+    user: User
