@@ -18,7 +18,7 @@ class ProjectAuthConsumer(EDAConsumer):
             auth = project_usecase.create_project_auth(body)
 
             message.channel.basic_ack(message.delivery_tag)
-            print(f"[ProjectConsumer] - Authorization created: {auth.email} - {auth.project} - {auth.role}")
+            print(f"[ProjectConsumer] - Authorization created: {auth.user.email} - {auth.project.name} - {auth.role}")
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
