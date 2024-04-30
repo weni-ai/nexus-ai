@@ -22,7 +22,6 @@ class ProjectConsumer(EDAConsumer):
                 org_uuid=body.get("organization_uuid"),
                 brain_on=body.get("brain_on"),
                 authorizations=body.get("authorizations"),
-                user_email=body.get("user_email"),
             )
 
             project_creation = ProjectsUseCase()
