@@ -9,6 +9,7 @@ from nexus.usecases.intelligences.create import (
     create_integrated_intelligence,
     create_llm
 )
+from .create import ProjectAuthUseCase
 from nexus.usecases import orgs
 from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
 from django.conf import settings
@@ -96,5 +97,17 @@ class ProjectsUseCase:
             user_email=user_email,
             project=project
         )
+
+        auths = project_dto.authorizations
+        auth_usecase = ProjectAuthUseCase()
+        for auth in auths:
+            auth_consumer_msg = {
+                "role": auth.get("role"),
+                "user": auth.get("user"),
+                "project": project.uuid
+            }
+            auth_usecase.create_project_auth(
+                consumer_msg=auth_consumer_msg
+            )
 
         return project
