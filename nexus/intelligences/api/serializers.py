@@ -139,13 +139,23 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         agent_data = validated_data.get("agent")
         if agent_data:
+            try:
+                agent = instance.agent
 
-            agent = instance.agent
-            agent.name = agent_data.get("name", agent.name)
-            agent.role = agent_data.get("role", agent.role)
-            agent.personality = agent_data.get("personality", agent.personality)
-            agent.goal = agent_data.get("goal", agent.goal)
-            agent.save()
+                agent.name = agent_data.get("name", agent.name)
+                agent.role = agent_data.get("role", agent.role)
+                agent.personality = agent_data.get("personality", agent.personality)
+                agent.goal = agent_data.get("goal", agent.goal)
+                agent.save()
+
+            except ContentBaseAgent.DoesNotExist:
+                ContentBaseAgent.objects.create(
+                    name=agent_data.get("name"),
+                    role=agent_data.get("role"),
+                    personality=agent_data.get("personality"),
+                    goal=agent_data.get("goal"),
+                    content_base=instance,
+                )
 
         instructions_data = self.context.get('request').data.get('instructions')
         if instructions_data:
