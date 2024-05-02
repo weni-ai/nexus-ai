@@ -8,6 +8,7 @@ from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.create import ProjectAuthUseCase
 from nexus.usecases.users.tests.user_factory import UserFactory
+from nexus.usecases.event_driven.mocks import mock_recent_activity_message
 
 
 class TestCreateProject(TestCase):
@@ -23,15 +24,14 @@ class TestCreateProject(TestCase):
             template_type_uuid=None,
         )
 
-    @patch('nexus.usecases.projects.projects_use_case.ProjectsUseCase.create_brain_project_base')
-    def test_create_project(self, mock_create_brain_project_base):
-        mock_create_brain_project_base.return_value = None
-        project = ProjectsUseCase().create_project(
+    def test_create_project(self):
+        project = ProjectsUseCase(
+            intelligence_activity_message=mock_recent_activity_message
+        ).create_project(
             project_dto=self.project_dto,
             user_email=self.user.email
         )
         self.assertEqual(project.uuid, self.project_dto.uuid)
-        mock_create_brain_project_base.assert_called_once()
 
 
 class ProjectAuthUseCaseTestCase(TestCase):

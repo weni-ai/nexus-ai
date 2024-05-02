@@ -1,4 +1,3 @@
-import uuid
 import json
 
 from django.conf import settings
@@ -20,15 +19,13 @@ from ..views import (
 
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     IntelligenceFactory,
+    IntegratedIntelligenceFactory,
     ContentBaseFactory,
     ContentBaseTextFactory,
     ContentBaseLinkFactory,
 )
-
-from nexus.usecases.orgs.tests.org_factory import OrgFactory
-from nexus.usecases.projects.projects_use_case import ProjectsUseCase
-from nexus.projects.project_dto import ProjectCreationDTO
-from nexus.usecases.intelligences.retrieve import get_default_content_base_by_project
+from nexus.usecases.event_driven.mocks import mock_recent_activity_message
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
 class TestIntelligencesViewset(TestCase):
@@ -79,7 +76,11 @@ class TestIntelligencesViewset(TestCase):
         request = self.factory.post(self.url, data)
         force_authenticate(request, user=self.user)
 
-        response = self.view(request, org_uuid=str(self.org.uuid))
+        response = self.view(
+            request,
+            org_uuid=str(self.org.uuid),
+            intelligence_activity_message=mock_recent_activity_message
+        )
         self.assertEqual(response.status_code, 201)
 
     def test_update(self):
@@ -164,7 +165,8 @@ class TestContentBaseViewset(TestCase):
         force_authenticate(request, user=self.user)
         response = self.view(
             request,
-            intelligence_uuid=str(self.intelligence.uuid)
+            intelligence_uuid=str(self.intelligence.uuid),
+            intelligence_activity_message=mock_recent_activity_message
         )
         self.assertEqual(response.status_code, 201)
 
@@ -331,7 +333,6 @@ class TestContentBaseLinkViewset(TestCase):
             content_base_uuid=str(self.content_base.uuid),
             contentbaselink_uuid=str(self.contentbaselink.uuid)
         )
-        print(response.data)
         self.assertEqual(response.status_code, 200)
 
     def test_retrieve(self):
@@ -375,33 +376,25 @@ class TestContentBaseLinkViewset(TestCase):
 
 
 class TestContentBasePersonalizationViewSet(TestCase):
-    def _create_project(self, org_uuid: str, user_email: str):
-
-        project_dto = ProjectCreationDTO(
-            uuid=str(uuid.uuid4()),
-            name="Test Project",
-            is_template=False,
-            template_type_uuid=None,
-            org_uuid=org_uuid,
-            brain_on=True
-        )
-        return ProjectsUseCase().create_project(project_dto, user_email)
 
     def setUp(self) -> None:
         self.factory = APIRequestFactory()
-        self.org = OrgFactory()
+        self.content_base = ContentBaseFactory(is_router=True)
+        self.instruction_1 = self.content_base.instructions.first()
+        self.org = self.content_base.intelligence.org
         self.user = self.org.created_by
-        self.project = self._create_project(str(self.org.uuid), str(self.org.created_by.email))
-        self.content_base = get_default_content_base_by_project(str(self.project.uuid))
+        self.project = ProjectFactory(
+            brain_on=True,
+            name=self.content_base.intelligence.name,
+            org=self.org,
+            created_by=self.user
+        )
+        IntegratedIntelligenceFactory(
+            intelligence=self.content_base.intelligence,
+            project=self.project,
+            created_by=self.user
+        )
         self.url = f'{self.project.uuid}/customization'
-        agent = self.content_base.agent
-        agent.name = "Doris"
-        agent.role = "Marketing"
-        agent.personality = "Relaxed"
-        agent.goal = "Marketing"
-        agent.save()
-        self.instruction_1 = self.content_base.instructions.create(instruction="Instruction 1")
-        self.instruction_2 = self.content_base.instructions.create(instruction="Instruction 2")
 
     def test_get_personalization(self):
         url_retrieve = f'{self.url}/'
