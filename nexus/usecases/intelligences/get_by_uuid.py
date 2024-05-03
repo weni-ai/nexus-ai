@@ -103,6 +103,11 @@ def get_or_create_default_integrated_intelligence_by_project(
             return integrated_intelligence
         return IntegratedIntelligence.objects.get(project__uuid=project_uuid)
     except IntegratedIntelligence.DoesNotExist:
+        integrated_intelligence = IntegratedIntelligence.objects.create(
+            project=project,
+            intelligence=intelligence,
+            created_by=project.created_by
+        )
         return integrated_intelligence
     except Exception as exception:
         raise Exception(f"[ Intelligence ] - Intelligence error to get - error: `{exception}`")
