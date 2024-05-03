@@ -9,11 +9,19 @@ from nexus.usecases import (
     users,
     orgs
 )
+from .publishers_msg import recent_activity_message
+from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
 
 
 class DeleteIntelligenceUseCase():
+
+    def __init__(
+        self,
+        intelligence_activity_message=intelligence_activity_message
+    ) -> None:
+        self.intelligence_activity_message = intelligence_activity_message
 
     def delete_intelligences(
             self,
@@ -29,7 +37,16 @@ class DeleteIntelligenceUseCase():
             raise IntelligencePermissionDenied()
 
         intelligence = get_by_intelligence_uuid(intelligence_uuid)
+        intelligence_name = intelligence.name
         intelligence.delete()
+
+        recent_activity_message(
+            org=org,
+            user=user,
+            entity_name=intelligence_name,
+            action="DELETE",
+            intelligence_activity_message=self.intelligence_activity_message
+        )
         return True
 
 
