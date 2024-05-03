@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 import os
 import sys
 import sentry_sdk
-
+from django.utils.log import DEFAULT_LOGGING
 from pathlib import Path
 from sentry_sdk.integrations.django import DjangoIntegration
 
@@ -255,6 +255,12 @@ if USE_EDA:
 RABBITMQ_DEFAULT_USER = env.str("RABBITMQ_DEFAULT_USER")
 RABBITMQ_DEFAULT_PASS = env.str("RABBITMQ_DEFAULT_PASS")
 
+LOGGING = DEFAULT_LOGGING
+LOGGING["loggers"]["sentry.errors"] = {
+    "level": "DEBUG",
+    "handlers": ["console"],
+    "propagate": False,
+}
 # Sentry config
 
 USE_SENTRY = env.bool("USE_SENTRY")
@@ -265,7 +271,6 @@ if USE_SENTRY:
         integrations=[DjangoIntegration()],
         environment=env.str("ENVIRONMENT"),
     )
-
 
 # OIDC
 
