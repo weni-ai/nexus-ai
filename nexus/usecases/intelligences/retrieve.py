@@ -6,8 +6,9 @@ from .get_by_uuid import (
     get_default_content_base_by_project,
     get_by_content_base_link_uuid,
 )
-from nexus.usecases import orgs, users
+from nexus.usecases import orgs, users, projects
 from nexus.orgs import permissions
+from nexus.projects.permissions import has_project_permission
 from .exceptions import IntelligencePermissionDenied
 
 
@@ -51,13 +52,14 @@ class RetrieveContentBaseUseCase():
             project_uuid: str,
             user_email: str
     ):
-        org_use_case = orgs.GetOrgByIntelligenceUseCase()
         user = users.get_by_email(user_email)
-        org = org_use_case.get_org_by_project_uuid(project_uuid)
+        project = projects.get_project_by_uuid(project_uuid)
 
-        has_permission = permissions.can_list_content_bases(user, org)
-        if not has_permission:
-            raise IntelligencePermissionDenied()
+        has_project_permission(
+            user=user,
+            project=project,
+            method='GET'
+        )
 
         return get_default_content_base_by_project(project_uuid)
 
