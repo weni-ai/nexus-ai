@@ -85,12 +85,6 @@ def generate_env():
         "DEFAULT_AGENT_ROLE": "",
         "DEFAULT_AGENT_PERSONALITY": "",
         "DEFAULT_AGENT_GOAL": "",
-        "EDA_BROKER_HOST": "",
-        "EDA_VIRTUAL_HOST": "",
-        "EDA_BROKER_PORT": "",
-        "EDA_BROKER_USER": "",
-        "EDA_BROKER_PASSWORD": "",
-        "EDA_WAIT_TIME_RETRY": "",
         "USE_EDA": True,
     }
 
