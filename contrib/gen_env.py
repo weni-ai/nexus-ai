@@ -91,6 +91,7 @@ def generate_env():
         "EDA_BROKER_USER": "",
         "EDA_BROKER_PASSWORD": "",
         "EDA_WAIT_TIME_RETRY": "",
+        "USE_EDA": True,
     }
 
     with open(env_path, "w") as configfile:
