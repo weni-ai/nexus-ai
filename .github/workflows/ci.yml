@@ -24,10 +24,10 @@ jobs:
         image: postgres:16
 
         env:
-          CI_POSTGRES_HOST: postgres
-          CI_POSTGRES_USER: postgres
-          CI_POSTGRES_DATABASE: postgres
-          CI_POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DATABASE: postgres
+          POSTGRES_PASSWORD: postgres
 
         options: >-
           --health-cmd pg_isready
