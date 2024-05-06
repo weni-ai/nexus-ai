@@ -33,6 +33,6 @@ if __name__ == "__main__":
     create_database(
         host=os.environ.get("CI_POSTGRES_HOST", "postgres"),
         database=os.environ.get("CI_POSTGRES_USER", "postgres"),
-        user=os.environ.get("CI_POSTGRES_DATABASE", "postgres"),
-        password=os.environ.get("CI_POSTGRES_PASSWORD", "postgres"),
+        user=os.environ.get("CI_POSTGRES_DATABASE", "nexus"),
+        password=os.environ.get("CI_POSTGRES_PASSWORD", "nexus"),
     )
