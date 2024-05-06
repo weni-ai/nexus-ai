@@ -19,9 +19,9 @@ def create_database(host: str, database: str, user: str, password: str) -> None:
     cur = con.cursor()
 
     try:
-        cur.execute(f"CREATE USER nexus with PASSWORD nexus")
-        cur.execute(f"ALTER ROLE nexus WITH SUPERUSER")
-        cur.execute(f"CREATE DATABASE nexus")
+        cur.execute(f"CREATE USER 'nexus' with PASSWORD 'nexus'")
+        cur.execute(f"ALTER ROLE 'nexus' WITH SUPERUSER")
+        cur.execute(f"CREATE DATABASE 'nexus'")
     except Exception as e:
         raise e
     
