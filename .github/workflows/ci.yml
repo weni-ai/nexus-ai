@@ -19,6 +19,22 @@ jobs:
     runs-on: ubuntu-latest
     container: python:3.10-slim
 
+    services:
+      postgres:
+        image: postgres:16
+
+        env:
+          CI_POSTGRES_HOST: ${{ secrets.CI_POSTGRES_HOST }}
+          CI_POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
+          CI_POSTGRES_DATABASE: ${{ secrets.CI_POSTGRES_DATABASE }}
+          CI_POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
@@ -29,6 +45,8 @@ jobs:
           poetry config virtualenvs.create false --local
           poetry install
           python contrib/gen_env.py
+      - name: Create database
+        run: python contrib/create_database.py
       - name: Run Django Unittests with Coverage
         run: coverage run manage.py test --verbosity=2 --noinput
       - name: Coverage Report
