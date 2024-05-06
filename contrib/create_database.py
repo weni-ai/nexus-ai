@@ -19,9 +19,9 @@ def create_database(host: str, database: str, user: str, password: str) -> None:
     cur = con.cursor()
 
     try:
-        cur.execute(f"CREATE USER {user} with PASSWORD '{password}'")
-        cur.execute(f"ALTER ROLE {user} WITH SUPERUSER")
-        cur.execute(f"CREATE DATABASE {database}")
+        cur.execute(f"CREATE USER nexus with PASSWORD nexus")
+        cur.execute(f"ALTER ROLE nexus WITH SUPERUSER")
+        cur.execute(f"CREATE DATABASE nexus")
     except Exception as e:
         raise e
     
@@ -32,7 +32,7 @@ def create_database(host: str, database: str, user: str, password: str) -> None:
 if __name__ == "__main__":
     create_database(
         host=os.environ.get("CI_POSTGRES_HOST", "postgres"),
-        database=os.environ.get("CI_POSTGRES_DATABASE", "nexus"),
-        user=os.environ.get("CI_POSTGRES_USER", "nexus"),
+        database=os.environ.get("CI_POSTGRES_DATABASE", "postgres"),
+        user=os.environ.get("CI_POSTGRES_USER", "postgres"),
         password=os.environ.get("CI_POSTGRES_PASSWORD", "postgres"),
     )
