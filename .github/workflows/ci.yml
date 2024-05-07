@@ -26,9 +26,9 @@ jobs:
         env:
           DEFAULT_DATABASE: postgres://nexus:nexus@postgres:5432/nexus
           POSTGRES_HOST: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_DATABASE: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: nexus
+          POSTGRES_DATABASE: nexus
+          POSTGRES_PASSWORD: nexus
 
         options: >-
           --health-cmd pg_isready
@@ -46,8 +46,8 @@ jobs:
           poetry config virtualenvs.create false --local
           poetry install
           python contrib/gen_env.py
-      - name: Create database
-        run: python contrib/create_database.py
+      # - name: Create database
+      #   run: python contrib/create_database.py
       - name: Run Django Unittests with Coverage
         run: coverage run manage.py test --verbosity=2 --noinput
       - name: Coverage Report
