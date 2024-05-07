@@ -6,6 +6,7 @@ from django.contrib.postgres.fields import ArrayField
 from nexus.projects.models import Project
 from nexus.intelligences.models import ContentBase
 
+
 class Message(models.Model):
 
     STATUS_CHOICES = (

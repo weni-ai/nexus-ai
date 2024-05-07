@@ -6,6 +6,7 @@ from nexus.logs.models import Message, MessageLog
 
 from nexus.usecases.logs.delete import DeleteLogUsecase
 
+
 class DeleteLogsTestCase(TestCase):
 
     def create_logs(self):

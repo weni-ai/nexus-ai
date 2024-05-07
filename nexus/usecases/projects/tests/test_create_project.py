@@ -1,5 +1,4 @@
 from uuid import uuid4
-from unittest.mock import patch
 from django.test import TestCase
 
 from .project_factory import ProjectFactory

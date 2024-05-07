@@ -1,6 +1,6 @@
 import pendulum
 
-from nexus.logs.models import Message, MessageLog
+from nexus.logs.models import Message
 
 
 class DeleteLogUsecase:

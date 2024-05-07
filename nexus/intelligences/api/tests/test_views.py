@@ -285,13 +285,6 @@ class TestContentBaseLinkViewset(TestCase):
 
     def setUp(self):
         self.factory = APIRequestFactory()
-        self.view = ContentBaseLinkViewset.as_view({
-            'get': 'list',
-            'get': 'retrieve',
-            'post': 'create',
-            # 'put': 'update',
-            # 'delete': 'destroy'
-        })
         self.contentbaselink = ContentBaseLinkFactory()
         self.user = self.contentbaselink.created_by
         self.content_base = self.contentbaselink.content_base
@@ -357,7 +350,7 @@ class TestContentBaseLinkViewset(TestCase):
 
         force_authenticate(request, user=self.user)
 
-        response = self.view(
+        response = ContentBaseLinkViewset.as_view({'post': 'create'})(
             request,
             content_base_uuid=str(self.content_base.uuid)
         )
