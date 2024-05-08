@@ -37,7 +37,7 @@ class ProjectsUseCase:
         user_email: str,
         project: Project
     ) -> None:
-        usecase = CreateIntelligencesUseCase()
+        usecase = CreateIntelligencesUseCase(intelligence_activity_message=self.intelligence_activity_message)
         base_intelligence = usecase.create_intelligences(
             org_uuid=project_dto.org_uuid,
             user_email=user_email,
@@ -49,7 +49,6 @@ class ProjectsUseCase:
             project_uuid=project.uuid,
             user_email=user_email
         )
-
         usecase = CreateContentBaseUseCase(
             intelligence_activity_message=self.intelligence_activity_message
         )

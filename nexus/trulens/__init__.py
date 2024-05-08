@@ -1,5 +1,4 @@
 import numpy as np
-from openai import OpenAI
 from django.conf import settings
 
 from trulens_eval import (

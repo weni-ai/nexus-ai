@@ -1,5 +1,4 @@
 from uuid import uuid4
-from unittest.mock import patch
 from django.test import TestCase
 
 from .project_factory import ProjectFactory
@@ -22,6 +21,7 @@ class TestCreateProject(TestCase):
             org_uuid=org.uuid,
             is_template=False,
             template_type_uuid=None,
+            authorizations=[]
         )
 
     def test_create_project(self):
@@ -42,9 +42,9 @@ class ProjectAuthUseCaseTestCase(TestCase):
 
     def test_create_project_auth(self):
         consumer_msg = {
-            'project_uuid': str(self.project.uuid),
+            'project': str(self.project.uuid),
             'role': 3,
-            'user_email': self.user_email
+            'user': self.user_email
         }
         project_auth = ProjectAuthUseCase().create_project_auth(
             consumer_msg

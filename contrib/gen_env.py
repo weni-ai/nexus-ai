@@ -29,7 +29,7 @@ def generate_env():
         "DEBUG": True,
         "ALLOWED_HOSTS": "*",
         "SECRET_KEY": get_random_secret_key(),
-        "DATABASE_URL": "postgresql://nexus:nexus@localhost:5432/nexus",
+        "DEFAULT_DATABASE": "postgres://nexus:nexus@postgres:5432/nexus",
         "WENIGPT_FLOWS_CLASSIFY_TOKEN": "",
         "WENIGPT_FLOWS_SEARCH_TOKEN": "",
         "SENTENX_BASE_URL": "",
@@ -85,6 +85,7 @@ def generate_env():
         "DEFAULT_AGENT_ROLE": "",
         "DEFAULT_AGENT_PERSONALITY": "",
         "DEFAULT_AGENT_GOAL": "",
+        "USE_EDA": True,
     }
 
     with open(env_path, "w") as configfile:

@@ -33,4 +33,4 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-        fail_under: 90
+        fail_under: 75

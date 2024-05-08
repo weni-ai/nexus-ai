@@ -19,6 +19,23 @@ jobs:
     runs-on: ubuntu-latest
     container: python:3.10-slim
 
+    services:
+      postgres:
+        image: postgres:16
+
+        env:
+          DEFAULT_DATABASE: postgres://nexus:nexus@postgres:5432/nexus
+          POSTGRES_HOST: postgres
+          POSTGRES_USER: nexus
+          POSTGRES_DATABASE: nexus
+          POSTGRES_PASSWORD: nexus
+
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
