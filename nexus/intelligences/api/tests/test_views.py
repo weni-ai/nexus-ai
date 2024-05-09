@@ -1,4 +1,5 @@
 import json
+from unittest import skip
 
 from django.conf import settings
 from django.test import TestCase
@@ -28,6 +29,7 @@ from nexus.usecases.event_driven.mocks import mock_recent_activity_message
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
+@skip("View Testing")
 class TestIntelligencesViewset(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()

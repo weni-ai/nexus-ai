@@ -4,7 +4,9 @@ from .exceptions import (
     IntelligenceDoesNotExist,
     ContentBaseDoesNotExist,
     ContentBaseTextDoesNotExist,
-    UserQuestionDoesNotExist
+    UserQuestionDoesNotExist,
+    ContentBaseFileDoesNotExist,
+    ContentBaseLinkDoesNotExist,
 )
 from nexus.intelligences.models import (
     Intelligence,
@@ -52,7 +54,7 @@ def get_by_content_base_file_uuid(content_base_uuid: str) -> ContentBaseFile:
     try:
         return ContentBaseFile.objects.get(uuid=content_base_uuid)
     except ContentBaseFile.DoesNotExist:
-        raise Exception(f"[ ContentBaseFile ] - ContentBaseFile with uuid `{content_base_uuid}` does not exists.")
+        raise ContentBaseFileDoesNotExist(f"[ ContentBaseFile ] - ContentBaseFile with uuid `{content_base_uuid}` does not exists.")
     except Exception as exception:
         raise (f"[ ContentBaseFile ] - ContentBaseFile error to get - error: `{exception}`")
 
@@ -61,7 +63,7 @@ def get_by_content_base_link_uuid(content_base_uuid: str) -> ContentBaseFile:
     try:
         return ContentBaseLink.objects.get(uuid=content_base_uuid)
     except ContentBaseLink.DoesNotExist:
-        raise Exception(f"[ ContentBaseLink ] - ContentBaseLink with uuid `{content_base_uuid}` does not exists.")
+        raise ContentBaseLinkDoesNotExist(f"[ ContentBaseLink ] - ContentBaseLink with uuid `{content_base_uuid}` does not exists.")
     except Exception as exception:
         raise (f"[ ContentBaseLink ] - ContentBaseFile error to get - error: `{exception}`")
 

@@ -65,11 +65,13 @@ def route(
                 instructions += settings.DEFAULT_INSTRUCTIONS
             
             instructions.append(settings.LLM_DEFAULT_CHAR_INSTRUCTION)
-            chunks: List[str] = get_chunks(
+            full_chunks: List[Dict] = get_chunks(
                 indexer,
                 text=message.text,
                 content_base_uuid=content_base.uuid
             )
+
+            chunks = [chunk.get("full_page") for chunk in full_chunks]
 
             llm_response: str = call_llm(
                 chunks=chunks,
@@ -112,7 +114,8 @@ def route(
                 llm_response=llm_response,
                 message=message,
                 direct_message=direct_message,
-                user_email=flows_user_email
+                user_email=flows_user_email,
+                full_chunks=full_chunks,
             )
 
         flow: FlowDTO = flows_repository.get_project_flow_by_name(message.project_uuid, classification)
@@ -126,4 +129,5 @@ def route(
 
     except Exception as e:
         log_usecase.update_status("F", exception_text=e)
+        raise e
  

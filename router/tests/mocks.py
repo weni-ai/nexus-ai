@@ -105,14 +105,25 @@ class MockLLMClient:
 
 
 class MockIndexer:
-    def search_data(self, content_base_uuid: str, text: str):
+    def __init__(self, file_uuid: str = None) -> None:
+        self.file_uuid = file_uuid
+
+    def search_data(self, content_base_uuid: str = None, text: str = None):
         return {
             "status": 200,
-            "data": {"response": ["Lorem Ipsum"]}
+            "data": {
+                "response": [
+                    {
+                        "full_page": "Full page info",
+                        "filename": "file.docx",
+                        "file_uuid": self.file_uuid,
+                    }
+                ]
+            }
         }
 
 class MockBroadcastHTTPClient():
-    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str):
+    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]):
         print(f"[+ Test: Sending direct message to {urns} +]")
 
 

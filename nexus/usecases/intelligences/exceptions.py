@@ -28,3 +28,7 @@ class ContentBaseLogsDoesNotExist(Exception):
 
 class ContentBaseDefaultDoesNotExist(Exception):
     pass
+
+
+class ContentBaseFileDoesNotExist(Exception):
+    pass
