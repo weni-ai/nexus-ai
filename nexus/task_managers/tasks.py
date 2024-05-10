@@ -20,7 +20,7 @@ from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
 from nexus.usecases.intelligences.get_by_uuid import get_by_contentbase_uuid
 from typing import Dict
 
-from nexus.trulens import wenigpt_evaluation, tru_recorder
+# from nexus.trulens import wenigpt_evaluation, tru_recorder
 
 
 @app.task
@@ -169,16 +169,16 @@ def create_wenigpt_logs(log: Dict):
             content_base_log=log
         )
         print("[Creating Log]")
-        trulens_evaluation.delay(log.id)
+        # trulens_evaluation.delay(log.id)
         return log
     except Exception as e:
         print(e)
         return False
 
 
-@app.task(name="trulens_evaluation")
-def trulens_evaluation(log_id: str):
-    log = ContentBaseLogs.objects.get(id=log_id)
-    with tru_recorder as recording:
-        wenigpt_evaluation.get_answer(log.question, log)
-    return True
+# @app.task(name="trulens_evaluation")
+# def trulens_evaluation(log_id: str):
+#     log = ContentBaseLogs.objects.get(id=log_id)
+#     with tru_recorder as recording:
+#         wenigpt_evaluation.get_answer(log.question, log)
+#     return True
