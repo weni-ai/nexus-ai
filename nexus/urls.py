@@ -26,9 +26,15 @@ url_api += intelligence_routes
 url_api += actions_routes
 url_api += projects_routes
 
+
+def vi(request):
+    raise OverflowError
+
+
 urlpatterns = [
     path("", schema_view.with_ui("redoc")),
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls')),
     path('api/', include(url_api)),
+    path('sentry-debug', vi)
 ]
