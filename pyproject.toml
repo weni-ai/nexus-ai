@@ -85,6 +85,8 @@ omit = [
   "migrations/",
   "manage.py",
   "nexus/urls.py",
+  "router/clients/",
+  "router/management/commands/runapi.py"
 ] 
 
 [tool.taskipy.tasks]
