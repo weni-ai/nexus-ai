@@ -14,7 +14,12 @@ class SearchFileDatabase:
         return {
             "status": 200,
             "data": {
-                "response": ["Text1", "Text2", "Text3"]
+                "response": [
+                    {
+                        "full_page": "Text1",
+                        "filename": "text1.pdf"
+                    }
+                ]
             }
         }
 

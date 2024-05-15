@@ -28,10 +28,12 @@ class IntelligenceGenerativeSearchUseCase():
         if response.get("status") != 200:
             raise Exception(response.get("data"))
 
+        chunks = [chunk.get("full_page") for chunk in response.get("data", []).get("response")]
+
         language = self._language_code(language.lower(), content_base_uuid)
 
         return self.generative_ai_database.request_gpt(
-            contexts=response.get("data", []).get("response"),
+            contexts=chunks,
             question=text,
             language=language,
             content_base_uuid=content_base_uuid,
