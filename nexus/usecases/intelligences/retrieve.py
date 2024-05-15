@@ -1,3 +1,5 @@
+from typing import Dict
+
 from .get_by_uuid import (
     get_by_intelligence_uuid,
     get_by_contentbase_uuid,
@@ -8,7 +10,11 @@ from .get_by_uuid import (
 )
 from nexus.usecases import orgs, users
 from nexus.orgs import permissions
-from .exceptions import IntelligencePermissionDenied
+from .exceptions import (
+    IntelligencePermissionDenied,
+    ContentBaseTextDoesNotExist,
+    ContentBaseFileDoesNotExist,
+)
 
 
 class RetrieveIntelligenceUseCase():
@@ -111,3 +117,27 @@ class RetrieveContentBaseLinkUseCase():
         if not has_permission:
             raise IntelligencePermissionDenied()
         return get_by_content_base_link_uuid(contentbaselink_uuid)
+
+
+def get_file_info(file_uuid: str) -> Dict:
+    try:
+        file = get_by_content_base_file_uuid(file_uuid)
+        return {
+            "filename": file.file_name,
+            "uuid": str(file.uuid),
+            "created_file_name": file.created_file_name,
+            "extension_file": file.extension_file,
+        }
+    except ContentBaseFileDoesNotExist:
+        try:
+            text = get_by_contentbasetext_uuid(file_uuid)
+            return {
+                "uuid": str(text.uuid),
+                "created_file_name": ".text"
+            }
+        except ContentBaseTextDoesNotExist:
+            link = get_by_content_base_link_uuid(file_uuid)
+            return {
+                "uuid": str(link.uuid),
+                "created_file_name": f".link:{link.link}"
+            }

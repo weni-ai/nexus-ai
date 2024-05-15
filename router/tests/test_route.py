@@ -18,11 +18,12 @@ from nexus.users.models import User
 from nexus.orgs.models import Org
 from nexus.actions.models import Flow
 from nexus.intelligences.models import (
-    IntegratedIntelligence, ContentBase, ContentBaseAgent, ContentBaseInstruction
+    IntegratedIntelligence, ContentBase, ContentBaseAgent, ContentBaseInstruction, ContentBaseLink
 )
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.intelligences.intelligences_dto import LLMDTO
 from nexus.usecases.intelligences.create import create_llm
+from nexus.usecases.intelligences.retrieve import get_file_info
 from nexus.usecases.logs.create import CreateLogUsecase
 
 from nexus.intelligences.llms.chatgpt import ChatGPTClient
@@ -95,6 +96,11 @@ class RouteTestCase(TestCase):
             }
         )
         self.llm = create_llm(llm_dto=llm_dto)
+        self.link = ContentBaseLink.objects.create(
+            content_base=self.content_base,
+            link="http://test.co",
+            created_by=self.user,
+        )
 
     def test_chatgpt_prompt(self):
         from router.repositories.orm import ContentBaseORMRepository
@@ -220,7 +226,7 @@ class RouteTestCase(TestCase):
             content_base_repository=content_base_repository,
             flows_repository=flows_repository,
             message_logs_repository=message_logs_repository,
-            indexer=MockIndexer(),
+            indexer=MockIndexer(file_uuid=str(self.link.uuid)),
             llm_client=llm_client(),
             direct_message=direct_message,
             flow_start=flow_start,
@@ -255,7 +261,7 @@ class RouteTestCase(TestCase):
         response = self.mock_messages(
             Classifier.CLASSIFICATION_OTHER,
             fallback_flow=self.fallback,
-            direct_message=SimulateBroadcast(host=None, access_token=None),
+            direct_message=SimulateBroadcast(host=None, access_token=None, get_file_info=get_file_info),
             flow_start=SimulateFlowStart(host=None, access_token=None)
         )
         self.assertEquals(response.get("type"), "flowstart")
@@ -263,7 +269,7 @@ class RouteTestCase(TestCase):
     def test_route_preview_other_no_fallback_flow(self):
         response = self.mock_messages(
             Classifier.CLASSIFICATION_OTHER,
-            direct_message=SimulateBroadcast(host=None, access_token=None),
+            direct_message=SimulateBroadcast(host=None, access_token=None, get_file_info=get_file_info),
             flow_start=SimulateFlowStart(host=None, access_token=None)
         )
         self.assertEquals(response.get("type"), "broadcast")
@@ -272,7 +278,7 @@ class RouteTestCase(TestCase):
         response = self.mock_messages(
             self.flow.name,
             fallback_flow=self.fallback,
-            direct_message=SimulateBroadcast(host=None, access_token=None),
+            direct_message=SimulateBroadcast(host=None, access_token=None, get_file_info=get_file_info),
             flow_start=SimulateFlowStart(host=None, access_token=None)
         )
         self.assertEquals(response.get("type"), "flowstart")

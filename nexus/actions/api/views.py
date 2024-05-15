@@ -18,6 +18,7 @@ from nexus.usecases.actions.update import UpdateFlowsUseCase, UpdateFlowDTO
 from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase, FlowDoesNotExist
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
+from nexus.usecases.intelligences.retrieve import get_file_info
 
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 
@@ -247,7 +248,7 @@ class MessagePreviewView(APIView):
             if llm_config.model.lower() != "wenigpt":
                 llm_client.api_key = llm_config.token
 
-            broadcast = SimulateBroadcast(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
+            broadcast = SimulateBroadcast(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'), get_file_info)
             flow_start = SimulateFlowStart(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
             flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 

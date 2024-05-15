@@ -1,12 +1,20 @@
 import uuid
 import json
+
 from unittest import skip
+from unittest.mock import patch
+
 from typing import List, Dict
 
 from django.test import TestCase
 from nexus.actions.models import Flow
 from nexus.projects.models import Project
-from nexus.intelligences.models import ContentBaseAgent
+from nexus.intelligences.models import (
+    ContentBaseAgent,
+    ContentBaseFile,
+    ContentBaseText,
+    ContentBaseLink,
+)
 
 from rest_framework.test import APIRequestFactory
 from rest_framework.test import force_authenticate
@@ -32,6 +40,8 @@ from nexus.usecases.intelligences.get_by_uuid import (
 )
 
 from nexus.usecases.actions.list import ListFlowsUseCase
+
+from router.tests.mocks import MockIndexer
 
 
 class FlowsTestCase(TestCase):
@@ -314,7 +324,29 @@ class MessagePreviewTestCase(TestCase):
         self.url = '/simulate-messages'
         self.setUp_message(5)
 
-    def test_other(self):
+        self.file = ContentBaseFile.objects.create(
+            file="http://test.com",
+            file_name="test-b3269efc-def3-4663-a8b6-26c2b3ccc9ce.docx",
+            extension_file="docx",
+            content_base=self.contentbase,
+            created_by=self.user,
+        )
+        self.link = ContentBaseLink.objects.create(
+            content_base=self.contentbase,
+            link="http://test.co",
+            created_by=self.user,
+        )
+        self.text = ContentBaseText.objects.create(
+            created_by=self.user,
+            text="Test",
+            file="http://test.com",
+            content_base=self.contentbase,
+        )
+
+    @patch("nexus.actions.api.views.SentenXFileDataBase")
+    def test_other(self, mock_indexer):
+
+        mock_indexer.return_value = MockIndexer(file_uuid=str(self.file.uuid))
         url_create = f'{self.url}/'
 
         data = {
@@ -334,12 +366,69 @@ class MessagePreviewTestCase(TestCase):
         )
 
         response.render()
-
         content = json.loads(response.content)
-
         self.assertEquals(content.get("type"), "broadcast")
+        self.assertEquals(content.get("fonts")[0].get("extension_file"), "docx")
 
-    def test_classify(self):
+    @patch("nexus.actions.api.views.SentenXFileDataBase")
+    def test_other_link(self, mock_indexer):
+
+        mock_indexer.return_value = MockIndexer(file_uuid=str(self.link.uuid))
+        url_create = f'{self.url}/'
+
+        data = {
+            "project_uuid": str(self.project.uuid),
+            "text": "Test",
+            "contact_urn": self.contact_urn,
+        }
+
+        request = self.factory.post(url_create, data=data)
+
+        force_authenticate(request, user=self.user)
+
+        response = MessagePreviewView.as_view()(
+            request,
+            data,
+            project_uuid=str(self.project.uuid)
+        )
+
+        response.render()
+        content = json.loads(response.content)
+        self.assertEquals(content.get("type"), "broadcast")
+        self.assertEquals(content.get("fonts")[0].get("created_file_name"), f".link:{self.link.link}")
+
+    @patch("nexus.actions.api.views.SentenXFileDataBase")
+    def test_other_text(self, mock_indexer):
+
+        mock_indexer.return_value = MockIndexer(file_uuid=str(self.text.uuid))
+        url_create = f'{self.url}/'
+
+        data = {
+            "project_uuid": str(self.project.uuid),
+            "text": "Test",
+            "contact_urn": self.contact_urn,
+        }
+
+        request = self.factory.post(url_create, data=data)
+
+        force_authenticate(request, user=self.user)
+
+        response = MessagePreviewView.as_view()(
+            request,
+            data,
+            project_uuid=str(self.project.uuid)
+        )
+
+        response.render()
+        content = json.loads(response.content)
+        self.assertEquals(content.get("type"), "broadcast")
+        self.assertEquals(content.get("fonts")[0].get("created_file_name"), ".text")
+
+    @patch("nexus.actions.api.views.SentenXFileDataBase")
+    def test_classify(self, mock_indexer):
+
+        mock_indexer.return_value = MockIndexer()
+
         url_create = f'{self.url}/'
 
         data = {

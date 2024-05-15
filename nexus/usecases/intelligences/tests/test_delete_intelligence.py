@@ -14,11 +14,14 @@ from .intelligence_factory import (
     ContentBaseFactory,
     ContentBaseTextFactory
 )
+from nexus.usecases.event_driven.mocks import mock_recent_activity_message
 
 
 class TestDeleteIntelligenceUseCase(TestCase):
     def setUp(self):
-        self.use_case = DeleteIntelligenceUseCase()
+        self.use_case = DeleteIntelligenceUseCase(
+            intelligence_activity_message=mock_recent_activity_message
+        )
         self.intelligence = IntelligenceFactory()
 
     def test_delete_intelligence(self):
