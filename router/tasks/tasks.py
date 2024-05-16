@@ -40,6 +40,9 @@ from router.entities import (
 
 @celery_app.task
 def start_route(message: Dict) -> bool:
+
+    print(f"[+ Message received: {message} +]")
+
     flows_repository = FlowsORMRepository()
     content_base_repository = ContentBaseORMRepository()
     message_logs_repository  = MessageLogsRepository()
@@ -73,6 +76,8 @@ def start_route(message: Dict) -> bool:
         )
 
         classification: str = classify(ZeroshotClassifier(chatbot_goal=agent.goal), message.text, flows, llm_config.language)
+
+        print(f"[+ Classification: {classification} +]")
 
         llm_client = LLMClient.get_by_type(llm_config.model)
         llm_client: LLMClient = list(llm_client)[0](model_version=llm_config.model_version)
