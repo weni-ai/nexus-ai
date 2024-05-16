@@ -255,6 +255,7 @@ def create_base_brain_structure(
             'top_p': settings.WENIGPT_TOP_P,
             'top_k': settings.WENIGPT_TOP_K,
             'max_length': settings.WENIGPT_MAX_LENGHT,
+            'language': settings.WENIGPT_DEFAULT_LANGUAGE,
         },
         advanced_options={}
     )

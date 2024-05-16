@@ -3,7 +3,7 @@
 import os
 from typing import List, Dict
 
-from fastapi import FastAPI
+from django.conf import settings
 
 from router.repositories.orm import (
     ContentBaseORMRepository,
@@ -57,7 +57,6 @@ def start_route(message: Dict) -> bool:
         agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
         agent = agent.set_default_if_null()
 
-        classification: str = classify(ZeroshotClassifier(chatbot_goal=agent.goal), message.text, flows)
 
         llm_model = get_llm_by_project_uuid(project_uuid)
 
@@ -70,7 +69,10 @@ def start_route(message: Dict) -> bool:
             token=llm_model.setup.get("token"),
             max_length=llm_model.setup.get("max_length"),
             max_tokens=llm_model.setup.get("max_tokens"),
+            language=llm_model.setup.get("language", settings.WENIGPT_DEFAULT_LANGUAGE),
         )
+
+        classification: str = classify(ZeroshotClassifier(chatbot_goal=agent.goal), message.text, flows, llm_config.language)
 
         llm_client = LLMClient.get_by_type(llm_config.model)
         llm_client: LLMClient = list(llm_client)[0](model_version=llm_config.model_version)

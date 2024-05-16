@@ -45,3 +45,4 @@ class LLMSetupDTO:
     token: str = None
     max_length: str = None
     max_tokens: str = None
+    language: str = "por"
