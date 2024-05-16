@@ -15,6 +15,7 @@ class ZeroshotClassifier(Classifier):
         self.chatbot_goal = chatbot_goal
 
     def predict(self, message: str, flows: List[FlowDTO], language: str = "por") -> str:
+        print(f"+ Zeroshot message classification: {message} ({language}) +")
         flows_list = []
         for flow in flows:
             flows_list.append(

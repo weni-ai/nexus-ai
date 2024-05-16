@@ -77,7 +77,7 @@ def route(
 
             chunks = [chunk.get("full_page") for chunk in full_chunks]
 
-            print(f"+ Chunks: {instructions} +")
+            print(f"+ Chunks: {full_chunks} +")
 
             llm_response: str = call_llm(
                 chunks=chunks,
