@@ -49,6 +49,8 @@ def route(
     try:
         if classification == Classifier.CLASSIFICATION_OTHER:
 
+            print("[ + Fallback + ]")
+
             fallback_flow: FlowDTO = flows_repository.project_flow_fallback(message.project_uuid, True)
 
             content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
@@ -71,7 +73,11 @@ def route(
                 content_base_uuid=content_base.uuid
             )
 
+            print(f"[+ Instructions: {instructions} +]")
+
             chunks = [chunk.get("full_page") for chunk in full_chunks]
+
+            print(f"[ + Chunks: {full_chunks} + ]")
 
             llm_response: str = call_llm(
                 chunks=chunks,
@@ -82,6 +88,9 @@ def route(
                 llm_config=llm_config,
                 last_messages=last_messages,
             )
+
+            print(f"[+ LLM Response: {llm_response} +]")
+
 
             metadata = LogMetadata(
                 agent_name=agent.name,
