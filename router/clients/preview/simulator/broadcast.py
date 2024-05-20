@@ -11,16 +11,19 @@ class SimulateBroadcast(DirectMessage):
 
     def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> None:
 
-        fonts = []
+        sources = []
         for chunk in full_chunks:
             file_uuid = chunk.get("file_uuid")
             file_info = self.get_file_info(file_uuid)
-
-            fonts.append({
+            info = {
                 "filename": file_info.get("filename"),
                 "uuid": file_uuid,
                 "created_file_name": file_info.get("created_file_name"),
                 "extension_file": file_info.get("extension_file"),
-            })
+            }
+            sources.append(f"{info}")
 
-        return {"type": "broadcast", "message": text, "fonts": fonts}
+        unique_sources = list(str(sources))
+        sources = [eval(font) for font in unique_sources]
+
+        return {"type": "broadcast", "message": text, "fonts": sources}
