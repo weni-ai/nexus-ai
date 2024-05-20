@@ -23,4 +23,4 @@ class SimulateBroadcast(DirectMessage):
                 "extension_file": file_info.get("extension_file"),
             })
 
-        return {"type": "broadcast", "message": text, "fonts": fonts}
+        return {"type": "broadcast", "message": text, "fonts": set(fonts)}
