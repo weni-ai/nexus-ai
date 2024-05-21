@@ -66,7 +66,8 @@ def route(
             if instructions == []:
                 instructions += settings.DEFAULT_INSTRUCTIONS
             
-            instructions.append(settings.LLM_DEFAULT_CHAR_INSTRUCTION)
+            instructions.append(f"Sempre responda em {llm_config.language}")
+
             full_chunks: List[Dict] = get_chunks(
                 indexer,
                 text=message.text,
