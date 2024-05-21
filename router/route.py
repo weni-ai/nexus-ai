@@ -32,6 +32,19 @@ from router.llms.call import call_llm, Indexer
 from nexus.usecases.logs.entities import LogMetadata
 
 
+def get_language_codes(language_code: str):
+    language_codes = {
+        "pt": "português",
+        "pt-br": "português",
+        "por": "português",
+        "en": "inglês",
+        "eng": "inglês",
+        "es": "espanhol",
+        "spa": "espanhol",
+    }
+    return language_codes.get(language_code, "português")
+
+
 def route(
         classification: str,
         message: Message,
@@ -65,8 +78,10 @@ def route(
 
             if instructions == []:
                 instructions += settings.DEFAULT_INSTRUCTIONS
-            
-            instructions.append(f"Sempre responda em {llm_config.language}")
+
+            response_language: str = get_language_codes(llm_config.language)
+
+            instructions.append(f"Sempre responda em {response_language}")
 
             full_chunks: List[Dict] = get_chunks(
                 indexer,
