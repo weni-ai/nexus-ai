@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 
 import requests
 import json
@@ -12,7 +12,7 @@ class SendMessageHTTPClient(DirectMessage):
         self.__host = host
         self.__access_token = access_token
 
-    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str) -> None:
+    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> None:
         url = f"{self.__host}/mr/msg/send"
 
         payload = {"user": user, "project_uuid": project_uuid, "urns": urns, "text": text}
