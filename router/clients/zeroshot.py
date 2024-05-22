@@ -27,6 +27,14 @@ class ZeroshotClient:
             'Content-Type': 'application/json'
         }
 
+        print("================================================================")
+        print(url)
+        print(payload)
+        print(headers)
+        print("POST")
+
         response = requests.request("POST", url, headers=headers, data=json.dumps(payload))
+        print(response.text)
+        print("================================================================")
         response.raise_for_status()
         return response.json().get("output")

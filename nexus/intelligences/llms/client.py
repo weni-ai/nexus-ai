@@ -12,6 +12,7 @@ class LLMClient(ABC):
 
     @classmethod
     def get_by_type(cls, type):
+        print(cls.__subclasses__())
         return filter(lambda llm: llm.code == type, cls.__subclasses__())
 
     def get_client(self):

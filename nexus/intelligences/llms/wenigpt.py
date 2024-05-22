@@ -20,6 +20,8 @@ class WeniGPTClient(LLMClient):
 
         self.model_version = model_version
 
+        self.stop = settings.WENIGPT_STOP
+
         self.prompt_with_context = settings.WENIGPT_CONTEXT_PROMPT
         self.prompt_without_context = settings.WENIGPT_NO_CONTEXT_PROMPT
 
@@ -56,7 +58,7 @@ class WeniGPTClient(LLMClient):
                     "top_p": float(llm_config.top_p),
                     "top_k": float(llm_config.top_k),
                     "temperature": float(llm_config.temperature),
-                    "stop": settings.WENIGPT_STOP,
+                    "stop": self.stop,
                 }
             }
         }

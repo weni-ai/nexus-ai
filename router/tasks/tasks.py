@@ -22,7 +22,7 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 
 from nexus.celery import app as celery_app
 
-from nexus.intelligences.llms.client import LLMClient
+from nexus.intelligences.llms import get_llm_client_by_type, LLMClient
 
 from nexus.usecases.logs.create import CreateLogUsecase
 
@@ -36,7 +36,6 @@ from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from router.entities import (
     FlowDTO, Message, AgentDTO, ContentBaseDTO, LLMSetupDTO
 )
-
 
 @celery_app.task
 def start_route(message: Dict) -> bool:
@@ -72,7 +71,7 @@ def start_route(message: Dict) -> bool:
             max_tokens=llm_model.setup.get("max_tokens"),
         )
 
-        llm_client = LLMClient.get_by_type(llm_config.model)
+        llm_client = get_llm_client_by_type(llm_config.model)
         llm_client: LLMClient = list(llm_client)[0](model_version=llm_config.model_version)
 
         if llm_config.model.lower() != "wenigpt":
