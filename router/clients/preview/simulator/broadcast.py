@@ -1,4 +1,4 @@
-from typing import List, Dict, Callable, ClassVar
+from typing import List, Dict, Callable
 
 from router.direct_message import DirectMessage
 
@@ -11,16 +11,24 @@ class SimulateBroadcast(DirectMessage):
 
     def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> None:
 
-        fonts = []
+        sources: List[Dict] = []
+        seen_uuid: List[str] = []
+
         for chunk in full_chunks:
             file_uuid = chunk.get("file_uuid")
+
+            if file_uuid in seen_uuid:
+                continue
+
+            seen_uuid.append(file_uuid)
+
             file_info = self.get_file_info(file_uuid)
 
-            fonts.append({
+            sources.append({
                 "filename": file_info.get("filename"),
                 "uuid": file_uuid,
                 "created_file_name": file_info.get("created_file_name"),
                 "extension_file": file_info.get("extension_file"),
             })
 
-        return {"type": "broadcast", "message": text, "fonts": fonts}
+        return {"type": "broadcast", "message": text, "fonts": sources}
