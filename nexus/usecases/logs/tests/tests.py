@@ -116,7 +116,7 @@ class ListLogsTestCase(TestCase):
 
     def test_list_by_project(self):
         usecase = ListLogUsecase()
-        logs = usecase.list_logs_by_project(str(self.project.uuid))
+        logs = usecase.list_logs_by_project(str(self.project.uuid), order_by="asc")
 
         self.assertEquals(logs.count(), 2)
         self.assertIsInstance(logs.first(), MessageLog)
@@ -124,7 +124,7 @@ class ListLogsTestCase(TestCase):
 
     def test_list_by_project_filter_with_kwargs(self):
         usecase = ListLogUsecase()
-        logs = usecase.list_logs_by_project(str(self.project.uuid), message__contact_urn="tel:456654")
+        logs = usecase.list_logs_by_project(str(self.project.uuid), order_by="asc", message__contact_urn="tel:456654")
 
         self.assertEquals(logs.count(), 1)
         self.assertIsInstance(logs.first(), MessageLog)

@@ -29,6 +29,8 @@ class LogsViewset(
         created_at_gte = self.request.query_params.get('created_at__gte')
         created_at_lte = self.request.query_params.get('created_at__lte')
 
+        order_by = self.request.query_params.get('order_by', 'desc')
+
         if contact_urn:
             params.update({"message__contact_urn": contact_urn})
 
@@ -38,4 +40,8 @@ class LogsViewset(
         if created_at_lte:
             params.update({"created_at__lte": created_at_lte})
 
-        return use_case.list_logs_by_project(project_uuid=project_uuid, **params)
+        return use_case.list_logs_by_project(
+            project_uuid=project_uuid,
+            order_by=order_by,
+            **params
+        )
