@@ -8,6 +8,7 @@ class MessageLogSerializer(serializers.ModelSerializer):
         fields = [
             "message_text",
             "message_exception",
+            "contact_urn",
             "chunks",
             "prompt",
             "project",
@@ -22,6 +23,7 @@ class MessageLogSerializer(serializers.ModelSerializer):
     message_text = serializers.SerializerMethodField()
     message_exception = serializers.SerializerMethodField()
     project = serializers.SerializerMethodField()
+    contact_urn = serializers.SerializerMethodField()
 
     def get_message_text(self, obj: MessageLog) -> str:
         return obj.message.text
@@ -31,3 +33,6 @@ class MessageLogSerializer(serializers.ModelSerializer):
 
     def get_project(self, obj: MessageLog) -> str:
         return f"{obj.project.uuid} - {obj.project.name}"
+
+    def get_contact_urn(self, obj: MessageLog) -> str:
+        return obj.message.contact_urn
