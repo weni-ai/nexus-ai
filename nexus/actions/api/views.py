@@ -49,6 +49,8 @@ from router.clients.preview.simulator.flow_start import SimulateFlowStart
 from router.route import route
 from nexus.usecases.logs.create import CreateLogUsecase
 
+from nexus.intelligences.llms import get_llm_client_by_type
+
 
 class SearchFlowView(APIView):
     def format_response(self, data: Dict) -> Dict:
@@ -245,7 +247,7 @@ class MessagePreviewView(APIView):
 
             classification: str = classify(ZeroshotClassifier(chatbot_goal=agent.goal), message.text, flows, llm_config.language)
 
-            llm_client = LLMClient.get_by_type(llm_config.model)
+            llm_client = get_llm_client_by_type(llm_config.model)
             llm_client: LLMClient = list(llm_client)[0](model_version=llm_config.model_version)
 
             if llm_config.model.lower() != "wenigpt":

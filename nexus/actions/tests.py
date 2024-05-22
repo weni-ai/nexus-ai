@@ -33,6 +33,12 @@ from nexus.actions.api.views import (
 )
 
 from nexus.logs.models import Message as ContactMessage, MessageLog
+from nexus.intelligences.llms import (
+    get_llm_client_by_type,
+    WeniGPTBetaClient,
+    WeniGPTClient,
+    ChatGPTClient
+)
 
 from nexus.usecases.intelligences.get_by_uuid import (
     get_integrated_intelligence_by_project,
@@ -452,3 +458,15 @@ class MessagePreviewTestCase(TestCase):
         content = json.loads(response.content)
 
         self.assertEquals(content.get("type"), "flowstart")
+
+
+class LLMClientTestCase(TestCase):
+    def test_llm_get_by_type(self):
+        llm_client = get_llm_client_by_type("wenigpt_beta")
+        self.assertIsInstance(llm_client("runpod"), WeniGPTBetaClient)
+
+        llm_client = get_llm_client_by_type("wenigpt")
+        self.assertIsInstance(llm_client("runpod"), WeniGPTClient)
+
+        llm_client = get_llm_client_by_type("chatgpt")
+        self.assertIsInstance(llm_client("test"), ChatGPTClient)

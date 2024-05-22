@@ -44,6 +44,8 @@ from router.tests.mocks import *
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
 
+from nexus.intelligences.llms import get_llm_client_by_type
+
 class RouteTestCase(TestCase):
     def setUp(self) -> None:
         self.user  = User.objects.create(email='test@user.com')
@@ -201,7 +203,7 @@ class RouteTestCase(TestCase):
         ]
 
         llm_type = "chatgpt"
-        llm_client = MockLLMClient.get_by_type(llm_type)
+        llm_client = get_llm_client_by_type(llm_type, llm_types=MOCK_LLM_TYPES)
 
         llm_model = get_llm_by_project_uuid(project_uuid)
         llm_config = LLMSetupDTO(

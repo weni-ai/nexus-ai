@@ -94,14 +94,11 @@ class MockGPTClient:
         return {"answers":[{"text": "LLM Response"}],"id":"0"}
 
 
-class MockLLMClient:
-    @staticmethod
-    def get_by_type(type: str):
-        types = {
-            "chatgpt": MockGPTClient,
-            "wenigpt": MockGPTClient,
-        }
-        return types.get(type)
+MOCK_LLM_TYPES = {
+    "chatgpt": MockGPTClient,
+    "wenigpt": MockGPTClient,
+    "wenigpt_beta": MockGPTClient,
+}
 
 
 class MockIndexer:
