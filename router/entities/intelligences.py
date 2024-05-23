@@ -15,7 +15,7 @@ class AgentDTO:
     personality: str
     goal: str
     content_base_uuid: str
-    
+
     def set_default_if_null(self):
         for field in fields(self):
             field_value = getattr(self, field.name)

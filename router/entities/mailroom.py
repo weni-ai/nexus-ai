@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Dict, List, Optional
-from typing import Optional
+
 
 class Message(BaseModel):
     project_uuid: str

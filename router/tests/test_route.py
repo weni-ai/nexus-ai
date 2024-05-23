@@ -2,14 +2,10 @@
 from __future__ import absolute_import, unicode_literals
 import os
 import django
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
-
-django.setup()
-
-
 import uuid
+
 from unittest import skip
+from typing import List
 
 from django.conf import settings
 from django.test import TestCase
@@ -35,18 +31,32 @@ from router.classifiers import Classifier
 from router.route import route
 from router.tasks.tasks import start_route
 from router.entities import (
-    FlowDTO, Message, LLMSetupDTO
+    Message,
+    LLMSetupDTO,
+    InstructionDTO
 )
-from router.tests.mocks import *
-
-
+from router.tests.mocks import (
+    TestException,
+    MockBroadcastHTTPClient,
+    MockFlowStartHTTPClient,
+    MockIndexer,
+    MockLLMClient,
+    ContentBaseTestRepository,
+    FlowsTestRepository,
+    MessageLogsTestRepository
+)
 
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
 
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
+
+django.setup()
+
+
 class RouteTestCase(TestCase):
     def setUp(self) -> None:
-        self.user  = User.objects.create(email='test@user.com')
+        self.user = User.objects.create(email='test@user.com')
 
         project_name = "Test Project"
 
@@ -116,7 +126,7 @@ class RouteTestCase(TestCase):
 
         prompt = ChatGPTClient().format_prompt(instructions, chunks, agent.__dict__)
         assert "{{" not in prompt
-    
+
     def test_wenigpt_prompt(self):
         from router.repositories.orm import ContentBaseORMRepository
 
@@ -132,7 +142,7 @@ class RouteTestCase(TestCase):
 
         prompt = WeniGPTClient(model_version=settings.WENIGPT_FINE_TUNNING_DEFAULT_VERSION).format_prompt(instructions, chunks, agent.__dict__, question)
         assert "{{" not in prompt
-    
+
     def test_wenigpt_no_context_prompt(self):
         from router.repositories.orm import ContentBaseORMRepository
 
@@ -148,7 +158,7 @@ class RouteTestCase(TestCase):
 
         prompt = WeniGPTClient(model_version=settings.WENIGPT_FINE_TUNNING_DEFAULT_VERSION).format_prompt(instructions, chunks, agent.__dict__, question)
         assert "{{" not in prompt
-    
+
     def test_chatgpt_no_context_prompt(self):
         from router.repositories.orm import ContentBaseORMRepository
 
@@ -164,13 +174,12 @@ class RouteTestCase(TestCase):
         assert "{{" not in prompt
 
     def mock_messages(
-            self,
-            classification: str,
-            fallback_flow = None,
-            direct_message = MockBroadcastHTTPClient(),
-            flow_start = MockFlowStartHTTPClient(),
-
-        ):
+        self,
+        classification: str,
+        fallback_flow=None,
+        direct_message=MockBroadcastHTTPClient(),
+        flow_start=MockFlowStartHTTPClient(),
+    ):
         content_base = self.content_base
         agent = self.agent
         flow = self.flow
@@ -189,16 +198,6 @@ class RouteTestCase(TestCase):
         content_base_repository = ContentBaseTestRepository(content_base, agent)
         flows_repository = FlowsTestRepository(flow, fallback_flow)
         message_logs_repository = MessageLogsTestRepository(str(self.content_base.uuid))
-
-        flows = [
-            FlowDTO(
-                uuid=str(flow.uuid),
-                name=flow.name,
-                prompt=flow.prompt,
-                fallback=flow.fallback,
-                content_base_uuid=str(flow.content_base.uuid),
-            )
-        ]
 
         llm_type = "chatgpt"
         llm_client = MockLLMClient.get_by_type(llm_type)
@@ -234,7 +233,7 @@ class RouteTestCase(TestCase):
             flows_user_email=flow_user_email,
             log_usecase=log_usecase
         )
-    
+
     def test_route_other(self):
         try:
             self.mock_messages(
@@ -256,7 +255,7 @@ class RouteTestCase(TestCase):
             self.mock_messages(self.flow.name)
         except Exception as e:
             self.fail(f" test_route_other raised {e}!")
-    
+
     def test_route_preview_other_with_fallback_flow(self):
         response = self.mock_messages(
             Classifier.CLASSIFICATION_OTHER,
@@ -289,16 +288,16 @@ class StartRouteTestCase(TestCase):
     def setUp(self) -> None:
         project_uuid = "e8326ee9-ca88-49da-aaf3-8f35eb60e7dc"
 
-        self.user  = User.objects.create(email='test@user.com')
+        self.user = User.objects.create(email='test@user.com')
 
         self.org = Org.objects.create(created_by=self.user, name="org_name")
         self.auth = self.org.authorizations.create(user=self.user, role=3)
         self.project = self.org.projects.create(
             uuid=project_uuid, name="Projeto", created_by=self.user
-            )
+        )
         self.intelligence = self.org.intelligences.create(
             created_by=self.user, name=self.project.name
-            )
+        )
         self.integrated_intelligence = IntegratedIntelligence.objects.create(
             project=self.project,
             intelligence=self.intelligence,
@@ -357,13 +356,13 @@ class LogUseCaseTestCase(TestCase):
     def setUp(self) -> None:
         project_uuid = "e8326ee9-ca88-49da-aaf3-8f35eb60e7dc"
 
-        self.user  = User.objects.create(email='test@user.com')
+        self.user = User.objects.create(email='test@user.com')
 
         self.org = Org.objects.create(created_by=self.user, name="org_name")
         self.auth = self.org.authorizations.create(user=self.user, role=3)
         self.project = self.org.projects.create(
             uuid=project_uuid, name="Projeto", created_by=self.user
-            )
+        )
 
         self.message = Message(
             project_uuid=project_uuid,
@@ -380,7 +379,7 @@ class LogUseCaseTestCase(TestCase):
         self.assertIsInstance(self.log_usecase.message, MessageModel)
         self.assertIsInstance(self.log_usecase.log, MessageLog)
         self.assertEquals(self.log_usecase.message.status, "P")
-    
+
     def test_update_status_with_exception(self):
         try:
             raise TestException("Test Exception")

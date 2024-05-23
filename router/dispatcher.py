@@ -16,7 +16,7 @@ def dispatch(
         direct_message: DirectMessage = None,
         flow_start: FlowStart = None,
         full_chunks: List[Dict] = None
-    ):
+):
     urns = [message.contact_urn]
 
     if direct_message:

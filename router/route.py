@@ -1,13 +1,16 @@
-import os
-
 from typing import List, Dict
 from django.conf import settings
 
-from router.repositories.orm import FlowsORMRepository, ContentBaseORMRepository
+from nexus.intelligences.llms.client import LLMClient
+from nexus.usecases.logs.entities import LogMetadata
+
+from router.dispatcher import dispatch
+from router.indexer import get_chunks
+from router.llms.call import call_llm, Indexer
+from router.direct_message import DirectMessage
+from router.flow_start import FlowStart
 from router.repositories import Repository
-from router.classifiers.zeroshot import ZeroshotClassifier
 from router.classifiers import Classifier
-from router.classifiers import classify
 from router.entities import (
     AgentDTO,
     ContactMessageDTO,
@@ -17,19 +20,6 @@ from router.entities import (
     LLMSetupDTO,
     Message,
 )
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-
-from nexus.event_driven.signals import message_started, message_finished
-
-from router.direct_message import DirectMessage
-from router.flow_start import FlowStart
-from nexus.intelligences.llms.client import LLMClient
-
-from router.dispatcher import dispatch
-
-from router.indexer import get_chunks
-from router.llms.call import call_llm, Indexer
-from nexus.usecases.logs.entities import LogMetadata
 
 
 def get_language_codes(language_code: str):
@@ -46,19 +36,19 @@ def get_language_codes(language_code: str):
 
 
 def route(
-        classification: str,
-        message: Message,
-        content_base_repository: Repository,
-        flows_repository: Repository,
-        message_logs_repository: Repository,
-        indexer: Indexer,
-        llm_client: LLMClient,
-        direct_message: DirectMessage,
-        flow_start: FlowStart,
-        llm_config: LLMSetupDTO,
-        flows_user_email: str,
-        log_usecase,
-    ):
+    classification: str,
+    message: Message,
+    content_base_repository: Repository,
+    flows_repository: Repository,
+    message_logs_repository: Repository,
+    indexer: Indexer,
+    llm_client: LLMClient,
+    direct_message: DirectMessage,
+    flow_start: FlowStart,
+    llm_config: LLMSetupDTO,
+    flows_user_email: str,
+    log_usecase,
+):
     try:
         if classification == Classifier.CLASSIFICATION_OTHER:
 
@@ -73,7 +63,7 @@ def route(
             agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
             agent = agent.set_default_if_null()
 
-            instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)        
+            instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
             instructions: List[str] = [instruction.instruction for instruction in instructions]
 
             if instructions == []:
@@ -107,7 +97,6 @@ def route(
 
             print(f"[+ LLM Response: {llm_response} +]")
 
-
             metadata = LogMetadata(
                 agent_name=agent.name,
                 agent_role=agent.role,
@@ -134,7 +123,7 @@ def route(
                     llm_response=llm_response,
                     user_email=flows_user_email
                 )
-            
+
             return dispatch(
                 llm_response=llm_response,
                 message=message,
@@ -155,4 +144,3 @@ def route(
     except Exception as e:
         log_usecase.update_status("F", exception_text=e)
         raise e
- 

@@ -20,8 +20,9 @@ def authenticate(token: str):
 
     if os.environ.get("ROUTER_TOKEN") == token:
         return
-    
+
     raise HTTPException(status_code=403, detail="Wrong credentials")
+
 
 @app.get("/")
 def healthcheck():
@@ -39,7 +40,6 @@ def messages(request: Request, message: Message):
         print("[+ Mensagem recebida +]")
         print(message)
         print("[+ ----------------- +]")
-
 
         start_route.delay(message.dict())
 
