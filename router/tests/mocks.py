@@ -9,6 +9,7 @@ from router.entities import (
     ContactMessageDTO,
 )
 
+
 class ContentBaseTestRepository(Repository):
     def __init__(self, content_base, agent) -> None:
         self.agent = agent
@@ -29,7 +30,7 @@ class ContentBaseTestRepository(Repository):
             goal=self.agent.goal,
             content_base_uuid=content_base_uuid
         )
-    
+
     def list_instructions(self, content_base_uuid: str):
         instructions_list = []
         instructions = self.content_base.instructions.all()
@@ -47,6 +48,7 @@ class ContentBaseTestRepository(Repository):
 class MessageLogsTestRepository(Repository):
     def __init__(self, content_base_uuid: str) -> None:
         self.content_base_uuid = content_base_uuid
+
     def list_last_messages(self, contact_urn: str, project_uuid: str, number_of_messages: int):
         messages = []
         for i in range(number_of_messages):
@@ -88,10 +90,27 @@ class FlowsTestRepository(Repository):
             )
         return
 
+
 class MockGPTClient:
     prompt = "Prompt: Lorem Ipsum"
-    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: Dict, last_messages: List):
-        return {"answers":[{"text": "LLM Response"}],"id":"0"}
+
+    def request_gpt(
+        self,
+        instructions: List,
+        chunks: List,
+        agent: Dict,
+        question: str,
+        llm_config: Dict,
+        last_messages: List
+    ):
+        return {
+            "answers": [
+                {
+                    "text": "LLM Response"
+                }
+            ],
+            "id": "0"
+        }
 
 
 class MockLLMClient:
@@ -121,6 +140,7 @@ class MockIndexer:
                 ]
             }
         }
+
 
 class MockBroadcastHTTPClient():
     def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]):

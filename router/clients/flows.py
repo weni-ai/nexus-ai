@@ -1,12 +1,11 @@
 import os
 import json
-from typing import List, Dict
+from typing import Dict
 
 import requests
 
 from router.entities import FlowDTO
 from router.main import Message
-
 
 
 class FlowClient:

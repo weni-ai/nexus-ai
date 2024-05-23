@@ -5,36 +5,24 @@ from typing import List, Dict
 
 from django.conf import settings
 
+from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
+from nexus.celery import app as celery_app
+from nexus.intelligences.llms.client import LLMClient
+from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
+from nexus.usecases.logs.create import CreateLogUsecase
+
+from router.route import route
+from router.classifiers.zeroshot import ZeroshotClassifier
+from router.classifiers import classify
+from router.clients.flows.http.flow_start import FlowStartHTTPClient
+from router.clients.flows.http.send_message import SendMessageHTTPClient
+from router.entities import (
+    FlowDTO, Message, AgentDTO, ContentBaseDTO, LLMSetupDTO
+)
 from router.repositories.orm import (
     ContentBaseORMRepository,
     FlowsORMRepository,
     MessageLogsRepository
-)
-from router.classifiers.zeroshot import ZeroshotClassifier
-from router.classifiers import classify
-from router.entities import (
-    FlowDTO,
-    Message,
-    LLMSetupDTO,
-)
-
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-
-from nexus.celery import app as celery_app
-
-from nexus.intelligences.llms.client import LLMClient
-
-from nexus.usecases.logs.create import CreateLogUsecase
-
-from router.clients.flows.http.send_message import SendMessageHTTPClient
-from router.clients.flows.http.flow_start import FlowStartHTTPClient
-
-from router.route import route
-
-from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
-
-from router.entities import (
-    FlowDTO, Message, AgentDTO, ContentBaseDTO, LLMSetupDTO
 )
 
 
@@ -45,7 +33,7 @@ def start_route(message: Dict) -> bool:
 
     flows_repository = FlowsORMRepository()
     content_base_repository = ContentBaseORMRepository()
-    message_logs_repository  = MessageLogsRepository()
+    message_logs_repository = MessageLogsRepository()
 
     message = Message(**message)
 
@@ -59,7 +47,6 @@ def start_route(message: Dict) -> bool:
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
         agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
         agent = agent.set_default_if_null()
-
 
         llm_model = get_llm_by_project_uuid(project_uuid)
 

@@ -16,14 +16,14 @@ class Indexer:
 
 
 def call_llm(
-        chunks: List[str],
-        llm_model: LLMClient,
-        message: Message,
-        agent: AgentDTO,
-        instructions: List[InstructionDTO],
-        llm_config: LLMSetupDTO,
-        last_messages: List[ContactMessageDTO]
-    ) -> str:
+    chunks: List[str],
+    llm_model: LLMClient,
+    message: Message,
+    agent: AgentDTO,
+    instructions: List[InstructionDTO],
+    llm_config: LLMSetupDTO,
+    last_messages: List[ContactMessageDTO]
+) -> str:
 
     response = llm_model.request_gpt(
         instructions=instructions,
