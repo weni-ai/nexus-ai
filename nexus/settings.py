@@ -11,9 +11,13 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 import os
 import sys
+import sentry_sdk
 from pathlib import Path
 
 import environ
+
+from sentry_sdk.integrations.django import DjangoIntegration
+
 
 environ.Env.read_env(env_file=(environ.Path(__file__) - 2)(".env"))
 
@@ -319,3 +323,14 @@ CHATGPT_POST_PROMPT = env.str("CHATGPT_POST_PROMPT")
 WENIGPT_POST_PROMPT = env.str("WENIGPT_POST_PROMPT")
 
 FLOWS_SEND_MESSAGE_INTERNAL_TOKEN = env.str("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN")
+
+# Sentry config
+
+USE_SENTRY = env.bool("USE_SENTRY")
+
+if USE_SENTRY:
+    sentry_sdk.init(
+        dsn=env.str("SENTRY_URL"),
+        integrations=[DjangoIntegration()],
+        environment=env.str("ENVIRONMENT"),
+    )
