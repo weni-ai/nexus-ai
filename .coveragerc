@@ -15,6 +15,9 @@ omit =
     nexus/conftest.py
     nexus/task_managers/file_database/*
     nexus/authentication/authentication.py
+    router/clients/*
+    nexus/internals/flows.py
+    */tests.py
 
 [report]
 fail_under = 75

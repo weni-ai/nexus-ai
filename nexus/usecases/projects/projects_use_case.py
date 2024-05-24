@@ -1,5 +1,6 @@
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
+from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.usecases.intelligences.intelligences_dto import LLMDTO
 from nexus.usecases.users.get_by_email import get_by_email
 from nexus.usecases.template_type.template_type_usecase import TemplateTypeUseCase
@@ -27,7 +28,7 @@ class ProjectsUseCase:
         try:
             return Project.objects.get(uuid=project_uuid)
         except Project.DoesNotExist:
-            raise Exception(f"[ ProjectsUseCase ] Project with uuid `{project_uuid}` does not exists!")
+            raise ProjectDoesNotExist(f"[ ProjectsUseCase ] Project with uuid `{project_uuid}` does not exists!")
         except Exception as exception:
             raise Exception(f"[ ProjectsUseCase ] error: {str(exception)}")
 

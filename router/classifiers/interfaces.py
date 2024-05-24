@@ -7,4 +7,4 @@ class Classifier(ABC):
 
     @abstractmethod
     def predict(self, message: str, flows: List, language: str = "por"):
-        pass
+        pass  # pragma: no cover

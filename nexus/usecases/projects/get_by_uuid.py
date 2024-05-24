@@ -1,5 +1,5 @@
 from nexus.projects.models import Project
-
+from nexus.projects.exceptions import ProjectDoesNotExist
 
 def get_project_by_uuid(
     project_uuid: str
@@ -8,6 +8,4 @@ def get_project_by_uuid(
     try:
         return Project.objects.get(uuid=project_uuid)
     except Project.DoesNotExist:
-        raise Exception(f"[ ProjectsUseCase ] Project with uuid `{project_uuid}` does not exists!")
-    except Exception as exception:
-        raise Exception(f"[ ProjectsUseCase ] error: {str(exception)}")
+        raise ProjectDoesNotExist(f"[ ProjectsUseCase ] Project with uuid `{project_uuid}` does not exists!")
