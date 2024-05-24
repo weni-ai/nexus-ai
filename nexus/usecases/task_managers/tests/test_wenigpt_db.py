@@ -20,7 +20,7 @@ class Requests:
         }
 
 
-@skip("External request test")
+# @skip("External request test")
 class TestWenigptDB(TestCase):
 
     def setUp(self) -> None:
@@ -36,6 +36,7 @@ class TestWenigptDB(TestCase):
         prompt = get_prompt_by_language('pt', self.context, self.question)
         self.assertEqual(prompt, f'''### Instruction:\nVocê é um médico tratando um paciente com amnésia. Para responder as perguntas do paciente, você irá ler um texto anteriormente para se contextualizar. Se você trouxer informações desconhecidas, fora do texto lido, poderá deixar o paciente confuso. Se o paciente fizer uma questão sobre informações não presentes no texto, você precisa responder de forma educada que você não tem informação suficiente para responder, pois se tentar responder, pode trazer informações que não ajudarão o paciente recuperar sua memória.\n\n### Input:\nTEXTO: {self.context}\n\nPERGUNTA: {self.question}\nLembre, se não estiver no texto, você precisa responder de forma educada que você não tem informação suficiente para responder. Precisamos ajudar o paciente.\n\n### Response:\nRESPOSTA:''')
 
+    @skip("External request test")
     @patch("nexus.task_managers.tasks.trulens_evaluation")
     def test_create_wenigpt_logs(self, trulens_evaluation):
         trulens_evaluation.return_value = True
@@ -50,6 +51,7 @@ class TestWenigptDB(TestCase):
         log = create_wenigpt_logs(log_dto.__dict__)
         self.assertIsInstance(log, ContentBaseLogs)
 
+    @skip("External request test")
     @patch("nexus.task_managers.tasks.trulens_evaluation")
     @patch("requests.request")
     def test_request_wenigpt(self, requests, trulens_evaluation):

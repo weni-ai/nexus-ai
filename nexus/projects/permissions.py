@@ -29,19 +29,25 @@ def is_support(
 
 
 def has_project_permission(
-    auth: ProjectAuth,
+    user: User,
+    project: Project,
     method: str
 ) -> bool:
+    try:
+        auth = project.authorizations.get(user=user)
+        if method.upper() in SAFE_METHODS:
+            return True
 
-    if method in SAFE_METHODS:
-        return True
+        if is_admin(auth):
+            return True
 
-    if is_admin(auth):
-        return True
+        if is_contributor(auth):
+            return method.upper() in ['PUT', 'PATCH', 'DELETE']
 
-    if is_contributor(auth):
-        return method in ['PUT', 'PATCH', 'DELETE']
-
-    raise ProjectAuthorizationDenied(
-        'You do not have permission to perform this action.'
-    )
+        raise ProjectAuthorizationDenied(
+            'You do not have permission to perform this action.'
+        )
+    except ProjectAuth.DoesNotExist:
+        raise ProjectAuthorizationDenied(
+            'You do not have permission to perform this action.'
+        )
