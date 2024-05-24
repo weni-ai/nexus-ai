@@ -6,8 +6,9 @@ from nexus.intelligences.models import (
     ContentBaseLink,
     LLM,
 )
-from nexus.usecases import orgs, users
+from nexus.usecases import orgs, users, projects
 from nexus.orgs import permissions
+from nexus.projects.permissions import has_project_permission
 from .exceptions import IntelligencePermissionDenied
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from .get_by_uuid import (
@@ -139,12 +140,13 @@ def get_llm_config(
     user_email: str,
 ) -> LLM:
     integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
-
-    org = integrated_intelligence.intelligence.org
     user = users.get_by_email(user_email)
+    project = projects.get_project_by_uuid(project_uuid)
 
-    has_permission = permissions.can_list_org_intelligences(user, org)
-    if not has_permission:
-        raise IntelligencePermissionDenied()
+    has_project_permission(
+        user=user,
+        project=project,
+        method='GET'
+    )
 
     return LLM.objects.filter(integrated_intelligence=integrated_intelligence).order_by('created_at').first()

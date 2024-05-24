@@ -6,8 +6,17 @@ from .models import Project, ProjectAuth, ProjectAuthorizationRole
 from nexus.users.models import User
 
 
-def get_user_auth(user: User, project: Project):
-    return ProjectAuth.objects.get(user=user, project=project)
+def get_user_auth(
+    user: User,
+    project: Project
+):
+    try:
+        auth = ProjectAuth.objects.get(user=user, project=project)
+    except ProjectAuth.DoesNotExist:
+        raise ProjectAuthorizationDenied(
+            'You do not have permission to perform this action.'
+        )
+    return auth
 
 
 def is_admin(
@@ -28,13 +37,11 @@ def is_support(
     return auth.role == ProjectAuthorizationRole.SUPPORT.value
 
 
-def has_project_permission(
-    user: User,
-    project: Project,
+def _has_project_general_permission(
+    auth: ProjectAuth,
     method: str
 ) -> bool:
     try:
-        auth = project.authorizations.get(user=user)
         if method.upper() in SAFE_METHODS:
             return True
 
@@ -51,3 +58,12 @@ def has_project_permission(
         raise ProjectAuthorizationDenied(
             'You do not have permission to perform this action.'
         )
+
+
+def has_project_permission(
+    user: User,
+    project: Project,
+    method: str
+) -> bool:
+    auth = get_user_auth(user=user, project=project)
+    return _has_project_general_permission(auth, method)
