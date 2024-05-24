@@ -14,6 +14,7 @@ from nexus.projects.exceptions import (
 
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 
+
 class GetByProjectUuidTestCase(TestCase):
 
     def setUp(self) -> None:

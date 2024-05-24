@@ -1,6 +1,7 @@
 from nexus.projects.models import Project
 from nexus.projects.exceptions import ProjectDoesNotExist
 
+
 def get_project_by_uuid(
     project_uuid: str
 ) -> Project:

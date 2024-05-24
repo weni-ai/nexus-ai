@@ -1,8 +1,6 @@
 from .get_by_uuid import get_project_by_uuid
 from nexus.usecases import users
 from nexus.projects import permissions
-from nexus.projects.exceptions import ProjectAuthorizationDenied
-from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 
 
 def get_project(

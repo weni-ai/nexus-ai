@@ -26,7 +26,7 @@ from nexus.intelligences.api.serializers import (
 from nexus.usecases.users.tests.user_factory import UserFactory
 
 from nexus.task_managers.models import TaskManager
-from nexus.intelligences.models import ContentBaseLogs, ContentBaseAgent
+from nexus.intelligences.models import ContentBaseLogs
 
 
 class MockRequest:
@@ -62,7 +62,7 @@ class IntelligencesSerializersTestCase(TestCase):
         serializer_fields = list(serializer.data.keys())
         fields = ['uuid', 'created_at', 'modified_at', 'is_active', 'title', 'description', 'language', 'is_router', 'created_by', 'modified_by', 'intelligence']
         self.assertListEqual(serializer_fields, fields)
-    
+
     def test_content_base_text_serializer(self):
         serializer = ContentBaseTextSerializer(self.content_base_text)
         serializer_fields = list(serializer.data.keys())
@@ -90,13 +90,13 @@ class IntelligencesSerializersTestCase(TestCase):
         fields = ["file", "extension_file", "uuid", "created_file_name", "status", "file_name"]
         self.assertListEqual(serializer_fields, fields)
         self.assertEquals(data.get("status"), TaskManager.STATUS_WAITING)
-    
+
     def test_created_content_base_link_serializer(self):
         serializer = CreatedContentBaseLinkSerializer(self.content_base_link)
         serializer_fields = list(serializer.data.keys())
         fields = ["uuid", "link"]
         self.assertListEqual(serializer_fields, fields)
-    
+
     def test_content_base_link_serializer_status_exception(self):
         serializer = ContentBaseLinkSerializer(self.content_base_link)
         data = serializer.data
@@ -104,7 +104,7 @@ class IntelligencesSerializersTestCase(TestCase):
         fields = ["uuid", "link", "status"]
         self.assertListEqual(serializer_fields, fields)
         self.assertEquals(data.get("status"), TaskManager.STATUS_FAIL)
-    
+
     def test_content_base_link_serializer(self):
         content_base_link = ContentBaseLinkFactory()
         content_base_link.upload_tasks.create(created_by=self.user)
@@ -143,7 +143,7 @@ class IntelligencesSerializersTestCase(TestCase):
             "correct_answer",
         ]
         self.assertListEqual(serializer_fields, fields)
-    
+
     def test_llm_config_serializer(self):
         serializer = LLMConfigSerializer(self.llm)
         serializer_fields = list(serializer.data.keys())
@@ -160,7 +160,7 @@ class IntelligencesSerializersTestCase(TestCase):
         serializer_fields = list(serializer.data.keys())
         fields = ['instruction']
         self.assertListEqual(serializer_fields, fields)
-    
+
     def test_content_base_agent_serializer(self):
         content_base_agent = self.content_base.agent
         serializer = ContentBaseAgentSerializer(content_base_agent)
@@ -177,7 +177,7 @@ class IntelligencesSerializersTestCase(TestCase):
         self.assertListEqual(serializer_fields, fields)
         self.assertListEqual(list(instructions[0].keys()), ["id", "instruction"])
         self.assertEquals(len(instructions), 1)
-    
+
     def test_content_base_personalization_update_serializer(self):
         name = "Updated name"
         data = {
