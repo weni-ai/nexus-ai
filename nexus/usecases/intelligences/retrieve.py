@@ -10,16 +10,12 @@ from .get_by_uuid import (
 )
 from nexus.usecases import orgs, users, projects
 from nexus.orgs import permissions
-<<<<<<< HEAD
 from .exceptions import (
     IntelligencePermissionDenied,
     ContentBaseTextDoesNotExist,
     ContentBaseFileDoesNotExist,
 )
-=======
 from nexus.projects.permissions import has_project_permission
-from .exceptions import IntelligencePermissionDenied
->>>>>>> 7bcd4a6 (Add: Change org permissions to project permissions)
 
 
 class RetrieveIntelligenceUseCase():
