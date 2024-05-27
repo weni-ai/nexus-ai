@@ -37,7 +37,7 @@ class ProjectTestCase(TestCase):
 class ProjectAuthTestCase(TestCase):
 
     def setUp(self) -> None:
-        self.project = ProjectFactory()
+        self.project = ProjectFactory(project_auth=None)
         self.user = self.project.created_by
 
     def test_create_project_auth(self):
