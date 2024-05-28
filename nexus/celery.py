@@ -24,6 +24,10 @@ app.conf.beat_schedule = {
     "log_cleanup_routine": {
         "task": "log_cleanup_routine",
         "schedule": schedules.crontab(hour=23, minute=0)
+    },
+    "delete_old_activities": {
+        "task": "delete_old_activities",
+        "schedule": schedules.crontab(hour=23, minute=0)
     }
 }
 
