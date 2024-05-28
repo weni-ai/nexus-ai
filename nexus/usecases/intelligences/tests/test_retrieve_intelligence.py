@@ -26,6 +26,8 @@ from nexus.usecases.intelligences.retrieve import RetrieveContentBaseFileUseCase
 from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 
+from nexus.projects.exceptions import ProjectAuthorizationDenied
+
 
 class TestRetrieveIntelligenceUseCase(TestCase):
 
@@ -95,7 +97,7 @@ class TestRetrieveContentBaseUseCase(TestCase):
         self.assertIsInstance(contentbase_retrieve, ContentBase)
 
     def test_get_default_by_project_fail(self):
-        with self.assertRaises(IntelligencePermissionDenied):
+        with self.assertRaises(ProjectAuthorizationDenied):
             self.usecase.get_default_by_project(
                 project_uuid=self.project.uuid,
                 user_email=self.user.email
