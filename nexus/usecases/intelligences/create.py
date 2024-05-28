@@ -28,15 +28,18 @@ from .publishers_msg import recent_activity_message
 from nexus.orgs import permissions
 from nexus.projects.models import Project
 from .exceptions import IntelligencePermissionDenied
+from nexus.events import event_manager
 
 
 class CreateIntelligencesUseCase():
 
     def __init__(
         self,
-        intelligence_activity_message=intelligence_activity_message
+        intelligence_activity_message=intelligence_activity_message,
+        event_manager_notify=event_manager.notify
     ) -> None:
         self.intelligence_activity_message = intelligence_activity_message
+        self.event_manager_notify = event_manager_notify
 
     def create_intelligences(
             self,
@@ -63,7 +66,9 @@ class CreateIntelligencesUseCase():
             action="CREATE",
             intelligence_activity_message=self.intelligence_activity_message
         )
-
+        self.event_manager_notify(
+            intelligence
+        )
         return intelligence
 
 
