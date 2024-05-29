@@ -35,10 +35,8 @@ class CreateIntelligencesUseCase():
 
     def __init__(
         self,
-        intelligence_activity_message=intelligence_activity_message,
         event_manager_notify=event_manager.notify
     ) -> None:
-        self.intelligence_activity_message = intelligence_activity_message
         self.event_manager_notify = event_manager_notify
 
     def create_intelligences(
@@ -59,15 +57,9 @@ class CreateIntelligencesUseCase():
             name=name, description=description,
             org=org, created_by=user
         )
-        recent_activity_message(
-            org=org,
-            user=user,
-            entity_name=intelligence.name,
-            action="CREATE",
-            intelligence_activity_message=self.intelligence_activity_message
-        )
         self.event_manager_notify(
-            intelligence
+            event="intelligence_create_activity",
+            intelligence=intelligence
         )
         return intelligence
 

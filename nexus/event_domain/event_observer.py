@@ -1,5 +1,3 @@
-# Interface, define como um observador deve ser implementado
-
 from abc import ABC, abstractmethod
 
 
