@@ -21,7 +21,7 @@ from .update import (
     UpdateContentBaseUseCase,
     UpdateContentBaseTextUseCase,
     # UpdateContentBaseFileUseCase,
-    update_llm_by_project,
+    UpdateLLMUseCase,
 )
 from .delete import (
     DeleteIntelligenceUseCase,

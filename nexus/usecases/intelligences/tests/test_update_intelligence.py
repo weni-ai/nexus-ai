@@ -3,7 +3,7 @@ from ..update import (
     UpdateIntelligenceUseCase,
     UpdateContentBaseUseCase,
     UpdateContentBaseTextUseCase,
-    update_llm_by_project
+    UpdateLLMUseCase
 )
 from .intelligence_factory import (
     IntelligenceFactory,
@@ -108,8 +108,8 @@ class TestUpdateLLM(TestCase):
             setup=setup,
             advanced_options=advanced_options
         )
-
-        updated_llm = update_llm_by_project(
+        usecase = UpdateLLMUseCase
+        updated_llm = usecase.update_llm_by_project(
             update_dto
         )
 

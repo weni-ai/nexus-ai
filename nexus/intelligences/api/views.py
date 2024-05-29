@@ -782,8 +782,8 @@ class LLMDefaultViewset(views.APIView):
             },
             advanced_options={}
         )
-
-        updated_llm = intelligences.update_llm_by_project(llm_update_dto)
+        usecase = intelligences.UpdateLLMUseCase()
+        updated_llm = usecase.update_llm_by_project(llm_update_dto)
 
         return Response(
             data=LLMConfigSerializer(updated_llm).data,

@@ -35,3 +35,23 @@ class IntelligenceCreateObserver(EventObserver):
             action="CREATE",
             intelligence_activity_message=self.intelligence_activity_message
         )
+
+
+class LLMUpdateObserver(EventObserver):
+
+    def perform(
+        self,
+        llm,
+        user,
+        action_details: dict,
+    ):
+        project = llm.integrated_intelligence.project
+        intelligence = llm.integrated_intelligence.intelligence
+        dto = CreateRecentActivityDTO(
+            action_type="U",
+            project=project,
+            created_by=user,
+            intelligence=intelligence,
+            action_details=action_details
+        )
+        create_recent_activity(llm, dto=dto)
