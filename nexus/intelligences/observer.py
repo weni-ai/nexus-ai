@@ -190,7 +190,6 @@ class ContentBaseTextObserver(EventObserver):
         content_base = content_base_text.content_base
 
         intelligence = content_base.intelligence
-        integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
 
         if action_type == "U":
             old_model_data = kwargs.get('old_contentbasetext_data')
@@ -200,7 +199,7 @@ class ContentBaseTextObserver(EventObserver):
             action_details = kwargs.get('action_details', {})
 
         if content_base.is_router:
-
+            integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
             project = integrated_intelligence.project
             dto = CreateRecentActivityDTO(
                 action_type="U",
@@ -211,7 +210,6 @@ class ContentBaseTextObserver(EventObserver):
             )
             create_recent_activity(content_base_text, dto=dto)
         else:
-
             org = intelligence.org
             project_list = org.projects.all()
             for project in project_list:
