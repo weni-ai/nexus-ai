@@ -576,7 +576,7 @@ class ContentBaseFileViewset(ModelViewSet):
 
         event_manager.notify(
             event="contentbase_file_activity",
-            action="D",
+            action_type="D",
             content_base_file=content_base_file,
         )
 

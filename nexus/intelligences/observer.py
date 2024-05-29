@@ -3,6 +3,24 @@ from nexus.usecases.logs.logs_dto import CreateRecentActivityDTO
 from nexus.event_domain.event_observer import EventObserver
 from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
 from nexus.usecases.intelligences.publishers_msg import recent_activity_message
+from nexus.intelligences.models import IntegratedIntelligence
+
+from django.forms.models import model_to_dict
+
+
+def _update_comparison_fields(
+    old_model_data,
+    new_model_data,
+):
+    old_model_dict = model_to_dict(old_model_data)
+    new_model_dict = model_to_dict(new_model_data)
+
+    action_details = {}
+    for key, old_value in old_model_dict.items():
+        new_value = new_model_dict.get(key)
+        if old_value != new_value:
+            action_details[key] = {'old': old_value, 'new': new_value}
+    return action_details
 
 
 class IntelligenceCreateObserver(EventObserver):
@@ -63,7 +81,7 @@ class ContentBaseFileObserver(EventObserver):
         self,
         content_base_file,
         user,
-        action: str,
+        action_type: str,
         action_details: dict = {},
     ):
         user = user
@@ -73,7 +91,7 @@ class ContentBaseFileObserver(EventObserver):
         if content_base.is_router:
             project = intelligence.integrated_intelligence.project
             dto = CreateRecentActivityDTO(
-                action_type=action,
+                action_type=action_type,
                 project=project,
                 created_by=user,
                 intelligence=intelligence,
@@ -85,10 +103,88 @@ class ContentBaseFileObserver(EventObserver):
             project_list = org.projects.all()
             for project in project_list:
                 dto = CreateRecentActivityDTO(
-                    action_type=action,
+                    action_type=action_type,
                     project=project,
                     created_by=user,
                     intelligence=intelligence,
                     action_details=action_details
                 )
                 create_recent_activity(content_base_file, dto=dto)
+
+
+class ContentBaseAgentObserver(EventObserver):
+
+    def perform(
+        self,
+        user,
+        content_base_agent,
+        action_type: str,
+        **kwargs
+    ):
+        intelligence = content_base_agent.content_base.intelligence
+        integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
+        project = integrated_intelligence.project
+
+        if action_type == "U":
+            old_model_data = kwargs.get('old_agent_data')
+            new_model_data = kwargs.get('new_agent_data')
+            action_details = _update_comparison_fields(old_model_data, new_model_data)
+        else:
+            action_details = kwargs.get('action_details', {})
+
+        dto = CreateRecentActivityDTO(
+            action_type="U",
+            project=project,
+            created_by=user,
+            intelligence=intelligence,
+            action_details=action_details
+        )
+        create_recent_activity(content_base_agent, dto=dto)
+
+
+class ContentBaseInstructionObserver(EventObserver):
+
+    def perform(
+        self,
+        user,
+        content_base_instruction,
+        action_type: str,
+        **kwargs
+    ):
+        intelligence = content_base_instruction.content_base.intelligence
+        integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
+        project = integrated_intelligence.project
+
+        if action_type == "U":
+            old_model_data = kwargs.get('old_instruction_data')
+            new_model_data = kwargs.get('new_instruction_data')
+            action_details = _update_comparison_fields(old_model_data, new_model_data)
+        else:
+            action_details = kwargs.get('action_details', {})
+
+        dto = CreateRecentActivityDTO(
+            action_type="U",
+            project=project,
+            created_by=user,
+            intelligence=intelligence,
+            action_details=action_details
+        )
+        create_recent_activity(content_base_instruction, dto=dto)
+
+
+class ContentBaseLinkObserver(EventObserver):
+    # TODO: Implement this observer to handle the methods: Create and delete
+    def perform(self):
+        pass
+
+
+class ContentBaseTextObserver(EventObserver):
+    # TODO: Implement this observer to handle the methods: Update
+    def perform(self):
+        pass
+
+
+class ContentBaseObserver(EventObserver):
+    # TODO: Implement this observer to handle the methods: Create, Update and delete
+    def perform(self):
+        pass
