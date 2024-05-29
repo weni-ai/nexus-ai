@@ -8,6 +8,7 @@ from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+from nexus.events import event_manager
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
 from .serializers import (
@@ -571,6 +572,12 @@ class ContentBaseFileViewset(ModelViewSet):
         content_base_file = use_case.get_contentbasefile(
             contentbasefile_uuid=contentbasefile_uuid,
             user_email=user_email
+        )
+
+        event_manager.notify(
+            event="contentbase_file_activity",
+            action="D",
+            content_base_file=content_base_file,
         )
 
         sentenx_file_database = SentenXFileDataBase()

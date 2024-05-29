@@ -2,7 +2,8 @@ from .event_domain.event_manager import EventManager
 
 from nexus.intelligences.observer import (
     IntelligenceCreateObserver,
-    LLMUpdateObserver
+    LLMUpdateObserver,
+    ContentBaseFileObserver
 )
 
 
@@ -17,4 +18,9 @@ event_manager.subscribe(
 event_manager.subscribe(
     event="llm_update_activity",
     observer=[LLMUpdateObserver()]
+)
+
+event_manager.subscribe(
+    event="contentbase_file_activity",
+    observer=[ContentBaseFileObserver()]
 )

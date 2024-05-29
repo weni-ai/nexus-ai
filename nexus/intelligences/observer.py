@@ -55,3 +55,40 @@ class LLMUpdateObserver(EventObserver):
             action_details=action_details
         )
         create_recent_activity(llm, dto=dto)
+
+
+class ContentBaseFileObserver(EventObserver):
+
+    def perform(
+        self,
+        content_base_file,
+        user,
+        action: str,
+        action_details: dict = {},
+    ):
+        user = user
+        content_base = content_base_file.content_base
+        intelligence = content_base.intelligence
+
+        if content_base.is_router:
+            project = intelligence.integrated_intelligence.project
+            dto = CreateRecentActivityDTO(
+                action_type=action,
+                project=project,
+                created_by=user,
+                intelligence=intelligence,
+                action_details=action_details
+            )
+            create_recent_activity(content_base_file, dto=dto)
+        else:
+            org = intelligence.org
+            project_list = org.projects.all()
+            for project in project_list:
+                dto = CreateRecentActivityDTO(
+                    action_type=action,
+                    project=project,
+                    created_by=user,
+                    intelligence=intelligence,
+                    action_details=action_details
+                )
+                create_recent_activity(content_base_file, dto=dto)

@@ -146,7 +146,17 @@ class CreateContentBaseTextUseCase():
 
 class CreateContentBaseFileUseCase():
 
-    def create_content_base_file(self, content_base_file: ContentBaseFileDTO) -> ContentBaseFile:
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ) -> None:
+        self.event_manager_notify = event_manager_notify
+
+    def create_content_base_file(
+        self,
+        content_base_file: ContentBaseFileDTO
+    ) -> ContentBaseFile:
+
         user = users.get_by_email(content_base_file.user_email)
         content_base = intelligences.get_by_contentbase_uuid(contentbase_uuid=content_base_file.content_base_uuid)
         content_base_file = ContentBaseFile.objects.create(
@@ -155,6 +165,12 @@ class CreateContentBaseFileUseCase():
             extension_file=content_base_file.extension_file,
             content_base=content_base,
             created_by=user
+        )
+        self.event_manager_notify(
+            event="contentbase_file_activity",
+            content_base_file=content_base_file,
+            action="C",
+            user=user
         )
         return content_base_file
 
