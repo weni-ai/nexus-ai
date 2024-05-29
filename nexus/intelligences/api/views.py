@@ -4,7 +4,6 @@ from django.conf import settings
 
 from rest_framework import status, parsers, views
 from rest_framework.viewsets import ModelViewSet
-from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
@@ -22,6 +21,7 @@ from .serializers import (
     ContentBasePersonalizationSerializer,
 )
 from nexus.usecases import intelligences
+from nexus.paginations import CustomCursorPagination
 from nexus.orgs import permissions
 from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
 
@@ -34,13 +34,6 @@ from nexus.task_managers.tasks import upload_text_file, send_link
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
-
-
-class CustomCursorPagination(CursorPagination):
-    page_size = 10
-    page_size_query_param = 'page_size'
-    max_page_size = 50
-    ordering = "created_at"
 
 
 class IntelligencesViewset(
