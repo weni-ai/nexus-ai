@@ -87,7 +87,7 @@ class LogsViewSetTestCase(TestCase):
         )
 
     def test_get_personalization(self):
-        request = self.factory.get(f"api/{self.project.uuid}/logs/?contact_urn=tel:123321")
+        request = self.factory.get(f"api/{self.project.uuid}/logs/?contact_urn=tel:123321&limit=100")
 
         force_authenticate(request, user=self.user)
 
@@ -97,13 +97,13 @@ class LogsViewSetTestCase(TestCase):
         )
 
         response.render()
-        content = json.loads(response.content)
+        content = json.loads(response.content).get("results")
 
         self.assertEqual(response.status_code, 200)
         self.assertEquals(len(content), 1)
 
     def test_order_by_desc(self):
-        request = self.factory.get(f"api/{self.project.uuid}/logs/?order_by=desc")
+        request = self.factory.get(f"api/{self.project.uuid}/logs/?order_by=desc&limit=100")
         force_authenticate(request, user=self.user)
         response = LogsViewset.as_view({'get': 'list'})(
             request,
@@ -112,6 +112,7 @@ class LogsViewSetTestCase(TestCase):
 
         response.render()
         content = json.loads(response.content)
+        content = content.get("results")
 
         first = pendulum.parse(content[0].get("created_at"))
         last = pendulum.parse(content[1].get("created_at"))
@@ -119,7 +120,7 @@ class LogsViewSetTestCase(TestCase):
         self.assertGreater(first, last)
 
     def test_order_by_asc(self):
-        request = self.factory.get(f"api/{self.project.uuid}/logs/?order_by=asc")
+        request = self.factory.get(f"api/{self.project.uuid}/logs/?order_by=asc&limit=100")
         force_authenticate(request, user=self.user)
         response = LogsViewset.as_view({'get': 'list'})(
             request,
@@ -128,6 +129,7 @@ class LogsViewSetTestCase(TestCase):
 
         response.render()
         content = json.loads(response.content)
+        content = content.get("results")
 
         first = pendulum.parse(content[0].get("created_at"))
         last = pendulum.parse(content[1].get("created_at"))

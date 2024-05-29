@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from nexus.logs.models import MessageLog
 from nexus.logs.api.serializers import MessageLogSerializer
 from nexus.usecases.logs.list import ListLogUsecase
+from rest_framework.pagination import LimitOffsetPagination
 
 
 class LogsViewset(
@@ -13,6 +14,7 @@ class LogsViewset(
     serializer_class = MessageLogSerializer
     permission_classes = [IsAuthenticated]
     lookup_url_kwarg = "contentbase_uuid"
+    pagination_class = LimitOffsetPagination
 
     def get_queryset(self):
 
