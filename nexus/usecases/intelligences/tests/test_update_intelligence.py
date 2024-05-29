@@ -79,7 +79,7 @@ class TestUpdateContentBaseTextUseCase(TestCase):
         new_text = 'New Text'
         use_case = UpdateContentBaseTextUseCase()
         updated_contentbasetext = use_case.update_contentbasetext(
-            contentbasetext_uuid=self.contentbasetext.uuid,
+            contentbasetext=self.contentbasetext,
             text=new_text,
             user_email=self.contentbasetext.created_by.email
         )

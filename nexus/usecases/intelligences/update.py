@@ -10,7 +10,7 @@ from nexus.projects.permissions import has_project_permission
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
 from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO, UpdateLLMDTO
-from nexus.intelligences.models import ContentBase
+from nexus.intelligences.models import ContentBase, ContentBaseText
 from nexus.events import event_manager
 
 from django.forms.models import model_to_dict
@@ -86,27 +86,42 @@ class UpdateContentBaseUseCase():
 
 class UpdateContentBaseTextUseCase():
 
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ):
+        self.event_manager_notify = event_manager_notify
+
     def update_contentbasetext(
             self,
-            contentbasetext_uuid: str,
+            contentbasetext: ContentBaseText,
             user_email: str,
             text: str = None,
     ):
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         user = users.get_by_email(user_email)
         org = org_use_case.get_org_by_contentbasetext_uuid(
-            contentbasetext_uuid
+            contentbasetext.uuid
         )
 
         has_permission = permissions.can_edit_content_bases(user, org)
         if not has_permission:
             raise IntelligencePermissionDenied()
 
-        contentbasetext = get_by_contentbasetext_uuid(contentbasetext_uuid)
-
+        old_contentbasetext_data = contentbasetext
         if text:
             contentbasetext.text = text
             contentbasetext.save(update_fields=['text'])
+        new_contentbase_data = contentbasetext
+
+        self.event_manager_notify(
+            event="contentbase_text_activity",
+            content_base_text=contentbasetext,
+            old_contentbasetext_data=old_contentbasetext_data,
+            new_contentbase_data=new_contentbase_data,
+            user=user,
+            action_type="U",
+        )
 
         return contentbasetext
 

@@ -464,7 +464,7 @@ class ContentBaseTextViewset(
                 created_by_email=content_base.created_by.email,
             )
             content_base_text = intelligences.UpdateContentBaseTextUseCase().update_contentbasetext(
-                contentbasetext_uuid=content_base_text_uuid,
+                contentbasetext=content_base_text,
                 user_email=user_email,
                 text=text
             )

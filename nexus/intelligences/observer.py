@@ -179,9 +179,50 @@ class ContentBaseLinkObserver(EventObserver):
 
 
 class ContentBaseTextObserver(EventObserver):
-    # TODO: Implement this observer to handle the methods: Update
-    def perform(self):
-        pass
+
+    def perform(
+        self,
+        user,
+        content_base_text,
+        action_type: str,
+        **kwargs
+    ):
+        content_base = content_base_text.content_base
+
+        intelligence = content_base.intelligence
+        integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
+
+        if action_type == "U":
+            old_model_data = kwargs.get('old_contentbasetext_data')
+            new_model_data = kwargs.get('new_contentbase_data')
+            action_details = _update_comparison_fields(old_model_data, new_model_data)
+        else:
+            action_details = kwargs.get('action_details', {})
+
+        if content_base.is_router:
+
+            project = integrated_intelligence.project
+            dto = CreateRecentActivityDTO(
+                action_type="U",
+                project=project,
+                created_by=user,
+                intelligence=intelligence,
+                action_details=action_details
+            )
+            create_recent_activity(content_base_text, dto=dto)
+        else:
+
+            org = intelligence.org
+            project_list = org.projects.all()
+            for project in project_list:
+                dto = CreateRecentActivityDTO(
+                    action_type="U",
+                    project=project,
+                    created_by=user,
+                    intelligence=intelligence,
+                    action_details=action_details
+                )
+                create_recent_activity(content_base_text, dto=dto)
 
 
 class ContentBaseObserver(EventObserver):
