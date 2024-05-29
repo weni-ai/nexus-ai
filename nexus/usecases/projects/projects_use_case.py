@@ -13,6 +13,7 @@ from nexus.usecases.intelligences.create import (
 from .create import ProjectAuthUseCase
 from nexus.usecases import orgs
 from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
+from nexus.events import event_manager
 from django.conf import settings
 
 
@@ -20,8 +21,10 @@ class ProjectsUseCase:
 
     def __init__(
         self,
+        event_manager_notify=event_manager.notify,
         intelligence_activity_message=intelligence_activity_message
     ) -> None:
+        self.event_manager_notify = event_manager_notify
         self.intelligence_activity_message = intelligence_activity_message
 
     def get_by_uuid(self, project_uuid: str) -> Project:
@@ -38,7 +41,7 @@ class ProjectsUseCase:
         user_email: str,
         project: Project
     ) -> None:
-        usecase = CreateIntelligencesUseCase(intelligence_activity_message=self.intelligence_activity_message)
+        usecase = CreateIntelligencesUseCase(event_manager_notify=self.event_manager_notify)
         base_intelligence = usecase.create_intelligences(
             org_uuid=project_dto.org_uuid,
             user_email=user_email,

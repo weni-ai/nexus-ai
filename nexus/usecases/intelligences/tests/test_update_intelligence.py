@@ -108,9 +108,9 @@ class TestUpdateLLM(TestCase):
             setup=setup,
             advanced_options=advanced_options
         )
-        usecase = UpdateLLMUseCase
+        usecase = UpdateLLMUseCase()
         updated_llm = usecase.update_llm_by_project(
-            update_dto
+            update_llm_dto=update_dto
         )
 
         self.assertEqual(updated_llm.setup, setup)

@@ -17,7 +17,7 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO, LLMDTO
 
-from nexus.usecases.event_driven.mocks import mock_recent_activity_message
+from nexus.usecases.event_driven.mocks import mock_event_manager_notify, mock_recent_activity_message
 
 
 class TestListIntelligenceUseCase(TestCase):
@@ -27,7 +27,9 @@ class TestListIntelligenceUseCase(TestCase):
 
     def test_create_intelligence_use_case(self):
 
-        use_case = CreateIntelligencesUseCase(mock_recent_activity_message)
+        use_case = CreateIntelligencesUseCase(
+            event_manager_notify=mock_event_manager_notify,
+        )
         intelligences_create = use_case.create_intelligences(
             name="name",
             description="description",
