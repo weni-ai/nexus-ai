@@ -135,3 +135,33 @@ class LogsViewSetTestCase(TestCase):
         last = pendulum.parse(content[1].get("created_at"))
 
         self.assertGreater(last, first)
+
+    def test_get_log(self):
+        fields = [
+            "message_text",
+            "message_exception",
+            "contact_urn",
+            "chunks",
+            "prompt",
+            "project",
+            "content_base",
+            "classification",
+            "llm_model",
+            "llm_response",
+            "created_at",
+            "metadata",
+        ]
+
+        log_id = MessageLog.objects.first().id
+        request = self.factory.get(f"api/{self.project.uuid}/logs/{log_id}")
+
+        force_authenticate(request, user=self.user)
+        response = LogsViewset.as_view({'get': 'retrieve'})(
+            request,
+            project_uuid=str(self.project.uuid),
+            log_id=log_id,
+        )
+        response.render()
+
+        content = json.loads(response.content)
+        self.assertListEqual(fields, list(content.keys()))
