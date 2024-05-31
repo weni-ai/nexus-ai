@@ -10,7 +10,7 @@ class ListLogUsecase:
         else:
             order = "created_at"
 
-        logs = MessageLog.objects.filter(project__uuid=project_uuid)
+        logs = MessageLog.objects.select_related("message").filter(project__uuid=project_uuid)
 
         if kwargs:
             try:

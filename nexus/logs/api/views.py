@@ -1,18 +1,20 @@
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.permissions import IsAuthenticated
 
 from nexus.logs.models import MessageLog
-from nexus.logs.api.serializers import MessageLogSerializer
+from nexus.logs.api.serializers import MessageLogSerializer, MessageFullLogSerializer
 from nexus.usecases.logs.list import ListLogUsecase
+from rest_framework.pagination import LimitOffsetPagination
 
 
 class LogsViewset(
-    ModelViewSet
+    ReadOnlyModelViewSet
 ):
 
     serializer_class = MessageLogSerializer
     permission_classes = [IsAuthenticated]
-    lookup_url_kwarg = "contentbase_uuid"
+    pagination_class = LimitOffsetPagination
+    lookup_url_kwarg = "log_id"
 
     def get_queryset(self):
 
@@ -45,3 +47,8 @@ class LogsViewset(
             order_by=order_by,
             **params
         )
+
+    def retrieve(self, request, *args, **kwargs):
+        print(kwargs)
+        self.serializer_class = MessageFullLogSerializer
+        return super().retrieve(request, *args, **kwargs)

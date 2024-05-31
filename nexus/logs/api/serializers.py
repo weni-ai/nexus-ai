@@ -6,6 +6,34 @@ class MessageLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = MessageLog
         fields = [
+            "id",
+            "message_text",
+            "message_exception",
+            "contact_urn",
+            "classification",
+            "llm_model",
+            "llm_response",
+            "created_at",
+        ]
+
+    message_text = serializers.SerializerMethodField()
+    message_exception = serializers.SerializerMethodField()
+    contact_urn = serializers.SerializerMethodField()
+
+    def get_message_text(self, obj: MessageLog) -> str:
+        return obj.message.text
+
+    def get_message_exception(self, obj: MessageLog) -> str:
+        return obj.message.exception
+
+    def get_contact_urn(self, obj: MessageLog) -> str:
+        return obj.message.contact_urn
+
+
+class MessageFullLogSerializer(MessageLogSerializer):
+    class Meta:
+        model = MessageLog
+        fields = [
             "message_text",
             "message_exception",
             "contact_urn",
@@ -20,19 +48,5 @@ class MessageLogSerializer(serializers.ModelSerializer):
             "metadata",
         ]
 
-    message_text = serializers.SerializerMethodField()
-    message_exception = serializers.SerializerMethodField()
-    project = serializers.SerializerMethodField()
-    contact_urn = serializers.SerializerMethodField()
-
-    def get_message_text(self, obj: MessageLog) -> str:
-        return obj.message.text
-
-    def get_message_exception(self, obj: MessageLog) -> str:
-        return obj.message.exception
-
     def get_project(self, obj: MessageLog) -> str:
         return f"{obj.project.uuid} - {obj.project.name}"
-
-    def get_contact_urn(self, obj: MessageLog) -> str:
-        return obj.message.contact_urn

@@ -87,7 +87,7 @@ class LogsViewSetTestCase(TestCase):
         )
 
     def test_get_personalization(self):
-        request = self.factory.get(f"api/{self.project.uuid}/logs/?contact_urn=tel:123321")
+        request = self.factory.get(f"api/{self.project.uuid}/logs/?contact_urn=tel:123321&limit=100")
 
         force_authenticate(request, user=self.user)
 
@@ -97,13 +97,13 @@ class LogsViewSetTestCase(TestCase):
         )
 
         response.render()
-        content = json.loads(response.content)
+        content = json.loads(response.content).get("results")
 
         self.assertEqual(response.status_code, 200)
         self.assertEquals(len(content), 1)
 
     def test_order_by_desc(self):
-        request = self.factory.get(f"api/{self.project.uuid}/logs/?order_by=desc")
+        request = self.factory.get(f"api/{self.project.uuid}/logs/?order_by=desc&limit=100")
         force_authenticate(request, user=self.user)
         response = LogsViewset.as_view({'get': 'list'})(
             request,
@@ -112,6 +112,7 @@ class LogsViewSetTestCase(TestCase):
 
         response.render()
         content = json.loads(response.content)
+        content = content.get("results")
 
         first = pendulum.parse(content[0].get("created_at"))
         last = pendulum.parse(content[1].get("created_at"))
@@ -119,7 +120,7 @@ class LogsViewSetTestCase(TestCase):
         self.assertGreater(first, last)
 
     def test_order_by_asc(self):
-        request = self.factory.get(f"api/{self.project.uuid}/logs/?order_by=asc")
+        request = self.factory.get(f"api/{self.project.uuid}/logs/?order_by=asc&limit=100")
         force_authenticate(request, user=self.user)
         response = LogsViewset.as_view({'get': 'list'})(
             request,
@@ -128,8 +129,39 @@ class LogsViewSetTestCase(TestCase):
 
         response.render()
         content = json.loads(response.content)
+        content = content.get("results")
 
         first = pendulum.parse(content[0].get("created_at"))
         last = pendulum.parse(content[1].get("created_at"))
 
         self.assertGreater(last, first)
+
+    def test_get_log(self):
+        fields = [
+            "message_text",
+            "message_exception",
+            "contact_urn",
+            "chunks",
+            "prompt",
+            "project",
+            "content_base",
+            "classification",
+            "llm_model",
+            "llm_response",
+            "created_at",
+            "metadata",
+        ]
+
+        log_id = MessageLog.objects.first().id
+        request = self.factory.get(f"api/{self.project.uuid}/logs/{log_id}")
+
+        force_authenticate(request, user=self.user)
+        response = LogsViewset.as_view({'get': 'retrieve'})(
+            request,
+            project_uuid=str(self.project.uuid),
+            log_id=log_id,
+        )
+        response.render()
+
+        content = json.loads(response.content)
+        self.assertListEqual(fields, list(content.keys()))
