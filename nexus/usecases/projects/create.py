@@ -5,6 +5,8 @@ from nexus.projects.project_dto import ProjectAuthCreationDTO
 
 from nexus.users.models import User
 
+from nexus.projects.exceptions import ProjectDoesNotExist
+
 
 class ProjectAuthUseCase:
 
@@ -21,7 +23,12 @@ class ProjectAuthUseCase:
 
         user, created = User.objects.get_or_create(email=user_email)
 
-        project = projects.get_project_by_uuid(project_uuid=project_uuid)
+        try:
+            project = projects.get_project_by_uuid(project_uuid=project_uuid)
+        except ProjectDoesNotExist:
+            raise ProjectDoesNotExist
+        except Exception as e:
+            raise e
 
         return ProjectAuthCreationDTO(
             user=user,
