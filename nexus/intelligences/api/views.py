@@ -595,6 +595,15 @@ class ContentBaseLinkViewset(ModelViewSet):
     serializer_class = ContentBaseLinkSerializer
     lookup_url_kwarg = "contentbaselink_uuid"
 
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify,
+        *args,
+        **kwargs
+    ):
+        self.event_manager_notify = event_manager_notify
+        super().__init__(*args, **kwargs)
+
     def list(self, request, *args, **kwargs):
         try:
             return super().list(request, *args, **kwargs)
@@ -637,7 +646,8 @@ class ContentBaseLinkViewset(ModelViewSet):
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def destroy(self, request, *args, **kwargs):
-        user_email: str = self.request.user.email
+        user = self.request.user
+        user_email: str = user.email
         contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
 
         use_case = intelligences.RetrieveContentBaseLinkUseCase()
@@ -651,6 +661,13 @@ class ContentBaseLinkViewset(ModelViewSet):
             content_base_uuid=str(content_base_file.content_base.uuid),
             content_base_file_uuid=str(content_base_file.uuid),
             filename=content_base_file.link
+        )
+
+        self.event_manager_notify(
+            event="contentbase_link_activity",
+            action_type="D",
+            content_base_link=content_base_file,
+            user=user
         )
 
         return super().destroy(request, *args, **kwargs)

@@ -84,7 +84,6 @@ class ContentBaseFileObserver(EventObserver):
         action_type: str,
         action_details: dict = {},
     ):
-        user = user
         content_base = content_base_file.content_base
         intelligence = content_base.intelligence
 
@@ -173,8 +172,43 @@ class ContentBaseInstructionObserver(EventObserver):
 
 
 class ContentBaseLinkObserver(EventObserver):
-    # TODO: Implement this observer to handle the methods: Create and delete
-    def perform(self):
+
+    def perform(
+        self,
+        user,
+        content_base_link,
+        action_type: str,
+        **kwargs
+    ):
+
+        content_base = content_base_link.content_base
+        intelligence = content_base.intelligence
+        action_details = kwargs.get('action_details', {})
+
+        if content_base.is_router:
+            integrated_intelligence = intelligence.integrated_intelligence
+            project = integrated_intelligence.project
+            dto = CreateRecentActivityDTO(
+                action_type=action_type,
+                project=project,
+                created_by=user,
+                intelligence=intelligence,
+                action_details=action_details
+            )
+            create_recent_activity(content_base_link, dto=dto)
+        else:
+            org = intelligence.org
+            project_list = org.projects.all()
+            for project in project_list:
+                dto = CreateRecentActivityDTO(
+                    action_type=action_type,
+                    project=project,
+                    created_by=user,
+                    intelligence=intelligence,
+                    action_details=action_details
+                )
+                create_recent_activity(content_base_link, dto=dto)
+
         pass
 
 

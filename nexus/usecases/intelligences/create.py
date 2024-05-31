@@ -169,7 +169,7 @@ class CreateContentBaseFileUseCase():
         self.event_manager_notify(
             event="contentbase_file_activity",
             content_base_file=content_base_file,
-            action="C",
+            action_type="C",
             user=user
         )
         return content_base_file
@@ -200,6 +200,13 @@ def create_integrated_intelligence(
 
 
 class CreateContentBaseLinkUseCase():
+
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ):
+        self.event_manager_notify = event_manager_notify
+
     def create_content_base_link(self, content_base_link: ContentBaseLinkDTO) -> ContentBaseLink:
         user = users.get_by_email(content_base_link.user_email)
         content_base = intelligences.get_by_contentbase_uuid(contentbase_uuid=content_base_link.content_base_uuid)
@@ -208,6 +215,14 @@ class CreateContentBaseLinkUseCase():
             content_base=content_base,
             created_by=user
         )
+
+        self.event_manager_notify(
+            event="contentbase_link_activity",
+            content_base_link=content_base_link,
+            action_type="C",
+            user=user
+        )
+
         return content_base_link
 
 
