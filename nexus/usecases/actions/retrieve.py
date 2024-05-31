@@ -1,7 +1,7 @@
 from nexus.actions.models import Flow
 
 
-class FlowDoesNotExist(BaseException):
+class FlowDoesNotExist(Exception):
     pass
 
 
