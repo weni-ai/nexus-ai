@@ -81,7 +81,7 @@ def route(
 
             print(f"[+ Instructions: {instructions} +]")
 
-            chunks = [chunk.get("full_page") for chunk in full_chunks]
+            chunks = [chunk.get("full_page").replace("\x00", "\uFFFD") for chunk in full_chunks]
 
             print(f"[ + Chunks: {full_chunks} + ]")
 
