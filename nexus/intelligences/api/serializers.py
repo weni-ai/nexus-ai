@@ -49,7 +49,7 @@ class ContentBaseFileSerializer(serializers.ModelSerializer):
 
     def get_status(self, obj):
         try:
-            task_manager = obj.upload_tasks.get()
+            task_manager = obj.upload_tasks.order_by("created_at").last()
             return task_manager.status
         except Exception:
             return ContentBaseFileTaskManager.STATUS_FAIL
@@ -70,7 +70,7 @@ class ContentBaseLinkSerializer(serializers.ModelSerializer):
 
     def get_status(self, obj):
         try:
-            task_manager = obj.upload_tasks.get()
+            task_manager = obj.upload_tasks.order_by("created_at").last()
             return task_manager.status
         except Exception as e:
             print(e)
