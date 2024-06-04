@@ -152,5 +152,5 @@ class MockFlowStartHTTPClient():
         print(f"[+ Test: Starting flow {flow} +]")
 
 
-class TestException(BaseException):
+class TestException(Exception):
     pass

@@ -5,6 +5,8 @@ from nexus.projects.project_dto import ProjectAuthCreationDTO
 
 from nexus.users.models import User
 
+from nexus.projects.exceptions import ProjectDoesNotExist
+
 
 class ProjectAuthUseCase:
 
@@ -21,7 +23,12 @@ class ProjectAuthUseCase:
 
         user, created = User.objects.get_or_create(email=user_email)
 
-        project = projects.get_project_by_uuid(project_uuid=project_uuid)
+        try:
+            project = projects.get_project_by_uuid(project_uuid=project_uuid)
+        except ProjectDoesNotExist as e:
+            raise e
+        except Exception as e:
+            raise e
 
         return ProjectAuthCreationDTO(
             user=user,
@@ -34,10 +41,10 @@ class ProjectAuthUseCase:
         consumer_msg: dict
     ) -> ProjectAuth:
 
-        auth_dto = self.auth_dto_from_dict(consumer_msg)
-        action = consumer_msg.get("action")  # create, update, delete
-
         try:
+            auth_dto = self.auth_dto_from_dict(consumer_msg)
+            action = consumer_msg.get("action")  # create, update, delete
+
             project_auth = ProjectAuth.objects.get(
                 project=auth_dto.project,
                 user=auth_dto.user
@@ -53,6 +60,9 @@ class ProjectAuthUseCase:
                 return project_auth
 
             return project_auth
+
+        except ProjectDoesNotExist as e:
+            raise e
 
         except ProjectAuth.DoesNotExist:
             if action != "delete":
