@@ -60,7 +60,9 @@ class TestUpdateContentBaseUseCase(TestCase):
     def test_update_contentbase_title(self):
         new_title = 'New Title'
         new_language = 'pt-br'
-        use_case = UpdateContentBaseUseCase()
+        use_case = UpdateContentBaseUseCase(
+            event_manager_notify=mock_event_manager_notify
+        )
         updated_contentbase = use_case.update_contentbase(
             contentbase_uuid=self.contentbase.uuid,
             title=new_title,
