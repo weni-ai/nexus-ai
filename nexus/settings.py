@@ -31,7 +31,12 @@ env = environ.Env(
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(lambda v: [s.strip() for s in v.split(",")], list("*")),
     CELERY_BROKER_URL=(str, "redis://localhost:6379/0"),
-    SENTENX_UPDATE_TASK_TOKEN=(str, "")
+    SENTENX_UPDATE_TASK_TOKEN=(str, ""),
+    APM_DISABLE_SEND=(bool, False),
+    APM_SERVICE_DEBUG=(bool, False),
+    APM_SERVICE_NAME=(str, ""),
+    APM_SECRET_TOKEN=(str, ""),
+    APM_SERVER_URL=(str, ""),
 )
 
 # Quick-start development settings - unsuitable for production
@@ -61,6 +66,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     'rest_framework',
     'drf_yasg',
+    'elasticapm.contrib.django',
     # apps
     'nexus.users',
     'nexus.db',
@@ -76,6 +82,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "elasticapm.contrib.django.middleware.TracingMiddleware",
+    "elasticapm.contrib.django.middleware.Catch404Middleware",
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -100,6 +108,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                "elasticapm.contrib.django.context_processors.rum_tracing",
             ],
         },
     },
@@ -334,3 +343,23 @@ if USE_SENTRY:
         integrations=[DjangoIntegration()],
         environment=env.str("ENVIRONMENT"),
     )
+
+
+# APM config
+
+ELASTIC_APM = {
+    "DISABLE_SEND": env.bool("APM_DISABLE_SEND"),
+    "DEBUG": env.bool("APM_SERVICE_DEBUG"),
+    "SERVICE_NAME": env.str("APM_SERVICE_NAME"),
+    "SECRET_TOKEN": env.str("APM_SECRET_TOKEN"),
+    "SERVER_URL": env.str("APM_SERVER_URL"),
+    "ENVIRONMENT": env.str("ENVIRONMENT"),
+    "DJANGO_TRANSACTION_NAME_FROM_ROUTE": True,
+    "PROCESSORS": [
+        "elasticapm.processors.sanitize_stacktrace_locals",
+        "elasticapm.processors.sanitize_http_request_cookies",
+        "elasticapm.processors.sanitize_http_headers",
+        "elasticapm.processors.sanitize_http_wsgi_env",
+        "elasticapm.processors.sanitize_http_request_body",
+    ],
+}
