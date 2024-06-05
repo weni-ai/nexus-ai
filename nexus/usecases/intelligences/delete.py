@@ -1,5 +1,6 @@
 from typing import List
 
+from nexus.events import event_manager
 from .get_by_uuid import (
     get_by_intelligence_uuid,
     get_by_contentbase_uuid,
@@ -9,8 +10,8 @@ from nexus.usecases import (
     users,
     orgs
 )
-from .publishers_msg import recent_activity_message
-from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
+from ...event_domain.recent_activity.msg_handler import recent_activity_message
+from nexus.event_domain.recent_activity.external_activities import intelligence_activity_message
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
 
@@ -52,6 +53,12 @@ class DeleteIntelligenceUseCase():
 
 class DeleteContentBaseUseCase():
 
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ):
+        self.event_manager_notify = event_manager_notify
+
     def delete_contentbase(
             self,
             contentbase_uuid: str,
@@ -66,6 +73,14 @@ class DeleteContentBaseUseCase():
             raise IntelligencePermissionDenied()
 
         contentbase = get_by_contentbase_uuid(contentbase_uuid)
+
+        event_manager.notify(
+            event="contentbase_activity",
+            contentbase=contentbase,
+            action_type="D",
+            user=user
+        )
+
         contentbase.delete()
         contentbase.intelligence.decrease_content_bases_count()
 

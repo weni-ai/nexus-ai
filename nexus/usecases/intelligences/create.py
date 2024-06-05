@@ -23,12 +23,10 @@ from nexus.usecases import (
     intelligences,
     projects,
 )
-from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
-from .publishers_msg import recent_activity_message
+from nexus.events import event_manager
 from nexus.orgs import permissions
 from nexus.projects.models import Project
 from .exceptions import IntelligencePermissionDenied
-from nexus.events import event_manager
 
 
 class CreateIntelligencesUseCase():
@@ -68,9 +66,9 @@ class CreateContentBaseUseCase():
 
     def __init__(
         self,
-        intelligence_activity_message=intelligence_activity_message
+        event_manager_notify=event_manager.notify,
     ) -> None:
-        self.intelligence_activity_message = intelligence_activity_message
+        self.event_manager_notify = event_manager_notify
 
     def create_contentbase(
             self,
@@ -104,12 +102,11 @@ class CreateContentBaseUseCase():
         ContentBaseAgent.objects.create(content_base=contentbase)
         intelligence.increase_content_bases_count()
 
-        recent_activity_message(
-            org=org,
-            user=user,
-            entity_name=contentbase.title,
-            action="CREATE",
-            intelligence_activity_message=self.intelligence_activity_message
+        self.event_manager_notify(
+            event="contentbase_activity",
+            content_base=contentbase,
+            action_type="C",
+            user=user
         )
 
         return contentbase
@@ -203,7 +200,7 @@ class CreateContentBaseLinkUseCase():
 
     def __init__(
         self,
-        event_manager_notify=event_manager.notify
+        event_manager_notify
     ):
         self.event_manager_notify = event_manager_notify
 

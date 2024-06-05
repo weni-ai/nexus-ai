@@ -48,6 +48,12 @@ class UpdateIntelligenceUseCase():
 
 class UpdateContentBaseUseCase():
 
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ):
+        self.event_manager_notify = event_manager_notify
+
     def update_contentbase(
             self,
             contentbase_uuid: str,
@@ -65,6 +71,7 @@ class UpdateContentBaseUseCase():
             raise IntelligencePermissionDenied()
 
         contentbase = get_by_contentbase_uuid(contentbase_uuid)
+        old_contentbase_data = contentbase
 
         update_fields = []
         if title:
@@ -80,6 +87,16 @@ class UpdateContentBaseUseCase():
             update_fields.append('description')
 
         contentbase.save(update_fields=update_fields)
+        new_contentbase_data = contentbase
+
+        self.event_manager_notify(
+            event="contentbase_activity",
+            contentbase=contentbase,
+            old_contentbase_data=old_contentbase_data,
+            new_contentbase_data=new_contentbase_data,
+            user=user,
+            action_type="U",
+        )
 
         return contentbase
 

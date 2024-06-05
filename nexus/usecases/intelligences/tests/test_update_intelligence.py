@@ -12,6 +12,7 @@ from .intelligence_factory import (
     LLMFactory
 )
 from nexus.usecases.intelligences.intelligences_dto import UpdateLLMDTO
+from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
 
 
 class TestUpdateIntelligenceUseCase(TestCase):
@@ -77,7 +78,9 @@ class TestUpdateContentBaseTextUseCase(TestCase):
 
     def test_update_contentbasetext_text(self):
         new_text = 'New Text'
-        use_case = UpdateContentBaseTextUseCase()
+        use_case = UpdateContentBaseTextUseCase(
+            event_manager_notify=mock_event_manager_notify
+        )
         updated_contentbasetext = use_case.update_contentbasetext(
             contentbasetext=self.contentbasetext,
             text=new_text,

@@ -14,7 +14,7 @@ from .intelligence_factory import (
     ContentBaseFactory,
     ContentBaseTextFactory
 )
-from nexus.usecases.event_driven.mocks import mock_recent_activity_message
+from nexus.event_domain.recent_activity.mocks import mock_recent_activity_message, mock_event_manager_notify
 
 
 class TestDeleteIntelligenceUseCase(TestCase):
@@ -38,7 +38,9 @@ class TestDeleteContentBaseUseCase(TestCase):
         self.contentbase = ContentBaseFactory()
 
     def test_delete_contentbase(self):
-        use_case = DeleteContentBaseUseCase()
+        use_case = DeleteContentBaseUseCase(
+            event_manager_notify=mock_event_manager_notify
+        )
         use_case.delete_contentbase(
             contentbase_uuid=self.contentbase.uuid,
             user_email=self.contentbase.created_by.email

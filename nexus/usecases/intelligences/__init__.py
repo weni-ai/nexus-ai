@@ -57,6 +57,6 @@ from .intelligences_dto import (
     LLMDTO,
     UpdateLLMDTO
 )
-from .publishers_msg import (
+from ...event_domain.recent_activity.msg_handler import (
     recent_activity_message
 )
