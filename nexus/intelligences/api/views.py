@@ -10,7 +10,6 @@ from rest_framework.permissions import IsAuthenticated
 
 from nexus.events import event_manager
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
-from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
 from .serializers import (
     IntelligenceSerializer,
     ContentBaseSerializer,
@@ -96,11 +95,10 @@ class IntelligencesViewset(
         self,
         request,
         org_uuid=str,
-        intelligence_activity_message=intelligence_activity_message,
     ):
         try:
             user_email = request.user.email
-            use_case = intelligences.CreateIntelligencesUseCase(intelligence_activity_message)
+            use_case = intelligences.CreateIntelligencesUseCase()
 
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -297,13 +295,10 @@ class ContentBaseViewset(
         self,
         request,
         intelligence_uuid=str,
-        intelligence_activity_message=intelligence_activity_message
     ):
         try:
             user_email = request.user.email
-            use_case = intelligences.CreateContentBaseUseCase(
-                intelligence_activity_message
-            )
+            use_case = intelligences.CreateContentBaseUseCase()
 
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -595,15 +590,6 @@ class ContentBaseLinkViewset(ModelViewSet):
     serializer_class = ContentBaseLinkSerializer
     lookup_url_kwarg = "contentbaselink_uuid"
 
-    def __init__(
-        self,
-        event_manager_notify=event_manager.notify,
-        *args,
-        **kwargs
-    ):
-        self.event_manager_notify = event_manager_notify
-        super().__init__(*args, **kwargs)
-
     def list(self, request, *args, **kwargs):
         try:
             return super().list(request, *args, **kwargs)
@@ -630,8 +616,7 @@ class ContentBaseLinkViewset(ModelViewSet):
                 user_email=user_email,
                 content_base_uuid=str(content_base.uuid)
             )
-            content_base_link = intelligences.CreateContentBaseLinkUseCase(
-            ).create_content_base_link(link_dto)
+            content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
 
             send_link.delay(
                 link=link,

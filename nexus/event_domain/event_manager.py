@@ -1,4 +1,4 @@
-from .event_observer import EventObserver
+from nexus.event_domain.event_observer import EventObserver
 from typing import List, Dict, Union
 
 

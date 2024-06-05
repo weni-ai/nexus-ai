@@ -1,8 +1,8 @@
-from nexus.usecases.logs.create import create_recent_activity
-from nexus.usecases.logs.logs_dto import CreateRecentActivityDTO
+from nexus.event_domain.recent_activity.create import create_recent_activity
+from nexus.event_domain.recent_activity.recent_activities_dto import CreateRecentActivityDTO
 from nexus.event_domain.event_observer import EventObserver
-from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
-from nexus.usecases.intelligences.publishers_msg import recent_activity_message
+from nexus.event_domain.recent_activity.external_activities import intelligence_activity_message
+from nexus.event_domain.recent_activity.msg_handler import recent_activity_message
 from nexus.intelligences.models import IntegratedIntelligence
 
 from django.forms.models import model_to_dict
@@ -209,8 +209,6 @@ class ContentBaseLinkObserver(EventObserver):
                 )
                 create_recent_activity(content_base_link, dto=dto)
 
-        pass
-
 
 class ContentBaseTextObserver(EventObserver):
 
@@ -258,6 +256,45 @@ class ContentBaseTextObserver(EventObserver):
 
 
 class ContentBaseObserver(EventObserver):
-    # TODO: Implement this observer to handle the methods: Create, Update and delete
-    def perform(self):
-        pass
+
+    def __init__(
+        self,
+        intelligence_activity_message=intelligence_activity_message,
+    ) -> None:
+        self.intelligence_activity_message = intelligence_activity_message
+
+    def perform(
+        self,
+        contentbase,
+        user,
+        action_type: str,
+        **kwargs
+    ):
+        action_details = kwargs.get('action_details', {})
+
+        if action_type == "U":
+            old_model_data = kwargs.get('old_contentbase_data')
+            new_model_data = kwargs.get('new_contentbase_data')
+            action_details = _update_comparison_fields(old_model_data, new_model_data)
+
+        if not contentbase.is_router:
+
+            org = contentbase.intelligence.org
+            project_list = org.projects.all()
+            for project in project_list:
+                dto = CreateRecentActivityDTO(
+                    action_type=action_type,
+                    project=project,
+                    created_by=user,
+                    intelligence=contentbase.intelligence,
+                    action_details=action_details
+                )
+                create_recent_activity(contentbase, dto=dto)
+
+            recent_activity_message(
+                org=org,
+                user=user,
+                entity_name=contentbase.title,
+                action=action_type,
+                intelligence_activity_message=self.intelligence_activity_message
+            )
