@@ -342,30 +342,30 @@ class TestContentBaseLinkViewset(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data.get("status"), TaskManager.STATUS_WAITING)
 
-    # def test_create(self):
-    #     data = {
-    #         'link': 'https://example.com/',
-    #     }
-    #     request = self.factory.post(self.url, data)
+    def test_create(self):
+        data = {
+            'link': 'https://example.com/',
+        }
+        request = self.factory.post(self.url, data)
 
-    #     force_authenticate(request, user=self.user)
+        force_authenticate(request, user=self.user)
 
-    #     response = ContentBaseLinkViewset.as_view({'post': 'create'})(
-    #         request,
-    #         content_base_uuid=str(self.content_base.uuid)
-    #     )
-    #     obj_uuid = response.data.get("uuid")
-    #     content_base_task_manager = ContentBaseLinkTaskManager.objects.get(content_base_link__uuid=obj_uuid)
+        response = ContentBaseLinkViewset.as_view({'post': 'create'})(
+            request,
+            content_base_uuid=str(self.content_base.uuid)
+        )
+        obj_uuid = response.data.get("uuid")
+        content_base_task_manager = ContentBaseLinkTaskManager.objects.get(content_base_link__uuid=obj_uuid)
 
-    #     self.sentenx_indexer_update_file(
-    #         task_uuid=str(content_base_task_manager.uuid),
-    #         status=True,
-    #         file_type="link"
-    #     )
-    #     self.assertEqual(response.status_code, 201)
+        self.sentenx_indexer_update_file(
+            task_uuid=str(content_base_task_manager.uuid),
+            status=True,
+            file_type="link"
+        )
+        self.assertEqual(response.status_code, 201)
 
-    #     content_base_task_manager = ContentBaseLinkTaskManager.objects.get(content_base_link__uuid=obj_uuid)
-    #     self.assertEqual(content_base_task_manager.status, TaskManager.STATUS_SUCCESS)
+        content_base_task_manager = ContentBaseLinkTaskManager.objects.get(content_base_link__uuid=obj_uuid)
+        self.assertEqual(content_base_task_manager.status, TaskManager.STATUS_SUCCESS)
 
 
 class TestContentBasePersonalizationViewSet(TestCase):

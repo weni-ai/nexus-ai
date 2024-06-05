@@ -200,7 +200,7 @@ class CreateContentBaseLinkUseCase():
 
     def __init__(
         self,
-        event_manager_notify
+        event_manager_notify=event_manager.notify
     ):
         self.event_manager_notify = event_manager_notify
 
