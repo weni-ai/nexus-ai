@@ -104,7 +104,7 @@ class CreateContentBaseUseCase():
 
         self.event_manager_notify(
             event="contentbase_activity",
-            content_base=contentbase,
+            contentbase=contentbase,
             action_type="C",
             user=user
         )

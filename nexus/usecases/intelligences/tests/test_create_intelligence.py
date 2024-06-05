@@ -17,7 +17,7 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseDTO, ContentBaseTextDTO, LLMDTO
 
-from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify, mock_recent_activity_message
+from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
 
 
 class TestListIntelligenceUseCase(TestCase):

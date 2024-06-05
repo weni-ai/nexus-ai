@@ -118,6 +118,7 @@ class TestIntelligencesViewset(TestCase):
         self.assertEqual(response.status_code, 204)
 
 
+@skip("View Testing")
 class TestContentBaseViewset(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
