@@ -23,27 +23,32 @@ from nexus.intelligences.api.serializers import (
     ContentBaseAgentSerializer,
     ContentBasePersonalizationSerializer
 )
-from nexus.usecases.users.tests.user_factory import UserFactory
 
 from nexus.task_managers.models import TaskManager
 from nexus.intelligences.models import ContentBaseLogs
 
 
 class MockRequest:
-    data = {"instructions": []}
+    def __init__(self, user=None):
+        self.data = {"instructions": []}
+        self.user = user
 
 
 class IntelligencesSerializersTestCase(TestCase):
     def setUp(self) -> None:
+        self.llm = LLMFactory()
+        integrated_intelligence = self.llm.integrated_intelligence
+        self.user = integrated_intelligence.created_by
+
+        self.content_base = ContentBaseFactory(
+            created_by=self.user,
+            intelligence=integrated_intelligence.intelligence
+        )
         self.intelligence = IntelligenceFactory()
-        self.content_base = ContentBaseFactory()
         self.content_base_text = ContentBaseTextFactory()
         self.content_base_file = ContentBaseFileFactory()
         self.content_base_link = ContentBaseLinkFactory()
         self.content_base_instruction = ContentBaseInstructionFactory()
-        self.llm = LLMFactory()
-
-        self.user = UserFactory()
 
     def test_intelligence_serializer(self):
         serializer = IntelligenceSerializer(self.intelligence)
@@ -192,7 +197,9 @@ class IntelligencesSerializersTestCase(TestCase):
             self.content_base,
             data=data,
             partial=True,
-            context={"request": MockRequest()}
+            context={"request": MockRequest(
+                user=self.user
+            )}
         )
         instance = serializer.update(self.content_base, validated_data=data)
         self.assertEquals(instance.agent.name, name)
@@ -209,7 +216,9 @@ class IntelligencesSerializersTestCase(TestCase):
                 "goal": "Updated goal",
             }
         }
-        request = MockRequest()
+        request = MockRequest(
+            user=self.user
+        )
         request.data.update(
             {
                 "instructions": [

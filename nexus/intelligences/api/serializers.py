@@ -1,4 +1,6 @@
 from rest_framework import serializers
+
+from nexus.events import event_manager
 from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
@@ -138,16 +140,28 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         agent_data = validated_data.get("agent")
+        instructions_data = self.context.get('request').data.get('instructions')
+
         if agent_data:
             try:
                 agent = instance.agent
+                old_agent_data = agent
 
                 agent.name = agent_data.get("name", agent.name)
                 agent.role = agent_data.get("role", agent.role)
                 agent.personality = agent_data.get("personality", agent.personality)
                 agent.goal = agent_data.get("goal", agent.goal)
                 agent.save()
+                new_agent_data = agent
 
+                event_manager.notify(
+                    event="contentbase_agent_activity",
+                    content_base_agent=agent,
+                    action_type="U",
+                    old_agent_data=old_agent_data,
+                    new_agent_data=new_agent_data,
+                    user=self.context.get('request').user
+                )
             except ContentBaseAgent.DoesNotExist:
                 ContentBaseAgent.objects.create(
                     name=agent_data.get("name"),
@@ -157,16 +171,28 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                     content_base=instance,
                 )
 
-        instructions_data = self.context.get('request').data.get('instructions')
         if instructions_data:
             for instruction_data in instructions_data:
                 serializer = ContentBaseInstructionSerializer(data=instruction_data, partial=True)
                 if serializer.is_valid():
                     if instruction_data.get('id'):
+
                         instruction = instance.instructions.get(id=instruction_data.get('id'))
+                        old_instruction_data = instruction
+
                         instruction.instruction = instruction_data.get('instruction')
                         instruction.save()
                         instruction.refresh_from_db()
+
+                        new_instruction_data = instruction
+                        event_manager.notify(
+                            event="contentbase_instruction_activity",
+                            content_base_instruction=instruction,
+                            action_type="U",
+                            old_instruction_data=old_instruction_data,
+                            new_instruction_data=new_instruction_data,
+                            user=self.context.get('request').user
+                        )
                     else:
                         instance.instructions.create(instruction=instruction_data.get('instruction'))
         instance.refresh_from_db()

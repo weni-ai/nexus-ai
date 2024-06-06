@@ -1,8 +1,8 @@
 from nexus.orgs.models import Org
 from nexus.users.models import User
 
-from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
-from nexus.usecases.event_driven.publishers_dto import RecentActivitiesDTO
+from nexus.event_domain.recent_activity.external_activities import intelligence_activity_message
+from nexus.event_domain.recent_activity.recent_activities_dto import RecentActivitiesDTO
 
 
 def recent_activity_message(

@@ -1,6 +1,6 @@
 from nexus.event_driven.publisher.rabbitmq_publisher import RabbitMQPublisher
 
-from .publishers_dto import RecentActivitiesDTO
+from nexus.event_domain.recent_activity.publishers_dto import RecentActivitiesDTO
 
 
 def intelligence_activity_message(

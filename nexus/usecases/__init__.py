@@ -3,5 +3,4 @@ from nexus.usecases import (
     orgs,
     users,
     projects,
-    event_driven
 )

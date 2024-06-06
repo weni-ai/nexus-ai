@@ -7,7 +7,7 @@ from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.create import ProjectAuthUseCase
 from nexus.usecases.users.tests.user_factory import UserFactory
-from nexus.usecases.event_driven.mocks import mock_recent_activity_message
+from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
 
 
 class TestCreateProject(TestCase):
@@ -26,7 +26,7 @@ class TestCreateProject(TestCase):
 
     def test_create_project(self):
         project = ProjectsUseCase(
-            intelligence_activity_message=mock_recent_activity_message
+            event_manager_notify=mock_event_manager_notify,
         ).create_project(
             project_dto=self.project_dto,
             user_email=self.user.email
