@@ -1,5 +1,6 @@
 from typing import List
 
+from nexus.events import event_manager
 from .get_by_uuid import (
     get_by_intelligence_uuid,
     get_by_contentbase_uuid,
@@ -9,8 +10,7 @@ from nexus.usecases import (
     users,
     orgs
 )
-from .publishers_msg import recent_activity_message
-from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
+from ...event_domain.recent_activity.msg_handler import recent_activity_message
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
 
@@ -19,9 +19,9 @@ class DeleteIntelligenceUseCase():
 
     def __init__(
         self,
-        intelligence_activity_message=intelligence_activity_message
+        recent_activity_message=recent_activity_message
     ) -> None:
-        self.intelligence_activity_message = intelligence_activity_message
+        self.recent_activity_message = recent_activity_message
 
     def delete_intelligences(
             self,
@@ -40,17 +40,22 @@ class DeleteIntelligenceUseCase():
         intelligence_name = intelligence.name
         intelligence.delete()
 
-        recent_activity_message(
+        self.recent_activity_message(
             org=org,
             user=user,
             entity_name=intelligence_name,
             action="DELETE",
-            intelligence_activity_message=self.intelligence_activity_message
         )
         return True
 
 
 class DeleteContentBaseUseCase():
+
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ):
+        self.event_manager_notify = event_manager_notify
 
     def delete_contentbase(
             self,
@@ -66,6 +71,14 @@ class DeleteContentBaseUseCase():
             raise IntelligencePermissionDenied()
 
         contentbase = get_by_contentbase_uuid(contentbase_uuid)
+
+        self.event_manager_notify(
+            event="contentbase_activity",
+            contentbase=contentbase,
+            action_type="D",
+            user=user
+        )
+
         contentbase.delete()
         contentbase.intelligence.decrease_content_bases_count()
 

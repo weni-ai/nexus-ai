@@ -23,8 +23,7 @@ from nexus.usecases import (
     intelligences,
     projects,
 )
-from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
-from .publishers_msg import recent_activity_message
+from nexus.events import event_manager
 from nexus.orgs import permissions
 from nexus.projects.models import Project
 from .exceptions import IntelligencePermissionDenied
@@ -34,9 +33,9 @@ class CreateIntelligencesUseCase():
 
     def __init__(
         self,
-        intelligence_activity_message=intelligence_activity_message
+        event_manager_notify=event_manager.notify
     ) -> None:
-        self.intelligence_activity_message = intelligence_activity_message
+        self.event_manager_notify = event_manager_notify
 
     def create_intelligences(
             self,
@@ -56,14 +55,10 @@ class CreateIntelligencesUseCase():
             name=name, description=description,
             org=org, created_by=user
         )
-        recent_activity_message(
-            org=org,
-            user=user,
-            entity_name=intelligence.name,
-            action="CREATE",
-            intelligence_activity_message=self.intelligence_activity_message
+        self.event_manager_notify(
+            event="intelligence_create_activity",
+            intelligence=intelligence
         )
-
         return intelligence
 
 
@@ -71,9 +66,9 @@ class CreateContentBaseUseCase():
 
     def __init__(
         self,
-        intelligence_activity_message=intelligence_activity_message
+        event_manager_notify=event_manager.notify,
     ) -> None:
-        self.intelligence_activity_message = intelligence_activity_message
+        self.event_manager_notify = event_manager_notify
 
     def create_contentbase(
             self,
@@ -107,12 +102,11 @@ class CreateContentBaseUseCase():
         ContentBaseAgent.objects.create(content_base=contentbase)
         intelligence.increase_content_bases_count()
 
-        recent_activity_message(
-            org=org,
-            user=user,
-            entity_name=contentbase.title,
-            action="CREATE",
-            intelligence_activity_message=self.intelligence_activity_message
+        self.event_manager_notify(
+            event="contentbase_activity",
+            contentbase=contentbase,
+            action_type="C",
+            user=user
         )
 
         return contentbase
@@ -149,7 +143,17 @@ class CreateContentBaseTextUseCase():
 
 class CreateContentBaseFileUseCase():
 
-    def create_content_base_file(self, content_base_file: ContentBaseFileDTO) -> ContentBaseFile:
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ) -> None:
+        self.event_manager_notify = event_manager_notify
+
+    def create_content_base_file(
+        self,
+        content_base_file: ContentBaseFileDTO
+    ) -> ContentBaseFile:
+
         user = users.get_by_email(content_base_file.user_email)
         content_base = intelligences.get_by_contentbase_uuid(contentbase_uuid=content_base_file.content_base_uuid)
         content_base_file = ContentBaseFile.objects.create(
@@ -158,6 +162,12 @@ class CreateContentBaseFileUseCase():
             extension_file=content_base_file.extension_file,
             content_base=content_base,
             created_by=user
+        )
+        self.event_manager_notify(
+            event="contentbase_file_activity",
+            content_base_file=content_base_file,
+            action_type="C",
+            user=user
         )
         return content_base_file
 
@@ -187,6 +197,13 @@ def create_integrated_intelligence(
 
 
 class CreateContentBaseLinkUseCase():
+
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ):
+        self.event_manager_notify = event_manager_notify
+
     def create_content_base_link(self, content_base_link: ContentBaseLinkDTO) -> ContentBaseLink:
         user = users.get_by_email(content_base_link.user_email)
         content_base = intelligences.get_by_contentbase_uuid(contentbase_uuid=content_base_link.content_base_uuid)
@@ -195,6 +212,14 @@ class CreateContentBaseLinkUseCase():
             content_base=content_base,
             created_by=user
         )
+
+        self.event_manager_notify(
+            event="contentbase_link_activity",
+            content_base_link=content_base_link,
+            action_type="C",
+            user=user
+        )
+
         return content_base_link
 
 

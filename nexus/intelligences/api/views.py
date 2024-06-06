@@ -7,8 +7,8 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+from nexus.events import event_manager
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
-from nexus.usecases.event_driven.recent_activities import intelligence_activity_message
 from .serializers import (
     IntelligenceSerializer,
     ContentBaseSerializer,
@@ -88,11 +88,10 @@ class IntelligencesViewset(
         self,
         request,
         org_uuid=str,
-        intelligence_activity_message=intelligence_activity_message,
     ):
         try:
             user_email = request.user.email
-            use_case = intelligences.CreateIntelligencesUseCase(intelligence_activity_message)
+            use_case = intelligences.CreateIntelligencesUseCase()
 
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -289,13 +288,10 @@ class ContentBaseViewset(
         self,
         request,
         intelligence_uuid=str,
-        intelligence_activity_message=intelligence_activity_message
     ):
         try:
             user_email = request.user.email
-            use_case = intelligences.CreateContentBaseUseCase(
-                intelligence_activity_message
-            )
+            use_case = intelligences.CreateContentBaseUseCase()
 
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -456,7 +452,7 @@ class ContentBaseTextViewset(
                 created_by_email=content_base.created_by.email,
             )
             content_base_text = intelligences.UpdateContentBaseTextUseCase().update_contentbasetext(
-                contentbasetext_uuid=content_base_text_uuid,
+                contentbasetext=content_base_text,
                 user_email=user_email,
                 text=text
             )
@@ -566,6 +562,12 @@ class ContentBaseFileViewset(ModelViewSet):
             user_email=user_email
         )
 
+        event_manager.notify(
+            event="contentbase_file_activity",
+            action_type="D",
+            content_base_file=content_base_file,
+        )
+
         sentenx_file_database = SentenXFileDataBase()
         sentenx_file_database.delete(
             content_base_uuid=str(content_base_file.content_base.uuid),
@@ -607,8 +609,7 @@ class ContentBaseLinkViewset(ModelViewSet):
                 user_email=user_email,
                 content_base_uuid=str(content_base.uuid)
             )
-            content_base_link = intelligences.CreateContentBaseLinkUseCase(
-            ).create_content_base_link(link_dto)
+            content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
 
             send_link.delay(
                 link=link,
@@ -623,7 +624,8 @@ class ContentBaseLinkViewset(ModelViewSet):
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def destroy(self, request, *args, **kwargs):
-        user_email: str = self.request.user.email
+        user = self.request.user
+        user_email: str = user.email
         contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
 
         use_case = intelligences.RetrieveContentBaseLinkUseCase()
@@ -637,6 +639,13 @@ class ContentBaseLinkViewset(ModelViewSet):
             content_base_uuid=str(content_base_file.content_base.uuid),
             content_base_file_uuid=str(content_base_file.uuid),
             filename=content_base_file.link
+        )
+
+        self.event_manager_notify(
+            event="contentbase_link_activity",
+            action_type="D",
+            content_base_link=content_base_file,
+            user=user
         )
 
         return super().destroy(request, *args, **kwargs)
@@ -729,7 +738,8 @@ class LLMViewset(views.APIView):
             setup=request.data.get("setup"),
             advanced_options=request.data.get("advanced_options")
         )
-        updated_llm = intelligences.update_llm_by_project(llm_update_dto)
+        usecase = intelligences.UpdateLLMUseCase()
+        updated_llm = usecase.update_llm_by_project(llm_update_dto)
 
         return Response(
             data=LLMConfigSerializer(updated_llm).data,
@@ -775,8 +785,8 @@ class LLMDefaultViewset(views.APIView):
             },
             advanced_options={}
         )
-
-        updated_llm = intelligences.update_llm_by_project(llm_update_dto)
+        usecase = intelligences.UpdateLLMUseCase()
+        updated_llm = usecase.update_llm_by_project(llm_update_dto)
 
         return Response(
             data=LLMConfigSerializer(updated_llm).data,

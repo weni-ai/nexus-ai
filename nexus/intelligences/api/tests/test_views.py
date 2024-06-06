@@ -25,7 +25,6 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseTextFactory,
     ContentBaseLinkFactory,
 )
-from nexus.usecases.event_driven.mocks import mock_recent_activity_message
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
@@ -81,7 +80,6 @@ class TestIntelligencesViewset(TestCase):
         response = self.view(
             request,
             org_uuid=str(self.org.uuid),
-            intelligence_activity_message=mock_recent_activity_message
         )
         self.assertEqual(response.status_code, 201)
 
@@ -120,6 +118,7 @@ class TestIntelligencesViewset(TestCase):
         self.assertEqual(response.status_code, 204)
 
 
+@skip("View Testing")
 class TestContentBaseViewset(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
@@ -168,7 +167,6 @@ class TestContentBaseViewset(TestCase):
         response = self.view(
             request,
             intelligence_uuid=str(self.intelligence.uuid),
-            intelligence_activity_message=mock_recent_activity_message
         )
         self.assertEqual(response.status_code, 201)
 

@@ -21,7 +21,7 @@ from .update import (
     UpdateContentBaseUseCase,
     UpdateContentBaseTextUseCase,
     # UpdateContentBaseFileUseCase,
-    update_llm_by_project,
+    UpdateLLMUseCase,
 )
 from .delete import (
     DeleteIntelligenceUseCase,
@@ -57,6 +57,6 @@ from .intelligences_dto import (
     LLMDTO,
     UpdateLLMDTO
 )
-from .publishers_msg import (
+from ...event_domain.recent_activity.msg_handler import (
     recent_activity_message
 )

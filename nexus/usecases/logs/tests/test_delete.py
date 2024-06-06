@@ -55,7 +55,7 @@ class DeleteMessageLogsTestCase(TestCase):
 class DeleteOldActivitiesTestCase(TestCase):
     def setUp(self) -> None:
         RecentActivitiesFactory()
-        with freeze_time(str(pendulum.now().subtract(months=4))):
+        with freeze_time(str(pendulum.now('UTC').subtract(months=4))):
             RecentActivitiesFactory.create_batch(
                 size=10,
             )

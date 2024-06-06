@@ -3,7 +3,7 @@ from ..update import (
     UpdateIntelligenceUseCase,
     UpdateContentBaseUseCase,
     UpdateContentBaseTextUseCase,
-    update_llm_by_project
+    UpdateLLMUseCase
 )
 from .intelligence_factory import (
     IntelligenceFactory,
@@ -12,6 +12,7 @@ from .intelligence_factory import (
     LLMFactory
 )
 from nexus.usecases.intelligences.intelligences_dto import UpdateLLMDTO
+from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
 
 
 class TestUpdateIntelligenceUseCase(TestCase):
@@ -59,7 +60,9 @@ class TestUpdateContentBaseUseCase(TestCase):
     def test_update_contentbase_title(self):
         new_title = 'New Title'
         new_language = 'pt-br'
-        use_case = UpdateContentBaseUseCase()
+        use_case = UpdateContentBaseUseCase(
+            event_manager_notify=mock_event_manager_notify
+        )
         updated_contentbase = use_case.update_contentbase(
             contentbase_uuid=self.contentbase.uuid,
             title=new_title,
@@ -77,9 +80,11 @@ class TestUpdateContentBaseTextUseCase(TestCase):
 
     def test_update_contentbasetext_text(self):
         new_text = 'New Text'
-        use_case = UpdateContentBaseTextUseCase()
+        use_case = UpdateContentBaseTextUseCase(
+            event_manager_notify=mock_event_manager_notify
+        )
         updated_contentbasetext = use_case.update_contentbasetext(
-            contentbasetext_uuid=self.contentbasetext.uuid,
+            contentbasetext=self.contentbasetext,
             text=new_text,
             user_email=self.contentbasetext.created_by.email
         )
@@ -108,9 +113,9 @@ class TestUpdateLLM(TestCase):
             setup=setup,
             advanced_options=advanced_options
         )
-
-        updated_llm = update_llm_by_project(
-            update_dto
+        usecase = UpdateLLMUseCase()
+        updated_llm = usecase.update_llm_by_project(
+            update_llm_dto=update_dto
         )
 
         self.assertEqual(updated_llm.setup, setup)

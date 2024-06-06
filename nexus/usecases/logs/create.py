@@ -1,4 +1,7 @@
-from nexus.logs.models import Message, MessageLog
+from nexus.logs.models import (
+    Message,
+    MessageLog,
+)
 
 
 class CreateLogUsecase:
