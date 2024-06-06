@@ -190,3 +190,9 @@ def trulens_evaluation(log_id: str):
 def log_cleanup_routine():
     usecase = DeleteLogUsecase()
     usecase.delete_logs_routine(months=1)
+
+
+@app.task(name='delete_old_activities')
+def delete_old_activities():
+    usecase = DeleteLogUsecase()
+    usecase.delete_old_activities(months=3)
