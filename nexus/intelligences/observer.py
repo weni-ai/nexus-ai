@@ -88,7 +88,8 @@ class ContentBaseFileObserver(EventObserver):
         intelligence = content_base.intelligence
 
         if content_base.is_router:
-            project = intelligence.integrated_intelligence.project
+            integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
+            project = integrated_intelligence.project
             dto = CreateRecentActivityDTO(
                 action_type=action_type,
                 project=project,
@@ -186,7 +187,7 @@ class ContentBaseLinkObserver(EventObserver):
         action_details = kwargs.get('action_details', {})
 
         if content_base.is_router:
-            integrated_intelligence = intelligence.integrated_intelligence
+            integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
             project = integrated_intelligence.project
             dto = CreateRecentActivityDTO(
                 action_type=action_type,
