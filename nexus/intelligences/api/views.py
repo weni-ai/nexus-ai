@@ -806,6 +806,7 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         try:
+            user_email = ""
             authorization_header = request.headers.get('Authorization', "Bearer unauthorized")
             is_super_user = permissions.is_super_user(authorization_header)
 
