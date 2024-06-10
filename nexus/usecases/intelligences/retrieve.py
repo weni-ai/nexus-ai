@@ -56,16 +56,18 @@ class RetrieveContentBaseUseCase():
     def get_default_by_project(
             self,
             project_uuid: str,
-            user_email: str
+            user_email: str,
+            is_superuser: bool = False,
     ):
         user = users.get_by_email(user_email)
         project = projects.get_project_by_uuid(project_uuid)
 
-        has_project_permission(
-            user=user,
-            project=project,
-            method='GET'
-        )
+        if not is_superuser:
+            has_project_permission(
+                user=user,
+                project=project,
+                method='GET'
+            )
 
         return get_default_content_base_by_project(project_uuid)
 

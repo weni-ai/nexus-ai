@@ -805,8 +805,11 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         try:
+            authorization_header = request.headers.get('Authorization', "Bearer unauthorized")
+            is_super_user = permissions.is_super_user(authorization_header)
+
             project_uuid = kwargs.get('project_uuid')
-            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, request.user.email)
+            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, request.user.email, is_super_user)
             data = ContentBasePersonalizationSerializer(content_base, context={"request": request}).data
             return Response(data=data, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
