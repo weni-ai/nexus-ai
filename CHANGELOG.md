@@ -1,3 +1,7 @@
+# 1.2.1
+## *Fix*
+    - Missing user instance on content base observer
+
 # 1.2.0
 ## *Add*
     - Create APM service to track the repository endpoints overall performance
