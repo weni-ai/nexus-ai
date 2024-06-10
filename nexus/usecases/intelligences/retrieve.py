@@ -59,10 +59,10 @@ class RetrieveContentBaseUseCase():
             user_email: str,
             is_superuser: bool = False,
     ):
-        user = users.get_by_email(user_email)
         project = projects.get_project_by_uuid(project_uuid)
 
         if not is_superuser:
+            user = users.get_by_email(user_email)
             has_project_permission(
                 user=user,
                 project=project,

@@ -797,6 +797,7 @@ class LLMDefaultViewset(views.APIView):
 
 class ContentBasePersonalizationViewSet(ModelViewSet):
     serializer_class = ContentBasePersonalizationSerializer
+    authentication_classes = []
 
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
@@ -808,8 +809,11 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
             authorization_header = request.headers.get('Authorization', "Bearer unauthorized")
             is_super_user = permissions.is_super_user(authorization_header)
 
+            if not is_super_user:
+                user_email = request.user.email
+
             project_uuid = kwargs.get('project_uuid')
-            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, request.user.email, is_super_user)
+            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, user_email, is_super_user)
             data = ContentBasePersonalizationSerializer(content_base, context={"request": request}).data
             return Response(data=data, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
