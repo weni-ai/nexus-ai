@@ -566,6 +566,7 @@ class ContentBaseFileViewset(ModelViewSet):
             event="contentbase_file_activity",
             action_type="D",
             content_base_file=content_base_file,
+            user=self.request.user
         )
 
         sentenx_file_database = SentenXFileDataBase()
@@ -641,7 +642,7 @@ class ContentBaseLinkViewset(ModelViewSet):
             filename=content_base_file.link
         )
 
-        self.event_manager_notify(
+        event_manager.notify(
             event="contentbase_link_activity",
             action_type="D",
             content_base_link=content_base_file,
