@@ -45,6 +45,6 @@ class ExternalTokenAuthentication(authentication.BaseAuthentication):
         is_super_user = permissions.is_super_user(authorization_header)
 
         if not is_super_user:
-            raise exceptions.AuthenticationFailed('Invalid Token')
+            return None
 
         return (is_super_user, None)
