@@ -213,7 +213,7 @@ class QuickTestAIAPIView(views.APIView):
 
                 intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
                     search_file_database=SentenXFileDataBase(),
-                    generative_ai_database=generative_ai_database(),
+                    generative_ai_database=generative_ai_database,
                     testing=True,
                 )
 
