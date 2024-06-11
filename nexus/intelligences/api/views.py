@@ -184,7 +184,7 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
 
         intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
             search_file_database=SentenXFileDataBase(),
-            generative_ai_database=generative_ai_database()
+            generative_ai_database=generative_ai_database
         )
         data = intelligence_usecase.search(content_base_uuid=content_base_uuid, text=data.get("text"), language=data.get("language"))
         if data.get("answers"):

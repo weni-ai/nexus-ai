@@ -363,3 +363,8 @@ ELASTIC_APM = {
         "elasticapm.processors.sanitize_http_request_body",
     ],
 }
+
+# TODO: temporary solution, undo later
+
+IRC_UUID = env.str("IRC_UUID")
+IRC_TOKEN = env.str("IRC_TOKEN")

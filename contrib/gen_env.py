@@ -88,6 +88,8 @@ def generate_env():
         "USE_EDA": True,
         "USE_SENTRY": False,
         "SENTRY_URL": "",
+        "IRC_UUID": "",
+        "IRC_TOKEN": "",
     }
 
     with open(env_path, "w") as configfile:
