@@ -34,6 +34,7 @@ from nexus.task_managers.tasks import upload_text_file, send_link
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
+from nexus.authentication import AUTHENTICATION_CLASSES
 
 
 class IntelligencesViewset(
@@ -797,7 +798,7 @@ class LLMDefaultViewset(views.APIView):
 
 class ContentBasePersonalizationViewSet(ModelViewSet):
     serializer_class = ContentBasePersonalizationSerializer
-    authentication_classes = []
+    authentication_classes = AUTHENTICATION_CLASSES
 
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
