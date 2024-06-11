@@ -47,7 +47,9 @@ class ChatGPTDatabase(GPTDatabase):
             contexts,
             self.default_agent,
             question,
-            self.default_llm_config)
+            self.default_llm_config,
+            []
+        )
 
         text_answer = None
         text_answer = gpt_response.get("answers")[0].get("text")
