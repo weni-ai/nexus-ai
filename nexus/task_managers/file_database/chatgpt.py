@@ -19,7 +19,7 @@ class ChatGPTDatabase(GPTDatabase):
     def __init__(self, api_key: str = settings.OPENAI_API_KEY):
         self.api_key = api_key
         self.chatgpt_model = settings.CHATGPT_MODEL
-        self.client = ChatGPTClient(api_key=self.api_key).get_client()
+        self.client = ChatGPTClient(api_key=self.api_key)
         self.default_instructions = settings.DEFAULT_INSTRUCTIONS
         self.default_agent = dict(
             name=settings.DEFAULT_AGENT_NAME,
@@ -42,7 +42,7 @@ class ChatGPTDatabase(GPTDatabase):
     ):
         self.default_instructions.append(f"Responda sempre em {self.language_codes.get(language, 'português')}")
 
-        gpt_response = self.default_wenigpt_client.request_gpt(
+        gpt_response = self.client.request_gpt(
             self.default_instructions,
             contexts,
             self.default_agent,
