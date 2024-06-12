@@ -27,7 +27,7 @@ class ChatGPTDatabase(GPTDatabase):
             goal=settings.DEFAULT_AGENT_GOAL,
             personality=settings.DEFAULT_AGENT_PERSONALITY
         )
-        self.default_llm_config = LLMSetupDTO(model="chatgpt", model_version="gpt-4o", temperature=0.1, top_p=0.1, token=self.api_key)
+        self.default_llm_config = LLMSetupDTO(model="chatgpt", model_version="gpt-3.5-turbo", temperature=0.1, top_p=0.1, token=self.api_key)
 
     def get_client(self):
         return OpenAI(api_key=self.api_key)
