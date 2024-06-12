@@ -27,7 +27,7 @@ class ChatGPTDatabase(GPTDatabase):
             goal=settings.DEFAULT_AGENT_GOAL,
             personality=settings.DEFAULT_AGENT_PERSONALITY
         )
-        self.default_llm_config = LLMSetupDTO(model="chatgpt", model_version="gpt-3.5-turbo", temperature=0.1, top_p=0.1, token=self.api_key)
+        self.default_llm_config = LLMSetupDTO(model="chatgpt", model_version=settings.CHATGPT_MODEL, temperature=0.1, top_p=0.1, token=self.api_key)
 
     def get_client(self):
         return OpenAI(api_key=self.api_key)
@@ -40,7 +40,8 @@ class ChatGPTDatabase(GPTDatabase):
         content_base_uuid: str,
         testing: bool = False
     ):
-        self.default_instructions.append(f"Responda sempre em {self.language_codes.get(language, 'português')}")
+        lang = self.language_codes.get(language, 'português')
+        self.default_instructions.append(f"Seu idioma é {lang}, portanto, sua resposta deve vir SOMENTE em {lang}")
 
         gpt_response = self.client.request_gpt(
             self.default_instructions,
