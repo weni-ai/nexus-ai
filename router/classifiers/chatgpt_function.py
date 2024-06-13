@@ -63,7 +63,7 @@ class ChatGPT_Function_Classifier(Classifier):
 
         flows_list = self.tools(flows)
 
-        response = self.client.ChatCompletion.create(
+        response = self.client.chat.completions.create(
             model=self.chatgpt_model,
             messages=msg,
             functions=flows_list,
