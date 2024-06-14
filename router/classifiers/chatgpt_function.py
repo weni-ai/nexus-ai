@@ -66,8 +66,8 @@ class ChatGPT_Function_Classifier(Classifier):
         response = self.client.chat.completions.create(
             model=self.chatgpt_model,
             messages=msg,
-            functions=flows_list,
-            function_call="auto"
+            tools=flows_list,
+            tool_choice="auto"
         )
 
         if response.choices[0].finish_reason == "function_call":
