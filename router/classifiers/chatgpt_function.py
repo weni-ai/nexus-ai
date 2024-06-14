@@ -1,3 +1,4 @@
+import re
 from openai import OpenAI
 
 from typing import List
@@ -20,6 +21,7 @@ class ChatGPT_Function_Classifier(Classifier):
         self.chatgpt_model = chatgpt_model
         self.client = self.get_client()
         self.prompt = settings.CHATGPT_CONTEXT_PROMPT
+        self.flow_name_mapping = {}
 
     def get_client(self):
         return OpenAI(api_key=self.api_key)
@@ -31,11 +33,13 @@ class ChatGPT_Function_Classifier(Classifier):
 
         tools = []
         for flow in flows:
+            valid_name = re.sub(r'[^a-zA-Z0-9_-]', '_', flow.name)
+            self.flow_name_mapping[valid_name] = flow.name
             tools.append(
                 {
                     "type": "function",
                     "function": {
-                        "name": flow.name,
+                        "name": valid_name,
                         "description": flow.prompt,
                     },
                 }
@@ -79,8 +83,9 @@ class ChatGPT_Function_Classifier(Classifier):
 
         multiple_classifications = []
         for tool_call in tool_calls:
+            original_flow_name = self.flow_name_mapping[tool_call.function.name]
             multiple_classifications.append(
-                tool_call.function.name
+                original_flow_name
             )
 
         return multiple_classifications[0]
