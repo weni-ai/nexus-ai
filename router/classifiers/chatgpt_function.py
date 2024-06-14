@@ -70,9 +70,17 @@ class ChatGPT_Function_Classifier(Classifier):
             tool_choice="auto"
         )
 
-        if response.choices[0].finish_reason == "function_call":
-            classification = response.choices[0].message.function_call.name
-        else:
-            classification = self.CLASSIFICATION_OTHER
+        response_message = response.choices[0].message
+        tool_calls = response_message.tool_calls
 
-        return classification
+        if not tool_calls:
+            classification = self.CLASSIFICATION_OTHER
+            return classification
+
+        multiple_classifications = []
+        for tool_call in tool_calls:
+            multiple_classifications.append(
+                tool_call.function.name
+            )
+
+        return multiple_classifications[0]
