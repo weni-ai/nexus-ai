@@ -3,15 +3,31 @@ from openai import OpenAI
 from django.conf import settings
 
 from nexus.task_managers.file_database import GPTDatabase
-from nexus.usecases.task_managers.wenigpt_database import get_prompt_by_language
+
+from nexus.intelligences.llms.chatgpt import ChatGPTClient
+from router.entities.intelligences import LLMSetupDTO
 
 
 class ChatGPTDatabase(GPTDatabase):
 
-    def __init__(self):
-        self.api_key = settings.OPENAI_API_KEY
+    language_codes = {
+        "pt": "português",
+        "en": "inglês",
+        "es": "espanhol",
+    }
+
+    def __init__(self, api_key: str = settings.OPENAI_API_KEY):
+        self.api_key = api_key
         self.chatgpt_model = settings.CHATGPT_MODEL
-        self.client = self.get_client()
+        self.client = ChatGPTClient(api_key=self.api_key)
+        self.default_instructions = settings.DEFAULT_INSTRUCTIONS
+        self.default_agent = dict(
+            name=settings.DEFAULT_AGENT_NAME,
+            role=settings.DEFAULT_AGENT_ROLE,
+            goal=settings.DEFAULT_AGENT_GOAL,
+            personality=settings.DEFAULT_AGENT_PERSONALITY
+        )
+        self.default_llm_config = LLMSetupDTO(model="chatgpt", model_version=settings.CHATGPT_MODEL, temperature=0.1, top_p=0.1, token=self.api_key)
 
     def get_client(self):
         return OpenAI(api_key=self.api_key)
@@ -24,21 +40,18 @@ class ChatGPTDatabase(GPTDatabase):
         content_base_uuid: str,
         testing: bool = False
     ):
-        if not contexts:
-            return {"answers": None, "id": "0", "message": "No context found for this question"}
+        lang = self.language_codes.get(language, 'português')
+        self.default_instructions.append(f"Seu idioma é {lang}, portanto, sua resposta deve vir SOMENTE em {lang}")
 
-        context = "\n".join([str(ctx) for ctx in contexts])
-        base_prompt = get_prompt_by_language(language=language, context=context, question=question)
-        print("[+] ChatGPT [+]")
-        print(base_prompt)
-        chat_completion = self.client.chat.completions.create(
-            messages=[
-                {
-                    "role": "user",
-                    "content": base_prompt
-                }
-            ],
-            model=settings.CHATGPT_MODEL
+        gpt_response = self.client.request_gpt(
+            self.default_instructions,
+            contexts,
+            self.default_agent,
+            question,
+            self.default_llm_config,
+            []
         )
-        text_answers = chat_completion.choices[0].message.content
-        return {"answers": [{"text": text_answers}], "id": "0"}
+
+        text_answer = None
+        text_answer = gpt_response.get("answers")[0].get("text")
+        return {"answers": [{"text": text_answer}], "id": "0"}

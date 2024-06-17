@@ -8,6 +8,11 @@ from nexus.task_managers.file_database.wenigpt_database import WeniGPTDatabase
 def get_gpt_by_content_base_uuid(content_base_uuid: str) -> GPTDatabase:
     org_uuid = str(get_org_by_content_base_uuid(content_base_uuid).uuid)
     if org_uuid in settings.CHATGPT_ORGS:
-        return ChatGPTDatabase
+        api_key = settings.OPENAI_API_KEY
 
-    return WeniGPTDatabase
+        if org_uuid == settings.IRC_UUID:
+            api_key = settings.IRC_TOKEN
+
+        return ChatGPTDatabase(api_key)
+
+    return WeniGPTDatabase()
