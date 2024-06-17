@@ -1,3 +1,14 @@
+# 1.3.0
+## *Add*
+    - OpenAI function calling for llm
+    - Possibility to use ChatGPT on specific projects
+## *Update*
+    - Default WeniGPT version to "Golfinho"
+## *Delete*
+    - WeniGPT model version "Boto" removed from the current llm default setup
+## *Fix*
+    - ChatGPT message to send "assistant" instead of "system"
+
 # 1.2.1
 ## *Fix*
     - Missing user instance on content base observer
