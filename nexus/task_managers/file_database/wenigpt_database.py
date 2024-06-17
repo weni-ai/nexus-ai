@@ -25,8 +25,8 @@ class WeniGPTDatabase(GPTDatabase):
             goal=settings.DEFAULT_AGENT_GOAL,
             personality=settings.DEFAULT_AGENT_PERSONALITY
         )
-        self.default_llm_config = LLMSetupDTO(model="wenigpt", model_version=settings.WENIGPT_FINE_TUNNING_DEFAULT_VERSION, temperature=0.1, top_p=0.1)
-        self.default_wenigpt_client = WeniGPTClient(settings.WENIGPT_FINE_TUNNING_DEFAULT_VERSION)
+        self.default_llm_config = LLMSetupDTO(model="wenigpt", model_version="runpod", temperature=0.1, top_p=0.1)
+        self.default_wenigpt_client = WeniGPTClient("runpod")
 
     def request_gpt(self, contexts: List, question: str, language: str, content_base_uuid: str, testing: bool = False):
         from nexus.task_managers.tasks import create_wenigpt_logs
