@@ -27,7 +27,9 @@ from router.repositories.orm import (
 
 
 @celery_app.task
-def start_route(message: Dict) -> bool:
+def start_route(
+    message: Dict
+) -> bool:  # pragma: no cover
 
     print(f"[+ Message received: {message} +]")
 
