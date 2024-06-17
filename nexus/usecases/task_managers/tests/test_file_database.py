@@ -16,7 +16,7 @@ class TestGPTDB(TestCase):
 
     def test_get_chatgpt_db(self):
         gpt = get_gpt_by_content_base_uuid(str(self.contentbase_chatgpt.uuid))
-        self.assertIsInstance(gpt(), WeniGPTDatabase)
+        self.assertIsInstance(gpt, WeniGPTDatabase)
 
     def test_get_wenigpt_db(self):
         wenigpt_cb = self.contentbase_wenigpt
@@ -24,4 +24,4 @@ class TestGPTDB(TestCase):
 
         with self.settings(CHATGPT_ORGS=[org_uuid]):
             gpt = get_gpt_by_content_base_uuid(str(wenigpt_cb.uuid))
-            self.assertIsInstance(gpt(), ChatGPTDatabase)
+            self.assertIsInstance(gpt, ChatGPTDatabase)
