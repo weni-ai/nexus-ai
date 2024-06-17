@@ -81,7 +81,7 @@ class LLMClient(ABC):
                 )
                 messages.append(
                     {
-                        "role": "system",
+                        "role": "assistant",
                         "content": last_message.llm_respose
                     }
                 )
