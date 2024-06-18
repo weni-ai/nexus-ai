@@ -25,7 +25,7 @@ class WeniGPTDatabase(GPTDatabase):
             goal=settings.DEFAULT_AGENT_GOAL,
             personality=settings.DEFAULT_AGENT_PERSONALITY
         )
-        self.default_llm_config = LLMSetupDTO(model="wenigpt", model_version="runpod", temperature=0.1, top_p=0.1)
+        self.default_llm_config = LLMSetupDTO(model="wenigpt", model_version="runpod", temperature=settings.WENIGPT_TEMPERATURE, top_p=settings.WENIGPT_TOP_P, top_k=settings.WENIGPT_TOP_K)
         self.default_wenigpt_client = WeniGPTClient("runpod")
 
     def request_gpt(self, contexts: List, question: str, language: str, content_base_uuid: str, testing: bool = False):
