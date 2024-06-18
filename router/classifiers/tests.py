@@ -2,7 +2,7 @@ import re
 from django.test import TestCase
 
 from router.classifiers.zeroshot import ZeroshotClassifier
-from router.classifiers.chatgpt_function import ChatGPT_Function_Classifier
+from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
 from router.classifiers.mocks import (
     MockFunction,
     MockToolCall,
@@ -78,7 +78,7 @@ class TestChatGPTFunctionClassifier(TestCase):
         self.mock_client = MockOpenAIClient(response=self.mock_response)
         self.chatgpt_model = "gpt-3.5-turbo"
 
-        self.classifier = ChatGPT_Function_Classifier(
+        self.classifier = ChatGPTFunctionClassifier(
             client=self.mock_client,
             chatgpt_model=self.chatgpt_model,
         )

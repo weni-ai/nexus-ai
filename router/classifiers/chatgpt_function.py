@@ -31,7 +31,7 @@ class OpenAIClient(OpenAIClientInterface):  # pragma: no cover
         )
 
 
-class ChatGPT_Function_Classifier(Classifier):
+class ChatGPTFunctionClassifier(Classifier):
 
     def __init__(
         self,
