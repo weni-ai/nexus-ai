@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "django_celery_results",
     "django_celery_beat",
+    "django_prometheus",
     'rest_framework',
     'drf_yasg',
     'elasticapm.contrib.django',

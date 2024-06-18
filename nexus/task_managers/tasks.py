@@ -9,6 +9,7 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
+from nexus.logs.healthcheck import check_service_health
 from nexus.intelligences.models import (
     ContentBaseText,
     ContentBaseLogs,
@@ -196,3 +197,8 @@ def log_cleanup_routine():
 def delete_old_activities():
     usecase = DeleteLogUsecase()
     usecase.delete_old_activities(months=3)
+
+
+@app.tasl(name='healthcheck')
+def update_healthcheck():
+    check_service_health()
