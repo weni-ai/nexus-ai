@@ -1,3 +1,7 @@
+# 1.3.1
+## *Fix*
+    - Wenigpt default llm: Add top_k, change hardcoded values to environment variables
+
 # 1.3.0
 ## *Add*
     - OpenAI function calling for llm
