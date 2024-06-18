@@ -34,7 +34,7 @@ from router.repositories.orm import (
     MessageLogsRepository
 )
 from router.classifiers.zeroshot import ZeroshotClassifier
-from router.classifiers.chatgpt_function import ChatGPT_Function_Classifier
+from router.classifiers.chatgpt_function import ChatGPT_Function_Classifier, OpenAIClient
 from router.classifiers import classify
 from router.entities import (
     AgentDTO,
@@ -245,8 +245,9 @@ class MessagePreviewView(APIView):
             )
 
             if llm_config.model.lower() == "chatgpt":
+                client = OpenAIClient(api_key=llm_config.token)
                 classifier = ChatGPT_Function_Classifier(
-                    api_key=llm_config.token,
+                    client=client,
                     chatgpt_model=llm_config.model_version,
                 )
             else:
