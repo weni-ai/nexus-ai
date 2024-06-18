@@ -1,4 +1,4 @@
-class mock_zero_shot_client:
+class MockZeroShotClient:
     def __init__(self, chatbot_goal, response=None):
         self.chatbot_goal = chatbot_goal
         self.response = response if response is not None else {"other": "other"}

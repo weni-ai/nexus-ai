@@ -10,7 +10,7 @@ from router.classifiers.mocks import (
     MockChoice,
     MockResponse,
     MockOpenAIClient,
-    mock_zero_shot_client
+    MockZeroShotClient
 )
 
 from nexus.usecases.actions.tests.flow_factory import FlowFactory
@@ -32,25 +32,25 @@ class TestZeroshotClassifier(TestCase):
             ))
 
     def test_predict(self):
-        classifier = ZeroshotClassifier(chatbot_goal="test", client=mock_zero_shot_client)
+        classifier = ZeroshotClassifier(chatbot_goal="test", client=MockZeroShotClient)
         classification = classifier.predict("test", self.flow_list)
         self.assertEqual(classification, "other")
 
     def test_predict_with_classification(self):
-        classifier = ZeroshotClassifier(chatbot_goal="test", client=mock_zero_shot_client)
+        classifier = ZeroshotClassifier(chatbot_goal="test", client=MockZeroShotClient)
         classification = classifier.predict("test", self.flow_list)
         self.assertEqual(classification, "other")
 
     def test_zeroshotclassifier(self):
         classifier = ZeroshotClassifier(
-            client=mock_zero_shot_client,
+            client=MockZeroShotClient,
         )
-        self.assertEqual(classifier.client, mock_zero_shot_client)
+        self.assertEqual(classifier.client, MockZeroShotClient)
 
     def test_predict_non_other_classification(self):
 
         mock_response = {"classification": "test_classification"}
-        classifier = ZeroshotClassifier(chatbot_goal="test", client=lambda goal: mock_zero_shot_client(goal, response=mock_response))
+        classifier = ZeroshotClassifier(chatbot_goal="test", client=lambda goal: MockZeroShotClient(goal, response=mock_response))
         classification = classifier.predict("test", self.flow_list)
         self.assertEqual(classification, "test_classification")
 
