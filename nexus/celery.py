@@ -28,6 +28,10 @@ app.conf.beat_schedule = {
     "delete_old_activities": {
         "task": "delete_old_activities",
         "schedule": schedules.crontab(hour=23, minute=0)
+    },
+    "healthcheck": {
+        "task": "healthcheck",
+        "schedule": schedules.crontab(minute="*/5")
     }
 }
 
