@@ -1,27 +1,27 @@
-import requests
-from prometheus_client import Gauge
+from nexus.events import event_manager
 
 
-services = {
-    'service_1': 'http://service1/health',
-    'service_2': 'http://service2/health',
-}
+class HealthCheck:
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ):
+        self.event_manager_notify = event_manager_notify
 
-service_health = Gauge('service_health', 'Health status of services', ['service_name'])
+    def check_service_health(self):
+        self.event_manager_notify(
+            event="health_check"
+        )
 
 
-def check_service_health():
-    services = {
-        'service_1': 'http://service1/health',
-        'service_2': 'http://service2/health',
-    }
+class ClassificationHealthCheck:
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ):
+        self.event_manager_notify = event_manager_notify
 
-    for service_name, url in services.items():
-        try:
-            response = requests.get(url)
-            if response.status_code == 200:
-                service_health.labels(service_name=service_name).set(1)
-            else:
-                service_health.labels(service_name=service_name).set(0)
-        except requests.exceptions.RequestException:
-            service_health.labels(service_name=service_name).set(0)
+    def check_service_health(self):
+        self.event_manager_notify(
+            event="classification_health_check"
+        )

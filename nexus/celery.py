@@ -31,8 +31,12 @@ app.conf.beat_schedule = {
     },
     "healthcheck": {
         "task": "healthcheck",
+        "schedule": schedules.crontab(minute="*/1")
+    },
+    "classification_healthcheck": {
+        "task": "classification_healthcheck",
         "schedule": schedules.crontab(minute="*/5")
-    }
+    },
 }
 
 if "test" in sys.argv or getattr(settings, "CELERY_ALWAYS_EAGER", False):

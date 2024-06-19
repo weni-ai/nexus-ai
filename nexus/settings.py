@@ -85,6 +85,8 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "elasticapm.contrib.django.middleware.TracingMiddleware",
     "elasticapm.contrib.django.middleware.Catch404Middleware",
+    'django_prometheus.middleware.PrometheusBeforeMiddleware',
+    'django_prometheus.middleware.PrometheusAfterMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -401,3 +403,9 @@ WENIGPT_VERSIONS = {
         "next_question_template_prompt": WENIGPT_SHARK_NEXT_QUESTION_TEMPLATE_PROMPT,
     }
 }
+
+# Healthcheck external services:
+
+HC_ZEROSHOT_URL = env.str("HC_ZEROSHOT_URL", "")
+HC_GOLFINHO_URL = env.str("HC_GOLFINHO_URL", "")
+HC_WENI_TOKEN = env.str("HC_WENI_TOKEN", "")
