@@ -1,16 +1,10 @@
-from prometheus_client import generate_latest
-
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import LimitOffsetPagination
-from rest_framework.views import APIView
-
-from django.http import HttpResponse
 
 from nexus.logs.models import MessageLog
 from nexus.logs.api.serializers import MessageLogSerializer, MessageFullLogSerializer
 from nexus.usecases.logs.list import ListLogUsecase
-from nexus.logs.healthcheck import check_service_health
 
 
 class LogsViewset(
@@ -58,10 +52,3 @@ class LogsViewset(
         print(kwargs)
         self.serializer_class = MessageFullLogSerializer
         return super().retrieve(request, *args, **kwargs)
-
-
-class HealthCheckViewset(APIView):
-
-    def get(self, request, *args, **kwargs):
-        check_service_health()
-        return HttpResponse(generate_latest(), content_type='text/plain')
