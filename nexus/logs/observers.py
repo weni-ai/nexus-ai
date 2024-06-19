@@ -16,30 +16,29 @@ class ZeroShotClassificationHealthCheckObserver(EventObserver):  # pragma: no co
         self.service_health = Gauge('service_zeroshot_classification_health', 'Health status of services', ['service_name'])
 
     def perform(self):
-        if os.environ.get("ENVIRONMENT") == "production":
-            actions = list({
-                "class": "health check",
-                "context": "health check",
-            })
-            payload = {
-                "context": "health check",
-                "language": "por",
-                "text": "health check",
-                "options": actions
-            }
-            headers = {
-                'Authorization': f'Bearer {self.token}',
-                'Content-Type': 'application/json'
-            }
-            try:
-                response = requests.request("POST", self.url, headers=headers, data=json.dumps(payload))
+        actions = list({
+            "class": "health check",
+            "context": "health check",
+        })
+        payload = {
+            "context": "health check",
+            "language": "por",
+            "text": "health check",
+            "options": actions
+        }
+        headers = {
+            'Authorization': f'Bearer {self.token}',
+            'Content-Type': 'application/json'
+        }
+        try:
+            response = requests.request("POST", self.url, headers=headers, data=json.dumps(payload))
 
-                if response.status_code == 200:
-                    self.service_health.labels(service_name=self.service_name).set(1)
-                else:
-                    self.service_health.labels(service_name=self.service_name).set(0)
-            except Exception:
+            if response.status_code == 200:
+                self.service_health.labels(service_name=self.service_name).set(1)
+            else:
                 self.service_health.labels(service_name=self.service_name).set(0)
+        except Exception:
+            self.service_health.labels(service_name=self.service_name).set(0)
 
 
 class ZeroShotHealthCheckObserver(EventObserver):  # pragma: no cover
@@ -51,16 +50,15 @@ class ZeroShotHealthCheckObserver(EventObserver):  # pragma: no cover
         self.service_health = Gauge('service_health_zeroshot', 'Health status of services', ['service_name'])
 
     def perform(self):
-        if os.environ.get("ENVIRONMENT") == "production":
-            try:
-                response = requests.request("GET", self.url)
+        try:
+            response = requests.request("GET", self.url)
 
-                if response.status_code == 200:
-                    self.service_health.labels(service_name=self.service_name).set(1)
-                else:
-                    self.service_health.labels(service_name=self.service_name).set(0)
-            except Exception:
+            if response.status_code == 200:
+                self.service_health.labels(service_name=self.service_name).set(1)
+            else:
                 self.service_health.labels(service_name=self.service_name).set(0)
+        except Exception:
+            self.service_health.labels(service_name=self.service_name).set(0)
 
 
 class GolfinhoHealthCheckObserver(EventObserver):  # pragma: no cover
@@ -72,13 +70,12 @@ class GolfinhoHealthCheckObserver(EventObserver):  # pragma: no cover
         self.service_health = Gauge('service_health_golfinho', 'Health status of services', ['service_name'])
 
     def perform(self):
-        if os.environ.get("ENVIRONMENT") == "production":
-            try:
-                response = requests.request("GET", self.url)
+        try:
+            response = requests.request("GET", self.url)
 
-                if response.status_code == 200:
-                    self.service_health.labels(service_name=self.service_name).set(1)
-                else:
-                    self.service_health.labels(service_name=self.service_name).set(0)
-            except Exception:
+            if response.status_code == 200:
+                self.service_health.labels(service_name=self.service_name).set(1)
+            else:
                 self.service_health.labels(service_name=self.service_name).set(0)
+        except Exception:
+            self.service_health.labels(service_name=self.service_name).set(0)
