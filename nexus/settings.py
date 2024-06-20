@@ -293,9 +293,8 @@ if TESTING:
         "rest_framework.authentication.TokenAuthentication"
     )
 
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://\w+\.weni\.ai$",
-]
+CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOW_ALL_ORIGINS = True
 
 OPENAI_API_KEY = env.str("OPENAI_API_KEY")
 CHATGPT_MODEL = env.str("CHATGPT_MODEL")
