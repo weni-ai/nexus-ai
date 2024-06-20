@@ -1,4 +1,4 @@
-import pickle
+import msgpack
 
 from nexus.task_managers import tasks
 from nexus.task_managers.file_database.file_database import FileDataBase
@@ -7,6 +7,7 @@ from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
 
 from nexus.events import event_manager
+
 
 
 class CeleryFileManager:
@@ -27,7 +28,7 @@ class CeleryFileManager:
         user_email: str,
         load_type: str = None
     ):
-        pickled_file = pickle.dumps(file)
+        packed_file = msgpack.packb(file, use_bin_type=True)
 
         content_base_file_dto = ContentBaseFileDTO(
             file=file,
@@ -39,7 +40,7 @@ class CeleryFileManager:
             event_manager_notify=self.event_manager_notify
         ).create_content_base_file(content_base_file=content_base_file_dto)
         tasks.upload_file.delay(
-            pickled_file,
+            packed_file,
             content_base_uuid,
             extension_file,
             user_email, str(content_base_file.uuid),
