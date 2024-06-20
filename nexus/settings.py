@@ -17,6 +17,8 @@ from pathlib import Path
 import environ
 
 from sentry_sdk.integrations.django import DjangoIntegration
+from corsheaders.defaults import default_headers
+
 
 
 environ.Env.read_env(env_file=(environ.Path(__file__) - 2)(".env"))
@@ -295,6 +297,12 @@ if TESTING:
 
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS")
 CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", False)
+
+
+CORS_ALLOW_HEADERS = (
+    *default_headers,
+    "baggage",
+)
 
 OPENAI_API_KEY = env.str("OPENAI_API_KEY")
 CHATGPT_MODEL = env.str("CHATGPT_MODEL")
