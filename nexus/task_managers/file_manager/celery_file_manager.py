@@ -9,7 +9,6 @@ from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
 from nexus.events import event_manager
 
 
-
 class CeleryFileManager:
 
     def __init__(
