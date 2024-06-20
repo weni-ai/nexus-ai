@@ -34,6 +34,7 @@ from nexus.task_managers.tasks import upload_text_file, send_link
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
+from nexus.authentication import AUTHENTICATION_CLASSES
 
 
 class IntelligencesViewset(
@@ -797,6 +798,7 @@ class LLMDefaultViewset(views.APIView):
 
 class ContentBasePersonalizationViewSet(ModelViewSet):
     serializer_class = ContentBasePersonalizationSerializer
+    authentication_classes = AUTHENTICATION_CLASSES
 
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
@@ -805,8 +807,15 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         try:
+            user_email = ""
+            authorization_header = request.headers.get('Authorization', "Bearer unauthorized")
+            is_super_user = permissions.is_super_user(authorization_header)
+
+            if not is_super_user:
+                user_email = request.user.email
+
             project_uuid = kwargs.get('project_uuid')
-            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, request.user.email)
+            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, user_email, is_super_user)
             data = ContentBasePersonalizationSerializer(content_base, context={"request": request}).data
             return Response(data=data, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
