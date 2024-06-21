@@ -5,7 +5,7 @@ from nexus.event_domain.recent_activity.publishers_dto import RecentActivitiesDT
 
 def intelligence_activity_message(
     recent_activities_dto: RecentActivitiesDTO
-):
+):  # pragma: no cover
     publisher = RabbitMQPublisher()
 
     message = {

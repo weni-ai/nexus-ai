@@ -13,10 +13,12 @@ class ZeroshotClassifier(Classifier):
     def __init__(
         self,
         version: str = None,
+        client=ZeroshotClient,
         chatbot_goal: str = settings.DEFAULT_AGENT_GOAL
     ) -> None:
         self.__version = version
         self.chatbot_goal = chatbot_goal
+        self.client = client
 
     def predict(self, message: str, flows: List[FlowDTO], language: str = "por") -> str:
         print(f"[+ Zeroshot message classification: {message} ({language}) +]")
@@ -29,7 +31,7 @@ class ZeroshotClassifier(Classifier):
                 }
             )
 
-        response: dict = ZeroshotClient(self.chatbot_goal).fast_predict(message, flows_list, language)
+        response: dict = self.client(self.chatbot_goal).fast_predict(message, flows_list, language)
 
         if response.get("other"):
             return self.CLASSIFICATION_OTHER
@@ -37,6 +39,6 @@ class ZeroshotClassifier(Classifier):
         return response.get("classification")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     client = ZeroshotClient()
     client.fast_predict()
