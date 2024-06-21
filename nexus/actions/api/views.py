@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from nexus.actions.models import Flow
 from nexus.actions.api.serializers import FlowSerializer
 
-from nexus.usecases import orgs, projects
+from nexus.usecases import projects
 from nexus.usecases.logs.create import CreateLogUsecase
 from nexus.usecases.actions.list import ListFlowsUseCase
 from nexus.usecases.actions.create import CreateFlowDTO, CreateFlowsUseCase
