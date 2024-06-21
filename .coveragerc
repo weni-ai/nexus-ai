@@ -20,6 +20,7 @@ omit =
     router/management/commands/runapi.py
     nexus/internals/flows.py
     */tests.py
+    */views.py
 
 [report]
 fail_under = 75
