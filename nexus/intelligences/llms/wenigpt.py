@@ -23,6 +23,9 @@ class WeniGPTClient(LLMClient):
         self.prompt_with_context = settings.WENIGPT_CONTEXT_PROMPT
         self.prompt_without_context = settings.WENIGPT_NO_CONTEXT_PROMPT
 
+        self.pairs_template_prompt = settings.WENIGPT_PAIRS_TEMPLATE_PROMPT
+        self.next_question_template_prompt = settings.WENIGPT_NEXT_QUESTION_TEMPLATE_PROMPT
+
         self.fine_tunning_models = settings.WENIGPT_FINE_TUNNING_VERSIONS
 
         self.fine_tunning_prompt_with_context = settings.CHATGPT_CONTEXT_PROMPT
@@ -40,14 +43,23 @@ class WeniGPTClient(LLMClient):
             "Cookie": self.cookie
         }
 
-    def format_prompt(self, instructions: List, chunks: List, agent: Dict, question: str = None) -> str:
+    def format_prompt(self, instructions: List, chunks: List, agent: Dict, question: str = None, last_messages: List = []) -> str:
+        conversation_prompt = ""
         instructions_formatted = "\n".join([f"- {instruction}" for instruction in instructions])
         context = "\n".join([chunk for chunk in chunks])
         prompt = self.get_prompt(instructions_formatted, context, agent, question)
+
+        for message in last_messages:
+            pairs_template = self.pairs_template_prompt
+            pairs_template = pairs_template.replace("{{msg_question}}", message.text)
+            conversation_prompt += pairs_template.replace("{{msg_answer}}", message.llm_respose)
+
+        next_question_template = self.next_question_template_prompt.replace("{{question}}", question)
+        prompt += conversation_prompt + next_question_template
         return prompt.replace("\\n", "\n")
 
-    def request_runpod(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
-        self.prompt = self.format_prompt(instructions, chunks, agent, question)
+    def request_runpod(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO] = []):
+        self.prompt = self.format_prompt(instructions, chunks, agent, question, last_messages)
         data = {
             "input": {
                 "prompt": self.prompt,
@@ -80,7 +92,6 @@ class WeniGPTClient(LLMClient):
                     }
                 ],
                 "id": "0",
-                # "question_uuid": str(log.user_question.uuid)
             }
 
         except Exception as e:
@@ -105,4 +116,4 @@ class WeniGPTClient(LLMClient):
                 last_messages=last_messages
             )
 
-        return self.request_runpod(instructions, chunks, agent, question, llm_config)
+        return self.request_runpod(instructions, chunks, agent, question, llm_config, last_messages=last_messages)
