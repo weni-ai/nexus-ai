@@ -9,10 +9,10 @@ from rest_framework import status
 from rest_framework.views import APIView
 
 from nexus.actions.models import Flow
-
 from nexus.actions.api.serializers import FlowSerializer
 
-from nexus.usecases import orgs
+from nexus.usecases import orgs, projects
+from nexus.usecases.logs.create import CreateLogUsecase
 from nexus.usecases.actions.list import ListFlowsUseCase
 from nexus.usecases.actions.create import CreateFlowDTO, CreateFlowsUseCase
 from nexus.usecases.actions.delete import DeleteFlowsUseCase, DeleteFlowDTO
@@ -26,7 +26,7 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 
 from nexus.intelligences.llms.client import LLMClient
 
-from nexus.orgs import permissions
+from nexus.projects.permissions import has_project_permission
 
 from router.repositories.orm import (
     ContentBaseORMRepository,
@@ -46,9 +46,7 @@ from router.entities import (
 
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
-
 from router.route import route
-from nexus.usecases.logs.create import CreateLogUsecase
 
 
 class SearchFlowView(APIView):
@@ -83,33 +81,22 @@ class FlowsViewset(
     serializer_class = FlowSerializer
     lookup_url_kwarg = 'flow_uuid'
 
-    def _permission_mapper(self):
-        return {
-            "create": permissions.can_create_content_bases,
-            "read": permissions.can_list_content_bases,
-            "update": permissions.can_edit_content_bases,
-            "delete": permissions.can_delete_content_bases,
-        }
-
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
             return Flow.objects.none()  # pragma: no cover
         super().get_serializer(*args, **kwargs)
 
-    def check_user_permissions(self, request, project_uuid: str, method: str):
-        org_use_case = orgs.GetOrgByIntelligenceUseCase()
-        org = org_use_case.get_org_by_project_uuid(project_uuid)
-
-        has_permission = self._permission_mapper().get(method)(request.user, org)
-
-        if not has_permission:
-            raise IntelligencePermissionDenied()
-
     def create(self, request, *args, **kwargs):
         try:
             project_uuid = kwargs.get('project_uuid')
+            project = projects.get_project_by_uuid(project_uuid)
+            user = request.user
 
-            self.check_user_permissions(request, project_uuid, "create")
+            has_project_permission(
+                user=user,
+                project=project,
+                method="post"
+            )
 
             create_dto = CreateFlowDTO(
                 project_uuid=project_uuid,
@@ -129,8 +116,14 @@ class FlowsViewset(
         try:
             flow_uuid = kwargs.get('flow_uuid')
             project_uuid = kwargs.get('project_uuid')
+            project = projects.get_project_by_uuid(project_uuid)
+            user = request.user
 
-            self.check_user_permissions(request, project_uuid, "read")
+            has_project_permission(
+                user=user,
+                project=project,
+                method="get"
+            )
 
             flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(flow_uuid=flow_uuid)
             data = FlowSerializer(flow).data
@@ -145,8 +138,14 @@ class FlowsViewset(
     def list(self, request, *args, **kwargs):
         try:
             project_uuid = kwargs.get('project_uuid')
+            project = projects.get_project_by_uuid(project_uuid)
+            user = request.user
 
-            self.check_user_permissions(request, project_uuid, "read")
+            has_project_permission(
+                user=user,
+                project=project,
+                method="get"
+            )
 
             flows = ListFlowsUseCase().list_flows_by_project_uuid(project_uuid)
             data = FlowSerializer(flows, many=True).data
@@ -160,7 +159,15 @@ class FlowsViewset(
             prompt=request.data.get("prompt")
         )
         project_uuid = kwargs.get('project_uuid')
-        self.check_user_permissions(request, project_uuid, "update")
+        project = projects.get_project_by_uuid(project_uuid)
+        user = request.user
+
+        has_project_permission(
+            user=user,
+            project=project,
+            method="put"
+        )
+
         flow = UpdateFlowsUseCase().update_flow(flow_dto)
         data = FlowSerializer(flow).data
         return Response(data=data, status=status.HTTP_200_OK)
@@ -171,7 +178,15 @@ class FlowsViewset(
             flow_dto = DeleteFlowDTO(
                 flow_uuid=kwargs.get("flow_uuid"),
             )
-            self.check_user_permissions(request, project_uuid, "update")
+            project = projects.get_project_by_uuid(project_uuid)
+            user = request.user
+
+            has_project_permission(
+                user=user,
+                project=project,
+                method="delete"
+            )
+
             DeleteFlowsUseCase().hard_delete_flow(flow_dto)
             return Response(status=status.HTTP_204_NO_CONTENT)
         except FlowDoesNotExist:
@@ -181,23 +196,8 @@ class FlowsViewset(
 
 
 class MessagePreviewView(APIView):
-    def _permission_mapper(self):
-        return {
-            "create": permissions.can_create_content_bases,
-            "read": permissions.can_list_content_bases,
-            "update": permissions.can_edit_content_bases,
-            "delete": permissions.can_delete_content_bases,
-        }
 
-    def check_user_permissions(self, request, project_uuid: str, method: str):
-        org_use_case = orgs.GetOrgByIntelligenceUseCase()
-        org = org_use_case.get_org_by_project_uuid(project_uuid)
-
-        has_permission = self._permission_mapper().get(method)(request.user, org)
-
-        if not has_permission:
-            raise IntelligencePermissionDenied()
-
+    # TODO: Refactor this method to put the logic in a usecase/observers
     def post(self, request, *args, **kwargs):
         try:
             data = request.data
@@ -206,7 +206,13 @@ class MessagePreviewView(APIView):
             text = data.get("text")
             contact_urn = data.get("contact_urn")
 
-            self.check_user_permissions(request, project_uuid, "read")
+            project = projects.get_project_by_uuid(project_uuid)
+
+            has_project_permission(
+                user=request.user,
+                project=project,
+                method="post"
+            )
 
             log_usecase = CreateLogUsecase()
             log_usecase.create_message_log(text, contact_urn)
