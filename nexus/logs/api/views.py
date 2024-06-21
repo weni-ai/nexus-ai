@@ -1,10 +1,10 @@
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import LimitOffsetPagination
 
 from nexus.logs.models import MessageLog
 from nexus.logs.api.serializers import MessageLogSerializer, MessageFullLogSerializer
 from nexus.usecases.logs.list import ListLogUsecase
-from rest_framework.pagination import LimitOffsetPagination
 
 
 class LogsViewset(

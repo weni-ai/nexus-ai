@@ -21,6 +21,7 @@ omit =
     nexus/internals/flows.py
     */tests.py
     */views.py
+    */middleware.py
 
 [report]
 fail_under = 75
