@@ -758,7 +758,7 @@ class LLMDefaultViewset(views.APIView):
             project_uuid=project_uuid,
             model="WeniGPT",
             setup={
-                "version": "runpod",
+                "version": settings.WENIGPT_DEFAULT_VERSION,
                 "top_k": settings.WENIGPT_TOP_K,
                 "top_p": settings.WENIGPT_TOP_P,
                 "max_length": settings.WENIGPT_MAX_LENGHT,

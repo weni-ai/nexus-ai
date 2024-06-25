@@ -275,7 +275,7 @@ def create_base_brain_structure(
         created_by=user,
         integrated_intelligence=integrated_intelligence,
         setup={
-            "version": "runpod",
+            "version": settings.WENIGPT_DEFAULT_VERSION,
             'temperature': settings.WENIGPT_TEMPERATURE,
             'top_p': settings.WENIGPT_TOP_P,
             'top_k': settings.WENIGPT_TOP_K,

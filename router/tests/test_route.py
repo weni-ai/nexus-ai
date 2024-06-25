@@ -140,7 +140,7 @@ class RouteTestCase(TestCase):
         chunks = ["Lorem Ipsum", "Dolor Sit Amet"]
         question = "Ipsum Lorem"
 
-        prompt = WeniGPTClient(model_version=settings.WENIGPT_FINE_TUNNING_DEFAULT_VERSION).format_prompt(instructions, chunks, agent.__dict__, question)
+        prompt = WeniGPTClient(model_version=settings.WENIGPT_DEFAULT_VERSION).format_prompt(instructions, chunks, agent.__dict__, question)
         assert "{{" not in prompt
 
     def test_wenigpt_no_context_prompt(self):
@@ -156,7 +156,7 @@ class RouteTestCase(TestCase):
         chunks = []
         question = "Ipsum Lorem"
 
-        prompt = WeniGPTClient(model_version=settings.WENIGPT_FINE_TUNNING_DEFAULT_VERSION).format_prompt(instructions, chunks, agent.__dict__, question)
+        prompt = WeniGPTClient(model_version=settings.WENIGPT_DEFAULT_VERSION).format_prompt(instructions, chunks, agent.__dict__, question)
         assert "{{" not in prompt
 
     def test_chatgpt_no_context_prompt(self):

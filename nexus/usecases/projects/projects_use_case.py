@@ -66,7 +66,7 @@ class ProjectsUseCase:
             user_email=user_email,
             project_uuid=project.uuid,
             setup={
-                "version": "runpod",
+                "version": settings.WENIGPT_DEFAULT_VERSION,
                 'temperature': settings.WENIGPT_TEMPERATURE,
                 'top_p': settings.WENIGPT_TOP_P,
                 'top_k': settings.WENIGPT_TOP_K,
