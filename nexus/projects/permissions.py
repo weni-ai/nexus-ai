@@ -4,19 +4,26 @@ from .exceptions import ProjectAuthorizationDenied
 from .models import Project, ProjectAuth, ProjectAuthorizationRole
 
 from nexus.users.models import User
+from nexus.orgs.models import OrgAuth, Role
 
 
 def get_user_auth(
     user: User,
     project: Project
 ):
-    try:
-        auth = ProjectAuth.objects.get(user=user, project=project)
-    except ProjectAuth.DoesNotExist:
-        raise ProjectAuthorizationDenied(
-            'You do not have permission to perform this action.'
+    auth = ProjectAuth.objects.filter(user=user, project=project).first()
+    if auth:
+        return auth
+
+    org_auth = OrgAuth.objects.filter(user=user, org=project.org).first()
+    if org_auth and org_auth.role == Role.ADMIN.value:
+        return ProjectAuth.objects.create(
+            user=user,
+            project=project,
+            role=ProjectAuthorizationRole.MODERATOR.value
         )
-    return auth
+
+    raise ProjectAuth.DoesNotExist("User does not have authorization to access this project.")
 
 
 def is_admin(
@@ -55,7 +62,7 @@ def _has_project_general_permission(
             'You do not have permission to perform this action.'
         )
     except ProjectAuth.DoesNotExist:
-        raise ProjectAuthorizationDenied(
+        raise ProjectAuth.DoesNotExist(
             'You do not have permission to perform this action.'
         )
 

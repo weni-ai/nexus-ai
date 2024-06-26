@@ -8,9 +8,9 @@ from nexus.usecases.users.tests.user_factory import UserFactory
 
 from nexus.usecases.projects.retrieve import get_project
 from nexus.projects.exceptions import (
-    ProjectAuthorizationDenied,
     ProjectDoesNotExist,
 )
+from nexus.projects.models import ProjectAuth
 
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 
@@ -41,7 +41,7 @@ class GetByProjectUuidTestCase(TestCase):
         self.assertEqual(self.project, project)
 
     def test_fail_get_project(self):
-        with self.assertRaises(ProjectAuthorizationDenied):
+        with self.assertRaises(ProjectAuth.DoesNotExist):
             get_project(str(self.project.uuid), self.user.email)
 
     def test_get_by_uuid_non_existent_project(self):
