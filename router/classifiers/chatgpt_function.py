@@ -83,6 +83,9 @@ class ChatGPTFunctionClassifier(Classifier):
         ]
 
         flows_list = self.tools(flows)
+        if not flows_list:
+            classification = self.CLASSIFICATION_OTHER
+            return classification
 
         response = self.client.chat_completions_create(
             model=self.chatgpt_model,
