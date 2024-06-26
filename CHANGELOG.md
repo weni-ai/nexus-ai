@@ -1,3 +1,8 @@
+# 1.5.1
+## *Fix*
+    - get_file_info, last_messages as empty list intead of None
+    - null actions
+
 # 1.5.0
 ## *Add*
     - Metrics endpoint on prometheus format
