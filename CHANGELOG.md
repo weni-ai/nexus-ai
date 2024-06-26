@@ -1,3 +1,18 @@
+# 1.5.0
+## *Add*
+    - Metrics endpoint on prometheus format
+    - Healthcheck for external llm aplications
+    - Function calling on router method
+    - Wenigpt multi turn conversation
+    - wenigpt shark model
+
+## *Update*
+    - Refactor function classifier using dependency injection
+    - Action now use project auth instead of org auth
+
+## *Fix*
+    - Exception handler when missing project auth
+
 # 1.4.0
 ## *Add*
     - allow flows module to request customization endpoint
