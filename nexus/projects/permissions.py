@@ -49,7 +49,7 @@ def _has_project_general_permission(
             return True
 
         if is_contributor(auth):
-            return method.upper() in ['PUT', 'PATCH', 'DELETE']
+            return method.upper() in ['POST', 'PUT', 'PATCH', 'DELETE']
 
         raise ProjectAuthorizationDenied(
             'You do not have permission to perform this action.'
