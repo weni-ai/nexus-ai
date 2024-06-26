@@ -30,6 +30,8 @@ class ZeroshotClassifier(Classifier):
                     "context": flow.prompt,
                 }
             )
+        if not flows_list:
+            return self.CLASSIFICATION_OTHER
 
         response: dict = self.client(self.chatbot_goal).fast_predict(message, flows_list, language)
 
