@@ -2,6 +2,11 @@ import logging
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 from nexus.usecases.users import CreateUserUseCase
 
+from rest_framework import authentication
+
+from nexus.orgs import permissions
+
+
 LOGGER = logging.getLogger("weni_django_oidc")
 
 
@@ -27,3 +32,18 @@ class WeniOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         user.save()
 
         return user
+
+
+class ExternalTokenAuthentication(authentication.BaseAuthentication):
+    def authenticate(self, request):
+        authorization_header = request.headers.get('Authorization')
+
+        if not authorization_header:
+            return None
+
+        is_super_user = permissions.is_super_user(authorization_header)
+
+        if not is_super_user:
+            return None
+
+        return (is_super_user, None)

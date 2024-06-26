@@ -402,6 +402,17 @@ class TestContentBasePersonalizationViewSet(TestCase):
 
         self.assertEqual(response.status_code, 200)
 
+    def test_get_personalization_external_token(self):
+        url_retrieve = f'{self.url}/'
+        headers = {"Authorization": f"Bearer {settings.WENIGPT_FLOWS_SEARCH_TOKEN}"}
+
+        request = self.factory.get(url_retrieve, headers=headers)
+        response = ContentBasePersonalizationViewSet.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        self.assertEqual(response.status_code, 200)
+
     def test_update_personalization(self):
         url_update = f'{self.url}/'
 
