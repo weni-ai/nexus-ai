@@ -3,7 +3,6 @@ from mozilla_django_oidc.auth import OIDCAuthenticationBackend
 from nexus.usecases.users import CreateUserUseCase
 
 from rest_framework import authentication
-from rest_framework import exceptions
 
 from nexus.orgs import permissions
 
