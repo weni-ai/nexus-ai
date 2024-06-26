@@ -24,11 +24,12 @@ class SimulateBroadcast(DirectMessage):
 
             file_info = self.get_file_info(file_uuid)
 
-            sources.append({
-                "filename": file_info.get("filename"),
-                "uuid": file_uuid,
-                "created_file_name": file_info.get("created_file_name"),
-                "extension_file": file_info.get("extension_file"),
-            })
+            if file_info:
+                sources.append({
+                    "filename": file_info.get("filename"),
+                    "uuid": file_uuid,
+                    "created_file_name": file_info.get("created_file_name"),
+                    "extension_file": file_info.get("extension_file"),
+                })
 
         return {"type": "broadcast", "message": text, "fonts": sources}

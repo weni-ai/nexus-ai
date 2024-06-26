@@ -14,6 +14,7 @@ from .exceptions import (
     IntelligencePermissionDenied,
     ContentBaseTextDoesNotExist,
     ContentBaseFileDoesNotExist,
+    ContentBaseLinkDoesNotExist,
 )
 from nexus.projects.permissions import has_project_permission
 
@@ -140,8 +141,11 @@ def get_file_info(file_uuid: str) -> Dict:
                 "created_file_name": ".text"
             }
         except ContentBaseTextDoesNotExist:
-            link = get_by_content_base_link_uuid(file_uuid)
-            return {
-                "uuid": str(link.uuid),
-                "created_file_name": f".link:{link.link}"
-            }
+            try:
+                link = get_by_content_base_link_uuid(file_uuid)
+                return {
+                    "uuid": str(link.uuid),
+                    "created_file_name": f".link:{link.link}"
+                }
+            except ContentBaseLinkDoesNotExist:
+                return {}

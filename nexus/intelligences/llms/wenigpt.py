@@ -118,7 +118,7 @@ class WeniGPTClient(LLMClient):
             response = {"error": str(e)}
             return {"answers": None, "id": "0", "message": response.get("error")}
 
-    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO] = None):
+    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO] = []):
 
         if self.model_version in self.fine_tunning_models:
             self.client = self.get_client()
