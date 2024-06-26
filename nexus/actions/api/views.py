@@ -221,6 +221,8 @@ class MessagePreviewView(APIView):
                 contact_urn=contact_urn,
             )
 
+            print(f"[+ Message: {message.text} - Contact: {message.contact_urn} - Project: {message.project_uuid} +]")
+
             project_uuid: str = message.project_uuid
 
             flows: List[FlowDTO] = flows_repository.project_flows(project_uuid, False)
@@ -243,6 +245,8 @@ class MessagePreviewView(APIView):
                 max_tokens=llm_model.setup.get("max_tokens"),
                 language=llm_model.setup.get("language", settings.WENIGPT_DEFAULT_LANGUAGE)
             )
+
+            print(f"[+ LLM model: {llm_config.model}:{llm_config.model_version} +]")
 
             if llm_config.model.lower() == "chatgpt":
                 classifier = ChatGPT_Function_Classifier(
@@ -270,6 +274,8 @@ class MessagePreviewView(APIView):
             broadcast = SimulateBroadcast(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'), get_file_info)
             flow_start = SimulateFlowStart(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
             flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+
+            print(f"[+ Classfication: {classification} +]")
 
             response: dict = route(
                 classification=classification,

@@ -1,0 +1,2 @@
+class WeniGPTInvalidVersionError(Exception):
+    pass

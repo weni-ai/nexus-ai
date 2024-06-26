@@ -1,5 +1,5 @@
 import json
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 import requests
 
@@ -7,23 +7,27 @@ from django.conf import settings
 
 from nexus.intelligences.llms.client import LLMClient
 from router.entities import LLMSetupDTO, ContactMessageDTO
+from nexus.intelligences.llms.exceptions import WeniGPTInvalidVersionError
 
 
 class WeniGPTClient(LLMClient):
     code = "wenigpt"
+    versions = settings.WENIGPT_VERSIONS
 
     def __init__(self, model_version: str):
-        self.url = settings.WENIGPT_API_URL
+        self.validate_version(model_version)
+
+        self.url = self.get_url(model_version)
         self.token = settings.WENIGPT_API_TOKEN
         self.cookie = settings.WENIGPT_COOKIE
         self.api_key = settings.WENIGPT_OPENAI_TOKEN
 
         self.model_version = model_version
 
-        self.prompt_with_context = settings.WENIGPT_CONTEXT_PROMPT
-        self.prompt_without_context = settings.WENIGPT_NO_CONTEXT_PROMPT
+        self.prompt_with_context, self.pairs_template_prompt, self.next_question_template_prompt = self.get_version_prompt(version=model_version, context=True)
+        self.prompt_without_context, self.pairs_template_prompt, self.next_question_template_prompt = self.get_version_prompt(version=model_version, context=False)
 
-        self.fine_tunning_models = settings.WENIGPT_FINE_TUNNING_VERSIONS
+        self.fine_tunning_models = settings.WENIGPT_FINE_TUNNING_VERSIONS  # deprecated
 
         self.fine_tunning_prompt_with_context = settings.CHATGPT_CONTEXT_PROMPT
         self.fine_tunning_prompt_without_context = settings.CHATGPT_NO_CONTEXT_PROMPT
@@ -40,14 +44,42 @@ class WeniGPTClient(LLMClient):
             "Cookie": self.cookie
         }
 
-    def format_prompt(self, instructions: List, chunks: List, agent: Dict, question: str = None) -> str:
+    def validate_version(self, version: str) -> None:
+        if version not in self.versions.keys():
+            raise WeniGPTInvalidVersionError(f"WeniGPT {version} is not a valid version")
+        return
+
+    def get_url(self, version: str) -> str:
+        return self.versions.get(version).get("url")
+
+    def get_version_prompt(self, version: str, context: bool) -> Tuple[str, str, str]:
+        prompt = ""
+        pairs_template_prompt: str = self.versions.get(version).get("pairs_template_prompt")
+        next_question_template_prompt: str = self.versions.get(version).get("next_question_template_prompt")
+
+        if context:
+            prompt: str = self.versions.get(version).get("context_prompt")
+        else:
+            prompt: str = self.versions.get(version).get("no_context_prompt")
+        return (prompt, pairs_template_prompt, next_question_template_prompt)
+
+    def format_prompt(self, instructions: List, chunks: List, agent: Dict, question: str = "", last_messages: List = []) -> str:
+        conversation_prompt = ""
         instructions_formatted = "\n".join([f"- {instruction}" for instruction in instructions])
         context = "\n".join([chunk for chunk in chunks])
         prompt = self.get_prompt(instructions_formatted, context, agent, question)
+
+        for message in last_messages:
+            pairs_template = self.pairs_template_prompt
+            pairs_template = pairs_template.replace("{{msg_question}}", message.text)
+            conversation_prompt += pairs_template.replace("{{msg_answer}}", message.llm_respose)
+
+        next_question_template = self.next_question_template_prompt.replace("{{question}}", question)
+        prompt += conversation_prompt + next_question_template
         return prompt.replace("\\n", "\n")
 
-    def request_runpod(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO):
-        self.prompt = self.format_prompt(instructions, chunks, agent, question)
+    def request_runpod(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO] = []):
+        self.prompt = self.format_prompt(instructions, chunks, agent, question, last_messages)
         data = {
             "input": {
                 "prompt": self.prompt,
@@ -67,7 +99,7 @@ class WeniGPTClient(LLMClient):
         text_answers = None
 
         try:
-            print(f"Request para o Wenigpt: {self.prompt}")
+            print(f"Request for WeniGPT: {self.prompt}")
             response = requests.request("POST", self.url, headers=self.headers, data=json.dumps(data))
             response_json = response.json()
             print(f"Resposta Json do WeniGPT: {response_json}")
@@ -80,7 +112,6 @@ class WeniGPTClient(LLMClient):
                     }
                 ],
                 "id": "0",
-                # "question_uuid": str(log.user_question.uuid)
             }
 
         except Exception as e:
@@ -105,4 +136,4 @@ class WeniGPTClient(LLMClient):
                 last_messages=last_messages
             )
 
-        return self.request_runpod(instructions, chunks, agent, question, llm_config)
+        return self.request_runpod(instructions, chunks, agent, question, llm_config, last_messages=last_messages)
