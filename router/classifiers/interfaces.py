@@ -8,3 +8,9 @@ class Classifier(ABC):
     @abstractmethod
     def predict(self, message: str, flows: List, language: str = "por"):
         pass  # pragma: no cover
+
+
+class OpenAIClientInterface(ABC):
+    @abstractmethod
+    def chat_completions_create(self, model, messages, tools, tool_choice):
+        pass  # pragma: no cover

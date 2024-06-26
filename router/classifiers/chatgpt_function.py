@@ -5,26 +5,43 @@ from typing import List
 
 from django.conf import settings
 
-from router.classifiers.interfaces import Classifier
+from router.classifiers.interfaces import Classifier, OpenAIClientInterface
 
 from router.entities.flow import FlowDTO
 
 
-class ChatGPT_Function_Classifier(Classifier):
+class OpenAIClient(OpenAIClientInterface):  # pragma: no cover
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.client = OpenAI(api_key=self.api_key)
+
+    def chat_completions_create(
+        self,
+        model,
+        messages,
+        tools,
+        tool_choice="auto"
+    ):
+        return self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=tools,
+            tool_choice=tool_choice
+        )
+
+
+class ChatGPTFunctionClassifier(Classifier):
 
     def __init__(
         self,
-        api_key: str,
+        client: OpenAIClientInterface,
         chatgpt_model: str,
     ):
-        self.api_key = api_key
         self.chatgpt_model = chatgpt_model
-        self.client = self.get_client()
+        self.client = client
         self.prompt = settings.CHATGPT_CONTEXT_PROMPT
         self.flow_name_mapping = {}
-
-    def get_client(self):
-        return OpenAI(api_key=self.api_key)
 
     def tools(
         self,
@@ -67,15 +84,14 @@ class ChatGPT_Function_Classifier(Classifier):
 
         flows_list = self.tools(flows)
 
-        response = self.client.chat.completions.create(
+        response = self.client.chat_completions_create(
             model=self.chatgpt_model,
             messages=msg,
             tools=flows_list,
             tool_choice="auto"
         )
 
-        response_message = response.choices[0].message
-        tool_calls = response_message.tool_calls
+        tool_calls = response.choices[0].message.tool_calls
 
         if not tool_calls:
             classification = self.CLASSIFICATION_OTHER

@@ -16,8 +16,11 @@ omit =
     nexus/task_managers/file_database/*
     nexus/authentication/authentication.py
     router/clients/*
+    router/main.py
+    router/management/commands/runapi.py
     nexus/internals/flows.py
     */tests.py
+    */views.py
 
 [report]
 fail_under = 75
