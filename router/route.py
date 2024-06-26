@@ -71,7 +71,8 @@ def route(
 
             response_language: str = get_language_codes(llm_config.language)
 
-            instructions.append(f"Sempre responda em {response_language}")
+            if llm_config.model.lower() != "chatgpt":
+                instructions.append(f"Sempre responda em {response_language}")
 
             full_chunks: List[Dict] = get_chunks(
                 indexer,

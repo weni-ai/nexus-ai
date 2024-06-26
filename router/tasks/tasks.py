@@ -13,6 +13,7 @@ from nexus.usecases.logs.create import CreateLogUsecase
 
 from router.route import route
 from router.classifiers.zeroshot import ZeroshotClassifier
+from router.classifiers.chatgpt_function import OpenAIClient, ChatGPTFunctionClassifier
 from router.classifiers import classify
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
 from router.clients.flows.http.send_message import SendMessageHTTPClient
@@ -64,7 +65,23 @@ def start_route(
             language=llm_model.setup.get("language", settings.WENIGPT_DEFAULT_LANGUAGE),
         )
 
-        classification: str = classify(ZeroshotClassifier(chatbot_goal=agent.goal), message.text, flows, llm_config.language)
+        if llm_config.model.lower() == "chatgpt":
+            client = OpenAIClient(api_key=llm_config.token)
+            classifier = ChatGPTFunctionClassifier(
+                client=client,
+                chatgpt_model=llm_config.model_version,
+            )
+        else:
+            classifier = ZeroshotClassifier(
+                chatbot_goal=agent.goal
+            )
+
+        classification = classify(
+            classifier=classifier,
+            message=message.text,
+            flows=flows,
+            language=llm_config.language
+        )
 
         print(f"[+ Classification: {classification} +]")
 
