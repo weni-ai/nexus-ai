@@ -1,3 +1,7 @@
+# 1.4.0
+## *Add*
+    - allow flows module to request customization endpoint
+
 # 1.3.1
 ## *Fix*
     - Wenigpt default llm: Add top_k, change hardcoded values to environment variables
