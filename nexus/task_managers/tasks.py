@@ -106,10 +106,10 @@ def upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: 
     content_base_title = content_base_dto.get('title', '').replace("/", "-").replace(" ", "-")
     file_name = f"{content_base_title}.txt"
 
-    with open(f"/tmp/{file_name}", "w") as file:
+    with open(f"/tmp/{file_name}", "w", encoding="utf-8") as file:
         file.write(text)
 
-    with open(f"/tmp/{file_name}", "rb") as file:
+    with open(f"/tmp/{file_name}", "rb", encoding="utf-8") as file:
         file_database_response = s3FileDatabase().add_file(file)
 
     content_base_text = ContentBaseText.objects.get(uuid=content_base_text_uuid)
