@@ -69,7 +69,7 @@ class WeniGPTClient(LLMClient):
         context = "\n".join([chunk for chunk in chunks])
         prompt = self.get_prompt(instructions_formatted, context, agent, question)
 
-        if self.pairs_template_prompt and self.next_question_template_prompt:
+        if self.pairs_template_prompt != '""' and self.next_question_template_prompt != '""':
             for message in last_messages:
                 pairs_template = self.pairs_template_prompt
                 pairs_template = pairs_template.replace("{{msg_question}}", message.text)
