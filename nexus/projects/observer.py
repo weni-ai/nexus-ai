@@ -16,8 +16,8 @@ def _update_comparison_fields(
     action_details = {}
     for key, old_value in old_model_dict.items():
         new_value = new_model_dict.get(key)
-        if old_value != new_value:
-            action_details[key] = {'old': old_value, 'new': new_value}
+        if str(old_value) != str(new_value):
+            action_details[key] = {'old': str(old_value), 'new': str(new_value)}
     return action_details
 
 

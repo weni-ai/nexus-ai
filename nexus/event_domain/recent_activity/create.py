@@ -6,7 +6,6 @@ def create_recent_activity(
     instance,
     dto: CreateRecentActivityDTO,
 ) -> RecentActivities:
-
     recent_activity = RecentActivities.objects.create(
         action_model=instance.__class__.__name__,
         action_type=dto.action_type,

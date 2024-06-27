@@ -1,3 +1,5 @@
+import copy
+
 from nexus.event_driven.publisher.rabbitmq_publisher import RabbitMQPublisher
 from .dto import UpdateProjectDTO
 from .get_by_uuid import get_project_by_uuid
@@ -49,7 +51,7 @@ class ProjectUpdateUseCase:
         org = project.org
         user = users.get_by_email(UpdateProjectDTO.user_email)
 
-        old_project_data = project
+        old_project_data = copy.deepcopy(project)
 
         has_permission = permissions.can_edit_intelligence_of_org(user, org)
         if not has_permission:
