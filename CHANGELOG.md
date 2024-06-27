@@ -1,3 +1,7 @@
+# 1.5.3
+## *Add*
+    - WeniGPT model for test
+
 # 1.5.2
 ## *Fix*
     - Missing brain_on log
