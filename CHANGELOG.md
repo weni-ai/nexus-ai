@@ -1,3 +1,10 @@
+# 1.5.2
+## *Fix*
+    - Missing brain_on log
+    - Healthcheck for external llm aplications
+    - Metrics endpoint on prometheus format
+    - Action now use project auth instead of org auth
+
 # 1.5.1
 ## *Fix*
     - get_file_info, last_messages as empty list intead of None
@@ -5,15 +12,12 @@
 
 # 1.5.0
 ## *Add*
-    - Metrics endpoint on prometheus format
-    - Healthcheck for external llm aplications
     - Function calling on router method
     - Wenigpt multi turn conversation
     - wenigpt shark model
 
 ## *Update*
     - Refactor function classifier using dependency injection
-    - Action now use project auth instead of org auth
 
 ## *Fix*
     - Exception handler when missing project auth
