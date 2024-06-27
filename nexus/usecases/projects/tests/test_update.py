@@ -2,15 +2,17 @@ from django.test import TestCase
 
 from unittest.mock import patch
 
-from .project_factory import ProjectFactory
-from ..update import update_project
+from ..update import ProjectUpdateUseCase
 from ..dto import UpdateProjectDTO
+
+from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
 
 
 class UpdateProjectTestCase(TestCase):
 
     def setUp(self) -> None:
-        self.project = ProjectFactory()
+        integrated_intelligence = IntegratedIntelligenceFactory()
+        self.project = integrated_intelligence.project
         self.user = self.project.created_by
         self.uuid = self.project.uuid
 
@@ -25,5 +27,6 @@ class UpdateProjectTestCase(TestCase):
             uuid=self.uuid,
             brain_on=brain_on
         )
-        updated_project = update_project(dto)
+        usecase = ProjectUpdateUseCase()
+        updated_project = usecase.update_project(dto)
         self.assertEqual(updated_project.brain_on, brain_on)
