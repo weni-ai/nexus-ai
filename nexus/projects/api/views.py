@@ -4,7 +4,9 @@ from rest_framework.response import Response
 
 from .serializers import ProjectSerializer
 
-from nexus.usecases import projects
+from nexus.usecases.projects.update import ProjectUpdateUseCase
+from nexus.usecases.projects.dto import UpdateProjectDTO
+from nexus.usecases.projects.retrieve import get_project
 
 
 class ProjectUpdateViewset(views.APIView):
@@ -12,7 +14,7 @@ class ProjectUpdateViewset(views.APIView):
 
     def get(self, request, project_uuid):
         user_email = request.user.email
-        project = projects.get_project(project_uuid, user_email)
+        project = get_project(project_uuid, user_email)
 
         return Response(
             ProjectSerializer(project).data
@@ -20,12 +22,13 @@ class ProjectUpdateViewset(views.APIView):
 
     def patch(self, request, project_uuid):
         user_email = request.user.email
-        dto = projects.UpdateProjectDTO(
+        dto = UpdateProjectDTO(
             user_email,
             project_uuid,
             brain_on=request.data.get('brain_on')
         )
-        updated_project = projects.update_project(dto)
+        usecase = ProjectUpdateUseCase()
+        updated_project = usecase.update_project(dto)
 
         return Response(
             ProjectSerializer(updated_project).data
