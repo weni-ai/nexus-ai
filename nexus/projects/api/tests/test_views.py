@@ -5,13 +5,14 @@ from rest_framework.test import force_authenticate
 from rest_framework.test import APIRequestFactory
 
 from nexus.projects.api.views import ProjectUpdateViewset
-from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
 
 
 class TestProjectUpdateViewSet(TestCase):
 
     def setUp(self):
-        self.project = ProjectFactory()
+        integrated_intelligence = IntegratedIntelligenceFactory()
+        self.project = integrated_intelligence.project
         self.factory = APIRequestFactory()
         self.view = ProjectUpdateViewset.as_view()
         self.user = self.project.created_by
