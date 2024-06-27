@@ -90,9 +90,14 @@ def generate_env():
         "SENTRY_URL": "",
         "IRC_UUID": "",
         "IRC_TOKEN": "",
-        "WENIGPT_SHARK_API_URL": "",
+        "WENIGPT_SHARK_API_URL": "SHARK",
         "WENIGPT_PAIRS_TEMPLATE_PROMPT": "",
         "WENIGPT_NEXT_QUESTION_TEMPLATE_PROMPT": "",
+        "WENIGPT_TEST_API_URL": "TEST",
+        "WENIGPT_TEST_CONTEXT_PROMPT": "TEST PROMPT",
+        "WENIGPT_TEST_NO_CONTEXT_PROMPT": "TEST PROMPT WITHOUT CONTEXT",
+        "WENIGPT_TEST_PAIRS_TEMPLATE_PROMPT": "TEST PAIRS",
+        "WENIGPT_TEST_NEXT_QUESTION_TEMPLATE_PROMPT": "TEST QUESTION",
     }
 
     with open(env_path, "w") as configfile:

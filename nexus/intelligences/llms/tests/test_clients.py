@@ -44,6 +44,8 @@ class WenigptClientTestCase(TestCase):
         self.assertEquals(self.client.url, settings.WENIGPT_API_URL)
         self.client = WeniGPTClient(settings.WENIGPT_SHARK)
         self.assertEquals(self.client.url, settings.WENIGPT_SHARK_API_URL)
+        self.client = WeniGPTClient(settings.WENIGPT_TEST)
+        self.assertEquals(self.client.url, settings.WENIGPT_TEST_API_URL)
 
     def test_fail(self):
         with self.assertRaises(WeniGPTInvalidVersionError):
@@ -62,3 +64,10 @@ class WenigptClientTestCase(TestCase):
         self.assertEquals(client.prompt_without_context, settings.WENIGPT_SHARK_NO_CONTEXT_PROMPT)
         self.assertEquals(client.pairs_template_prompt, settings.WENIGPT_SHARK_PAIRS_TEMPLATE_PROMPT)
         self.assertEquals(client.next_question_template_prompt, settings.WENIGPT_SHARK_NEXT_QUESTION_TEMPLATE_PROMPT)
+
+    def test_wenigpt_test_prompts(self):
+        client = WeniGPTClient(settings.WENIGPT_SHARK)
+        self.assertEquals(client.prompt_with_context, settings.WENIGPT_TEST_CONTEXT_PROMPT)
+        self.assertEquals(client.prompt_without_context, settings.WENIGPT_TEST_NO_CONTEXT_PROMPT)
+        self.assertEquals(client.pairs_template_prompt, settings.WENIGPT_TEST_PAIRS_TEMPLATE_PROMPT)
+        self.assertEquals(client.next_question_template_prompt, settings.WENIGPT_TEST_NEXT_QUESTION_TEMPLATE_PROMPT)

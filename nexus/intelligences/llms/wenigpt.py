@@ -69,13 +69,14 @@ class WeniGPTClient(LLMClient):
         context = "\n".join([chunk for chunk in chunks])
         prompt = self.get_prompt(instructions_formatted, context, agent, question)
 
-        for message in last_messages:
-            pairs_template = self.pairs_template_prompt
-            pairs_template = pairs_template.replace("{{msg_question}}", message.text)
-            conversation_prompt += pairs_template.replace("{{msg_answer}}", message.llm_respose)
+        if self.pairs_template_prompt != '""' and self.next_question_template_prompt != '""':
+            for message in last_messages:
+                pairs_template = self.pairs_template_prompt
+                pairs_template = pairs_template.replace("{{msg_question}}", message.text)
+                conversation_prompt += pairs_template.replace("{{msg_answer}}", message.llm_respose)
 
-        next_question_template = self.next_question_template_prompt.replace("{{question}}", question)
-        prompt += conversation_prompt + next_question_template
+            next_question_template = self.next_question_template_prompt.replace("{{question}}", question)
+            prompt += conversation_prompt + next_question_template
         return prompt.replace("\\n", "\n")
 
     def request_runpod(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO] = []):
