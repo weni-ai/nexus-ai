@@ -1,0 +1,19 @@
+import os
+
+from django.http import HttpResponseForbidden
+
+
+class PrometheusAuthenticationMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.path.startswith('/api/prometheus/'):
+            auth_token = request.headers.get('Authorization')
+            expected_token = os.environ.get('PROMETHEUS_AUTH_TOKEN')
+
+            if not auth_token or auth_token != expected_token:
+                return HttpResponseForbidden('Acesso negado')
+
+        response = self.get_response(request)
+        return response

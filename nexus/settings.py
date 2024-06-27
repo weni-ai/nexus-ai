@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "django_celery_results",
     "django_celery_beat",
+    "django_prometheus",
     'rest_framework',
     'drf_yasg',
     'elasticapm.contrib.django',
@@ -84,6 +85,8 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "elasticapm.contrib.django.middleware.TracingMiddleware",
     "elasticapm.contrib.django.middleware.Catch404Middleware",
+    'django_prometheus.middleware.PrometheusBeforeMiddleware',
+    'django_prometheus.middleware.PrometheusAfterMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -93,6 +96,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'nexus.logs.middleware.PrometheusAuthenticationMiddleware',
 ]
 
 ROOT_URLCONF = 'nexus.urls'
@@ -400,3 +404,10 @@ WENIGPT_VERSIONS = {
         "next_question_template_prompt": WENIGPT_SHARK_NEXT_QUESTION_TEMPLATE_PROMPT,
     }
 }
+
+# Healthcheck external services:
+
+HC_ZEROSHOT_URL = env.str("HC_ZEROSHOT_URL", "")
+HC_GOLFINHO_URL = env.str("HC_GOLFINHO_URL", "")
+HC_WENI_TOKEN = env.str("HC_WENI_TOKEN", "")
+PROMETHEUS_AUTH_TOKEN = env.str("PROMETHEUS_AUTH_TOKEN", "")

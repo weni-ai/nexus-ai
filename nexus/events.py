@@ -10,6 +10,11 @@ from nexus.intelligences.observer import (
     ContentBaseTextObserver,
     ContentBaseObserver
 )
+from nexus.logs.observers import (
+    ZeroShotHealthCheckObserver,
+    ZeroShotClassificationHealthCheckObserver,
+    GolfinhoHealthCheckObserver
+)
 
 from nexus.projects.observer import ProjectObserver
 
@@ -53,6 +58,21 @@ event_manager.subscribe(
 event_manager.subscribe(
     event="contentbase_activity",
     observer=[ContentBaseObserver()]
+)
+
+event_manager.subscribe(
+    event="health_check",
+    observer=[
+        ZeroShotHealthCheckObserver(),
+        GolfinhoHealthCheckObserver()
+    ]
+)
+
+event_manager.subscribe(
+    event="classification_health_check",
+    observer=[
+        ZeroShotClassificationHealthCheckObserver()
+    ]
 )
 
 event_manager.subscribe(
