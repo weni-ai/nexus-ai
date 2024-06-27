@@ -5,6 +5,7 @@ from nexus.projects.models import Project
 from nexus.orgs import permissions
 from nexus.usecases import users
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
+from nexus.events import event_manager
 
 
 def update_message(UpdateProjectDTO: UpdateProjectDTO):  # pragma: no cover
@@ -31,22 +32,44 @@ def update_message(UpdateProjectDTO: UpdateProjectDTO):  # pragma: no cover
     )
 
 
-def update_project(
-    UpdateProjectDTO: UpdateProjectDTO
-) -> Project:
+class ProjectUpdateUseCase:
 
-    project = get_project_by_uuid(UpdateProjectDTO.uuid)
-    org = project.org
-    user = users.get_by_email(UpdateProjectDTO.user_email)
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ) -> None:
+        self.event_manager_notify = event_manager_notify
 
-    has_permission = permissions.can_edit_intelligence_of_org(user, org)
-    if not has_permission:
-        raise IntelligencePermissionDenied()
+    def update_project(
+        self,
+        UpdateProjectDTO: UpdateProjectDTO
+    ) -> Project:
 
-    for attr, value in UpdateProjectDTO.dict().items():
-        setattr(project, attr, value)
-        if attr == "brain_on":
-            update_message(UpdateProjectDTO)
-    project.save()
+        project = get_project_by_uuid(UpdateProjectDTO.uuid)
+        org = project.org
+        user = users.get_by_email(UpdateProjectDTO.user_email)
 
-    return project
+        old_project_data = project
+
+        has_permission = permissions.can_edit_intelligence_of_org(user, org)
+        if not has_permission:
+            raise IntelligencePermissionDenied()
+
+        for attr, value in UpdateProjectDTO.dict().items():
+            setattr(project, attr, value)
+            if attr == "brain_on":
+                update_message(UpdateProjectDTO)
+        project.save()
+
+        new_project_data = project
+
+        self.event_manager_notify(
+            event="project_activity",
+            project=project,
+            action_type="U",
+            old_project_data=old_project_data,
+            new_project_data=new_project_data,
+            user=user
+        )
+
+        return project

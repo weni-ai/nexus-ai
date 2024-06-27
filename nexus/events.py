@@ -11,6 +11,7 @@ from nexus.intelligences.observer import (
     ContentBaseObserver
 )
 
+from nexus.projects.observer import ProjectObserver
 
 event_manager = EventManager()
 
@@ -52,4 +53,9 @@ event_manager.subscribe(
 event_manager.subscribe(
     event="contentbase_activity",
     observer=[ContentBaseObserver()]
+)
+
+event_manager.subscribe(
+    event="project_activity",
+    observer=[ProjectObserver()]
 )
