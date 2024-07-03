@@ -114,10 +114,18 @@ class SentenXFileDataBase:
         url = settings.SENTENX_BASE_URL + "/content_base/search-document"
         body = {
             "file_uuid": content_base_file_uuid,
-            "content_base": content_base_uuid,
+            "content_base_uuid": content_base_uuid,
         }
         response = requests.post(url=url, headers=self.headers, json=body)
         if response.status_code == 200:
+            json_response = response.json()
+
+            if not json_response.get("content"):
+                return {
+                    "status": 404,
+                    "data": "Content not found"
+                }
+
             return {
                 "status": response.status_code,
                 "data": response.json()
