@@ -16,7 +16,6 @@ from .views import (
     LLMViewset,
     LLMDefaultViewset,
     ContentBasePersonalizationViewSet,
-    ContentBaseFilePreview,
 )
 
 
@@ -55,7 +54,6 @@ urlpatterns = [
     path('<project_uuid>/router/', RouterContentBaseViewSet.as_view(), name="project-content-bases"),
     path('<project_uuid>/llm/', LLMViewset.as_view(), name='llm'),
     path('<project_uuid>/llm-default/', LLMDefaultViewset.as_view(), name='llm'),
-    path('<project_uuid>/document-preview/', ContentBaseFilePreview.as_view(), name="document-preview"),
     path('v1/intelligences/content_bases/<project_uuid>/', FlowsIntelligencesApiView.as_view(), name="project-intelligences"),
     path('v1/content-base-file', SentenxIndexerUpdateFile.as_view(), name="sentenx-content-base-file"),
     path('v1/wenigpt_question', GenerativeIntelligenceQuestionAPIView.as_view(), name="wenigpt-question"),

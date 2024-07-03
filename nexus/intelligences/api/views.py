@@ -23,8 +23,6 @@ from .serializers import (
 from nexus.usecases import intelligences
 from nexus.paginations import CustomCursorPagination
 from nexus.orgs import permissions
-from nexus.projects.permissions import has_project_permission
-from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
 
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
@@ -849,32 +847,3 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
             return Response(status=status.HTTP_200_OK, data=data)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
-
-
-class ContentBaseFilePreview(views.APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        try:
-            project_uuid = request.data.get("project_uuid")
-            content_base = request.data.get("content_base_uuid")
-            content_base_file_uuid = request.data.get("content_base_file_uuid")
-
-            project = get_project_by_uuid(project_uuid)
-            search_file_database = SentenXFileDataBase()
-
-            has_project_permission(
-                user=request.user,
-                project=project,
-                method="post"
-            )
-
-            response = search_file_database.document_preview(
-                content_base_file_uuid=content_base_file_uuid,
-                content_base_uuid=content_base
-            )
-            return Response(data=response, status=200)
-        except IntelligencePermissionDenied:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
-        except Exception as e:
-            return Response(data={"message": str(e)}, status=500)
