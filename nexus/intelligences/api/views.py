@@ -854,9 +854,9 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
 class ContentBaseFilePreview(views.APIView):
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
+    def post(self, request, *args, **kwargs):
         try:
-            project_uuid = request.data.get("project_uuid")
+            project_uuid = kwargs.get("project_uuid")
             content_base = request.data.get("content_base_uuid")
             content_base_file_uuid = request.data.get("content_base_file_uuid")
 
