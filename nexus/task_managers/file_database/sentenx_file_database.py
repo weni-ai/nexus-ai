@@ -105,3 +105,24 @@ class SentenXFileDataBase:
             "status": response.status_code,
             "data": response.text
         }
+
+    def document_preview(
+        self,
+        content_base_file_uuid: str,
+        content_base_uuid: str,
+    ):
+        url = settings.SENTENX_BASE_URL + "/content_base/search-document"
+        body = {
+            "file_uuid": content_base_file_uuid,
+            "content_base": content_base_uuid,
+        }
+        response = requests.post(url=url, headers=self.headers, json=body)
+        if response.status_code == 200:
+            return {
+                "status": response.status_code,
+                "data": response.json()
+            }
+        return {
+            "status": response.status_code,
+            "data": response.text
+        }
