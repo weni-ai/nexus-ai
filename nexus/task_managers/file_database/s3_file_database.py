@@ -17,7 +17,8 @@ class s3FileDatabase(FileDataBase):
 
     def add_file(self, file) -> FileResponseDTO:
         file_name = basename(file.name)
-        name, extension = file_name.split(".")
+        name, extension = file_name.rsplit(".", 1)
+        name = name.replace(".", "_")
         file_name = f"{name}-{uuid.uuid4()}.{extension}"
         response = FileResponseDTO()
         try:
