@@ -125,7 +125,7 @@ class MessageLogsRepository(Repository):
             contact_urn=contact_urn,
             messagelog__content_base=content_base,
             status="S"
-        ).order_by("created_at")[:number_of_messages]
+        ).order_by("-created_at")[:number_of_messages]
         for message in messages:
 
             message_log: MessageLog = message.messagelog
