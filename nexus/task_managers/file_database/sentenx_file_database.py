@@ -5,6 +5,15 @@ from nexus.task_managers.models import TaskManager
 from .file_database import FileDataBase
 
 
+class DefaultSentenXData:
+
+    def __init__(self):
+        self.headers = {
+            "Content-Type": "application/json; charset: utf-8",
+            "Authorization": f"Bearer {settings.SENTENX_AUTH_TOKEN}",
+        }
+
+
 class SentenXFileDataBase:
     def __init__(self):
         self.headers = {
@@ -105,3 +114,65 @@ class SentenXFileDataBase:
             "status": response.status_code,
             "data": response.text
         }
+
+
+class SentenXDocumentPreview(DefaultSentenXData):
+
+    def paginate_content(
+        self,
+        content: list,
+        page_size: int,
+        page_number: int
+    ) -> dict:
+        start_index = (page_number - 1) * page_size
+        end_index = start_index + page_size
+        paginated_content = content[start_index:end_index]
+
+        total_pages = -(-len(content) // page_size)
+
+        return {
+            "content": paginated_content,
+            "page_number": page_number,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
+
+    def document_preview(
+        self,
+        content_base_file_uuid: str,
+        content_base_uuid: str,
+        page_size: int,
+        page_number: int
+    ) -> dict:
+        url = settings.SENTENX_BASE_URL + "/content_base/search-document"
+        body = {
+            "file_uuid": content_base_file_uuid,
+            "content_base_uuid": content_base_uuid,
+        }
+
+        try:
+
+            response = requests.post(url=url, headers=self.headers, json=body)
+            response.raise_for_status()
+
+            json_response = response.json()
+            content = json_response.get("content")
+
+            if not content:
+                return {
+                    "status": 404,
+                    "data": "Content not found"
+                }
+
+            paginated_content = self.paginate_content(
+                content=content,
+                page_size=page_size,
+                page_number=page_number
+            )
+
+            return {
+                "status": response.status_code,
+                "data": paginated_content
+            }
+        except requests.exceptions.RequestException as e:
+            return {"status": 500, "data": str(e)}
