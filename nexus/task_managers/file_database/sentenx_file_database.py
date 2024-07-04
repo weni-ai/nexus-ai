@@ -1,12 +1,11 @@
 import requests
 from django.conf import settings
-from abc import ABC
 
 from nexus.task_managers.models import TaskManager
 from .file_database import FileDataBase
 
 
-class SentenXInterface(ABC):
+class DefaultSentenXData:
 
     def __init__(self):
         self.headers = {
@@ -117,7 +116,7 @@ class SentenXFileDataBase:
         }
 
 
-class SentenXDocumentPreview(SentenXInterface):
+class SentenXDocumentPreview(DefaultSentenXData):
 
     def paginate_content(
         self,
