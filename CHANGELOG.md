@@ -1,3 +1,10 @@
+# 1.6.0
+## *Add*:
+    - Document API preview.
+## *Fix*:
+    - Filename errors when creating a ContentBaseText with a project that has a name with special characters
+    - Message history bringing first 5 messages insteado of the 5 last messages
+
 # 1.5.3
 ## *Add*
     - WeniGPT model for test
