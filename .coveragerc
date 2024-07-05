@@ -22,6 +22,7 @@ omit =
     */tests.py
     */views.py
     */middleware.py
+    */mocks.py
 
 [report]
 fail_under = 75

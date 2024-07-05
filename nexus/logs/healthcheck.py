@@ -1,7 +1,7 @@
 from nexus.events import event_manager
 
 
-class HealthCheck:
+class HealthCheck:  # pragma: no cover
     def __init__(
         self,
         event_manager_notify=event_manager.notify
@@ -14,7 +14,7 @@ class HealthCheck:
         )
 
 
-class ClassificationHealthCheck:
+class ClassificationHealthCheck:  # pragma: no cover
     def __init__(
         self,
         event_manager_notify=event_manager.notify

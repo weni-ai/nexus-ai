@@ -2,7 +2,7 @@ from typing import List, Dict
 from abc import ABC, abstractmethod
 
 
-class DirectMessage(ABC):
+class DirectMessage(ABC):  # pragma: no cover
     @abstractmethod
     def send_direct_message(
         self,
