@@ -865,6 +865,11 @@ class ContentBaseFilePreview(views.APIView):
             project = get_project_by_uuid(project_uuid)
             search_file_database = SentenXDocumentPreview()
 
+            cb_org = get_org_by_content_base_uuid(content_base)
+            project_org = project.org
+            if not cb_org == project_org:
+                raise IntelligencePermissionDenied()
+
             has_project_permission(
                 user=request.user,
                 project=project,
