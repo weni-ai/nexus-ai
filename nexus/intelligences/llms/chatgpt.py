@@ -33,7 +33,15 @@ class ChatGPTClient(LLMClient):
         prompt: str = self.get_prompt(instructions_formatted, context, agent)
         return prompt
 
-    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO]):
+    def request_gpt(
+        self,
+        instructions: List,
+        chunks: List,
+        agent: Dict,
+        question: str,
+        llm_config: LLMSetupDTO,
+        last_messages: List[ContactMessageDTO]
+    ):  # pragma: no cover
         return self.chat_completion(
             instructions=instructions,
             chunks=chunks,

@@ -61,7 +61,7 @@ def _has_project_general_permission(
         raise ProjectAuthorizationDenied(
             'You do not have permission to perform this action.'
         )
-    except ProjectAuth.DoesNotExist:
+    except ProjectAuth.DoesNotExist:  # pragma: no cover
         raise ProjectAuth.DoesNotExist(
             'You do not have permission to perform this action.'
         )
