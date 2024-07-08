@@ -99,7 +99,10 @@ class CreateContentBaseUseCase():
             language=language,
             is_router=is_router
         )
-        ContentBaseAgent.objects.create(content_base=contentbase)
+        ContentBaseAgent.objects.create(
+            content_base=contentbase,
+            personality=settings.DEFAULT_AGENT_PERSONALITY,
+        )
         intelligence.increase_content_bases_count()
 
         self.event_manager_notify(
