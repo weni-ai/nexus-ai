@@ -8,7 +8,7 @@ from router.entities import LLMSetupDTO, ContactMessageDTO
 from django.conf import settings
 
 
-class LLMClient(ABC):
+class LLMClient(ABC):  # pragma: no cover
 
     @classmethod
     def get_by_type(cls, type):
