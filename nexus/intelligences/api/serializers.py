@@ -45,7 +45,7 @@ class ContentBaseTextSerializer(serializers.ModelSerializer):
 class ContentBaseFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseFile
-        fields = ["file", "extension_file", "uuid", "created_file_name", "status", "file_name"]
+        fields = ["file", "extension_file", "uuid", "created_file_name", "status", "file_name", "created_at"]
 
     status = serializers.SerializerMethodField()
 
@@ -66,7 +66,7 @@ class CreatedContentBaseLinkSerializer(serializers.ModelSerializer):
 class ContentBaseLinkSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseLink
-        fields = ["uuid", "link", "status"]
+        fields = ["uuid", "link", "status", "created_at"]
 
     status = serializers.SerializerMethodField()
 

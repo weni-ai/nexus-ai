@@ -1,3 +1,5 @@
+import pendulum
+
 from .get_by_uuid import (
     get_by_intelligence_uuid,
     get_by_contentbase_uuid,
@@ -40,6 +42,8 @@ class UpdateIntelligenceUseCase():
         if description:
             intelligence.description = description
 
+        intelligence.modified_at = pendulum.now()
+        intelligence.modified_by = user
         intelligence.save()
 
         return intelligence
@@ -85,6 +89,12 @@ class UpdateContentBaseUseCase():
             contentbase.description = description
             update_fields.append('description')
 
+        contentbase.modified_at = pendulum.now()
+        update_fields.append('modified_at')
+
+        contentbase.modified_by = user
+        update_fields.append('modified_by')
+
         contentbase.save(update_fields=update_fields)
         new_contentbase_data = contentbase
 
@@ -127,7 +137,11 @@ class UpdateContentBaseTextUseCase():
         old_contentbasetext_data = contentbasetext
         if text:
             contentbasetext.text = text
-            contentbasetext.save(update_fields=['text'])
+            contentbasetext.modified_at = pendulum.now()
+            contentbasetext.modified_by = user
+            contentbasetext.save(
+                update_fields=['text', 'modified_at', 'modified_by']
+            )
         new_contentbase_data = contentbasetext
 
         self.event_manager_notify(
@@ -164,6 +178,8 @@ class UpdateContentBaseFileUseCase():
 
         for attr, value in update_content_base_file_dto.dict().items():
             setattr(content_base_file, attr, value)
+        content_base_file.modified_at = pendulum.now()
+        content_base_file.modified_by = user
         content_base_file.save()
 
         return content_base_file

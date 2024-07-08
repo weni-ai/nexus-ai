@@ -78,7 +78,7 @@ class IntelligencesSerializersTestCase(TestCase):
         serializer = ContentBaseFileSerializer(self.content_base_file)
         data = serializer.data
         serializer_fields = list(data.keys())
-        fields = ["file", "extension_file", "uuid", "created_file_name", "status", "file_name"]
+        fields = ["file", "extension_file", "uuid", "created_file_name", "status", "file_name", "created_at"]
         self.assertListEqual(serializer_fields, fields)
         self.assertEquals(data.get("status"), TaskManager.STATUS_FAIL)
 
@@ -92,7 +92,7 @@ class IntelligencesSerializersTestCase(TestCase):
         data = serializer.data
 
         serializer_fields = list(data.keys())
-        fields = ["file", "extension_file", "uuid", "created_file_name", "status", "file_name"]
+        fields = ["file", "extension_file", "uuid", "created_file_name", "status", "file_name", "created_at"]
         self.assertListEqual(serializer_fields, fields)
         self.assertEquals(data.get("status"), TaskManager.STATUS_WAITING)
 
@@ -106,7 +106,7 @@ class IntelligencesSerializersTestCase(TestCase):
         serializer = ContentBaseLinkSerializer(self.content_base_link)
         data = serializer.data
         serializer_fields = list(data.keys())
-        fields = ["uuid", "link", "status"]
+        fields = ["uuid", "link", "status", "created_at"]
         self.assertListEqual(serializer_fields, fields)
         self.assertEquals(data.get("status"), TaskManager.STATUS_FAIL)
 
@@ -117,7 +117,7 @@ class IntelligencesSerializersTestCase(TestCase):
         serializer = ContentBaseLinkSerializer(content_base_link)
         data = serializer.data
         serializer_fields = list(data.keys())
-        fields = ["uuid", "link", "status"]
+        fields = ["uuid", "link", "status", "created_at"]
 
         self.assertListEqual(serializer_fields, fields)
         self.assertEquals(data.get("status"), TaskManager.STATUS_WAITING)
