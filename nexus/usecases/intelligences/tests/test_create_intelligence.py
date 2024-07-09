@@ -1,4 +1,5 @@
 from django.test import TestCase
+from django.conf import settings
 
 from ..create import (
     CreateIntelligencesUseCase,
@@ -55,6 +56,7 @@ class TestCreateContentBaseUseCase(TestCase):
             language='en-us'
         )
         self.assertEqual(content_base_create.title, "title")
+        self.assertEqual(content_base_create.agent.personality, settings.DEFAULT_AGENT_PERSONALITY)
 
     def test_create_content_base_text_use_case(self):
         contentbase = ContentBaseFactory()
