@@ -39,6 +39,7 @@ def start_route(
     message_logs_repository = MessageLogsRepository()
 
     message = Message(**message)
+    mailroom_msg_event = message.msg_event
 
     log_usecase = CreateLogUsecase()
     log_usecase.create_message_log(message.text, message.contact_urn)
@@ -107,7 +108,8 @@ def start_route(
             flow_start=flow_start,
             llm_config=llm_config,
             flows_user_email=flows_user_email,
-            log_usecase=log_usecase
+            log_usecase=log_usecase,
+            msg_event=mailroom_msg_event
         )
 
         log_usecase.update_status("S")
