@@ -1,3 +1,13 @@
+# 1.7.0
+## *Add*
+    - Return created_at on multiple intelligences api
+## *Remove*
+    - Add pragma: no cover to files that contains external calls removing it from coverage
+## *Fix*
+    - Missing permissions unittests
+    - Add new permission check for document preview api
+
+
 # 1.6.0
 ## *Add*:
     - Document API preview.
