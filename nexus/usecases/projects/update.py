@@ -1,12 +1,11 @@
 import copy
 
 from nexus.event_driven.publisher.rabbitmq_publisher import RabbitMQPublisher
-from .dto import UpdateProjectDTO
-from .get_by_uuid import get_project_by_uuid
+from nexus.usecases.projects.dto import UpdateProjectDTO
+from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.projects.models import Project
-from nexus.orgs import permissions
+from nexus.projects.permissions import has_project_permission
 from nexus.usecases import users
-from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 from nexus.events import event_manager
 
 
@@ -48,14 +47,15 @@ class ProjectUpdateUseCase:
     ) -> Project:
 
         project = get_project_by_uuid(UpdateProjectDTO.uuid)
-        org = project.org
         user = users.get_by_email(UpdateProjectDTO.user_email)
 
         old_project_data = copy.deepcopy(project)
 
-        has_permission = permissions.can_edit_intelligence_of_org(user, org)
-        if not has_permission:
-            raise IntelligencePermissionDenied()
+        has_project_permission(
+            user=user,
+            project=project,
+            method="patch"
+        )
 
         for attr, value in UpdateProjectDTO.dict().items():
             setattr(project, attr, value)
