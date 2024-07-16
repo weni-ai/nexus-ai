@@ -1,3 +1,7 @@
+# 1.7.1
+## *Fix*
+    - Check project permission on projects updates.
+
 # 1.7.0
 ## *Add*
     - Return created_at on multiple intelligences api
@@ -6,7 +10,6 @@
 ## *Fix*
     - Missing permissions unittests
     - Add new permission check for document preview api
-
 
 # 1.6.0
 ## *Add*:
