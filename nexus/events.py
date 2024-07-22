@@ -15,6 +15,7 @@ from nexus.logs.observers import (
     ZeroShotClassificationHealthCheckObserver,
     GolfinhoHealthCheckObserver
 )
+from nexus.actions.observers import ActionsObserver
 
 from nexus.projects.observer import ProjectObserver
 
@@ -78,4 +79,9 @@ event_manager.subscribe(
 event_manager.subscribe(
     event="project_activity",
     observer=[ProjectObserver()]
+)
+
+event_manager.subscribe(
+    event="action_activity",
+    observer=[ActionsObserver()]
 )

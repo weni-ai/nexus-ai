@@ -156,7 +156,8 @@ class FlowsViewset(
     def update(self, request, *args, **kwargs):
         flow_dto = UpdateFlowDTO(
             flow_uuid=kwargs.get("flow_uuid"),
-            prompt=request.data.get("prompt")
+            prompt=request.data.get("prompt"),
+            flow_name=request.data.get("action_name"),
         )
         project_uuid = kwargs.get('project_uuid')
         project = projects.get_project_by_uuid(project_uuid)
@@ -168,7 +169,10 @@ class FlowsViewset(
             method="put"
         )
 
-        flow = UpdateFlowsUseCase().update_flow(flow_dto)
+        flow = UpdateFlowsUseCase().update_flow(
+            flow_dto=flow_dto,
+            user=user
+        )
         data = FlowSerializer(flow).data
         return Response(data=data, status=status.HTTP_200_OK)
 
