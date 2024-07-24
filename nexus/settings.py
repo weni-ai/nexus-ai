@@ -37,6 +37,7 @@ env = environ.Env(
     APM_SERVICE_NAME=(str, ""),
     APM_SECRET_TOKEN=(str, ""),
     APM_SERVER_URL=(str, ""),
+    FILTER_SENTRY_EVENTS=(list, [])
 )
 
 # Quick-start development settings - unsuitable for production
@@ -347,11 +348,26 @@ FLOWS_SEND_MESSAGE_INTERNAL_TOKEN = env.str("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN")
 
 USE_SENTRY = env.bool("USE_SENTRY")
 
+FILTER_SENTRY_EVENTS = env.list("FILTER_SENTRY_EVENTS")
+
+
+def filter_events(event, hint):
+    event_type: str | None = event.get("exception").get("values")[0].get("type")
+
+    print(event_type, FILTER_SENTRY_EVENTS, event_type in FILTER_SENTRY_EVENTS)
+
+    if event_type in FILTER_SENTRY_EVENTS:
+        return None
+
+    return event
+
+
 if USE_SENTRY:
     sentry_sdk.init(
         dsn=env.str("SENTRY_URL"),
         integrations=[DjangoIntegration()],
         environment=env.str("ENVIRONMENT"),
+        before_send=filter_events
     )
 
 
