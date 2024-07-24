@@ -28,9 +28,17 @@ url_api += actions_routes
 url_api += projects_routes
 url_api += logs_routes
 
+
+def raise_error(request):
+    from elasticapm.transport import exceptions
+    message: str = """Failed to submit message: 'HTTP 503: {"accepted":0,"errors":[{"message":"queue is full"}]}\n'"""
+    raise exceptions.TransportException(message)
+
+
 urlpatterns = [
     path("", schema_view.with_ui("redoc")),
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls')),
     path('api/', include(url_api)),
+    path('error', raise_error),
 ]
