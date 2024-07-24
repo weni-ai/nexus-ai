@@ -11,13 +11,9 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 import os
 import sys
-import sentry_sdk
 from pathlib import Path
 
 import environ
-
-from sentry_sdk.integrations.django import DjangoIntegration
-
 
 environ.Env.read_env(env_file=(environ.Path(__file__) - 2)(".env"))
 
@@ -81,6 +77,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'router',
     'nexus.logs',
+    'nexus.sentry',
 ]
 
 MIDDLEWARE = [
@@ -347,28 +344,10 @@ FLOWS_SEND_MESSAGE_INTERNAL_TOKEN = env.str("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN")
 # Sentry config
 
 USE_SENTRY = env.bool("USE_SENTRY")
+SENTRY_URL = env.str("SENTRY_URL")
+ENVIRONMENT = env.str("ENVIRONMENT")
 
 FILTER_SENTRY_EVENTS = env.list("FILTER_SENTRY_EVENTS")
-
-
-def filter_events(event, hint):
-    event_type: str | None = event.get("exception").get("values")[0].get("type")
-
-    print(event_type, FILTER_SENTRY_EVENTS, event_type in FILTER_SENTRY_EVENTS)
-
-    if event_type in FILTER_SENTRY_EVENTS:
-        return None
-
-    return event
-
-
-if USE_SENTRY:
-    sentry_sdk.init(
-        dsn=env.str("SENTRY_URL"),
-        integrations=[DjangoIntegration()],
-        environment=env.str("ENVIRONMENT"),
-        before_send=filter_events
-    )
 
 
 # APM config
