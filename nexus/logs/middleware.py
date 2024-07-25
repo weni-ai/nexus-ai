@@ -10,8 +10,9 @@ class PrometheusAuthenticationMiddleware:
     def __call__(self, request):
         if request.path.startswith('/api/prometheus/'):
             auth_token = request.headers.get('Authorization')
-            expected_token = os.environ.get('PROMETHEUS_AUTH_TOKEN')
+            prometheus_auth_token = os.environ.get('PROMETHEUS_AUTH_TOKEN')
 
+            expected_token = f"Bearer {prometheus_auth_token}"
             if not auth_token or auth_token != expected_token:
                 return HttpResponseForbidden('Acesso negado')
 
