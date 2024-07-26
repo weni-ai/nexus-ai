@@ -156,8 +156,10 @@ class FlowsViewset(
     def update(self, request, *args, **kwargs):
         flow_dto = UpdateFlowDTO(
             flow_uuid=kwargs.get("flow_uuid"),
-            prompt=request.data.get("prompt")
+            prompt=request.data.get("prompt"),
+            name=request.data.get("name"),
         )
+
         project_uuid = kwargs.get('project_uuid')
         project = projects.get_project_by_uuid(project_uuid)
         user = request.user

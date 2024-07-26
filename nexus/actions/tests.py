@@ -156,6 +156,55 @@ class FlowsViewsetTestCase(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data.get("prompt"), prompt_update)
+        self.assertEqual(response.data.get("name"), self.flow.name)
+
+    def test_update_name(self):
+        flow_uuid = str(self.flow.uuid)
+        url_update = f'{self.url}/{flow_uuid}/'
+
+        name_update = "Update name"
+
+        data = {'name': name_update}
+        request = self.factory.patch(url_update, data=data)
+        force_authenticate(request, user=self.user)
+
+        response = FlowsViewset.as_view({'patch': 'update'})(
+            request,
+            data,
+            flow_uuid=flow_uuid,
+            project_uuid=str(self.project.uuid),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data.get("name"), name_update)
+        self.assertEqual(response.data.get("prompt"), self.flow.prompt)
+
+    def test_update_name_and_prompt(self):
+        flow_uuid = str(self.flow.uuid)
+        url_update = f'{self.url}/{flow_uuid}/'
+
+        name_update = "Update name"
+        prompt_update = "Update prompt"
+
+        data = {
+            "name": name_update,
+            "prompt": prompt_update,
+        }
+        request = self.factory.patch(url_update, data=data)
+        force_authenticate(request, user=self.user)
+
+        response = FlowsViewset.as_view({'patch': 'update'})(
+            request,
+            data,
+            flow_uuid=flow_uuid,
+            project_uuid=str(self.project.uuid),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data.get("name"), name_update)
+        self.assertEqual(response.data.get("prompt"), prompt_update)
 
     def test_delete(self):
         flow_uuid = str(self.flow.uuid)
