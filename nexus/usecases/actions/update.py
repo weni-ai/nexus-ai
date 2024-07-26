@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from events import event_manager
+from nexus.events import event_manager
 
 from django.forms.models import model_to_dict
 
@@ -28,21 +28,18 @@ class UpdateFlowsUseCase():
 
     def _save_log(
         self,
-        action,
-        values_before_update,
-        values_after_update,
-        user
+        user,
+        action: Flow,
+        values_before_update: dict,
+        values_after_update: dict
     ) -> bool:
-        action_details = {}
-        for key, old_value in values_before_update.items():
-            new_value = values_after_update.get(key)
-            if old_value != new_value:
-                action_details[key] = {'old': old_value, 'new': new_value}
 
         self.event_manager_notify(
             event="action_activity",
+            action_type="U",
             action=action,
-            action_details=action_details,
+            values_before_update=values_before_update,
+            values_after_update=values_after_update,
             user=user
         )
 
@@ -61,6 +58,5 @@ class UpdateFlowsUseCase():
             values_after_update=values_after_update,
             user=user
         )
-
 
         return flow

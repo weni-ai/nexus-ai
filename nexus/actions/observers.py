@@ -23,7 +23,7 @@ class ActionsObserver(EventObserver):
         self,
         action,
         user,
-        action_type:str,
+        action_type: str,
         **kwargs
     ) -> None:
         content_base = action.content_base
@@ -48,6 +48,6 @@ class ActionsObserver(EventObserver):
             action_details=action_details
         )
         create_recent_activity(
-            action-action,
+            action=action,
             dto=create_recent_activity_dto
         )
