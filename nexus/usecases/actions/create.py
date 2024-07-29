@@ -64,10 +64,11 @@ class GenerateFlowNameUseCase():
         return f"""
             A partir dos dados fornecidos, gere um nome de classe que melhor represente o Contexto da classe passado e os requisitos informados.
             # Contexto da classe: {context}
-            # Requisitos: 
+            # Requisitos:
             - O contexto da classe faz parte desse objetivo de chatbot: {chatbot_goal}
             - Responda sempre no formato: ```json\n{{\"class\": \"Nome da Classe\"}}\n```
             - O nome da classe pode ser composto e ter espaços, mas deve ser curto.
+            - Gere a classe no mesmo idioma do contexto.
             """
 
     def generate_action_name(self, chatbot_goal, context):
