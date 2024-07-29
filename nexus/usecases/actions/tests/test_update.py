@@ -8,13 +8,12 @@ from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
 
 class TestUpdateFlowUseCase(TestCase):
 
-    def __init__(self):
+    def setUp(self):
         self.flow_factory = FlowFactory()
-
 
     def test_update(self):
         update_dto = UpdateFlowDTO(
-            flow_uuid=self.flow_factory.flow.uuid,
+            flow_uuid=self.flow_factory.uuid,
             prompt="new prompt",
             flow_name="new flow name"
         )

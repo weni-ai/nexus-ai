@@ -48,6 +48,6 @@ class ActionsObserver(EventObserver):
             action_details=action_details
         )
         create_recent_activity(
-            action=action,
+            instance=action,
             dto=create_recent_activity_dto
         )
