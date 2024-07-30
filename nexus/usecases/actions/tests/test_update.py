@@ -45,3 +45,4 @@ class TestUpdateFlowUseCase(TestCase):
         )
 
         self.assertEqual(updated_flow.flow_name, update_dto.flow_name)
+        self.assertEqual(updated_flow.prompt, self.flow_factory.prompt)
