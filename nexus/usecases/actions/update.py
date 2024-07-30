@@ -11,8 +11,8 @@ from nexus.actions.models import Flow
 @dataclass
 class UpdateFlowDTO:
     flow_uuid: str
-    prompt: str
-    flow_name: str
+    prompt: str = None
+    flow_name: str = None
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
