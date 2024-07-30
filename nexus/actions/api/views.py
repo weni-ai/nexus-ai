@@ -158,7 +158,7 @@ class FlowsViewset(
         flow_dto = UpdateFlowDTO(
             flow_uuid=kwargs.get("flow_uuid"),
             prompt=request.data.get("prompt"),
-            flow_name=request.data.get("action_name"),
+            flow_name=request.data.get("name"),
         )
         project_uuid = kwargs.get('project_uuid')
         project = projects.get_project_by_uuid(project_uuid)
