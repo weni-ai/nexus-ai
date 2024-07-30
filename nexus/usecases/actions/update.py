@@ -12,7 +12,7 @@ from nexus.actions.models import Flow
 class UpdateFlowDTO:
     flow_uuid: str
     prompt: str = None
-    flow_name: str = None
+    name: str = None
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
