@@ -1,3 +1,10 @@
+# 1.8.0
+## *Add*
+    - Generate action name use LLM model
+    - Sentry app and filter exceptions
+## *Update*
+    - Check Bearer syntax on prometheus middleware
+
 # 1.7.1
 ## *Fix*
     - Check project permission on projects updates.
