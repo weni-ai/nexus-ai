@@ -14,7 +14,7 @@ from nexus.actions.api.serializers import FlowSerializer
 from nexus.usecases import projects
 from nexus.usecases.logs.create import CreateLogUsecase
 from nexus.usecases.actions.list import ListFlowsUseCase
-from nexus.usecases.actions.create import CreateFlowDTO, CreateFlowsUseCase
+from nexus.usecases.actions.create import CreateFlowDTO, CreateFlowsUseCase, GenerateFlowNameUseCase
 from nexus.usecases.actions.delete import DeleteFlowsUseCase, DeleteFlowDTO
 from nexus.usecases.actions.update import UpdateFlowsUseCase, UpdateFlowDTO
 from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase, FlowDoesNotExist
@@ -27,6 +27,7 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.intelligences.llms.client import LLMClient
 
 from nexus.projects.permissions import has_project_permission
+from nexus.projects.exceptions import ProjectAuthorizationDenied
 
 from router.repositories.orm import (
     ContentBaseORMRepository,
@@ -156,7 +157,8 @@ class FlowsViewset(
     def update(self, request, *args, **kwargs):
         flow_dto = UpdateFlowDTO(
             flow_uuid=kwargs.get("flow_uuid"),
-            prompt=request.data.get("prompt")
+            prompt=request.data.get("prompt"),
+            flow_name=request.data.get("name"),
         )
         project_uuid = kwargs.get('project_uuid')
         project = projects.get_project_by_uuid(project_uuid)
@@ -168,7 +170,10 @@ class FlowsViewset(
             method="put"
         )
 
-        flow = UpdateFlowsUseCase().update_flow(flow_dto)
+        flow = UpdateFlowsUseCase().update_flow(
+            flow_dto=flow_dto,
+            user=user
+        )
         data = FlowSerializer(flow).data
         return Response(data=data, status=status.HTTP_200_OK)
 
@@ -304,3 +309,30 @@ class MessagePreviewView(APIView):
             return Response(data=response)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+class GenerateActionNameView(APIView):
+    def post(self, request, *args, **kwargs):
+        try:
+            user = request.user
+            project = projects.get_project_by_uuid(kwargs.get("project_uuid"))
+            has_project_permission(
+                method="post",
+                user=user,
+                project=project
+            )
+
+            data = request.data
+            chatbot_goal = data.get("chatbot_goal")
+            context = data.get("context")
+
+            usecase = GenerateFlowNameUseCase()
+            response = usecase.generate_action_name(chatbot_goal, context)
+            return Response(data=response)
+        except ProjectAuthorizationDenied:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            return Response(
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                data={"Error": str(e)}
+            )
