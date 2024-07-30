@@ -1,3 +1,7 @@
+# 1.8.1
+## *Fix*
+    - Fix updating name action syntax
+
 # 1.8.0
 ## *Add*
     - Generate action name use LLM model
