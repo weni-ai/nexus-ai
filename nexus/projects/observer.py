@@ -55,3 +55,28 @@ class ProjectObserver(EventObserver):
         )
 
         create_recent_activity(project, dto=dto)
+
+
+class FeatureVersionObserver(EventObserver):
+
+    def _updated_fields(
+        self,
+        old_feature_version_dict: dict,
+        new_feature_version_dict: dict
+    ):
+        action_details = {}
+        for key, old_value in old_feature_version_dict.items():
+            new_value = new_feature_version_dict.get(key)
+            if str(old_value) != str(new_value):
+                action_details[key] = {'old': str(old_value), 'new': str(new_value)}
+        return action_details
+
+    # TODO: On update, all existing projects using the changed feature version should be updated.
+    def perform(self, event):
+
+        if event.action_type == "U":
+            old_feature_version_data = model_to_dict(event.old_feature_version_data)
+            new_feature_version_data = model_to_dict(event.new_feature_version_data)
+            action_details = self._updated_fields(old_feature_version_data, new_feature_version_data)
+
+        pass
