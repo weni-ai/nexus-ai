@@ -13,10 +13,26 @@ class FlowStartHTTPClient(FlowStart):
         self.__host = host
         self.__access_token = access_token
 
-    def start_flow(self, flow: FlowDTO, user: str, urns: List, user_message: str) -> None:
+    def start_flow(
+        self,
+        flow: FlowDTO,
+        user: str,
+        urns: List,
+        user_message: str,
+        msg_event: dict
+    ) -> None:
+
         url = f"{self.__host}/api/v2/internals/flow_starts/"
 
-        payload = {"user": user, "flow": flow.uuid, "urns": urns, "params": {"message": user_message}}
+        payload = {
+            "user": user,
+            "flow": flow.uuid,
+            "urns": urns,
+            "params": {
+                "message": user_message,
+                "msg_event": msg_event
+            }
+        }
 
         params = {
             "token": self.__access_token

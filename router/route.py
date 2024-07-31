@@ -47,6 +47,7 @@ def route(
     flow_start: FlowStart,
     llm_config: LLMSetupDTO,
     flows_user_email: str,
+    msg_event: dict,
     log_usecase,
 ):
     try:
@@ -122,7 +123,8 @@ def route(
                     flow=fallback_flow,
                     flow_start=flow_start,
                     llm_response=llm_response,
-                    user_email=flows_user_email
+                    user_email=flows_user_email,
+                    msg_event=msg_event,
                 )
 
             return dispatch(
@@ -131,6 +133,7 @@ def route(
                 direct_message=direct_message,
                 user_email=flows_user_email,
                 full_chunks=full_chunks,
+                msg_event=msg_event,
             )
 
         flow: FlowDTO = flows_repository.get_project_flow_by_name(message.project_uuid, classification)
@@ -139,7 +142,8 @@ def route(
             message=message,
             flow_start=flow_start,
             flow=flow,
-            user_email=flows_user_email
+            user_email=flows_user_email,
+            msg_event=msg_event,
         )
 
     except Exception as e:

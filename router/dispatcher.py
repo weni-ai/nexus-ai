@@ -11,6 +11,7 @@ from router.flow_start import FlowStart
 def dispatch(
         message: Message,
         user_email: str,
+        msg_event: dict = None,
         flow: FlowDTO = None,
         llm_response: str = None,
         direct_message: DirectMessage = None,
@@ -33,4 +34,5 @@ def dispatch(
         user=user_email,
         urns=urns,
         user_message=message.text,
+        msg_event=msg_event,
     )
