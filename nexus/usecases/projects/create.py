@@ -83,15 +83,15 @@ class CreateFeatureVersionUseCase:
     def create_feature_version(
         self,
         consumer_msg: dict
-    ) -> FeatureVersion:
+    ) -> bool:
         feature_version_dto = FeatureVersionDTO(
             uuuid=consumer_msg.get("uuid"),
             setup=consumer_msg.get("setup")
         )
 
-        feature_version = FeatureVersion.objects.create(
+        FeatureVersion.objects.create(
             uuid=feature_version_dto.uuuid,
             setup=feature_version_dto.setup
         )
 
-        return feature_version
+        return True
