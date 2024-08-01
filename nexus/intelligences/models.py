@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import ValidationError
 
 from nexus.db.models import BaseModel, SoftDeleteModel
 from nexus.orgs.models import Org
@@ -33,6 +34,19 @@ class Intelligence(BaseModel, SoftDeleteModel):
 class IntegratedIntelligence(BaseModel):
     intelligence = models.ForeignKey(Intelligence, on_delete=models.CASCADE)
     project = models.ForeignKey('projects.Project', on_delete=models.CASCADE)
+
+    def unique_router(self):
+        if self.intelligence.is_router:
+            existing_router = IntegratedIntelligence.objects.filter(
+                project=self.project,
+                intelligence__is_router=True
+            ).exclude(id=self.id)
+            if existing_router.exists():
+                raise ValidationError("A project can only have one IntegratedIntelligence with is_router=True")
+
+    def save(self, *args, **kwargs):
+        self.unique_router()
+        super().save(*args, **kwargs)
 
 
 class Languages(Enum):
