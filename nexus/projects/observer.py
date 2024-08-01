@@ -72,11 +72,20 @@ class FeatureVersionObserver(EventObserver):
         return action_details
 
     # TODO: On update, all existing projects using the changed feature version should be updated.
-    def perform(self, event):
+    def perform(
+        self,
+        feature_version,
+        action_type,
+        **kwargs
+    ):
 
-        if event.action_type == "U":
-            old_feature_version_data = model_to_dict(event.old_feature_version_data)
-            new_feature_version_data = model_to_dict(event.new_feature_version_data)
-            action_details = self._updated_fields(old_feature_version_data, new_feature_version_data)
+        if action_type == "U":
+            old_feature_version_data = kwargs.get('old_feature_version_data')
+            new_feature_version_data = kwargs.get('new_feature_version_data')
+
+            action_details = self._updated_fields(
+                old_feature_version_data,
+                new_feature_version_data
+            )
 
         pass

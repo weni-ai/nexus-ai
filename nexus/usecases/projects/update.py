@@ -92,7 +92,7 @@ class UpdateFeatureVersionUseCase:
         feature_version_dto: FeatureVersionDTO
     ) -> FeatureVersion:
 
-        feature_version = FeatureVersion.objects.get(uuid=feature_version_dto.uuuid)
+        feature_version = FeatureVersion.objects.get(uuid=feature_version_dto.uuid)
         old_feature_version_data = model_to_dict(feature_version)
         for attr, value in feature_version_dto.dict().items():
             setattr(feature_version, attr, value)
