@@ -89,8 +89,12 @@ class UpdateFeatureVersionUseCase:
 
     def update_feature_version(
         self,
-        feature_version_dto: FeatureVersionDTO
+        consumer_msg: dict
     ) -> FeatureVersion:
+        feature_version_dto = FeatureVersionDTO(
+            uuid=consumer_msg.get("feature_version_uuid"),
+            setup=consumer_msg.get("brain")
+        )
 
         feature_version = FeatureVersion.objects.get(uuid=feature_version_dto.uuid)
         old_feature_version_data = model_to_dict(feature_version)

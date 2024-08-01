@@ -62,7 +62,7 @@ class CreateFeatureVersionUseCaseTestCase(TestCase):
     def test_create_feature_version(self):
         consumer_msg = {
             'feature_version_uuid': uuid4().hex,
-            'setup': {
+            'brain': {
                 "agent": {
                     "name": "name",
                     "role": "role",
@@ -79,7 +79,7 @@ class CreateFeatureVersionUseCaseTestCase(TestCase):
     def test_empty_setup(self):
         consumer_msg = {
             'feature_version_uuid': uuid4().hex,
-            'setup': {}
+            'brain': {}
         }
 
         feature_version = self.usecase.create_feature_version(
@@ -90,7 +90,7 @@ class CreateFeatureVersionUseCaseTestCase(TestCase):
     def test_existing_feature_version(self):
         consumer_msg = {
             'feature_version_uuid': uuid4().hex,
-            'setup': {
+            'brain': {
                 "agent": {
                     "name": "name",
                     "role": "role",

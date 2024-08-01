@@ -86,7 +86,7 @@ class CreateFeatureVersionUseCase:
     ) -> bool:
         feature_version_dto = FeatureVersionDTO(
             uuid=consumer_msg.get("feature_version_uuid"),
-            setup=consumer_msg.get("setup")
+            setup=consumer_msg.get("brain")
         )
 
         try:

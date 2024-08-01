@@ -41,9 +41,9 @@ class FeatureVersionTestCase(TestCase):
 
     def test_update_feature_version(self):
         setup = {"test": "test"}
-        dto = FeatureVersionDTO(
-            uuid=self.feature_version.uuid,
-            setup=setup
-        )
-        updated_feature_version = self.usecase.update_feature_version(dto)
+        consumer_msg = {
+            "feature_version_uuid": self.feature_version.uuid,
+            "brain": setup
+        }
+        updated_feature_version = self.usecase.update_feature_version(consumer_msg)
         self.assertEqual(updated_feature_version.setup, setup)
