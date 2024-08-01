@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from nexus.usecases.projects.tests.project_factory import FeatureVersionFactory
 from ..update import ProjectUpdateUseCase, UpdateFeatureVersionUseCase
-from ..dto import UpdateProjectDTO, FeatureVersionDTO
+from ..dto import UpdateProjectDTO
 
 from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
 

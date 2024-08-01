@@ -83,7 +83,7 @@ class FeatureVersionObserver(EventObserver):
             old_feature_version_data = kwargs.get('old_feature_version_data')
             new_feature_version_data = kwargs.get('new_feature_version_data')
 
-            action_details = self._updated_fields(
+            self._updated_fields(
                 old_feature_version_data,
                 new_feature_version_data
             )

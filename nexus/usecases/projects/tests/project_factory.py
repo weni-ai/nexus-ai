@@ -15,6 +15,7 @@ from nexus.usecases.users.tests.user_factory import UserFactory
 
 fake = Faker()
 
+
 class ProjectFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Project
