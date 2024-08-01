@@ -13,8 +13,8 @@ class UpdateProjectDTO:
 
 @dataclass
 class FeatureVersionDTO:
-    uuuid = str
-    setup = dict
+    uuid: str
+    setup: dict
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
