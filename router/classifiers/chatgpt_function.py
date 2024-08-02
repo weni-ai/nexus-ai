@@ -1,4 +1,5 @@
 import re
+import concurrent.futures
 from openai import OpenAI
 
 from typing import List
@@ -108,3 +109,64 @@ class ChatGPTFunctionClassifier(Classifier):
             )
 
         return multiple_classifications[0]
+
+
+class ChatGPTReflectionClassifier(Classifier):
+
+    def __init__(
+        self,
+        client: OpenAIClientInterface,
+        chatgpt_model: str,
+    ):
+        self.chatgpt_model = chatgpt_model
+        self.client = client
+
+    def predict(
+        self,
+        message: str,
+        prompt: str
+    ) -> str:
+
+        msg = [
+            {
+                "role": "system",
+                "content": prompt
+            },
+            {
+                "role": "user",
+                "content": message
+            }
+        ]
+
+        response = self.client.chat_completions_create(
+            model=self.chatgpt_model,
+            messages=msg,
+        )
+
+        return response.choices[0].message.content
+
+    def multi_predict(
+        self,
+        message: str,
+        prediction_count: int
+    ) -> List[str]:
+        prompt_list = settings.CHATGPT_MULTI_PROMPT_LIST[:prediction_count]
+
+        results = []
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [executor.submit(self.predict, message, prompt) for prompt in prompt_list]
+
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    results.append(future.result())
+                except Exception as e:
+                    results.append(f"Error: {e}")
+
+        return results
+
+    def reflection(
+        self,
+        answer_to_reflect: str,
+    ):
+        # TODO: Implement reflection check of the best msg
+        pass
