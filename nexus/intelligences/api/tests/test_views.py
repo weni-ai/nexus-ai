@@ -266,8 +266,9 @@ class TestContentBaseTextViewset(TestCase):
     def test_update(self, mock_file_database):
         mock_file_database = MockFileDataBase
         mock_file_database()
+        text = ""
         data = {
-            'text': 'text',
+            'text': text,
         }
         url_put = f'{self.url}/{self.contentbasetext.uuid}/'
         request = self.factory.put(
@@ -281,7 +282,35 @@ class TestContentBaseTextViewset(TestCase):
             content_base_uuid=str(self.content_base.uuid),
             contentbasetext_uuid=str(self.contentbasetext.uuid)
         )
+        response.render()
+        content = json.loads(response.content)
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(content.get("text"), text)
+
+    @mock.patch("nexus.intelligences.api.views.SentenXFileDataBase")
+    def test_update_empty_text(self, mock_file_database):
+        mock_file_database = MockFileDataBase
+        mock_file_database()
+        text = ""
+        data = {
+            'text': text,
+        }
+        url_put = f'{self.url}/{self.contentbasetext.uuid}/'
+        request = self.factory.put(
+            url_put,
+            json.dumps(data),
+            content_type='application/json'
+        )
+        force_authenticate(request, user=self.user)
+        response = self.view(
+            request,
+            content_base_uuid=str(self.content_base.uuid),
+            contentbasetext_uuid=str(self.contentbasetext.uuid)
+        )
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(content.get("text"), text)
 
 
 class TestContentBaseLinkViewset(TestCase):

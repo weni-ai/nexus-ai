@@ -135,7 +135,7 @@ class UpdateContentBaseTextUseCase():
             raise IntelligencePermissionDenied()
 
         old_contentbasetext_data = contentbasetext
-        if text:
+        if text is not None:
             contentbasetext.text = text
             contentbasetext.modified_at = pendulum.now()
             contentbasetext.modified_by = user
