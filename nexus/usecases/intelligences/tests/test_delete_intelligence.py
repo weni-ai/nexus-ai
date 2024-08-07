@@ -15,7 +15,7 @@ from .intelligence_factory import (
     ContentBaseTextFactory
 )
 from nexus.event_domain.recent_activity.mocks import mock_message_handler, mock_event_manager_notify
-
+from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
 
 class TestDeleteIntelligenceUseCase(TestCase):
     def setUp(self):
@@ -54,7 +54,7 @@ class TestDeleteContentBaseTextUseCase(TestCase):
         self.contentbasetext = ContentBaseTextFactory()
 
     def test_delete_contentbasetext(self):
-        use_case = DeleteContentBaseTextUseCase()
+        use_case = DeleteContentBaseTextUseCase(file_database=MockFileDataBase())
         status = use_case.delete_contentbasetext(
             contentbasetext_uuid=self.contentbasetext.uuid,
             user_email=self.contentbasetext.created_by.email
