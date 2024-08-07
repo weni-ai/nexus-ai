@@ -13,6 +13,7 @@ from nexus.usecases import (
 from ...event_domain.recent_activity.msg_handler import recent_activity_message
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
+from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase, SentenXDocumentPreview
 
 
 class DeleteIntelligenceUseCase():
@@ -93,6 +94,9 @@ class DeleteContentBaseUseCase():
 
 class DeleteContentBaseTextUseCase():
 
+    def __init__(self, file_database) -> None:
+        self.file_database = file_database
+
     def delete_contentbasetext(
             self,
             contentbasetext_uuid: str,
@@ -110,4 +114,17 @@ class DeleteContentBaseTextUseCase():
 
         contentbasetext = get_by_contentbasetext_uuid(contentbasetext_uuid)
         contentbasetext.delete()
+        self.delete_content_base_text_from_index(
+            contentbasetext_uuid=str(contentbasetext_uuid),
+            content_base_uuid=str(contentbasetext.content_base.uuid),
+            content_base_file_name=contentbasetext.file_name,
+        )
+        return True
+
+    def delete_content_base_text_from_index(self, contentbasetext_uuid: str, content_base_uuid: str, content_base_file_name: str):
+        self.file_database.delete(
+            content_base_uuid=content_base_uuid,
+            content_base_file_uuid=contentbasetext_uuid,
+            filename=content_base_file_name
+        )
         return True

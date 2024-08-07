@@ -1,5 +1,5 @@
 import json
-from unittest import skip
+from unittest import skip, mock
 
 from django.conf import settings
 from django.test import TestCase
@@ -26,7 +26,7 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseLinkFactory,
 )
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
-
+from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
 
 @skip("View Testing")
 class TestIntelligencesViewset(TestCase):
@@ -261,8 +261,9 @@ class TestContentBaseTextViewset(TestCase):
         )
         self.assertEqual(response.status_code, 201)
 
-    def test_update(self):
-
+    @mock.patch("nexus.intelligences.api.views.SentenXFileDataBase")
+    def test_update(self, mock_file_database):
+        mock_file_database = MockFileDataBase
         data = {
             'text': 'text',
         }
