@@ -28,6 +28,7 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
 
+
 @skip("View Testing")
 class TestIntelligencesViewset(TestCase):
     def setUp(self):
@@ -264,6 +265,7 @@ class TestContentBaseTextViewset(TestCase):
     @mock.patch("nexus.intelligences.api.views.SentenXFileDataBase")
     def test_update(self, mock_file_database):
         mock_file_database = MockFileDataBase
+        mock_file_database()
         data = {
             'text': 'text',
         }
