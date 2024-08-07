@@ -13,7 +13,6 @@ from nexus.usecases import (
 from ...event_domain.recent_activity.msg_handler import recent_activity_message
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase, SentenXDocumentPreview
 
 
 class DeleteIntelligenceUseCase():

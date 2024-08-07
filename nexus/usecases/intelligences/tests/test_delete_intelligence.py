@@ -17,6 +17,7 @@ from .intelligence_factory import (
 from nexus.event_domain.recent_activity.mocks import mock_message_handler, mock_event_manager_notify
 from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
 
+
 class TestDeleteIntelligenceUseCase(TestCase):
     def setUp(self):
         self.use_case = DeleteIntelligenceUseCase(
