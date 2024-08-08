@@ -96,6 +96,8 @@ def route(
                 last_messages=last_messages,
             )
 
+            prompt_to_reflect = llm_client.prompt
+
             print(f"[+ LLM Response: {llm_response} +]")
 
             metadata = LogMetadata(

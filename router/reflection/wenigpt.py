@@ -84,4 +84,5 @@ class WenigPTSharkReflection(ModelVersionReflection):
         self,
         message_to_reflect: str
     ) -> str:
+        formated_prompt = self.format_prompt(message_to_reflect)
         return self.strategy(message_to_reflect)
