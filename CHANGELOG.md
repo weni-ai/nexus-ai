@@ -1,3 +1,7 @@
+# 1.8.2
+## *Fix*
+    - Add missing rule where you can only have 1 router per project in IntegratedIntelligence model
+
 # 1.8.1
 ## *Fix*
     - Fix updating name action syntax
