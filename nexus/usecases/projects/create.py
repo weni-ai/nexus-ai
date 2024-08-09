@@ -1,7 +1,8 @@
 from nexus.usecases import projects
 
-from nexus.projects.models import ProjectAuth
+from nexus.projects.models import ProjectAuth, FeatureVersion
 from nexus.projects.project_dto import ProjectAuthCreationDTO
+from nexus.usecases.projects.dto import FeatureVersionDTO
 
 from nexus.users.models import User
 
@@ -75,3 +76,24 @@ class ProjectAuthUseCase:
             raise ValueError("Project auth does not exists")
         except Exception as exception:
             raise exception
+
+
+class CreateFeatureVersionUseCase:
+
+    def create_feature_version(
+        self,
+        consumer_msg: dict
+    ) -> bool:
+        feature_version_dto = FeatureVersionDTO(
+            uuid=consumer_msg.get("feature_version_uuid"),
+            setup=consumer_msg.get("brain")
+        )
+
+        try:
+            FeatureVersion.objects.create(
+                uuid=feature_version_dto.uuid,
+                setup=feature_version_dto.setup
+            )
+            return True
+        except Exception as e:
+            raise e

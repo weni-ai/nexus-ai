@@ -2,7 +2,8 @@ from django.test import TestCase
 
 from unittest.mock import patch
 
-from ..update import ProjectUpdateUseCase
+from nexus.usecases.projects.tests.project_factory import FeatureVersionFactory
+from ..update import ProjectUpdateUseCase, UpdateFeatureVersionUseCase
 from ..dto import UpdateProjectDTO
 
 from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
@@ -30,3 +31,19 @@ class UpdateProjectTestCase(TestCase):
         usecase = ProjectUpdateUseCase()
         updated_project = usecase.update_project(dto)
         self.assertEqual(updated_project.brain_on, brain_on)
+
+
+class FeatureVersionTestCase(TestCase):
+
+    def setUp(self) -> None:
+        self.feature_version = FeatureVersionFactory()
+        self.usecase = UpdateFeatureVersionUseCase()
+
+    def test_update_feature_version(self):
+        setup = {"test": "test"}
+        consumer_msg = {
+            "feature_version_uuid": self.feature_version.uuid,
+            "brain": setup
+        }
+        updated_feature_version = self.usecase.update_feature_version(consumer_msg)
+        self.assertEqual(updated_feature_version.setup, setup)

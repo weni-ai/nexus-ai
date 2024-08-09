@@ -16,6 +16,16 @@ class TemplateType(models.Model):
         return f'{self.uuid} - {self.name}'
 
 
+class FeatureVersion(models.Model):
+    uuid = models.UUIDField(primary_key=True, editable=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    setup = models.JSONField(default=dict)
+
+    def __str__(self) -> str:
+        return f'{self.uuid}'
+
+
 class Project(BaseModel, SoftDeleteModel):
     name = models.CharField(max_length=255)
     org = models.ForeignKey(

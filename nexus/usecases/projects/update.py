@@ -1,12 +1,14 @@
 import copy
 
 from nexus.event_driven.publisher.rabbitmq_publisher import RabbitMQPublisher
-from nexus.usecases.projects.dto import UpdateProjectDTO
+from nexus.usecases.projects.dto import UpdateProjectDTO, FeatureVersionDTO
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
-from nexus.projects.models import Project
+from nexus.projects.models import Project, FeatureVersion
 from nexus.projects.permissions import has_project_permission
 from nexus.usecases import users
 from nexus.events import event_manager
+
+from django.forms.models import model_to_dict
 
 
 def update_message(UpdateProjectDTO: UpdateProjectDTO):  # pragma: no cover
@@ -75,3 +77,39 @@ class ProjectUpdateUseCase:
         )
 
         return project
+
+
+class UpdateFeatureVersionUseCase:
+
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ) -> None:
+        self.event_manager_notify = event_manager_notify
+
+    def update_feature_version(
+        self,
+        consumer_msg: dict
+    ) -> FeatureVersion:
+        feature_version_dto = FeatureVersionDTO(
+            uuid=consumer_msg.get("feature_version_uuid"),
+            setup=consumer_msg.get("brain")
+        )
+
+        feature_version = FeatureVersion.objects.get(uuid=feature_version_dto.uuid)
+        old_feature_version_data = model_to_dict(feature_version)
+        for attr, value in feature_version_dto.dict().items():
+            setattr(feature_version, attr, value)
+
+        feature_version.save()
+        new_feature_version_data = model_to_dict(feature_version)
+
+        self.event_manager_notify(
+            event="feature_version",
+            feature_version=feature_version,
+            action_type="U",
+            old_feature_version_data=old_feature_version_data,
+            new_feature_version_data=new_feature_version_data
+        )
+
+        return feature_version
