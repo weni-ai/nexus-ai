@@ -1,7 +1,9 @@
 import json
 import requests
+from typing import List
 
 from django.conf import settings
+from django.db.models import QuerySet
 
 from dataclasses import dataclass
 
@@ -33,6 +35,19 @@ class CreateFlowsUseCase():
             fallback=create_dto.fallback,
             content_base=content_base
         )
+
+    def bulk_create_flows(self, flows_dtos: List[CreateFlowDTO], project_uuid: str) -> QuerySet[Flow]:
+        content_base = get_default_content_base_by_project(project_uuid)
+        create_flows = []
+        for flow_dto in flows_dtos:
+            create_flows.append(Flow(
+                uuid=flow_dto.flow_uuid,
+                name=flow_dto.name,
+                prompt=flow_dto.prompt,
+                fallback=flow_dto.fallback,
+                content_base=content_base
+            ))
+        return Flow.objects.bulk_create(create_flows)
 
 
 class GenerateFlowNameUseCase():
