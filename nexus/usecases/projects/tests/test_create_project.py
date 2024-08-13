@@ -5,7 +5,7 @@ from .project_factory import ProjectFactory
 from ..projects_use_case import ProjectsUseCase
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
-from nexus.usecases.projects.create import ProjectAuthUseCase
+from nexus.usecases.projects.create import ProjectAuthUseCase, CreateFeatureVersionUseCase
 from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
 
@@ -52,3 +52,58 @@ class ProjectAuthUseCaseTestCase(TestCase):
         self.assertEqual(project_auth.project, self.project)
         self.assertEqual(project_auth.user.email, self.user_email)
         self.assertEqual(project_auth.role, 3)
+
+
+class CreateFeatureVersionUseCaseTestCase(TestCase):
+
+    def setUp(self) -> None:
+        self.usecase = CreateFeatureVersionUseCase()
+
+    def test_create_feature_version(self):
+        consumer_msg = {
+            'feature_version_uuid': uuid4().hex,
+            'brain': {
+                "agent": {
+                    "name": "name",
+                    "role": "role",
+                    "personality": "personality"
+                }
+            }
+        }
+
+        feature_version = self.usecase.create_feature_version(
+            consumer_msg=consumer_msg
+        )
+        self.assertTrue(feature_version)
+
+    def test_empty_setup(self):
+        consumer_msg = {
+            'feature_version_uuid': uuid4().hex,
+            'brain': {}
+        }
+
+        feature_version = self.usecase.create_feature_version(
+            consumer_msg=consumer_msg
+        )
+        self.assertTrue(feature_version)
+
+    def test_existing_feature_version(self):
+        consumer_msg = {
+            'feature_version_uuid': uuid4().hex,
+            'brain': {
+                "agent": {
+                    "name": "name",
+                    "role": "role",
+                    "personality": "personality"
+                }
+            }
+        }
+
+        self.usecase.create_feature_version(
+            consumer_msg=consumer_msg
+        )
+
+        with self.assertRaises(Exception):
+            self.usecase.create_feature_version(
+                consumer_msg=consumer_msg
+            )

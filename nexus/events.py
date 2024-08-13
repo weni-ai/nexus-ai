@@ -17,7 +17,7 @@ from nexus.logs.observers import (
 )
 from nexus.actions.observers import ActionsObserver
 
-from nexus.projects.observer import ProjectObserver
+from nexus.projects.observer import ProjectObserver, FeatureVersionObserver
 
 event_manager = EventManager()
 
@@ -84,4 +84,9 @@ event_manager.subscribe(
 event_manager.subscribe(
     event="action_activity",
     observer=[ActionsObserver()]
+)
+
+event_manager.subscribe(
+    event="feature_version",
+    observer=[FeatureVersionObserver()]
 )
