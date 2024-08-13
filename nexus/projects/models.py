@@ -5,6 +5,7 @@ from enum import Enum
 from nexus.db.models import BaseModel, SoftDeleteModel
 from nexus.orgs.models import Org
 from nexus.users.models import User
+from nexus.actions.models import Flow
 
 
 class TemplateType(models.Model):
@@ -78,3 +79,13 @@ class ProjectAuth(models.Model):
 
     def __str__(self):
         return f'{self.user} - {self.project} - {self.role}'
+
+
+class IntegratedFeatureVersion(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    feature_version = models.ForeignKey(FeatureVersion, on_delete=models.CASCADE)
+    actions = models.ManyToManyField(Flow)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"Project: {self.project} - Feature Version: {self.feature_version.uuid}"
