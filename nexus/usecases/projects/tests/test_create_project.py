@@ -21,6 +21,7 @@ class TestCreateProject(TestCase):
             org_uuid=org.uuid,
             is_template=False,
             template_type_uuid=None,
+            brain_on=False,
             authorizations=[]
         )
 
@@ -32,6 +33,17 @@ class TestCreateProject(TestCase):
             user_email=self.user.email
         )
         self.assertEqual(project.uuid, self.project_dto.uuid)
+
+    def test_create_brain_on_project(self):
+        self.project_dto.brain_on = True
+        project = ProjectsUseCase(
+            event_manager_notify=mock_event_manager_notify,
+        ).create_project(
+            project_dto=self.project_dto,
+            user_email=self.user.email
+        )
+        self.assertEqual(project.uuid, self.project_dto.uuid)
+        self.assertTrue(project.brain_on)
 
 
 class ProjectAuthUseCaseTestCase(TestCase):
