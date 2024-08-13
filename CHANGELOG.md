@@ -1,3 +1,7 @@
+# 1.8.3
+## *Fix*
+    - Fix missing statement on project consumer
+
 # 1.8.2
 ## *Fix*
     - Add missing rule where you can only have 1 router per project in IntegratedIntelligence model
