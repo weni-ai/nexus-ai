@@ -32,3 +32,6 @@ class ListFlowsUseCase:
         data: Dict = self.rest_client.list_project_flows(project_uuid, page_size, page)
 
         return data
+
+    def list_objects_by_uuid(self, actions_uuid: List[str]) -> QuerySet[Flow]:
+        return Flow.objects.filter(uuid__in=actions_uuid)

@@ -1,12 +1,15 @@
 from nexus.usecases import projects
 
-from nexus.projects.models import ProjectAuth, FeatureVersion
-from nexus.projects.project_dto import ProjectAuthCreationDTO
-from nexus.usecases.projects.dto import FeatureVersionDTO
-
+from nexus.projects.models import ProjectAuth, FeatureVersion, IntegratedFeatureVersion
 from nexus.users.models import User
 
+from nexus.projects.project_dto import ProjectAuthCreationDTO
 from nexus.projects.exceptions import ProjectDoesNotExist
+
+from nexus.usecases.projects.dto import FeatureVersionDTO, IntegratedFeatureVersionDTO
+from nexus.usecases.actions.create import CreateFlowsUseCase
+from nexus.usecases.projects.retrieve import RetrieveFeatureVersion
+from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 
 
 class ProjectAuthUseCase:
@@ -97,3 +100,17 @@ class CreateFeatureVersionUseCase:
             return True
         except Exception as e:
             raise e
+
+
+class CreateIntegratedFeatureVersionUseCase:
+    def create(self, integrated_feature_dto: IntegratedFeatureVersionDTO) -> IntegratedFeatureVersion:
+        project_uuid: str = integrated_feature_dto.project_uuid
+        feature_version = RetrieveFeatureVersion().get(integrated_feature_dto.feature_version_uuid)
+        project = get_project_by_uuid(project_uuid)
+        CreateFlowsUseCase().bulk_create_flows(
+            integrated_feature_dto.actions_dto, project_uuid=project_uuid
+        )
+        return IntegratedFeatureVersion.objects.create(
+            feature_version=feature_version,
+            project=project
+        )

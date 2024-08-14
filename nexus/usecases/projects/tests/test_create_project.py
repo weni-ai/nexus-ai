@@ -1,13 +1,31 @@
+import json
+import amqp
 from uuid import uuid4
 from django.test import TestCase
 
-from .project_factory import ProjectFactory
+from .project_factory import ProjectFactory, FeatureVersionFactory
 from ..projects_use_case import ProjectsUseCase
-from nexus.projects.project_dto import ProjectCreationDTO
+
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
-from nexus.usecases.projects.create import ProjectAuthUseCase, CreateFeatureVersionUseCase
+from nexus.usecases.projects.create import ProjectAuthUseCase, CreateFeatureVersionUseCase, CreateIntegratedFeatureVersionUseCase
 from nexus.usecases.users.tests.user_factory import UserFactory
+from nexus.usecases.projects.dto import IntegratedFeatureVersionDTO
+from nexus.usecases.projects.retrieve import RetrieveIntegratedFeatureVersion
+from nexus.usecases.intelligences.create import create_base_brain_structure
+
 from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
+
+from nexus.projects.project_dto import ProjectCreationDTO
+from nexus.projects.models import IntegratedFeatureVersion
+from nexus.projects.consumers.integrated_feature_version import IntegratedFeatureVersionConsumer
+
+
+class MockChannel:
+    def basic_ack(*args, **kwargs):
+        return True
+
+    def basic_reject(*args, **kwargs):
+        return False
 
 
 class TestCreateProject(TestCase):
@@ -119,3 +137,67 @@ class CreateFeatureVersionUseCaseTestCase(TestCase):
             self.usecase.create_feature_version(
                 consumer_msg=consumer_msg
             )
+
+
+class IntegratedFeatureVersionTestCase(TestCase):
+    def setUp(self) -> None:
+        self.org = OrgFactory()
+        self.project = self.org.projects.create(name="Test", created_by=self.org.created_by)
+        self.integrated_intelligence = create_base_brain_structure(self.project)
+        self.feature_version = FeatureVersionFactory()
+        self.usecase = CreateIntegratedFeatureVersionUseCase()
+        self.actions = [
+            {
+                "name": "teste 1",
+                "description": "teste 1",
+                "flow_uuid": str(uuid4())
+            },
+            {
+                "name": "teste 2",
+                "description": "teste 2",
+                "flow_uuid": str(uuid4())
+            }
+        ]
+
+    def test_create_integrated_feature_usecase(self):
+        message = {
+            "project_uuid": str(self.project.uuid),
+            "feature_version_uuid": str(self.feature_version.uuid),
+            "actions": self.actions
+        }
+        integrated_feature_version_dto = IntegratedFeatureVersionDTO(**message)
+        integrated_feature_version = self.usecase.create(integrated_feature_version_dto)
+        self.assertIsInstance(integrated_feature_version, IntegratedFeatureVersion)
+
+    def test_create_integrated_feature_usecase_empty_actions(self):
+        message = {
+            "project_uuid": str(self.project.uuid),
+            "feature_version_uuid": str(self.feature_version.uuid),
+            "actions": []
+        }
+        integrated_feature_version_dto = IntegratedFeatureVersionDTO(**message)
+        integrated_feature_version = self.usecase.create(integrated_feature_version_dto)
+        self.assertIsInstance(integrated_feature_version, IntegratedFeatureVersion)
+
+    def test_consumer(self):
+        project_uuid = str(self.project.uuid)
+        feature_version_uuid = str(self.feature_version.uuid)
+
+        message = {
+            "project_uuid": project_uuid,
+            "feature_version_uuid": feature_version_uuid,
+            "actions": self.actions
+        }
+
+        message = json.dumps(message)
+        self.message = amqp.Message(
+            body=message.encode(),
+            channel=MockChannel(),
+            delivery_tag="",
+        )
+        IntegratedFeatureVersionConsumer().consume(self.message)
+        integrated_feature_version = RetrieveIntegratedFeatureVersion().get(
+            project_uuid=project_uuid,
+            feature_version_uuid=feature_version_uuid
+        )
+        self.assertIsInstance(integrated_feature_version, IntegratedFeatureVersion)
