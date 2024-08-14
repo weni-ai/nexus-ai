@@ -10,7 +10,7 @@ from nexus.usecases.projects.dto import IntegratedFeatureVersionDTO
 
 class IntegratedFeatureVersionConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
-        print(f"[IntegratedFeatureVersion] - Consuming a message. Body: {message.body}")
+        print(f"[IntegratedFeatureVersionConsumer] - Consuming a message. Body: {message.body}")
         body = JSONParser.parse(message.body)
         integrated_feature_version_dto = IntegratedFeatureVersionDTO(**body)
         try:
@@ -19,4 +19,4 @@ class IntegratedFeatureVersionConsumer(EDAConsumer):
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
-            print(f"[FeatureVersionConsumer] - Message rejected by: {exception}")
+            print(f"[IntegratedFeatureVersionConsumer] - Message rejected by: {exception}")
