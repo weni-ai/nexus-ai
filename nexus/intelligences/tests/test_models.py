@@ -1,5 +1,8 @@
 import pytest
 
+from django.test import TestCase
+from django.core.exceptions import ValidationError
+
 from nexus.intelligences.models import (
     ContentBaseFile,
     ContentBaseLink,
@@ -8,8 +11,7 @@ from nexus.intelligences.models import (
     Intelligence,
     ContentBaseLogs
 )
-from django.test import TestCase
-from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory
+from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory, IntegratedIntelligenceFactory
 
 
 @pytest.mark.django_db
@@ -116,3 +118,26 @@ class ContentBaseLogsTestCase(TestCase):
         )
 
         self.assertEqual(feedback, log.user_feedback)
+
+
+class IntegratedIntelligenceTestCase(TestCase):
+
+    def setUp(self) -> None:
+        self.content_base = ContentBaseFactory(
+            is_router=True
+        )
+        self.integrated_intelligence = IntegratedIntelligenceFactory(
+            intelligence=self.content_base.intelligence
+        )
+        self.project = self.integrated_intelligence.project
+
+    def test_multiple_integrated_routers(self):
+        content_base_2 = ContentBaseFactory(
+            is_router=True
+        )
+        with self.assertRaises(ValidationError):
+            IntegratedIntelligence.objects.create(
+                project=self.project,
+                intelligence=content_base_2.intelligence,
+                created_by=self.integrated_intelligence.created_by
+            )
