@@ -1,3 +1,6 @@
+# 1.8.4
+## *Fix*
+    - Move docs page to /docs, leave / as healthcheck endpoint
 # 1.8.3
 ## *Fix*
     - Fix missing statement on project consumer
