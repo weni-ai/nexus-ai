@@ -10,13 +10,13 @@ from nexus.usecases.projects.dto import IntegratedFeatureVersionDTO
 
 class IntegratedFeatureVersionConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
-        print(f"[IntegratedFeatureVersionConsumer] - Consuming a message. Body: {message.body}")
-        body = JSONParser.parse(message.body)
-        integrated_feature_version_dto = IntegratedFeatureVersionDTO(**body)
         try:
+            print(f"[IntegratedFeatureVersionConsumer] - Consuming a message. Body: {message.body}")
+            body = JSONParser.parse(message.body)
+            integrated_feature_version_dto = IntegratedFeatureVersionDTO(**body)
             CreateIntegratedFeatureVersionUseCase().create(integrated_feature_version_dto)
             message.channel.basic_ack(message.delivery_tag)
         except Exception as exception:
-            capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
+            capture_exception(exception)
             print(f"[IntegratedFeatureVersionConsumer] - Message rejected by: {exception}")
