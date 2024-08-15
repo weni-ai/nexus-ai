@@ -16,24 +16,24 @@ class FeatureVersionConsumer(EDAConsumer):
         print(f"[FeatureVersion] - Consuming a message. Body: {message.body}")
         try:
             body = JSONParser.parse(message.body)
-            feature_version = FeatureVersion.objects.filter(uuid=body.get("uuid"))
+            feature_version = FeatureVersion.objects.filter(uuid=body.get('uuid'))
 
             if feature_version.exists():
                 usecase = UpdateFeatureVersionUseCase()
                 usecase.update_feature_version(consumer_msg=body)
 
                 message.channel.basic_ack(message.delivery_tag)
-                print(f"[FeatureVersionConsumer] - FeatureVersion updated: {body.uuid}")
+                print(f"[FeatureVersionConsumer] - FeatureVersion updated: {body.get('uuid')}")
             else:
                 usecase = CreateFeatureVersionUseCase()
                 created = usecase.create_feature_version(consumer_msg=body)
 
                 if created:
                     message.channel.basic_ack(message.delivery_tag)
-                    print(f"[FeatureVersionConsumer] - FeatureVersion created: {body.uuid}")
+                    print(f"[FeatureVersionConsumer] - FeatureVersion created: {body.get('uuid')}")
                 else:
                     message.channel.basic_reject(message.delivery_tag, requeue=False)
-                    print(f"[FeatureVersionConsumer] - Message rejected by: {body.uuid}")
+                    print(f"[FeatureVersionConsumer] - Message rejected by: {body.get('uuid')}")
 
         except Exception as exception:
             capture_exception(exception)
