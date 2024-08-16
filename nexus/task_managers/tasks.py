@@ -1,4 +1,7 @@
 import pickle
+import pendulum
+
+from time import sleep
 from typing import Dict
 
 from django.conf import settings
@@ -7,13 +10,14 @@ from nexus.celery import app
 
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 from nexus.task_managers.models import ContentBaseFileTaskManager
-from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
+from nexus.task_managers.file_database.s3_file_database import s3FileDatabase, BedrockDatabase
 
 from nexus.logs.healthcheck import HealthCheck, ClassificationHealthCheck
 from nexus.intelligences.models import (
     ContentBaseText,
     ContentBaseLogs,
     ContentBaseLink,
+    ContentBaseFile,
     UserQuestion,
 )
 
@@ -65,12 +69,30 @@ def upload_file(
     extension_file: str,
     user_email: str,
     content_base_file_uuid: str,
-    load_type: str = None
+    load_type: str = None,
+    file_database_type: str = "sentenx"
 ):
     file = pickle.loads(file)
-    file_database_response = s3FileDatabase().add_file(file)
+
+    file_database = {
+        "sentenx": s3FileDatabase,
+        "bedrock": BedrockDatabase
+    }.get(file_database_type)()
+
+    content_base_file = ContentBaseFile.objects.get(uuid=content_base_file_uuid)
+
+    task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
+
+    file_database_response = file_database.add_file(
+        file,
+        content_base_uuid,
+        content_base_file_uuid,
+        str(task_manager.uuid),
+        "file",
+    )
 
     if file_database_response.status != 0:
+        file_database.delete_file(content_base_uuid, file_database_response.file_name)
         return {
             "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
             "error": file_database_response.err
@@ -87,9 +109,9 @@ def upload_file(
         update_content_base_file_dto=content_base_file_dto
     )
 
-    task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
+    if file_database_type == "sentenx":
+        add_file.apply_async(args=[str(task_manager.uuid), "file", load_type])
 
-    add_file.apply_async(args=[str(task_manager.uuid), "file", load_type])
     response = {
         "task_uuid": task_manager.uuid,
         "task_status": task_manager.status,
@@ -209,3 +231,60 @@ def update_healthcheck():
 def update_classification_healthcheck():
     classification_notify = ClassificationHealthCheck()
     classification_notify.check_service_health()
+
+
+@app.task(name='bedrock-document-status')
+def check_bedrock_document_status(
+    ingestion_job_id:str,
+    task_manager_uuid:str,
+    file_type:str
+):
+    task_manager = CeleryTaskManagerUseCase().get_task_manager_by_uuid(
+        task_uuid=task_manager_uuid,
+        file_type=file_type
+    )
+    # status types: 'STARTING'|'IN_PROGRESS'|'COMPLETE'|'FAILED'
+    db = BedrockDatabase()
+    status = "IN_PROGRESS"
+
+    count = 0
+    limit_count = 5
+
+    while (status == 'IN_PROGRESS' or status=='STARTING') and count < limit_count:
+        sleep(30)
+        status = db.bedrock_ingestion_status(ingestionJobId=ingestion_job_id)
+        if status == 'COMPLETE':
+            task_manager.update_status(ContentBaseFileTaskManager.STATUS_SUCCESS)
+        if status == 'IN_PROGRESS':
+            task_manager.update_status(ContentBaseFileTaskManager.STATUS_PROCESSING)
+        if status == 'FAILED':
+            task_manager.update_status(ContentBaseFileTaskManager.STATUS_FAIL)
+        count +=1
+
+
+@app.task(name='bedrock-document-status')
+def check_bedrock_document_status(
+    ingestion_job_id:str,
+    task_manager_uuid:str,
+    file_type:str
+):
+    db = BedrockDatabase()
+    task_manager = CeleryTaskManagerUseCase().get_task_manager_by_uuid(
+        task_uuid=task_manager_uuid,
+        file_type=file_type
+    )
+    # status types: 'STARTING'|'IN_PROGRESS'|'COMPLETE'|'FAILED'
+    status_map = {
+        "COMPLETE": ContentBaseFileTaskManager.STATUS_SUCCESS,
+        "IN_PROGRESS": ContentBaseFileTaskManager.STATUS_PROCESSING,
+        "FAILED": ContentBaseFileTaskManager.STATUS_FAIL,
+    }
+
+    status = db.bedrock_ingestion_status(ingestionJobId=ingestion_job_id)
+
+    task_manager.status = status_map.get(status)
+    task_manager.save()
+
+    if (status == 'IN_PROGRESS' or status=='STARTING'):
+        sleep(5)
+        check_bedrock_document_status.delay(ingestion_job_id, task_manager_uuid, file_type)

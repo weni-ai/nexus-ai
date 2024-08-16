@@ -149,3 +149,12 @@ def get_llm_by_project_uuid(
         raise Exception(f"[ LLM ] - LLM with project uuid `{project_uuid}` does not exists.")
     except Exception as exception:
         raise Exception(f"[ LLM ] - LLM error to get - error: `{exception}`")
+
+
+def get_project_by_content_base_uuid(content_base_uuid: str):
+    try:
+        intelligence = Intelligence.objects.get(contentbases__uuid=content_base_uuid)
+        integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
+        return integrated_intelligence.project
+    except Exception as e:
+        raise e

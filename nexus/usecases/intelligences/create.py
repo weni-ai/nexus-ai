@@ -166,12 +166,12 @@ class CreateContentBaseFileUseCase():
             content_base=content_base,
             created_by=user
         )
-        self.event_manager_notify(
-            event="contentbase_file_activity",
-            content_base_file=content_base_file,
-            action_type="C",
-            user=user
-        )
+        # self.event_manager_notify(
+        #     event="contentbase_file_activity",
+        #     content_base_file=content_base_file,
+        #     action_type="C",
+        #     user=user
+        # )
         return content_base_file
 
 

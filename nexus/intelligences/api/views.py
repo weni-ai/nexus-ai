@@ -26,7 +26,7 @@ from nexus.orgs import permissions
 from nexus.projects.permissions import has_project_permission
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
-
+from nexus.projects.models import Project
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase, SentenXDocumentPreview
 from nexus.usecases.task_managers.file_database import get_gpt_by_content_base_uuid
@@ -38,6 +38,8 @@ from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.authentication import AUTHENTICATION_CLASSES
 
+from nexus.usecases.intelligences.get_by_uuid import get_project_by_content_base_uuid
+import pendulum
 
 class IntelligencesViewset(
     ModelViewSet
@@ -507,9 +509,10 @@ class ContentBaseFileViewset(ModelViewSet):
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def create(self, request, content_base_uuid=str):
+    def create(self, request, content_base_uuid: str):
 
         try:
+            project: Project = get_project_by_content_base_uuid(content_base_uuid)
             file = request.FILES['file']
             self.get_queryset()
             user_email = request.user.email
@@ -517,12 +520,19 @@ class ContentBaseFileViewset(ModelViewSet):
             load_type = request.data.get("load_type")
             file_database = s3FileDatabase()
             file_manager = CeleryFileManager(file_database=file_database)
+
+            if project.created_at < pendulum.parse(settings.BEDROCK_DATE):
+                file_database_type = "sentenx"
+            else:
+                file_database_type = "bedrock"
+
             response = file_manager.upload_file(
                 file,
                 content_base_uuid,
                 extension_file,
                 user_email,
-                load_type
+                load_type,
+                file_database_type
             )
 
             return Response(
