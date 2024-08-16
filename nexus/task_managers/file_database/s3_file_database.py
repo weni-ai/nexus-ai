@@ -51,12 +51,15 @@ class BedrockDatabase(FileDataBase):
         chunks = response_chunks.get('retrievalResults')
 
         for chunk in chunks:
-            selected_chunk = chunk.get('content').get('text')
+            filename = chunks.get('metadata').get('filename')
+            full_page = chunk.get('content').get('text')
+            file_uuid = chunk.get('metadata').get('fileUuid')
 
-            file_source = chunk.get('location').get('s3Location').get('uri')        
-            file_name = file_source.split('/')[-1]
-
-            llm_chunk_list.append({(selected_chunk, file_name)})
+            llm_chunk_list.append({
+                "full_page": full_page,
+                "filename": filename,
+                "file_uuid": file_uuid
+            })
 
         return llm_chunk_list
 
