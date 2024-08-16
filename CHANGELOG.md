@@ -1,6 +1,6 @@
 # 1.8.5
 ## *Fix*
-    - fix ContentBaseLogs answer property
+    - ContentBaseLogs answer property
 
 # 1.8.4
 ## *Fix*
