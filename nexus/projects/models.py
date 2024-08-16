@@ -29,6 +29,7 @@ class Project(BaseModel, SoftDeleteModel):
     )
     is_template = models.BooleanField(default=False)
     brain_on = models.BooleanField(default=False)
+    indexer_database = models.CharField(max_length=255, default='sentenx')
 
     def __str__(self):
         return f'{self.uuid} - Project: {self.name} - Org: {self.org.name}'

@@ -1,3 +1,5 @@
+import pendulum
+
 from django.core.exceptions import PermissionDenied
 from django.utils.datastructures import MultiValueDictKeyError
 from django.conf import settings
@@ -27,7 +29,7 @@ from nexus.projects.permissions import has_project_permission
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
 from nexus.projects.models import Project
-from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
+from nexus.task_managers.file_database.s3_file_database import s3FileDatabase, BedrockDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase, SentenXDocumentPreview
 from nexus.usecases.task_managers.file_database import get_gpt_by_content_base_uuid
 
@@ -39,7 +41,7 @@ from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.authentication import AUTHENTICATION_CLASSES
 
 from nexus.usecases.intelligences.get_by_uuid import get_project_by_content_base_uuid
-import pendulum
+
 
 class IntelligencesViewset(
     ModelViewSet
@@ -187,9 +189,16 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
         content_base_uuid = data.get("content_base_uuid")
         generative_ai_database = get_gpt_by_content_base_uuid(content_base_uuid)
 
+        project = get_project_by_content_base_uuid(content_base_uuid=content_base_uuid)
+        if project.indexer_database == "bedrock":
+            file_database = BedrockDatabase()
+        else:
+            file_database = SentenXFileDataBase()
+
         intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
-            search_file_database=SentenXFileDataBase(),
-            generative_ai_database=generative_ai_database
+            search_file_database=file_database,
+            generative_ai_database=generative_ai_database,
+            indexer_database=project.indexer_database
         )
         data = intelligence_usecase.search(content_base_uuid=content_base_uuid, text=data.get("text"), language=data.get("language"))
         if data.get("answers"):
@@ -214,10 +223,17 @@ class QuickTestAIAPIView(views.APIView):
             has_permission = permissions.can_list_content_bases(user, org)
 
             if has_permission:
-                generative_ai_database = get_gpt_by_content_base_uuid(content_base_uuid)
 
+                # TODO: Handle non-brain projects
+                project = get_project_by_content_base_uuid(content_base_uuid=content_base_uuid)
+                if project.indexer_database == "bedrock":
+                    file_database = BedrockDatabase()
+                else:
+                    file_database = SentenXFileDataBase()
+
+                generative_ai_database = get_gpt_by_content_base_uuid(content_base_uuid)
                 intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
-                    search_file_database=SentenXFileDataBase(),
+                    search_file_database=file_database,
                     generative_ai_database=generative_ai_database,
                     testing=True,
                 )
@@ -226,7 +242,8 @@ class QuickTestAIAPIView(views.APIView):
                     data=intelligence_usecase.search(
                         content_base_uuid=content_base_uuid,
                         text=data.get("text"),
-                        language=data.get("language", "pt-br")
+                        language=data.get("language", "pt-br"),
+                        indexer_database=project.indexer_database
                     ),
                     status=200
                 )

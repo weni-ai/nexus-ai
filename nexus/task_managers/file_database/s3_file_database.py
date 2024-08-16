@@ -6,7 +6,6 @@ from os.path import basename
 from django.conf import settings
 from typing import Tuple
 from .file_database import FileDataBase, FileResponseDTO
-from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 from nexus.events import event_manager
 
 
@@ -22,10 +21,10 @@ class BedrockDatabase(FileDataBase):
         self.bucket_name = settings.AWS_S3_BEDROCK_BUCKET_NAME
         self.event_manager_notify = event_manager_notify
 
-    def get_chunks(
+    def search_data(
         self,
         query,
-        content_base_uuid:str
+        content_base_uuid: str
     ) -> list:
 
         retrieval_config = {
@@ -82,7 +81,7 @@ class BedrockDatabase(FileDataBase):
 
     def add_metadata_json_file(self, filename: str, content_base_uuid: str, file_uuid: str):
         print("[+ Add metadata to file +]")
-        
+
         data = {
             "metadataAttributes": {
                 "contentBaseUuid": content_base_uuid,
@@ -105,8 +104,8 @@ class BedrockDatabase(FileDataBase):
             print("[+ Add file to bedrock bucket +]")
             file_name = basename(file.name)        
             file_name, extension = self.__clean_file_name(file_name)
-            file_name_ext  = f"{file_name}.{extension}"
-            
+            file_name_ext = f"{file_name}.{extension}"
+
             response = FileResponseDTO()
 
             self.s3_client.upload_fileobj(file, settings.AWS_S3_BUCKET_NAME, f"{content_base_uuid}/{file_name_ext}")
@@ -125,7 +124,7 @@ class BedrockDatabase(FileDataBase):
 
         return response
 
-    def delete_file(self, content_base_uuid: str, filename:str) -> bool:
+    def delete_file(self, content_base_uuid: str, filename: str) -> bool:
 
         response = self.s3_client.delete_object(
             Bucket=self.bucket_name,
@@ -133,14 +132,14 @@ class BedrockDatabase(FileDataBase):
         )
 
         file_metadata = f"{content_base_uuid}/{filename}.metadata.json"
-        
+
         response = self.s3_client.delete_object(
             Bucket=self.bucket_name,
             Key=file_metadata,
         )
         status = response.get('DeleteMarker')
 
-        if status == False:
+        if status is False:
             raise Exception
 
         return status
@@ -190,7 +189,7 @@ class s3FileDatabase(FileDataBase):
         name, extension = file_name.rsplit(".", 1)
         name = name.replace(".", "_")
         file_name = f"{name}-{uuid.uuid4()}"
-        file_name_ext  = f"{file_name}.{extension}"
+        file_name_ext = f"{file_name}.{extension}"
         response = FileResponseDTO()
         try:
             self.s3_client.upload_fileobj(file, settings.AWS_S3_BUCKET_NAME, file_name_ext)

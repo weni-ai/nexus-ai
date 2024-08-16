@@ -1,5 +1,4 @@
 import pickle
-import pendulum
 
 from time import sleep
 from typing import Dict
@@ -235,9 +234,9 @@ def update_classification_healthcheck():
 
 @app.task(name='bedrock-document-status')
 def check_bedrock_document_status(
-    ingestion_job_id:str,
-    task_manager_uuid:str,
-    file_type:str
+    ingestion_job_id: str,
+    task_manager_uuid: str,
+    file_type: str
 ):
     task_manager = CeleryTaskManagerUseCase().get_task_manager_by_uuid(
         task_uuid=task_manager_uuid,
@@ -250,7 +249,7 @@ def check_bedrock_document_status(
     count = 0
     limit_count = 5
 
-    while (status == 'IN_PROGRESS' or status=='STARTING') and count < limit_count:
+    while (status == 'IN_PROGRESS' or status == 'STARTING') and count < limit_count:
         sleep(30)
         status = db.bedrock_ingestion_status(ingestionJobId=ingestion_job_id)
         if status == 'COMPLETE':
@@ -259,14 +258,15 @@ def check_bedrock_document_status(
             task_manager.update_status(ContentBaseFileTaskManager.STATUS_PROCESSING)
         if status == 'FAILED':
             task_manager.update_status(ContentBaseFileTaskManager.STATUS_FAIL)
-        count +=1
+        count += 1
 
 
+# TODO start this
 @app.task(name='bedrock-document-status')
-def check_bedrock_document_status(
-    ingestion_job_id:str,
-    task_manager_uuid:str,
-    file_type:str
+def check_bedrock_document_routine(
+    ingestion_job_id: str,
+    task_manager_uuid: str,
+    file_type: str
 ):
     db = BedrockDatabase()
     task_manager = CeleryTaskManagerUseCase().get_task_manager_by_uuid(
@@ -285,6 +285,6 @@ def check_bedrock_document_status(
     task_manager.status = status_map.get(status)
     task_manager.save()
 
-    if (status == 'IN_PROGRESS' or status=='STARTING'):
+    if (status == 'IN_PROGRESS' or status == 'STARTING'):
         sleep(5)
-        check_bedrock_document_status.delay(ingestion_job_id, task_manager_uuid, file_type)
+        check_bedrock_document_routine.delay(ingestion_job_id, task_manager_uuid, file_type)
