@@ -1,3 +1,7 @@
+# 1.8.5
+## *Fix*
+    - ContentBaseLogs answer property
+
 # 1.8.4
 ## *Fix*
     - Move docs page to /docs, leave / as healthcheck endpoint
