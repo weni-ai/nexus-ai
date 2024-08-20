@@ -123,7 +123,7 @@ def route(
                     flow=fallback_flow,
                     flow_start=flow_start,
                     llm_response=llm_response,
-                    user_email=flows_user_email,
+                    user_email=flows_user_email
                 )
 
             return dispatch(
@@ -146,7 +146,7 @@ def route(
             message=message,
             flow_start=flow_start,
             flow=flow,
-            user_email=flows_user_email,
+            user_email=flows_user_email
         )
 
     except Exception as e:
