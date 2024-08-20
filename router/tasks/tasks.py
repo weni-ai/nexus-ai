@@ -13,7 +13,6 @@ from nexus.usecases.logs.create import CreateLogUsecase
 from nexus.usecases.actions.retrieve import get_flow_by_action_type
 
 from router.route import route
-from router.dispatcher import dispatch
 from router.classifiers.zeroshot import ZeroshotClassifier
 from router.classifiers.chatgpt_function import OpenAIClient, ChatGPTFunctionClassifier
 from router.classifiers import classify
@@ -141,7 +140,7 @@ def start_route(
             flow_start=flow_start,
             llm_config=llm_config,
             flows_user_email=flows_user_email,
-            log_usecase=log_usecase,
+            log_usecase=log_usecase
         )
 
         log_usecase.update_status("S")
