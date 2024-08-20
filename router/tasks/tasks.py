@@ -37,15 +37,15 @@ def whatsapp_cart_flow(
     flow_start: FlowStart
 ) -> bool:
     flow = get_flow_by_action_type(content_base, "whatsapp_cart")
+    flow_dto = FlowDTO(**flow)
 
     if flow:
-        dispatch(
-            message=message,
+        flow_start.start_flow(
+            flow=flow_dto,
+            user=os.environ.get("FLOW_USER_EMAIL"),
+            urn=[message.contact_urn],
+            user_message="",
             msg_event=msg_event,
-            user_email=os.environ.get("FLOW_USER_EMAIL"),
-            flow=flow,
-            flow_start=flow_start,
-            direct_message=False
         )
         return True
     return False
