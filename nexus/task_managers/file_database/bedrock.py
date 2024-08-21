@@ -1,10 +1,9 @@
-import json
 import uuid
-from typing import Dict
-from os.path import basename
-
+import json
 import boto3
+from os.path import basename
 from django.conf import settings
+from typing import Dict
 
 from .file_database import FileDataBase, FileResponseDTO
 
@@ -24,9 +23,6 @@ class BedrockFileDatabase(FileDataBase):
         self.bedrock_agent_runtime = self.__get_bedrock_agent_runtime()
         self.bedrock_runtime = self.__get_bedrock_runtime()
 
-    def add_file(file) -> FileResponseDTO:
-        pass
-
     def invoke_model(self, prompt: str, config_data: Dict):
         data = {
             "top_p": config_data.get("top_p"),
@@ -45,7 +41,6 @@ class BedrockFileDatabase(FileDataBase):
             trace='ENABLED'
         )
         return response
-
 
     def add_metadata_json_file(self, filename, content_base_uuid: str, file_uuid: str):
         print("[+ Adding metadata.json file +]")
@@ -82,6 +77,7 @@ class BedrockFileDatabase(FileDataBase):
 
             self.s3_client.upload_fileobj(file, self.bucket_name, file_path)
             self.add_metadata_json_file(file_name, content_base_uuid, file_uuid)
+            self.start_bedrock_ingestion()  # TODO: maybe use one knowledge base for each Project
 
         except Exception as exception:
             response.status = 1
