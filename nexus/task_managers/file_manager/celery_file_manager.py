@@ -8,13 +8,22 @@ from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
 
 from nexus.events import event_manager
 
+from nexus.projects.models import Project
+from nexus.intelligences.models import Intelligence
+
+
+def get_project_by_content_base_uuid(content_base_uuid: str) -> Project:
+    intelligence = Intelligence.objects.get(contentbases__uuid=content_base_uuid)
+    project = intelligence.integratedintelligence_set.first().project
+    return project
+
 
 class CeleryFileManager:
 
     def __init__(
         self,
-        file_database: FileDataBase,
-        event_manager_notify=event_manager.notify
+        event_manager_notify=event_manager.notify,
+        file_database: FileDataBase = None,
     ):
         self._file_database = file_database
         self.event_manager_notify = event_manager_notify
@@ -35,9 +44,19 @@ class CeleryFileManager:
             content_base_uuid=content_base_uuid,
             extension_file=extension_file,
         )
-        content_base_file = CreateContentBaseFileUseCase(
-            event_manager_notify=self.event_manager_notify
-        ).create_content_base_file(content_base_file=content_base_file_dto)
+        content_base_file = CreateContentBaseFileUseCase(event_manager_notify=self.event_manager_notify).create_content_base_file(content_base_file=content_base_file_dto)
+        project = get_project_by_content_base_uuid(content_base_uuid)
+
+        if project.indexer_database == Project.BEDROCK:
+            print("B E D R O C K")
+            # return tasks.bedrock_upload_file.delay()
+            return tasks.bedrock_upload_file(
+                pickled_file,
+                content_base_uuid,
+                user_email,
+                str(content_base_file.uuid),
+            )
+
         tasks.upload_file.delay(
             pickled_file,
             content_base_uuid,
