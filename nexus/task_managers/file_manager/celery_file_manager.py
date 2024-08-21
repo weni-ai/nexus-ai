@@ -5,17 +5,10 @@ from nexus.task_managers.file_database.file_database import FileDataBase
 
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
-
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.events import event_manager
 
 from nexus.projects.models import Project
-from nexus.intelligences.models import Intelligence
-
-
-def get_project_by_content_base_uuid(content_base_uuid: str) -> Project:
-    intelligence = Intelligence.objects.get(contentbases__uuid=content_base_uuid)
-    project = intelligence.integratedintelligence_set.first().project
-    return project
 
 
 class CeleryFileManager:
@@ -45,7 +38,7 @@ class CeleryFileManager:
             extension_file=extension_file,
         )
         content_base_file = CreateContentBaseFileUseCase(event_manager_notify=self.event_manager_notify).create_content_base_file(content_base_file=content_base_file_dto)
-        project = get_project_by_content_base_uuid(content_base_uuid)
+        project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
 
         if project.indexer_database == Project.BEDROCK:
             print("B E D R O C K")
