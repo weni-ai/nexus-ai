@@ -1,6 +1,7 @@
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.projects.exceptions import ProjectDoesNotExist
+from nexus.intelligences.models import ContentBase, IntegratedIntelligence
 from nexus.usecases.intelligences.intelligences_dto import LLMDTO
 from nexus.usecases.users.get_by_email import get_by_email
 from nexus.usecases.template_type.template_type_usecase import TemplateTypeUseCase
@@ -123,3 +124,9 @@ class ProjectsUseCase:
             Project.BEDROCK: BedrockFileDatabase,
             Project.SENTENX: SentenXFileDataBase
         }.get(project.indexer_database)
+
+    def get_project_by_content_base_uuid(self, content_base_uuid: str) -> Project:
+        content_base = ContentBase.objects.get(uuid=content_base_uuid)
+        intelligence = content_base.intelligence
+        project = IntegratedIntelligence.objects.get(intelligence=intelligence).project
+        return project
