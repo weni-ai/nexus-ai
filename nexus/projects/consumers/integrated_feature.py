@@ -71,7 +71,7 @@ class UpdateIntegratedFeatureConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
         print(f"[UpdateIntegratedFeature] - Consuming a message. Body: {message.body}")
         try:
-            # body = JSONParser.parse(message.body)
+            _ = JSONParser.parse(message.body)
             # TODO - Implement the use
             message.channel.basic_ack(message.delivery_tag)
             print("[UpdateIntegratedFeature] - Authorization created: ")
