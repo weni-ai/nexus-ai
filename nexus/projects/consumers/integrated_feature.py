@@ -49,6 +49,7 @@ class DeleteIntegratedFeatureConsumer(EDAConsumer):
         print(f"[IntegratedFeature] - Consuming a message. Body: {message.body}")
         try:
             body = JSONParser.parse(message.body)
+            # TODO - Implement the usecase
             message.channel.basic_ack(message.delivery_tag)
             print(f"[IntegratedFeature] - Authorization created: ")
         except Exception as exception:
@@ -63,12 +64,11 @@ class UpdateIntegratedFeatureConsumer(EDAConsumer):
         print(f"[IntegratedFeature] - Consuming a message. Body: {message.body}")
         try:
             body = JSONParser.parse(message.body)
+            # TODO - Implement the use
             message.channel.basic_ack(message.delivery_tag)
             print(f"[IntegratedFeature] - Authorization created: ")
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
             print(f"[IntegratedFeature] - Message rejected by: {exception}")
-
-
 
