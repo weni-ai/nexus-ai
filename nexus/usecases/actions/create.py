@@ -17,13 +17,16 @@ class CreateFlowDTO:
     project_uuid: str
     flow_uuid: str
     name: str
-    prompt: str
     action_type: str
+    prompt: str = None
     fallback: bool = False
 
 
 class CreateFlowsUseCase():
     def create_flow(self, create_dto: CreateFlowDTO) -> Flow:
+
+        if create_dto.action_type == "custom" and create_dto.prompt is None:
+            raise ValueError("Prompt is required for custom actions")
 
         content_base = get_default_content_base_by_project(create_dto.project_uuid)
 
