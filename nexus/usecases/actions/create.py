@@ -18,8 +18,8 @@ class CreateFlowDTO:
     flow_uuid: str
     name: str
     prompt: str
+    action_type: str
     fallback: bool = False
-    action_type: str = "custom"
 
 
 class CreateFlowsUseCase():
