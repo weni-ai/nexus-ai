@@ -15,7 +15,7 @@ class Flow(models.Model):
 
     uuid = models.UUIDField(primary_key=True)
     name = models.CharField(max_length=255)
-    prompt = models.TextField()
+    prompt = models.TextField(blank=True, null=True)
     fallback = models.BooleanField(default=False)
     content_base = models.ForeignKey(ContentBase, on_delete=models.CASCADE, related_name="flows")
     action_type = models.CharField(max_length=50, choices=ACTION_TYPE_CHOICES, default='custom')
