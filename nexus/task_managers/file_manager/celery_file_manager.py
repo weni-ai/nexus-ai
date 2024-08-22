@@ -42,12 +42,13 @@ class CeleryFileManager:
 
         if project.indexer_database == Project.BEDROCK:
             print("B E D R O C K")
-            return tasks.bedrock_upload_file.delay(
+            tasks.bedrock_upload_file.delay(
                 pickled_file,
                 content_base_uuid,
                 user_email,
                 str(content_base_file.uuid),
             )
+            return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}
 
         tasks.upload_file.delay(
             pickled_file,
