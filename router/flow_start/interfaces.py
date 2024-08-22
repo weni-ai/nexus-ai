@@ -10,6 +10,6 @@ class FlowStart(ABC):  # pragma: no cover
         user: str,
         urns: List,
         user_message: str,
-        msg_event: dict,
+        msg_event: dict = None,
     ) -> None:
         pass

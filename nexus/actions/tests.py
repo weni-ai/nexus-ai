@@ -178,6 +178,7 @@ class FlowsViewsetTestCase(TestCase):
             "name": "Flow 1",
             "prompt": "Prompt",
             "fallback": False,
+            "action_type": "custom"
         }
 
         request = self.factory.post(url_create, data=data)

@@ -101,8 +101,9 @@ class FlowsViewset(
                 project_uuid=project_uuid,
                 flow_uuid=request.data.get("uuid"),
                 name=request.data.get("name"),
-                prompt=request.data.get("prompt"),
+                prompt=request.data.get("prompt", ""),
                 fallback=request.data.get("fallback"),
+                action_type=request.data.get("action_type", "custom")
             )
 
             flows = CreateFlowsUseCase().create_flow(create_dto)
@@ -237,7 +238,11 @@ class MessagePreviewView(APIView):
 
             project_uuid: str = message.project_uuid
 
-            flows: List[FlowDTO] = flows_repository.project_flows(project_uuid, False)
+            flows: List[FlowDTO] = flows_repository.project_flows(
+                project_uuid=project_uuid,
+                fallback=False,
+                action_type="custom"
+            )
 
             content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
 
