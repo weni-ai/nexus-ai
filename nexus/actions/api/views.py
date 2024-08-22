@@ -105,6 +105,7 @@ class FlowsViewset(
                 name=request.data.get("name"),
                 prompt=request.data.get("prompt"),
                 fallback=request.data.get("fallback"),
+                action_type=request.data.get("action_type")
             )
 
             flows = CreateFlowsUseCase().create_flow(create_dto)
