@@ -8,4 +8,4 @@ from nexus.actions.models import (
 class FlowSerializer(serializers.ModelSerializer):
     class Meta:
         model = Flow
-        fields = ['uuid', 'name', 'prompt', 'fallback', 'content_base']
+        fields = ['uuid', 'name', 'prompt', 'fallback', 'content_base', 'action_type']
