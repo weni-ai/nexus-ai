@@ -19,6 +19,7 @@ class CreateFlowDTO:
     name: str
     prompt: str
     fallback: bool = False
+    action_type: str = "custom"
 
 
 class CreateFlowsUseCase():
@@ -31,7 +32,8 @@ class CreateFlowsUseCase():
             name=create_dto.name,
             prompt=create_dto.prompt,
             fallback=create_dto.fallback,
-            content_base=content_base
+            content_base=content_base,
+            action_type=create_dto.action_type,
         )
 
 
