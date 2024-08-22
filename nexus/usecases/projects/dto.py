@@ -3,6 +3,7 @@ from typing import List, Dict
 
 from nexus.projects.models import  Project, IntegratedFeature
 from nexus.usecases.actions.create import CreateFlowDTO
+from nexus.usecases.actions.update import UpdateFlowDTO
 
 from nexus.usecases.projects.retrieve import get_integrated_feature
 
@@ -47,3 +48,4 @@ class IntegratedFeatureDTO:
                 project_uuid=self.project.uuid
             )
         return None
+

@@ -74,7 +74,7 @@ class UpdateIntegratedFeatureConsumer(EDAConsumer):
             body = JSONParser.parse(message.body)
             # TODO - Implement the use
             message.channel.basic_ack(message.delivery_tag)
-            print(f"[IntegratedFeature] - Authorization created: ")
+            print("[IntegratedFeature] - Authorization created: ")
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
