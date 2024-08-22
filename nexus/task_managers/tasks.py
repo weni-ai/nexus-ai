@@ -59,6 +59,7 @@ def add_file(
     return False
 
 
+@app.task
 def bedrock_upload_file(
     file: bytes,
     content_base_uuid: str,
