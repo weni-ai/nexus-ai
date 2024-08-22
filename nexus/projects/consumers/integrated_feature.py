@@ -5,6 +5,7 @@ from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
 
 from nexus.usecases.projects.create import CreateIntegratedFeatureUseCase
+from nexus.usecases.projects.delete import delete_integrated_feature
 
 
 class CreateIntegratedFeatureConsumer(EDAConsumer):
@@ -49,9 +50,16 @@ class DeleteIntegratedFeatureConsumer(EDAConsumer):
         print(f"[IntegratedFeature] - Consuming a message. Body: {message.body}")
         try:
             body = JSONParser.parse(message.body)
-            # TODO - Implement the usecase
+            project_uuid = body.get('project_uuid')
+            feature_uuid = body.get('feature_uuid')
+
+            delete_integrated_feature(
+                project_uuid=project_uuid,
+                feature_uuid=feature_uuid
+            )
+
             message.channel.basic_ack(message.delivery_tag)
-            print(f"[IntegratedFeature] - Authorization created: ")
+            print("[IntegratedFeature] - IntegratedFeature deleted ")
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
@@ -71,4 +79,3 @@ class UpdateIntegratedFeatureConsumer(EDAConsumer):
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
             print(f"[IntegratedFeature] - Message rejected by: {exception}")
-
