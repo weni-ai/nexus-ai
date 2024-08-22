@@ -68,3 +68,13 @@ class ProjectAuth(models.Model):
 
     def __str__(self):
         return f'{self.user} - {self.project} - {self.role}'
+
+
+class IntegratedFeature(models.Model):
+
+    feature_uuid = models.UUIDField(primary_key=True)
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, related_name='integrated_features'
+    )
+    current_version_setup = models.JSONField(default=dict)
+    is_integrated = models.BooleanField(default=False)
