@@ -29,7 +29,7 @@ class CreateIntegratedFeatureConsumer(EDAConsumer):
 class CreateIntegratedFeatureFlowConsumer(EDAConsumer):
 
     def consume(self, message: amqp.Message):
-        print(f"[IntegratedFeature] - Consuming a message. Body: {message.body}")
+        print(f"[IntegratedFeatureFlows] - Consuming a message. Body: {message.body}")
         try:
             body = JSONParser.parse(message.body)
 
@@ -37,17 +37,17 @@ class CreateIntegratedFeatureFlowConsumer(EDAConsumer):
             usecase.create_integrated_feature_flows(body)
 
             message.channel.basic_ack(message.delivery_tag)
-            print("[IntegratedFeature] - IntegratedFeature flow created")
+            print("[IntegratedFeatureFlows] - IntegratedFeatureFlows flow created")
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
-            print(f"[IntegratedFeature] - Message rejected by: {exception}")
+            print(f"[IntegratedFeatureFlows] - Message rejected by: {exception}")
 
 
 class DeleteIntegratedFeatureConsumer(EDAConsumer):
 
     def consume(self, message: amqp.Message):
-        print(f"[IntegratedFeature] - Consuming a message. Body: {message.body}")
+        print(f"[DeleteIntegratedFeature] - Consuming a message. Body: {message.body}")
         try:
             body = JSONParser.parse(message.body)
             project_uuid = body.get('project_uuid')
@@ -59,23 +59,23 @@ class DeleteIntegratedFeatureConsumer(EDAConsumer):
             )
 
             message.channel.basic_ack(message.delivery_tag)
-            print("[IntegratedFeature] - IntegratedFeature deleted ")
+            print("[DeleteIntegratedFeature] - IntegratedFeature deleted ")
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
-            print(f"[IntegratedFeature] - Message rejected by: {exception}")
+            print(f"[DeleteIntegratedFeature] - Message rejected by: {exception}")
 
 
 class UpdateIntegratedFeatureConsumer(EDAConsumer):
 
     def consume(self, message: amqp.Message):
-        print(f"[IntegratedFeature] - Consuming a message. Body: {message.body}")
+        print(f"[UpdateIntegratedFeature] - Consuming a message. Body: {message.body}")
         try:
             body = JSONParser.parse(message.body)
             # TODO - Implement the use
             message.channel.basic_ack(message.delivery_tag)
-            print("[IntegratedFeature] - Authorization created: ")
+            print("[UpdateIntegratedFeature] - Authorization created: ")
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
-            print(f"[IntegratedFeature] - Message rejected by: {exception}")
+            print(f"[UpdateIntegratedFeature] - Message rejected by: {exception}")
