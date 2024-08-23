@@ -19,6 +19,7 @@ class UpdateProjectDTO:
         return {key: value for key, value in self.__dict__.items() if value is not None}
 
 
+@dataclass
 class IntegratedFeatureDTO:
     project_uuid: str
     feature_uuid: str
