@@ -115,7 +115,11 @@ class CreateIntegratedFeatureUseCase:
         self,
         consumer_msg: dict
     ):
-        integrated_feature_dto = IntegratedFeatureDTO(**consumer_msg)
+        integrated_feature_dto = IntegratedFeatureDTO(
+            project_uuid=consumer_msg.get("project_uuid"),
+            feature_uuid=consumer_msg.get("feature_uuid"),
+            flows=consumer_msg.get("flows")
+        )
         flow = integrated_feature_dto.action_dto
 
         if not flow:
