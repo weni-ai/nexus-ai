@@ -23,7 +23,7 @@ class UpdateProjectDTO:
 class IntegratedFeatureDTO:
     project_uuid: str
     feature_uuid: str
-    imported_flows: List[Dict[str, str]]
+    flows: List[Dict[str, str]]
     integrated_feature: IntegratedFeature = field(init=False)
 
     def __post_init__(self):
@@ -37,15 +37,15 @@ class IntegratedFeatureDTO:
 
         current_setup_action = self.integrated_feature.current_version_setup
         matching_flow = next(
-            (flow for flow in self.imported_flows if flow.get('base_uuid') == current_setup_action.get('uuid')),
+            (flow for flow in self.flows if flow.get('base_uuid') == current_setup_action.get('root_flow_uuid')),
             None
         )
 
         if matching_flow:
             return CreateFlowDTO(
                 flow_uuid=matching_flow.get("uuid"),
-                name=matching_flow.get("name"),
-                prompt=current_setup_action.get('description'),
+                name=current_setup_action.get("name"),
+                prompt=current_setup_action.get('prompt'),
                 project_uuid=self.project.uuid
             )
         return None
