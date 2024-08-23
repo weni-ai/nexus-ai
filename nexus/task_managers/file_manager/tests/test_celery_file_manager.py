@@ -3,6 +3,8 @@ from django.test import TestCase
 from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory
 from ..celery_file_manager import CeleryFileManager
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.intelligences.create import create_base_brain_structure
 
 
 class MockFileDataBase(FileDataBase):
@@ -14,9 +16,13 @@ class TestCeleryFileManager(TestCase):
 
     def setUp(self) -> None:
         self.file_database = MockFileDataBase()
+        self.project = ProjectFactory()
+
+        self.integrated_intelligence = create_base_brain_structure(self.project)
+        self.intelligence = self.integrated_intelligence.intelligence
+        self.content_base = self.intelligence.contentbases.get()
         self.celery_file_manager = CeleryFileManager(file_database=self.file_database)
-        self.content_base = ContentBaseFactory()
-        self.email = self.content_base.created_by.email
+        self.email = self.content_base.created_by.email       
 
     def test_upload_file(self):
         file = b'file'
