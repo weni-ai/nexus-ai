@@ -10,5 +10,5 @@ class SimulateFlowStart(FlowStart):
         self.__host = host
         self.__access_token = access_token
 
-    def start_flow(self, flow: FlowDTO, user: str, urns: List, user_message: str) -> None:
-        return {"type": "flowstart", "uuid": flow.uuid, "name": flow.name}
+    def start_flow(self, flow: FlowDTO, user: str, urns: List, user_message: str, msg_event: dict = None) -> None:
+        return {"type": "flowstart", "uuid": flow.uuid, "name": flow.name, "msg_event": msg_event}

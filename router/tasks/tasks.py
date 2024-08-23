@@ -10,11 +10,13 @@ from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
+from nexus.usecases.actions.retrieve import get_flow_by_action_type
 
 from router.route import route
 from router.classifiers.zeroshot import ZeroshotClassifier
 from router.classifiers.chatgpt_function import OpenAIClient, ChatGPTFunctionClassifier
 from router.classifiers import classify
+from router.flow_start.interfaces import FlowStart
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.entities import (
@@ -25,6 +27,27 @@ from router.repositories.orm import (
     FlowsORMRepository,
     MessageLogsRepository
 )
+
+
+def whatsapp_cart_flow(
+    content_base: ContentBaseDTO,
+    message: Message,
+    msg_event: dict,
+    flow_start: FlowStart
+) -> bool:
+    flow = get_flow_by_action_type(content_base, "whatsapp_cart")
+    flow_dto = FlowDTO(**flow)
+
+    if flow:
+        flow_start.start_flow(
+            flow=flow_dto,
+            user=os.environ.get("FLOW_USER_EMAIL"),
+            urn=[message.contact_urn],
+            user_message="",
+            msg_event=msg_event,
+        )
+        return True
+    return False
 
 
 @celery_app.task
@@ -39,6 +62,7 @@ def start_route(
     message_logs_repository = MessageLogsRepository()
 
     message = Message(**message)
+    mailroom_msg_event = message.msg_event
 
     log_usecase = CreateLogUsecase()
     log_usecase.create_message_log(message.text, message.contact_urn)
@@ -46,10 +70,23 @@ def start_route(
     try:
         project_uuid: str = message.project_uuid
 
+        broadcast = SendMessageHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'))
+        flow_start = FlowStartHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
+        flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+
         flows: List[FlowDTO] = flows_repository.project_flows(project_uuid, False)
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
         agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
         agent = agent.set_default_if_null()
+
+        if 'order' in message.metadata:
+            print("[+ WhatsApp Cart Flow +]")
+            return whatsapp_cart_flow(
+                content_base=content_base,
+                message=message,
+                msg_event=mailroom_msg_event,
+                flow_start=flow_start
+            )
 
         llm_model = get_llm_by_project_uuid(project_uuid)
 
@@ -90,10 +127,6 @@ def start_route(
 
         if llm_config.model.lower() != "wenigpt":
             llm_client.api_key = llm_config.token
-
-        broadcast = SendMessageHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'))
-        flow_start = FlowStartHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
-        flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
         route(
             classification=classification,

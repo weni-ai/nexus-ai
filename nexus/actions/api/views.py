@@ -103,8 +103,9 @@ class FlowsViewset(
                 project_uuid=project_uuid,
                 flow_uuid=request.data.get("uuid"),
                 name=request.data.get("name"),
-                prompt=request.data.get("prompt"),
+                prompt=request.data.get("prompt", ""),
                 fallback=request.data.get("fallback"),
+                action_type=request.data.get("action_type", "custom")
             )
 
             flows = CreateFlowsUseCase().create_flow(create_dto)
@@ -210,6 +211,7 @@ class MessagePreviewView(APIView):
             project_uuid = kwargs.get("project_uuid")
             text = data.get("text")
             contact_urn = data.get("contact_urn")
+            mailroon_msg_event = data.get("msg_event")
 
             project = projects.get_project_by_uuid(project_uuid)
 
@@ -236,7 +238,11 @@ class MessagePreviewView(APIView):
 
             project_uuid: str = message.project_uuid
 
-            flows: List[FlowDTO] = flows_repository.project_flows(project_uuid, False)
+            flows: List[FlowDTO] = flows_repository.project_flows(
+                project_uuid=project_uuid,
+                fallback=False,
+                action_type="custom"
+            )
 
             content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
 
@@ -302,6 +308,7 @@ class MessagePreviewView(APIView):
                 llm_config=llm_config,
                 flows_user_email=flows_user_email,
                 log_usecase=log_usecase,
+                msg_event=mailroon_msg_event
             )
 
             log_usecase.update_status("S")
