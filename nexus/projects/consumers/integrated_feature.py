@@ -34,10 +34,10 @@ class CreateIntegratedFeatureFlowConsumer(EDAConsumer):
             body = JSONParser.parse(message.body)
 
             usecase = CreateIntegratedFeatureUseCase()
-            usecase.create_integrated_feature(body)
+            usecase.create_integrated_feature_flows(body)
 
             message.channel.basic_ack(message.delivery_tag)
-            print(f"[IntegratedFeature] - Authorization created: ")
+            print("[IntegratedFeature] - IntegratedFeature flow created")
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
