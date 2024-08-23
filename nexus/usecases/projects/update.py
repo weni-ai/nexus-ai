@@ -85,14 +85,19 @@ class UpdateIntegratedFeatureUseCase:
         consumer_msg: dict
     ) -> IntegratedFeature:
 
-        integrated_feature = get_integrated_feature(
-            project_uuid=consumer_msg.get('project_uuid'),
-            feature_uuid=consumer_msg.get('feature_uuid')
+        try:
+            integrated_feature = get_integrated_feature(
+                project_uuid=consumer_msg.get('project_uuid'),
+                feature_uuid=consumer_msg.get('feature_uuid')
+            )
+        except IntegratedFeature.DoesNotExist:
+            return None
+
+        update_dto = UpdateIntegratedFeatureDTO(
+            current_version_setup=consumer_msg.get('action')
         )
 
-        # TODO: Handle different models and actions
-
-        for attr, value in UpdateIntegratedFeatureDTO.dict().items():
+        for attr, value in update_dto:
             setattr(integrated_feature, attr, value)
         integrated_feature.save()
 

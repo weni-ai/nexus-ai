@@ -1,12 +1,12 @@
 from dataclasses import dataclass, field
 from typing import List, Dict
 
-from nexus.projects.models import  Project, IntegratedFeature
+from nexus.projects.models import IntegratedFeature
 from nexus.usecases.actions.create import CreateFlowDTO
 from nexus.usecases.actions.update import UpdateFlowDTO
 
-from nexus.usecases.projects.retrieve import get_integrated_feature
 
+from nexus.usecases.projects.retrieve import get_integrated_feature
 
 
 @dataclass
@@ -49,3 +49,10 @@ class IntegratedFeatureDTO:
             )
         return None
 
+
+@dataclass
+class UpdateIntegratedFeatureDTO:
+    current_version_setup: Dict[str, str]
+
+    def dict(self):
+        return {key: value for key, value in self.__dict__.items() if value is not None}
