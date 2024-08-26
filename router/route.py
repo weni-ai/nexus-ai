@@ -50,13 +50,13 @@ def route(
     log_usecase,
 ):
     try:
+        content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
+
         if classification == Classifier.CLASSIFICATION_OTHER:
 
             print("[ + Fallback + ]")
 
             fallback_flow: FlowDTO = flows_repository.project_flow_fallback(message.project_uuid, True)
-
-            content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
 
             last_messages: List[ContactMessageDTO] = message_logs_repository.list_last_messages(message.project_uuid, message.contact_urn, 5)
 
@@ -134,6 +134,12 @@ def route(
             )
 
         flow: FlowDTO = flows_repository.get_project_flow_by_name(message.project_uuid, classification)
+
+        log_usecase.update_log_field(
+            project_id=message.project_uuid,
+            content_base_id=content_base.uuid,
+            classification=classification,
+        )
 
         return dispatch(
             message=message,
