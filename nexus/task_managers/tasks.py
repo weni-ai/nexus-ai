@@ -1,6 +1,6 @@
 import pickle
-from typing import Dict
-
+import time
+from typing import Dict, List
 from django.conf import settings
 
 from nexus.celery import app
@@ -58,6 +58,26 @@ def add_file(
     task_manager.update_status(ContentBaseFileTaskManager.STATUS_FAIL)
     return False
 
+@app.task
+def start_ingestion_job(celery_task_manager_uuid: str):
+    file_database = BedrockFileDatabase()
+    ingestion_jobs: List = file_database.list_bedrock_ingestion()
+
+    if ingestion_jobs:
+        time.sleep(5)
+        return start_ingestion_job(celery_task_manager_uuid)
+
+    file_database.start_bedrock_ingestion()
+    ingestion_job_id: str = file_database.start_bedrock_ingestion()
+
+    task_manager_usecase = CeleryTaskManagerUseCase()
+
+    task_manager = task_manager_usecase.get_task_manager_by_uuid(celery_task_manager_uuid, "file")
+    task_manager.ingestion_job_id = ingestion_job_id
+    task_manager.save()
+
+    task_manager_usecase.update_task_status(celery_task_manager_uuid, "PROCESSING", "file")
+
 
 @app.task
 def bedrock_upload_file(
@@ -87,7 +107,12 @@ def bedrock_upload_file(
         user_email=user_email,
         update_content_base_file_dto=content_base_file_dto
     )
-    task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
+    task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(
+        content_base_file=content_base_file
+        )
+    
+    start_ingestion_job(str(task_manager.uuid))
+
     response = {
         "task_uuid": task_manager.uuid,
         "task_status": task_manager.status,
