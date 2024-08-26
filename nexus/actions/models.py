@@ -9,4 +9,3 @@ class Flow(models.Model):
     prompt = models.TextField()
     fallback = models.BooleanField(default=False)
     content_base = models.ForeignKey(ContentBase, on_delete=models.CASCADE, related_name="flows")
-    action_usage = models.IntegerField(default=0)
