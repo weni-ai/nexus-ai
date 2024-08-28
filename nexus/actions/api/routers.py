@@ -4,13 +4,15 @@ from .views import (
     FlowsViewset,
     SearchFlowView,
     MessagePreviewView,
-    GenerateActionNameView
+    GenerateActionNameView,
+    TemplateActionView
 )
 
 
 flows_router = DefaultRouter()
 
 flows_router.register(r'', FlowsViewset, basename='flows')
+flows_router.register(r'template-actions', TemplateActionView, basename='template-actions')
 
 urlpatterns = [
     path('<project_uuid>/flows/', include(flows_router.urls)),
