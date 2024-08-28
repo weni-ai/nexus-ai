@@ -8,6 +8,7 @@ from django.conf import settings
 from nexus.intelligences.llms.client import LLMClient
 from router.entities import LLMSetupDTO, ContactMessageDTO
 from nexus.intelligences.llms.exceptions import WeniGPTInvalidVersionError
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 
 class WeniGPTClient(LLMClient):
@@ -137,4 +138,35 @@ class WeniGPTClient(LLMClient):
                 last_messages=last_messages
             )
 
+        elif settings.USE_BEDROCK_WENIGPT:
+            return self.invoke_model(instructions, chunks, agent, question, last_messages=last_messages)
+
         return self.request_runpod(instructions, chunks, agent, question, llm_config, last_messages=last_messages)
+
+    def invoke_model(self, instructions, chunks, agent, question, last_messages):
+        try:
+            config_data = {
+                "max_tokens": int(settings.WENIGPT_MAX_LENGHT),
+                "top_p": float(settings.WENIGPT_TOP_P),
+                "top_k": float(settings.WENIGPT_TOP_K),
+                "stop": settings.WENIGPT_STOP,
+                "temperature": float(settings.WENIGPT_TEMPERATURE),
+            }
+
+            self.prompt = self.format_prompt(instructions, chunks, agent, question, last_messages)
+
+            bedrock = BedrockFileDatabase()
+            response = bedrock.invoke_model(self.prompt, config_data)
+
+            text_answers = json.loads(response['body'].read().decode('utf-8'))
+            return {
+                "answers": [
+                    {
+                        "text": text_answers
+                    }
+                ],
+                "id": "0",
+            }
+        except Exception as e:
+            response = {"error": str(e)}
+            return {"answers": None, "id": "0", "message": response.get("error")}
