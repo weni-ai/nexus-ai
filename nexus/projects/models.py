@@ -72,7 +72,7 @@ class ProjectAuth(models.Model):
 
 class IntegratedFeature(models.Model):
 
-    feature_uuid = models.UUIDField(primary_key=True)
+    feature_uuid = models.UUIDField()
     project = models.ForeignKey(
         Project, on_delete=models.CASCADE, related_name='integrated_features'
     )
