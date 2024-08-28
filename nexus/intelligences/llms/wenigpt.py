@@ -139,11 +139,11 @@ class WeniGPTClient(LLMClient):
             )
 
         elif settings.USE_BEDROCK_WENIGPT:
-            return self.invoke_model(instructions, chunks, agent, question, last_messages=last_messages)
+            return self.request_bedrock(instructions, chunks, agent, question, last_messages=last_messages)
 
         return self.request_runpod(instructions, chunks, agent, question, llm_config, last_messages=last_messages)
 
-    def invoke_model(self, instructions, chunks, agent, question, last_messages):
+    def request_bedrock(self, instructions, chunks, agent, question, last_messages):
         try:
             config_data = {
                 "max_tokens": int(settings.WENIGPT_MAX_LENGHT),
