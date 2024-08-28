@@ -25,6 +25,13 @@ class TaskManager(models.Model):
         (STATUS_WAITING, "Wait")
     ]
 
+    status_map = {
+        "STARTING": STATUS_LOADING,
+        "IN_PROGRESS": STATUS_PROCESSING,
+        "COMPLETE": STATUS_SUCCESS,
+        "FAILED": STATUS_FAIL,
+    }
+
     uuid = models.UUIDField(default=uuid.uuid4)
     created_at = models.DateTimeField(auto_now_add=True)
     end_at = models.DateTimeField(null=True, blank=True)
@@ -42,16 +49,10 @@ class ContentBaseFileTaskManager(TaskManager):
 
     @property
     def get_status(self):
-        status_map = {
-            "STARTING": self.STATUS_LOADING,
-            "IN_PROGRESS": self.STATUS_PROCESSING,
-            "COMPLETE": self.STATUS_SUCCESS,
-            "FAILED": self.STATUS_FAIL,
-        }
 
         if self.ingestion_job_id:
             status = BedrockFileDatabase().get_bedrock_ingestion_status(self.ingestion_job_id)
-            if self.status != status_map.get(status):
+            if self.status != self.status_map.get(status):
                 self.update_status(status)
 
         return self.status

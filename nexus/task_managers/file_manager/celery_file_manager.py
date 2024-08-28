@@ -41,7 +41,7 @@ class CeleryFileManager:
         project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
 
         if project.indexer_database == Project.BEDROCK:
-            print("B E D R O C K")
+            print("[+ 🦑 Using BEDROCK 🦑 +]")
             tasks.bedrock_upload_file.delay(
                 pickled_file,
                 content_base_uuid,
