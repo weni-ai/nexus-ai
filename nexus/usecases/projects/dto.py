@@ -3,7 +3,6 @@ from typing import List, Dict
 
 from nexus.projects.models import IntegratedFeature
 from nexus.usecases.actions.create import CreateFlowDTO
-from nexus.usecases.actions.update import UpdateFlowDTO
 
 
 from nexus.usecases.projects.retrieve import get_integrated_feature
@@ -46,7 +45,7 @@ class IntegratedFeatureDTO:
                 flow_uuid=matching_flow.get("uuid"),
                 name=current_setup_action.get("name"),
                 prompt=current_setup_action.get('prompt'),
-                project_uuid=self.project.uuid
+                project_uuid=self.project_uuid
             )
         return None
 
