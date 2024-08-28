@@ -5,7 +5,7 @@ from django.conf import settings
 
 from dataclasses import dataclass
 
-from nexus.actions.models import Flow
+from nexus.actions.models import Flow, TemplateAction
 
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
@@ -38,6 +38,25 @@ class CreateFlowsUseCase():
             content_base=content_base,
             action_type=create_dto.action_type,
         )
+
+
+class CreateTemplateActionUseCase():
+
+    def create_template_action(
+        self,
+        name: str,
+        prompt: str,
+        action_type: str
+    ):
+        try:
+            return TemplateAction.objects.create(
+                name=name,
+                prompt=prompt,
+                action_type=action_type
+            )
+        except Exception as e:
+            print("error", str(e))
+            raise Exception("Error creating template action")
 
 
 class GenerateFlowNameUseCase():
