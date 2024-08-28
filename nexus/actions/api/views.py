@@ -227,7 +227,6 @@ class MessagePreviewView(APIView):
             project_uuid = kwargs.get("project_uuid")
             text = data.get("text")
             contact_urn = data.get("contact_urn")
-            mailroon_msg_event = data.get("msg_event")
 
             project = projects.get_project_by_uuid(project_uuid)
 
@@ -324,7 +323,6 @@ class MessagePreviewView(APIView):
                 llm_config=llm_config,
                 flows_user_email=flows_user_email,
                 log_usecase=log_usecase,
-                msg_event=mailroon_msg_event
             )
 
             log_usecase.update_status("S")
