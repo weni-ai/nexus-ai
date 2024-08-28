@@ -55,7 +55,6 @@ class BedrockFileDatabase(FileDataBase):
 
             self.s3_client.upload_fileobj(file, self.bucket_name, file_path)
             self.add_metadata_json_file(file_name, content_base_uuid, file_uuid)
-            self.start_bedrock_ingestion()  # TODO: maybe use one knowledge base for each Project
 
         except Exception as exception:
             response.status = 1
@@ -92,6 +91,34 @@ class BedrockFileDatabase(FileDataBase):
         )
         ingestion_job_id = response.get("ingestionJob").get("ingestionJobId")
         return ingestion_job_id
+
+    def get_bedrock_ingestion_status(self, job_id: str):
+        response = self.bedrock_agent.get_ingestion_job(
+            dataSourceId=self.data_source_id,
+            knowledgeBaseId=self.knowledge_base_id,
+            ingestionJobId=job_id,
+        )
+        status_code = response.get("ResponseMetadata").get("HTTPStatusCode")
+        if status_code == 200:
+            return response.get("ingestionJob").get("status")
+        raise Exception(f"get_ingestion_job returned status code {status_code}")
+
+    def list_bedrock_ingestion(self):
+        response = self.bedrock_agent.list_ingestion_jobs(
+            dataSourceId=self.data_source_id,
+            knowledgeBaseId=self.knowledge_base_id,
+            filters=[
+                {
+                    'attribute': 'STATUS',
+                    'operator': 'EQ',
+                    'values': [
+                        'STARTING',
+                        'IN_PROGRESS'
+                    ]
+                },
+            ]
+        )
+        return response.get("ingestionJobSummaries")
 
     def search_data(self, content_base_uuid: str, text: str, number_of_results: int = 5):
         retrieval_config = {
