@@ -2,21 +2,36 @@ import os
 from typing import Dict, List
 
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
 
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
 
-from nexus.actions.models import Flow
-from nexus.actions.api.serializers import FlowSerializer
+from nexus.actions.models import Flow, TemplateAction
+from nexus.actions.api.serializers import FlowSerializer, TemplateActionSerializer
 
 from nexus.usecases import projects
 from nexus.usecases.logs.create import CreateLogUsecase
-from nexus.usecases.actions.list import ListFlowsUseCase
-from nexus.usecases.actions.create import CreateFlowDTO, CreateFlowsUseCase, GenerateFlowNameUseCase
-from nexus.usecases.actions.delete import DeleteFlowsUseCase, DeleteFlowDTO
-from nexus.usecases.actions.update import UpdateFlowsUseCase, UpdateFlowDTO
+from nexus.usecases.actions.list import ListFlowsUseCase, ListTemplateActionUseCase
+from nexus.usecases.actions.create import (
+    CreateFlowDTO,
+    CreateFlowsUseCase,
+    GenerateFlowNameUseCase,
+    CreateTemplateActionUseCase
+)
+from nexus.usecases.actions.delete import (
+    DeleteFlowsUseCase,
+    DeleteFlowDTO,
+    delete_template_action
+)
+from nexus.usecases.actions.update import (
+    UpdateFlowsUseCase,
+    UpdateFlowDTO,
+    UpdateTemplateActionDTO,
+    UpdateTemplateActionUseCase
+)
 from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase, FlowDoesNotExist
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
@@ -26,6 +41,7 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 
 from nexus.intelligences.llms.client import LLMClient
 
+from nexus.orgs.permissions import is_super_user
 from nexus.projects.permissions import has_project_permission
 from nexus.projects.exceptions import ProjectAuthorizationDenied
 
@@ -337,6 +353,102 @@ class GenerateActionNameView(APIView):
             response = usecase.generate_action_name(chatbot_goal, context)
             return Response(data=response)
         except ProjectAuthorizationDenied:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            return Response(
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                data={"Error": str(e)}
+            )
+
+
+class TemplateActionView(APIView):
+    serializer_class = TemplateActionSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        if getattr(self, "swagger_fake_view", False):
+            return TemplateAction.objects.none()  # pragma: no cover
+        super().get_serializer(*args, **kwargs)
+
+    def list(self, request, *args, **kwargs):
+        try:
+            user = request.user
+            project = projects.get_project_by_uuid(kwargs.get("project_uuid"))
+            has_project_permission(
+                method="get",
+                user=user,
+                project=project
+            )
+
+            template_actions = ListTemplateActionUseCase().list_template_action()
+            data = [template_action.to_dict() for template_action in template_actions]
+            return Response(data=data)
+        except ProjectAuthorizationDenied:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            return Response(
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                data={"Error": str(e)}
+            )
+
+    def create(self, request, *args, **kwargs):
+        try:
+            authorization_header = request.headers.get("Authorization", "Bearer unauthorized")
+            if not is_super_user(authorization_header):
+                raise PermissionDenied("You has not permission to do that.")
+
+            data = request.data
+            name = data.get("name")
+            prompt = data.get("prompt")
+            action_type = data.get("action_type")
+
+            template_action = CreateTemplateActionUseCase().create_template_action(
+                name=name,
+                prompt=prompt,
+                action_type=action_type
+            )
+            return Response(data=template_action.to_dict())
+        except PermissionDenied:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            return Response(
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                data={"Error": str(e)}
+            )
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            authorization_header = request.headers.get("Authorization", "Bearer unauthorized")
+            if not is_super_user(authorization_header):
+                raise PermissionDenied("You has not permission to do that.")
+
+            template_action_uuid = kwargs.get("template_action_uuid")
+            deleted = delete_template_action(template_action_uuid)
+            return Response(data={"deleted": deleted})
+        except PermissionDenied:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            return Response(
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                data={"Error": str(e)}
+            )
+
+    def update(self, request, *args, **kwargs):
+        try:
+            authorization_header = request.headers.get("Authorization", "Bearer unauthorized")
+            if not is_super_user(authorization_header):
+                raise PermissionDenied("You has not permission to do that.")
+
+            data = request.data
+            update_dto = UpdateTemplateActionDTO(
+                template_action_uuid=kwargs.get("template_action_uuid"),
+                name=data.get("name"),
+                prompt=data.get("prompt"),
+                action_type=data.get("action_type")
+            )
+            usecase = UpdateTemplateActionUseCase()
+            template_action = usecase.update_template_action(update_dto)
+            return Response(data=template_action.to_dict())
+        except PermissionDenied:
             return Response(status=status.HTTP_403_FORBIDDEN)
         except Exception as e:
             return Response(

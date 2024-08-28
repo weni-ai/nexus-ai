@@ -7,6 +7,7 @@ from nexus.intelligences.models import ContentBase
 class TemplateAction(models.Model):
 
     uuid = models.UUIDField(primary_key=True)
+    action_type = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
     prompt = models.TextField(blank=True, null=True)
 
