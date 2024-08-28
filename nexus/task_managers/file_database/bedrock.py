@@ -125,7 +125,6 @@ class BedrockFileDatabase(FileDataBase):
             return response.get("ingestionJob").get("status")
         raise Exception(f"get_ingestion_job returned status code {status_code}")
 
-
     def list_bedrock_ingestion(self):
         response = self.bedrock_agent.list_ingestion_jobs(
             dataSourceId=self.data_source_id,
@@ -142,7 +141,6 @@ class BedrockFileDatabase(FileDataBase):
             ]
         )
         return response.get("ingestionJobSummaries")
-        
 
     def search_data(self, content_base_uuid: str, text: str, number_of_results: int = 5):
         retrieval_config = {

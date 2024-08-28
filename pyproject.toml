@@ -101,4 +101,4 @@ post_test = 'coverage html'
 run = 'python manage.py runserver'
 makemigrations = 'python manage.py makemigrations'
 migrate = 'python manage.py migrate'
-
+coverage = 'coverage run manage.py test --verbosity=2 --noinput'
