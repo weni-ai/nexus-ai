@@ -26,7 +26,7 @@ class IntegratedFeatureDTO:
     integrated_feature: IntegratedFeature = field(init=False)
 
     def __post_init__(self):
-        self.integrated_feature = get_integrated_feature(self.project.uuid, self.feature_uuid)
+        self.integrated_feature = get_integrated_feature(self.project_uuid, self.feature_uuid)
 
     @property
     def action_dto(self) -> CreateFlowDTO:
