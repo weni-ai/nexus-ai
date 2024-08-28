@@ -1,6 +1,5 @@
 from django.test import TestCase
 
-from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory
 from ..celery_file_manager import CeleryFileManager
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
@@ -22,7 +21,7 @@ class TestCeleryFileManager(TestCase):
         self.intelligence = self.integrated_intelligence.intelligence
         self.content_base = self.intelligence.contentbases.get()
         self.celery_file_manager = CeleryFileManager(file_database=self.file_database)
-        self.email = self.content_base.created_by.email       
+        self.email = self.content_base.created_by.email
 
     def test_upload_file(self):
         file = b'file'
