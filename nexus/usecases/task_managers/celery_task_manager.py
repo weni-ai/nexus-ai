@@ -61,12 +61,13 @@ class CeleryTaskManagerUseCase:
         except Exception as exception:
             raise Exception(f"[ ContentBaseFile ] - ContentBaseFile error to get - error: `{exception}`")
 
-    def create_celery_task_manager(self, content_base_file: ContentBaseFile) -> ContentBaseFileTaskManager:
+    def create_celery_task_manager(self, content_base_file: ContentBaseFile, ingestion_job_id: str = None) -> ContentBaseFileTaskManager:
         content_base_task_manager = ContentBaseFileTaskManager.objects.create(
             status=ContentBaseFileTaskManager.STATUS_WAITING,
             created_by=content_base_file.created_by,
             end_at=pendulum.now(),
-            content_base_file=content_base_file
+            content_base_file=content_base_file,
+            ingestion_job_id=ingestion_job_id,
         )
         print(f"[ CeleryTaskManagerUseCase ] - creating {content_base_task_manager.uuid}")
         return content_base_task_manager
