@@ -2,7 +2,7 @@ from typing import Dict, List
 
 from django.db.models import QuerySet
 
-from nexus.actions.models import Flow
+from nexus.actions.models import Flow, TemplateAction
 from nexus.internals.flows import FlowsRESTClient, RestClient
 
 
@@ -32,3 +32,9 @@ class ListFlowsUseCase:
         data: Dict = self.rest_client.list_project_flows(project_uuid, page_size, page)
 
         return data
+
+
+class ListTemplateActionUseCase:
+
+    def list_template_action(self):
+        return TemplateAction.objects.all()
