@@ -12,11 +12,11 @@ from .views import (
 flows_router = DefaultRouter()
 
 flows_router.register(r'', FlowsViewset, basename='flows')
-flows_router.register(r'template-actions', TemplateActionView, basename='template-actions')
 
 urlpatterns = [
     path('<project_uuid>/flows/', include(flows_router.urls)),
     path('<project_uuid>/search-flows/', SearchFlowView.as_view()),
     path('<project_uuid>/preview/', MessagePreviewView.as_view()),
-    path('<project_uuid>/generate-action-name/', GenerateActionNameView.as_view())
+    path('<project_uuid>/generate-action-name/', GenerateActionNameView.as_view()),
+    path('<project_uuid>/template-actions/', TemplateActionView.as_view()),
 ]
