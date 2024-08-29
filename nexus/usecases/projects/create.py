@@ -126,10 +126,10 @@ class CreateIntegratedFeatureUseCase:
             raise ValueError("Flows not found")
 
         usecase = CreateFlowsUseCase()
-        usecase.create_flow(flow)
+        created_flow = usecase.create_flow(flow)
 
         integrated_feature = integrated_feature_dto.integrated_feature
         integrated_feature.is_integrated = True
         integrated_feature.save(update_fields=["is_integrated"])
 
-        return flow
+        return created_flow
