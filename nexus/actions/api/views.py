@@ -359,7 +359,7 @@ class GenerateActionNameView(APIView):
             )
 
 
-class TemplateActionView(APIView):
+class TemplateActionView(ModelViewSet):
     serializer_class = TemplateActionSerializer
 
     def get_queryset(self, *args, **kwargs):
