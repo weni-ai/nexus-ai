@@ -1,6 +1,13 @@
 import factory
 
-from nexus.projects.models import Project, ProjectAuth, ProjectAuthorizationRole
+from uuid import uuid4
+
+from nexus.projects.models import (
+    Project,
+    ProjectAuth,
+    ProjectAuthorizationRole,
+    IntegratedFeature
+)
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
@@ -33,3 +40,17 @@ class ProjectAuthFactory(factory.django.DjangoModelFactory):
     project = factory.SubFactory(ProjectFactory)
     user = factory.SubFactory(UserFactory)
     role = ProjectAuthorizationRole.MODERATOR.value
+
+
+class IntegratedFeatureFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = IntegratedFeature
+
+    project = factory.SubFactory(ProjectFactory)
+    feature_uuid = uuid4().hex
+    current_version_setup = {
+        "name": "Human handoff",
+        "root_flow_uuid": uuid4().hex,
+        "prompt": "Whenever an user wants to talk to a human",
+    }
+    is_integrated = False
