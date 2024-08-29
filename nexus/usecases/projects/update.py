@@ -93,12 +93,8 @@ class UpdateIntegratedFeatureUseCase:
         except IntegratedFeature.DoesNotExist:
             return None
 
-        update_dto = UpdateIntegratedFeatureDTO(
-            current_version_setup=consumer_msg.get('action')
-        )
-
-        for attr, value in update_dto:
-            setattr(integrated_feature, attr, value)
+        updated_version = consumer_msg.get('action')
+        integrated_feature.current_version_setup = updated_version[0]
         integrated_feature.save()
 
         return integrated_feature
