@@ -24,6 +24,7 @@ class UpdateTemplateActionDTO:
     name: str = None
     prompt: str = None
     action_type: str = None
+    group: str = None
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
