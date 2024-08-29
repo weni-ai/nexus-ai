@@ -2,7 +2,7 @@ import factory
 
 from uuid import uuid4
 
-from nexus.actions.models import Flow
+from nexus.actions.models import Flow, TemplateAction
 from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory
 
 
@@ -18,3 +18,15 @@ class FlowFactory(factory.django.DjangoModelFactory):
         ContentBaseFactory,
     )
     fallback = False
+
+
+class TemplateActionFactory(factory.django.DjangoModelFactory):
+
+    class Meta:
+        model = TemplateAction
+
+    uuid = str(uuid4().hex)
+    name = factory.Sequence(lambda n: 'test%d' % n)
+    prompt = factory.Sequence(lambda n: 'test%d' % n)
+    action_type = "custom"
+    group = "test"
