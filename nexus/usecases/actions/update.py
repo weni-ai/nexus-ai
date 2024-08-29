@@ -78,14 +78,14 @@ class UpdateTemplateActionUseCase():
 
     def update_template_action(
         self,
-        template_dto: UpdateTemplateActionDTO
+        template_action_dto: UpdateTemplateActionDTO
     ) -> TemplateAction:
         try:
             template_action = TemplateAction.objects.get(
-                uuid=template_dto.template_action_uuid
+                uuid=template_action_dto.template_action_uuid
             )
 
-            for attr, value in template_dto.dict().items():
+            for attr, value in template_action_dto.dict().items():
                 setattr(template_action, attr, value)
             template_action.save()
 
