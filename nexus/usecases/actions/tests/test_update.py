@@ -1,7 +1,12 @@
 from django.test import TestCase
 
-from nexus.usecases.actions.tests.flow_factory import FlowFactory
-from nexus.usecases.actions.update import UpdateFlowDTO, UpdateFlowsUseCase
+from nexus.usecases.actions.tests.flow_factory import FlowFactory, TemplateActionFactory
+from nexus.usecases.actions.update import (
+    UpdateFlowDTO,
+    UpdateFlowsUseCase,
+    UpdateTemplateActionDTO,
+    UpdateTemplateActionUseCase,
+)
 
 from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
 
@@ -46,3 +51,49 @@ class TestUpdateFlowUseCase(TestCase):
 
         self.assertEqual(updated_flow.name, update_dto.name)
         self.assertEqual(updated_flow.prompt, self.flow_factory.prompt)
+
+
+class TestUpdateTemplateActionUseCase(TestCase):
+
+    def setUp(self):
+        self.template_action_factory = TemplateActionFactory()
+        self.usecase = UpdateTemplateActionUseCase()
+
+    def test_update(self):
+        update_dto = UpdateTemplateActionDTO(
+            template_action_uuid=self.template_action_factory.uuid,
+            prompt="new prompt",
+            name="new template action name"
+        )
+
+        updated_template_action = self.usecase.update_template_action(
+            template_action_dto=update_dto
+        )
+
+        self.assertEqual(updated_template_action.prompt, update_dto.prompt)
+
+    def test_update_name(self):
+        update_dto = UpdateTemplateActionDTO(
+            template_action_uuid=self.template_action_factory.uuid,
+            name="test template action name 2",
+        )
+
+        updated_template_action = self.usecase.update_template_action(
+            template_action_dto=update_dto
+        )
+
+        self.assertEqual(updated_template_action.name, update_dto.name)
+        self.assertEqual(updated_template_action.prompt, self.template_action_factory.prompt)
+
+    def test_update_prompt(self):
+        update_dto = UpdateTemplateActionDTO(
+            template_action_uuid=self.template_action_factory.uuid,
+            prompt="test template action prompt 2",
+        )
+
+        updated_template_action = self.usecase.update_template_action(
+            template_action_dto=update_dto
+        )
+
+        self.assertEqual(updated_template_action.prompt, update_dto.prompt)
+        self.assertEqual(updated_template_action.name, self.template_action_factory.name)
