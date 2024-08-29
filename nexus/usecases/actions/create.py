@@ -17,7 +17,7 @@ class CreateFlowDTO:
     project_uuid: str
     flow_uuid: str
     name: str
-    action_type: str
+    action_type: str = "custom"
     prompt: str = None
     fallback: bool = False
 
