@@ -378,8 +378,8 @@ class TemplateActionView(ModelViewSet):
             )
 
             template_actions = ListTemplateActionUseCase().list_template_action()
-            data = [template_action.to_dict() for template_action in template_actions]
-            return Response(data=data)
+            serializer = self.get_serializer(template_actions, many=True)
+            return Response(data=serializer.data)
         except ProjectAuthorizationDenied:
             return Response(status=status.HTTP_403_FORBIDDEN)
         except Exception as e:
@@ -406,7 +406,8 @@ class TemplateActionView(ModelViewSet):
                 action_type=action_type,
                 group=group
             )
-            return Response(data=template_action.to_dict())
+            serializer = self.get_serializer(template_action)
+            return Response(data=serializer.data)
         except PermissionDenied:
             return Response(status=status.HTTP_403_FORBIDDEN)
         except Exception as e:
@@ -448,7 +449,8 @@ class TemplateActionView(ModelViewSet):
             )
             usecase = UpdateTemplateActionUseCase()
             template_action = usecase.update_template_action(update_dto)
-            return Response(data=template_action.to_dict())
+            serializer = self.get_serializer(template_action)
+            return Response(data=serializer.data)
         except PermissionDenied:
             return Response(status=status.HTTP_403_FORBIDDEN)
         except Exception as e:

@@ -21,6 +21,7 @@ from rest_framework.test import force_authenticate
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.actions.tests.flow_factory import TemplateActionFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory
 
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -29,7 +30,8 @@ from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.actions.api.views import (
     FlowsViewset,
     SearchFlowView,
-    MessagePreviewView
+    MessagePreviewView,
+    TemplateActionView,
 )
 
 from nexus.logs.models import Message as ContactMessage, MessageLog
@@ -453,3 +455,30 @@ class MessagePreviewTestCase(TestCase):
         content = json.loads(response.content)
 
         self.assertEquals(content.get("type"), "flowstart")
+
+
+class TemplateActionViewSetTestCase(TestCase):
+
+    # Test get from TemplateActionViewSet
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+        self.view = TemplateActionView.as_view({'get': 'list'})
+        self.project = ProjectFactory(
+            name="Router",
+            brain_on=True,
+        )
+        self.template_action = TemplateActionFactory()
+        self.url = f'{self.project.uuid}/flows/template-action'
+
+    def test_get(self):
+        request = self.factory.get(self.url)
+        force_authenticate(request, user=self.project.created_by)
+        response = TemplateActionView.as_view({
+            'get': 'list'
+        })(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        response.render()
+        print(response.content)
+        self.assertEqual(response.status_code, 200)
