@@ -1,6 +1,10 @@
 from uuid import uuid4
 
-from nexus.usecases.actions.create import CreateFlowDTO, CreateFlowsUseCase
+from nexus.usecases.actions.create import (
+    CreateFlowDTO,
+    CreateFlowsUseCase,
+    CreateTemplateActionUseCase,
+)
 from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory, IntegratedIntelligenceFactory
 
 
@@ -73,3 +77,27 @@ class CreateFlowsUseCaseTest(TestCase):
         self.assertEqual(flow.action_type, "whatsapp_cart")
         self.assertEqual(flow.content_base, self.content_base)
         self.assertEqual(flow.uuid, flow_uuid)
+
+
+class CreateTemplateActionUseCaseTest(TestCase):
+
+    def setUp(self) -> None:
+        self.name = "action_name"
+        self.prompt = "action_prompt"
+        self.action_type = "custom"
+        self.group = "test"
+        self.usecase = CreateTemplateActionUseCase()
+
+    def test_create_template_action(self):
+
+        action = self.usecase.create_template_action(
+            name=self.name,
+            prompt=self.prompt,
+            action_type=self.action_type,
+            group=self.group
+        )
+
+        self.assertEqual(action.name, "action_name")
+        self.assertEqual(action.prompt, "action_prompt")
+        self.assertEqual(action.action_type, "custom")
+        self.assertEqual(action.group, "test")
