@@ -46,13 +46,15 @@ class CreateTemplateActionUseCase():
         self,
         name: str,
         prompt: str,
-        action_type: str
+        action_type: str,
+        group: str = None
     ):
         try:
             return TemplateAction.objects.create(
                 name=name,
                 prompt=prompt,
-                action_type=action_type
+                action_type=action_type,
+                group=group
             )
         except Exception as e:
             print("error", str(e))

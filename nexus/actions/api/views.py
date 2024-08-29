@@ -398,11 +398,13 @@ class TemplateActionView(APIView):
             name = data.get("name")
             prompt = data.get("prompt")
             action_type = data.get("action_type")
+            group = data.get("group")
 
             template_action = CreateTemplateActionUseCase().create_template_action(
                 name=name,
                 prompt=prompt,
-                action_type=action_type
+                action_type=action_type,
+                group=group
             )
             return Response(data=template_action.to_dict())
         except PermissionDenied:
@@ -441,7 +443,8 @@ class TemplateActionView(APIView):
                 template_action_uuid=kwargs.get("template_action_uuid"),
                 name=data.get("name"),
                 prompt=data.get("prompt"),
-                action_type=data.get("action_type")
+                action_type=data.get("action_type"),
+                group=data.get("group")
             )
             usecase = UpdateTemplateActionUseCase()
             template_action = usecase.update_template_action(update_dto)
