@@ -129,7 +129,41 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
             feature_uuid=self.integrated_feature.feature_uuid
         )
 
-        self.assertTrue(True)
+        self.assertIsInstance(returned_flow, Flow)
+        self.assertTrue(integrated_feature.is_integrated)
+
+    def test_integrate_multiple_flows(self):
+        root_flow_uuid = self.integrated_feature.current_version_setup['root_flow_uuid']
+        consumer_msg = {
+            'project_uuid': str(self.project.uuid),
+            'feature_uuid': self.integrated_feature.feature_uuid,
+            'flows': [
+                {
+                    'base_uuid': uuid4().hex,
+                    'uuid': uuid4().hex,
+                    'name': 'Example flow 2'
+                },
+                {
+                    'base_uuid': root_flow_uuid,
+                    'uuid': uuid4().hex,
+                    'name': 'Example flow'
+                },
+                {
+                    'base_uuid': uuid4().hex,
+                    'uuid': uuid4().hex,
+                    'name': 'Example flow 3'
+                }
+            ]
+        }
+        returned_flow = self.usecase.integrate_feature_flows(
+            consumer_msg=consumer_msg
+        )
+
+        integrated_feature = get_integrated_feature(
+            project_uuid=str(self.project.uuid),
+            feature_uuid=self.integrated_feature.feature_uuid
+        )
+
         self.assertIsInstance(returned_flow, Flow)
         self.assertTrue(integrated_feature.is_integrated)
 

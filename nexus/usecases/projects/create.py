@@ -1,6 +1,7 @@
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 
 from nexus.projects.models import ProjectAuth, IntegratedFeature
+from nexus.actions.models import Flow
 from nexus.projects.project_dto import ProjectAuthCreationDTO
 from nexus.usecases.projects.dto import IntegratedFeatureDTO
 from nexus.usecases.actions.create import CreateFlowsUseCase
@@ -121,9 +122,18 @@ class CreateIntegratedFeatureUseCase:
         flows = integrated_feature_dto.flows
 
         for flow in flows:
-            if 'new_uuid' in flow:
-                return self._update_flow(flow, integrated_feature_dto)
-            else:
+            base_uuid = flow.get("base_uuid")
+            flow_uuid = flow.get("uuid")
+
+            if IntegratedFeature.objects.filter(
+                root_flow=base_uuid,
+                is_integrated=True
+            ).exists():
+
+                if Flow.objects.filter(
+                    uuid=flow_uuid
+                ).exists():
+                    return self._update_flow(flow, integrated_feature_dto)
                 return self._create_flow(integrated_feature_dto)
 
     def _update_flow(self, flow, integrated_feature_dto):
