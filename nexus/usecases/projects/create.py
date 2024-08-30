@@ -3,9 +3,11 @@ from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.projects.models import ProjectAuth, IntegratedFeature
 from nexus.projects.project_dto import ProjectAuthCreationDTO
 from nexus.usecases.projects.dto import IntegratedFeatureDTO
-from nexus.usecases.actions.create import CreateFlowsUseCase
+from nexus.usecases.actions.create import CreateFlowsUseCase, CreateFlowDTO
+from nexus.usecases.actions.update import UpdateFlowDTO, UpdateFlowsUseCase
 
 from nexus.users.models import User
+from nexus.actions.models import Flow
 
 from nexus.projects.exceptions import ProjectDoesNotExist
 
@@ -111,7 +113,7 @@ class CreateIntegratedFeatureUseCase:
 
         return integrated_feature
 
-    def create_integrated_feature_flows(
+    def integrate_feature_flows(
         self,
         consumer_msg: dict
     ):
@@ -120,16 +122,32 @@ class CreateIntegratedFeatureUseCase:
             feature_uuid=consumer_msg.get("feature_uuid"),
             flows=consumer_msg.get("flows")
         )
-        flow = integrated_feature_dto.action_dto
+        flows = integrated_feature_dto.flows
 
-        if not flow:
-            raise ValueError("Flows not found")
+        for flow in flows:
+            if 'new_uuid' in flow:
+                integrated_feature = integrated_feature_dto.integrated_feature
+                update_dto = UpdateFlowDTO(
+                    flow_uuid=flow.get("new_uuid"),
+                    name=integrated_feature.current_version_setup.get("name"),
+                    prompt=integrated_feature.current_version_setup.get("prompt"),
+                )
+                usecase = UpdateFlowsUseCase()
+                updated_flow = usecase.update_flow(
+                    flow_dto=update_dto
+                )
+                return updated_flow
+            else:
+                create_flow_dto = integrated_feature_dto.action_dto
 
-        usecase = CreateFlowsUseCase()
-        created_flow = usecase.create_flow(flow)
+                if not create_flow_dto:
+                    raise ValueError("Flows not found")
 
-        integrated_feature = integrated_feature_dto.integrated_feature
-        integrated_feature.is_integrated = True
-        integrated_feature.save(update_fields=["is_integrated"])
+                usecase = CreateFlowsUseCase()
+                created_flow = usecase.create_flow(create_flow_dto)
 
-        return created_flow
+                integrated_feature = integrated_feature_dto.integrated_feature
+                integrated_feature.is_integrated = True
+                integrated_feature.save(update_fields=["is_integrated"])
+
+                return created_flow
