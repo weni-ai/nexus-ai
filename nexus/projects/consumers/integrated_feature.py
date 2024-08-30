@@ -27,7 +27,7 @@ class CreateIntegratedFeatureConsumer(EDAConsumer):
             print(f"[IntegratedFeature] - Message rejected by: {exception}")
 
 
-class CreateIntegratedFeatureFlowConsumer(EDAConsumer):
+class IntegratedFeatureFlowConsumer(EDAConsumer):
 
     def consume(self, message: amqp.Message):
         print(f"[IntegratedFeatureFlows] - Consuming a message. Body: {message.body}")
@@ -35,7 +35,7 @@ class CreateIntegratedFeatureFlowConsumer(EDAConsumer):
             body = JSONParser.parse(message.body)
 
             usecase = CreateIntegratedFeatureUseCase()
-            usecase.create_integrated_feature_flows(body)
+            usecase.integrate_feature_flows(body)
 
             message.channel.basic_ack(message.delivery_tag)
             print("[IntegratedFeatureFlows] - IntegratedFeatureFlows flow created")
