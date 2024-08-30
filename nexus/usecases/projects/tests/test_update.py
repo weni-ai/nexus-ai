@@ -1,7 +1,5 @@
 from django.test import TestCase
 
-from uuid import uuid4
-
 from unittest.mock import patch
 
 from nexus.usecases.projects.create import CreateIntegratedFeatureUseCase

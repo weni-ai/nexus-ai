@@ -3,11 +3,10 @@ from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.projects.models import ProjectAuth, IntegratedFeature
 from nexus.projects.project_dto import ProjectAuthCreationDTO
 from nexus.usecases.projects.dto import IntegratedFeatureDTO
-from nexus.usecases.actions.create import CreateFlowsUseCase, CreateFlowDTO
+from nexus.usecases.actions.create import CreateFlowsUseCase
 from nexus.usecases.actions.update import UpdateFlowDTO, UpdateFlowsUseCase
 
 from nexus.users.models import User
-from nexus.actions.models import Flow
 
 from nexus.projects.exceptions import ProjectDoesNotExist
 
