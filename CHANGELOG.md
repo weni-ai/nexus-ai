@@ -1,3 +1,7 @@
+# 1.9.0
+## *Add*
+    - invoke_model method to wenigpt
+
 # 1.8.5
 ## *Fix*
     - ContentBaseLogs answer property
