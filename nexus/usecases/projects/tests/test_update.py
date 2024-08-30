@@ -4,11 +4,13 @@ from uuid import uuid4
 
 from unittest.mock import patch
 
+from nexus.usecases.projects.create import CreateIntegratedFeatureUseCase
 from nexus.usecases.projects.update import ProjectUpdateUseCase, UpdateIntegratedFeatureUseCase
 from nexus.usecases.projects.dto import UpdateProjectDTO
 
 from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
 from nexus.usecases.projects.tests.project_factory import IntegratedFeatureFactory, ProjectFactory
+from nexus.usecases.actions.tests.flow_factory import FlowFactory
 
 
 class UpdateProjectTestCase(TestCase):
@@ -39,6 +41,10 @@ class UpdateIntegratedFeatureTestCase(TestCase):
 
     def setUp(self) -> None:
         self.integrated_feature = IntegratedFeatureFactory()
+        self.related_flow = FlowFactory(
+            name=self.integrated_feature.current_version_setup['name'],
+            prompt=self.integrated_feature.current_version_setup['prompt'],
+        )
         self.project = ProjectFactory()
         self.usecase = UpdateIntegratedFeatureUseCase()
         self.project = self.integrated_feature.project
@@ -47,7 +53,7 @@ class UpdateIntegratedFeatureTestCase(TestCase):
         root_flow_uuid = self.integrated_feature.current_version_setup['root_flow_uuid']
         name = "new name"
         prompt = "new prompt"
-        # print(type(self.integrated_feature.current_version_setup))
+
         consumer_msg = {
             'project_uuid': str(self.project.uuid),
             'feature_uuid': self.integrated_feature.feature_uuid,
@@ -61,6 +67,43 @@ class UpdateIntegratedFeatureTestCase(TestCase):
         }
 
         integrated_feature = self.usecase.update_integrated_feature(consumer_msg)
-        # print(type(integrated_feature.current_version_setup))
+
         self.assertEqual(integrated_feature.current_version_setup['name'], name)
         self.assertEqual(integrated_feature.current_version_setup['prompt'], prompt)
+
+    def test_update_integrated_flow(self):
+        root_flow_uuid = self.integrated_feature.current_version_setup['root_flow_uuid']
+        name = "new name"
+        prompt = "new prompt"
+
+        consumer_msg = {
+            'project_uuid': str(self.project.uuid),
+            'feature_uuid': self.integrated_feature.feature_uuid,
+            'action': [
+                {
+                    'base_uuid': root_flow_uuid,
+                    'name': name,
+                    'prompt': prompt
+                }
+            ]
+        }
+
+        updated_feature = self.usecase.update_integrated_feature(consumer_msg)
+
+        update_flow_consumer_msg = {
+            'project_uuid': str(self.project.uuid),
+            'feature_uuid': updated_feature.feature_uuid,
+            'flows': [
+                {
+                    'base_uuid': updated_feature.feature_uuid,
+                    'new_uuid': self.related_flow.uuid
+                }
+            ]
+        }
+
+        update_flow_usecase = CreateIntegratedFeatureUseCase()
+        returned_flow = update_flow_usecase.integrate_feature_flows(
+            consumer_msg=update_flow_consumer_msg
+        )
+
+        self.assertEqual(returned_flow.name, name)
