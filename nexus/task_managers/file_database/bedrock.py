@@ -56,7 +56,7 @@ class BedrockFileDatabase(FileDataBase):
             self.s3_client.upload_fileobj(file, self.bucket_name, file_path)
             self.add_metadata_json_file(file_name, content_base_uuid, file_uuid)
 
-        except Exception as exception:
+        except ZeroDivisionError as exception:
             response.status = 1
             response.err = str(exception)
 

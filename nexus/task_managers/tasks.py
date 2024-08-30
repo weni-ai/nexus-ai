@@ -63,7 +63,7 @@ def add_file(
 
 
 @app.task
-def check_ingestion_job_status(celery_task_manager_uuid: str, ingestion_job_id: str, waiting_time: int = 10):
+def check_ingestion_job_status(celery_task_manager_uuid: str, ingestion_job_id: str, waiting_time: int = 10, file_type: str = "file"):
 
     if waiting_time:
         time.sleep(waiting_time)
@@ -75,7 +75,7 @@ def check_ingestion_job_status(celery_task_manager_uuid: str, ingestion_job_id: 
     status = TaskManager.status_map.get(ingestion_job_status)
 
     task_manager_usecase = CeleryTaskManagerUseCase()
-    task_manager_usecase.update_task_status(celery_task_manager_uuid, status, "file")
+    task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
 
     print(f"[+ 🦑 Ingestion Job {ingestion_job_id} Status: {status} +]")
 
@@ -84,7 +84,7 @@ def check_ingestion_job_status(celery_task_manager_uuid: str, ingestion_job_id: 
 
 
 @app.task
-def start_ingestion_job(celery_task_manager_uuid: str):
+def start_ingestion_job(celery_task_manager_uuid: str, file_type: str = "file"):
     try:
         print("[+ 🦑 Starting Ingestion Job +]")
 
@@ -93,24 +93,24 @@ def start_ingestion_job(celery_task_manager_uuid: str):
 
         if ingestion_jobs:
             time.sleep(5)
-            return start_ingestion_job(celery_task_manager_uuid)
+            return start_ingestion_job(celery_task_manager_uuid, file_type)
 
         ingestion_job_id: str = file_database.start_bedrock_ingestion()
 
         task_manager_usecase = CeleryTaskManagerUseCase()
 
-        task_manager = task_manager_usecase.get_task_manager_by_uuid(celery_task_manager_uuid, "file")
+        task_manager = task_manager_usecase.get_task_manager_by_uuid(celery_task_manager_uuid, file_type)
         task_manager.ingestion_job_id = ingestion_job_id
         task_manager.save()
         status = TaskManager.status_map.get("IN_PROGRESS")
-        task_manager_usecase.update_task_status(celery_task_manager_uuid, status, "file")
-        check_ingestion_job_status.delay(celery_task_manager_uuid, ingestion_job_id)
+        task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
+        check_ingestion_job_status.delay(celery_task_manager_uuid, ingestion_job_id, file_type=file_type)
 
     except ClientError as e:
         if e.response["Error"]["Code"] == "ConflictException":
             print("[+ Filter didn't catch in progress Ingestion Job. \n Waiting to start new IngestionJob ... +]")
             time.sleep(15)
-            return start_ingestion_job(celery_task_manager_uuid)
+            return start_ingestion_job(celery_task_manager_uuid, file_type)
 
 
 @app.task
@@ -198,6 +198,53 @@ def upload_file(
         "content_base": {
             "uuid": content_base_file.uuid,
             "extension_file": content_base_file.extension_file,
+        }
+    }
+    return response
+
+
+def create_txt_from_text(text, content_base_dto) -> str:
+    content_base_title = content_base_dto.get('title', '').replace("/", "-").replace(" ", "-")
+    file_name = f"{content_base_title}.txt"
+    with open(f"/tmp/{file_name}", "w") as file:
+        file.write(text)
+    return file_name
+
+
+@app.task
+def bedrock_upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: Dict):
+    file_name = create_txt_from_text(text, content_base_dto)
+    content_base_uuid = str(content_base_dto.get("uuid"))
+    file_database = BedrockFileDatabase()
+
+    with open(f"/tmp/{file_name}", "rb") as file:
+        file_database_response = file_database.add_file(file, content_base_uuid, content_base_text_uuid)
+
+    # TODO: create usecase
+    content_base_text = ContentBaseText.objects.get(uuid=content_base_text_uuid)
+    content_base_text.file = file_database_response.file_url
+    content_base_text.file_name = file_database_response.file_name
+    content_base_text.save(update_fields=['file', 'file_name'])
+
+    if file_database_response.status != 0:
+        file_database.delete_file_and_metadata(content_base_uuid, file_database_response.file_name)
+        return {
+            "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
+            "error": file_database_response.err
+        }
+
+    print("[+ Text File was added +}")
+
+    task_manager = CeleryTaskManagerUseCase().create_celery_text_file_manager(content_base_text=content_base_text)
+    start_ingestion_job(str(task_manager.uuid), "text")
+
+    response = {
+        "task_uuid": task_manager.uuid,
+        "task_status": task_manager.status,
+        "content_base_text": {
+            "uuid": content_base_text.uuid,
+            "extension_file": 'txt',
+            "text": content_base_text.text,
         }
     }
     return response
