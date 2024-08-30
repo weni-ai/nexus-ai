@@ -4,6 +4,7 @@ from nexus.projects.models import ProjectAuth, IntegratedFeature
 from nexus.projects.project_dto import ProjectAuthCreationDTO
 from nexus.usecases.projects.dto import IntegratedFeatureDTO
 from nexus.usecases.actions.create import CreateFlowsUseCase
+from nexus.usecases.actions.update import UpdateFlowDTO, UpdateFlowsUseCase
 
 from nexus.users.models import User
 
@@ -111,22 +112,38 @@ class CreateIntegratedFeatureUseCase:
 
         return integrated_feature
 
-    def create_integrated_feature_flows(
-        self,
-        consumer_msg: dict
-    ):
+    def integrate_feature_flows(self, consumer_msg: dict):
         integrated_feature_dto = IntegratedFeatureDTO(
             project_uuid=consumer_msg.get("project_uuid"),
             feature_uuid=consumer_msg.get("feature_uuid"),
             flows=consumer_msg.get("flows")
         )
-        flow = integrated_feature_dto.action_dto
+        flows = integrated_feature_dto.flows
 
-        if not flow:
+        for flow in flows:
+            if 'new_uuid' in flow:
+                return self._update_flow(flow, integrated_feature_dto)
+            else:
+                return self._create_flow(integrated_feature_dto)
+
+    def _update_flow(self, flow, integrated_feature_dto):
+        integrated_feature = integrated_feature_dto.integrated_feature
+        update_dto = UpdateFlowDTO(
+            flow_uuid=flow.get("new_uuid"),
+            name=integrated_feature.current_version_setup.get("name"),
+            prompt=integrated_feature.current_version_setup.get("prompt"),
+        )
+        usecase = UpdateFlowsUseCase()
+        return usecase.update_flow(flow_dto=update_dto)
+
+    def _create_flow(self, integrated_feature_dto):
+        create_flow_dto = integrated_feature_dto.action_dto
+
+        if not create_flow_dto:
             raise ValueError("Flows not found")
 
         usecase = CreateFlowsUseCase()
-        created_flow = usecase.create_flow(flow)
+        created_flow = usecase.create_flow(create_flow_dto)
 
         integrated_feature = integrated_feature_dto.integrated_feature
         integrated_feature.is_integrated = True

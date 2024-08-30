@@ -1,7 +1,7 @@
 import copy
 
 from nexus.event_driven.publisher.rabbitmq_publisher import RabbitMQPublisher
-from nexus.usecases.projects.dto import UpdateProjectDTO, UpdateIntegratedFeatureDTO
+from nexus.usecases.projects.dto import UpdateProjectDTO
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.retrieve import get_integrated_feature
 from nexus.projects.models import Project, IntegratedFeature
@@ -93,12 +93,8 @@ class UpdateIntegratedFeatureUseCase:
         except IntegratedFeature.DoesNotExist:
             return None
 
-        update_dto = UpdateIntegratedFeatureDTO(
-            current_version_setup=consumer_msg.get('action')
-        )
-
-        for attr, value in update_dto:
-            setattr(integrated_feature, attr, value)
+        updated_version = consumer_msg.get('action')
+        integrated_feature.current_version_setup = updated_version[0]
         integrated_feature.save()
 
         return integrated_feature

@@ -6,6 +6,7 @@ from nexus.event_driven.consumer.consumers import EDAConsumer
 
 from nexus.usecases.projects.create import CreateIntegratedFeatureUseCase
 from nexus.usecases.projects.delete import delete_integrated_feature
+from nexus.usecases.projects.update import UpdateIntegratedFeatureUseCase
 
 
 class CreateIntegratedFeatureConsumer(EDAConsumer):
@@ -26,7 +27,7 @@ class CreateIntegratedFeatureConsumer(EDAConsumer):
             print(f"[IntegratedFeature] - Message rejected by: {exception}")
 
 
-class CreateIntegratedFeatureFlowConsumer(EDAConsumer):
+class IntegratedFeatureFlowConsumer(EDAConsumer):
 
     def consume(self, message: amqp.Message):
         print(f"[IntegratedFeatureFlows] - Consuming a message. Body: {message.body}")
@@ -34,7 +35,7 @@ class CreateIntegratedFeatureFlowConsumer(EDAConsumer):
             body = JSONParser.parse(message.body)
 
             usecase = CreateIntegratedFeatureUseCase()
-            usecase.create_integrated_feature_flows(body)
+            usecase.integrate_feature_flows(body)
 
             message.channel.basic_ack(message.delivery_tag)
             print("[IntegratedFeatureFlows] - IntegratedFeatureFlows flow created")
@@ -72,7 +73,8 @@ class UpdateIntegratedFeatureConsumer(EDAConsumer):
         print(f"[UpdateIntegratedFeature] - Consuming a message. Body: {message.body}")
         try:
             body = JSONParser.parse(message.body)
-            # TODO - Implement the use
+            usecase = UpdateIntegratedFeatureUseCase()
+            usecase.update_integrated_feature(body)
             message.channel.basic_ack(message.delivery_tag)
             print("[UpdateIntegratedFeature] - Authorization created: ")
         except Exception as exception:
