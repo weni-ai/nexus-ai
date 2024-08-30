@@ -1,7 +1,9 @@
-from nexus.usecases import projects
+from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 
-from nexus.projects.models import ProjectAuth
+from nexus.projects.models import ProjectAuth, IntegratedFeature
 from nexus.projects.project_dto import ProjectAuthCreationDTO
+from nexus.usecases.projects.dto import IntegratedFeatureDTO
+from nexus.usecases.actions.create import CreateFlowsUseCase
 
 from nexus.users.models import User
 
@@ -24,7 +26,7 @@ class ProjectAuthUseCase:
         user, created = User.objects.get_or_create(email=user_email)
 
         try:
-            project = projects.get_project_by_uuid(project_uuid=project_uuid)
+            project = get_project_by_uuid(project_uuid=project_uuid)
         except ProjectDoesNotExist as e:
             raise e
         except Exception as e:
@@ -75,3 +77,59 @@ class ProjectAuthUseCase:
             raise ValueError("Project auth does not exists")
         except Exception as exception:
             raise exception
+
+
+class CreateIntegratedFeatureUseCase:
+
+    def create_integrated_feature(
+        self,
+        consumer_msg: dict
+    ) -> IntegratedFeature:
+
+        project_uuid = consumer_msg.get("project_uuid")
+        feature_uuid = consumer_msg.get("feature_uuid")
+        action = consumer_msg.get("action")
+
+        if action is None:
+            raise ValueError("Action is required")
+
+        try:
+            project = get_project_by_uuid(project_uuid=project_uuid)
+        except ProjectDoesNotExist as e:
+            raise e
+        except Exception as e:
+            raise e
+
+        integrated_feature, created = IntegratedFeature.objects.get_or_create(
+            project=project,
+            feature_uuid=feature_uuid,
+            current_version_setup=action
+        )
+
+        if not created and integrated_feature.is_integrated:
+            raise ValueError("Integrated feature already exists")
+
+        return integrated_feature
+
+    def create_integrated_feature_flows(
+        self,
+        consumer_msg: dict
+    ):
+        integrated_feature_dto = IntegratedFeatureDTO(
+            project_uuid=consumer_msg.get("project_uuid"),
+            feature_uuid=consumer_msg.get("feature_uuid"),
+            flows=consumer_msg.get("flows")
+        )
+        flow = integrated_feature_dto.action_dto
+
+        if not flow:
+            raise ValueError("Flows not found")
+
+        usecase = CreateFlowsUseCase()
+        created_flow = usecase.create_flow(flow)
+
+        integrated_feature = integrated_feature_dto.integrated_feature
+        integrated_feature.is_integrated = True
+        integrated_feature.save(update_fields=["is_integrated"])
+
+        return created_flow
