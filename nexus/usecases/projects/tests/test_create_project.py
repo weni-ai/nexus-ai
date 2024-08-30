@@ -120,7 +120,7 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
                 }
             ]
         }
-        returned_flow = self.usecase.create_integrated_feature_flows(
+        returned_flow = self.usecase.integrate_feature_flows(
             consumer_msg=consumer_msg
         )
 
@@ -146,7 +146,7 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
             ]
         }
         with self.assertRaises(ValueError):
-            self.usecase.create_integrated_feature_flows(
+            self.usecase.integrate_feature_flows(
                 consumer_msg=consumer_msg
             )
 
