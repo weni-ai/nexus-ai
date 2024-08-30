@@ -159,6 +159,10 @@ class WeniGPTClient(LLMClient):
             response = bedrock.invoke_model(self.prompt, config_data)
 
             text_answers = json.loads(response['body'].read().decode('utf-8'))
+
+            if text_answers.get("outputs"):
+                text_answers = text_answers.get("outputs")[0].get("text")
+
             return {
                 "answers": [
                     {
