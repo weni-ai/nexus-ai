@@ -1,3 +1,7 @@
+# 1.10.0
+## *Add*
+    - Create and delete methods to retail application
+
 # 1.9.0
 ## *Add*
     - invoke_model method to wenigpt
