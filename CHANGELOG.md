@@ -1,3 +1,7 @@
+# 1.10.1
+## *Fix*
+    - Fix request_bedrock response
+
 # 1.10.0
 ## *Add*
     - Create and delete methods to retail application
