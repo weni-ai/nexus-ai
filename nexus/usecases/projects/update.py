@@ -94,7 +94,7 @@ class UpdateIntegratedFeatureUseCase:
             return None
 
         updated_version = consumer_msg.get('action')
-        integrated_feature.current_version_setup = updated_version[0]
+        integrated_feature.current_version_setup = updated_version
         integrated_feature.save()
 
         return integrated_feature

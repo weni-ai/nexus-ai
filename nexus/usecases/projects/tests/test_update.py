@@ -55,13 +55,11 @@ class UpdateIntegratedFeatureTestCase(TestCase):
         consumer_msg = {
             'project_uuid': str(self.project.uuid),
             'feature_uuid': self.integrated_feature.feature_uuid,
-            'action': [
-                {
-                    'base_uuid': root_flow_uuid,
-                    'name': name,
-                    'prompt': prompt
-                }
-            ]
+            'action': {
+                'base_uuid': root_flow_uuid,
+                'name': name,
+                'prompt': prompt
+            }
         }
 
         integrated_feature = self.usecase.update_integrated_feature(consumer_msg)
@@ -77,13 +75,11 @@ class UpdateIntegratedFeatureTestCase(TestCase):
         consumer_msg = {
             'project_uuid': str(self.project.uuid),
             'feature_uuid': self.integrated_feature.feature_uuid,
-            'action': [
-                {
-                    'base_uuid': root_flow_uuid,
-                    'name': name,
-                    'prompt': prompt
-                }
-            ]
+            'action': {
+                'base_uuid': root_flow_uuid,
+                'name': name,
+                'prompt': prompt
+            }
         }
 
         updated_feature = self.usecase.update_integrated_feature(consumer_msg)

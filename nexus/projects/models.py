@@ -78,3 +78,7 @@ class IntegratedFeature(models.Model):
     )
     current_version_setup = models.JSONField(default=dict)
     is_integrated = models.BooleanField(default=False)
+
+    @property
+    def root_flow(self):
+        return self.current_version_setup.get('root_flow')
