@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from nexus.usecases.projects.create import CreateIntegratedFeatureUseCase
 from nexus.usecases.projects.update import ProjectUpdateUseCase, UpdateIntegratedFeatureUseCase
-from nexus.usecases.projects.dto import UpdateProjectDTO
+from nexus.usecases.projects.dto import UpdateProjectDTO, IntegratedFeatureFlowDTO
 
 from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
 from nexus.usecases.projects.tests.project_factory import IntegratedFeatureFactory, ProjectFactory
@@ -76,28 +76,36 @@ class UpdateIntegratedFeatureTestCase(TestCase):
             'project_uuid': str(self.project.uuid),
             'feature_uuid': self.integrated_feature.feature_uuid,
             'action': {
-                'base_uuid': root_flow_uuid,
+                'root_flow_uuid': root_flow_uuid,
                 'name': name,
                 'prompt': prompt
             }
         }
 
         updated_feature = self.usecase.update_integrated_feature(consumer_msg)
+        print("====================================")
+        print("updated_feature: ", updated_feature.__dict__)
 
         update_flow_consumer_msg = {
             'project_uuid': str(self.project.uuid),
             'feature_uuid': updated_feature.feature_uuid,
             'flows': [
                 {
-                    'base_uuid': updated_feature.feature_uuid,
+                    'base_uuid': root_flow_uuid,
                     'new_uuid': self.related_flow.uuid
                 }
             ]
         }
 
+        flow_dto = IntegratedFeatureFlowDTO(
+            project_uuid=str(self.project.uuid),
+            feature_uuid=updated_feature.feature_uuid,
+            flows=update_flow_consumer_msg['flows']
+        )
+
         update_flow_usecase = CreateIntegratedFeatureUseCase()
         returned_flow = update_flow_usecase.integrate_feature_flows(
-            consumer_msg=update_flow_consumer_msg
+            integrated_feature_flow_dto=flow_dto
         )
 
         self.assertEqual(returned_flow.name, name)
