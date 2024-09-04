@@ -2,10 +2,12 @@ from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 
 from nexus.projects.models import ProjectAuth, IntegratedFeature
 from nexus.actions.models import Flow
-from nexus.projects.project_dto import ProjectAuthCreationDTO
-from nexus.usecases.projects.dto import IntegratedFeatureDTO
+from nexus.projects.project_dto import (
+    ProjectAuthCreationDTO,
+)
 from nexus.usecases.actions.create import CreateFlowsUseCase
 from nexus.usecases.actions.update import UpdateFlowDTO, UpdateFlowsUseCase
+from nexus.usecases.projects.dto import IntegratedFeatureFlowDTO, IntegratedFeatureDTO
 
 from nexus.users.models import User
 
@@ -85,21 +87,21 @@ class CreateIntegratedFeatureUseCase:
 
     def create_integrated_feature(
         self,
-        consumer_msg: dict
+        integrated_feature_dto: IntegratedFeatureDTO
     ) -> IntegratedFeature:
 
-        project_uuid = consumer_msg.get("project_uuid")
-        feature_uuid = consumer_msg.get("feature_uuid")
-        action = consumer_msg.get("action")
+        project_uuid = integrated_feature_dto.project_uuid
+        feature_uuid = integrated_feature_dto.feature_uuid
+        action = integrated_feature_dto.current_version_setup
 
         if action is None:
             raise ValueError("Action is required")
 
         try:
-            project = get_project_by_uuid(project_uuid=project_uuid)
+            project = get_project_by_uuid(
+                project_uuid=project_uuid
+            )
         except ProjectDoesNotExist as e:
-            raise e
-        except Exception as e:
             raise e
 
         integrated_feature, created = IntegratedFeature.objects.get_or_create(
@@ -113,28 +115,30 @@ class CreateIntegratedFeatureUseCase:
 
         return integrated_feature
 
-    def integrate_feature_flows(self, consumer_msg: dict):
-        integrated_feature_dto = IntegratedFeatureDTO(
-            project_uuid=consumer_msg.get("project_uuid"),
-            feature_uuid=consumer_msg.get("feature_uuid"),
-            flows=consumer_msg.get("flows")
-        )
-        flows = integrated_feature_dto.flows
+    def integrate_feature_flows(
+        self,
+        integrated_feature_flow_dto: IntegratedFeatureFlowDTO
+    ):
+
+        flows = integrated_feature_flow_dto.flows
 
         for flow in flows:
-            base_uuid = flow.get("base_uuid")
-            flow_uuid = flow.get("uuid")
 
-            if IntegratedFeature.objects.filter(
-                root_flow=base_uuid,
-                is_integrated=True
-            ).exists():
+            new_uuid = str(flow.get("new_uuid"))
 
-                if Flow.objects.filter(
-                    uuid=flow_uuid
-                ).exists():
-                    return self._update_flow(flow, integrated_feature_dto)
-                return self._create_flow(integrated_feature_dto)
+            print("current_version_setu: ", integrated_feature_flow_dto.integrated_feature.current_version_setup)
+            print(IntegratedFeature.objects.all().first().__dict__)
+
+            if new_uuid:
+                base_uuid = flow.get("base_uuid")
+                if Flow.objects.filter(uuid=base_uuid).exists():
+                    return self._update_flow(flow, integrated_feature_flow_dto)
+                continue
+            else:
+                if integrated_feature_flow_dto.action_dto:
+                    return self._create_flow(integrated_feature_flow_dto)
+                continue
+        raise ValueError("No valid flows found")
 
     def _update_flow(self, flow, integrated_feature_dto):
         integrated_feature = integrated_feature_dto.integrated_feature

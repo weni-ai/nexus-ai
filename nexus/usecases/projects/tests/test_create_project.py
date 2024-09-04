@@ -6,6 +6,7 @@ from ..projects_use_case import ProjectsUseCase
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.retrieve import get_integrated_feature
+from nexus.usecases.projects.dto import IntegratedFeatureFlowDTO
 from nexus.usecases.projects.create import ProjectAuthUseCase, CreateIntegratedFeatureUseCase
 from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
@@ -120,8 +121,14 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
                 }
             ]
         }
+        flow_dto = IntegratedFeatureFlowDTO(
+            project_uuid=str(self.project.uuid),
+            feature_uuid=self.integrated_feature.feature_uuid,
+            flows=consumer_msg['flows']
+        )
+
         returned_flow = self.usecase.integrate_feature_flows(
-            consumer_msg=consumer_msg
+            integrated_feature_flow_dto=flow_dto
         )
 
         integrated_feature = get_integrated_feature(
@@ -155,8 +162,13 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
                 }
             ]
         }
+        flow_dto = IntegratedFeatureFlowDTO(
+            project_uuid=str(self.project.uuid),
+            feature_uuid=self.integrated_feature.feature_uuid,
+            flows=consumer_msg['flows']
+        )
         returned_flow = self.usecase.integrate_feature_flows(
-            consumer_msg=consumer_msg
+            integrated_feature_flow_dto=flow_dto
         )
 
         integrated_feature = get_integrated_feature(
@@ -179,9 +191,14 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
                 }
             ]
         }
+        flow_dto = IntegratedFeatureFlowDTO(
+            project_uuid=str(self.project.uuid),
+            feature_uuid=self.integrated_feature.feature_uuid,
+            flows=consumer_msg['flows']
+        )
         with self.assertRaises(ValueError):
             self.usecase.integrate_feature_flows(
-                consumer_msg=consumer_msg
+                integrated_feature_flow_dto=flow_dto
             )
 
         integrated_feature = get_integrated_feature(
