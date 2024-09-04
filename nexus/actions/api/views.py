@@ -37,8 +37,6 @@ from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.intelligences.retrieve import get_file_info
 
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-
 from nexus.intelligences.llms.client import LLMClient
 
 from nexus.orgs.permissions import is_super_user
@@ -230,6 +228,8 @@ class MessagePreviewView(APIView):
 
             project = projects.get_project_by_uuid(project_uuid)
 
+            indexer = projects.ProjectsUseCase().get_indexer_database(project_uuid)
+
             has_project_permission(
                 user=request.user,
                 project=project,
@@ -316,7 +316,7 @@ class MessagePreviewView(APIView):
                 content_base_repository=content_base_repository,
                 flows_repository=flows_repository,
                 message_logs_repository=message_logs_repository,
-                indexer=SentenXFileDataBase(),
+                indexer=indexer(),
                 llm_client=llm_client,
                 direct_message=broadcast,
                 flow_start=flow_start,
