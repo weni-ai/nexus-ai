@@ -115,13 +115,29 @@ class FlowsViewset(
                 method="post"
             )
 
+            flow_uuid = request.data.get("uuid")
+            fallback = request.data.get("fallback")
+
+            action_template_uuid = request.data.get("action_template_uuid", None)
+
+            name = request.data.get("name")
+            prompt = request.data.get("prompt", "")
+            action_type = request.data.get("action_type", "custom")
+
+            if action_template_uuid:
+                template = TemplateAction.objects.get(uuid=action_template_uuid)
+                name = template.name
+                prompt = template.prompt if template.prompt else ""
+                action_type = template.action_type
+
             create_dto = CreateFlowDTO(
                 project_uuid=project_uuid,
-                flow_uuid=request.data.get("uuid"),
-                name=request.data.get("name"),
-                prompt=request.data.get("prompt", ""),
-                fallback=request.data.get("fallback"),
-                action_type=request.data.get("action_type", "custom")
+                flow_uuid=flow_uuid,
+                name=name,
+                prompt=prompt,
+                fallback=fallback,
+                action_type=action_type,
+                action_template_uuid=action_template_uuid
             )
 
             flows = CreateFlowsUseCase().create_flow(create_dto)
@@ -369,6 +385,7 @@ class TemplateActionView(ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         try:
+            language = request.query_params.get("language", "pt-br")
             user = request.user
             project = projects.get_project_by_uuid(kwargs.get("project_uuid"))
             has_project_permission(
@@ -377,7 +394,9 @@ class TemplateActionView(ModelViewSet):
                 project=project
             )
 
-            template_actions = ListTemplateActionUseCase().list_template_action()
+            template_actions = ListTemplateActionUseCase().list_template_action(
+                language=language
+            )
             serializer = self.get_serializer(template_actions, many=True)
             return Response(data=serializer.data)
         except ProjectAuthorizationDenied:
@@ -399,12 +418,14 @@ class TemplateActionView(ModelViewSet):
             prompt = data.get("prompt")
             action_type = data.get("action_type")
             group = data.get("group")
+            display_prompt = data.get("display_prompt", prompt)
 
             template_action = CreateTemplateActionUseCase().create_template_action(
                 name=name,
                 prompt=prompt,
                 action_type=action_type,
-                group=group
+                group=group,
+                display_prompt=display_prompt
             )
             serializer = self.get_serializer(template_action)
             return Response(data=serializer.data)
@@ -445,7 +466,8 @@ class TemplateActionView(ModelViewSet):
                 name=data.get("name"),
                 prompt=data.get("prompt"),
                 action_type=data.get("action_type"),
-                group=data.get("group")
+                group=data.get("group"),
+                display_prompt=data.get("display_prompt")
             )
             usecase = UpdateTemplateActionUseCase()
             template_action = usecase.update_template_action(update_dto)
