@@ -9,7 +9,7 @@ from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
-from nexus.usecases.projects.projects_use_case import ProjectAuthUseCase
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from router.route import route
 from router.classifiers.zeroshot import ZeroshotClassifier
 from router.classifiers.chatgpt_function import OpenAIClient, ChatGPTFunctionClassifier
@@ -45,7 +45,7 @@ def start_route(
     try:
         project_uuid: str = message.project_uuid
 
-        indexer = ProjectAuthUseCase().get_indexer_database(project_uuid)
+        indexer = ProjectsUseCase().get_indexer_database(project_uuid)
 
         flows: List[FlowDTO] = flows_repository.project_flows(project_uuid, False)
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
