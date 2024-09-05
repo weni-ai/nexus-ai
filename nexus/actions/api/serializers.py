@@ -16,4 +16,4 @@ class TemplateActionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TemplateAction
-        fields = ['uuid', 'name', 'prompt', 'action_type', 'group']
+        fields = ['uuid', 'name', 'group', 'display_prompt', 'language', 'action_type']
