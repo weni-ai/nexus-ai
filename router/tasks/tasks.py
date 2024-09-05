@@ -36,7 +36,13 @@ def whatsapp_cart_flow(
     flow_start: FlowStart
 ) -> bool:
     flow = get_flow_by_action_type(content_base, "whatsapp_cart")
-    flow_dto = FlowDTO(**flow)
+    flow_dto = FlowDTO(
+        content_base_uuid=content_base.uuid,
+        uuid=flow.uuid,
+        name=flow.name,
+        prompt=flow.prompt,
+        fallback=flow.fallback,
+    )
 
     if flow:
         flow_start.start_flow(
@@ -145,4 +151,5 @@ def start_route(
 
         log_usecase.update_status("S")
     except Exception as e:
+        print(f"[- START ROUTE - Error: {e} -]")
         log_usecase.update_status("F", exception_text=e)
