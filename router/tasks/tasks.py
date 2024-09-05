@@ -40,8 +40,8 @@ def whatsapp_cart_flow(
         action_type="whatsapp_cart"
     )
     flow_dto = FlowDTO(
-        content_base_uuid=content_base.uuid,
-        uuid=flow.uuid,
+        content_base_uuid=str(content_base.uuid),
+        uuid=str(flow.uuid),
         name=flow.name,
         prompt=flow.prompt,
         fallback=flow.fallback,
