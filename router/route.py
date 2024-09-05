@@ -69,10 +69,11 @@ def route(
             if instructions == []:
                 instructions += settings.DEFAULT_INSTRUCTIONS
 
-            response_language: str = get_language_codes(llm_config.language)
+            # TODO: Implement after changes on create_base_brain_structure usecase.
+            # response_language: str = get_language_codes(llm_config.language)
 
-            if llm_config.model.lower() != "chatgpt":
-                instructions.append(f"Sempre responda em {response_language}")
+            # if llm_config.model.lower() != "chatgpt":
+            #     instructions.append(f"Sempre responda em {response_language}")
 
             full_chunks: List[Dict] = get_chunks(
                 indexer,

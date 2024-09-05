@@ -274,6 +274,7 @@ def create_base_brain_structure(
         intelligence=intelligence,
         created_by=user
     )
+    # TODO: Handle different languages
     LLM.objects.create(
         created_by=user,
         integrated_intelligence=integrated_intelligence,
