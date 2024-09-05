@@ -1,3 +1,8 @@
+# 1.10.2
+## *Fix*
+    - Missing classifier class logs
+    - Remove language instruction
+
 # 1.10.1
 ## *Fix*
     - Fix request_bedrock response
