@@ -35,7 +35,10 @@ def whatsapp_cart_flow(
     msg_event: dict,
     flow_start: FlowStart
 ) -> bool:
-    flow = get_flow_by_action_type(content_base, "whatsapp_cart")
+    flow = get_flow_by_action_type(
+        content_base_uuid=content_base.uuid,
+        action_type="whatsapp_cart"
+    )
     flow_dto = FlowDTO(
         content_base_uuid=content_base.uuid,
         uuid=flow.uuid,
