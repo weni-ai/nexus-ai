@@ -33,7 +33,8 @@ def whatsapp_cart_flow(
     content_base: ContentBaseDTO,
     message: Message,
     msg_event: dict,
-    flow_start: FlowStart
+    flow_start: FlowStart,
+    user_email: str
 ) -> bool:
     flow = get_flow_by_action_type(
         content_base_uuid=content_base.uuid,
@@ -50,7 +51,7 @@ def whatsapp_cart_flow(
     if flow:
         flow_start.start_flow(
             flow=flow_dto,
-            user=os.environ.get("FLOW_USER_EMAIL"),
+            user=user_email,
             urns=[message.contact_urn],
             user_message="",
             msg_event=msg_event,
@@ -72,7 +73,10 @@ def start_route(
 
     message = Message(**message)
     mailroom_msg_event = message.msg_event
+    mailroom_msg_event['attachments'] = mailroom_msg_event.get('attachments') or []
+    mailroom_msg_event['metadata'] = mailroom_msg_event.get('metadata') or {}
 
+    log_usecase = CreateLogUsecase()
     try:
         project_uuid: str = message.project_uuid
 
@@ -92,10 +96,10 @@ def start_route(
                 content_base=content_base,
                 message=message,
                 msg_event=mailroom_msg_event,
-                flow_start=flow_start
+                flow_start=flow_start,
+                user_email=flows_user_email
             )
 
-        log_usecase = CreateLogUsecase()
         log_usecase.create_message_log(message.text, message.contact_urn)
 
         llm_model = get_llm_by_project_uuid(project_uuid)
@@ -156,4 +160,5 @@ def start_route(
         log_usecase.update_status("S")
     except Exception as e:
         print(f"[- START ROUTE - Error: {e} -]")
-        log_usecase.update_status("F", exception_text=e)
+        if message.text:
+            log_usecase.update_status("F", exception_text=e)
