@@ -51,7 +51,7 @@ def whatsapp_cart_flow(
         flow_start.start_flow(
             flow=flow_dto,
             user=os.environ.get("FLOW_USER_EMAIL"),
-            urn=[message.contact_urn],
+            urns=[message.contact_urn],
             user_message="",
             msg_event=msg_event,
         )
