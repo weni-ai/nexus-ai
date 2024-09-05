@@ -1,18 +1,36 @@
 from django.db import models
 from django.db.models import Q
+from enum import Enum
 
 from uuid import uuid4
 
 from nexus.intelligences.models import ContentBase
 
 
+class Languages(Enum):
+    PORTUGUESE = 'pt-br'
+    ENGLISH = 'en-us'
+    SPANISH = 'es'
+
+
 class TemplateAction(models.Model):
+    LANGUAGES = (
+        (Languages.ENGLISH.value, "English"),
+        (Languages.PORTUGUESE.value, "Portuguese"),
+        (Languages.SPANISH.value, "Spanish")
+    )
 
     uuid = models.UUIDField(primary_key=True, default=uuid4)
     action_type = models.CharField(max_length=255)
     name = models.CharField(max_length=255)
     prompt = models.TextField(blank=True, null=True)
     group = models.CharField(max_length=255, null=True, blank=True)
+    display_prompt = models.CharField(max_length=255, null=True, blank=True)
+    language = models.CharField(
+        max_length=10,
+        default=Languages.PORTUGUESE.value,
+        choices=LANGUAGES
+    )
 
 
 class Flow(models.Model):
