@@ -64,9 +64,6 @@ def start_route(
     message = Message(**message)
     mailroom_msg_event = message.msg_event
 
-    log_usecase = CreateLogUsecase()
-    log_usecase.create_message_log(message.text, message.contact_urn)
-
     try:
         project_uuid: str = message.project_uuid
 
@@ -88,6 +85,9 @@ def start_route(
                 msg_event=mailroom_msg_event,
                 flow_start=flow_start
             )
+
+        log_usecase = CreateLogUsecase()
+        log_usecase.create_message_log(message.text, message.contact_urn)
 
         llm_model = get_llm_by_project_uuid(project_uuid)
 
