@@ -20,6 +20,7 @@ class CreateFlowDTO:
     action_type: str = "custom"
     prompt: str = None
     fallback: bool = False
+    action_template_uuid: str = None
 
 
 class CreateFlowsUseCase():
@@ -29,6 +30,18 @@ class CreateFlowsUseCase():
             raise ValueError("Prompt is required for custom actions")
 
         content_base = get_default_content_base_by_project(create_dto.project_uuid)
+
+        if create_dto.action_template_uuid:
+            action_template = TemplateAction.objects.get(uuid=create_dto.action_template_uuid)
+            return Flow.objects.create(
+                uuid=create_dto.flow_uuid,
+                name=create_dto.name,
+                prompt=create_dto.prompt,
+                fallback=create_dto.fallback,
+                content_base=content_base,
+                action_type=create_dto.action_type,
+                action_template=action_template
+            )
 
         return Flow.objects.create(
             uuid=create_dto.flow_uuid,
@@ -47,14 +60,19 @@ class CreateTemplateActionUseCase():
         name: str,
         prompt: str,
         action_type: str,
+        display_prompt: str = None,
         group: str = None
     ):
         try:
+            if display_prompt is None:
+                display_prompt = prompt
+
             return TemplateAction.objects.create(
                 name=name,
                 prompt=prompt,
                 action_type=action_type,
-                group=group
+                group=group,
+                display_prompt=display_prompt
             )
         except Exception as e:
             print("error", str(e))

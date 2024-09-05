@@ -36,5 +36,10 @@ class ListFlowsUseCase:
 
 class ListTemplateActionUseCase:
 
-    def list_template_action(self):
-        return TemplateAction.objects.all()
+    def list_template_action(
+        self,
+        language: str = 'pt-br'
+    ) -> QuerySet[TemplateAction]:
+        return TemplateAction.objects.filter(
+            language=language
+        )
