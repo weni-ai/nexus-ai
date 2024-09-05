@@ -34,7 +34,7 @@ class ContentBaseORMRepository(Repository):
     def _get_content_base(self, content_base_uuid: str) -> ContentBase:
         return ContentBase.objects.get(uuid=content_base_uuid)
 
-    def get_content_base_by_project(self, project_uuid: str) -> ContentBase:
+    def get_content_base_by_project(self, project_uuid: str) -> ContentBaseDTO:
 
         content_base = get_default_content_base_by_project(project_uuid)
 
