@@ -36,6 +36,10 @@ class FlowStartHTTPClient(FlowStart):
         if msg_event:
             payload["params"]["msg_event"] = msg_event
 
+        print("[+ DEBUG PAYLOAD +]")
+        print(payload)
+        print("[+ DEBUG PAYLOAD +]")
+
         params = {
             "token": self.__access_token
         }
@@ -43,6 +47,10 @@ class FlowStartHTTPClient(FlowStart):
             'Content-Type': 'application/json'
         }
         response = requests.post(url, data=json.dumps(payload), params=params, headers=headers)
+
+        print("[+ DEBUG RESPONSE +]")
+        print(response)
+        print("[+ DEBUG RESPONSE +]")
 
         try:
             response.raise_for_status()
