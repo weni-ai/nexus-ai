@@ -75,9 +75,11 @@ class ContentBaseORMRepository(Repository):
 
 
 class FlowsORMRepository(Repository):
+
     def get_project_flow_by_name(self, project_uuid: str, name: str):
         content_base = get_default_content_base_by_project(project_uuid)
         flow = Flow.objects.filter(content_base=content_base, name=name).first()
+
         return FlowDTO(
             uuid=str(flow.uuid),
             name=flow.name,
