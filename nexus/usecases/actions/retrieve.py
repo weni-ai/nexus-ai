@@ -14,13 +14,13 @@ class RetrieveFlowsUseCase():
 
 
 def get_flow_by_action_type(
-    content_base,
+    content_base_uuid: str,
     action_type: str,
 ) -> Flow:
     try:
         return Flow.objects.get(
             action_type=action_type,
-            content_base=content_base
+            content_base__uuid=content_base_uuid
         )
     except Flow.DoesNotExist:
         raise FlowDoesNotExist
