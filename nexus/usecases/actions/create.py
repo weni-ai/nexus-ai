@@ -18,6 +18,7 @@ class CreateFlowDTO:
     flow_uuid: str
     name: str
     action_type: str = "custom"
+    group: str = "interactions"
     prompt: str = None
     fallback: bool = False
     action_template_uuid: str = None
@@ -40,7 +41,8 @@ class CreateFlowsUseCase():
                 fallback=create_dto.fallback,
                 content_base=content_base,
                 action_type=create_dto.action_type,
-                action_template=action_template
+                action_template=action_template,
+                group=action_template.group
             )
 
         return Flow.objects.create(
@@ -50,6 +52,7 @@ class CreateFlowsUseCase():
             fallback=create_dto.fallback,
             content_base=content_base,
             action_type=create_dto.action_type,
+            group=create_dto.group
         )
 
 
