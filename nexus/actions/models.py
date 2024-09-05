@@ -13,6 +13,12 @@ class Languages(Enum):
     SPANISH = 'es'
 
 
+class Group(Enum):
+    SUPPORT = 'support'
+    INTERACTIONS = 'interactions'
+    SHOPPING = 'shopping'
+
+
 class TemplateAction(models.Model):
     LANGUAGES = (
         (Languages.ENGLISH.value, "English"),
@@ -41,6 +47,12 @@ class Flow(models.Model):
         ('attachment', 'Attachment'),
     ]
 
+    group = (
+        (Group.SUPPORT.value, "Support"),
+        (Group.INTERACTIONS.value, "Interactions"),
+        (Group.SHOPPING.value, "Shopping")
+    )
+
     uuid = models.UUIDField(primary_key=True)
     name = models.CharField(max_length=255)
     prompt = models.TextField(blank=True, null=True)
@@ -48,6 +60,11 @@ class Flow(models.Model):
     content_base = models.ForeignKey(ContentBase, on_delete=models.CASCADE, related_name="flows")
     action_type = models.CharField(max_length=50, choices=ACTION_TYPE_CHOICES, default='custom')
     action_template = models.OneToOneField(TemplateAction, on_delete=models.CASCADE, related_name="flows", null=True)
+    group = models.CharField(
+        max_length=255,
+        choices=group,
+        default=Group.INTERACTIONS.value
+    )
 
     class Meta:
         constraints = [
