@@ -30,3 +30,5 @@ class TemplateActionFactory(factory.django.DjangoModelFactory):
     prompt = factory.Sequence(lambda n: 'test%d' % n)
     action_type = "custom"
     group = "test"
+    language = "pt-br"
+    display_prompt = factory.Sequence(lambda n: 'test%d' % n)
