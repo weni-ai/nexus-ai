@@ -89,7 +89,7 @@ class CreateFlowsUseCaseTest(TestCase):
             action_type=self.template_action.action_type,
             prompt=self.template_action.prompt,
             fallback=False,
-            action_template_uuid=self.template_action.uuid
+            template=self.template_action
         )
 
         use_case = CreateFlowsUseCase()

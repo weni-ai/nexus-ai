@@ -21,7 +21,7 @@ class CreateFlowDTO:
     group: str = "interactions"
     prompt: str = None
     fallback: bool = False
-    action_template_uuid: str = None
+    template: TemplateAction = None
 
 
 class CreateFlowsUseCase():
@@ -32,8 +32,7 @@ class CreateFlowsUseCase():
 
         content_base = get_default_content_base_by_project(create_dto.project_uuid)
 
-        if create_dto.action_template_uuid:
-            action_template = TemplateAction.objects.get(uuid=create_dto.action_template_uuid)
+        if create_dto.template:
             return Flow.objects.create(
                 uuid=create_dto.flow_uuid,
                 name=create_dto.name,
@@ -41,8 +40,8 @@ class CreateFlowsUseCase():
                 fallback=create_dto.fallback,
                 content_base=content_base,
                 action_type=create_dto.action_type,
-                action_template=action_template,
-                group=action_template.group
+                action_template=create_dto.template,
+                group=create_dto.group
             )
 
         return Flow.objects.create(
