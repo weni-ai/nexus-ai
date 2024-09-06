@@ -38,7 +38,9 @@ class UpdateProjectTestCase(TestCase):
 class UpdateIntegratedFeatureTestCase(TestCase):
 
     def setUp(self) -> None:
-        self.integrated_feature = IntegratedFeatureFactory()
+        self.integrated_feature = IntegratedFeatureFactory(
+            is_integrated=True
+        )
         self.related_flow = FlowFactory(
             name=self.integrated_feature.current_version_setup['name'],
             prompt=self.integrated_feature.current_version_setup['prompt'],
@@ -83,8 +85,6 @@ class UpdateIntegratedFeatureTestCase(TestCase):
         }
 
         updated_feature = self.usecase.update_integrated_feature(consumer_msg)
-        print("====================================")
-        print("updated_feature: ", updated_feature.__dict__)
 
         update_flow_consumer_msg = {
             'project_uuid': str(self.project.uuid),
@@ -92,7 +92,8 @@ class UpdateIntegratedFeatureTestCase(TestCase):
             'flows': [
                 {
                     'base_uuid': root_flow_uuid,
-                    'new_uuid': self.related_flow.uuid
+                    'uuid': self.related_flow.uuid,
+                    'name': name,
                 }
             ]
         }
