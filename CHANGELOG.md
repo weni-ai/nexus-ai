@@ -1,3 +1,9 @@
+# 2.0.0
+## *Add*
+    - New TemplateActions models
+    - Change communication with mailroom for different actions
+    - New fields on actions to define groups and template usage
+
 # 1.10.2
 ## *Fix*
     - Missing classifier class logs
