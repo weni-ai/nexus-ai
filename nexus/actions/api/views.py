@@ -121,7 +121,7 @@ class FlowsViewset(
             name = request.data.get("name")
             prompt = request.data.get("prompt", "")
             action_type = request.data.get("action_type", "custom")
-            group = request.data.get("group", "interactions")
+            group = request.data.get("group", "custom")
 
             if action_template_uuid:
                 template = TemplateAction.objects.get(uuid=action_template_uuid)
@@ -137,7 +137,7 @@ class FlowsViewset(
                 prompt=prompt,
                 fallback=fallback,
                 action_type=action_type,
-                action_template_uuid=action_template_uuid,
+                template=template if action_template_uuid else None,
                 group=group
             )
 

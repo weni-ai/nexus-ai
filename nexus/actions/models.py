@@ -17,6 +17,7 @@ class Group(Enum):
     SUPPORT = 'support'
     INTERACTIONS = 'interactions'
     SHOPPING = 'shopping'
+    CUSTOM = 'custom'
 
 
 class TemplateAction(models.Model):
@@ -50,7 +51,8 @@ class Flow(models.Model):
     group = (
         (Group.SUPPORT.value, "Support"),
         (Group.INTERACTIONS.value, "Interactions"),
-        (Group.SHOPPING.value, "Shopping")
+        (Group.SHOPPING.value, "Shopping"),
+        (Group.CUSTOM.value, "Custom")
     )
 
     uuid = models.UUIDField(primary_key=True)
@@ -63,7 +65,7 @@ class Flow(models.Model):
     group = models.CharField(
         max_length=255,
         choices=group,
-        default=Group.INTERACTIONS.value
+        default=Group.CUSTOM.value
     )
 
     class Meta:
