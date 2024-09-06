@@ -139,7 +139,7 @@ class FlowsViewset(
                 prompt=prompt,
                 fallback=fallback,
                 action_type=action_type,
-                action_template_uuid=action_template_uuid,
+                template=template if action_template_uuid else None,
                 group=group
             )
 
