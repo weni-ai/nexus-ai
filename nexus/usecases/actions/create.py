@@ -5,7 +5,7 @@ from django.conf import settings
 
 from dataclasses import dataclass
 
-from nexus.actions.models import Flow
+from nexus.actions.models import Flow, TemplateAction
 
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
@@ -17,12 +17,16 @@ class CreateFlowDTO:
     project_uuid: str
     flow_uuid: str
     name: str
-    prompt: str
+    action_type: str = "custom"
+    prompt: str = None
     fallback: bool = False
 
 
 class CreateFlowsUseCase():
     def create_flow(self, create_dto: CreateFlowDTO) -> Flow:
+
+        if create_dto.action_type == "custom" and create_dto.prompt is None:
+            raise ValueError("Prompt is required for custom actions")
 
         content_base = get_default_content_base_by_project(create_dto.project_uuid)
 
@@ -31,8 +35,30 @@ class CreateFlowsUseCase():
             name=create_dto.name,
             prompt=create_dto.prompt,
             fallback=create_dto.fallback,
-            content_base=content_base
+            content_base=content_base,
+            action_type=create_dto.action_type,
         )
+
+
+class CreateTemplateActionUseCase():
+
+    def create_template_action(
+        self,
+        name: str,
+        prompt: str,
+        action_type: str,
+        group: str = None
+    ):
+        try:
+            return TemplateAction.objects.create(
+                name=name,
+                prompt=prompt,
+                action_type=action_type,
+                group=group
+            )
+        except Exception as e:
+            print("error", str(e))
+            raise Exception("Error creating template action")
 
 
 class GenerateFlowNameUseCase():

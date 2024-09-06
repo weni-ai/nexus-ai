@@ -33,7 +33,7 @@ class ContentBaseORMRepository(Repository):
     def _get_content_base(self, content_base_uuid: str) -> ContentBase:
         return ContentBase.objects.get(uuid=content_base_uuid)
 
-    def get_content_base_by_project(self, project_uuid: str) -> ContentBase:
+    def get_content_base_by_project(self, project_uuid: str) -> ContentBaseDTO:
 
         content_base = get_default_content_base_by_project(project_uuid)
 
@@ -100,9 +100,14 @@ class FlowsORMRepository(Repository):
                 content_base_uuid=str(flow.content_base.uuid)
             )
 
-    def project_flows(self, project_uuid: str, fallback: bool = False) -> List[FlowDTO]:
+    def project_flows(
+        self,
+        project_uuid: str,
+        fallback: bool = False,
+        action_type: str = "custom"
+    ) -> List[FlowDTO]:
         content_base = get_default_content_base_by_project(project_uuid)
-        flows = Flow.objects.filter(content_base=content_base, fallback=fallback)
+        flows = Flow.objects.filter(content_base=content_base, fallback=fallback, action_type=action_type)
 
         flows_list = []
         for flow in flows:

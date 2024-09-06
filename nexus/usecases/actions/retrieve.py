@@ -11,3 +11,16 @@ class RetrieveFlowsUseCase():
             return Flow.objects.get(uuid=flow_uuid)
         except Flow.DoesNotExist:
             raise FlowDoesNotExist
+
+
+def get_flow_by_action_type(
+    content_base_uuid: str,
+    action_type: str,
+) -> Flow:
+    try:
+        return Flow.objects.get(
+            action_type=action_type,
+            content_base__uuid=content_base_uuid
+        )
+    except Flow.DoesNotExist:
+        raise FlowDoesNotExist
