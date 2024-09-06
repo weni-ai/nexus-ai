@@ -1,7 +1,6 @@
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 
 from nexus.projects.models import ProjectAuth, IntegratedFeature
-from nexus.actions.models import Flow
 from nexus.projects.project_dto import (
     ProjectAuthCreationDTO,
 )
