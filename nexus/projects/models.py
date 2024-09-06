@@ -78,4 +78,3 @@ class IntegratedFeature(models.Model):
     )
     current_version_setup = models.JSONField(default=dict)
     is_integrated = models.BooleanField(default=False)
-
