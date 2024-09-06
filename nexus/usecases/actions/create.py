@@ -18,7 +18,7 @@ class CreateFlowDTO:
     flow_uuid: str
     name: str
     action_type: str = "custom"
-    group: str = "interactions"
+    group: str = "custom"
     prompt: str = None
     fallback: bool = False
     template: TemplateAction = None
