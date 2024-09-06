@@ -18,8 +18,10 @@ class CreateFlowDTO:
     flow_uuid: str
     name: str
     action_type: str = "custom"
+    group: str = "custom"
     prompt: str = None
     fallback: bool = False
+    template: TemplateAction = None
 
 
 class CreateFlowsUseCase():
@@ -30,6 +32,18 @@ class CreateFlowsUseCase():
 
         content_base = get_default_content_base_by_project(create_dto.project_uuid)
 
+        if create_dto.template:
+            return Flow.objects.create(
+                uuid=create_dto.flow_uuid,
+                name=create_dto.name,
+                prompt=create_dto.prompt,
+                fallback=create_dto.fallback,
+                content_base=content_base,
+                action_type=create_dto.action_type,
+                action_template=create_dto.template,
+                group=create_dto.group
+            )
+
         return Flow.objects.create(
             uuid=create_dto.flow_uuid,
             name=create_dto.name,
@@ -37,6 +51,7 @@ class CreateFlowsUseCase():
             fallback=create_dto.fallback,
             content_base=content_base,
             action_type=create_dto.action_type,
+            group=create_dto.group
         )
 
 
@@ -47,14 +62,19 @@ class CreateTemplateActionUseCase():
         name: str,
         prompt: str,
         action_type: str,
+        display_prompt: str = None,
         group: str = None
     ):
         try:
+            if display_prompt is None:
+                display_prompt = prompt
+
             return TemplateAction.objects.create(
                 name=name,
                 prompt=prompt,
                 action_type=action_type,
-                group=group
+                group=group,
+                display_prompt=display_prompt
             )
         except Exception as e:
             print("error", str(e))

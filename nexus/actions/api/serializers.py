@@ -9,11 +9,11 @@ from nexus.actions.models import (
 class FlowSerializer(serializers.ModelSerializer):
     class Meta:
         model = Flow
-        fields = ['uuid', 'name', 'prompt', 'fallback', 'content_base', 'action_type']
+        fields = ['uuid', 'name', 'prompt', 'fallback', 'content_base', 'action_type', 'group']
 
 
 class TemplateActionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TemplateAction
-        fields = ['uuid', 'name', 'prompt', 'action_type', 'group']
+        fields = ['uuid', 'name', 'group', 'display_prompt', 'language', 'action_type']

@@ -6,6 +6,7 @@ from nexus.usecases.actions.create import (
     CreateTemplateActionUseCase,
 )
 from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory, IntegratedIntelligenceFactory
+from nexus.usecases.actions.tests.flow_factory import TemplateActionFactory
 
 
 from django.test import TestCase
@@ -15,6 +16,7 @@ class CreateFlowsUseCaseTest(TestCase):
 
     def setUp(self):
         integrated_intelligence = IntegratedIntelligenceFactory()
+        self.template_action = TemplateActionFactory()
         self.project = integrated_intelligence.project
         self.content_base = ContentBaseFactory(
             intelligence=integrated_intelligence.intelligence,
@@ -78,6 +80,28 @@ class CreateFlowsUseCaseTest(TestCase):
         self.assertEqual(flow.content_base, self.content_base)
         self.assertEqual(flow.uuid, flow_uuid)
 
+    def test_create_flow_with_template_action(self):
+        flow_uuid = str(uuid4())
+        create_dto = CreateFlowDTO(
+            project_uuid=self.project.uuid,
+            flow_uuid=flow_uuid,
+            name=self.template_action.name,
+            action_type=self.template_action.action_type,
+            prompt=self.template_action.prompt,
+            fallback=False,
+            template=self.template_action
+        )
+
+        use_case = CreateFlowsUseCase()
+        flow = use_case.create_flow(create_dto)
+
+        self.assertEqual(flow.name, self.template_action.name)
+        self.assertEqual(flow.prompt, self.template_action.prompt)
+        self.assertEqual(flow.fallback, False)
+        self.assertEqual(flow.action_type, self.template_action.action_type)
+        self.assertEqual(flow.content_base, self.content_base)
+        self.assertEqual(flow.uuid, flow_uuid)
+
 
 class CreateTemplateActionUseCaseTest(TestCase):
 
@@ -101,3 +125,18 @@ class CreateTemplateActionUseCaseTest(TestCase):
         self.assertEqual(action.prompt, "action_prompt")
         self.assertEqual(action.action_type, "custom")
         self.assertEqual(action.group, "test")
+        self.assertEqual(action.display_prompt, "action_prompt")
+
+    def test_create_with_display_prompt(self):
+
+        display_prompt = "action_display_prompt"
+        action = self.usecase.create_template_action(
+            name=self.name,
+            prompt=self.prompt,
+            action_type=self.action_type,
+            group=self.group,
+            display_prompt=display_prompt
+        )
+
+        self.assertEqual(action.prompt, "action_prompt")
+        self.assertEqual(action.display_prompt, display_prompt)
