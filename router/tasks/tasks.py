@@ -29,6 +29,27 @@ from router.repositories.orm import (
 )
 
 
+def attachment_flow(
+    content_base: ContentBaseDTO,
+    message: Message,
+    msg_event: dict,
+    flow_start: FlowStart
+) -> bool:
+    flow = get_flow_by_action_type(content_base, "attachment")
+    flow_dto = FlowDTO(**flow)
+
+    if flow:
+        flow_start.start_flow(
+            flow=flow_dto,
+            user=os.environ.get("FLOW_USER_EMAIL"),
+            urn=[message.contact_urn],
+            user_message=message.text,
+            msg_event=msg_event,
+        )
+        return True
+    return False
+
+
 def whatsapp_cart_flow(
     content_base: ContentBaseDTO,
     message: Message,
@@ -99,6 +120,14 @@ def start_route(
                 user_email=flows_user_email
             )
 
+        if 'attachments' in message:
+            print("[+ Attachment Flow +]")
+            return attachment_flow(
+                content_base=content_base,
+                message=message,
+                msg_event=mailroom_msg_event,
+                flow_start=flow_start
+            )
         log_usecase.create_message_log(message.text, message.contact_urn)
 
         llm_model = get_llm_by_project_uuid(project_uuid)
