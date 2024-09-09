@@ -29,37 +29,17 @@ from router.repositories.orm import (
 )
 
 
-def attachment_flow(
-    content_base: ContentBaseDTO,
-    message: Message,
-    msg_event: dict,
-    flow_start: FlowStart
-) -> bool:
-    flow = get_flow_by_action_type(content_base, "attachment")
-    flow_dto = FlowDTO(**flow)
-
-    if flow:
-        flow_start.start_flow(
-            flow=flow_dto,
-            user=os.environ.get("FLOW_USER_EMAIL"),
-            urn=[message.contact_urn],
-            user_message=message.text,
-            msg_event=msg_event,
-        )
-        return True
-    return False
-
-
-def whatsapp_cart_flow(
+def direct_flows(
     content_base: ContentBaseDTO,
     message: Message,
     msg_event: dict,
     flow_start: FlowStart,
-    user_email: str
+    user_email: str,
+    action_type: str
 ) -> bool:
     flow = get_flow_by_action_type(
         content_base_uuid=content_base.uuid,
-        action_type="whatsapp_cart"
+        action_type=action_type
     )
     flow_dto = FlowDTO(
         content_base_uuid=str(content_base.uuid),
@@ -68,7 +48,7 @@ def whatsapp_cart_flow(
         prompt=flow.prompt,
         fallback=flow.fallback,
     )
-
+    print(f"[+ Direct Flow: {action_type} +]")
     if flow:
         flow_start.start_flow(
             flow=flow_dto,
@@ -110,24 +90,23 @@ def start_route(
         agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
         agent = agent.set_default_if_null()
 
+        flow_type = None
         if 'order' in message.metadata:
-            print("[+ WhatsApp Cart Flow +]")
-            return whatsapp_cart_flow(
+            flow_type = 'whatsapp_cart'
+
+        if 'attachments' in message and message['attachments']:
+            flow_type = 'attachment'
+
+        if flow_type is None:
+            return direct_flows(
                 content_base=content_base,
                 message=message,
                 msg_event=mailroom_msg_event,
                 flow_start=flow_start,
-                user_email=flows_user_email
+                user_email=flows_user_email,
+                action_type=flow_type
             )
 
-        if 'attachments' in message:
-            print("[+ Attachment Flow +]")
-            return attachment_flow(
-                content_base=content_base,
-                message=message,
-                msg_event=mailroom_msg_event,
-                flow_start=flow_start
-            )
         log_usecase.create_message_log(message.text, message.contact_urn)
 
         llm_model = get_llm_by_project_uuid(project_uuid)
