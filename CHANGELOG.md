@@ -1,4 +1,8 @@
-# 2.0.0
+# 2.0.2
+## *Fix*
+    - Direct_message validation fix
+
+# 2.0.1
 ## *Add*
     - Add template attachment handler
 ## *Fix*
