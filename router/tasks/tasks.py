@@ -97,7 +97,7 @@ def start_route(
         if 'attachments' in message and message['attachments']:
             flow_type = 'attachment'
 
-        if flow_type is None:
+        if flow_type is not None:
             return direct_flows(
                 content_base=content_base,
                 message=message,
