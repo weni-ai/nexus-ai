@@ -1,5 +1,11 @@
 # 2.0.0
 ## *Add*
+    - Add template attachment handler
+## *Fix*
+    - TemplateAction and Flow model relation
+
+# 2.0.0
+## *Add*
     - New TemplateActions models
     - Change communication with mailroom for different actions
     - New fields on actions to define groups and template usage
