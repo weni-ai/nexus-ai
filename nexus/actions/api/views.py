@@ -51,7 +51,7 @@ from router.repositories.orm import (
     MessageLogsRepository
 )
 from router.classifiers.zeroshot import ZeroshotClassifier
-from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier, OpenAIClient
+# from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier, OpenAIClient
 from router.classifiers import classify
 from router.entities import (
     AgentDTO,

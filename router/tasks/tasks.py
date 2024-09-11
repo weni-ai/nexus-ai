@@ -14,7 +14,7 @@ from nexus.usecases.actions.retrieve import get_flow_by_action_type
 
 from router.route import route
 from router.classifiers.zeroshot import ZeroshotClassifier
-from router.classifiers.chatgpt_function import OpenAIClient, ChatGPTFunctionClassifier
+# from router.classifiers.chatgpt_function import OpenAIClient, ChatGPTFunctionClassifier
 from router.classifiers import classify
 from router.flow_start.interfaces import FlowStart
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
