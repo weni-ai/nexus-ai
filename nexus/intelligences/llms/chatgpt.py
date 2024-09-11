@@ -42,6 +42,14 @@ class ChatGPTClient(LLMClient):
         llm_config: LLMSetupDTO,
         last_messages: List[ContactMessageDTO]
     ):  # pragma: no cover
+        print("++++++++++++++Requesting GPT++++++++++++++")
+        print("Instructions: ", instructions)
+        print("Chunks: ", chunks)
+        print("Agent: ", agent)
+        print("Question: ", question)
+        print("LLM Config: ", llm_config)
+        print("Last Messages: ", last_messages)
+        print("++++++++++++++Requesting GPT++++++++++++++")
         return self.chat_completion(
             instructions=instructions,
             chunks=chunks,
