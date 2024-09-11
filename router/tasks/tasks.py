@@ -9,7 +9,7 @@ from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
-from nexus.usecases.actions.retrieve import get_flow_by_action_type
+from nexus.usecases.actions.retrieve import get_flow_by_action_type, FlowDoesNotExist
 
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from router.route import route
@@ -101,15 +101,18 @@ def start_route(
         agent = agent.set_default_if_null()
 
         if not safety_check(message.text):
-            if direct_flows(
-                content_base=content_base,
-                message=message,
-                msg_event=mailroom_msg_event,
-                flow_start=flow_start,
-                user_email=flows_user_email,
-                action_type="safe_guard"
-            ):
-                return True
+            try:
+                if direct_flows(
+                    content_base=content_base,
+                    message=message,
+                    msg_event=mailroom_msg_event,
+                    flow_start=flow_start,
+                    user_email=flows_user_email,
+                    action_type="safe_guard"
+                ):
+                    return True
+            except FlowDoesNotExist as e:
+                print(f"[- START ROUTE - Error: {e} -]")
 
         flow_type = None
         if 'order' in message.metadata:
