@@ -15,6 +15,8 @@ from nexus.usecases.actions.retrieve import get_flow_by_action_type
 from router.route import route
 from router.classifiers.zeroshot import ZeroshotClassifier
 # from router.classifiers.chatgpt_function import OpenAIClient, ChatGPTFunctionClassifier
+
+from router.classifiers.safe_guard import SafeGuard
 from router.classifiers import classify
 from router.flow_start.interfaces import FlowStart
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
@@ -61,6 +63,13 @@ def direct_flows(
     return False
 
 
+def safety_check(message: str) -> bool:
+
+    safeguard = SafeGuard()
+    is_safe = safeguard.classify(message)
+    return is_safe
+
+
 @celery_app.task
 def start_route(
     message: Dict
@@ -89,6 +98,17 @@ def start_route(
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
         agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
         agent = agent.set_default_if_null()
+
+        if not safety_check(message.text):
+            if direct_flows(
+                content_base=content_base,
+                message=message,
+                msg_event=mailroom_msg_event,
+                flow_start=flow_start,
+                user_email=flows_user_email,
+                action_type="safe_guard"
+            ):
+                return True
 
         flow_type = None
         if 'order' in message.metadata:
