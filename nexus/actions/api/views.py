@@ -299,16 +299,16 @@ class MessagePreviewView(APIView):
 
             print(f"[+ LLM model: {llm_config.model}:{llm_config.model_version} +]")
 
-            if llm_config.model.lower() == "chatgpt":
-                client = OpenAIClient(api_key=llm_config.token)
-                classifier = ChatGPTFunctionClassifier(
-                    client=client,
-                    chatgpt_model=llm_config.model_version,
-                )
-            else:
-                classifier = ZeroshotClassifier(
-                    chatbot_goal=agent.goal
-                )
+            # if llm_config.model.lower() == "chatgpt":
+            #     client = OpenAIClient(api_key=llm_config.token)
+            #     classifier = ChatGPTFunctionClassifier(
+            #         client=client,
+            #         chatgpt_model=llm_config.model_version,
+            #     )
+            # else:
+            classifier = ZeroshotClassifier(
+                chatbot_goal=agent.goal
+            )
 
             classification = classify(
                 classifier=classifier,
