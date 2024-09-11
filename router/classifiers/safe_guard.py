@@ -53,4 +53,7 @@ class SafeGuard:
     def classify(self, message: str):
         formated_prompt = self.get_prompt(message)
         response = self.request_safe_guard(formated_prompt)
-        return response.json()
+        safety_check = response.json()['output'][0]['choices'][0]['tokens'][0]
+        if safety_check == "safe":
+            return True
+        return False
