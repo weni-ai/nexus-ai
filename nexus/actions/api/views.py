@@ -53,6 +53,7 @@ from router.repositories.orm import (
 from router.classifiers.zeroshot import ZeroshotClassifier
 from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier, OpenAIClient
 from router.classifiers import classify
+from router.tasks.tasks import safety_check, direct_flows
 from router.entities import (
     AgentDTO,
     ContentBaseDTO,
@@ -299,6 +300,24 @@ class MessagePreviewView(APIView):
 
             print(f"[+ LLM model: {llm_config.model}:{llm_config.model_version} +]")
 
+            broadcast = SimulateBroadcast(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'), get_file_info)
+            flow_start = SimulateFlowStart(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
+            flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+
+            if not safety_check(message.text):
+                try:
+                    if direct_flows(
+                        content_base=content_base,
+                        message=message,
+                        msg_event={},
+                        flow_start=flow_start,
+                        user_email=flows_user_email,
+                        action_type="safe_guard"
+                    ):
+                        return True
+                except FlowDoesNotExist as e:
+                    print(f"[- START ROUTE - Error: {e} -]")
+
             if llm_config.model.lower() == "chatgpt":
                 client = OpenAIClient(api_key=llm_config.token)
                 classifier = ChatGPTFunctionClassifier(
@@ -322,10 +341,6 @@ class MessagePreviewView(APIView):
 
             if llm_config.model.lower() != "wenigpt":
                 llm_client.api_key = llm_config.token
-
-            broadcast = SimulateBroadcast(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'), get_file_info)
-            flow_start = SimulateFlowStart(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
-            flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
             print(f"[+ Classfication: {classification} +]")
 
