@@ -9,13 +9,9 @@ from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
-<<<<<<< HEAD
 from nexus.usecases.actions.retrieve import get_flow_by_action_type
 
-from nexus.usecases.projects.projects_use_case import ProjectAuthUseCase
-=======
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
->>>>>>> 5333989 (Fix: Indexer filter)
 from router.route import route
 from router.classifiers.zeroshot import ZeroshotClassifier
 # from router.classifiers.chatgpt_function import OpenAIClient, ChatGPTFunctionClassifier
