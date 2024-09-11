@@ -1,3 +1,7 @@
+# 2.0.3
+## *Remove*
+    - OpenAI function calling
+
 # 2.0.2
 ## *Fix*
     - Direct_message validation fix
