@@ -46,6 +46,7 @@ class Flow(models.Model):
         ('whatsapp_cart', 'WhatsApp Cart'),
         ('localization', 'Localization'),
         ('attachment', 'Attachment'),
+        ('safe_guard', 'Safe Guard'),
     ]
 
     group = (
