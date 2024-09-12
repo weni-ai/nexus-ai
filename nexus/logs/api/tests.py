@@ -216,5 +216,5 @@ class RecentActivitiesViewSetTestCase(TestCase):
         )
 
         response.render()
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 401)
         self.assertEquals(json.loads(response.content).get("detail"), "Authentication credentials were not provided.")
