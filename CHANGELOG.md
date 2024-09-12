@@ -1,3 +1,9 @@
+# 2.0.4
+## *Fix*
+    - Fix action contraints.
+## *Add*:
+    - SafeCheck model
+
 # 2.0.3
 ## *Remove*
     - OpenAI function calling
