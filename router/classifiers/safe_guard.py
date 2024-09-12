@@ -12,6 +12,7 @@ class SafeGuard:
         self.prompt = os.environ.get("SAFEGUARD_PROMPT")
         self.cookie = os.environ.get("SAFEGUARD_COOKIE")
         self.api_key = os.environ.get("SAFEGUARD_API_KEY")
+        self.use_safeguard = os.environ.get("USE_SAFEGUARD")
 
     def request_safe_guard(self, formated_prompt: str):
         payload = json.dumps({
@@ -51,6 +52,9 @@ class SafeGuard:
         return self.replace_vars(self.prompt, variable)
 
     def classify(self, message: str):
+        if self.use_safeguard == "false":
+            return True
+
         formated_prompt = self.get_prompt(message)
         response = self.request_safe_guard(formated_prompt)
         safety_check = response.json()['output'][0]['choices'][0]['tokens'][0]
