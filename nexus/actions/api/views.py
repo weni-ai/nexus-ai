@@ -36,6 +36,7 @@ from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase, FlowDoesNotExi
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.intelligences.retrieve import get_file_info
+from nexus.usecases.actions.retrieve import get_flow_by_action_type
 
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 
@@ -53,6 +54,7 @@ from router.repositories.orm import (
 from router.classifiers.zeroshot import ZeroshotClassifier
 # from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier, OpenAIClient
 from router.classifiers import classify
+from router.tasks.tasks import safety_check, direct_flows
 from router.entities import (
     AgentDTO,
     ContentBaseDTO,
@@ -309,6 +311,33 @@ class MessagePreviewView(APIView):
             classifier = ZeroshotClassifier(
                 chatbot_goal=agent.goal
             )
+            broadcast = SimulateBroadcast(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'), get_file_info)
+            flow_start = SimulateFlowStart(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
+            flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+
+            # TODO - Refactor direct_flows to return formated response, or create a new method for that API
+            if not safety_check(message.text):
+                try:
+                    if direct_flows(
+                        content_base=content_base,
+                        message=message,
+                        msg_event={},
+                        flow_start=flow_start,
+                        user_email=flows_user_email,
+                        action_type="safe_guard"
+                    ):
+                        flow = get_flow_by_action_type(
+                            content_base_uuid=content_base.uuid,
+                            action_type="safe_guard"
+                        )
+                        return Response({
+                            "type": "flowstart",
+                            "uuid": flow.uuid,
+                            "name": flow.name,
+                            "msg_event": None
+                        })
+                except FlowDoesNotExist as e:
+                    print(f"[- START ROUTE - Error: {e} -]")
 
             classification = classify(
                 classifier=classifier,
@@ -322,10 +351,6 @@ class MessagePreviewView(APIView):
 
             if llm_config.model.lower() != "wenigpt":
                 llm_client.api_key = llm_config.token
-
-            broadcast = SimulateBroadcast(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'), get_file_info)
-            flow_start = SimulateFlowStart(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
-            flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
             print(f"[+ Classfication: {classification} +]")
 

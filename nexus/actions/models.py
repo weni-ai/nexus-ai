@@ -46,6 +46,7 @@ class Flow(models.Model):
         ('whatsapp_cart', 'WhatsApp Cart'),
         ('localization', 'Localization'),
         ('attachment', 'Attachment'),
+        ('safe_guard', 'Safe Guard'),
     ]
 
     group = (
@@ -71,7 +72,7 @@ class Flow(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['action_type', 'action_type'],
+                fields=['content_base', 'action_type'],
                 condition=~Q(action_type='custom'),
                 name='unique_action_type_except_custom_per_content_base'
             )
