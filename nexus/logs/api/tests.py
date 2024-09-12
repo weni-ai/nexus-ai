@@ -10,12 +10,13 @@ from rest_framework.test import APIRequestFactory
 
 from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.logs.tests.logs_factory import RecentActivitiesFactory
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
 from nexus.logs.models import MessageLog, Message
-from nexus.logs.api.serializers import MessageLogSerializer
+from nexus.logs.api.serializers import MessageLogSerializer, RecentActivitiesSerializer
 
-from nexus.logs.api.views import LogsViewset
+from nexus.logs.api.views import LogsViewset, RecentActivitiesViewset
 
 
 class LogSerializersTestCase(TestCase):
@@ -165,3 +166,55 @@ class LogsViewSetTestCase(TestCase):
 
         content = json.loads(response.content)
         self.assertListEqual(fields, list(content.keys()))
+
+
+class RecentActivitiesViewSetTestCase(TestCase):
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.recent_activity = RecentActivitiesFactory(
+            project=self.project
+        )
+
+    def test_get_recent_activities(self):
+        request = self.factory.get(f"api/{self.project.uuid}/activities/?page_size=100")
+        force_authenticate(request, user=self.user)
+        response = RecentActivitiesViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+        content = json.loads(response.content).get("results")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEquals(len(content), 1)
+
+    def test_pagination(self):
+        RecentActivitiesFactory(
+            project=self.project
+        )
+        request = self.factory.get(f"api/{self.project.uuid}/activities/?page_size=1")
+        force_authenticate(request, user=self.user)
+        response = RecentActivitiesViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(response.status_code, 200)
+        self.assertEquals(len(content.get("results")), 1)
+        self.assertIsNotNone(content.get("next"))
+
+    def test_no_permission(self):
+        request = self.factory.get(f"api/{self.project.uuid}/activities/?page_size=100")
+        response = RecentActivitiesViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+        self.assertEqual(response.status_code, 403)
+        self.assertEquals(json.loads(response.content).get("detail"), "Authentication credentials were not provided.")
