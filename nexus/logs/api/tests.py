@@ -14,7 +14,7 @@ from nexus.usecases.logs.tests.logs_factory import RecentActivitiesFactory
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
 from nexus.logs.models import MessageLog, Message
-from nexus.logs.api.serializers import MessageLogSerializer, RecentActivitiesSerializer
+from nexus.logs.api.serializers import MessageLogSerializer
 
 from nexus.logs.api.views import LogsViewset, RecentActivitiesViewset
 
