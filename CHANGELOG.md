@@ -1,3 +1,7 @@
+# 2.0.5
+## *Fix*
+    - Attachment flow start condition
+
 # 2.0.4
 ## *Fix*
     - Fix action contraints.
