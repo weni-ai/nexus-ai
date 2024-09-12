@@ -13,5 +13,3 @@ def delete_integrated_feature(
         return True
     except IntegratedFeature.DoesNotExist:
         raise ValueError("IntegratedFeature does not exists")
-    except Exception as exception:
-        raise exception
