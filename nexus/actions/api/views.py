@@ -416,11 +416,16 @@ class TemplateActionView(ModelViewSet):
             language = request.query_params.get("language", "pt-br")
             user = request.user
             project = projects.get_project_by_uuid(kwargs.get("project_uuid"))
-            has_project_permission(
-                method="get",
-                user=user,
-                project=project
-            )
+            if user:
+                has_project_permission(
+                    method="get",
+                    user=user,
+                    project=project
+                )
+            else:
+                authorization_header = request.headers.get("Authorization", "Bearer unauthorized")
+                if not is_super_user(authorization_header):
+                    raise PermissionDenied("You has not permission to do that.")
 
             template_actions = ListTemplateActionUseCase().list_template_action(
                 language=language
