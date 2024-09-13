@@ -118,7 +118,7 @@ def start_route(
         if 'order' in message.metadata:
             flow_type = 'whatsapp_cart'
 
-        if 'attachments' in message and message['attachments']:
+        if hasattr(message, 'attachments') and message.attachments:
             flow_type = 'attachment'
 
         if flow_type is not None:
