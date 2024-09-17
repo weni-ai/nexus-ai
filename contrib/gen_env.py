@@ -99,6 +99,10 @@ def generate_env():
         "WENIGPT_TEST_PAIRS_TEMPLATE_PROMPT": "TEST PAIRS",
         "WENIGPT_TEST_NEXT_QUESTION_TEMPLATE_PROMPT": "TEST QUESTION",
         "AWS_BEDROCK_BUCKET_ARN": "",
+        "AWS_BEDROCK_DATASOURCE_ID": "",
+        "AWS_BEDROCK_BUCKET_ARN": "",
+        "AWS_BEDROCK_ACCESS_KEY": "",
+        "AWS_BEDROCK_SECRET_KEY": "",
         "AWS_BEDROCK_REGION_NAME": "",
         "AWS_BEDROCK_KNOWLEDGE_BASE_ID": "",
         "AWS_BEDROCK_DATASOURCE_ID": "",
@@ -110,7 +114,6 @@ def generate_env():
         "AWS_BEDROCK_ACCESS_KEY": "",
         "AWS_BEDROCK_SECRET_KEY": "",
         "USE_BEDROCK_WENIGPT": "",
-
     }
 
     with open(env_path, "w") as configfile:
