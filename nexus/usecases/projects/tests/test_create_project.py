@@ -3,13 +3,15 @@ from django.test import TestCase
 
 from .project_factory import ProjectFactory, IntegratedFeatureFactory
 from ..projects_use_case import ProjectsUseCase
+from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
+
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.retrieve import get_integrated_feature
 from nexus.usecases.projects.dto import IntegratedFeatureFlowDTO
 from nexus.usecases.projects.create import ProjectAuthUseCase, CreateIntegratedFeatureUseCase
 from nexus.usecases.users.tests.user_factory import UserFactory
-from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
+from nexus.usecases.actions.tests.flow_factory import TemplateActionFactory
 
 
 from nexus.actions.models import Flow
@@ -76,6 +78,7 @@ class IntegratedFeatureUseCaseTestCase(TestCase):
     def setUp(self) -> None:
         self.project = ProjectFactory()
         self.usecase = CreateIntegratedFeatureUseCase()
+        self.template_action = TemplateActionFactory()
 
     def create_integrated_feature(self):
         root_flow_uuid = uuid4().hex
@@ -87,6 +90,7 @@ class IntegratedFeatureUseCaseTestCase(TestCase):
                 "name": "Human handoff",
                 "prompt": "aaaaa",
                 "root_flow_uuid": root_flow_uuid,
+                "type": ""
             }
         }
         feature = self.usecase.create_integrated_feature(
@@ -98,6 +102,30 @@ class IntegratedFeatureUseCaseTestCase(TestCase):
         self.assertEqual(feature.current_version_setup['root_flow_uuid'], root_flow_uuid)
         self.assertEqual(feature.current_version_setup['name'], "Human handoff")
         self.assertEqual(feature.current_version_setup['prompt'], "Whenever an user wants to talk to a human")
+        self.assertFalse(feature.is_integrated)
+
+    def create_integrated_feature_with_action_template(self):
+        root_flow_uuid = uuid4().hex
+        feature_uuid = uuid4().hex
+        consumer_msg = {
+            'project_uuid': str(self.project.uuid),
+            'feature_uuid': feature_uuid,
+            "action": {
+                "name": "Human handoff",
+                "prompt": "aaaaa",
+                "root_flow_uuid": root_flow_uuid,
+                "type": self.template_action.uuid
+            }
+        }
+        feature = self.usecase.create_integrated_feature(
+            consumer_msg
+        )
+
+        self.assertEqual(feature.project, self.project)
+        self.assertEqual(feature.feature_uuid, feature_uuid)
+        self.assertEqual(feature.current_version_setup['root_flow_uuid'], root_flow_uuid)
+        self.assertEqual(feature.current_version_setup['name'], "Human handoff")
+        self.assertEqual(feature.current_version_setup['prompt'], "aaaaa")
         self.assertFalse(feature.is_integrated)
 
 
