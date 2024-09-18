@@ -52,5 +52,6 @@ class IntegratedFeatureFactory(factory.django.DjangoModelFactory):
         "name": "Human handoff",
         "root_flow_uuid": uuid4().hex,
         "prompt": "Whenever an user wants to talk to a human",
+        "type": None
     }
     is_integrated = False
