@@ -29,6 +29,9 @@ from nexus.usecases.intelligences.create import create_base_brain_structure
 from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
+from nexus.usecases.intelligences.create import create_base_brain_structure
+from nexus.usecases.users.tests.user_factory import UserFactory
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
 
 
 @skip("View Testing")
