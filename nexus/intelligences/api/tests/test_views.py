@@ -1,5 +1,5 @@
 import json
-from unittest import skip
+from unittest import skip, mock
 
 from django.conf import settings
 from django.test import TestCase
@@ -28,6 +28,7 @@ from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.intelligences.create import create_base_brain_structure
 from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
 
 
 @skip("View Testing")
@@ -271,10 +272,13 @@ class TestContentBaseTextViewset(TestCase):
         )
         self.assertEqual(response.status_code, 201)
 
-    def test_update(self):
-
+    @mock.patch("nexus.intelligences.api.views.SentenXFileDataBase")
+    def test_update(self, mock_file_database):
+        mock_file_database = MockFileDataBase
+        mock_file_database()
+        text = ""
         data = {
-            'text': 'text',
+            'text': text,
         }
         url_put = f'{self.url}/{self.contentbasetext.uuid}/'
         request = self.factory.put(
@@ -288,7 +292,35 @@ class TestContentBaseTextViewset(TestCase):
             content_base_uuid=str(self.content_base.uuid),
             contentbasetext_uuid=str(self.contentbasetext.uuid)
         )
+        response.render()
+        content = json.loads(response.content)
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(content.get("text"), text)
+
+    @mock.patch("nexus.intelligences.api.views.SentenXFileDataBase")
+    def test_update_empty_text(self, mock_file_database):
+        mock_file_database = MockFileDataBase
+        mock_file_database()
+        text = ""
+        data = {
+            'text': text,
+        }
+        url_put = f'{self.url}/{self.contentbasetext.uuid}/'
+        request = self.factory.put(
+            url_put,
+            json.dumps(data),
+            content_type='application/json'
+        )
+        force_authenticate(request, user=self.user)
+        response = self.view(
+            request,
+            content_base_uuid=str(self.content_base.uuid),
+            contentbasetext_uuid=str(self.contentbasetext.uuid)
+        )
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(content.get("text"), text)
 
 
 class TestContentBaseLinkViewset(TestCase):
