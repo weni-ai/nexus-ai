@@ -90,6 +90,11 @@ class ContentBaseFileObserver(EventObserver):
         if content_base.is_router:
             integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
             project = integrated_intelligence.project
+            if not action_details:
+                action_details = {
+                    "old": "",
+                    "new": content_base_file.file_name
+                }
             dto = CreateRecentActivityDTO(
                 action_type=action_type,
                 project=project,
@@ -130,7 +135,12 @@ class ContentBaseAgentObserver(EventObserver):
             new_model_data = kwargs.get('new_agent_data')
             action_details = _update_comparison_fields(old_model_data, new_model_data)
         else:
-            action_details = kwargs.get('action_details', {})
+            action_details = kwargs.get(
+                'action_details', {
+                    "old": "",
+                    "new": content_base_agent.agent
+                }
+            )
 
         dto = CreateRecentActivityDTO(
             action_type="U",
@@ -160,7 +170,11 @@ class ContentBaseInstructionObserver(EventObserver):
             new_model_data = kwargs.get('new_instruction_data')
             action_details = _update_comparison_fields(old_model_data, new_model_data)
         else:
-            action_details = kwargs.get('action_details', {})
+            action_details = kwargs.get(
+                'action_details', {
+                    "old": "",
+                    "new": content_base_instruction.instruction
+                })
 
         dto = CreateRecentActivityDTO(
             action_type="U",
@@ -184,7 +198,13 @@ class ContentBaseLinkObserver(EventObserver):
 
         content_base = content_base_link.content_base
         intelligence = content_base.intelligence
-        action_details = kwargs.get('action_details', {})
+        action_details = kwargs.get(
+            'action_details',
+            {
+                "old": "",
+                "new": content_base_link.link
+            }
+        )
 
         if content_base.is_router:
             integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
