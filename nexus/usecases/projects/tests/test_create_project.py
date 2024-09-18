@@ -135,6 +135,7 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
         self.integrated_feature = IntegratedFeatureFactory()
         self.project = self.integrated_feature.project
         self.usecase = CreateIntegratedFeatureUseCase()
+        self.template_action = TemplateActionFactory()
 
     def test_integrate_flow(self):
         root_flow_uuid = self.integrated_feature.current_version_setup['root_flow_uuid']
@@ -211,6 +212,43 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
         consumer_msg = {
             'project_uuid': str(self.project.uuid),
             'feature_uuid': self.integrated_feature.feature_uuid,
+            'flows': [
+                {
+                    'base_uuid': uuid4().hex,
+                    'uuid': uuid4().hex,
+                    'name': 'Example flow'
+                }
+            ]
+        }
+        flow_dto = IntegratedFeatureFlowDTO(
+            project_uuid=str(self.project.uuid),
+            feature_uuid=self.integrated_feature.feature_uuid,
+            flows=consumer_msg['flows']
+        )
+        with self.assertRaises(ValueError):
+            self.usecase.integrate_feature_flows(
+                integrated_feature_flow_dto=flow_dto
+            )
+
+        integrated_feature = get_integrated_feature(
+            project_uuid=str(self.project.uuid),
+            feature_uuid=self.integrated_feature.feature_uuid
+        )
+        self.assertFalse(integrated_feature.is_integrated)
+
+    def test_create_integrated_flow_template(self):
+        integrated_feature_template = IntegratedFeatureFactory(
+            current_version_setup={
+                "name": "Human handoff",
+                "root_flow_uuid": uuid4().hex,
+                "prompt": "Whenever an user wants to talk to a human",
+                "type": self.template_action.uuid
+            }
+        )
+        template_action_project = integrated_feature_template.project
+        consumer_msg = {
+            'project_uuid': str(template_action_project.uuid),
+            'feature_uuid': integrated_feature_template.feature_uuid,
             'flows': [
                 {
                     'base_uuid': uuid4().hex,
