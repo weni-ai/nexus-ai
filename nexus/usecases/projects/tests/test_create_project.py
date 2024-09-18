@@ -155,4 +155,3 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
             feature_uuid=self.integrated_feature.feature_uuid
         )
         self.assertFalse(integrated_feature.is_integrated)
-
