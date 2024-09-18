@@ -1,10 +1,13 @@
+import pendulum
+
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import LimitOffsetPagination
 
 from rest_framework.mixins import ListModelMixin
 from rest_framework.viewsets import GenericViewSet
-from rest_framework.pagination import CursorPagination
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.response import Response
 
 from nexus.logs.models import MessageLog, RecentActivities
 from nexus.logs.api.serializers import MessageLogSerializer, MessageFullLogSerializer, RecentActivitiesSerializer
@@ -12,14 +15,20 @@ from nexus.usecases.logs.list import ListLogUsecase
 
 from nexus.projects.permissions import has_project_permission
 
+from django.conf import settings
 
-class CustomCursorPagination(CursorPagination):
+
+class CustomPageNumberPagination(PageNumberPagination):
+    page_size = 10
     page_size_query_param = 'page_size'
-    page_size = 20
 
-    def paginate_queryset(self, queryset, request, view=None):
-        self.ordering = view.get_ordering()
-        return super().paginate_queryset(queryset, request, view)
+    def get_paginated_response(self, data):
+        return Response({
+            'count': self.page.paginator.count,
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'results': data
+        })
 
 
 class LogsViewset(
@@ -69,13 +78,21 @@ class LogsViewset(
         return super().retrieve(request, *args, **kwargs)
 
 
+ACTION_MODEL_GROUPS = {
+    "Action": ["flow"],
+    "Customization": ["ContentBaseAgent", "ContentBaseInstruction"],
+    "Content": ["ContentBase", "ContentBaseFile", "ContentBaseLink", "ContentBaseText"],
+    "Config": ["LLM"],
+}
+
+
 class RecentActivitiesViewset(
     ListModelMixin,
     GenericViewSet
 ):
     serializer_class = RecentActivitiesSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = CustomCursorPagination
+    pagination_class = CustomPageNumberPagination
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
@@ -85,7 +102,20 @@ class RecentActivitiesViewset(
         project = self.kwargs.get('project_uuid')
         has_project_permission(user, project, 'GET')
 
-        return RecentActivities.objects.filter(project=self.kwargs.get('project_uuid'))
+        filter_params = {
+            'project': project
+        }
 
-    def get_ordering(self):
-        return ["-created_at"]
+        start_date_str = settings.RECENT_ACTIVITIES_START_DATE
+        if start_date_str:
+            start_date = pendulum.parse(start_date_str)
+            filter_params['created_at__gte'] = start_date
+
+        model_group = self.request.query_params.get('model_group')
+        if model_group:
+            action_models = ACTION_MODEL_GROUPS.get(model_group, [])
+            filter_params['action_model__in'] = action_models
+
+        queryset = RecentActivities.objects.filter(**filter_params).select_related('created_by').order_by('-created_at')
+
+        return queryset

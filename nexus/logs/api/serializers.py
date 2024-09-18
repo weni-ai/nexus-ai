@@ -58,6 +58,7 @@ class RecentActivitiesSerializer(serializers.ModelSerializer):
         model = RecentActivities
         fields = [
             "uuid",
+            "model_group",
             "action_model",
             "created_at",
             "action_details",
@@ -67,6 +68,21 @@ class RecentActivitiesSerializer(serializers.ModelSerializer):
         ]
 
     created_by = serializers.SerializerMethodField()
+    model_group = serializers.SerializerMethodField()
 
     def get_created_by(self, obj: RecentActivities) -> str:
         return obj.created_by.email
+
+    def get_model_group(self, obj: RecentActivities) -> str:
+
+        ACTION_MODEL_GROUPS = {
+            "flow": "Action",
+            "ContentBaseAgent": "Customization",
+            "ContentBaseInstruction": "Customization",
+            "ContentBase": "Content",
+            "ContentBaseFile": "Content",
+            "ContentBaseLink": "Content",
+            "ContentBaseText": "Content",
+            "LLM": "Config",
+        }
+        return ACTION_MODEL_GROUPS.get(obj.action_model, "")
