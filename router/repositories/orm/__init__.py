@@ -139,7 +139,6 @@ class MessageLogsRepository(Repository):
         messages = list(messages)[::-1]
 
         for message in messages:
-            print(f"[+ Message id: {message.id} +]")
             contact_messages.append(
                 ContactMessageDTO(
                     contact_urn=message.message.contact_urn,
