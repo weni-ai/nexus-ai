@@ -125,25 +125,28 @@ class FlowsORMRepository(Repository):
 
 
 class MessageLogsRepository(Repository):
-    def list_last_messages(self, project_uuid: str, contact_urn: str, number_of_messages: int) -> List[ContactMessageDTO]:
+
+    def list_last_messages(self, project_uuid: str, contact_urn: str, number_of_messages: int):
         content_base = get_default_content_base_by_project(project_uuid)
         contact_messages = []
-        messages = Message.objects.filter(
-            contact_urn=contact_urn,
-            messagelog__content_base=content_base,
-            status="S"
-        ).order_by("-created_at")[:number_of_messages]
+        messages = MessageLog.objects.filter(
+            message__contact_urn=contact_urn,
+            content_base=content_base,
+            message__status="S",
+            classification="other"
+        ).order_by("-message__created_at")[:number_of_messages]
+
+        messages = list(messages)[::-1]
+
         for message in messages:
-
-            message_log: MessageLog = message.messagelog
-
             contact_messages.append(
                 ContactMessageDTO(
-                    contact_urn=message.contact_urn,
-                    text=message.text,
-                    llm_respose=message_log.llm_response,
-                    content_base_uuid=str(message_log.content_base.uuid),
+                    contact_urn=message.message.contact_urn,
+                    text=message.message.text,
+                    llm_respose=message.llm_response,
+                    content_base_uuid=str(message.content_base.uuid),
                     project_uuid=project_uuid
                 )
             )
+
         return contact_messages
