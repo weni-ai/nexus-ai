@@ -5,13 +5,13 @@ from typing import List, Dict
 
 from django.conf import settings
 
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
 from nexus.usecases.actions.retrieve import get_flow_by_action_type, FlowDoesNotExist
 
+from nexus.usecases.projects.projects_use_case import ProjectAuthUseCase
 from router.route import route
 from router.classifiers.zeroshot import ZeroshotClassifier
 # from router.classifiers.chatgpt_function import OpenAIClient, ChatGPTFunctionClassifier
@@ -27,7 +27,7 @@ from router.entities import (
 from router.repositories.orm import (
     ContentBaseORMRepository,
     FlowsORMRepository,
-    MessageLogsRepository
+    MessageLogsRepository,
 )
 
 
@@ -93,6 +93,7 @@ def start_route(
         broadcast = SendMessageHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'))
         flow_start = FlowStartHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+        indexer = ProjectAuthUseCase().get_indexer_database(project_uuid)
 
         flows: List[FlowDTO] = flows_repository.project_flows(project_uuid, False)
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
@@ -178,7 +179,7 @@ def start_route(
             content_base_repository=content_base_repository,
             flows_repository=flows_repository,
             message_logs_repository=message_logs_repository,
-            indexer=SentenXFileDataBase(),
+            indexer=indexer(),
             llm_client=llm_client,
             direct_message=broadcast,
             flow_start=flow_start,
