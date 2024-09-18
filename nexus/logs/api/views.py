@@ -4,7 +4,8 @@ from rest_framework.pagination import LimitOffsetPagination
 
 from rest_framework.mixins import ListModelMixin
 from rest_framework.viewsets import GenericViewSet
-from rest_framework.pagination import CursorPagination
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.response import Response
 
 from nexus.logs.models import MessageLog, RecentActivities
 from nexus.logs.api.serializers import MessageLogSerializer, MessageFullLogSerializer, RecentActivitiesSerializer
@@ -13,13 +14,17 @@ from nexus.usecases.logs.list import ListLogUsecase
 from nexus.projects.permissions import has_project_permission
 
 
-class CustomCursorPagination(CursorPagination):
+class CustomPageNumberPagination(PageNumberPagination):
+    page_size = 10
     page_size_query_param = 'page_size'
-    page_size = 20
 
-    def paginate_queryset(self, queryset, request, view=None):
-        self.ordering = view.get_ordering()
-        return super().paginate_queryset(queryset, request, view)
+    def get_paginated_response(self, data):
+        return Response({
+            'count': self.page.paginator.count,
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'results': data
+        })
 
 
 class LogsViewset(
@@ -75,7 +80,7 @@ class RecentActivitiesViewset(
 ):
     serializer_class = RecentActivitiesSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = CustomCursorPagination
+    pagination_class = CustomPageNumberPagination
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
@@ -85,7 +90,6 @@ class RecentActivitiesViewset(
         project = self.kwargs.get('project_uuid')
         has_project_permission(user, project, 'GET')
 
-        return RecentActivities.objects.filter(project=self.kwargs.get('project_uuid'))
-
-    def get_ordering(self):
-        return ["-created_at"]
+        return RecentActivities.objects.filter(
+            project=self.kwargs.get('project_uuid')
+        ).select_related('created_by').order_by('-created_at')
