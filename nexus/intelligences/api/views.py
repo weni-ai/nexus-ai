@@ -460,6 +460,7 @@ class ContentBaseTextViewset(
             content_base_text_uuid = kwargs.get('contentbasetext_uuid')
             content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
             content_base_text = intelligences.get_by_contentbasetext_uuid(content_base_text_uuid)
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
             cb_dto = intelligences.ContentBaseDTO(
                 uuid=content_base.uuid,
                 title=content_base.title,
@@ -472,18 +473,28 @@ class ContentBaseTextViewset(
                 text=text
             )
 
-            delete_use_case = intelligences.DeleteContentBaseTextUseCase(SentenXFileDataBase())
+            file_database = ProjectsUseCase().get_indexer_database(str(project.uuid))
+
+            delete_use_case = intelligences.DeleteContentBaseTextUseCase(file_database())
             delete_use_case.delete_content_base_text_from_index(
                 content_base_text_uuid,
                 content_base_uuid,
                 content_base_text.file_name
             )
 
-            upload_text_file.delay(
-                content_base_dto=cb_dto.__dict__,
-                content_base_text_uuid=content_base_text.uuid,
-                text=text,
-            )
+            if project.indexer_database == Project.BEDROCK:
+                bedrock_upload_text_file.delay(
+                    content_base_dto=cb_dto.__dict__,
+                    content_base_text_uuid=str(content_base_text.uuid),
+                    text=text
+                )
+
+            else:
+                upload_text_file.delay(
+                    content_base_dto=cb_dto.__dict__,
+                    content_base_text_uuid=content_base_text.uuid,
+                    text=text
+                )
 
             response = ContentBaseTextSerializer(content_base_text).data
 
