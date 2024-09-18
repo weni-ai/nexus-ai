@@ -22,6 +22,7 @@ class TestCeleryFileManager(TestCase):
         self.content_base = self.intelligence.contentbases.get()
         self.celery_file_manager = CeleryFileManager(file_database=self.file_database)
         self.email = self.content_base.created_by.email
+        self.email = self.content_base.created_by.email       
 
     def test_upload_file(self):
         file = b'file'
