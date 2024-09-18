@@ -85,6 +85,9 @@ class BedrockFileDatabase(FileDataBase):
 
         return response
 
+    def delete(self, content_base_uuid: str, content_base_file_uuid: str, filename: str):
+        self.delete_file_and_metadata(content_base_uuid, filename)
+
     def delete_file_and_metadata(self, content_base_uuid: str, filename: str):
         file = f"{content_base_uuid}/{filename}"
         response_file = self.s3_client.delete_object(
