@@ -1,3 +1,8 @@
+# 2.0.6
+## *Fix*
+    - Last message bringing wrong classification messages
+    - Ordering after filter routing user last messages
+
 # 2.0.5
 ## *Fix*
     - Attachment flow start condition
