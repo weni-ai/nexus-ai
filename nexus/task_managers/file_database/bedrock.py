@@ -104,10 +104,8 @@ class BedrockFileDatabase(FileDataBase):
         file_status = response_file.get("DeleteMarker")
         metadata_status = response_metadata.get("DeleteMarker")
 
-        if file_status and metadata_status:
-            return True
+        return True
 
-        raise Exception
 
     def start_bedrock_ingestion(self) -> str:
         print("[+ Starting ingestion job +]")
