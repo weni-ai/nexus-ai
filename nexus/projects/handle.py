@@ -7,7 +7,7 @@ from .consumers.integrated_feature import (
     CreateIntegratedFeatureConsumer,
     DeleteIntegratedFeatureConsumer,
     UpdateIntegratedFeatureConsumer,
-    CreateIntegratedFeatureFlowConsumer,
+    IntegratedFeatureFlowConsumer,
 )
 
 
@@ -18,4 +18,4 @@ def handle_consumers(channel: Channel) -> None:
     channel.basic_consume("nexus.integrated-feature", callback=CreateIntegratedFeatureConsumer().handle)
     channel.basic_consume("nexus.updated-feature", callback=UpdateIntegratedFeatureConsumer().handle)
     channel.basic_consume("nexus.removed-feature", callback=DeleteIntegratedFeatureConsumer().handle)
-    channel.basic_consume("nexus.created-flows", callback=CreateIntegratedFeatureFlowConsumer().handle)
+    channel.basic_consume("nexus.created-flows", callback=IntegratedFeatureFlowConsumer().handle)

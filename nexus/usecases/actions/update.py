@@ -6,6 +6,7 @@ from django.forms.models import model_to_dict
 
 from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase
 from nexus.actions.models import Flow, TemplateAction
+from nexus.users.models import User
 
 
 @dataclass
@@ -56,7 +57,11 @@ class UpdateFlowsUseCase():
             user=user
         )
 
-    def update_flow(self, user, flow_dto: UpdateFlowDTO) -> Flow:
+    def update_flow(
+        self,
+        flow_dto: UpdateFlowDTO,
+        user: User = None,
+    ) -> Flow:
         flow: Flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(flow_dto.flow_uuid)
 
         values_before_update = model_to_dict(flow)
@@ -65,12 +70,13 @@ class UpdateFlowsUseCase():
         flow.save()
         values_after_update = model_to_dict(flow)
 
-        self._save_log(
-            action=flow,
-            values_before_update=values_before_update,
-            values_after_update=values_after_update,
-            user=user
-        )
+        if user:
+            self._save_log(
+                action=flow,
+                values_before_update=values_before_update,
+                values_after_update=values_after_update,
+                user=user
+            )
 
         return flow
 

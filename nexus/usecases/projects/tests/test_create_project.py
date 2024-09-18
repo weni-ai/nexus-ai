@@ -6,6 +6,7 @@ from ..projects_use_case import ProjectsUseCase
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.retrieve import get_integrated_feature
+from nexus.usecases.projects.dto import IntegratedFeatureFlowDTO
 from nexus.usecases.projects.create import ProjectAuthUseCase, CreateIntegratedFeatureUseCase
 from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
@@ -120,8 +121,14 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
                 }
             ]
         }
-        returned_flow = self.usecase.create_integrated_feature_flows(
-            consumer_msg=consumer_msg
+        flow_dto = IntegratedFeatureFlowDTO(
+            project_uuid=str(self.project.uuid),
+            feature_uuid=self.integrated_feature.feature_uuid,
+            flows=consumer_msg['flows']
+        )
+
+        returned_flow = self.usecase.integrate_feature_flows(
+            integrated_feature_flow_dto=flow_dto
         )
 
         integrated_feature = get_integrated_feature(
@@ -129,7 +136,46 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
             feature_uuid=self.integrated_feature.feature_uuid
         )
 
-        self.assertTrue(True)
+        self.assertIsInstance(returned_flow, Flow)
+        self.assertTrue(integrated_feature.is_integrated)
+
+    def test_integrate_multiple_flows(self):
+        root_flow_uuid = self.integrated_feature.current_version_setup['root_flow_uuid']
+        consumer_msg = {
+            'project_uuid': str(self.project.uuid),
+            'feature_uuid': self.integrated_feature.feature_uuid,
+            'flows': [
+                {
+                    'base_uuid': uuid4().hex,
+                    'uuid': uuid4().hex,
+                    'name': 'Example flow 2'
+                },
+                {
+                    'base_uuid': root_flow_uuid,
+                    'uuid': uuid4().hex,
+                    'name': 'Example flow'
+                },
+                {
+                    'base_uuid': uuid4().hex,
+                    'uuid': uuid4().hex,
+                    'name': 'Example flow 3'
+                }
+            ]
+        }
+        flow_dto = IntegratedFeatureFlowDTO(
+            project_uuid=str(self.project.uuid),
+            feature_uuid=self.integrated_feature.feature_uuid,
+            flows=consumer_msg['flows']
+        )
+        returned_flow = self.usecase.integrate_feature_flows(
+            integrated_feature_flow_dto=flow_dto
+        )
+
+        integrated_feature = get_integrated_feature(
+            project_uuid=str(self.project.uuid),
+            feature_uuid=self.integrated_feature.feature_uuid
+        )
+
         self.assertIsInstance(returned_flow, Flow)
         self.assertTrue(integrated_feature.is_integrated)
 
@@ -145,9 +191,14 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
                 }
             ]
         }
+        flow_dto = IntegratedFeatureFlowDTO(
+            project_uuid=str(self.project.uuid),
+            feature_uuid=self.integrated_feature.feature_uuid,
+            flows=consumer_msg['flows']
+        )
         with self.assertRaises(ValueError):
-            self.usecase.create_integrated_feature_flows(
-                consumer_msg=consumer_msg
+            self.usecase.integrate_feature_flows(
+                integrated_feature_flow_dto=flow_dto
             )
 
         integrated_feature = get_integrated_feature(

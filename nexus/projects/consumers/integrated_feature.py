@@ -6,6 +6,8 @@ from nexus.event_driven.consumer.consumers import EDAConsumer
 
 from nexus.usecases.projects.create import CreateIntegratedFeatureUseCase
 from nexus.usecases.projects.delete import delete_integrated_feature
+from nexus.usecases.projects.update import UpdateIntegratedFeatureUseCase
+from nexus.usecases.projects.dto import IntegratedFeatureFlowDTO, IntegratedFeatureDTO
 
 
 class CreateIntegratedFeatureConsumer(EDAConsumer):
@@ -14,9 +16,13 @@ class CreateIntegratedFeatureConsumer(EDAConsumer):
         try:
             print(f"[IntegratedFeature] - Consuming a message. Body: {message.body}")
             body = JSONParser.parse(message.body)
-
+            integrated_feature_dto = IntegratedFeatureDTO(
+                project_uuid=body.get("project_uuid"),
+                feature_uuid=body.get("feature_uuid"),
+                current_version_setup=body.get("action")
+            )
             usecase = CreateIntegratedFeatureUseCase()
-            usecase.create_integrated_feature(body)
+            usecase.create_integrated_feature(integrated_feature_dto)
 
             message.channel.basic_ack(message.delivery_tag)
             print("[IntegratedFeature] - Feature created")
@@ -26,15 +32,19 @@ class CreateIntegratedFeatureConsumer(EDAConsumer):
             print(f"[IntegratedFeature] - Message rejected by: {exception}")
 
 
-class CreateIntegratedFeatureFlowConsumer(EDAConsumer):
+class IntegratedFeatureFlowConsumer(EDAConsumer):
 
     def consume(self, message: amqp.Message):
         print(f"[IntegratedFeatureFlows] - Consuming a message. Body: {message.body}")
         try:
             body = JSONParser.parse(message.body)
-
+            integrated_feature_dto = IntegratedFeatureFlowDTO(
+                project_uuid=body.get("project_uuid"),
+                feature_uuid=body.get("feature_uuid"),
+                flows=body.get("flows")
+            )
             usecase = CreateIntegratedFeatureUseCase()
-            usecase.create_integrated_feature_flows(body)
+            usecase.integrate_feature_flows(integrated_feature_dto)
 
             message.channel.basic_ack(message.delivery_tag)
             print("[IntegratedFeatureFlows] - IntegratedFeatureFlows flow created")
@@ -71,8 +81,9 @@ class UpdateIntegratedFeatureConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
         print(f"[UpdateIntegratedFeature] - Consuming a message. Body: {message.body}")
         try:
-            # body = JSONParser.parse(message.body)
-            # TODO - Implement the use
+            body = JSONParser.parse(message.body)
+            usecase = UpdateIntegratedFeatureUseCase()
+            usecase.update_integrated_feature(body)
             message.channel.basic_ack(message.delivery_tag)
             print("[UpdateIntegratedFeature] - Authorization created: ")
         except Exception as exception:
