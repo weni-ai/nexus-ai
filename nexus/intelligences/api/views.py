@@ -460,6 +460,13 @@ class ContentBaseTextViewset(
                 text=text
             )
 
+            delete_use_case = intelligences.DeleteContentBaseTextUseCase(SentenXFileDataBase())
+            delete_use_case.delete_content_base_text_from_index(
+                content_base_text_uuid,
+                content_base_uuid,
+                content_base_text.file_name
+            )
+
             upload_text_file.delay(
                 content_base_dto=cb_dto.__dict__,
                 content_base_text_uuid=content_base_text.uuid,
@@ -478,7 +485,7 @@ class ContentBaseTextViewset(
     def destroy(self, request, **kwargs):
         try:
             user_email = request.user.email
-            use_case = intelligences.DeleteContentBaseTextUseCase()
+            use_case = intelligences.DeleteContentBaseTextUseCase(SentenXFileDataBase())
 
             contentbasetext_uuid = kwargs.get('contentbasetext_uuid')
             use_case.delete_contentbasetext(
