@@ -40,6 +40,7 @@ from nexus.usecases.actions.retrieve import get_flow_by_action_type
 
 from nexus.intelligences.llms.client import LLMClient
 
+from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.orgs.permissions import is_super_user
 from nexus.projects.permissions import has_project_permission
 from nexus.projects.exceptions import ProjectAuthorizationDenied
@@ -405,6 +406,7 @@ class GenerateActionNameView(APIView):
 
 class TemplateActionView(ModelViewSet):
     serializer_class = TemplateActionSerializer
+    authentication_classes = AUTHENTICATION_CLASSES
 
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
@@ -414,18 +416,18 @@ class TemplateActionView(ModelViewSet):
     def list(self, request, *args, **kwargs):
         try:
             language = request.query_params.get("language", "pt-br")
-            user = request.user
             project = projects.get_project_by_uuid(kwargs.get("project_uuid"))
-            if user:
+
+            authorization_header = request.headers.get('Authorization', "Bearer unauthorized")
+            super_user = is_super_user(authorization_header)
+
+            if not super_user:
+                user = request.user
                 has_project_permission(
                     method="get",
                     user=user,
                     project=project
                 )
-            else:
-                authorization_header = request.headers.get("Authorization", "Bearer unauthorized")
-                if not is_super_user(authorization_header):
-                    raise PermissionDenied("You has not permission to do that.")
 
             template_actions = ListTemplateActionUseCase().list_template_action(
                 language=language
