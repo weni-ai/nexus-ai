@@ -1,3 +1,5 @@
+import pendulum
+
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import LimitOffsetPagination
@@ -12,6 +14,8 @@ from nexus.logs.api.serializers import MessageLogSerializer, MessageFullLogSeria
 from nexus.usecases.logs.list import ListLogUsecase
 
 from nexus.projects.permissions import has_project_permission
+
+from django.conf import settings
 
 
 class CustomPageNumberPagination(PageNumberPagination):
@@ -74,6 +78,14 @@ class LogsViewset(
         return super().retrieve(request, *args, **kwargs)
 
 
+ACTION_MODEL_GROUPS = {
+    "Action": ["flow"],
+    "Customization": ["ContentBaseAgent", "ContentBaseInstruction"],
+    "Content": ["ContentBase", "ContentBaseFile", "ContentBaseLink", "ContentBaseText"],
+    "Config": ["LLM"],
+}
+
+
 class RecentActivitiesViewset(
     ListModelMixin,
     GenericViewSet
@@ -90,6 +102,20 @@ class RecentActivitiesViewset(
         project = self.kwargs.get('project_uuid')
         has_project_permission(user, project, 'GET')
 
-        return RecentActivities.objects.filter(
-            project=self.kwargs.get('project_uuid')
-        ).select_related('created_by').order_by('-created_at')
+        filter_params = {
+            'project': project
+        }
+
+        start_date_str = settings.RECENT_ACTIVITIES_START_DATE
+        if start_date_str:
+            start_date = pendulum.parse(start_date_str)
+            filter_params['created_at__gte'] = start_date
+
+        model_group = self.request.query_params.get('model_group')
+        if model_group:
+            action_models = ACTION_MODEL_GROUPS.get(model_group, [])
+            filter_params['action_model__in'] = action_models
+
+        queryset = RecentActivities.objects.filter(**filter_params).select_related('created_by').order_by('-created_at')
+
+        return queryset
