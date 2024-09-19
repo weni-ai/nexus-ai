@@ -104,7 +104,7 @@ def get_or_create_default_integrated_intelligence_by_project(
         if not intelligence or intelligence.is_router is False:
             integrated_intelligence = create_base_brain_structure(project)
             return integrated_intelligence
-        return IntegratedIntelligence.objects.get(project__uuid=project_uuid)
+        return IntegratedIntelligence.objects.get(project__uuid=project_uuid, intelligence=intelligence)
     except IntegratedIntelligence.DoesNotExist:
         integrated_intelligence = IntegratedIntelligence.objects.create(
             project=project,
