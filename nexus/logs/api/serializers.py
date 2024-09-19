@@ -76,7 +76,7 @@ class RecentActivitiesSerializer(serializers.ModelSerializer):
     def get_model_group(self, obj: RecentActivities) -> str:
 
         ACTION_MODEL_GROUPS = {
-            "flow": "Action",
+            "Flow": "Action",
             "ContentBaseAgent": "Customization",
             "ContentBaseInstruction": "Customization",
             "ContentBase": "Content",

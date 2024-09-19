@@ -234,7 +234,11 @@ class FlowsViewset(
                 method="delete"
             )
 
-            DeleteFlowsUseCase().hard_delete_flow(flow_dto)
+            DeleteFlowsUseCase().hard_delete_flow(
+                flow_dto=flow_dto,
+                user=user,
+                project=project
+            )
             return Response(status=status.HTTP_204_NO_CONTENT)
         except FlowDoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
