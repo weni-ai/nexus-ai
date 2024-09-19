@@ -145,7 +145,12 @@ class FlowsViewset(
                 group=group
             )
 
-            flows = CreateFlowsUseCase().create_flow(create_dto)
+            usecase = CreateFlowsUseCase()
+            flows = usecase.create_flow(
+                user=user,
+                project=project,
+                create_dto=create_dto,
+            )
             data = FlowSerializer(flows).data
             return Response(data=data, status=status.HTTP_201_CREATED)
         except IntelligencePermissionDenied:
