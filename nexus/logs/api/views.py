@@ -79,7 +79,7 @@ class LogsViewset(
 
 
 ACTION_MODEL_GROUPS = {
-    "Action": ["flow"],
+    "Action": ["Flow"],
     "Customization": ["ContentBaseAgent", "ContentBaseInstruction"],
     "Content": ["ContentBase", "ContentBaseFile", "ContentBaseLink", "ContentBaseText"],
     "Config": ["LLM"],
