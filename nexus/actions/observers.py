@@ -22,7 +22,6 @@ class ActionsObserver(EventObserver):
     def perform(
         self,
         action,
-        user,
         action_type: str,
         **kwargs
     ) -> None:
@@ -39,6 +38,10 @@ class ActionsObserver(EventObserver):
 
         integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
         project = integrated_intelligence.project
+
+        user = kwargs.get('user')
+        if user is None:
+            user = project.created_by
 
         create_recent_activity_dto = CreateRecentActivityDTO(
             action_type=action_type,
