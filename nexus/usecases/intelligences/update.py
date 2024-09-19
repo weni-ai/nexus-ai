@@ -74,7 +74,7 @@ class UpdateContentBaseUseCase():
             raise IntelligencePermissionDenied()
 
         contentbase = get_by_contentbase_uuid(contentbase_uuid)
-        old_contentbase_data = contentbase
+        old_contentbase_data = model_to_dict(contentbase)
 
         update_fields = []
         if title:
@@ -96,7 +96,7 @@ class UpdateContentBaseUseCase():
         update_fields.append('modified_by')
 
         contentbase.save(update_fields=update_fields)
-        new_contentbase_data = contentbase
+        new_contentbase_data = model_to_dict(contentbase)
 
         self.event_manager_notify(
             event="contentbase_activity",
@@ -134,15 +134,17 @@ class UpdateContentBaseTextUseCase():
         if not has_permission:
             raise IntelligencePermissionDenied()
 
-        old_contentbasetext_data = contentbasetext
         if text is not None:
+            old_contentbasetext_data = model_to_dict(contentbasetext)
+
+        if text:
             contentbasetext.text = text
             contentbasetext.modified_at = pendulum.now()
             contentbasetext.modified_by = user
             contentbasetext.save(
                 update_fields=['text', 'modified_at', 'modified_by']
             )
-        new_contentbase_data = contentbasetext
+        new_contentbase_data = model_to_dict(contentbasetext)
 
         self.event_manager_notify(
             event="contentbase_text_activity",
