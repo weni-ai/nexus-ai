@@ -17,6 +17,8 @@ from nexus.task_managers.models import (
     ContentBaseLinkTaskManager,
 )
 
+from django.forms.models import model_to_dict
+
 
 class IntelligenceSerializer(serializers.ModelSerializer):
     class Meta:
@@ -145,14 +147,14 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
         if agent_data:
             try:
                 agent = instance.agent
-                old_agent_data = agent
+                old_agent_data = model_to_dict(agent)
 
                 agent.name = agent_data.get("name", agent.name)
                 agent.role = agent_data.get("role", agent.role)
                 agent.personality = agent_data.get("personality", agent.personality)
                 agent.goal = agent_data.get("goal", agent.goal)
                 agent.save()
-                new_agent_data = agent
+                new_agent_data = model_to_dict(agent)
 
                 event_manager.notify(
                     event="contentbase_agent_activity",
@@ -178,13 +180,13 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                     if instruction_data.get('id'):
 
                         instruction = instance.instructions.get(id=instruction_data.get('id'))
-                        old_instruction_data = instruction
+                        old_instruction_data = model_to_dict(instruction)
 
                         instruction.instruction = instruction_data.get('instruction')
                         instruction.save()
                         instruction.refresh_from_db()
 
-                        new_instruction_data = instruction
+                        new_instruction_data = model_to_dict(instruction)
                         event_manager.notify(
                             event="contentbase_instruction_activity",
                             content_base_instruction=instruction,
