@@ -31,7 +31,11 @@ class DeleteFlowsUseCase():
             action=flow,
             action_type="D",
             user=user,
-            project=project
+            project=project,
+            action_details={
+                "old": flow.name,
+                "new": ""
+            },
         )
 
         flow.delete()
