@@ -5,19 +5,15 @@ from nexus.event_domain.recent_activity.external_activities import intelligence_
 from nexus.event_domain.recent_activity.msg_handler import recent_activity_message
 from nexus.intelligences.models import IntegratedIntelligence
 
-from django.forms.models import model_to_dict
-
 
 def _update_comparison_fields(
-    old_model_data,
-    new_model_data,
+    old_model_data: dict,
+    new_model_data: dict,
 ):
-    old_model_dict = model_to_dict(old_model_data)
-    new_model_dict = model_to_dict(new_model_data)
 
     action_details = {}
-    for key, old_value in old_model_dict.items():
-        new_value = new_model_dict.get(key)
+    for key, old_value in old_model_data.items():
+        new_value = new_model_data.get(key)
         if old_value != new_value:
             action_details[key] = {'old': old_value, 'new': new_value}
     return action_details
