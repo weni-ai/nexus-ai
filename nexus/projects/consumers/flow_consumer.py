@@ -7,6 +7,7 @@ from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
 
 from nexus.usecases.actions import delete, retrieve
+from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 
 
 class FlowConsumer(EDAConsumer):
@@ -31,8 +32,12 @@ class FlowConsumer(EDAConsumer):
             print(f"[FlowConsumer] - Flow readed: {flow}")
 
             try:
+                project = get_project_by_uuid(flow.project_uuid)
                 usecase = delete.DeleteFlowsUseCase()
-                usecase.hard_delete_flow(flow_dto=dto)
+                usecase.hard_delete_flow(
+                    flow_dto=dto,
+                    project=project,
+                )
                 print(f"[FlowConsumer] - Flow {flow.entity_name} deleted")
             except retrieve.FlowDoesNotExist:
                 print(f"[FlowConsumer] - Flow {flow.entity_name} not found")
