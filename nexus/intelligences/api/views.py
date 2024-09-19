@@ -842,9 +842,10 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
             instruction_id = request.query_params.get("id")
             project_uuid = kwargs.get('project_uuid')
             content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, request.user.email)
+            user = request.user
 
             ids = [instruction_id]
-            intelligences.DeleteContentBaseUseCase().bulk_delete_instruction_by_id(content_base, ids)
+            intelligences.DeleteContentBaseUseCase().bulk_delete_instruction_by_id(content_base, ids, user)
             data = ContentBasePersonalizationSerializer(content_base, context={"request": request}).data
             return Response(status=status.HTTP_200_OK, data=data)
         except IntelligencePermissionDenied:
