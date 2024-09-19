@@ -72,7 +72,11 @@ class CreateFlowsUseCase():
             action=flow,
             action_type="C",
             user=user,
-            project=project
+            project=project,
+            action_details={
+                "old": "",
+                "new": flow.name
+            }
         )
         return flow
 
