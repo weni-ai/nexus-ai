@@ -125,8 +125,12 @@ class CreateIntegratedFeatureUseCase:
         if not flow:
             raise ValueError("Flows not found")
 
+        project = get_project_by_uuid(integrated_feature_dto.project_uuid)
         usecase = CreateFlowsUseCase()
-        created_flow = usecase.create_flow(flow)
+        created_flow = usecase.create_flow(
+            create_dto=flow,
+            project=project
+        )
 
         integrated_feature = integrated_feature_dto.integrated_feature
         integrated_feature.is_integrated = True
