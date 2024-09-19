@@ -204,6 +204,9 @@ class UpdateLLMUseCase():
         for key, old_value in values_before_update.items():
             new_value = values_after_update.get(key)
             if old_value != new_value:
+                if key == "token":
+                    old_value = "old_token" if old_value else old_value
+                    new_value = "novo_token" if new_value else new_value
                 action_details[key] = {'old': old_value, 'new': new_value}
 
         self.event_manager_notify(
