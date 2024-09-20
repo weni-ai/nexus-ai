@@ -704,7 +704,7 @@ class DownloadFileViewSet(views.APIView):
                 content_base_uuid = str(content_base_file.content_base.uuid)
                 project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
                 if project.indexer_database == Project.BEDROCK:
-                    file = BedrockFileDatabase().create_presigned_url(file_name)
+                    file = BedrockFileDatabase().create_presigned_url(f"{content_base_uuid}/{file_name}")
                 else:
                     file = s3FileDatabase().create_presigned_url(file_name)
             except:
