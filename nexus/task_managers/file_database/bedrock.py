@@ -185,7 +185,7 @@ class BedrockFileDatabase(FileDataBase):
         }
 
     def create_presigned_url(self, file_name: str, expiration: int = 3600) -> str:
-        pass
+        return self.s3_client.generate_presigned_url('get_object', Params={'Bucket': self.bucket_name, 'Key': file_name}, ExpiresIn=expiration)
 
     def __create_unique_filename(self, filename: str) -> str:
         name, extension = filename.rsplit(".", 1)
