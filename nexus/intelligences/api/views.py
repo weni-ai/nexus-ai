@@ -684,6 +684,7 @@ class ContentBaseLinkViewset(ModelViewSet):
 
         return super().destroy(request, *args, **kwargs)
 
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 class DownloadFileViewSet(views.APIView):
     permission_classes = [IsAuthenticated]
@@ -695,11 +696,20 @@ class DownloadFileViewSet(views.APIView):
             user_email = request.user.email
 
             use_case = intelligences.RetrieveContentBaseFileUseCase()
-            use_case.get_contentbasefile(
+            content_base_file = use_case.get_contentbasefile(
                 contentbasefile_uuid=contentbasefile_uuid,
                 user_email=user_email
             )
-            file = s3FileDatabase().create_presigned_url(file_name)
+            try:
+                content_base_uuid = str(content_base_file.content_base.uuid)
+                project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+                if project.indexer_database == Project.BEDROCK:
+                    file = BedrockFileDatabase().create_presigned_url(file_name)
+                else:
+                    file = s3FileDatabase().create_presigned_url(file_name)
+            except:
+                file = s3FileDatabase().create_presigned_url(file_name)
+
             return Response(data={"file": file}, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
