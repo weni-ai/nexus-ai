@@ -89,7 +89,7 @@ class DeleteContentBaseUseCase():
             instruction = content_base.instructions.get(id=instruction_id)
             self.event_manager_notify(
                 event="contentbase_instruction_activity",
-                instruction=instruction,
+                content_base_instruction=instruction,
                 action_type="D",
                 user=user,
                 action_details={
