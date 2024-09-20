@@ -138,14 +138,15 @@ class ContentBaseAgentObserver(EventObserver):
                 }
             )
 
-        dto = CreateRecentActivityDTO(
-            action_type="U",
-            project=project,
-            created_by=user,
-            intelligence=intelligence,
-            action_details=action_details
-        )
-        create_recent_activity(content_base_agent, dto=dto)
+        if action_details != {}:
+            dto = CreateRecentActivityDTO(
+                action_type="U",
+                project=project,
+                created_by=user,
+                intelligence=intelligence,
+                action_details=action_details
+            )
+            create_recent_activity(content_base_agent, dto=dto)
 
 
 class ContentBaseInstructionObserver(EventObserver):
