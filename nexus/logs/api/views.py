@@ -116,6 +116,6 @@ class RecentActivitiesViewset(
             action_models = ACTION_MODEL_GROUPS.get(model_group, [])
             filter_params['action_model__in'] = action_models
 
-        queryset = RecentActivities.objects.filter(**filter_params).select_related('created_by').order_by('-created_at')
+        queryset = RecentActivities.objects.filter(**filter_params).select_related('created_by').order_by('-created_at').exclude(action_details__isnull=True)
 
         return queryset
