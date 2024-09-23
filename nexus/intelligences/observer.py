@@ -89,7 +89,7 @@ class ContentBaseFileObserver(EventObserver):
             if not action_details:
                 action_details = {
                     "old": "",
-                    "new": content_base_file.file_name
+                    "new": content_base_file.created_file_name
                 }
             dto = CreateRecentActivityDTO(
                 action_type=action_type,
