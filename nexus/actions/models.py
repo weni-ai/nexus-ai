@@ -48,7 +48,7 @@ class Flow(models.Model):
         ('localization', 'Localization'),
         ('attachment', 'Attachment'),
         ('safe_guard', 'Safe Guard'),
-        ('guard_prompt', 'Guard Prompt'),
+        ('prompt_guard', 'Prompt Guard'),
     ]
 
     group = (
