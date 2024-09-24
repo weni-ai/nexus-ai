@@ -18,6 +18,7 @@ class Group(Enum):
     INTERACTIONS = 'interactions'
     SHOPPING = 'shopping'
     CUSTOM = 'custom'
+    SECURITY = 'security'
 
 
 class TemplateAction(models.Model):
@@ -47,13 +48,15 @@ class Flow(models.Model):
         ('localization', 'Localization'),
         ('attachment', 'Attachment'),
         ('safe_guard', 'Safe Guard'),
+        ('guard_prompt', 'Guard Prompt'),
     ]
 
     group = (
         (Group.SUPPORT.value, "Support"),
         (Group.INTERACTIONS.value, "Interactions"),
         (Group.SHOPPING.value, "Shopping"),
-        (Group.CUSTOM.value, "Custom")
+        (Group.CUSTOM.value, "Custom"),
+        (Group.SECURITY.value, "Security")
     )
 
     uuid = models.UUIDField(primary_key=True)
