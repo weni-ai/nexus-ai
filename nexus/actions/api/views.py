@@ -260,7 +260,6 @@ class MessagePreviewView(APIView):
             log_usecase = CreateLogUsecase()
             log_usecase.create_message_log(text, contact_urn)
 
-            flows_repository = FlowsORMRepository()
             content_base_repository = ContentBaseORMRepository()
             message_logs_repository = MessageLogsRepository()
 
@@ -274,8 +273,8 @@ class MessagePreviewView(APIView):
 
             project_uuid: str = message.project_uuid
 
+            flows_repository = FlowsORMRepository(project_uuid=project_uuid)
             flows: List[FlowDTO] = flows_repository.project_flows(
-                project_uuid=project_uuid,
                 fallback=False,
                 action_type="custom"
             )

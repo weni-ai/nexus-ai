@@ -10,12 +10,12 @@ from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
-from nexus.usecases.actions.retrieve import get_flow_by_action_type, FlowDoesNotExist
+from nexus.usecases.actions.retrieve import FlowDoesNotExist
 
 from router.route import route
 from router.classifiers.zeroshot import ZeroshotClassifier
-# from router.classifiers.chatgpt_function import OpenAIClient, ChatGPTFunctionClassifier
 
+from router.classifiers.pre_classification import PreClassification
 from router.classifiers.safe_guard import SafeGuard
 from router.classifiers.prompt_guard import PromptGuard
 from router.classifiers import classify
@@ -33,26 +33,19 @@ from router.repositories.orm import (
 
 
 def direct_flows(
-    content_base: ContentBaseDTO,
+    flows_repository: FlowsORMRepository,
     message: Message,
     msg_event: dict,
     flow_start: FlowStart,
     user_email: str,
     action_type: str
 ) -> bool:
-    flow = get_flow_by_action_type(
-        content_base_uuid=content_base.uuid,
+    flow_dto = flows_repository.get_classifier_flow_by_action_type(
         action_type=action_type
     )
-    flow_dto = FlowDTO(
-        content_base_uuid=str(content_base.uuid),
-        uuid=str(flow.uuid),
-        name=flow.name,
-        prompt=flow.prompt,
-        fallback=flow.fallback,
-    )
+
     print(f"[+ Direct Flow: {action_type} +]")
-    if flow:
+    if flow_dto:
         flow_start.start_flow(
             flow=flow_dto,
             user=user_email,
@@ -64,19 +57,26 @@ def direct_flows(
     return False
 
 
-def safety_check(message: str) -> bool:
+def safety_check(
+    message: str,
+    flows_repository: FlowsORMRepository
+) -> bool:
+    if flows_repository.get_classifier_flow_by_action_type("safe_guard"):
+        safeguard = SafeGuard()
+        is_safe = safeguard.classify(message)
+        return is_safe
+    return False
 
-    safeguard = SafeGuard()
-    is_safe = safeguard.classify(message)
-    return is_safe
 
-
-def prompt_guard(message: str) -> bool:
-
-    prompt_guard = PromptGuard()
-    is_safe = prompt_guard.classify(message)
-    return is_safe
-
+def prompt_guard(
+    message: str,
+    flows_repository: FlowsORMRepository
+) -> bool:
+    if flows_repository.get_classifier_flow_by_action_type("prompt_guard"):
+        prompt_guard = PromptGuard()
+        is_safe = prompt_guard.classify(message)
+        return is_safe
+    return False
 
 @celery_app.task
 def start_route(
@@ -85,7 +85,6 @@ def start_route(
 
     print(f"[+ Message received: {message} +]")
 
-    flows_repository = FlowsORMRepository()
     content_base_repository = ContentBaseORMRepository()
     message_logs_repository = MessageLogsRepository()
 
@@ -97,29 +96,27 @@ def start_route(
     log_usecase = CreateLogUsecase()
     try:
         project_uuid: str = message.project_uuid
+        flows_repository = FlowsORMRepository(project_uuid=project_uuid)
 
         broadcast = SendMessageHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'))
         flow_start = FlowStartHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
-        flows: List[FlowDTO] = flows_repository.project_flows(project_uuid, False)
+        flows: List[FlowDTO] = flows_repository.project_flows(fallback=False)
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
         agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
         agent = agent.set_default_if_null()
 
-        if not safety_check(message.text):
-            try:
-                if direct_flows(
-                    content_base=content_base,
-                    message=message,
-                    msg_event=mailroom_msg_event,
-                    flow_start=flow_start,
-                    user_email=flows_user_email,
-                    action_type="safe_guard"
-                ):
-                    return True
-            except FlowDoesNotExist as e:
-                print(f"[- START ROUTE - Error: {e} -]")
+        pre_classification = PreClassification(
+            flows_repository=flows_repository,
+            message=message,
+            msg_event=mailroom_msg_event,
+            flow_start=flow_start,
+            user_email=flows_user_email
+        )
+
+        if pre_classification.pre_classification_route():
+            return True
 
         flow_type = None
         if 'order' in message.metadata:
@@ -154,18 +151,22 @@ def start_route(
             language=llm_model.setup.get("language", settings.WENIGPT_DEFAULT_LANGUAGE),
         )
 
-        classifier = ZeroshotClassifier(
-            chatbot_goal=agent.goal
-        )
+        flows = flows_repository.get_classifier_flow_by_action_type("custom")
+        if flows:
+            classifier = ZeroshotClassifier(
+                chatbot_goal=agent.goal
+            )
 
-        classification = classify(
-            classifier=classifier,
-            message=message.text,
-            flows=flows,
-            language=llm_config.language
-        )
+            classification = classify(
+                classifier=classifier,
+                message=message.text,
+                flows=flows,
+                language=llm_config.language
+            )
 
-        print(f"[+ Classification: {classification} +]")
+            print(f"[+ Classification: {classification} +]")
+        else:
+            classification = "other"
 
         llm_client = LLMClient.get_by_type(llm_config.model)
         llm_client: LLMClient = list(llm_client)[0](model_version=llm_config.model_version)
