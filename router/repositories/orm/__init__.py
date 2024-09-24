@@ -162,6 +162,9 @@ class FlowsORMRepository(Repository):
 
         flow = self.flows.filter(action_type=action_type).first()
 
+        if flow is None:
+            return None
+
         return FlowDTO(
             uuid=str(flow.uuid),
             name=flow.name,
