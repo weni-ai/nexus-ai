@@ -144,7 +144,7 @@ class UpdateContentBaseTextUseCase():
                 update_fields=['text', 'modified_at', 'modified_by']
             )
         new_contentbase_data = model_to_dict(contentbasetext)
-        new_contentbase_data['modified_at'] = str(new_contentbase_data['modified_at'])  
+        new_contentbase_data['modified_at'] = str(new_contentbase_data['modified_at'])
 
         self.event_manager_notify(
             event="contentbase_text_activity",
