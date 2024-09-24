@@ -4,6 +4,19 @@ import json
 from typing import List, Dict
 
 import requests
+from nexus.zeroshot.client import InvokeModel
+
+
+class NexusZeroshotClient:
+    def fast_predict(self, message: str, actions: List[Dict], language: str = "por"):
+        zeroshot_data = {
+            'context': 'Realizar atendimento ao cliente',
+            'language': language,
+            'text': message,
+            'options': actions}
+        zeroshot = InvokeModel(zeroshot_data)
+        response = zeroshot.invoke()
+        return response.json().get("output")
 
 
 class ZeroshotClient:
