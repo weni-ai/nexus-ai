@@ -306,7 +306,7 @@ class MessagePreviewView(APIView):
             )
 
             pre_classification_response = pre_classification.pre_classification_preview()
-            if pre_classification_response is not {}:
+            if pre_classification_response:
                 return Response(pre_classification_response)
 
             classification_handler = Classification(
@@ -318,8 +318,8 @@ class MessagePreviewView(APIView):
             )
 
             started_flow = classification_handler.non_custom_actions_preview()
-            if started_flow is not {}:
-                Response(started_flow)
+            if started_flow:
+                return Response(started_flow)
 
             classifier = ZeroshotClassifier(
                 chatbot_goal=agent.goal
