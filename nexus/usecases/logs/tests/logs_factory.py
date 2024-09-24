@@ -49,6 +49,10 @@ class RecentActivitiesFactory(factory.django.DjangoModelFactory):
 
     action_model = 'model'
     action_type = 'C'
+    action_details = {
+        "old": "",
+        "new": "model.name"
+    }
     created_by = factory.SubFactory(UserFactory)
     project = factory.SubFactory(ProjectFactory)
     intelligence = factory.SubFactory(
