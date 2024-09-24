@@ -53,7 +53,7 @@ class PreClassification:
         flow_dto: FlowDTO
     ) -> bool:
 
-        print(f"[+ Direct Flow: {flow_dto.uuid} +]")
+        print(f"[+ Pre Classification Direct Flow: {flow_dto.uuid} +]")
 
         self.flow_start.start_flow(
             flow=flow_dto,

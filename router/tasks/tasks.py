@@ -10,12 +10,12 @@ from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
-from nexus.usecases.actions.retrieve import FlowDoesNotExist
 
 from router.route import route
 from router.classifiers.zeroshot import ZeroshotClassifier
 
 from router.classifiers.pre_classification import PreClassification
+from router.classifiers.classification import Classification
 from router.classifiers.safe_guard import SafeGuard
 from router.classifiers.prompt_guard import PromptGuard
 from router.classifiers import classify
@@ -78,6 +78,7 @@ def prompt_guard(
         return is_safe
     return False
 
+
 @celery_app.task
 def start_route(
     message: Dict
@@ -102,7 +103,6 @@ def start_route(
         flow_start = FlowStartHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
-        flows: List[FlowDTO] = flows_repository.project_flows(fallback=False)
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
         agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
         agent = agent.set_default_if_null()
@@ -118,22 +118,16 @@ def start_route(
         if pre_classification.pre_classification_route():
             return True
 
-        flow_type = None
-        if 'order' in message.metadata:
-            flow_type = 'whatsapp_cart'
+        classification_handler = Classification(
+            flows_repository=flows_repository,
+            message=message,
+            msg_event=mailroom_msg_event,
+            flow_start=flow_start,
+            user_email=flows_user_email
+        )
 
-        if hasattr(message, 'attachments') and message.attachments:
-            flow_type = 'attachment'
-
-        if flow_type is not None:
-            return direct_flows(
-                content_base=content_base,
-                message=message,
-                msg_event=mailroom_msg_event,
-                flow_start=flow_start,
-                user_email=flows_user_email,
-                action_type=flow_type
-            )
+        if classification_handler.non_custom_actions():
+            return True
 
         log_usecase.create_message_log(message.text, message.contact_urn)
 
@@ -151,22 +145,11 @@ def start_route(
             language=llm_model.setup.get("language", settings.WENIGPT_DEFAULT_LANGUAGE),
         )
 
-        flows = flows_repository.get_classifier_flow_by_action_type("custom")
-        if flows:
-            classifier = ZeroshotClassifier(
-                chatbot_goal=agent.goal
-            )
-
-            classification = classify(
-                classifier=classifier,
-                message=message.text,
-                flows=flows,
-                language=llm_config.language
-            )
-
-            print(f"[+ Classification: {classification} +]")
-        else:
-            classification = "other"
+        classifier = ZeroshotClassifier(chatbot_goal=agent.goal)
+        classification = classification_handler.custom_actions(
+            classifier=classifier,
+            language=llm_config.language
+        )
 
         llm_client = LLMClient.get_by_type(llm_config.model)
         llm_client: LLMClient = list(llm_client)[0](model_version=llm_config.model_version)
