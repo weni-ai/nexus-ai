@@ -52,7 +52,8 @@ from router.repositories.orm import (
     MessageLogsRepository
 )
 from router.classifiers.zeroshot import ZeroshotClassifier
-# from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier, OpenAIClient
+from router.classifiers.pre_classification import PreClassification
+from router.classifiers.classification import Classification
 from router.classifiers import classify
 from router.tasks.tasks import safety_check, direct_flows
 from router.entities import (
@@ -274,10 +275,6 @@ class MessagePreviewView(APIView):
             project_uuid: str = message.project_uuid
 
             flows_repository = FlowsORMRepository(project_uuid=project_uuid)
-            flows: List[FlowDTO] = flows_repository.project_flows(
-                fallback=False,
-                action_type="custom"
-            )
 
             content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
 
@@ -300,48 +297,40 @@ class MessagePreviewView(APIView):
 
             print(f"[+ LLM model: {llm_config.model}:{llm_config.model_version} +]")
 
-            # if llm_config.model.lower() == "chatgpt":
-            #     client = OpenAIClient(api_key=llm_config.token)
-            #     classifier = ChatGPTFunctionClassifier(
-            #         client=client,
-            #         chatgpt_model=llm_config.model_version,
-            #     )
-            # else:
-            classifier = ZeroshotClassifier(
-                chatbot_goal=agent.goal
-            )
             broadcast = SimulateBroadcast(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'), get_file_info)
             flow_start = SimulateFlowStart(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
             flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
-            # TODO - Refactor direct_flows to return formated response, or create a new method for that API
-            if not safety_check(message.text):
-                try:
-                    if direct_flows(
-                        content_base=content_base,
-                        message=message,
-                        msg_event={},
-                        flow_start=flow_start,
-                        user_email=flows_user_email,
-                        action_type="safe_guard"
-                    ):
-                        flow = get_flow_by_action_type(
-                            content_base_uuid=content_base.uuid,
-                            action_type="safe_guard"
-                        )
-                        return Response({
-                            "type": "flowstart",
-                            "uuid": flow.uuid,
-                            "name": flow.name,
-                            "msg_event": None
-                        })
-                except FlowDoesNotExist as e:
-                    print(f"[- START ROUTE - Error: {e} -]")
+            pre_classification = PreClassification(
+                flows_repository=flows_repository,
+                message=message,
+                msg_event={},
+                flow_start=flow_start,
+                user_email=flows_user_email
+            )
 
-            classification = classify(
+            pre_classification_response = pre_classification.pre_classification_preview()
+            if pre_classification_response is not {}:
+                return Response(pre_classification_response)
+
+            classification_handler = Classification(
+                flows_repository=flows_repository,
+                message=message,
+                msg_event={},
+                flow_start=flow_start,
+                user_email=flows_user_email
+            )
+
+            started_flow = classification_handler.non_custom_actions_preview()
+            if started_flow is not {}:
+                Response(started_flow)
+
+            classifier = ZeroshotClassifier(
+                chatbot_goal=agent.goal
+            )
+
+            classification = classification_handler.custom_actions(
                 classifier=classifier,
-                message=message.text,
-                flows=flows,
                 language=llm_config.language
             )
 

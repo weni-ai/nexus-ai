@@ -1,7 +1,7 @@
 
 
 import os
-from typing import List, Dict
+from typing import Dict
 
 from django.conf import settings
 
@@ -18,12 +18,11 @@ from router.classifiers.pre_classification import PreClassification
 from router.classifiers.classification import Classification
 from router.classifiers.safe_guard import SafeGuard
 from router.classifiers.prompt_guard import PromptGuard
-from router.classifiers import classify
 from router.flow_start.interfaces import FlowStart
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.entities import (
-    FlowDTO, Message, AgentDTO, ContentBaseDTO, LLMSetupDTO
+    Message, AgentDTO, ContentBaseDTO, LLMSetupDTO
 )
 from router.repositories.orm import (
     ContentBaseORMRepository,
@@ -126,7 +125,7 @@ def start_route(
             user_email=flows_user_email
         )
 
-        if classification_handler.non_custom_actions():
+        if classification_handler.non_custom_actions_route():
             return True
 
         log_usecase.create_message_log(message.text, message.contact_urn)
