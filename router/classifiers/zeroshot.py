@@ -1,7 +1,7 @@
 from typing import List
 
 from router.classifiers.interfaces import Classifier
-from router.clients.zeroshot import ZeroshotClient
+from router.clients.zeroshot import ZeroshotClient, NexusZeroshotClient
 
 from router.entities.flow import FlowDTO
 
@@ -13,7 +13,7 @@ class ZeroshotClassifier(Classifier):
     def __init__(
         self,
         version: str = None,
-        client=ZeroshotClient,
+        client=NexusZeroshotClient,
         chatbot_goal: str = settings.DEFAULT_AGENT_GOAL
     ) -> None:
         self.__version = version
