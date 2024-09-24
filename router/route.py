@@ -56,7 +56,7 @@ def route(
 
             print("[ + Fallback + ]")
 
-            fallback_flow: FlowDTO = flows_repository.project_flow_fallback(message.project_uuid, True)
+            fallback_flow: FlowDTO = flows_repository.project_flow_fallback(fallback=True)
 
             last_messages: List[ContactMessageDTO] = message_logs_repository.list_last_messages(message.project_uuid, message.contact_urn, 5)
 
@@ -134,7 +134,7 @@ def route(
                 full_chunks=full_chunks,
             )
 
-        flow: FlowDTO = flows_repository.get_project_flow_by_name(message.project_uuid, classification)
+        flow: FlowDTO = flows_repository.get_project_flow_by_name(name=classification)
 
         log_usecase.update_log_field(
             project_id=message.project_uuid,

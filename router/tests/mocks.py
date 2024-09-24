@@ -65,27 +65,26 @@ class MessageLogsTestRepository(Repository):
 
 
 class FlowsTestRepository(Repository):
-
     def __init__(self, flow, fallback_flow) -> None:
         self.flow = flow
         self.fallback_flow = fallback_flow
 
-    def get_project_flow_by_name(self, project_uuid: str, name: str) -> FlowDTO:
+    def get_project_flow_by_name(self, name: str) -> FlowDTO:
         return FlowDTO(
             uuid=str(self.flow.uuid),
             name=self.flow.name,
             fallback=self.flow.fallback,
-            content_base_uuid=str(self.flow.content_base),
+            content_base_uuid=str(self.flow.content_base.uuid),
             prompt=self.flow.prompt,
         )
 
-    def project_flow_fallback(self, project_uuid: str, fallback: bool) -> FlowDTO:
+    def project_flow_fallback(self, fallback: bool) -> FlowDTO:
         if self.fallback_flow:
             return FlowDTO(
                 uuid=str(self.fallback_flow.uuid),
                 name=self.fallback_flow.name,
                 fallback=self.fallback_flow.fallback,
-                content_base_uuid=str(self.fallback_flow.content_base),
+                content_base_uuid=str(self.fallback_flow.content_base.uuid),
                 prompt=self.fallback_flow.prompt,
             )
         return
