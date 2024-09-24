@@ -10,7 +10,7 @@ from nexus.intelligences.api.routers import urlpatterns as intelligence_routes
 from nexus.actions.api.routers import urlpatterns as actions_routes
 from nexus.projects.api.routers import urlpatterns as projects_routes
 from nexus.logs.api.routers import urlpatterns as logs_routes
-
+from nexus.zeroshot.api.routers import urlpatterns as zeroshot_routes
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -35,4 +35,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls')),
     path('api/', include(url_api)),
+    path('v2/repository/', include(zeroshot_routes))
 ]
