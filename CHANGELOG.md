@@ -1,3 +1,13 @@
+# 2.1.0
+## *Add*
+    - More super user type tokens
+    - Prompt Guard llm model, responsible to handle injection attacks
+    - Update retail usecase
+    - Template action on retail usecases
+## *Update*
+    - Refactor start_route method
+    - Refactor preview method
+
 # 2.0.6
 ## *Fix*
     - Last message bringing wrong classification messages
