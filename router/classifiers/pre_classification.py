@@ -70,9 +70,9 @@ class PreClassification:
         return flow_dto
 
     def pre_classification_route(self) -> bool:
-        if self.safety_check(self.message):
+        if self.safety_check(self.message, start_flow=True):
             return self.flow_started
-        if self.prompt_guard(self.message):
+        if self.prompt_guard(self.message, start_flow=True):
             return self.flow_started
         return self.flow_started
 
