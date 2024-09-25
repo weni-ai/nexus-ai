@@ -144,7 +144,7 @@ class UpdateContentBaseTextUseCase():
                 update_fields=['text', 'modified_at', 'modified_by']
             )
         new_contentbase_data = model_to_dict(contentbasetext)
-        new_contentbase_data['modified_at'] = str(new_contentbase_data['modified_at'])  
+        new_contentbase_data['modified_at'] = str(new_contentbase_data['modified_at'])
 
         self.event_manager_notify(
             event="contentbase_text_activity",
@@ -159,6 +159,12 @@ class UpdateContentBaseTextUseCase():
 
 
 class UpdateContentBaseFileUseCase():
+
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ) -> None:
+        self.event_manager_notify = event_manager_notify
 
     def update_content_base_file(
             self,
@@ -183,6 +189,13 @@ class UpdateContentBaseFileUseCase():
         content_base_file.modified_at = pendulum.now()
         content_base_file.modified_by = user
         content_base_file.save()
+
+        self.event_manager_notify(
+            event="contentbase_file_activity",
+            content_base_file=content_base_file,
+            action_type="C",
+            user=user,
+        )
 
         return content_base_file
 
