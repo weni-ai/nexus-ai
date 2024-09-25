@@ -10,7 +10,7 @@ from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
 
-from nexus.usecases.projects.projects_use_case import ProjectAuthUseCase
+from nexus.usecases.projects.projects_use_case import ProjectAuthUseCase, ProjectsUseCase
 from router.route import route
 from router.classifiers.zeroshot import ZeroshotClassifier
 
@@ -101,7 +101,7 @@ def start_route(
         broadcast = SendMessageHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'))
         flow_start = FlowStartHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
-        indexer = ProjectAuthUseCase().get_indexer_database(project_uuid)
+        indexer = ProjectsUseCase().get_indexer_database(project_uuid)
 
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
         agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
