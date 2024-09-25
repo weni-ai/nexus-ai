@@ -146,12 +146,6 @@ class CreateContentBaseTextUseCase():
 
 class CreateContentBaseFileUseCase():
 
-    def __init__(
-        self,
-        event_manager_notify=event_manager.notify
-    ) -> None:
-        self.event_manager_notify = event_manager_notify
-
     def create_content_base_file(
         self,
         content_base_file: ContentBaseFileDTO
@@ -166,12 +160,7 @@ class CreateContentBaseFileUseCase():
             content_base=content_base,
             created_by=user
         )
-        self.event_manager_notify(
-            event="contentbase_file_activity",
-            content_base_file=content_base_file,
-            action_type="C",
-            user=user
-        )
+
         return content_base_file
 
 
