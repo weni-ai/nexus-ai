@@ -76,9 +76,19 @@ class ContentBaseORMRepository(Repository):
 
 class FlowsORMRepository(Repository):
 
-    def get_project_flow_by_name(self, project_uuid: str, name: str):
-        content_base = get_default_content_base_by_project(project_uuid)
-        flow = Flow.objects.filter(content_base=content_base, name=name).first()
+    def __init__(
+        self,
+        project_uuid: str,
+    ):
+        self.content_base = get_default_content_base_by_project(project_uuid)
+        self.flows = Flow.objects.filter(content_base=self.content_base)
+
+    def get_project_flow_by_name(
+        self,
+        name: str
+    ):
+
+        flow = self.flows.filter(name=name).first()
 
         return FlowDTO(
             uuid=str(flow.uuid),
@@ -88,9 +98,13 @@ class FlowsORMRepository(Repository):
             content_base_uuid=str(flow.content_base.uuid)
         )
 
-    def project_flow_fallback(self, project_uuid: str, fallback: bool) -> FlowDTO:
-        content_base = get_default_content_base_by_project(project_uuid)
-        flow = Flow.objects.filter(content_base=content_base, fallback=fallback).first()  # TODO: Flow.DoesNotExist
+    def project_flow_fallback(
+        self,
+        fallback: bool
+    ) -> FlowDTO:
+
+        flow = self.flows.filter(fallback=fallback).first()
+
         if flow:
             return FlowDTO(
                 uuid=str(flow.uuid),
@@ -102,12 +116,11 @@ class FlowsORMRepository(Repository):
 
     def project_flows(
         self,
-        project_uuid: str,
         fallback: bool = False,
         action_type: str = "custom"
     ) -> List[FlowDTO]:
-        content_base = get_default_content_base_by_project(project_uuid)
-        flows = Flow.objects.filter(content_base=content_base, fallback=fallback, action_type=action_type)
+
+        flows = self.flows.filter(fallback=fallback, action_type=action_type)
 
         flows_list = []
         for flow in flows:
@@ -122,6 +135,43 @@ class FlowsORMRepository(Repository):
             )
 
         return flows_list
+
+    def get_classifier_flow_list(
+        self,
+    ) -> List[FlowDTO]:
+
+        flows = self.flows.exclude(action_type="custom")
+        flows_list = []
+        for flow in flows:
+            flows_list.append(
+                FlowDTO(
+                    uuid=str(flow.uuid),
+                    name=flow.name,
+                    prompt=flow.prompt,
+                    fallback=flow.fallback,
+                    content_base_uuid=str(flow.content_base.uuid)
+                )
+            )
+
+        return flows_list
+
+    def get_classifier_flow_by_action_type(
+        self,
+        action_type: str
+    ) -> FlowDTO:
+
+        flow = self.flows.filter(action_type=action_type).first()
+
+        if flow is None:
+            return None
+
+        return FlowDTO(
+            uuid=str(flow.uuid),
+            name=flow.name,
+            prompt=flow.prompt,
+            fallback=flow.fallback,
+            content_base_uuid=str(flow.content_base.uuid)
+        )
 
 
 class MessageLogsRepository(Repository):
