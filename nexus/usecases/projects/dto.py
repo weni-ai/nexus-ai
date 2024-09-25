@@ -3,6 +3,7 @@ from typing import List, Dict
 
 from nexus.projects.models import IntegratedFeature
 from nexus.usecases.actions.create import CreateFlowDTO
+from nexus.usecases.actions.update import UpdateFlowDTO
 
 
 from nexus.usecases.projects.retrieve import get_integrated_feature
@@ -19,7 +20,7 @@ class UpdateProjectDTO:
 
 
 @dataclass
-class IntegratedFeatureDTO:
+class IntegratedFeatureFlowDTO:
     project_uuid: str
     feature_uuid: str
     flows: List[Dict[str, str]]
@@ -49,10 +50,36 @@ class IntegratedFeatureDTO:
             )
         return None
 
+    @property
+    def update_dto(self) -> UpdateFlowDTO:
+        if not self.integrated_feature or not self.integrated_feature.current_version_setup:
+            return None
+
+        current_setup_action = self.integrated_feature.current_version_setup
+        matching_flow = next(
+            (flow for flow in self.flows if flow.get('base_uuid') == current_setup_action.get('root_flow_uuid')),
+            None
+        )
+
+        if matching_flow:
+            return UpdateFlowDTO(
+                flow_uuid=matching_flow.get("uuid"),
+                name=current_setup_action.get("name"),
+                prompt=current_setup_action.get('prompt'),
+            )
+        return None
+
 
 @dataclass
-class UpdateIntegratedFeatureDTO:
+class UpdateIntegratedFeatureFlowDTO:
     current_version_setup: Dict[str, str]
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
+
+
+@dataclass
+class IntegratedFeatureDTO:
+    feature_uuid: str
+    project_uuid: str
+    current_version_setup: Dict[str, str]
