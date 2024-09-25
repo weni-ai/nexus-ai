@@ -7,6 +7,7 @@ from unittest.mock import patch
 from typing import List, Dict
 
 from django.test import TestCase
+
 from nexus.actions.models import Flow
 from nexus.projects.models import Project
 from nexus.intelligences.models import (
@@ -459,7 +460,6 @@ class MessagePreviewTestCase(TestCase):
 
 class TemplateActionViewSetTestCase(TestCase):
 
-    # Test get from TemplateActionViewSet
     def setUp(self) -> None:
         self.factory = APIRequestFactory()
         self.view = TemplateActionView.as_view({'get': 'list'})
