@@ -74,7 +74,7 @@ class UpdateContentBaseUseCase():
             raise IntelligencePermissionDenied()
 
         contentbase = get_by_contentbase_uuid(contentbase_uuid)
-        old_contentbase_data = contentbase
+        old_contentbase_data = model_to_dict(contentbase)
 
         update_fields = []
         if title:
@@ -96,7 +96,7 @@ class UpdateContentBaseUseCase():
         update_fields.append('modified_by')
 
         contentbase.save(update_fields=update_fields)
-        new_contentbase_data = contentbase
+        new_contentbase_data = model_to_dict(contentbase)
 
         self.event_manager_notify(
             event="contentbase_activity",
@@ -134,15 +134,18 @@ class UpdateContentBaseTextUseCase():
         if not has_permission:
             raise IntelligencePermissionDenied()
 
-        old_contentbasetext_data = contentbasetext
         if text is not None:
+            old_contentbasetext_data = model_to_dict(contentbasetext)
+            old_contentbasetext_data['modified_at'] = str(old_contentbasetext_data['modified_at'])
+        if text:
             contentbasetext.text = text
             contentbasetext.modified_at = pendulum.now()
             contentbasetext.modified_by = user
             contentbasetext.save(
                 update_fields=['text', 'modified_at', 'modified_by']
             )
-        new_contentbase_data = contentbasetext
+        new_contentbase_data = model_to_dict(contentbasetext)
+        new_contentbase_data['modified_at'] = str(new_contentbase_data['modified_at'])
 
         self.event_manager_notify(
             event="contentbase_text_activity",
@@ -157,6 +160,12 @@ class UpdateContentBaseTextUseCase():
 
 
 class UpdateContentBaseFileUseCase():
+
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ) -> None:
+        self.event_manager_notify = event_manager_notify
 
     def update_content_base_file(
             self,
@@ -181,6 +190,13 @@ class UpdateContentBaseFileUseCase():
         content_base_file.modified_at = pendulum.now()
         content_base_file.modified_by = user
         content_base_file.save()
+
+        self.event_manager_notify(
+            event="contentbase_file_activity",
+            content_base_file=content_base_file,
+            action_type="C",
+            user=user,
+        )
 
         return content_base_file
 

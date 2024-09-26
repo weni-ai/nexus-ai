@@ -143,7 +143,12 @@ class FlowsViewset(
                 group=group
             )
 
-            flows = CreateFlowsUseCase().create_flow(create_dto)
+            usecase = CreateFlowsUseCase()
+            flows = usecase.create_flow(
+                user=user,
+                project=project,
+                create_dto=create_dto,
+            )
             data = FlowSerializer(flows).data
             return Response(data=data, status=status.HTTP_201_CREATED)
         except IntelligencePermissionDenied:
@@ -228,7 +233,11 @@ class FlowsViewset(
                 method="delete"
             )
 
-            DeleteFlowsUseCase().hard_delete_flow(flow_dto)
+            DeleteFlowsUseCase().hard_delete_flow(
+                flow_dto=flow_dto,
+                user=user,
+                project=project
+            )
             return Response(status=status.HTTP_204_NO_CONTENT)
         except FlowDoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)

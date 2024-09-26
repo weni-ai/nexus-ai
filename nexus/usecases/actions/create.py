@@ -5,6 +5,7 @@ from django.conf import settings
 
 from dataclasses import dataclass
 
+from nexus.events import event_manager
 from nexus.actions.models import Flow, TemplateAction
 
 from nexus.usecases.intelligences.get_by_uuid import (
@@ -25,7 +26,19 @@ class CreateFlowDTO:
 
 
 class CreateFlowsUseCase():
-    def create_flow(self, create_dto: CreateFlowDTO) -> Flow:
+
+    def __init__(
+        self,
+        event_manager_notify=event_manager.notify
+    ) -> None:
+        self.event_manager_notify = event_manager_notify
+
+    def create_flow(
+        self,
+        project,
+        create_dto: CreateFlowDTO,
+        user=None,
+    ) -> Flow:
 
         if create_dto.action_type == "custom" and create_dto.prompt is None:
             raise ValueError("Prompt is required for custom actions")
@@ -33,7 +46,7 @@ class CreateFlowsUseCase():
         content_base = get_default_content_base_by_project(create_dto.project_uuid)
 
         if create_dto.template:
-            return Flow.objects.create(
+            flow = Flow.objects.create(
                 uuid=create_dto.flow_uuid,
                 name=create_dto.name,
                 prompt=create_dto.prompt,
@@ -43,16 +56,29 @@ class CreateFlowsUseCase():
                 action_template=create_dto.template,
                 group=create_dto.group
             )
+        else:
+            flow = Flow.objects.create(
+                uuid=create_dto.flow_uuid,
+                name=create_dto.name,
+                prompt=create_dto.prompt,
+                fallback=create_dto.fallback,
+                content_base=content_base,
+                action_type=create_dto.action_type,
+                group=create_dto.group
+            )
 
-        return Flow.objects.create(
-            uuid=create_dto.flow_uuid,
-            name=create_dto.name,
-            prompt=create_dto.prompt,
-            fallback=create_dto.fallback,
-            content_base=content_base,
-            action_type=create_dto.action_type,
-            group=create_dto.group
+        self.event_manager_notify(
+            event="action_activity",
+            action=flow,
+            action_type="C",
+            user=user,
+            project=project,
+            action_details={
+                "old": "",
+                "new": flow.name
+            }
         )
+        return flow
 
 
 class CreateTemplateActionUseCase():

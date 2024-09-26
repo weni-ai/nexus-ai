@@ -13,6 +13,9 @@ def _update_comparison_fields(
     for key, old_value in old_model_data.items():
         new_value = new_model_data.get(key)
         if old_value != new_value:
+            if key == "token":
+                old_value = "old_token" if old_value else old_value
+                new_value = "new_token" if new_value else new_value
             action_details[key] = {'old': old_value, 'new': new_value}
     return action_details
 
@@ -22,7 +25,6 @@ class ActionsObserver(EventObserver):
     def perform(
         self,
         action,
-        user,
         action_type: str,
         **kwargs
     ) -> None:
@@ -39,6 +41,10 @@ class ActionsObserver(EventObserver):
 
         integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
         project = integrated_intelligence.project
+
+        user = kwargs.get('user')
+        if user is None:
+            user = project.created_by
 
         create_recent_activity_dto = CreateRecentActivityDTO(
             action_type=action_type,

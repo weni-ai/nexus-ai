@@ -6,18 +6,14 @@ from nexus.task_managers.file_database.file_database import FileDataBase
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
 
-from nexus.events import event_manager
-
 
 class CeleryFileManager:
 
     def __init__(
         self,
         file_database: FileDataBase,
-        event_manager_notify=event_manager.notify
     ):
         self._file_database = file_database
-        self.event_manager_notify = event_manager_notify
 
     def upload_file(
         self,
@@ -35,9 +31,7 @@ class CeleryFileManager:
             content_base_uuid=content_base_uuid,
             extension_file=extension_file,
         )
-        content_base_file = CreateContentBaseFileUseCase(
-            event_manager_notify=self.event_manager_notify
-        ).create_content_base_file(content_base_file=content_base_file_dto)
+        content_base_file = CreateContentBaseFileUseCase().create_content_base_file(content_base_file=content_base_file_dto)
         tasks.upload_file.delay(
             pickled_file,
             content_base_uuid,

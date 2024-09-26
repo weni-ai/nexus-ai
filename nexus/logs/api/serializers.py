@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from nexus.logs.models import MessageLog
+from nexus.logs.models import MessageLog, RecentActivities
 
 
 class MessageLogSerializer(serializers.ModelSerializer):
@@ -50,3 +50,39 @@ class MessageFullLogSerializer(MessageLogSerializer):
 
     def get_project(self, obj: MessageLog) -> str:
         return f"{obj.project.uuid} - {obj.project.name}"
+
+
+class RecentActivitiesSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = RecentActivities
+        fields = [
+            "uuid",
+            "model_group",
+            "action_model",
+            "created_at",
+            "action_details",
+            "action_type",
+            "project",
+            "created_by",
+        ]
+
+    created_by = serializers.SerializerMethodField()
+    model_group = serializers.SerializerMethodField()
+
+    def get_created_by(self, obj: RecentActivities) -> str:
+        return obj.created_by.email
+
+    def get_model_group(self, obj: RecentActivities) -> str:
+
+        ACTION_MODEL_GROUPS = {
+            "Flow": "Action",
+            "ContentBaseAgent": "Customization",
+            "ContentBaseInstruction": "Customization",
+            "ContentBase": "Content",
+            "ContentBaseFile": "Content",
+            "ContentBaseLink": "Content",
+            "ContentBaseText": "Content",
+            "LLM": "Config",
+        }
+        return ACTION_MODEL_GROUPS.get(obj.action_model, "")
