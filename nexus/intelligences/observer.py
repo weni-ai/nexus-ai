@@ -245,6 +245,11 @@ class ContentBaseTextObserver(EventObserver):
             old_model_data = kwargs.get('old_contentbasetext_data')
             new_model_data = kwargs.get('new_contentbase_data')
             action_details = _update_comparison_fields(old_model_data, new_model_data)
+
+            action_details['text'] = {
+                "old": "",
+                "new": "Text"
+            }
         else:
             action_details = kwargs.get('action_details', {})
 
