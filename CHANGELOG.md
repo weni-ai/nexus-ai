@@ -1,3 +1,7 @@
+# 2.2.1
+## *Fix*
+    - Customization activities
+
 # 2.2.0
 ## *Add*
     - New recent activities
