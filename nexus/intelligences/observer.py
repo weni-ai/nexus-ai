@@ -155,7 +155,7 @@ class ContentBaseInstructionObserver(EventObserver):
         self,
         user,
         content_base_instruction,
-        action_type: str,
+        action_type: str = "U",
         **kwargs
     ):
         intelligence = content_base_instruction.content_base.intelligence
@@ -173,14 +173,15 @@ class ContentBaseInstructionObserver(EventObserver):
                     "new": content_base_instruction.instruction
                 })
 
-        dto = CreateRecentActivityDTO(
-            action_type="U",
-            project=project,
-            created_by=user,
-            intelligence=intelligence,
-            action_details=action_details
-        )
-        create_recent_activity(content_base_instruction, dto=dto)
+        if not (action_details == {} and action_type == "U"):
+            dto = CreateRecentActivityDTO(
+                action_type=action_type,
+                project=project,
+                created_by=user,
+                intelligence=intelligence,
+                action_details=action_details
+            )
+            create_recent_activity(content_base_instruction, dto=dto)
 
 
 class ContentBaseLinkObserver(EventObserver):

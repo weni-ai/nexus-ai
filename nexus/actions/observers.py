@@ -13,9 +13,14 @@ def _update_comparison_fields(
     for key, old_value in old_model_data.items():
         new_value = new_model_data.get(key)
         if old_value != new_value:
-            if key == "token":
-                old_value = "old_token" if old_value else old_value
-                new_value = "new_token" if new_value else new_value
+            if key == "setup":
+                old_token = old_value.get("token") if old_value else None
+                new_token = new_value.get("token") if new_value else None
+                if old_token != new_token:
+                    if old_token:
+                        old_value["token"] = "old_token"
+                    if new_token:
+                        new_value["token"] = "new_token"
             action_details[key] = {'old': old_value, 'new': new_value}
     return action_details
 

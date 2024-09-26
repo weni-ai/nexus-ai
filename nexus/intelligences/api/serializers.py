@@ -196,6 +196,17 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                             user=self.context.get('request').user
                         )
                     else:
-                        instance.instructions.create(instruction=instruction_data.get('instruction'))
+
+                        created_instruction = instance.instructions.create(instruction=instruction_data.get('instruction'))
+                        event_manager.notify(
+                            event="contentbase_instruction_activity",
+                            content_base_instruction=created_instruction,
+                            action_type="C",
+                            action_details={
+                                "old": "",
+                                "new": instruction_data.get('instruction')
+                            },
+                            user=self.context.get('request').user
+                        )
         instance.refresh_from_db()
         return instance
