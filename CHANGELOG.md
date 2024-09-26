@@ -1,3 +1,7 @@
+# 2.1.1
+## *Fix*
+    - Wrong message statement on safeguard methods
+
 # 2.1.0
 ## *Add*
     - More super user type tokens
