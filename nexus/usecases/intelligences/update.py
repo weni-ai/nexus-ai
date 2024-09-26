@@ -136,7 +136,7 @@ class UpdateContentBaseTextUseCase():
 
         old_contentbasetext_data = model_to_dict(contentbasetext)
         old_contentbasetext_data['modified_at'] = str(old_contentbasetext_data['modified_at'])
-        if text:
+        if text is not None:
             contentbasetext.text = text
             contentbasetext.modified_at = pendulum.now()
             contentbasetext.modified_by = user
