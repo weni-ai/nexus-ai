@@ -22,17 +22,18 @@ class PreClassification:
     ):
         self.flows_repository = flows_repository
         self.message = message
+        self.message_text = message.text
         self.msg_event = msg_event
         self.flow_start = flow_start
         self.user_email = user_email
 
         self.flow_started = False
 
-    def prompt_guard(self, message: str, start_flow: bool) -> bool:
+    def prompt_guard(self, start_flow: bool) -> bool:
         flow_dto = self.flows_repository.get_classifier_flow_by_action_type("prompt_guard")
         if flow_dto:
             prompt_guard = PromptGuard()
-            is_safe = prompt_guard.classify(message)
+            is_safe = prompt_guard.classify(self.message_text)
             if is_safe:
                 return self.flow_started
             return self.direct_flows(
@@ -41,11 +42,11 @@ class PreClassification:
             )
         return self.flow_started
 
-    def safety_check(self, message: str, start_flow: bool) -> bool:
+    def safety_check(self, start_flow: bool) -> bool:
         flow_dto = self.flows_repository.get_classifier_flow_by_action_type("safe_guard")
         if flow_dto:
             safeguard = SafeGuard()
-            is_safe = safeguard.classify(message)
+            is_safe = safeguard.classify(self.message_text)
             if is_safe:
                 return self.flow_started
             return self.direct_flows(
@@ -70,16 +71,16 @@ class PreClassification:
         return flow_dto
 
     def pre_classification_route(self) -> bool:
-        if self.safety_check(self.message, start_flow=True):
+        if self.safety_check(start_flow=True):
             return self.flow_started
-        if self.prompt_guard(self.message, start_flow=True):
+        if self.prompt_guard(start_flow=True):
             return self.flow_started
         return self.flow_started
 
     def pre_classification_preview(self) -> dict:
         print(f"[+ Pre Classification Preview: {self.message} +]")
 
-        flow_dto = self.safety_check(self.message, start_flow=False)
+        flow_dto = self.safety_check(start_flow=False)
         if flow_dto:
             return {
                 "type": "flowstart",
@@ -88,7 +89,7 @@ class PreClassification:
                 "msg_event": None
             }
 
-        flow_dto = self.prompt_guard(self.message, start_flow=False)
+        flow_dto = self.prompt_guard(start_flow=False)
         if flow_dto:
             return {
                 "type": "flowstart",
