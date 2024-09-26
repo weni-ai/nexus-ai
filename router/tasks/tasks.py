@@ -16,9 +16,6 @@ from router.classifiers.zeroshot import ZeroshotClassifier
 
 from router.classifiers.pre_classification import PreClassification
 from router.classifiers.classification import Classification
-from router.classifiers.safe_guard import SafeGuard
-from router.classifiers.prompt_guard import PromptGuard
-from router.flow_start.interfaces import FlowStart
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.entities import (
@@ -29,53 +26,6 @@ from router.repositories.orm import (
     FlowsORMRepository,
     MessageLogsRepository
 )
-
-
-def direct_flows(
-    flows_repository: FlowsORMRepository,
-    message: Message,
-    msg_event: dict,
-    flow_start: FlowStart,
-    user_email: str,
-    action_type: str
-) -> bool:
-    flow_dto = flows_repository.get_classifier_flow_by_action_type(
-        action_type=action_type
-    )
-
-    print(f"[+ Direct Flow: {action_type} +]")
-    if flow_dto:
-        flow_start.start_flow(
-            flow=flow_dto,
-            user=user_email,
-            urns=[message.contact_urn],
-            user_message="",
-            msg_event=msg_event,
-        )
-        return True
-    return False
-
-
-def safety_check(
-    message: str,
-    flows_repository: FlowsORMRepository
-) -> bool:
-    if flows_repository.get_classifier_flow_by_action_type("safe_guard"):
-        safeguard = SafeGuard()
-        is_safe = safeguard.classify(message)
-        return is_safe
-    return False
-
-
-def prompt_guard(
-    message: str,
-    flows_repository: FlowsORMRepository
-) -> bool:
-    if flows_repository.get_classifier_flow_by_action_type("prompt_guard"):
-        prompt_guard = PromptGuard()
-        is_safe = prompt_guard.classify(message)
-        return is_safe
-    return False
 
 
 @celery_app.task
