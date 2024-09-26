@@ -7,7 +7,6 @@ class PromptGuard:
 
     def __init__(self) -> None:
         self.url = os.environ.get("PROMPT_GUARD_URL")
-        self.prompt = os.environ.get("PROMPT_GUARD_PROMPT")
         self.api_key = os.environ.get("PROMPT_GUARD_API_KEY")
         self.use_prompt_guard = os.environ.get("USE_PROMPT_GUARD")
 
@@ -31,6 +30,6 @@ class PromptGuard:
 
         response = self.request_safe_guard(message)
         classification = response.json()['output']['guardrails_classification']
-        if classification == "injection":
+        if classification == "Injection":
             return False
         return True
