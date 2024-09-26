@@ -35,7 +35,11 @@ class CreateFlowsUseCaseTest(TestCase):
         )
 
         use_case = CreateFlowsUseCase()
-        flow = use_case.create_flow(create_dto)
+        flow = use_case.create_flow(
+            user=self.content_base.created_by,
+            project=self.project,
+            create_dto=create_dto
+        )
 
         self.assertEqual(flow.name, "flow_name")
         self.assertEqual(flow.prompt, "flow_prompt")
@@ -57,7 +61,11 @@ class CreateFlowsUseCaseTest(TestCase):
 
         use_case = CreateFlowsUseCase()
         with self.assertRaises(ValueError):
-            use_case.create_flow(create_dto)
+            use_case.create_flow(
+                create_dto=create_dto,
+                project=self.project,
+                user=self.content_base.created_by
+            )
 
     def test_blank_prompt_for_whatsapp_cart_flow(self):
         flow_uuid = str(uuid4())
@@ -71,7 +79,11 @@ class CreateFlowsUseCaseTest(TestCase):
         )
 
         use_case = CreateFlowsUseCase()
-        flow = use_case.create_flow(create_dto)
+        flow = use_case.create_flow(
+            create_dto=create_dto,
+            project=self.project,
+            user=self.content_base.created_by
+        )
 
         self.assertEqual(flow.name, "flow_name")
         self.assertEqual(flow.prompt, None)
@@ -93,7 +105,11 @@ class CreateFlowsUseCaseTest(TestCase):
         )
 
         use_case = CreateFlowsUseCase()
-        flow = use_case.create_flow(create_dto)
+        flow = use_case.create_flow(
+            create_dto=create_dto,
+            project=self.project,
+            user=self.content_base.created_by
+        )
 
         self.assertEqual(flow.name, self.template_action.name)
         self.assertEqual(flow.prompt, self.template_action.prompt)

@@ -5,19 +5,15 @@ from nexus.event_domain.recent_activity.external_activities import intelligence_
 from nexus.event_domain.recent_activity.msg_handler import recent_activity_message
 from nexus.intelligences.models import IntegratedIntelligence
 
-from django.forms.models import model_to_dict
-
 
 def _update_comparison_fields(
-    old_model_data,
-    new_model_data,
+    old_model_data: dict,
+    new_model_data: dict,
 ):
-    old_model_dict = model_to_dict(old_model_data)
-    new_model_dict = model_to_dict(new_model_data)
 
     action_details = {}
-    for key, old_value in old_model_dict.items():
-        new_value = new_model_dict.get(key)
+    for key, old_value in old_model_data.items():
+        new_value = new_model_data.get(key)
         if old_value != new_value:
             action_details[key] = {'old': old_value, 'new': new_value}
     return action_details
@@ -90,6 +86,11 @@ class ContentBaseFileObserver(EventObserver):
         if content_base.is_router:
             integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
             project = integrated_intelligence.project
+            if not action_details:
+                action_details = {
+                    "old": "",
+                    "new": content_base_file.created_file_name
+                }
             dto = CreateRecentActivityDTO(
                 action_type=action_type,
                 project=project,
@@ -130,16 +131,22 @@ class ContentBaseAgentObserver(EventObserver):
             new_model_data = kwargs.get('new_agent_data')
             action_details = _update_comparison_fields(old_model_data, new_model_data)
         else:
-            action_details = kwargs.get('action_details', {})
+            action_details = kwargs.get(
+                'action_details', {
+                    "old": "",
+                    "new": content_base_agent.agent
+                }
+            )
 
-        dto = CreateRecentActivityDTO(
-            action_type="U",
-            project=project,
-            created_by=user,
-            intelligence=intelligence,
-            action_details=action_details
-        )
-        create_recent_activity(content_base_agent, dto=dto)
+        if action_details != {}:
+            dto = CreateRecentActivityDTO(
+                action_type="U",
+                project=project,
+                created_by=user,
+                intelligence=intelligence,
+                action_details=action_details
+            )
+            create_recent_activity(content_base_agent, dto=dto)
 
 
 class ContentBaseInstructionObserver(EventObserver):
@@ -160,7 +167,11 @@ class ContentBaseInstructionObserver(EventObserver):
             new_model_data = kwargs.get('new_instruction_data')
             action_details = _update_comparison_fields(old_model_data, new_model_data)
         else:
-            action_details = kwargs.get('action_details', {})
+            action_details = kwargs.get(
+                'action_details', {
+                    "old": "",
+                    "new": content_base_instruction.instruction
+                })
 
         dto = CreateRecentActivityDTO(
             action_type="U",
@@ -184,7 +195,13 @@ class ContentBaseLinkObserver(EventObserver):
 
         content_base = content_base_link.content_base
         intelligence = content_base.intelligence
-        action_details = kwargs.get('action_details', {})
+        action_details = kwargs.get(
+            'action_details',
+            {
+                "old": "",
+                "new": content_base_link.link
+            }
+        )
 
         if content_base.is_router:
             integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)

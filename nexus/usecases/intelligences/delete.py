@@ -84,9 +84,19 @@ class DeleteContentBaseUseCase():
 
         return True
 
-    def bulk_delete_instruction_by_id(self, content_base, ids: List[int]):
+    def bulk_delete_instruction_by_id(self, content_base, ids: List[int], user):
         for instruction_id in ids:
             instruction = content_base.instructions.get(id=instruction_id)
+            self.event_manager_notify(
+                event="contentbase_instruction_activity",
+                content_base_instruction=instruction,
+                action_type="D",
+                user=user,
+                action_details={
+                    "old": instruction.instruction,
+                    "new": ""
+                }
+            )
             instruction.delete()
         content_base.refresh_from_db()
 
