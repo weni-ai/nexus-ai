@@ -73,7 +73,7 @@ class PreClassification:
     def pre_classification_route(self) -> bool:
         if self.safety_check(start_flow=True):
             return self.flow_started
-        if self.prompt_guard(tart_flow=True):
+        if self.prompt_guard(start_flow=True):
             return self.flow_started
         return self.flow_started
 
