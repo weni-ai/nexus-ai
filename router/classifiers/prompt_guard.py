@@ -30,6 +30,6 @@ class PromptGuard:
 
         response = self.request_safe_guard(message)
         classification = response.json()['output']['guardrails_classification']
-        if classification == "Injection":
+        if classification.lower() == "injection":
             return False
         return True
