@@ -1,3 +1,10 @@
+# 2.2.0
+## *Add*
+    - New recent activities
+## *Fix*
+    - Prompt guard response
+    - Missing action details on recent activities
+
 # 2.1.1
 ## *Fix*
     - Wrong message statement on safeguard methods
