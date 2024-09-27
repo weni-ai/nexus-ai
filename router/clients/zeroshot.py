@@ -8,6 +8,7 @@ from nexus.zeroshot.client import InvokeModel
 
 
 class NexusZeroshotClient:
+    print("[+ Calling Zeroshot in Nexus +]")
     def fast_predict(self, message: str, actions: List[Dict], language: str = "por"):
         zeroshot_data = {
             'context': 'Realizar atendimento ao cliente',
