@@ -918,6 +918,6 @@ class UploadFileView(views.APIView):
         file_name = storage.save(file.name, file)
         file_url = storage.url(file_name)
 
-        delete_file_task.apply_async((file_name,), countdown=86400)
+        delete_file_task.apply_async((file_name,), countdown=600)
 
         return Response({"file_url": file_url}, status=status.HTTP_201_CREATED)
