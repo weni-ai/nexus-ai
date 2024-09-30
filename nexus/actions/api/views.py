@@ -245,14 +245,22 @@ class FlowsViewset(
 
 class MessagePreviewView(APIView):
 
-    # TODO: Refactor this method to put the logic in a usecase/observers
     def post(self, request, *args, **kwargs):
         try:
+            flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+            flow_start = SimulateFlowStart(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
+            broadcast = SimulateBroadcast(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'), get_file_info)
+
+            content_base_repository = ContentBaseORMRepository()
+            message_logs_repository = MessageLogsRepository()
+
             data = request.data
 
             project_uuid = kwargs.get("project_uuid")
             text = data.get("text")
             contact_urn = data.get("contact_urn")
+            attachments = data.get("attachments", [])
+            metadata = data.get("metadata", {})
 
             project = projects.get_project_by_uuid(project_uuid)
 
@@ -265,15 +273,13 @@ class MessagePreviewView(APIView):
             )
 
             log_usecase = CreateLogUsecase()
-            log_usecase.create_message_log(text, contact_urn)
-
-            content_base_repository = ContentBaseORMRepository()
-            message_logs_repository = MessageLogsRepository()
 
             message = Message(
                 project_uuid=project_uuid,
                 text=text,
                 contact_urn=contact_urn,
+                attachments=attachments,
+                metadata=metadata
             )
 
             print(f"[+ Message: {message.text} - Contact: {message.contact_urn} - Project: {message.project_uuid} +]")
@@ -303,10 +309,6 @@ class MessagePreviewView(APIView):
 
             print(f"[+ LLM model: {llm_config.model}:{llm_config.model_version} +]")
 
-            broadcast = SimulateBroadcast(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'), get_file_info)
-            flow_start = SimulateFlowStart(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
-            flows_user_email = os.environ.get("FLOW_USER_EMAIL")
-
             pre_classification = PreClassification(
                 flows_repository=flows_repository,
                 message=message,
@@ -330,6 +332,8 @@ class MessagePreviewView(APIView):
             started_flow = classification_handler.non_custom_actions_preview()
             if started_flow:
                 return Response(started_flow)
+
+            log_usecase.create_message_log(text, contact_urn)
 
             classifier = ZeroshotClassifier(
                 chatbot_goal=agent.goal

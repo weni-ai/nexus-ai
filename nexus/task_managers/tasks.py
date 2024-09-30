@@ -8,6 +8,7 @@ from django.conf import settings
 
 from nexus.celery import app
 
+from nexus.storage import DeleteStorageFile
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 from nexus.task_managers.models import ContentBaseFileTaskManager, TaskManager
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
@@ -358,3 +359,9 @@ def update_healthcheck():
 def update_classification_healthcheck():
     classification_notify = ClassificationHealthCheck()
     classification_notify.check_service_health()
+
+
+@app.task(name='delete_attachment_preview_file')
+def delete_file_task(file_name):
+    deleter = DeleteStorageFile()
+    deleter.delete_file(file_name)
