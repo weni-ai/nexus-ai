@@ -109,6 +109,23 @@ def generate_env():
         "AWS_BEDROCK_ACCESS_KEY": "",
         "AWS_BEDROCK_SECRET_KEY": "",
         "USE_BEDROCK_WENIGPT": "",
+        "ZEROSHOT_BASE_NLP_URL": "",
+        "FLOWS_TOKEN_ZEROSHOT": "",
+        "ZEROSHOT_SUFFIX": "",
+        "ZEROSHOT_BEDROCK_AWS_KEY": "",
+        "ZEROSHOT_BASE_NLP_URL": "",
+        "ZEROSHOT_TOP_P": 0.1,
+        "ZEROSHOT_TOP_K": 10,
+        "ZEROSHOT_STOP": "",
+        "ZEROSHOT_TEMPERATURE": 10,
+        "ZEROSHOT_BEDROCK_MODEL_ID": "",
+        "ZEROSHOT_N": 1,
+        "ZEROSHOT_DO_SAMPLE": "",
+        "ZEROSHOT_TOKEN": "",
+        "ZEROSHOT_MAX_TOKENS": 20,
+        "ZEROSHOT_MODEL_BACKEND": "",
+        "ZEROSHOT_BEDROCK_AWS_SECRET": "",
+        "ZEROSHOT_BEDROCK_AWS_REGION": "",
     }
 
     with open(env_path, "w") as configfile:
