@@ -17,6 +17,14 @@ class TemplateType(models.Model):
 
 
 class Project(BaseModel, SoftDeleteModel):
+    SENTENX = "SENTENX"
+    BEDROCK = "BEDROCK"
+
+    INDEXER_CHOICES = (
+        (SENTENX, "Sentenx"),
+        (BEDROCK, "Bedrock"),
+    )
+
     name = models.CharField(max_length=255)
     org = models.ForeignKey(
         Org, on_delete=models.CASCADE, related_name='projects'
@@ -29,6 +37,7 @@ class Project(BaseModel, SoftDeleteModel):
     )
     is_template = models.BooleanField(default=False)
     brain_on = models.BooleanField(default=False)
+    indexer_database = models.CharField(max_length=15, choices=INDEXER_CHOICES, default=SENTENX)
 
     def __str__(self):
         return f'{self.uuid} - Project: {self.name} - Org: {self.org.name}'

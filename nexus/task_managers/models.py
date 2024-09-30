@@ -8,6 +8,7 @@ from nexus.intelligences.models import (
     ContentBaseLink,
 )
 from nexus.users.models import User
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 
 class TaskManager(models.Model):
@@ -24,6 +25,13 @@ class TaskManager(models.Model):
         (STATUS_WAITING, "Wait")
     ]
 
+    status_map = {
+        "STARTING": STATUS_LOADING,
+        "IN_PROGRESS": STATUS_PROCESSING,
+        "COMPLETE": STATUS_SUCCESS,
+        "FAILED": STATUS_FAIL,
+    }
+
     uuid = models.UUIDField(default=uuid.uuid4)
     created_at = models.DateTimeField(auto_now_add=True)
     end_at = models.DateTimeField(null=True, blank=True)
@@ -33,10 +41,21 @@ class TaskManager(models.Model):
 
 class ContentBaseFileTaskManager(TaskManager):
     content_base_file = models.ForeignKey(ContentBaseFile, on_delete=models.CASCADE, related_name="upload_tasks", blank=True, null=True)
+    ingestion_job_id = models.CharField(null=True)
 
     def update_status(self, new_status):
         self.status = new_status
         self.save(update_fields=["status"])
+
+    @property
+    def get_status(self):
+
+        if self.ingestion_job_id:
+            status = BedrockFileDatabase().get_bedrock_ingestion_status(self.ingestion_job_id)
+            if self.status != self.status_map.get(status):
+                self.update_status(status)
+
+        return self.status
 
 
 class ContentBaseTextTaskManager(TaskManager):

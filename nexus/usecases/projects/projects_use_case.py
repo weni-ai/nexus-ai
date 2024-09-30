@@ -1,6 +1,7 @@
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.projects.exceptions import ProjectDoesNotExist
+from nexus.intelligences.models import ContentBase, IntegratedIntelligence
 from nexus.usecases.intelligences.intelligences_dto import LLMDTO
 from nexus.usecases.users.get_by_email import get_by_email
 from nexus.usecases.template_type.template_type_usecase import TemplateTypeUseCase
@@ -14,6 +15,8 @@ from .create import ProjectAuthUseCase
 from nexus.usecases import orgs
 from nexus.events import event_manager
 from django.conf import settings
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
+from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 
 
 class ProjectsUseCase:
@@ -113,4 +116,17 @@ class ProjectsUseCase:
                 consumer_msg=auth_consumer_msg
             )
 
+        return project
+
+    def get_indexer_database(self, project_uuid: str):
+        project = self.get_by_uuid(project_uuid)
+        return {
+            Project.BEDROCK: BedrockFileDatabase,
+            Project.SENTENX: SentenXFileDataBase
+        }.get(project.indexer_database)
+
+    def get_project_by_content_base_uuid(self, content_base_uuid: str) -> Project:
+        content_base = ContentBase.objects.get(uuid=content_base_uuid)
+        intelligence = content_base.intelligence
+        project = IntegratedIntelligence.objects.get(intelligence=intelligence).project
         return project

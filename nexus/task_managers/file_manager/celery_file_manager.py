@@ -5,6 +5,9 @@ from nexus.task_managers.file_database.file_database import FileDataBase
 
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+
+from nexus.projects.models import Project
 
 
 class CeleryFileManager:
@@ -32,6 +35,18 @@ class CeleryFileManager:
             extension_file=extension_file,
         )
         content_base_file = CreateContentBaseFileUseCase().create_content_base_file(content_base_file=content_base_file_dto)
+        project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+
+        if project.indexer_database == Project.BEDROCK:
+            print("[+ 🦑 Using BEDROCK 🦑 +]")
+            tasks.bedrock_upload_file.delay(
+                pickled_file,
+                content_base_uuid,
+                user_email,
+                str(content_base_file.uuid),
+            )
+            return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}
+
         tasks.upload_file.delay(
             pickled_file,
             content_base_uuid,
