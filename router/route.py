@@ -4,6 +4,7 @@ from ftfy import fix_encoding
 
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.logs.entities import LogMetadata
+from router.classifiers.reflection import Reflection
 
 from router.dispatcher import dispatch
 from router.indexer import get_chunks
@@ -107,6 +108,15 @@ def route(
             )
 
             print(f"[+ LLM Response: {llm_response} +]")
+
+            reflection = Reflection(
+                message_text=message.text,
+                chunks_used=chunks,
+                llm_response=llm_response,
+                client=llm_client,
+                log_usecase=log_usecase
+            )
+            reflection.classify()
 
             metadata = LogMetadata(
                 agent_name=agent.name,
