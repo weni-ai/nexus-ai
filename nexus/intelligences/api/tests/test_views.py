@@ -22,11 +22,13 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
     IntelligenceFactory,
     IntegratedIntelligenceFactory,
     ContentBaseFactory,
-    ContentBaseTextFactory,
     ContentBaseLinkFactory,
 )
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
+from nexus.usecases.intelligences.create import create_base_brain_structure
+from nexus.usecases.users.tests.user_factory import UserFactory
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
 
 
 @skip("View Testing")
@@ -221,10 +223,18 @@ class TestContentBaseTextViewset(TestCase):
             'put': 'update',
             'delete': 'destroy'
         })
-        self.contentbasetext = ContentBaseTextFactory()
-        self.user = self.contentbasetext.created_by
-        self.content_base = self.contentbasetext.content_base
-        self.intelligence = self.content_base.intelligence
+
+        self.org = OrgFactory()
+        self.user = UserFactory()
+        self.project = self.org.projects.create(name="Project", created_by=self.user)
+
+        self.org.authorizations.create(user=self.user, role=3)
+        self.project.authorizations.create(user=self.user, role=3)
+
+        self.integrated_intelligence = create_base_brain_structure(self.project)
+        self.intelligence = self.integrated_intelligence.intelligence
+        self.content_base = self.intelligence.contentbases.get()
+        self.contentbasetext = self.content_base.contentbasetexts.create(text="Text Test", created_by=self.user)
         self.url = f'{self.content_base.uuid}/content-bases-text'
 
     def test_get_queryset(self):
