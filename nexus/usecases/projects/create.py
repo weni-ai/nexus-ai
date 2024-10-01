@@ -91,9 +91,9 @@ class CreateIntegratedFeatureUseCase:
 
         project_uuid = integrated_feature_dto.project_uuid
         feature_uuid = integrated_feature_dto.feature_uuid
-        action = integrated_feature_dto.current_version_setup
+        action_list = integrated_feature_dto.current_version_setup
 
-        if action is None:
+        if not action_list:
             raise ValueError("Action is required")
 
         try:
@@ -106,7 +106,7 @@ class CreateIntegratedFeatureUseCase:
         integrated_feature, created = IntegratedFeature.objects.get_or_create(
             project=project,
             feature_uuid=feature_uuid,
-            current_version_setup=action
+            current_version_setup=action_list
         )
 
         if not created and integrated_feature.is_integrated:
@@ -123,42 +123,54 @@ class CreateIntegratedFeatureUseCase:
         existing_integration = integrated_feature_flow_dto.integrated_feature
 
         if existing_integration and not existing_integration.is_integrated:
-            created_flow = self._create_flow(integrated_feature_flow_dto)
-            return created_flow
+            created_flows = self._create_flows(integrated_feature_flow_dto)
+            return created_flows
 
+        updated_flows = []
         for flow in flows:
             if existing_integration and existing_integration.is_integrated:
                 updated_flow = self._update_flow(flow, integrated_feature_flow_dto)
-                return updated_flow
+                updated_flows.append(updated_flow)
 
-        raise ValueError("No valid flows found")
+        if not updated_flows:
+            raise ValueError("No valid flows found")
+
+        return updated_flows
 
     def _update_flow(self, flow, integrated_feature_flow_dto):
-        integrated_feature = integrated_feature_flow_dto.integrated_feature
-        update_dto = UpdateFlowDTO(
-            flow_uuid=flow.get("uuid"),
-            name=integrated_feature.current_version_setup.get("name"),
-            prompt=integrated_feature.current_version_setup.get("prompt"),
-        )
-        usecase = UpdateFlowsUseCase()
-        return usecase.update_flow(flow_dto=update_dto)
 
-    def _create_flow(self, integrated_feature_flow_dto):
-        create_flow_dto = integrated_feature_flow_dto.action_dto
+        update_flow_dtos = integrated_feature_flow_dto.update_dto
 
-        if not create_flow_dto:
+        if not update_flow_dtos:
+            raise ValueError("No update DTOs found")
+
+        for update_dto in update_flow_dtos:
+            if update_dto.flow_uuid == flow.get("uuid"):
+                usecase = UpdateFlowsUseCase()
+                updated_flow = usecase.update_flow(flow_dto=update_dto)
+                return updated_flow
+
+        raise ValueError("No matching flow found for update")
+
+    def _create_flows(self, integrated_feature_flow_dto):
+        create_flow_dtos = integrated_feature_flow_dto.action_dto
+
+        if not create_flow_dtos:
             raise ValueError("Flows not found")
 
         project = get_project_by_uuid(integrated_feature_flow_dto.project_uuid)
         usecase = CreateFlowsUseCase()
 
-        created_flow = usecase.create_flow(
-            create_dto=create_flow_dto,
-            project=project
-        )
+        created_flows = []
+        for create_flow_dto in create_flow_dtos:
+            created_flow = usecase.create_flow(
+                create_dto=create_flow_dto,
+                project=project
+            )
+            created_flows.append(created_flow)
 
         integrated_feature = integrated_feature_flow_dto.integrated_feature
         integrated_feature.is_integrated = True
         integrated_feature.save(update_fields=["is_integrated"])
 
-        return created_flow
+        return created_flows
