@@ -64,6 +64,9 @@ class UpdateFlowsUseCase():
     ) -> Flow:
         flow: Flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(flow_dto.flow_uuid)
 
+        if flow.editable is False:
+            raise ValueError("Flow is not editable")
+
         values_before_update = model_to_dict(flow)
         for attr, value in flow_dto.dict().items():
             setattr(flow, attr, value)
