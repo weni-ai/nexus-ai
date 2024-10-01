@@ -5,7 +5,7 @@ from nexus.projects.project_dto import (
     ProjectAuthCreationDTO,
 )
 from nexus.usecases.actions.create import CreateFlowsUseCase
-from nexus.usecases.actions.update import UpdateFlowDTO, UpdateFlowsUseCase
+from nexus.usecases.actions.update import UpdateFlowsUseCase
 from nexus.usecases.projects.dto import IntegratedFeatureFlowDTO, IntegratedFeatureDTO
 
 from nexus.users.models import User
