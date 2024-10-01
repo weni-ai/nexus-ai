@@ -98,6 +98,7 @@ class ContentBaseLink(BaseModel, SoftDeleteModel):
     content_base = models.ForeignKey(
         ContentBase, related_name='contentbaselinks', on_delete=models.CASCADE
     )
+    name = models.CharField(null=True, help_text="used to manage file with content from the link in bedrock")
 
 
 class ContentBaseText(BaseModel, SoftDeleteModel):

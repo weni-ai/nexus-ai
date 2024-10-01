@@ -302,6 +302,68 @@ def send_link(link: str, user_email: str, content_base_link_uuid: str):
     }
     return response
 
+def url_to_markdown(link: str, link_uuid: str) -> str:
+    from typing import List
+    from langchain_community.document_loaders import AsyncChromiumLoader
+    from langchain_community.document_transformers import Html2TextTransformer
+
+    links: List[str] = [link]
+
+    loader = AsyncChromiumLoader(links)
+    docs = loader.load()
+
+    html2text = Html2TextTransformer()
+    docs_transformed = html2text.transform_documents(docs)
+
+    filename = f"{link_uuid}.md"
+
+    with open(f"/tmp/{filename}", "w") as file:
+        file.write(docs_transformed[0].page_content)
+    
+    return filename
+
+
+@app.task
+def bedrock_send_link(link: str, user_email: str, content_base_link_uuid: str):
+    content_base_link = ContentBaseLink.objects.get(uuid=content_base_link_uuid)
+    content_base_uuid = str(content_base_link.content_base.uuid)
+    task_manager = CeleryTaskManagerUseCase().create_celery_link_manager(content_base_link=content_base_link)
+
+    filename = url_to_markdown(link, str(content_base_link.uuid))
+
+    file_database = BedrockFileDatabase()
+
+    with open(f"/tmp/{filename}", "rb") as file:
+        file_database_response = file_database.add_file(file, content_base_uuid, content_base_link_uuid)
+
+    if file_database_response.status != 0:
+        file_database.delete_file_and_metadata(content_base_uuid, file_database_response.file_name)
+        return {
+            "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
+            "error": file_database_response.err
+        }
+    
+    # TODO: usecase
+    content_base_link.name = file_database_response.file_name
+    content_base_link.save(update_fields=['name'])
+
+    print("[+ Link File was added +}")
+
+    task_manager = CeleryTaskManagerUseCase().create_celery_link_manager(content_base_link=content_base_link)
+    start_ingestion_job(str(task_manager.uuid), "link")
+
+    response = {
+        "task_uuid": task_manager.uuid,
+        "task_status": task_manager.status,
+        "content_base_text": {
+            "uuid": content_base_link.uuid,
+            "extension_file": 'url',
+            "link": content_base_link.link,
+        }
+    }
+
+    return response
+
 
 @app.task(name="create_wenigpt_logs")
 def create_wenigpt_logs(log: Dict):

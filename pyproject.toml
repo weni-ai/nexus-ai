@@ -37,6 +37,12 @@ uvicorn = "^0.29.0"
 elastic-apm = "^6.22.2"
 django-prometheus = "^2.3.1"
 prometheus-client = "^0.20.0"
+langchain = "^0.3.1"
+langchain-community = "^0.3.1"
+unstructured = "^0.15.13"
+playwright = "^1.47.0"
+ipython = "^8.27.0"
+html2text = "^2024.2.26"
 
 
 [tool.poetry.group.dev.dependencies]

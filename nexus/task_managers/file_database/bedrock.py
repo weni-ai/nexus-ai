@@ -79,7 +79,7 @@ class BedrockFileDatabase(FileDataBase):
             self.add_metadata_json_file(file_name, content_base_uuid, file_uuid)
             self.start_bedrock_ingestion()  # TODO: maybe use one knowledge base for each Project
 
-        except ZeroDivisionError as exception:
+        except Exception as exception:
             response.status = 1
             response.err = str(exception)
 
@@ -100,6 +100,13 @@ class BedrockFileDatabase(FileDataBase):
             Bucket=self.bucket_name,
             Key=file_metadata,
         )
+        print("___________________________________________________")
+        print("DELETE FILE AND METADATA")
+        print("Filename: ", filename)
+        print("Filename: ", file)
+        print("Filename: ", file_metadata)
+        print("Filename: ", self.bucket_name)
+        print("___________________________________________________")
 
         file_status = response_file.get("DeleteMarker")
         metadata_status = response_metadata.get("DeleteMarker")

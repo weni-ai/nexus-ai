@@ -32,13 +32,14 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.usecases.task_managers.file_database import get_gpt_by_content_base_uuid
 
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
-from nexus.task_managers.tasks import upload_text_file, send_link, bedrock_upload_text_file
+from nexus.task_managers.tasks import upload_text_file, send_link, bedrock_upload_text_file, bedrock_send_link
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.projects.models import Project
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 
 class IntelligencesViewset(
@@ -645,11 +646,20 @@ class ContentBaseLinkViewset(ModelViewSet):
             )
             content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
 
-            send_link.delay(
-                link=link,
-                user_email=user_email,
-                content_base_link_uuid=str(content_base_link.uuid)
-            )
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+
+            if project.indexer_database == Project.BEDROCK:
+                bedrock_send_link.delay(
+                    link=link,
+                    user_email=user_email,
+                    content_base_link_uuid=str(content_base_link.uuid)
+                )
+            else:
+                send_link.delay(
+                    link=link,
+                    user_email=user_email,
+                    content_base_link_uuid=str(content_base_link.uuid)
+                )
 
             response = CreatedContentBaseLinkSerializer(content_base_link).data
 
@@ -661,6 +671,7 @@ class ContentBaseLinkViewset(ModelViewSet):
         user = self.request.user
         user_email: str = user.email
         contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
+        content_base_uuid: str = kwargs.get('content_base_uuid')
 
         use_case = intelligences.RetrieveContentBaseLinkUseCase()
         content_base_file = use_case.get_contentbaselink(
@@ -668,12 +679,23 @@ class ContentBaseLinkViewset(ModelViewSet):
             user_email=user_email
         )
 
-        sentenx_file_database = SentenXFileDataBase()
-        sentenx_file_database.delete(
-            content_base_uuid=str(content_base_file.content_base.uuid),
-            content_base_file_uuid=str(content_base_file.uuid),
-            filename=content_base_file.link
-        )
+        project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+
+        if project.indexer_database == Project.BEDROCK:
+            file_database = BedrockFileDatabase()
+            file_database.delete(
+                content_base_uuid=str(content_base_file.content_base.uuid),
+                content_base_file_uuid=str(content_base_file.uuid),
+                filename=str(content_base_file.name)
+            )
+
+        else:
+            sentenx_file_database = SentenXFileDataBase()
+            sentenx_file_database.delete(
+                content_base_uuid=str(content_base_file.content_base.uuid),
+                content_base_file_uuid=str(content_base_file.uuid),
+                filename=content_base_file.link
+            )
 
         event_manager.notify(
             event="contentbase_link_activity",
