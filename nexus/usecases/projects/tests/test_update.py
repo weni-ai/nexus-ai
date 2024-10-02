@@ -41,47 +41,52 @@ class UpdateIntegratedFeatureTestCase(TestCase):
         self.integrated_feature = IntegratedFeatureFactory(
             is_integrated=True
         )
+        current_version_setup = self.integrated_feature.current_version_setup[0]
         self.related_flow = FlowFactory(
-            name=self.integrated_feature.current_version_setup['name'],
-            prompt=self.integrated_feature.current_version_setup['prompt'],
+            name=current_version_setup['name'],
+            prompt=current_version_setup['prompt'],
         )
         self.project = ProjectFactory()
         self.usecase = UpdateIntegratedFeatureUseCase()
         self.project = self.integrated_feature.project
 
     def test_update(self):
-        root_flow_uuid = self.integrated_feature.current_version_setup['root_flow_uuid']
+        root_flow_uuid = self.integrated_feature.current_version_setup[0]['root_flow_uuid']
         name = "new name"
         prompt = "new prompt"
 
         consumer_msg = {
             'project_uuid': str(self.project.uuid),
             'feature_uuid': self.integrated_feature.feature_uuid,
-            'action': {
-                'base_uuid': root_flow_uuid,
-                'name': name,
-                'prompt': prompt
-            }
+            'action': [
+                {
+                    'base_uuid': root_flow_uuid,
+                    'name': name,
+                    'prompt': prompt
+                }
+            ]
         }
 
         integrated_feature = self.usecase.update_integrated_feature(consumer_msg)
 
-        self.assertEqual(integrated_feature.current_version_setup['name'], name)
-        self.assertEqual(integrated_feature.current_version_setup['prompt'], prompt)
+        self.assertEqual(integrated_feature.current_version_setup[0]['name'], name)
+        self.assertEqual(integrated_feature.current_version_setup[0]['prompt'], prompt)
 
     def test_update_integrated_flow(self):
-        root_flow_uuid = self.integrated_feature.current_version_setup['root_flow_uuid']
+        root_flow_uuid = self.integrated_feature.current_version_setup[0]['root_flow_uuid']
         name = "new name"
         prompt = "new prompt"
 
         consumer_msg = {
             'project_uuid': str(self.project.uuid),
             'feature_uuid': self.integrated_feature.feature_uuid,
-            'action': {
-                'root_flow_uuid': root_flow_uuid,
-                'name': name,
-                'prompt': prompt
-            }
+            'action': [
+                {
+                    'root_flow_uuid': root_flow_uuid,
+                    'name': name,
+                    'prompt': prompt
+                }
+            ]
         }
 
         updated_feature = self.usecase.update_integrated_feature(consumer_msg)
@@ -108,5 +113,4 @@ class UpdateIntegratedFeatureTestCase(TestCase):
         returned_flow = update_flow_usecase.integrate_feature_flows(
             integrated_feature_flow_dto=flow_dto
         )
-
-        self.assertEqual(returned_flow.name, name)
+        self.assertEqual(returned_flow[0].name, name)
