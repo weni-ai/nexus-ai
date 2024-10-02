@@ -6,6 +6,15 @@ import requests
 
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.file_database import FileResponseDTO
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.projects.models import Project
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
+from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
+
+from router.entities import ProjectDTO
+from router.repositories.orm import ProjectORMRepository
 
 
 class BedrockFileDatabaseTestCase(TestCase):
@@ -70,11 +79,6 @@ class BedrockFileDatabaseTestCase(TestCase):
         self.assertEquals(response.status_code, 200)
 
 
-from nexus.usecases.orgs.tests.org_factory import OrgFactory
-from nexus.projects.models import Project
-from router.entities import ProjectDTO
-from router.repositories.orm import ProjectORMRepository
-
 class TestChangesInProjectBedrockTestCase(TestCase):
     def setUp(self) -> None:
         self.org = OrgFactory()
@@ -83,12 +87,29 @@ class TestChangesInProjectBedrockTestCase(TestCase):
             indexer_database=Project.BEDROCK,
             created_by=self.org.created_by
         )
+        self.project2 = ProjectFactory()
+        self.project_uuid = str(self.project.uuid)
+        self.project_uuid2 = str(self.project2.uuid)
 
     def test_project_orm_repository(self):
-        project_uuid = str(self.project.uuid)
-        project_dto: ProjectDTO = ProjectORMRepository().get_project(project_uuid)
+        
+        project_dto: ProjectDTO = ProjectORMRepository().get_project(self.project_uuid)
 
         self.assertIsInstance(project_dto, ProjectDTO)
-        self.assertEquals(project_uuid, project_dto.uuid)
+        self.assertEquals(self.project_uuid, project_dto.uuid)
         self.assertEquals(self.project.name, project_dto.name)
         self.assertEquals(self.project.indexer_database, project_dto.indexer_database)
+
+    def test_get_indexer_database(self):
+        usecase = ProjectsUseCase()
+        bedrock = usecase.get_indexer_database_by_uuid(self.project_uuid)
+        sentenx = usecase.get_indexer_database_by_uuid(self.project_uuid2)
+
+        self.assertIsInstance(bedrock(), BedrockFileDatabase)
+        self.assertIsInstance(sentenx(), SentenXFileDataBase)
+
+        bedrock = usecase.get_indexer_database_by_project(self.project)
+        sentenx = usecase.get_indexer_database_by_project(self.project2)
+
+        self.assertIsInstance(bedrock(), BedrockFileDatabase)
+        self.assertIsInstance(sentenx(), SentenXFileDataBase)
