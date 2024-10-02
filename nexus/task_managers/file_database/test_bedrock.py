@@ -68,3 +68,27 @@ class BedrockFileDatabaseTestCase(TestCase):
         print(response.text)
         self.assertIsInstance(url, str)
         self.assertEquals(response.status_code, 200)
+
+
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.projects.models import Project
+from router.entities import ProjectDTO
+from router.repositories.orm import ProjectORMRepository
+
+class TestChangesInProjectBedrockTestCase(TestCase):
+    def setUp(self) -> None:
+        self.org = OrgFactory()
+        self.project = self.org.projects.create(
+            name="Bedrock 1",
+            indexer_database=Project.BEDROCK,
+            created_by=self.org.created_by
+        )
+
+    def test_project_orm_repository(self):
+        project_uuid = str(self.project.uuid)
+        project_dto: ProjectDTO = ProjectORMRepository().get_project(project_uuid)
+
+        self.assertIsInstance(project_dto, ProjectDTO)
+        self.assertEquals(project_uuid, project_dto.uuid)
+        self.assertEquals(self.project.name, project_dto.name)
+        self.assertEquals(self.project.indexer_database, project_dto.indexer_database)
