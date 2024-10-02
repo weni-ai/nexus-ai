@@ -72,6 +72,8 @@ class Flow(models.Model):
         default=Group.CUSTOM.value
     )
 
+    editable = models.BooleanField(default=True)
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
