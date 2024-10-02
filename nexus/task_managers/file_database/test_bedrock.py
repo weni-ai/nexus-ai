@@ -113,3 +113,51 @@ class TestChangesInProjectBedrockTestCase(TestCase):
 
         self.assertIsInstance(bedrock(), BedrockFileDatabase)
         self.assertIsInstance(sentenx(), SentenXFileDataBase)
+
+from nexus.task_managers.tasks_bedrock import (
+    check_ingestion_job_status,
+    start_ingestion_job,
+)
+
+from nexus.usecases.intelligences.tests.intelligence_factory import (
+    IntelligenceFactory,
+    ContentBaseFactory,
+    ContentBaseTextFactory,
+    ContentBaseFileFactory,
+    ContentBaseLinkFactory,
+    LLMFactory,
+    ContentBaseInstructionFactory,
+)
+from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
+from nexus.task_managers.models import TaskManager
+from unittest.mock import patch
+
+class TestBedrockTasksTestCase(TestCase):
+    def setUp(self) -> None:
+        self.content_base_file = ContentBaseFileFactory()
+        self.task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(
+            content_base_file=self.content_base_file
+        )
+        self.celery_task_manager_uuid = str(self.task_manager.uuid)
+
+    def test_check_ingestion_job_status(self):
+        self.assertEquals(self.task_manager.status, TaskManager.STATUS_WAITING)
+        ingestion_job_id = "5OL7KTHSWZ"
+        file_type = "file"
+
+        response = check_ingestion_job_status(self.celery_task_manager_uuid, ingestion_job_id,file_type=file_type)
+        self.task_manager.refresh_from_db()
+
+        self.assertTrue(response)
+        self.assertEquals(self.task_manager.status, TaskManager.STATUS_SUCCESS)
+
+    @patch("nexus.task_managers.tasks_bedrock.check_ingestion_job_status")
+    def test_start_ingestion_job(self, _):
+        self.assertEquals(self.task_manager.status, TaskManager.STATUS_WAITING)
+        file_type = "file"
+
+        start_ingestion_job(self.celery_task_manager_uuid, file_type=file_type)
+
+        self.task_manager.refresh_from_db()
+        print(self.task_manager.ingestion_job_id)
+        self.assertEquals(self.task_manager.status, TaskManager.STATUS_PROCESSING)
