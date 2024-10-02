@@ -37,8 +37,6 @@ from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.intelligences.retrieve import get_file_info
 
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-
 from nexus.intelligences.llms.client import LLMClient
 
 from nexus.authentication import AUTHENTICATION_CLASSES

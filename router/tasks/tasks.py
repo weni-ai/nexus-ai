@@ -5,7 +5,6 @@ from typing import Dict
 
 from django.conf import settings
 
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid

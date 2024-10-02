@@ -11,7 +11,7 @@ class CeleryFileManager:
 
     def __init__(
         self,
-        file_database: FileDataBase=None,
+        file_database: FileDataBase = None,
     ):
         self._file_database = file_database
 

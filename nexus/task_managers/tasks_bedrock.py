@@ -9,7 +9,7 @@ from nexus.celery import app
 from nexus.task_managers.models import ContentBaseFileTaskManager, TaskManager
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
-from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO, UpdateLLMDTO
+from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
 from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 

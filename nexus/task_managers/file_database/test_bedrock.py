@@ -1,17 +1,24 @@
+import requests
 from uuid import uuid4
-from typing import Dict
+from unittest.mock import patch
+
 from django.test import TestCase
 
-import requests
 
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.file_database import FileResponseDTO
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.projects.models import Project
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
-from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFileFactory
+from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
+from nexus.task_managers.models import TaskManager
+from nexus.task_managers.tasks_bedrock import (
+    check_ingestion_job_status,
+    start_ingestion_job,
+)
 
 from router.entities import ProjectDTO
 from router.repositories.orm import ProjectORMRepository
@@ -92,7 +99,7 @@ class TestChangesInProjectBedrockTestCase(TestCase):
         self.project_uuid2 = str(self.project2.uuid)
 
     def test_project_orm_repository(self):
-        
+
         project_dto: ProjectDTO = ProjectORMRepository().get_project(self.project_uuid)
 
         self.assertIsInstance(project_dto, ProjectDTO)
@@ -114,23 +121,6 @@ class TestChangesInProjectBedrockTestCase(TestCase):
         self.assertIsInstance(bedrock(), BedrockFileDatabase)
         self.assertIsInstance(sentenx(), SentenXFileDataBase)
 
-from nexus.task_managers.tasks_bedrock import (
-    check_ingestion_job_status,
-    start_ingestion_job,
-)
-
-from nexus.usecases.intelligences.tests.intelligence_factory import (
-    IntelligenceFactory,
-    ContentBaseFactory,
-    ContentBaseTextFactory,
-    ContentBaseFileFactory,
-    ContentBaseLinkFactory,
-    LLMFactory,
-    ContentBaseInstructionFactory,
-)
-from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
-from nexus.task_managers.models import TaskManager
-from unittest.mock import patch
 
 class TestBedrockTasksTestCase(TestCase):
     def setUp(self) -> None:
@@ -145,7 +135,7 @@ class TestBedrockTasksTestCase(TestCase):
         ingestion_job_id = "5OL7KTHSWZ"
         file_type = "file"
 
-        response = check_ingestion_job_status(self.celery_task_manager_uuid, ingestion_job_id,file_type=file_type)
+        response = check_ingestion_job_status(self.celery_task_manager_uuid, ingestion_job_id, file_type=file_type)
         self.task_manager.refresh_from_db()
 
         self.assertTrue(response)

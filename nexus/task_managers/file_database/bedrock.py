@@ -8,6 +8,7 @@ from django.conf import settings
 
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 
+
 class BedrockFileDatabase(FileDataBase):
     def __init__(self) -> None:
         self.data_source_id = settings.AWS_BEDROCK_DATASOURCE_ID
@@ -66,17 +67,13 @@ class BedrockFileDatabase(FileDataBase):
         try:
             print("[+ BEDROCK: Adding file to bucket +]")
 
-            print("___________FILETYPE_______________")
-            print(type(file))
-            print("__________________________________")
-
             file_name = self.__create_unique_filename(basename(file.name))
             file_path = f"{content_base_uuid}/{file_name}"
 
             response = FileResponseDTO(
                 status=0,
-                file_url = f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com/{file_path}",
-                file_name = file_name
+                file_url=f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com/{file_path}",
+                file_name=file_name
             )
 
             self.s3_client.upload_fileobj(file, self.bucket_name, file_path)
