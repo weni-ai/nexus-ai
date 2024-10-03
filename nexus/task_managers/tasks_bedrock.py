@@ -75,8 +75,10 @@ def bedrock_upload_file(
     user_email: str,
     content_base_file_uuid: str,
 ):
-    print("[+ BEDROCK: Task to Upload File +]")
+    print("[+ 🦑 BEDROCK: Task to Upload File +]")
+
     file = pickle.loads(file)
+
     file_database = BedrockFileDatabase()
     file_database_response = file_database.add_file(file, content_base_uuid, content_base_file_uuid)
 
@@ -87,7 +89,7 @@ def bedrock_upload_file(
             "error": file_database_response.err
         }
 
-    print("[+ File was added +]")
+    print("[+ 🦑 BEDROCK: File was added +]")
 
     content_base_file_dto = UpdateContentBaseFileDTO(
         file_url=file_database_response.file_url,

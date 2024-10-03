@@ -75,7 +75,6 @@ class BedrockFileDatabase(FileDataBase):
                 file_url=f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com/{file_path}",
                 file_name=file_name
             )
-
             self.s3_client.upload_fileobj(file, self.bucket_name, file_path)
             self.add_metadata_json_file(file_name, content_base_uuid, file_uuid)
 
