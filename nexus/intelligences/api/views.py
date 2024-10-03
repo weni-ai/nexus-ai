@@ -33,10 +33,12 @@ from nexus.usecases.task_managers.file_database import get_gpt_by_content_base_u
 
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 from nexus.task_managers.tasks import upload_text_file, send_link
+from nexus.task_managers.tasks_bedrock import bedrock_upload_text_file
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.projects.models import Project
 
 
 class IntelligencesViewset(
@@ -401,6 +403,8 @@ class ContentBaseTextViewset(
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def create(self, request, content_base_uuid: str):
+        from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+
         try:
             user_email = request.user.email
 
@@ -409,6 +413,7 @@ class ContentBaseTextViewset(
 
             text = serializer.validated_data.get('text')
             content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
             cb_dto = intelligences.ContentBaseDTO(
                 uuid=content_base.uuid,
                 title=content_base.title,
@@ -425,11 +430,19 @@ class ContentBaseTextViewset(
                 content_base_text_dto=cbt_dto
             )
 
-            upload_text_file.delay(
-                content_base_dto=cb_dto.__dict__,
-                content_base_text_uuid=content_base_text.uuid,
-                text=text
-            )
+            if project.indexer_database == Project.BEDROCK:
+                bedrock_upload_text_file.delay(
+                    content_base_dto=cb_dto.__dict__,
+                    content_base_text_uuid=str(content_base_text.uuid),
+                    text=text
+                )
+
+            else:
+                upload_text_file.delay(
+                    content_base_dto=cb_dto.__dict__,
+                    content_base_text_uuid=content_base_text.uuid,
+                    text=text
+                )
 
             response = ContentBaseTextSerializer(content_base_text).data
 
