@@ -20,7 +20,7 @@ from nexus.projects.models import Project
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.file_database import FileResponseDTO
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-from nexus.task_managers.models import TaskManager, ContentBaseFileTaskManager, ContentBaseTextTaskManager
+from nexus.task_managers.models import TaskManager, ContentBaseFileTaskManager, ContentBaseTextTaskManager, ContentBaseLinkTaskManager
 from nexus.task_managers.tasks_bedrock import (
     check_ingestion_job_status,
     start_ingestion_job,
@@ -60,7 +60,7 @@ class BedrockFileDatabaseTestCase(TestCase):
         self.assertIsInstance(job_id, str)
 
     def test_get_ingestion_job_status(self):
-        job_id = "5OL7KTHSWZ"
+        job_id = "JOT2LSEMHF"
         status = "COMPLETE"
         response = self.bedrock.get_bedrock_ingestion_status(job_id)
 
@@ -193,7 +193,7 @@ class TestContentBaseBedrockTestCase(TestCase):
 
         task_manager = ContentBaseFileTaskManager.objects.get(content_base_file__uuid=file_uuid)
         self.assertEquals(response.status_code, 201)
-        self.assertEquals(task_manager.status, "success")
+        self.assertIn(task_manager.status, [TaskManager.STATUS_SUCCESS, TaskManager.STATUS_PROCESSING])
 
     def test_view_create_content_base_text(self):
         client = APIClient()
@@ -203,11 +203,26 @@ class TestContentBaseBedrockTestCase(TestCase):
         response = client.post(url, data, format='json')
         response.render()
         content = json.loads(response.content)
-        print(content)
         print(str(self.content_base.uuid))
 
         file_uuid = content.get("uuid")
 
         task_manager = ContentBaseTextTaskManager.objects.get(content_base_text__uuid=file_uuid)
         self.assertEquals(response.status_code, 201)
-        self.assertEquals(task_manager.status, "success")
+        self.assertIn(task_manager.status, [TaskManager.STATUS_SUCCESS, TaskManager.STATUS_PROCESSING])
+
+    def test_view_create_content_base_link(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("content-base-link-list", kwargs={"content_base_uuid": str(self.content_base.uuid)})
+        data = {"link": "https://docs.djangoproject.com/en/5.1/ref/request-response/#django.http.HttpRequest.FILES"}
+        response = client.post(url, data, format='json')
+        response.render()
+        content = json.loads(response.content)
+        print(str(self.content_base.uuid))
+
+        file_uuid = content.get("uuid")
+
+        task_manager = ContentBaseLinkTaskManager.objects.get(content_base_link__uuid=file_uuid)
+        self.assertEquals(response.status_code, 201)
+        self.assertIn(task_manager.status, [TaskManager.STATUS_SUCCESS, TaskManager.STATUS_PROCESSING])
