@@ -20,7 +20,7 @@ from nexus.projects.models import Project
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.file_database import FileResponseDTO
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-from nexus.task_managers.models import TaskManager, ContentBaseFileTaskManager
+from nexus.task_managers.models import TaskManager, ContentBaseFileTaskManager, ContentBaseTextTaskManager
 from nexus.task_managers.tasks_bedrock import (
     check_ingestion_job_status,
     start_ingestion_job,
@@ -138,7 +138,7 @@ class TestBedrockTasksTestCase(TestCase):
 
     def test_check_ingestion_job_status(self):
         self.assertEquals(self.task_manager.status, TaskManager.STATUS_WAITING)
-        ingestion_job_id = "5OL7KTHSWZ"
+        ingestion_job_id = "IRHKH8JT0J"
         file_type = "file"
 
         response = check_ingestion_job_status(self.celery_task_manager_uuid, ingestion_job_id, file_type=file_type)
@@ -159,7 +159,7 @@ class TestBedrockTasksTestCase(TestCase):
         self.assertEquals(self.task_manager.status, TaskManager.STATUS_PROCESSING)
 
 
-class TestContentBaseFileViewsetTestCase(TestCase):
+class TestContentBaseBedrockTestCase(TestCase):
     def setUp(self) -> None:
         self.factory = APIRequestFactory()
         self.org = OrgFactory()
@@ -175,7 +175,7 @@ class TestContentBaseFileViewsetTestCase(TestCase):
         self.content_base_uuid = str(self.content_base.uuid)
         self.url = f'{self.content_base.uuid}/content-bases-file/'
 
-    def test_create(self):
+    def test_view_create_content_base_file(self):
         client = APIClient()
         client.force_authenticate(user=self.user)
         url = reverse("content-base-file-list", kwargs={"content_base_uuid": str(self.content_base.uuid)})
@@ -192,5 +192,22 @@ class TestContentBaseFileViewsetTestCase(TestCase):
         file_uuid = content.get("uuid")
 
         task_manager = ContentBaseFileTaskManager.objects.get(content_base_file__uuid=file_uuid)
+        self.assertEquals(response.status_code, 201)
+        self.assertEquals(task_manager.status, "success")
+
+    def test_view_create_content_base_text(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("content-bases-text-list", kwargs={"content_base_uuid": str(self.content_base.uuid)})
+        data = {"text": "Just nod if you can hear me"}
+        response = client.post(url, data, format='json')
+        response.render()
+        content = json.loads(response.content)
+        print(content)
+        print(str(self.content_base.uuid))
+
+        file_uuid = content.get("uuid")
+
+        task_manager = ContentBaseTextTaskManager.objects.get(content_base_text__uuid=file_uuid)
         self.assertEquals(response.status_code, 201)
         self.assertEquals(task_manager.status, "success")
