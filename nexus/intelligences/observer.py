@@ -282,6 +282,13 @@ class ContentBaseObserver(EventObserver):
     ) -> None:
         self.intelligence_activity_message = intelligence_activity_message
 
+    def action_type_mapper(self, action_type):
+        return {
+            "C": "CREATE",
+            "U": "UPDATE",
+            "D": "DELETE"
+        }[action_type]
+
     def perform(
         self,
         contentbase,
@@ -314,6 +321,6 @@ class ContentBaseObserver(EventObserver):
                 org=org,
                 user=user,
                 entity_name=contentbase.title,
-                action=action_type,
+                action=self.action_type_mapper(action_type),
                 intelligence_activity_message=self.intelligence_activity_message
             )
