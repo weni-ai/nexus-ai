@@ -23,6 +23,7 @@ class CreateFlowDTO:
     prompt: str = None
     fallback: bool = False
     template: TemplateAction = None
+    editable: bool = True
 
 
 class CreateFlowsUseCase():

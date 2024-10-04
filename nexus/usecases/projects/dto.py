@@ -48,13 +48,16 @@ class IntegratedFeatureFlowDTO:
                 if template_uuid is not None:
                     template_action = TemplateAction.objects.get(uuid=current_setup_action.get('type'))
 
-                create_flow_dtos.append(CreateFlowDTO(
-                    flow_uuid=matching_flow.get("uuid"),
-                    name=current_setup_action.get("name"),
-                    prompt=current_setup_action.get('prompt'),
-                    project_uuid=self.project_uuid,
-                    template=template_action if template_uuid else None
-                ))
+                create_flow_dtos.append(
+                    CreateFlowDTO(
+                        flow_uuid=matching_flow.get("uuid"),
+                        name=current_setup_action.get("name"),
+                        prompt=current_setup_action.get('prompt'),
+                        project_uuid=self.project_uuid,
+                        template=template_action if template_uuid else None,
+                        editable=False
+                    )
+                )
 
         return create_flow_dtos
 
