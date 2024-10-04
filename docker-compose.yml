@@ -58,6 +58,28 @@ services:
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.16
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - http.port=9200
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - ES_HEAP_SIZE=1g
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - http.cors.enabled=true
+      - http.cors.allow-origin="*"
+      - http.cors.allow-headers=X-Requested-With,X-Auth-Token,Content-Type,Content-Length,Authorization
+      - http.cors.allow-credentials=true
+      - network.publish_host=localhost
+      - xpack.security.enabled=false
+    networks:
+      - default
+      - nexus
+
 networks:
   nexus:
     external: true

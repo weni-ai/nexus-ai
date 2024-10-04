@@ -126,6 +126,7 @@ def generate_env():
         "ZEROSHOT_MODEL_BACKEND": "",
         "ZEROSHOT_BEDROCK_AWS_SECRET": "",
         "ZEROSHOT_BEDROCK_AWS_REGION": "",
+        "ZEROSHOT_LOG_SAVE_ELASTIC": False,
     }
 
     with open(env_path, "w") as configfile:

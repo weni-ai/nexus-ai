@@ -22,6 +22,8 @@ from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFile
 from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
 from nexus.usecases.intelligences.get_by_uuid import get_by_contentbase_uuid
 from nexus.usecases.logs.delete import DeleteLogUsecase
+from nexus.usecases.logs.entities import ZeroshotDTO
+from nexus.usecases.logs.create import CreateZeroshotLogsUseCase
 
 from nexus.trulens import wenigpt_evaluation, tru_recorder
 
@@ -209,3 +211,9 @@ def update_healthcheck():
 def update_classification_healthcheck():
     classification_notify = ClassificationHealthCheck()
     classification_notify.check_service_health()
+
+
+@app.task
+def create_zeroshot_logs(zeroshot_dict: Dict):
+    zeroshot_dto = ZeroshotDTO(**zeroshot_dict)
+    CreateZeroshotLogsUseCase(zeroshot_dto).create()
