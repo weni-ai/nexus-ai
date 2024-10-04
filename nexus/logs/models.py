@@ -39,6 +39,9 @@ class MessageLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     metadata = models.JSONField(null=True)
 
+    groundedness_score = models.IntegerField(null=True)
+    reflection_data = models.JSONField(null=True)
+
     def __str__(self) -> str:
         return f"{self.message}"
 
