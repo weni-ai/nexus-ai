@@ -31,50 +31,53 @@ class IntegratedFeatureFlowDTO:
         self.integrated_feature = get_integrated_feature(self.project_uuid, self.feature_uuid)
 
     @property
-    def action_dto(self) -> CreateFlowDTO:
-
+    def action_dto(self) -> List[CreateFlowDTO]:
         if not self.integrated_feature or not self.integrated_feature.current_version_setup:
-            return None
+            return []
 
-        current_setup_action = self.integrated_feature.current_version_setup
-        matching_flow = next(
-            (flow for flow in self.flows if flow.get('base_uuid') == current_setup_action.get('root_flow_uuid')),
-            None
-        )
-
-        if matching_flow:
-
-            template_uuid = current_setup_action.get('type', None)
-            if template_uuid is not None:
-                template_action = TemplateAction.objects.get(uuid=current_setup_action.get('type'))
-
-            return CreateFlowDTO(
-                flow_uuid=matching_flow.get("uuid"),
-                name=current_setup_action.get("name"),
-                prompt=current_setup_action.get('prompt'),
-                project_uuid=self.project_uuid,
-                template=template_action if template_uuid else None
+        create_flow_dtos = []
+        for current_setup_action in self.integrated_feature.current_version_setup:
+            matching_flow = next(
+                (flow for flow in self.flows if flow.get('base_uuid') == current_setup_action.get('root_flow_uuid')),
+                None
             )
-        return None
+
+            if matching_flow:
+                template_uuid = current_setup_action.get('type', None)
+                template_action = None
+                if template_uuid is not None:
+                    template_action = TemplateAction.objects.get(uuid=current_setup_action.get('type'))
+
+                create_flow_dtos.append(CreateFlowDTO(
+                    flow_uuid=matching_flow.get("uuid"),
+                    name=current_setup_action.get("name"),
+                    prompt=current_setup_action.get('prompt'),
+                    project_uuid=self.project_uuid,
+                    template=template_action if template_uuid else None
+                ))
+
+        return create_flow_dtos
 
     @property
-    def update_dto(self) -> UpdateFlowDTO:
+    def update_dto(self) -> List[UpdateFlowDTO]:
         if not self.integrated_feature or not self.integrated_feature.current_version_setup:
-            return None
+            return []
 
-        current_setup_action = self.integrated_feature.current_version_setup
-        matching_flow = next(
-            (flow for flow in self.flows if flow.get('base_uuid') == current_setup_action.get('root_flow_uuid')),
-            None
-        )
-
-        if matching_flow:
-            return UpdateFlowDTO(
-                flow_uuid=matching_flow.get("uuid"),
-                name=current_setup_action.get("name"),
-                prompt=current_setup_action.get('prompt'),
+        update_flow_dtos = []
+        for current_setup_action in self.integrated_feature.current_version_setup:
+            matching_flow = next(
+                (flow for flow in self.flows if flow.get('base_uuid') == current_setup_action.get('root_flow_uuid')),
+                None
             )
-        return None
+
+            if matching_flow:
+                update_flow_dtos.append(UpdateFlowDTO(
+                    flow_uuid=matching_flow.get("uuid"),
+                    name=current_setup_action.get("name"),
+                    prompt=current_setup_action.get('prompt'),
+                ))
+
+        return update_flow_dtos
 
 
 @dataclass
@@ -89,4 +92,4 @@ class UpdateIntegratedFeatureFlowDTO:
 class IntegratedFeatureDTO:
     feature_uuid: str
     project_uuid: str
-    current_version_setup: Dict[str, str]
+    current_version_setup: List[Dict[str, str]]

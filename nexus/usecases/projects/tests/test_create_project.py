@@ -86,12 +86,14 @@ class IntegratedFeatureUseCaseTestCase(TestCase):
         consumer_msg = {
             'project_uuid': str(self.project.uuid),
             'feature_uuid': feature_uuid,
-            "action": {
-                "name": "Human handoff",
-                "prompt": "aaaaa",
-                "root_flow_uuid": root_flow_uuid,
-                "type": ""
-            }
+            "action": [
+                {
+                    "name": "Human handoff",
+                    "prompt": "aaaaa",
+                    "root_flow_uuid": root_flow_uuid,
+                    "type": ""
+                }
+            ]
         }
         feature = self.usecase.create_integrated_feature(
             consumer_msg
@@ -110,12 +112,14 @@ class IntegratedFeatureUseCaseTestCase(TestCase):
         consumer_msg = {
             'project_uuid': str(self.project.uuid),
             'feature_uuid': feature_uuid,
-            "action": {
-                "name": "Human handoff",
-                "prompt": "aaaaa",
-                "root_flow_uuid": root_flow_uuid,
-                "type": self.template_action.uuid
-            }
+            "action": [
+                {
+                    "name": "Human handoff",
+                    "prompt": "aaaaa",
+                    "root_flow_uuid": root_flow_uuid,
+                    "type": self.template_action.uuid
+                }
+            ]
         }
         feature = self.usecase.create_integrated_feature(
             consumer_msg
@@ -138,7 +142,7 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
         self.template_action = TemplateActionFactory()
 
     def test_integrate_flow(self):
-        root_flow_uuid = self.integrated_feature.current_version_setup['root_flow_uuid']
+        root_flow_uuid = self.integrated_feature.current_version_setup[0]['root_flow_uuid']
         consumer_msg = {
             'project_uuid': str(self.project.uuid),
             'feature_uuid': self.integrated_feature.feature_uuid,
@@ -165,11 +169,29 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
             feature_uuid=self.integrated_feature.feature_uuid
         )
 
-        self.assertIsInstance(returned_flow, Flow)
+        self.assertIsInstance(returned_flow[0], Flow)
         self.assertTrue(integrated_feature.is_integrated)
 
     def test_integrate_multiple_flows(self):
-        root_flow_uuid = self.integrated_feature.current_version_setup['root_flow_uuid']
+        root_flow_uuid_1 = uuid4().hex
+        root_flow_uuid_2 = uuid4().hex
+
+        self.integrated_feature.current_version_setup = [
+            {
+                "name": "Flow 1",
+                "root_flow_uuid": root_flow_uuid_1,
+                "prompt": "Prompt 1",
+                "type": self.template_action.uuid
+            },
+            {
+                "name": "Flow 2",
+                "root_flow_uuid": root_flow_uuid_2,
+                "prompt": "Prompt 2",
+                "type": self.template_action.uuid
+            }
+        ]
+        self.integrated_feature.save()
+
         consumer_msg = {
             'project_uuid': str(self.project.uuid),
             'feature_uuid': self.integrated_feature.feature_uuid,
@@ -180,12 +202,12 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
                     'name': 'Example flow 2'
                 },
                 {
-                    'base_uuid': root_flow_uuid,
+                    'base_uuid': root_flow_uuid_1,
                     'uuid': uuid4().hex,
                     'name': 'Example flow'
                 },
                 {
-                    'base_uuid': uuid4().hex,
+                    'base_uuid': root_flow_uuid_2,
                     'uuid': uuid4().hex,
                     'name': 'Example flow 3'
                 }
@@ -205,7 +227,7 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
             feature_uuid=self.integrated_feature.feature_uuid
         )
 
-        self.assertIsInstance(returned_flow, Flow)
+        self.assertIsInstance(returned_flow[0], Flow)
         self.assertTrue(integrated_feature.is_integrated)
 
     def test_integrate_flow_without_root_flow(self):
@@ -238,12 +260,14 @@ class CreateIntegratedFeatureFlowsTestCase(TestCase):
 
     def test_create_integrated_flow_template(self):
         integrated_feature_template = IntegratedFeatureFactory(
-            current_version_setup={
-                "name": "Human handoff",
-                "root_flow_uuid": uuid4().hex,
-                "prompt": "Whenever an user wants to talk to a human",
-                "type": self.template_action.uuid
-            }
+            current_version_setup=[
+                {
+                    "name": "Human handoff",
+                    "root_flow_uuid": uuid4().hex,
+                    "prompt": "Whenever an user wants to talk to a human",
+                    "type": self.template_action.uuid
+                }
+            ]
         )
         template_action_project = integrated_feature_template.project
         consumer_msg = {
