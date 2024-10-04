@@ -6,7 +6,7 @@ from typing import List, Dict
 import requests
 from nexus.zeroshot.client import InvokeModel
 from nexus.usecases.logs.entities import ZeroshotDTO
-from nexus.usecases.logs.create import CreateZeroshotLogsUseCase
+from nexus.task_managers.tasks import create_zeroshot_logs
 
 
 class NexusZeroshotClient:
@@ -31,7 +31,7 @@ class NexusZeroshotClient:
             nlp_log=str(json.dumps(response)),
             language=zeroshot_data.get("language")
         )
-        CreateZeroshotLogsUseCase().create(zeroshot_dto)
+        create_zeroshot_logs.delay(zeroshot_dto.__dict__)
         return response.get("output")
 
 

@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from nexus.zeroshot.client import InvokeModel
 from nexus.zeroshot.api.permissions import ZeroshotTokenPermission
 from nexus.usecases.logs.entities import ZeroshotDTO
-from nexus.usecases.logs.create import CreateZeroshotLogsUseCase
+from nexus.task_managers.tasks import create_zeroshot_logs
 
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class ZeroShotFastPredictAPIView(APIView):
                 nlp_log=str(json.dumps(response)),
                 language=data.get("language")
             )
-            CreateZeroshotLogsUseCase().create(zeroshot_dto)
+            create_zeroshot_logs.delay(zeroshot_dto.__dict__)
             return Response(status=200, data=response if response.get("output") else {"error": response})
         except Exception as error:
             traceback.print_exc()
