@@ -1,76 +1,120 @@
-from typing import Dict
+import re
+import pendulum
+
+from typing import Dict, List
 from router.classifiers.interfaces import OpenAIClientInterface
+from openai import OpenAI
 
 from django.conf import settings
+
+
+class OpenAIClient(OpenAIClientInterface):  # pragma: no cover
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.client = OpenAI(api_key=self.api_key)
+
+    def chat_completions_create(
+        self,
+        messages,
+    ):
+        groundedness_model = settings.GROUNDEDNESS_MODEL
+        return self.client.chat.completions.create(
+            model=groundedness_model,
+            messages=messages,
+        )
 
 
 class Groundedness:
 
     def __init__(
         self,
-        client: OpenAIClientInterface,
         llm_response: str,
         llm_chunk_used: str,
         log_usecase,
+        system_prompt: str = settings.GROUNDEDNESS_SYSTEM_PROMPT,
+        user_prompt: str = settings.GROUNDEDNESS_USER_PROMPT,
     ) -> None:
-        self.client = client
+
+        self.client = OpenAIClient(settings.OPENAI_API_KEY)
         self.llm_chunk_used = llm_chunk_used
         self.llm_response = llm_response
+        self.log_usecase = log_usecase
+        self.system_prompt = system_prompt.replace("\\n", "\n")
+        self.user_prompt = user_prompt.replace("\\n", "\n")
 
-        self.system_prompt = (
-            """You are a INFORMATION OVERLAP classifier; providing the overlap of information between the source and statement.
-            Respond only as a number from 0 to 10 where 0 is no information overlap and 10 is all information is overlapping.
-            Never elaborate."""
+    def extract_score_and_sentences(
+        self,
+        response: str
+    ) -> List[Dict[str, str]]:
+
+        pattern = re.compile(
+            r"Statement Sentence: (?P<sentence>.*?),\nSupporting Evidence: (?P<evidence>.*?),\nScore: (?P<score>\d+)"
         )
-        self.user_prompt = (
-            """
-            SOURCE: {{premise}}
+        matches = pattern.findall(response)
 
-            Hypothesis: {{hypothesis}}
+        result = []
+        for match in matches:
+            if match[1] == "NOTHING FOUND":
+                continue
+            result.append({
+                "sentence": match[0],
+                "evidence": match[1],
+                "score": match[2]
+            })
 
-            Please answer with the template below for all statement sentences:
-
-            Statement Sentence: <Sentence>,
-            Supporting Evidence: <Choose the exact unchanged sentences in the source that can answer the statement, if nothing matches, say NOTHING FOUND>
-            Score: <Output a number between 0-10 where 0 is no information overlap and 10 is all information is overlapping>
-            """
-        )
-
-        self.groundedness_model = settings.GROUNDEDNESS_MODEL
-        # self.groundedness_prompt = settings.GROUNDEDNESS_PROMPT
+        return result
 
     def replace_vars(self, prompt: str, replace_variables: Dict) -> str:
         for key in replace_variables.keys():
             replace_str = "{{" + key + "}}"
-            prompt = prompt.replace(replace_str, replace_variables.get(key))
+            value = replace_variables.get(key)
+            if not isinstance(value, str):
+                value = str(value)
+            prompt = prompt.replace(replace_str, value)
         return prompt
 
     def get_prompt(self):
         variable = {
-            "premise": self.llm_chunk_used,
+            "premise": "".join(self.llm_chunk_used),
             "hypothesis": self.llm_response,
         }
 
-        return self.replace_vars(variable)
+        return self.replace_vars(
+            prompt=self.user_prompt,
+            replace_variables=variable
+        )
 
     def classify(self):
 
+        started_groundedness = pendulum.now()
+
         formated_prompt = self.get_prompt()
+
         gpt_response = self.client.chat_completions_create(
-            model=self.groundedness_model,
             messages=[
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": formated_prompt},
             ],
         )
 
+        response_content = gpt_response.choices[0].message.content
+        groundedness_values = self.extract_score_and_sentences(response_content)
 
-        return False
+        if not groundedness_values:
+            return None
 
+        score_avg = sum([int(item["score"]) for item in groundedness_values]) / len(groundedness_values)
+        finished_groundedness = pendulum.now()
 
-groundedness = Groundedness(
-    client=client,
-    llm_response=llm_response,
-    llm_chunk_used=llm_chunk_used,
-    log_usecase=log_usecase
-)
+        usage_time = finished_groundedness.diff(started_groundedness).in_seconds()
+
+        self.log_usecase.update_log_field(
+            groundedness_score=score_avg,
+            reflection_data={
+                "request_time": usage_time,
+                "sentence_rankings": response_content
+            },
+        )
+
+        return gpt_response

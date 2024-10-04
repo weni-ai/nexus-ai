@@ -110,7 +110,6 @@ def route(
             print(f"[+ LLM Response: {llm_response} +]")
 
             reflection = Reflection(
-                message_text=message.text,
                 chunks_used=chunks,
                 llm_response=llm_response,
                 client=llm_client,
