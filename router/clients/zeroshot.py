@@ -5,6 +5,8 @@ from typing import List, Dict
 
 import requests
 from nexus.zeroshot.client import InvokeModel
+from nexus.usecases.logs.entities import ZeroshotDTO
+from nexus.usecases.logs.create import CreateZeroshotLogsUseCase
 
 
 class NexusZeroshotClient:
@@ -21,6 +23,15 @@ class NexusZeroshotClient:
         }
         zeroshot = InvokeModel(zeroshot_data)
         response = zeroshot.invoke()
+        zeroshot_dto = ZeroshotDTO(
+            text=zeroshot_data.get("text"),
+            classification=response["output"].get("classification"),
+            other=response["output"].get("other", False),
+            options=zeroshot_data.get("options"),
+            nlp_log=str(json.dumps(response)),
+            language=zeroshot_data.get("language")
+        )
+        CreateZeroshotLogsUseCase().create(zeroshot_dto)
         return response.get("output")
 
 

@@ -2,6 +2,8 @@ from nexus.logs.models import (
     Message,
     MessageLog,
 )
+from nexus.zeroshot.models import ZeroshotLogs
+from nexus.usecases.logs.entities import ZeroshotDTO
 
 
 class CreateLogUsecase:
@@ -42,3 +44,21 @@ class CreateLogUsecase:
             setattr(log, key, kwargs.get(key))
 
         log.save()
+
+
+class CreateZeroshotLogsUseCase:
+    def __init__(
+            self,
+            zeroshot_dto: ZeroshotDTO,
+    ) -> None:
+        self.zeroshot_dto = zeroshot_dto
+
+    def create(self) -> ZeroshotLogs:
+        return ZeroshotLogs.objects.create(
+            text=self.zeroshot_dto.text,
+            classification=self.zeroshot_dto.classification,
+            other=self.zeroshot_dto.other,
+            options=self.zeroshot_dto.options,
+            nlp_log=self.zeroshot_dto.nlp_log,
+            language=self.zeroshot_dto.language,
+        )

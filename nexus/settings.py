@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'drf_yasg',
     'elasticapm.contrib.django',
+    'django_elasticsearch_dsl',
     # apps
     'nexus.users',
     'nexus.db',
@@ -467,3 +468,15 @@ ZEROSHOT_BEDROCK_AWS_KEY = env.str("ZEROSHOT_BEDROCK_AWS_KEY")
 ZEROSHOT_BEDROCK_AWS_SECRET = env.str("ZEROSHOT_BEDROCK_AWS_SECRET")
 ZEROSHOT_BEDROCK_AWS_REGION = env.str("ZEROSHOT_BEDROCK_AWS_REGION")
 ZEROSHOT_BEDROCK_MODEL_ID = env.str("ZEROSHOT_BEDROCK_MODEL_ID")
+
+ELASTICSEARCH_HOST = env.str("ELASTICSEARCH_HOST", "http://localhost:9200")
+ELASTICSEARCH_NUMBER_OF_SHARDS = env.int("ELASTICSEARCH_NUMBER_OF_SHARDS", 1)
+ELASTICSEARCH_NUMBER_OF_REPLICAS = env.int("ELASTICSEARCH_NUMBER_OF_REPLICAS", 0)
+
+
+ELASTICSEARCH_DSL = {
+    'default': {
+        'hosts': ELASTICSEARCH_HOST,
+        'http_auth': ('username', 'password')
+    }
+}

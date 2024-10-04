@@ -21,3 +21,13 @@ class LogMetadata:
             },
             "instructions": self.instructions
         }
+
+
+@dataclass
+class ZeroshotDTO:
+    text: str
+    classification: str
+    other: bool
+    options: Dict
+    nlp_log: str
+    language: str
