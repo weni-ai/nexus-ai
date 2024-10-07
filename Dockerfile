@@ -96,4 +96,5 @@ USER "${APP_USER}:${APP_GROUP}"
 EXPOSE 8000
 COPY entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["bash", "./entrypoint.sh"]
+RUN playwright install
 CMD ["start"]
