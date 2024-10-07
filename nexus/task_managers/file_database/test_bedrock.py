@@ -1,20 +1,26 @@
+import json
 import requests
 from uuid import uuid4
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
+from rest_framework.test import APIRequestFactory
+from rest_framework.test import APIClient
 
-
-from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
-from nexus.task_managers.file_database.file_database import FileResponseDTO
-from nexus.usecases.orgs.tests.org_factory import OrgFactory
-from nexus.projects.models import Project
+from nexus.usecases.intelligences.create import create_base_brain_structure
+from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFileFactory
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
-from nexus.task_managers.models import TaskManager
+from nexus.projects.models import Project
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
+from nexus.task_managers.file_database.file_database import FileResponseDTO
+from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
+from nexus.task_managers.models import TaskManager, ContentBaseFileTaskManager
 from nexus.task_managers.tasks_bedrock import (
     check_ingestion_job_status,
     start_ingestion_job,
@@ -151,3 +157,40 @@ class TestBedrockTasksTestCase(TestCase):
         self.task_manager.refresh_from_db()
         print(self.task_manager.ingestion_job_id)
         self.assertEquals(self.task_manager.status, TaskManager.STATUS_PROCESSING)
+
+
+class TestContentBaseFileViewsetTestCase(TestCase):
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+        self.org = OrgFactory()
+        self.project = self.org.projects.create(
+            name="Bedrock 1",
+            indexer_database=Project.BEDROCK,
+            created_by=self.org.created_by
+        )
+        self.user = self.org.created_by
+        self.project.authorizations.create(user=self.user, role=3)
+        self.integrated_intelligence = create_base_brain_structure(self.project)
+        self.content_base = get_default_content_base_by_project(str(self.project.uuid))
+        self.content_base_uuid = str(self.content_base.uuid)
+        self.url = f'{self.content_base.uuid}/content-bases-file/'
+
+    def test_create(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("content-base-file-list", kwargs={"content_base_uuid": str(self.content_base.uuid)})
+        file = SimpleUploadedFile("file.txt", "Test File".encode("utf-8"))
+
+        data = {
+            "file": file,
+            "extension_file": "txt",
+        }
+        response = client.post(url, data, format='multipart')
+        response.render()
+        content = json.loads(response.content)
+
+        file_uuid = content.get("uuid")
+
+        task_manager = ContentBaseFileTaskManager.objects.get(content_base_file__uuid=file_uuid)
+        self.assertEquals(response.status_code, 201)
+        self.assertEquals(task_manager.status, "success")
