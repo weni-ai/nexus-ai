@@ -14,6 +14,8 @@ from .create import ProjectAuthUseCase
 from nexus.usecases import orgs
 from nexus.events import event_manager
 from django.conf import settings
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
+from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 
 
 class ProjectsUseCase:
@@ -114,3 +116,17 @@ class ProjectsUseCase:
             )
 
         return project
+
+    def get_indexer_database_by_uuid(self, project_uuid: str):
+        project = self.get_by_uuid(project_uuid)
+        return {
+            Project.BEDROCK: BedrockFileDatabase,
+            Project.SENTENX: SentenXFileDataBase
+        }.get(project.indexer_database)
+
+    def get_indexer_database_by_project(self, project: Project):
+        """It's the same method as "get_indexer_database_by_uuid" but skips retrieving the project from the DB"""
+        return {
+            Project.BEDROCK: BedrockFileDatabase,
+            Project.SENTENX: SentenXFileDataBase
+        }.get(project.indexer_database)

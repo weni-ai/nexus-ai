@@ -10,3 +10,4 @@ from nexus.usecases.intelligences.intelligences_dto import (
     ContentBaseDTO,
 )
 from router.entities.logs import ContactMessageDTO
+from router.entities.projects import ProjectDTO

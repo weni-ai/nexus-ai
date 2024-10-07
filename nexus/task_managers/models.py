@@ -24,11 +24,19 @@ class TaskManager(models.Model):
         (STATUS_WAITING, "Wait")
     ]
 
+    status_map = {
+        "STARTING": STATUS_LOADING,
+        "IN_PROGRESS": STATUS_PROCESSING,
+        "COMPLETE": STATUS_SUCCESS,
+        "FAILED": STATUS_FAIL,
+    }
+
     uuid = models.UUIDField(default=uuid.uuid4)
     created_at = models.DateTimeField(auto_now_add=True)
     end_at = models.DateTimeField(null=True, blank=True)
     status = models.TextField(choices=STATUS_CHOICES, default=STATUS_WAITING)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="files")
+    ingestion_job_id = models.CharField(null=True)
 
 
 class ContentBaseFileTaskManager(TaskManager):
