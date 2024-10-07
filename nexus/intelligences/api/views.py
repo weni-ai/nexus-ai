@@ -21,6 +21,7 @@ from .serializers import (
     ContentBasePersonalizationSerializer,
 )
 from nexus.usecases import intelligences
+from nexus.usecases import projects
 from nexus.paginations import CustomCursorPagination
 from nexus.orgs import permissions
 from nexus.projects.permissions import has_project_permission
@@ -497,7 +498,10 @@ class ContentBaseTextViewset(
     def destroy(self, request, **kwargs):
         try:
             user_email = request.user.email
-            use_case = intelligences.DeleteContentBaseTextUseCase(SentenXFileDataBase())
+            content_base_uuid = kwargs.get("content_base_uuid")
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+            indexer = projects.ProjectsUseCase().get_indexer_database_by_project(project)
+            use_case = intelligences.DeleteContentBaseTextUseCase(indexer())
 
             contentbasetext_uuid = kwargs.get('contentbasetext_uuid')
             use_case.delete_contentbasetext(
@@ -576,25 +580,21 @@ class ContentBaseFileViewset(ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         user_email: str = self.request.user.email
         contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
-
+        content_base_uuid: str = kwargs.get('content_base_uuid')
         use_case = intelligences.RetrieveContentBaseFileUseCase()
         content_base_file = use_case.get_contentbasefile(
             contentbasefile_uuid=contentbasefile_uuid,
             user_email=user_email
         )
+        project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+        indexer = projects.ProjectsUseCase().get_indexer_database_by_project(project)
+        intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
 
         event_manager.notify(
             event="contentbase_file_activity",
             action_type="D",
             content_base_file=content_base_file,
             user=self.request.user
-        )
-
-        sentenx_file_database = SentenXFileDataBase()
-        sentenx_file_database.delete(
-            content_base_uuid=str(content_base_file.content_base.uuid),
-            content_base_file_uuid=str(content_base_file.uuid),
-            filename=content_base_file.file_name
         )
 
         return super().destroy(request, *args, **kwargs)
@@ -657,24 +657,26 @@ class ContentBaseLinkViewset(ModelViewSet):
         user = self.request.user
         user_email: str = user.email
         contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
+        content_base_uuid: str = kwargs.get('content_base_uuid')
 
         use_case = intelligences.RetrieveContentBaseLinkUseCase()
-        content_base_file = use_case.get_contentbaselink(
+        content_base_link = use_case.get_contentbaselink(
             contentbaselink_uuid=contentbaselink_uuid,
             user_email=user_email
         )
 
-        sentenx_file_database = SentenXFileDataBase()
-        sentenx_file_database.delete(
-            content_base_uuid=str(content_base_file.content_base.uuid),
-            content_base_file_uuid=str(content_base_file.uuid),
-            filename=content_base_file.link
+        project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+        indexer = projects.ProjectsUseCase().get_indexer_database_by_project(project)
+
+        use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
+        use_case.delete_by_object(
+            content_base_link,
         )
 
         event_manager.notify(
             event="contentbase_link_activity",
             action_type="D",
-            content_base_link=content_base_file,
+            content_base_link=content_base_link,
             user=user
         )
 
