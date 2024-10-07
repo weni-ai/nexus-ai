@@ -33,12 +33,13 @@ from nexus.usecases.task_managers.file_database import get_gpt_by_content_base_u
 
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 from nexus.task_managers.tasks import upload_text_file, send_link
-from nexus.task_managers.tasks_bedrock import bedrock_upload_text_file
+from nexus.task_managers.tasks_bedrock import bedrock_upload_text_file, bedrock_send_link
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.projects.models import Project
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
 
 class IntelligencesViewset(
@@ -403,8 +404,6 @@ class ContentBaseTextViewset(
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def create(self, request, content_base_uuid: str):
-        from nexus.usecases.projects.projects_use_case import ProjectsUseCase
-
         try:
             user_email = request.user.email
 
@@ -633,12 +632,20 @@ class ContentBaseLinkViewset(ModelViewSet):
                 content_base_uuid=str(content_base.uuid)
             )
             content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
 
-            send_link.delay(
-                link=link,
-                user_email=user_email,
-                content_base_link_uuid=str(content_base_link.uuid)
-            )
+            if project.indexer_database == Project.BEDROCK:
+                bedrock_send_link.delay(
+                    link=link,
+                    user_email=user_email,
+                    content_base_link_uuid=str(content_base_link.uuid)
+                )
+            else:
+                send_link.delay(
+                    link=link,
+                    user_email=user_email,
+                    content_base_link_uuid=str(content_base_link.uuid)
+                )
 
             response = CreatedContentBaseLinkSerializer(content_base_link).data
 
