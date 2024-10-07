@@ -185,6 +185,8 @@ class BedrockFileDatabase(FileDataBase):
                 }
             )
 
+        return llm_chunk_list
+
     def __create_unique_filename(self, filename: str) -> str:
         name, extension = filename.rsplit(".", 1)
         name = name.replace(".", "_")
