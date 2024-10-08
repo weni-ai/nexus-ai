@@ -939,7 +939,11 @@ class UploadFileView(views.APIView):
         if not validate_mime_type(file.content_type):
             return Response({"error": f"invalid file type: {file.content_type}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        storage = AttachmentPreviewStorage()
+        storage = AttachmentPreviewStorage(
+            access_key=settings.AWS_ACCESS_KEY_ID,
+            secret_key=settings.AWS_SECRET_ACCESS_KEY,
+            bucket_name=settings.AWS_S3_BUCKET_NAME,
+        )
         file_name = storage.save(file.name, file)
         file_url = storage.url(file_name)
 

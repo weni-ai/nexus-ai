@@ -50,7 +50,7 @@ class DeleteStorageFile:
     def delete_file(self, file_name):
         try:
             response = self.s3_client.delete_object(
-                Bucket=settings.AWS_STORAGE_BUCKET_NAME,
+                Bucket=settings.AWS_S3_BUCKET_NAME,
                 Key=f"{AttachmentPreviewStorage.location}/{file_name}"
             )
             return response
