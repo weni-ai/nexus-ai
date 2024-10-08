@@ -6,6 +6,23 @@ from storages.backends.s3boto3 import S3Boto3Storage
 from django.conf import settings
 
 
+def validate_mime_type(content_type: str) -> bool:
+    image = ["image/png", "image/jpeg", "image/gif", "image/webp"]
+    video = ["video/mp4", "video/x-msvideo"]
+    audio = ["audio/mpeg", "audio/wav", "audio/ogg"]
+    doc = [
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/pdf",
+        "text/plain"
+    ]
+    mime = image + audio + video + doc
+
+    return content_type in mime
+
+
 class AttachmentPreviewStorage(S3Boto3Storage):
     location = "media/preview/attachments/"
     default_acl = "public-read"

@@ -20,7 +20,7 @@ from .serializers import (
     LLMConfigSerializer,
     ContentBasePersonalizationSerializer,
 )
-from nexus.storage import AttachmentPreviewStorage
+from nexus.storage import AttachmentPreviewStorage, validate_mime_type
 from nexus.usecases import intelligences
 from nexus.paginations import CustomCursorPagination
 from nexus.orgs import permissions
@@ -913,6 +913,9 @@ class UploadFileView(views.APIView):
         file = request.FILES.get('file')
         if not file:
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not validate_mime_type(file.content_type):
+            return Response({"error": f"invalid file type: {file.content_type}"}, status=status.HTTP_400_BAD_REQUEST)
 
         storage = AttachmentPreviewStorage()
         file_name = storage.save(file.name, file)
