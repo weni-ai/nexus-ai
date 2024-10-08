@@ -945,7 +945,8 @@ class UploadFileView(views.APIView):
             bucket_name=settings.AWS_S3_BUCKET_NAME,
         )
         file_name = storage.save(file.name, file)
-        file_url = storage.url(file_name)
+        file_name = f"media/preview/attachments/{file_name}"
+        file_url = s3FileDatabase().create_presigned_url(file_name)
 
         delete_file_task.apply_async((file_name,), countdown=600)
 
