@@ -25,7 +25,6 @@ def validate_mime_type(content_type: str) -> bool:
 
 class AttachmentPreviewStorage(S3Boto3Storage):
     location = "media/preview/attachments/"
-    default_acl = "public-read"
     file_overwrite = False
     custom_domain = False
     override_available_name = True
