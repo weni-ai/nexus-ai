@@ -918,8 +918,8 @@ class UploadFileView(views.APIView):
             return Response({"error": f"invalid file type: {file.content_type}"}, status=status.HTTP_400_BAD_REQUEST)
 
         storage = AttachmentPreviewStorage(
-            access_key=settings.AWS_ACCESS_KEY_ID,
-            secret_key=settings.AWS_SECRET_ACCESS_KEY,
+            access_key=settings.AWS_S3_ACCESS_KEY_ID,
+            secret_key=settings.AWS_S3_SECRET_ACCESS_KEY,
             bucket_name=settings.AWS_S3_BUCKET_NAME,
         )
         file_name = storage.save(file.name, file)
