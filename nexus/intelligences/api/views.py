@@ -605,6 +605,7 @@ class ContentBaseFileViewset(ModelViewSet):
             content_base_file=content_base_file,
             user=self.request.user
         )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ContentBaseLinkViewset(ModelViewSet):
