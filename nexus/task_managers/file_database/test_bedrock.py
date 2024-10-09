@@ -317,3 +317,31 @@ class TestContentBaseBedrockTestCase(TestCase):
 
         with self.assertRaises(ContentBaseFileTaskManager.DoesNotExist):
             ContentBaseFileTaskManager.objects.get(content_base_file__uuid=content_base_file_uuid)
+
+    def test_view_update_content_base_text(self):
+        self.content_base.uuid = "1b2a7752-6977-420b-937f-a935b26a199b"
+        self.content_base.save()
+        filename = "Bedrock-2-fef7af31-a8fa-4a47-893d-4b821466fab9.txt"
+
+        client = APIClient()
+        content_base_text = ContentBaseText.objects.create(
+            file_name=filename,
+            text="Esse é um texto",
+            content_base=self.content_base,
+            created_by=self.user
+        )
+        data = {"text": "Esse é um texto (Atualizado 1)"}
+
+        content_base_text_uuid = str(content_base_text.uuid)
+        client.force_authenticate(user=self.user)
+
+        url = reverse(
+            "content-bases-text-detail",
+            kwargs={
+                "content_base_uuid": str(self.content_base.uuid),
+                "contentbasetext_uuid": content_base_text_uuid
+            }
+        )
+        response = client.put(url, data, format='json')
+        response.render()
+        print(response)
