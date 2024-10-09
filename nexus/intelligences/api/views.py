@@ -608,8 +608,6 @@ class ContentBaseFileViewset(ModelViewSet):
             user=self.request.user
         )
 
-        return super().destroy(request, *args, **kwargs)
-
 
 class ContentBaseLinkViewset(ModelViewSet):
 
