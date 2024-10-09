@@ -34,9 +34,8 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.usecases.task_managers.file_database import get_gpt_by_content_base_uuid
 
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
-from nexus.task_managers.tasks import upload_text_file, send_link
-from nexus.task_managers.tasks_bedrock import bedrock_upload_text_file, bedrock_send_link
 from nexus.task_managers.tasks import upload_text_file, send_link, delete_file_task
+from nexus.task_managers.tasks_bedrock import bedrock_upload_text_file, bedrock_send_link, start_ingestion_job
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
@@ -601,6 +600,9 @@ class ContentBaseFileViewset(ModelViewSet):
         indexer = projects.ProjectsUseCase().get_indexer_database_by_project(project)
         intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
 
+        if project.indexer_database == Project.BEDROCK:
+            start_ingestion_job.delay("", post_delete=True)
+
         event_manager.notify(
             event="contentbase_file_activity",
             action_type="D",
@@ -682,6 +684,9 @@ class ContentBaseLinkViewset(ModelViewSet):
         use_case.delete_by_object(
             content_base_link,
         )
+
+        if project.indexer_database == Project.BEDROCK:
+            start_ingestion_job.delay("", post_delete=True)
 
         event_manager.notify(
             event="contentbase_link_activity",
