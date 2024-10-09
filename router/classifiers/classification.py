@@ -101,6 +101,9 @@ class Classification:
                         "name": flow_dto.name,
                         "msg_event": None
                     }
+                return {
+                    "type": "media_and_location_unavailable",
+                }
 
         return self.flow_started
 
