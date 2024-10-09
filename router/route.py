@@ -3,7 +3,7 @@ from django.conf import settings
 
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.logs.entities import LogMetadata
-from router.classifiers.reflection import Reflection
+from router.classifiers.reflection import run_reflection_task
 
 from router.dispatcher import dispatch
 from router.indexer import get_chunks
@@ -100,13 +100,11 @@ def route(
 
             print(f"[+ LLM Response: {llm_response} +]")
 
-            reflection = Reflection(
+            run_reflection_task.delay(
                 chunks_used=chunks,
                 llm_response=llm_response,
-                client=llm_client,
-                log_usecase=log_usecase
+                log_usecase=log_usecase,
             )
-            reflection.classify()
 
             metadata = LogMetadata(
                 agent_name=agent.name,
