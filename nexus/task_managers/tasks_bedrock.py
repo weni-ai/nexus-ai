@@ -57,7 +57,7 @@ def start_ingestion_job(celery_task_manager_uuid: str, file_type: str = "file", 
         ingestion_job_id: str = file_database.start_bedrock_ingestion()
 
         if post_delete:
-            return check_ingestion_job_status.delay(celery_task_manager_uuid, ingestion_job_id, file_type=file_type)
+            return
 
         # TODO: USECASE
         task_manager_usecase = CeleryTaskManagerUseCase()
