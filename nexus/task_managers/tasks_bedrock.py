@@ -43,7 +43,7 @@ def check_ingestion_job_status(celery_task_manager_uuid: str, ingestion_job_id: 
 
 
 @app.task
-def start_ingestion_job(celery_task_manager_uuid: str, file_type: str = "file"):
+def start_ingestion_job(celery_task_manager_uuid: str, file_type: str = "file", post_delete: bool = False):
     try:
         print("[+ 🦑 BEDROCK: Starting Ingestion Job +]")
 
@@ -52,9 +52,12 @@ def start_ingestion_job(celery_task_manager_uuid: str, file_type: str = "file"):
 
         if in_progress_ingestion_jobs:
             sleep(5)
-            return start_ingestion_job(celery_task_manager_uuid)
+            return start_ingestion_job.delay(celery_task_manager_uuid, file_type=file_type)
 
         ingestion_job_id: str = file_database.start_bedrock_ingestion()
+
+        if post_delete:
+            return check_ingestion_job_status.delay(celery_task_manager_uuid, ingestion_job_id, file_type=file_type)
 
         # TODO: USECASE
         task_manager_usecase = CeleryTaskManagerUseCase()
@@ -64,13 +67,13 @@ def start_ingestion_job(celery_task_manager_uuid: str, file_type: str = "file"):
 
         status = TaskManager.status_map.get("IN_PROGRESS")
         task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
-        check_ingestion_job_status.delay(celery_task_manager_uuid, ingestion_job_id, file_type=file_type)
+        return check_ingestion_job_status.delay(celery_task_manager_uuid, ingestion_job_id, file_type=file_type)
 
     except ClientError as e:
         if e.response["Error"]["Code"] == "ConflictException":
             print("[+ 🦑 BEDROCK: Filter didn't catch in progress Ingestion Job. \n Waiting to start new IngestionJob ... +]")
             sleep(15)
-            return start_ingestion_job(celery_task_manager_uuid)
+            return start_ingestion_job.delay(celery_task_manager_uuid, file_type=file_type)
 
 
 @app.task
