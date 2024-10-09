@@ -1,7 +1,7 @@
 import re
 import pendulum
 
-from typing import Dict, List
+from typing import Dict
 from router.classifiers.interfaces import OpenAIClientInterface
 from openai import OpenAI
 
@@ -43,20 +43,14 @@ class Groundedness:
         self.system_prompt = system_prompt.replace("\\n", "\n")
         self.user_prompt = user_prompt.replace("\\n", "\n")
 
-    def extract_score_and_sentences(
-        self,
-        response: str
-    ) -> List[Dict[str, str]]:
-
+    def extract_score_and_sentences(response: str):
         pattern = re.compile(
-            r"Statement Sentence: (?P<sentence>.*?),\nSupporting Evidence: (?P<evidence>.*?),\nScore: (?P<score>\d+)"
+            r"Statement Sentence: (?P<sentence>.*?),\s*Supporting Evidence:\s*(?P<evidence>.*?)(?:,|\s*)\s*Score:\s*(?P<score>\d+)"
         )
         matches = pattern.findall(response)
 
         result = []
         for match in matches:
-            if match[1] == "NOTHING FOUND":
-                continue
             result.append({
                 "sentence": match[0],
                 "evidence": match[1],

@@ -1,6 +1,20 @@
-from router.classifiers.interfaces import OpenAIClientInterface
-
 from router.classifiers.groundedness import Groundedness
+
+from nexus.celery import app as celery_app
+
+
+@celery_app.task
+def run_reflection_task(
+    chunks_used: list,
+    llm_response: str,
+    log_usecase,
+):
+    reflection = Reflection(
+        chunks_used,
+        llm_response,
+        log_usecase,
+    )
+    return reflection.classify()
 
 
 class Reflection:

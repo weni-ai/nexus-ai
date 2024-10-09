@@ -41,4 +41,14 @@ class CreateLogUsecase:
         for key in keys:
             setattr(log, key, kwargs.get(key))
 
+        reflection_data = log.reflection_data or {}
+        groundedness_score = kwargs.get("groundedness_score")
+
+        if groundedness_score is not None:
+            if groundedness_score < 8:
+                reflection_data["tag"] = "Answer not found"
+            else:
+                reflection_data["tag"] = "Answer found"
+
+        log.reflection_data = reflection_data
         log.save()
