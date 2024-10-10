@@ -34,7 +34,7 @@ from nexus.usecases.task_managers.file_database import get_gpt_by_content_base_u
 
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 
-from nexus.task_managers.tasks_bedrock import bedrock_upload_text_file, bedrock_send_link
+from nexus.task_managers.tasks_bedrock import bedrock_upload_text_file, bedrock_send_link, start_ingestion_job
 from nexus.task_managers.tasks import upload_text_file, send_link, delete_file_task
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
@@ -42,6 +42,7 @@ from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.projects.models import Project
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 
 class IntelligencesViewset(
@@ -462,6 +463,7 @@ class ContentBaseTextViewset(
             content_base_text_uuid = kwargs.get('contentbasetext_uuid')
             content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
             content_base_text = intelligences.get_by_contentbasetext_uuid(content_base_text_uuid)
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
             cb_dto = intelligences.ContentBaseDTO(
                 uuid=content_base.uuid,
                 title=content_base.title,
@@ -473,19 +475,27 @@ class ContentBaseTextViewset(
                 user_email=user_email,
                 text=text
             )
+            file_database = ProjectsUseCase().get_indexer_database_by_project(project)
 
-            delete_use_case = intelligences.DeleteContentBaseTextUseCase(SentenXFileDataBase())
+            delete_use_case = intelligences.DeleteContentBaseTextUseCase(file_database())
             delete_use_case.delete_content_base_text_from_index(
                 content_base_text_uuid,
                 content_base_uuid,
                 content_base_text.file_name
             )
 
-            upload_text_file.delay(
-                content_base_dto=cb_dto.__dict__,
-                content_base_text_uuid=content_base_text.uuid,
-                text=text,
-            )
+            if project.indexer_database == Project.BEDROCK:
+                bedrock_upload_text_file.delay(
+                    content_base_dto=cb_dto.__dict__,
+                    content_base_text_uuid=str(content_base_text.uuid),
+                    text=text
+                )
+            else:
+                upload_text_file.delay(
+                    content_base_dto=cb_dto.__dict__,
+                    content_base_text_uuid=content_base_text.uuid,
+                    text=text,
+                )
 
             response = ContentBaseTextSerializer(content_base_text).data
 
@@ -499,7 +509,11 @@ class ContentBaseTextViewset(
     def destroy(self, request, **kwargs):
         try:
             user_email = request.user.email
-            use_case = intelligences.DeleteContentBaseTextUseCase(SentenXFileDataBase())
+            content_base_uuid = kwargs.get("content_base_uuid")
+            project_use_case = ProjectsUseCase()
+            project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
+            indexer = project_use_case.get_indexer_database_by_project(project)
+            use_case = intelligences.DeleteContentBaseTextUseCase(indexer())
 
             contentbasetext_uuid = kwargs.get('contentbasetext_uuid')
             use_case.delete_contentbasetext(
@@ -578,12 +592,19 @@ class ContentBaseFileViewset(ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         user_email: str = self.request.user.email
         contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
-
+        content_base_uuid: str = kwargs.get('content_base_uuid')
         use_case = intelligences.RetrieveContentBaseFileUseCase()
         content_base_file = use_case.get_contentbasefile(
             contentbasefile_uuid=contentbasefile_uuid,
             user_email=user_email
         )
+        project_use_case = ProjectsUseCase()
+        project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
+        indexer = project_use_case.get_indexer_database_by_project(project)
+        intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
+
+        if project.indexer_database == Project.BEDROCK:
+            start_ingestion_job.delay("", post_delete=True)
 
         event_manager.notify(
             event="contentbase_file_activity",
@@ -591,15 +612,7 @@ class ContentBaseFileViewset(ModelViewSet):
             content_base_file=content_base_file,
             user=self.request.user
         )
-
-        sentenx_file_database = SentenXFileDataBase()
-        sentenx_file_database.delete(
-            content_base_uuid=str(content_base_file.content_base.uuid),
-            content_base_file_uuid=str(content_base_file.uuid),
-            filename=content_base_file.file_name
-        )
-
-        return super().destroy(request, *args, **kwargs)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ContentBaseLinkViewset(ModelViewSet):
@@ -659,28 +672,33 @@ class ContentBaseLinkViewset(ModelViewSet):
         user = self.request.user
         user_email: str = user.email
         contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
+        content_base_uuid: str = kwargs.get('content_base_uuid')
 
         use_case = intelligences.RetrieveContentBaseLinkUseCase()
-        content_base_file = use_case.get_contentbaselink(
+        content_base_link = use_case.get_contentbaselink(
             contentbaselink_uuid=contentbaselink_uuid,
             user_email=user_email
         )
+        project_use_case = ProjectsUseCase()
+        project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
+        indexer = project_use_case.get_indexer_database_by_project(project)
 
-        sentenx_file_database = SentenXFileDataBase()
-        sentenx_file_database.delete(
-            content_base_uuid=str(content_base_file.content_base.uuid),
-            content_base_file_uuid=str(content_base_file.uuid),
-            filename=content_base_file.link
+        use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
+        use_case.delete_by_object(
+            content_base_link,
         )
+
+        if project.indexer_database == Project.BEDROCK:
+            start_ingestion_job.delay("", post_delete=True)
 
         event_manager.notify(
             event="contentbase_link_activity",
             action_type="D",
-            content_base_link=content_base_file,
+            content_base_link=content_base_link,
             user=user
         )
 
-        return super().destroy(request, *args, **kwargs)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class DownloadFileViewSet(views.APIView):
@@ -693,11 +711,19 @@ class DownloadFileViewSet(views.APIView):
             user_email = request.user.email
 
             use_case = intelligences.RetrieveContentBaseFileUseCase()
-            use_case.get_contentbasefile(
+            content_base_file = use_case.get_contentbasefile(
                 contentbasefile_uuid=contentbasefile_uuid,
                 user_email=user_email
             )
-            file = s3FileDatabase().create_presigned_url(file_name)
+            content_base_uuid = str(content_base_file.content_base.uuid)
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+
+            if project.indexer_database == Project.BEDROCK:
+                file_name = f"{content_base_uuid}/{file_name}"
+                file = BedrockFileDatabase().create_presigned_url(file_name)
+            else:
+                file = s3FileDatabase().create_presigned_url(file_name)
+
             return Response(data={"file": file}, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)

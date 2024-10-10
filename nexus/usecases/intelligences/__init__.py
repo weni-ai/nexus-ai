@@ -27,7 +27,8 @@ from .delete import (
     DeleteIntelligenceUseCase,
     DeleteContentBaseUseCase,
     DeleteContentBaseTextUseCase,
-    # DeleteContentBaseFileUseCase,
+    DeleteContentBaseLinkUseCase,
+    DeleteContentBaseFileUseCase,
 )
 from .get_by_uuid import (
     get_by_intelligence_uuid,

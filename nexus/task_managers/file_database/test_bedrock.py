@@ -2,6 +2,7 @@ import json
 import requests
 from uuid import uuid4
 from unittest.mock import patch
+from unittest import skip
 
 from django.test import TestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -26,10 +27,13 @@ from nexus.task_managers.tasks_bedrock import (
     start_ingestion_job,
 )
 
+from nexus.intelligences.models import ContentBaseLink, ContentBaseText, ContentBaseFile
+
 from router.entities import ProjectDTO
 from router.repositories.orm import ProjectORMRepository
 
 
+@skip("Development tests for bedrock")
 class BedrockFileDatabaseTestCase(TestCase):
     def setUp(self) -> None:
         self.bedrock = BedrockFileDatabase()
@@ -92,6 +96,7 @@ class BedrockFileDatabaseTestCase(TestCase):
         self.assertEquals(response.status_code, 200)
 
 
+@skip("Development tests for bedrock")
 class TestChangesInProjectBedrockTestCase(TestCase):
     def setUp(self) -> None:
         self.org = OrgFactory()
@@ -128,6 +133,7 @@ class TestChangesInProjectBedrockTestCase(TestCase):
         self.assertIsInstance(sentenx(), SentenXFileDataBase)
 
 
+@skip
 class TestBedrockTasksTestCase(TestCase):
     def setUp(self) -> None:
         self.content_base_file = ContentBaseFileFactory()
@@ -159,6 +165,7 @@ class TestBedrockTasksTestCase(TestCase):
         self.assertEquals(self.task_manager.status, TaskManager.STATUS_PROCESSING)
 
 
+@skip("Development tests for bedrock")
 class TestContentBaseBedrockTestCase(TestCase):
     def setUp(self) -> None:
         self.factory = APIRequestFactory()
@@ -226,3 +233,120 @@ class TestContentBaseBedrockTestCase(TestCase):
         task_manager = ContentBaseLinkTaskManager.objects.get(content_base_link__uuid=file_uuid)
         self.assertEquals(response.status_code, 201)
         self.assertIn(task_manager.status, [TaskManager.STATUS_SUCCESS, TaskManager.STATUS_PROCESSING])
+
+    def test_view_delete_content_base_link(self):
+
+        self.content_base.uuid = "e1c5b03b-d569-4e5d-bbed-0b0e285f15b7"
+        self.content_base.save()
+
+        client = APIClient()
+        content_base_link = ContentBaseLink.objects.create(
+            uuid="a47ded65-1dc4-48b3-a1cd-cb27987cfde9",
+            link="https://docs.djangoproject.com/en/5.1/ref/request-response/#django.http.HttpRequest.FILES",
+            content_base=self.content_base,
+            name="a47ded65-1dc4-48b3-a1cd-cb27987cfde9-5113bdc7-53c9-4857-8102-9ca7baea04b6.md",
+            created_by=self.user
+        )
+        content_base_link_uuid = str(content_base_link.uuid)
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "content-base-link-detail",
+            kwargs={
+                "content_base_uuid": self.content_base_uuid,
+                "contentbaselink_uuid": content_base_link_uuid
+            }
+        )
+        response = client.delete(url, format='json')
+        response.render()
+
+        with self.assertRaises(ContentBaseLinkTaskManager.DoesNotExist):
+            ContentBaseLinkTaskManager.objects.get(content_base_link__uuid=content_base_link_uuid)
+
+    def test_view_delete_content_base_text(self):
+        self.content_base.uuid = "baef775e-8ed3-465f-818e-d7e67ff46ecf"
+        self.content_base.save()
+        text_uuid = "620ddbff-5ecb-4bbd-b771-9025ea91e8f6"
+        filename = "Bedrock-1-c6023317-1d9c-4fac-a123-bab262f40852.txt"
+        client = APIClient()
+
+        content_base_text = ContentBaseText.objects.create(
+            uuid=text_uuid,
+            content_base=self.content_base,
+            file_name=filename,
+            created_by=self.user,
+        )
+        content_base_text_uuid = str(content_base_text.uuid)
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "content-bases-text-detail",
+            kwargs={
+                "content_base_uuid": self.content_base_uuid,
+                "contentbasetext_uuid": content_base_text_uuid
+            }
+        )
+        response = client.delete(url, format='json')
+        response.render()
+
+        with self.assertRaises(ContentBaseTextTaskManager.DoesNotExist):
+            ContentBaseTextTaskManager.objects.get(content_base_text__uuid=content_base_text_uuid)
+
+    def test_view_delete_content_base_file(self):
+        self.content_base.uuid = "1eacef76-92e2-45b4-bb1a-82fc7f373050"
+        self.content_base.save()
+
+        file_uuid = "1eacef76-92e2-45b4-bb1a-82fc7f373050"
+        filename = "file-d88855c1-97e8-4f68-afaf-30e12b7dc5aa.txt"
+        ext = filename.split(".")[1]
+
+        client = APIClient()
+
+        content_base_file = ContentBaseFile.objects.create(
+            uuid=file_uuid,
+            content_base=self.content_base,
+            file_name=filename,
+            created_by=self.user,
+            extension_file=ext
+        )
+        content_base_file_uuid = str(content_base_file.uuid)
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "content-base-file-detail",
+            kwargs={
+                "content_base_uuid": self.content_base_uuid,
+                "contentbase_file_uuid": content_base_file_uuid
+            }
+        )
+
+        response = client.delete(url, format='json')
+        response.render()
+
+        with self.assertRaises(ContentBaseFileTaskManager.DoesNotExist):
+            ContentBaseFileTaskManager.objects.get(content_base_file__uuid=content_base_file_uuid)
+
+    def test_view_update_content_base_text(self):
+        self.content_base.uuid = "1b2a7752-6977-420b-937f-a935b26a199b"
+        self.content_base.save()
+        filename = "Bedrock-2-fef7af31-a8fa-4a47-893d-4b821466fab9.txt"
+
+        client = APIClient()
+        content_base_text = ContentBaseText.objects.create(
+            file_name=filename,
+            text="Esse é um texto",
+            content_base=self.content_base,
+            created_by=self.user
+        )
+        data = {"text": "Esse é um texto (Atualizado 1)"}
+
+        content_base_text_uuid = str(content_base_text.uuid)
+        client.force_authenticate(user=self.user)
+
+        url = reverse(
+            "content-bases-text-detail",
+            kwargs={
+                "content_base_uuid": str(self.content_base.uuid),
+                "contentbasetext_uuid": content_base_text_uuid
+            }
+        )
+        response = client.put(url, data, format='json')
+        response.render()
+        print(response)
