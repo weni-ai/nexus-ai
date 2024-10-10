@@ -20,6 +20,7 @@ from .serializers import (
     LLMConfigSerializer,
     ContentBasePersonalizationSerializer,
 )
+from nexus.storage import AttachmentPreviewStorage, validate_mime_type
 from nexus.usecases import intelligences
 from nexus.paginations import CustomCursorPagination
 from nexus.orgs import permissions
@@ -32,8 +33,8 @@ from nexus.task_managers.file_database.sentenx_file_database import SentenXFileD
 from nexus.usecases.task_managers.file_database import get_gpt_by_content_base_uuid
 
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
-from nexus.task_managers.tasks import upload_text_file, send_link
 from nexus.task_managers.tasks_bedrock import bedrock_upload_text_file
+from nexus.task_managers.tasks import upload_text_file, send_link, delete_file_task
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
@@ -907,3 +908,36 @@ class ContentBaseFilePreview(views.APIView):
             return Response(status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
             return Response(data={"message": str(e)}, status=500)
+
+
+class UploadFileView(views.APIView):
+    def post(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        user = request.user
+
+        project = get_project_by_uuid(project_uuid)
+        has_project_permission(
+            user=user,
+            project=project,
+            method="post"
+        )
+
+        file = request.FILES.get('file')
+        if not file:
+            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not validate_mime_type(file.content_type):
+            return Response({"error": f"invalid file type: {file.content_type}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        storage = AttachmentPreviewStorage(
+            access_key=settings.AWS_S3_ACCESS_KEY_ID,
+            secret_key=settings.AWS_S3_SECRET_ACCESS_KEY,
+            bucket_name=settings.AWS_S3_BUCKET_NAME,
+        )
+        file_name = storage.save(file.name, file)
+        file_name = f"media/preview/attachments/{file_name}"
+        file_url = s3FileDatabase().create_presigned_url(file_name)
+
+        delete_file_task.apply_async((file_name,), countdown=600)
+
+        return Response({"file_url": file_url}, status=status.HTTP_201_CREATED)

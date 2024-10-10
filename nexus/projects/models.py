@@ -85,5 +85,5 @@ class IntegratedFeature(models.Model):
     project = models.ForeignKey(
         Project, on_delete=models.CASCADE, related_name='integrated_features'
     )
-    current_version_setup = models.JSONField(default=dict)
+    current_version_setup = models.JSONField(default=list)
     is_integrated = models.BooleanField(default=False)
