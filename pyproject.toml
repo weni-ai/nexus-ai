@@ -29,7 +29,6 @@ amqp = "^5.2.0"
 sentry-sdk = "^1.39.2"
 mozilla-django-oidc = "^4.0.0"
 django-cors-headers = "^4.3.1"
-trulens-eval = "0.23.0"
 openai = ">=1.1.1, <2"
 pre-commit = "^3.6.2"
 fastapi = "^0.110.0"
@@ -39,6 +38,7 @@ django-prometheus = "^2.3.1"
 prometheus-client = "^0.20.0"
 django-storages = "^1.14.4"
 ftfy = "^6.2.3"
+trulens-eval = "^1.1.0"
 
 
 
