@@ -1,9 +1,9 @@
 # 2.4.0
 ## *Add*
-    - "Accept attachments in preview"
+    -Accept attachments in preview
 # *Fix*
-- Encoding chunk pages error
-- Recent activities token visualization
+    - Encoding chunk pages error
+    - Recent activities token visualization
 
 # 2.3.1
 ## *Update*
