@@ -109,6 +109,8 @@ def generate_env():
         "AWS_BEDROCK_ACCESS_KEY": "",
         "AWS_BEDROCK_SECRET_KEY": "",
         "USE_BEDROCK_WENIGPT": "",
+        "AWS_ACCESS_KEY_ID": "",
+        "AWS_SECRET_ACCESS_KEY": "",
         "ZEROSHOT_BASE_NLP_URL": "",
         "FLOWS_TOKEN_ZEROSHOT": "",
         "ZEROSHOT_SUFFIX": "",

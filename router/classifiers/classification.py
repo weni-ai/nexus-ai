@@ -78,8 +78,34 @@ class Classification:
     def non_custom_actions_preview(
         self,
     ) -> bool:
+        if not self.message.text:
+            action_type = None
+            if 'order' in self.message.metadata:
+                action_type = 'whatsapp_cart'
+                flow_dto = self.flows_repository.get_classifier_flow_by_action_type(action_type=action_type)
+                if flow_dto:
+                    return {
+                        "type": "flowstart",
+                        "uuid": flow_dto.uuid,
+                        "name": flow_dto.name,
+                        "msg_event": None
+                    }
 
-        return {}
+            if hasattr(self.message, 'attachments') and self.message.attachments:
+                action_type = 'attachment'
+                flow_dto = self.flows_repository.get_classifier_flow_by_action_type(action_type=action_type)
+                if flow_dto:
+                    return {
+                        "type": "flowstart",
+                        "uuid": flow_dto.uuid,
+                        "name": flow_dto.name,
+                        "msg_event": None
+                    }
+                return {
+                    "type": "media_and_location_unavailable",
+                }
+
+        return self.flow_started
 
     def custom_actions(
         self,
