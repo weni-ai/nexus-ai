@@ -21,7 +21,6 @@ from .serializers import (
     ContentBasePersonalizationSerializer,
 )
 from nexus.usecases import intelligences
-from nexus.usecases import projects
 from nexus.paginations import CustomCursorPagination
 from nexus.orgs import permissions
 from nexus.projects.permissions import has_project_permission
@@ -509,8 +508,9 @@ class ContentBaseTextViewset(
         try:
             user_email = request.user.email
             content_base_uuid = kwargs.get("content_base_uuid")
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-            indexer = projects.ProjectsUseCase().get_indexer_database_by_project(project)
+            project_use_case = ProjectsUseCase()
+            project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
+            indexer = project_use_case.get_indexer_database_by_project(project)
             use_case = intelligences.DeleteContentBaseTextUseCase(indexer())
 
             contentbasetext_uuid = kwargs.get('contentbasetext_uuid')
@@ -596,8 +596,9 @@ class ContentBaseFileViewset(ModelViewSet):
             contentbasefile_uuid=contentbasefile_uuid,
             user_email=user_email
         )
-        project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-        indexer = projects.ProjectsUseCase().get_indexer_database_by_project(project)
+        project_use_case = ProjectsUseCase()
+        project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
+        indexer = project_use_case.get_indexer_database_by_project(project)
         intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
 
         if project.indexer_database == Project.BEDROCK:
@@ -676,9 +677,9 @@ class ContentBaseLinkViewset(ModelViewSet):
             contentbaselink_uuid=contentbaselink_uuid,
             user_email=user_email
         )
-
-        project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-        indexer = projects.ProjectsUseCase().get_indexer_database_by_project(project)
+        project_use_case = ProjectsUseCase()
+        project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
+        indexer = project_use_case.get_indexer_database_by_project(project)
 
         use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
         use_case.delete_by_object(
