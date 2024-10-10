@@ -1,3 +1,12 @@
+# 2.3.1
+## *Update*
+    - IntegratedFeature current_version_setup is now a list of dicts
+    - Handle multiple flows integrations
+
+# 2.3.0
+## *Add*
+    - Zeroshot client
+
 # 2.2.1
 ## *Fix*
     - Customization activities
