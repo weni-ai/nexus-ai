@@ -78,7 +78,7 @@ def start_route(
         if classification_handler.non_custom_actions_route():
             return True
 
-        log_usecase.create_message_log(message.text, message.contact_urn)
+        message_log = log_usecase.create_message_log(message.text, message.contact_urn)
 
         llm_model = get_llm_by_project_uuid(project_uuid)
 
@@ -118,7 +118,8 @@ def start_route(
             flow_start=flow_start,
             llm_config=llm_config,
             flows_user_email=flows_user_email,
-            log_usecase=log_usecase
+            log_usecase=log_usecase,
+            message_log=message_log
         )
 
         log_usecase.update_status("S")
