@@ -109,6 +109,8 @@ def generate_env():
         "AWS_BEDROCK_ACCESS_KEY": "",
         "AWS_BEDROCK_SECRET_KEY": "",
         "USE_BEDROCK_WENIGPT": "",
+        "AWS_ACCESS_KEY_ID": "",
+        "AWS_SECRET_ACCESS_KEY": "",
     }
 
     with open(env_path, "w") as configfile:
