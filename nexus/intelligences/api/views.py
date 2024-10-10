@@ -41,6 +41,7 @@ from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.projects.models import Project
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 
 class IntelligencesViewset(
@@ -707,11 +708,19 @@ class DownloadFileViewSet(views.APIView):
             user_email = request.user.email
 
             use_case = intelligences.RetrieveContentBaseFileUseCase()
-            use_case.get_contentbasefile(
+            content_base_file = use_case.get_contentbasefile(
                 contentbasefile_uuid=contentbasefile_uuid,
                 user_email=user_email
             )
-            file = s3FileDatabase().create_presigned_url(file_name)
+            content_base_uuid = str(content_base_file.content_base.uuid)
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+
+            if project.indexer_database == Project.BEDROCK:
+                file_name = f"{content_base_uuid}/{file_name}"
+                file = BedrockFileDatabase().create_presigned_url(file_name)
+            else:
+                file = s3FileDatabase().create_presigned_url(file_name)
+
             return Response(data={"file": file}, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
