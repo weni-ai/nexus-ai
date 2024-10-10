@@ -71,31 +71,34 @@ class PreClassification:
         return flow_dto
 
     def pre_classification_route(self) -> bool:
-        if self.safety_check(start_flow=True):
-            return self.flow_started
-        if self.prompt_guard(start_flow=True):
-            return self.flow_started
+        if self.message_text:
+            if self.safety_check(start_flow=True):
+                return self.flow_started
+            if self.prompt_guard(start_flow=True):
+                return self.flow_started
         return self.flow_started
 
     def pre_classification_preview(self) -> dict:
         print(f"[+ Pre Classification Preview: {self.message} +]")
 
-        flow_dto = self.safety_check(start_flow=False)
-        if flow_dto:
-            return {
-                "type": "flowstart",
-                "uuid": flow_dto.uuid,
-                "name": flow_dto.name,
-                "msg_event": None
-            }
+        if self.message_text:
 
-        flow_dto = self.prompt_guard(start_flow=False)
-        if flow_dto:
-            return {
-                "type": "flowstart",
-                "uuid": flow_dto.uuid,
-                "name": flow_dto.name,
-                "msg_event": None
-            }
+            flow_dto = self.safety_check(start_flow=False)
+            if flow_dto:
+                return {
+                    "type": "flowstart",
+                    "uuid": flow_dto.uuid,
+                    "name": flow_dto.name,
+                    "msg_event": None
+                }
+
+            flow_dto = self.prompt_guard(start_flow=False)
+            if flow_dto:
+                return {
+                    "type": "flowstart",
+                    "uuid": flow_dto.uuid,
+                    "name": flow_dto.name,
+                    "msg_event": None
+                }
 
         return {}
