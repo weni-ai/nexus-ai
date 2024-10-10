@@ -29,7 +29,7 @@ def generate_env():
         "DEBUG": True,
         "ALLOWED_HOSTS": "*",
         "SECRET_KEY": get_random_secret_key(),
-        "DEFAULT_DATABASE": "postgres://nexus:nexus@localhost:5432/nexus",
+        "DEFAULT_DATABASE": "postgres://nexus:nexus@postgres:5432/nexus",
         "WENIGPT_FLOWS_CLASSIFY_TOKEN": "",
         "WENIGPT_FLOWS_SEARCH_TOKEN": "",
         "SENTENX_BASE_URL": "",
