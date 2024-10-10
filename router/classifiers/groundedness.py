@@ -34,6 +34,7 @@ class Groundedness:
         log_usecase,
         system_prompt: str = settings.GROUNDEDNESS_SYSTEM_PROMPT,
         user_prompt: str = settings.GROUNDEDNESS_USER_PROMPT,
+        score_avg_threshold: int = settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD,
     ) -> None:
 
         self.client = OpenAIClient(settings.OPENAI_API_KEY)
@@ -42,6 +43,7 @@ class Groundedness:
         self.log_usecase = log_usecase
         self.system_prompt = system_prompt.replace("\\n", "\n")
         self.user_prompt = user_prompt.replace("\\n", "\n")
+        self.score_avg_threshold = score_avg_threshold
 
     def extract_score_and_sentences(response: str):
         pattern = re.compile(
@@ -99,6 +101,7 @@ class Groundedness:
             return None
 
         score_avg = sum([int(item["score"]) for item in groundedness_values]) / len(groundedness_values)
+        tag = "llm_response" if self.score_avg_threshold < 8 else "llm_response_low"
         finished_groundedness = pendulum.now()
 
         usage_time = finished_groundedness.diff(started_groundedness).in_seconds()
@@ -106,6 +109,7 @@ class Groundedness:
         self.log_usecase.update_log_field(
             groundedness_score=score_avg,
             reflection_data={
+                "tag": tag,
                 "request_time": usage_time,
                 "sentence_rankings": response_content
             },
