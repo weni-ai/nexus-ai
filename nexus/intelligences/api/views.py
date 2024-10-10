@@ -695,7 +695,7 @@ class ContentBaseLinkViewset(ModelViewSet):
             user=user
         )
 
-        return super().destroy(request, *args, **kwargs)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class DownloadFileViewSet(views.APIView):
