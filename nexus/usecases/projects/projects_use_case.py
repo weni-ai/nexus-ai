@@ -16,6 +16,7 @@ from nexus.events import event_manager
 from django.conf import settings
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
+from nexus.intelligences.models import ContentBase, IntegratedIntelligence
 
 
 class ProjectsUseCase:
@@ -130,3 +131,9 @@ class ProjectsUseCase:
             Project.BEDROCK: BedrockFileDatabase,
             Project.SENTENX: SentenXFileDataBase
         }.get(project.indexer_database)
+
+    def get_project_by_content_base_uuid(self, content_base_uuid: str) -> Project:
+        content_base = ContentBase.objects.get(uuid=content_base_uuid)
+        intelligence = content_base.intelligence
+        project = IntegratedIntelligence.objects.get(intelligence=intelligence).project
+        return project
