@@ -48,10 +48,12 @@ class IntegratedFeatureFactory(factory.django.DjangoModelFactory):
 
     project = factory.SubFactory(ProjectFactory)
     feature_uuid = uuid4().hex
-    current_version_setup = {
-        "name": "Human handoff",
-        "root_flow_uuid": uuid4().hex,
-        "prompt": "Whenever an user wants to talk to a human",
-        "type": None
-    }
+    current_version_setup = [
+        {
+            "name": "Human handoff",
+            "root_flow_uuid": uuid4().hex,
+            "prompt": "Whenever an user wants to talk to a human",
+            "type": None
+        }
+    ]
     is_integrated = False
