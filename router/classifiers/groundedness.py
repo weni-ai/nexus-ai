@@ -31,7 +31,7 @@ class Groundedness:
         self,
         llm_response: str,
         llm_chunk_used: str,
-        log_usecase,
+        log,
         system_prompt: str = settings.GROUNDEDNESS_SYSTEM_PROMPT,
         user_prompt: str = settings.GROUNDEDNESS_USER_PROMPT,
         score_avg_threshold: int = settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD,
@@ -40,7 +40,7 @@ class Groundedness:
         self.client = OpenAIClient(settings.OPENAI_API_KEY)
         self.llm_chunk_used = llm_chunk_used
         self.llm_response = llm_response
-        self.log_usecase = log_usecase
+        self.log = log
         self.system_prompt = system_prompt.replace("\\n", "\n")
         self.user_prompt = user_prompt.replace("\\n", "\n")
         self.score_avg_threshold = score_avg_threshold

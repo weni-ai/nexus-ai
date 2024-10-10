@@ -50,6 +50,7 @@ def route(
     llm_config: LLMSetupDTO,
     flows_user_email: str,
     log_usecase,
+    message_log=None
 ):
     try:
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
@@ -112,7 +113,7 @@ def route(
             run_reflection_task.delay(
                 chunks_used=chunks,
                 llm_response=llm_response,
-                log_usecase=log_usecase,
+                message_log_id=message_log.id,
             )
 
             metadata = LogMetadata(

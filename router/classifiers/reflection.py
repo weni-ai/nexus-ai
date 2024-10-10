@@ -1,5 +1,6 @@
 from router.classifiers.groundedness import Groundedness
 
+from nexus.logs.models import MessageLog
 from nexus.celery import app as celery_app
 
 
@@ -7,12 +8,12 @@ from nexus.celery import app as celery_app
 def run_reflection_task(
     chunks_used: list,
     llm_response: str,
-    log_usecase,
+    message_log_id: int,
 ):
     reflection = Reflection(
         chunks_used,
         llm_response,
-        log_usecase,
+        message_log_id,
     )
     return reflection.classify()
 
@@ -28,17 +29,17 @@ class Reflection:
         self,
         chunks_used: list,
         llm_response: str,
-        log_usecase,
+        message_log_id: int,
     ):
+        self.log = MessageLog.objects.get(id=message_log_id)
         self.chunk_used = chunks_used
         self.llm_response = llm_response
-        self.log_usecase = log_usecase
 
     def classify(self):
 
         groundedness = Groundedness(
             self.llm_response,
             self.chunk_used,
-            self.log_usecase,
+            self.log,
         )
         return groundedness.classify()
