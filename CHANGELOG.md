@@ -1,3 +1,7 @@
+# 2.5.0
+## *Add*
+    - Bedrock Knowledge Bases
+
 # 2.4.0
 ## *Add*
     -Accept attachments in preview
