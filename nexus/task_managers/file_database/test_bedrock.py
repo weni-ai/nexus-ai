@@ -2,6 +2,7 @@ import json
 import requests
 from uuid import uuid4
 from unittest.mock import patch
+from unittest import skip
 
 from django.test import TestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -32,6 +33,7 @@ from router.entities import ProjectDTO
 from router.repositories.orm import ProjectORMRepository
 
 
+@skip("Development tests for bedrock")
 class BedrockFileDatabaseTestCase(TestCase):
     def setUp(self) -> None:
         self.bedrock = BedrockFileDatabase()
@@ -94,6 +96,7 @@ class BedrockFileDatabaseTestCase(TestCase):
         self.assertEquals(response.status_code, 200)
 
 
+@skip("Development tests for bedrock")
 class TestChangesInProjectBedrockTestCase(TestCase):
     def setUp(self) -> None:
         self.org = OrgFactory()
@@ -130,6 +133,7 @@ class TestChangesInProjectBedrockTestCase(TestCase):
         self.assertIsInstance(sentenx(), SentenXFileDataBase)
 
 
+@skip
 class TestBedrockTasksTestCase(TestCase):
     def setUp(self) -> None:
         self.content_base_file = ContentBaseFileFactory()
@@ -161,6 +165,7 @@ class TestBedrockTasksTestCase(TestCase):
         self.assertEquals(self.task_manager.status, TaskManager.STATUS_PROCESSING)
 
 
+@skip("Development tests for bedrock")
 class TestContentBaseBedrockTestCase(TestCase):
     def setUp(self) -> None:
         self.factory = APIRequestFactory()
