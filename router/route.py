@@ -1,5 +1,6 @@
 from typing import List, Dict
 from django.conf import settings
+from ftfy import fix_encoding
 
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.logs.entities import LogMetadata
@@ -83,9 +84,17 @@ def route(
 
             print(f"[+ Instructions: {instructions} +]")
 
-            chunks = [chunk.get("full_page").replace("\x00", "\uFFFD") for chunk in full_chunks]
+            chunks: List[str] = []
+            for chunk in full_chunks:
+                full_page = chunk.get("full_page").replace("\x00", "\uFFFD")
+                try:
+                    full_page.encode("latin-1")
+                    chunks.append(full_page)
+                except UnicodeEncodeError:
+                    full_page = fix_encoding(full_page)
+                    chunks.append(full_page)
 
-            print(f"[ + Chunks: {full_chunks} + ]")
+            print(f"[ + Chunks: {chunks} + ]")
 
             llm_response: str = call_llm(
                 chunks=chunks,
