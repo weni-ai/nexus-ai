@@ -1583,6 +1583,20 @@ files = [
 ]
 
 [[package]]
+name = "ftfy"
+version = "6.2.3"
+description = "Fixes mojibake and other problems with Unicode, after the fact"
+optional = false
+python-versions = "<4,>=3.8.1"
+files = [
+    {file = "ftfy-6.2.3-py3-none-any.whl", hash = "sha256:f15761b023f3061a66207d33f0c0149ad40a8319fd16da91796363e2c049fdf8"},
+    {file = "ftfy-6.2.3.tar.gz", hash = "sha256:79b505988f29d577a58a9069afe75553a02a46e42de6091c0660cdc67812badc"},
+]
+
+[package.dependencies]
+wcwidth = ">=0.2.12,<0.3.0"
+
+[[package]]
 name = "gevent"
 version = "23.9.1"
 description = "Coroutine-based network library"
