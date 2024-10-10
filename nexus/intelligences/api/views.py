@@ -523,8 +523,7 @@ class ContentBaseFileViewset(ModelViewSet):
             user_email = request.user.email
             extension_file = request.data.get("extension_file")
             load_type = request.data.get("load_type")
-            file_database = s3FileDatabase()
-            file_manager = CeleryFileManager(file_database=file_database)
+            file_manager = CeleryFileManager()
             response = file_manager.upload_file(
                 file,
                 content_base_uuid,

@@ -3,14 +3,13 @@ import os
 import django
 
 from typing import List
-from dataclasses import dataclass
 
 from nexus.intelligences.models import (
     ContentBase,
     ContentBaseAgent,
 )
 from nexus.actions.models import Flow
-from nexus.logs.models import Message, MessageLog
+from nexus.logs.models import MessageLog
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
@@ -22,7 +21,9 @@ from router.entities import (
     InstructionDTO,
     ContentBaseDTO,
     ContactMessageDTO,
+    ProjectDTO
 )
+from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
@@ -200,3 +201,13 @@ class MessageLogsRepository(Repository):
             )
 
         return contact_messages
+
+
+class ProjectORMRepository(Repository):
+    def get_project(self, project_uuid) -> ProjectDTO:
+        project = get_project_by_uuid(project_uuid)
+        return ProjectDTO(
+            uuid=str(project.uuid),
+            name=project.name,
+            indexer_database=project.indexer_database
+        )

@@ -5,7 +5,6 @@ from typing import Dict
 
 from django.conf import settings
 
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
@@ -26,6 +25,7 @@ from router.repositories.orm import (
     FlowsORMRepository,
     MessageLogsRepository
 )
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
 
 @celery_app.task
@@ -46,6 +46,7 @@ def start_route(
     log_usecase = CreateLogUsecase()
     try:
         project_uuid: str = message.project_uuid
+        indexer = ProjectsUseCase().get_indexer_database_by_uuid(project_uuid)
         flows_repository = FlowsORMRepository(project_uuid=project_uuid)
 
         broadcast = SendMessageHTTPClient(os.environ.get('FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'))
@@ -112,7 +113,7 @@ def start_route(
             content_base_repository=content_base_repository,
             flows_repository=flows_repository,
             message_logs_repository=message_logs_repository,
-            indexer=SentenXFileDataBase(),
+            indexer=indexer(),
             llm_client=llm_client,
             direct_message=broadcast,
             flow_start=flow_start,
