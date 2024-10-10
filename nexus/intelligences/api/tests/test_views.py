@@ -26,7 +26,10 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseLinkFactory,
 )
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
+from nexus.usecases.intelligences.create import create_base_brain_structure
+from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
 
 @skip("View Testing")
@@ -221,11 +224,25 @@ class TestContentBaseTextViewset(TestCase):
             'put': 'update',
             'delete': 'destroy'
         })
-        self.contentbasetext = ContentBaseTextFactory()
-        self.user = self.contentbasetext.created_by
-        self.content_base = self.contentbasetext.content_base
-        self.intelligence = self.content_base.intelligence
+        self.org = OrgFactory()
+        self.user = self.org.created_by
+        self.project = self.org.projects.create(
+            name="Project",
+            created_by=self.org.created_by
+        )
+        self.project.authorizations.create(user=self.user, role=3)
+        self.integrated_intelligence = create_base_brain_structure(self.project)
+        self.intelligence = self.integrated_intelligence.intelligence
+        self.content_base = get_default_content_base_by_project(str(self.project.uuid))
+        self.contentbasetext = self.__create_content_base_text(self.content_base)
         self.url = f'{self.content_base.uuid}/content-bases-text'
+
+    def __create_content_base_text(self, content_base):
+        contentbasetext = ContentBaseTextFactory()
+        contentbasetext.content_base = content_base
+        contentbasetext.save()
+        contentbasetext.refresh_from_db()
+        return contentbasetext
 
     def test_get_queryset(self):
 
@@ -262,8 +279,9 @@ class TestContentBaseTextViewset(TestCase):
         )
         self.assertEqual(response.status_code, 201)
 
+    @mock.patch("nexus.usecases.intelligences.delete.DeleteContentBaseTextUseCase.delete_content_base_text_from_index")
     @mock.patch("nexus.intelligences.api.views.SentenXFileDataBase")
-    def test_update(self, mock_file_database):
+    def test_update(self, mock_file_database, _):
         mock_file_database = MockFileDataBase
         mock_file_database()
         text = ""
@@ -287,8 +305,9 @@ class TestContentBaseTextViewset(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(content.get("text"), text)
 
+    @mock.patch("nexus.usecases.intelligences.delete.DeleteContentBaseTextUseCase.delete_content_base_text_from_index")
     @mock.patch("nexus.intelligences.api.views.SentenXFileDataBase")
-    def test_update_empty_text(self, mock_file_database):
+    def test_update_empty_text(self, mock_file_database, _):
         mock_file_database = MockFileDataBase
         mock_file_database()
         text = ""
@@ -317,15 +336,31 @@ class TestContentBaseLinkViewset(TestCase):
 
     def setUp(self):
         self.factory = APIRequestFactory()
-        self.contentbaselink = ContentBaseLinkFactory()
-        self.user = self.contentbaselink.created_by
-        self.content_base = self.contentbaselink.content_base
-        self.intelligence = self.content_base.intelligence
-        self.url = f'{self.content_base.uuid}/content-bases-link'
+
+        self.org = OrgFactory()
+        self.user = self.org.created_by
+        self.project = self.org.projects.create(
+            name="Project",
+            created_by=self.org.created_by
+        )
+        self.project.authorizations.create(user=self.user, role=3)
+        self.integrated_intelligence = create_base_brain_structure(self.project)
+        self.intelligence = self.integrated_intelligence.intelligence
+        self.content_base = get_default_content_base_by_project(str(self.project.uuid))
+        self.contentbaselink = self.__create_content_base_link(self.content_base)
+
         self.task_uuid = ContentBaseLinkTaskManager.objects.create(
             content_base_link=self.contentbaselink,
             created_by=self.user
         )
+        self.url = f'{self.content_base.uuid}/content-bases-link'
+
+    def __create_content_base_link(self, content_base):
+        contentbaselink = ContentBaseLinkFactory()
+        contentbaselink.content_base = content_base
+        contentbaselink.save()
+        contentbaselink.refresh_from_db()
+        return contentbaselink
 
     def sentenx_indexer_update_file(self, task_uuid: str, status: bool, file_type: str):
         data = {

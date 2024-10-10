@@ -99,6 +99,9 @@ class BedrockFileDatabase(FileDataBase):
             Key=file_metadata
         )
 
+    def delete(self, content_base_uuid: str, content_base_file_uuid: str, filename: str):
+        self.delete_file_and_metadata(content_base_uuid, filename)
+
     def start_bedrock_ingestion(self) -> str:
         print("[+ Bedrock: Starting ingestion job +]")
         response = self.bedrock_agent.start_ingestion_job(
@@ -181,6 +184,8 @@ class BedrockFileDatabase(FileDataBase):
                     "file_uuid": chunk.get("metadata").get("fileUuid"),
                 }
             )
+
+        return llm_chunk_list
 
     def __create_unique_filename(self, filename: str) -> str:
         name, extension = filename.rsplit(".", 1)

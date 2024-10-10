@@ -13,6 +13,8 @@ from nexus.usecases import (
 from ...event_domain.recent_activity.msg_handler import recent_activity_message
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
+from nexus.usecases.intelligences.retrieve import RetrieveContentBaseLinkUseCase
+from nexus.intelligences.models import ContentBaseLink, ContentBaseFile
 
 
 class DeleteIntelligenceUseCase():
@@ -137,3 +139,46 @@ class DeleteContentBaseTextUseCase():
             filename=content_base_file_name
         )
         return True
+
+
+class DeleteContentBaseLinkUseCase:
+    def __init__(self, file_database=None) -> None:
+        self.file_database = file_database
+
+    def delete_by_uuid(self, link_uuid: str, user_email: str):
+        use_case = RetrieveContentBaseLinkUseCase()
+        content_base_link: ContentBaseLink = use_case.get_contentbaselink(
+            contentbaselink_uuid=link_uuid,
+            user_email=user_email
+        )
+        if self.file_database:
+            self.file_database.delete(
+                content_base_uuid=str(content_base_link.content_base.uuid),
+                content_base_file_uuid=str(content_base_link.uuid),
+                filename=content_base_link.link
+            )
+        content_base_link.delete()
+
+    def delete_by_object(self, content_base_link: ContentBaseLink):
+        if self.file_database:
+            filename: str = content_base_link.name if content_base_link.name else content_base_link.link
+            self.file_database().delete(
+                content_base_uuid=str(content_base_link.content_base.uuid),
+                content_base_file_uuid=str(content_base_link.uuid),
+                filename=filename
+            )
+        content_base_link.delete()
+
+
+class DeleteContentBaseFileUseCase:
+    def __init__(self, file_database=None) -> None:
+        self.file_database = file_database
+
+    def delete_by_object(self, content_base_file: ContentBaseFile):
+        if self.file_database:
+            self.file_database().delete(
+                content_base_uuid=str(content_base_file.content_base.uuid),
+                content_base_file_uuid=str(content_base_file.uuid),
+                filename=content_base_file.file_name
+            )
+        content_base_file.delete()
