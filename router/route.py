@@ -101,11 +101,12 @@ def route(
 
             print(f"[+ LLM Response: {llm_response} +]")
 
-            run_reflection_task.delay(
-                chunks_used=chunks,
-                llm_response=llm_response,
-                message_log_id=message_log.id,
-            )
+            if message_log:
+                run_reflection_task.delay(
+                    chunks_used=chunks,
+                    llm_response=llm_response,
+                    message_log_id=message_log.id,
+                )
 
             metadata = LogMetadata(
                 agent_name=agent.name,
@@ -148,6 +149,9 @@ def route(
             project_id=message.project_uuid,
             content_base_id=content_base.uuid,
             classification=classification,
+            reflection_data={
+                "tag": "action_started"
+            }
         )
 
         return dispatch(
