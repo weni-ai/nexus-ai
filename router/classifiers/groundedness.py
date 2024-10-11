@@ -47,7 +47,10 @@ class Groundedness:
         self.user_prompt = user_prompt.replace("\\n", "\n")
         self.score_avg_threshold = score_avg_threshold
 
-    def extract_score_and_sentences(response: str):
+    def extract_score_and_sentences(
+        self,
+        response: str
+    ):
         pattern = re.compile(
             r"Statement Sentence: (?P<sentence>.*?),\s*Supporting Evidence:\s*(?P<evidence>.*?)(?:,|\s*)\s*Score:\s*(?P<score>\d+)"
         )
