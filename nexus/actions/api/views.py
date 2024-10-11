@@ -332,7 +332,7 @@ class MessagePreviewView(APIView):
             if started_flow:
                 return Response(started_flow)
 
-            log_usecase.create_message_log(text, contact_urn)
+            message_log = log_usecase.create_message_log(text, contact_urn)
 
             classifier = ZeroshotClassifier(
                 chatbot_goal=agent.goal
@@ -364,6 +364,7 @@ class MessagePreviewView(APIView):
                 llm_config=llm_config,
                 flows_user_email=flows_user_email,
                 log_usecase=log_usecase,
+                message_log=message_log
             )
 
             log_usecase.update_status("S")
