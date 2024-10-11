@@ -1,3 +1,7 @@
+# 2.5.1
+## *FIx*
+    - install playwright in docker build
+
 # 2.5.0
 ## *Add*
     - Bedrock Knowledge Bases
