@@ -112,7 +112,7 @@ class Groundedness:
 
         score_avg = sum([int(item["score"]) for item in groundedness_values]) / len(groundedness_values)
         print("[+] Groundedness score avg [+]")
-        tag = "answer_valid" if self.score_avg_threshold < 8 else "answer_not_valid"
+        tag = "answer_valid" if self.score_avg_threshold >= 8 else "answer_not_valid"
         print(tag)
         finished_groundedness = pendulum.now()
 
@@ -129,4 +129,3 @@ class Groundedness:
         self.log.save()
         print("[+] Log after update [+]")
         print(self.log)
-        return gpt_response
