@@ -119,5 +119,3 @@ class Groundedness:
 
         self.log.groundedness_score = score_avg
         self.log.save()
-
-        return gpt_response
