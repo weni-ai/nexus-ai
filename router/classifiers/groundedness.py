@@ -106,7 +106,7 @@ class Groundedness:
             return None
 
         score_avg = sum([int(item["score"]) for item in groundedness_values]) / len(groundedness_values)
-        tag = "answer_valid" if self.score_avg_threshold < 8 else "answer_not_valid"
+        tag = "answer_valid" if self.score_avg_threshold >= 8 else "answer_not_valid"
         finished_groundedness = pendulum.now()
 
         usage_time = finished_groundedness.diff(started_groundedness).in_seconds()
