@@ -88,6 +88,7 @@ class Groundedness:
 
     def classify(self):
 
+        print("[+] Groundedness reflection start [+]")
         started_groundedness = pendulum.now()
 
         formated_prompt = self.get_prompt()
@@ -100,17 +101,24 @@ class Groundedness:
         )
 
         response_content = gpt_response.choices[0].message.content
+        print("[+] Groundedness gpt classification [+]")
+        print(response_content)
         groundedness_values = self.extract_score_and_sentences(response_content)
+        print("[+] Groundedness values extracted [+]")
+        print(groundedness_values)
 
         if not groundedness_values:
             return None
 
         score_avg = sum([int(item["score"]) for item in groundedness_values]) / len(groundedness_values)
+        print("[+] Groundedness score avg [+]")
         tag = "answer_valid" if self.score_avg_threshold < 8 else "answer_not_valid"
+        print(tag)
         finished_groundedness = pendulum.now()
 
         usage_time = finished_groundedness.diff(started_groundedness).in_seconds()
-
+        print("[+] Log before update [+]")
+        print(self.log)
         self.log.reflection_data = {
             "tag": tag,
             "request_time": usage_time,
@@ -119,5 +127,6 @@ class Groundedness:
 
         self.log.groundedness_score = score_avg
         self.log.save()
-
+        print("[+] Log after update [+]")
+        print(self.log)
         return gpt_response
