@@ -1,3 +1,8 @@
+# 2.6.0
+## *Add*
+    - Reflection step after the user message
+    - Groundedness classification on the user message
+
 # 2.5.1
 ## *FIx*
     - install playwright in docker build
