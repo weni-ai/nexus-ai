@@ -133,7 +133,8 @@ class FlowsViewset(
 
             if action_template_uuid:
                 template = TemplateAction.objects.get(
-                    uuid=action_template_uuid)
+                    uuid=action_template_uuid
+                )
                 name = template.name
                 prompt = template.prompt if template.prompt else ""
                 action_type = template.action_type
@@ -535,7 +536,8 @@ class TemplateActionView(ModelViewSet):
     def update(self, request, *args, **kwargs):
         try:
             authorization_header = request.headers.get(
-                "Authorization", "Bearer unauthorized")
+                "Authorization", "Bearer unauthorized"
+            )
             if not is_super_user(authorization_header):
                 raise PermissionDenied("You has not permission to do that.")
 
