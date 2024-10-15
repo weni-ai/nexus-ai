@@ -41,7 +41,8 @@ def start_route(
     message = Message(**message)
     mailroom_msg_event = message.msg_event
     mailroom_msg_event['attachments'] = mailroom_msg_event.get(
-        'attachments') or []
+        'attachments'
+    ) or []
     mailroom_msg_event['metadata'] = mailroom_msg_event.get('metadata') or {}
 
     log_usecase = CreateLogUsecase()
@@ -50,14 +51,27 @@ def start_route(
         indexer = ProjectsUseCase().get_indexer_database_by_uuid(project_uuid)
         flows_repository = FlowsORMRepository(project_uuid=project_uuid)
 
-        broadcast = SendMessageHTTPClient(os.environ.get(
-            'FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'))
-        flow_start = FlowStartHTTPClient(os.environ.get(
-            'FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
+        broadcast = SendMessageHTTPClient(
+            os.environ.get(
+                'FLOWS_REST_ENDPOINT'
+            ),
+            os.environ.get(
+                'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
+            )
+        )
+        flow_start = FlowStartHTTPClient(
+            os.environ.get(
+                'FLOWS_REST_ENDPOINT'
+            ),
+            os.environ.get(
+                'FLOWS_INTERNAL_TOKEN'
+            )
+        )
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(
-            message.project_uuid)
+            message.project_uuid
+        )
         agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
         agent = agent.set_default_if_null()
 
@@ -101,7 +115,8 @@ def start_route(
             max_length=llm_model.setup.get("max_length"),
             max_tokens=llm_model.setup.get("max_tokens"),
             language=llm_model.setup.get(
-                "language", settings.WENIGPT_DEFAULT_LANGUAGE),
+                "language", settings.WENIGPT_DEFAULT_LANGUAGE
+            ),
         )
 
         classifier = ZeroshotClassifier(chatbot_goal=agent.goal)
@@ -112,7 +127,8 @@ def start_route(
 
         llm_client = LLMClient.get_by_type(llm_config.model)
         llm_client: LLMClient = list(llm_client)[0](
-            model_version=llm_config.model_version)
+            model_version=llm_config.model_version
+        )
 
         if llm_config.model.lower() != "wenigpt":
             llm_client.api_key = llm_config.token
