@@ -86,7 +86,11 @@ class SearchFlowView(APIView):
         page = request.query_params.get('page')
 
         data: Dict = ListFlowsUseCase().search_flows_by_project(
-            project_uuid, name, page_size, page)
+            project_uuid,
+            name,
+            page_size,
+            page
+        )
 
         return Response(self.format_response(data))
 
@@ -118,7 +122,9 @@ class FlowsViewset(
             fallback = request.data.get("fallback")
 
             action_template_uuid = request.data.get(
-                "action_template_uuid", None)
+                "action_template_uuid",
+                None
+            )
 
             name = request.data.get("name")
             prompt = request.data.get("prompt", "")
@@ -251,10 +257,23 @@ class MessagePreviewView(APIView):
     def post(self, request, *args, **kwargs):
         try:
             flows_user_email = os.environ.get("FLOW_USER_EMAIL")
-            flow_start = SimulateFlowStart(os.environ.get(
-                'FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'))
-            broadcast = SimulateBroadcast(os.environ.get(
-                'FLOWS_REST_ENDPOINT'), os.environ.get('FLOWS_INTERNAL_TOKEN'), get_file_info)
+            flow_start = SimulateFlowStart(
+                os.environ.get(
+                    'FLOWS_REST_ENDPOINT'
+                ),
+                os.environ.get(
+                    'FLOWS_INTERNAL_TOKEN'
+                )
+            )
+            broadcast = SimulateBroadcast(
+                os.environ.get(
+                    'FLOWS_REST_ENDPOINT'
+                ),
+                os.environ.get(
+                    'FLOWS_INTERNAL_TOKEN'
+                ),
+                get_file_info
+            )
 
             content_base_repository = ContentBaseORMRepository()
             message_logs_repository = MessageLogsRepository()
@@ -268,7 +287,9 @@ class MessagePreviewView(APIView):
             metadata = data.get("metadata", {})
 
             project = projects.get_project_by_uuid(project_uuid)
-            indexer = projects.ProjectsUseCase().get_indexer_database_by_project(project)
+            indexer = projects.ProjectsUseCase().get_indexer_database_by_project(
+                project
+            )
 
             has_project_permission(
                 user=request.user,
@@ -287,17 +308,20 @@ class MessagePreviewView(APIView):
             )
 
             print(
-                f"[+ Message: {message.text} - Contact: {message.contact_urn} - Project: {message.project_uuid} +]")
+                f"[+ Message: {message.text} - Contact: {message.contact_urn} - Project: {message.project_uuid} +]"
+            )
 
             project_uuid: str = message.project_uuid
 
             flows_repository = FlowsORMRepository(project_uuid=project_uuid)
 
             content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(
-                message.project_uuid)
+                message.project_uuid
+            )
 
             agent: AgentDTO = content_base_repository.get_agent(
-                content_base.uuid)
+                content_base.uuid
+            )
             agent = agent.set_default_if_null()
 
             llm_model = get_llm_by_project_uuid(project_uuid)
@@ -316,7 +340,8 @@ class MessagePreviewView(APIView):
             )
 
             print(
-                f"[+ LLM model: {llm_config.model}:{llm_config.model_version} +]")
+                f"[+ LLM model: {llm_config.model}:{llm_config.model_version} +]"
+            )
 
             pre_classification = PreClassification(
                 flows_repository=flows_repository,
@@ -359,7 +384,8 @@ class MessagePreviewView(APIView):
 
             llm_client = LLMClient.get_by_type(llm_config.model)
             llm_client: LLMClient = list(llm_client)[0](
-                model_version=llm_config.model_version)
+                model_version=llm_config.model_version
+            )
 
             if llm_config.model.lower() != "wenigpt":
                 llm_client.api_key = llm_config.token
@@ -431,7 +457,8 @@ class TemplateActionView(ModelViewSet):
             project = projects.get_project_by_uuid(kwargs.get("project_uuid"))
 
             authorization_header = request.headers.get(
-                'Authorization', "Bearer unauthorized")
+                'Authorization', "Bearer unauthorized"
+            )
             super_user = is_super_user(authorization_header)
 
             if not super_user:
@@ -458,7 +485,8 @@ class TemplateActionView(ModelViewSet):
     def create(self, request, *args, **kwargs):
         try:
             authorization_header = request.headers.get(
-                "Authorization", "Bearer unauthorized")
+                "Authorization", "Bearer unauthorized"
+            )
             if not is_super_user(authorization_header):
                 raise PermissionDenied("You has not permission to do that.")
 
@@ -489,7 +517,8 @@ class TemplateActionView(ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         try:
             authorization_header = request.headers.get(
-                "Authorization", "Bearer unauthorized")
+                "Authorization", "Bearer unauthorized"
+            )
             if not is_super_user(authorization_header):
                 raise PermissionDenied("You has not permission to do that.")
 
