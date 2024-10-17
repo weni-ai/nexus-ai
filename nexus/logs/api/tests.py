@@ -272,3 +272,18 @@ class MessageHistoryViewsetTestCase(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEquals(len(content.get("results")), 0)
+
+    def test_null_reflection_data(self):
+        MessageLog.objects.all().update(reflection_data=None)
+
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100")
+        force_authenticate(request, user=self.user)
+        response = MessageHistoryViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEquals(len(content.get("results")), 0)

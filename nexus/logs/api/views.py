@@ -69,6 +69,8 @@ class MessageHistoryViewset(
 
         return MessageLog.objects.filter(
             **params
+        ).exclude(
+            reflection_data__isnull=True
         ).select_related(
             'message'
         ).order_by(
