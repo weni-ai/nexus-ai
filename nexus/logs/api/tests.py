@@ -10,13 +10,13 @@ from rest_framework.test import APIRequestFactory
 
 from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
-from nexus.usecases.logs.tests.logs_factory import RecentActivitiesFactory
+from nexus.usecases.logs.tests.logs_factory import RecentActivitiesFactory, MessageLogFactory
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
 from nexus.logs.models import MessageLog, Message
 from nexus.logs.api.serializers import MessageLogSerializer
 
-from nexus.logs.api.views import LogsViewset, RecentActivitiesViewset
+from nexus.logs.api.views import LogsViewset, RecentActivitiesViewset, MessageHistoryViewset
 
 
 class LogSerializersTestCase(TestCase):
@@ -218,3 +218,72 @@ class RecentActivitiesViewSetTestCase(TestCase):
         response.render()
         self.assertEqual(response.status_code, 401)
         self.assertEquals(json.loads(response.content).get("detail"), "Authentication credentials were not provided.")
+
+
+class MessageHistoryViewsetTestCase(TestCase):
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+
+        MessageLogFactory.create_batch(10, project=self.project)
+
+    def test_message_history_viewset(self):
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100")
+        force_authenticate(request, user=self.user)
+        response = MessageHistoryViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_time_filter(self):
+        started_day = pendulum.now().to_date_string()
+
+        with freeze_time(str(pendulum.now().subtract(months=1))):
+            MessageLogFactory.create_batch(5, project=self.project)
+
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&started_day={started_day}")
+        force_authenticate(request, user=self.user)
+        response = MessageHistoryViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEquals(len(content.get("results")), 10)
+
+    def test_tag_filter(self):
+        tag = "failed"
+
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&tag={tag}")
+        force_authenticate(request, user=self.user)
+        response = MessageHistoryViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEquals(len(content.get("results")), 0)
+
+    def test_null_reflection_data(self):
+        MessageLog.objects.all().update(reflection_data=None)
+
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100")
+        force_authenticate(request, user=self.user)
+        response = MessageHistoryViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEquals(len(content.get("results")), 0)

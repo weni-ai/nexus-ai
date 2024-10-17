@@ -14,10 +14,18 @@ class CreateLogUsecase:
         )
         return self.message
 
-    def create_message_log(self, text: str, contact_urn: str, status: str = "P") -> MessageLog:
+    def create_message_log(
+        self,
+        text: str,
+        contact_urn: str,
+        source: str,
+        status: str = "P",
+    ) -> MessageLog:
+
         message = self.create_message(text, contact_urn, status)
         self.log = MessageLog.objects.create(
-            message=message
+            message=message,
+            source=source
         )
         return self.log
 

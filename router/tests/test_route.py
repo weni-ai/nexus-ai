@@ -62,10 +62,18 @@ class RouteTestCase(TestCase):
 
         self.org = Org.objects.create(created_by=self.user, name='Test Org')
         self.org.authorizations.create(role=3, user=self.user)
-        self.project = self.org.projects.create(uuid="7886d8d1-7bdc-4e85-a7fc-220e2256c11b", name=project_name, created_by=self.user)
-        self.intelligence = self.org.intelligences.create(name=project_name, created_by=self.user)
+        self.project = self.org.projects.create(
+            uuid="7886d8d1-7bdc-4e85-a7fc-220e2256c11b",
+            name=project_name,
+            created_by=self.user
+        )
+        self.intelligence = self.org.intelligences.create(
+            name=project_name, created_by=self.user)
         self.content_base = ContentBase.objects.create(
-            title=project_name, intelligence=self.intelligence, created_by=self.user, is_router=True
+            title=project_name,
+            intelligence=self.intelligence,
+            created_by=self.user,
+            is_router=True
         )
         self.integrated_intel = IntegratedIntelligence.objects.create(
             project=self.project,
@@ -93,7 +101,10 @@ class RouteTestCase(TestCase):
             prompt="Fluxo de fallback",
             fallback=True,
         )
-        self.instruction = ContentBaseInstruction.objects.create(content_base=self.content_base, instruction="Teste Instruction")
+        self.instruction = ContentBaseInstruction.objects.create(
+            content_base=self.content_base,
+            instruction="Teste Instruction"
+        )
 
         llm_dto = LLMDTO(
             user_email=self.user.email,
@@ -118,8 +129,12 @@ class RouteTestCase(TestCase):
         content_base = self.content_base
 
         content_base_repository = ContentBaseORMRepository()
-        instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
-        instructions: List[str] = [instruction.instruction for instruction in instructions]
+        instructions: List[InstructionDTO] = content_base_repository.list_instructions(
+            content_base.uuid
+        )
+        instructions: List[str] = [
+            instruction.instruction for instruction in instructions
+        ]
         agent = self.agent
 
         chunks = ["Lorem Ipsum", "Dolor Sit Amet"]
@@ -133,14 +148,19 @@ class RouteTestCase(TestCase):
         content_base = self.content_base
 
         content_base_repository = ContentBaseORMRepository()
-        instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
-        instructions: List[str] = [instruction.instruction for instruction in instructions]
+        instructions: List[InstructionDTO] = content_base_repository.list_instructions(
+            content_base.uuid
+        )
+        instructions: List[str] = [
+            instruction.instruction for instruction in instructions
+        ]
         agent = self.agent
 
         chunks = ["Lorem Ipsum", "Dolor Sit Amet"]
         question = "Ipsum Lorem"
 
-        prompt = WeniGPTClient(model_version=settings.WENIGPT_DEFAULT_VERSION).format_prompt(instructions, chunks, agent.__dict__, question)
+        prompt = WeniGPTClient(model_version=settings.WENIGPT_DEFAULT_VERSION).format_prompt(
+            instructions, chunks, agent.__dict__, question)
         assert "{{" not in prompt
 
     def test_wenigpt_no_context_prompt(self):
@@ -149,14 +169,19 @@ class RouteTestCase(TestCase):
         content_base = self.content_base
 
         content_base_repository = ContentBaseORMRepository()
-        instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
-        instructions: List[str] = [instruction.instruction for instruction in instructions]
+        instructions: List[InstructionDTO] = content_base_repository.list_instructions(
+            content_base.uuid
+        )
+        instructions: List[str] = [
+            instruction.instruction for instruction in instructions
+        ]
         agent = self.agent
 
         chunks = []
         question = "Ipsum Lorem"
 
-        prompt = WeniGPTClient(model_version=settings.WENIGPT_DEFAULT_VERSION).format_prompt(instructions, chunks, agent.__dict__, question)
+        prompt = WeniGPTClient(model_version=settings.WENIGPT_DEFAULT_VERSION).format_prompt(
+            instructions, chunks, agent.__dict__, question)
         assert "{{" not in prompt
 
     def test_chatgpt_no_context_prompt(self):
@@ -165,12 +190,18 @@ class RouteTestCase(TestCase):
         content_base = self.content_base
 
         content_base_repository = ContentBaseORMRepository()
-        instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
+        instructions: List[InstructionDTO] = content_base_repository.list_instructions(
+            content_base.uuid
+        )
         agent = self.agent
 
         chunks = []
 
-        prompt = ChatGPTClient().format_prompt(instructions, chunks, agent.__dict__)
+        prompt = ChatGPTClient().format_prompt(
+            instructions,
+            chunks,
+            agent.__dict__
+        )
         assert "{{" not in prompt
 
     def mock_messages(
@@ -193,11 +224,18 @@ class RouteTestCase(TestCase):
         )
 
         log_usecase = CreateLogUsecase()
-        log_usecase.create_message_log(message.text, message.contact_urn)
+        log_usecase.create_message_log(
+            text=message.text,
+            contact_urn=message.contact_urn,
+            source="router",
+        )
 
-        content_base_repository = ContentBaseTestRepository(content_base, agent)
+        content_base_repository = ContentBaseTestRepository(
+            content_base, agent)
         flows_repository = FlowsTestRepository(flow, fallback_flow)
-        message_logs_repository = MessageLogsTestRepository(str(self.content_base.uuid))
+        message_logs_repository = MessageLogsTestRepository(
+            str(self.content_base.uuid)
+        )
 
         llm_type = "chatgpt"
         llm_client = MockLLMClient.get_by_type(llm_type)
@@ -260,7 +298,9 @@ class RouteTestCase(TestCase):
         response = self.mock_messages(
             Classifier.CLASSIFICATION_OTHER,
             fallback_flow=self.fallback,
-            direct_message=SimulateBroadcast(host=None, access_token=None, get_file_info=get_file_info),
+            direct_message=SimulateBroadcast(
+                host=None, access_token=None, get_file_info=get_file_info
+            ),
             flow_start=SimulateFlowStart(host=None, access_token=None)
         )
         self.assertEquals(response.get("type"), "flowstart")
@@ -268,7 +308,9 @@ class RouteTestCase(TestCase):
     def test_route_preview_other_no_fallback_flow(self):
         response = self.mock_messages(
             Classifier.CLASSIFICATION_OTHER,
-            direct_message=SimulateBroadcast(host=None, access_token=None, get_file_info=get_file_info),
+            direct_message=SimulateBroadcast(
+                host=None, access_token=None, get_file_info=get_file_info
+            ),
             flow_start=SimulateFlowStart(host=None, access_token=None)
         )
         self.assertEquals(response.get("type"), "broadcast")
@@ -277,7 +319,9 @@ class RouteTestCase(TestCase):
         response = self.mock_messages(
             self.flow.name,
             fallback_flow=self.fallback,
-            direct_message=SimulateBroadcast(host=None, access_token=None, get_file_info=get_file_info),
+            direct_message=SimulateBroadcast(
+                host=None, access_token=None, get_file_info=get_file_info
+            ),
             flow_start=SimulateFlowStart(host=None, access_token=None)
         )
         self.assertEquals(response.get("type"), "flowstart")
@@ -322,7 +366,9 @@ class StartRouteTestCase(TestCase):
             prompt="Caso esteja interessado em testar o router",
             content_base=self.content_base
         )
-        self.instruction = ContentBaseInstruction.objects.create(content_base=self.content_base, instruction="Responda sempre em esperanto")
+        self.instruction = ContentBaseInstruction.objects.create(
+            content_base=self.content_base, instruction="Responda sempre em esperanto"
+        )
 
         llm_dto = LLMDTO(
             model="chatGPT",
@@ -371,8 +417,9 @@ class LogUseCaseTestCase(TestCase):
         )
         self.log_usecase = CreateLogUsecase()
         self.log_usecase.create_message_log(
-            self.message.text,
-            self.message.contact_urn
+            source="router",
+            text=self.message.text,
+            contact_urn=self.message.contact_urn
         )
 
     def test_create(self):
@@ -393,5 +440,7 @@ class LogUseCaseTestCase(TestCase):
 
         chunks = ["Chunk 1", "Chunk 2", "Chunk 3"]
 
-        self.log_usecase.update_log_field(chunks=chunks, project_id=self.project.uuid)
+        self.log_usecase.update_log_field(
+            chunks=chunks, project_id=self.project.uuid
+        )
         self.assertEquals(self.log_usecase.log.chunks, chunks)
