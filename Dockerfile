@@ -89,6 +89,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   && apt-get install -y --no-install-recommends ${RUNTIME_DEPS} \
   && rm -rf /usr/share/man /usr/share/doc
 
+RUN apt update && apt install libglib2.0-0 \
+  libnss3 libnspr4 libdbus-1-3 libatk1.0-0 \
+  libatk-bridge2.0-0 libcups2 libdrm2 libxcb1 \
+  libxkbcommon0 libatspi2.0-0 libx11-6 libxcomposite1 \
+  libxdamage1 libxext6 libxfixes3 libxrandr2 \
+  libgbm1 libpango-1.0-0 libcairo2 libasound2 -y
+
 COPY --from=build /install /usr/local
 COPY --chown=${APP_USER}:${APP_GROUP} . ${APP_PATH}
 RUN playwright install
