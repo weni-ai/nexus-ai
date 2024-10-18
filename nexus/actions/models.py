@@ -59,7 +59,8 @@ class Flow(models.Model):
         (Group.SECURITY.value, "Security")
     )
 
-    uuid = models.UUIDField(primary_key=True)
+    uuid = models.UUIDField(primary_key=True, default=uuid4)
+    flow_uuid = models.UUIDField(unique=False)
     name = models.CharField(max_length=255)
     prompt = models.TextField(blank=True, null=True)
     fallback = models.BooleanField(default=False)

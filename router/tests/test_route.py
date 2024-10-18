@@ -83,12 +83,14 @@ class RouteTestCase(TestCase):
         self.flow = Flow.objects.create(
             content_base=self.content_base,
             uuid=uuid.uuid4(),
+            flow_uuid=uuid.uuid4(),
             name="Compras",
             prompt="Fluxo de compras de roupas"
         )
         self.fallback = Flow.objects.create(
             content_base=self.content_base,
             uuid=uuid.uuid4(),
+            flow_uuid=uuid.uuid4(),
             name="Fluxo de fallback",
             prompt="Fluxo de fallback",
             fallback=True,
@@ -317,7 +319,7 @@ class StartRouteTestCase(TestCase):
             content_base=self.content_base
         )
         self.flow = Flow.objects.create(
-            uuid="da2c0365-cabe-410b-bc15-4a42a237d91e",
+            flow_uuid="da2c0365-cabe-410b-bc15-4a42a237d91e",
             name="Teste router",
             prompt="Caso esteja interessado em testar o router",
             content_base=self.content_base

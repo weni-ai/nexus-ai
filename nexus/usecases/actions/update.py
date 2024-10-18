@@ -62,7 +62,9 @@ class UpdateFlowsUseCase():
         flow_dto: UpdateFlowDTO,
         user: User = None,
     ) -> Flow:
-        flow: Flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(flow_dto.flow_uuid)
+        flow: Flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(
+            uuid=flow_dto.flow_uuid
+        )
 
         if flow.editable is False:
             raise ValueError("Flow is not editable")

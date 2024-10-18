@@ -54,6 +54,7 @@ class FlowsTestCase(TestCase):
     def test_model(self):
         flow = Flow.objects.create(
             uuid=uuid.uuid4(),
+            flow_uuid=uuid.uuid4(),
             name="Test Flow",
             prompt="Prompt",
             content_base=self.contentbase,
@@ -64,6 +65,7 @@ class FlowsTestCase(TestCase):
     def test_model_fallback(self):
         flow = Flow.objects.create(
             uuid=uuid.uuid4(),
+            flow_uuid=uuid.uuid4(),
             name="Test Flow",
             prompt="Prompt",
             content_base=self.contentbase,
@@ -105,7 +107,7 @@ class FlowsViewsetTestCase(TestCase):
         self.contentbase = get_default_content_base_by_project(self.project.uuid)
 
         self.flow = Flow.objects.create(
-            uuid=uuid.uuid4(),
+            flow_uuid=str(uuid.uuid4()),
             name="Test Flow",
             prompt="Prompt",
             content_base=self.contentbase,
@@ -141,8 +143,8 @@ class FlowsViewsetTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_update(self):
-        flow_uuid = str(self.flow.uuid)
-        url_update = f'{self.url}/{flow_uuid}/'
+        action_uuid = str(self.flow.uuid)
+        url_update = f'{self.url}/{action_uuid}/'
 
         prompt_update = "Update prompt"
 
@@ -153,7 +155,7 @@ class FlowsViewsetTestCase(TestCase):
         response = FlowsViewset.as_view({'patch': 'update'})(
             request,
             data,
-            flow_uuid=flow_uuid,
+            flow_uuid=action_uuid,
             project_uuid=str(self.project.uuid),
             format='json',
         )
@@ -194,7 +196,7 @@ class FlowsViewsetTestCase(TestCase):
             project_uuid=str(self.project.uuid)
         )
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data.get("uuid"), flow_uuid)
+        self.assertEqual(response.data.get("flow_uuid"), flow_uuid)
 
 
 @skip("Testing View")
@@ -321,6 +323,7 @@ class MessagePreviewTestCase(TestCase):
         )
         self.flow = Flow.objects.create(
             uuid=uuid.uuid4(),
+            flow_uuid=uuid.uuid4(),
             name="Test Flow",
             prompt="Quando o usuário estiver interessado em testar o router",
             content_base=self.contentbase,
