@@ -48,7 +48,7 @@ class CreateFlowsUseCase():
 
         if create_dto.template:
             flow = Flow.objects.create(
-                uuid=create_dto.flow_uuid,
+                flow_uuid=create_dto.flow_uuid,
                 name=create_dto.name,
                 prompt=create_dto.prompt,
                 fallback=create_dto.fallback,
@@ -59,7 +59,7 @@ class CreateFlowsUseCase():
             )
         else:
             flow = Flow.objects.create(
-                uuid=create_dto.flow_uuid,
+                flow_uuid=create_dto.flow_uuid,
                 name=create_dto.name,
                 prompt=create_dto.prompt,
                 fallback=create_dto.fallback,

@@ -175,7 +175,7 @@ class FlowsViewset(
                 method="get"
             )
 
-            flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(flow_uuid=flow_uuid)
+            flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(uuid=flow_uuid)
             data = FlowSerializer(flow).data
             return Response(data=data, status=status.HTTP_200_OK)
 
