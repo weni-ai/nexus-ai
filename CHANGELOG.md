@@ -1,3 +1,7 @@
+# 2.6.2
+## *Fix*
+    - playwright install in docker build
+
 # 2.6.1
 ## *Fix*
     - Install playwright dependencies
