@@ -6,9 +6,9 @@ class FlowDoesNotExist(Exception):
 
 
 class RetrieveFlowsUseCase():
-    def retrieve_flow_by_uuid(self, flow_uuid: str) -> Flow:
+    def retrieve_flow_by_uuid(self, uuid: str) -> Flow:
         try:
-            return Flow.objects.get(uuid=flow_uuid)
+            return Flow.objects.get(uuid=uuid)
         except Flow.DoesNotExist:
             raise FlowDoesNotExist
 
