@@ -98,9 +98,10 @@ RUN apt update && apt install libglib2.0-0 \
 
 COPY --from=build /install /usr/local
 COPY --chown=${APP_USER}:${APP_GROUP} . ${APP_PATH}
-RUN playwright install
+
 USER "${APP_USER}:${APP_GROUP}"
 EXPOSE 8000
 COPY entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["bash", "./entrypoint.sh"]
+RUN playwright install
 CMD ["start"]
