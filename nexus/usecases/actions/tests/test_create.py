@@ -46,7 +46,7 @@ class CreateFlowsUseCaseTest(TestCase):
         self.assertEqual(flow.fallback, False)
         self.assertEqual(flow.action_type, "custom")
         self.assertEqual(flow.content_base, self.content_base)
-        self.assertEqual(flow.uuid, flow_uuid)
+        self.assertEqual(flow.flow_uuid, flow_uuid)
 
     def test_blank_prompt_for_custom_flow(self):
         flow_uuid = str(uuid4())
@@ -90,7 +90,7 @@ class CreateFlowsUseCaseTest(TestCase):
         self.assertEqual(flow.fallback, False)
         self.assertEqual(flow.action_type, "whatsapp_cart")
         self.assertEqual(flow.content_base, self.content_base)
-        self.assertEqual(flow.uuid, flow_uuid)
+        self.assertEqual(flow.flow_uuid, flow_uuid)
 
     def test_create_flow_with_template_action(self):
         flow_uuid = str(uuid4())
@@ -116,7 +116,7 @@ class CreateFlowsUseCaseTest(TestCase):
         self.assertEqual(flow.fallback, False)
         self.assertEqual(flow.action_type, self.template_action.action_type)
         self.assertEqual(flow.content_base, self.content_base)
-        self.assertEqual(flow.uuid, flow_uuid)
+        self.assertEqual(flow.flow_uuid, flow_uuid)
 
 
 class CreateTemplateActionUseCaseTest(TestCase):
