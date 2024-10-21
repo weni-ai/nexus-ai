@@ -729,7 +729,6 @@ class ContentBaseLinkViewset(ModelViewSet):
             response = CreatedContentBaseLinkSerializer(content_base_link).data
             return Response(response, status=status.HTTP_201_CREATED)
 
-
     def destroy(self, request, *args, **kwargs):
         try:
             user = self.request.user
