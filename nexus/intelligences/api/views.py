@@ -720,38 +720,61 @@ class ContentBaseLinkViewset(ModelViewSet):
             return Response(response, status=status.HTTP_201_CREATED)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ObjectDoesNotExist:
+            send_link.delay(
+                link=link,
+                user_email=user_email,
+                content_base_link_uuid=str(content_base_link.uuid)
+            )
+            response = CreatedContentBaseLinkSerializer(content_base_link).data
+            return Response(response, status=status.HTTP_201_CREATED)
+
 
     def destroy(self, request, *args, **kwargs):
-        user = self.request.user
-        user_email: str = user.email
-        contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
-        content_base_uuid: str = kwargs.get('content_base_uuid')
+        try:
+            user = self.request.user
+            user_email: str = user.email
+            contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
+            content_base_uuid: str = kwargs.get('content_base_uuid')
 
-        use_case = intelligences.RetrieveContentBaseLinkUseCase()
-        content_base_link = use_case.get_contentbaselink(
-            contentbaselink_uuid=contentbaselink_uuid,
-            user_email=user_email
-        )
-        project_use_case = ProjectsUseCase()
-        project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
-        indexer = project_use_case.get_indexer_database_by_project(project)
+            use_case = intelligences.RetrieveContentBaseLinkUseCase()
+            content_base_link = use_case.get_contentbaselink(
+                contentbaselink_uuid=contentbaselink_uuid,
+                user_email=user_email
+            )
+            project_use_case = ProjectsUseCase()
+            project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
+            indexer = project_use_case.get_indexer_database_by_project(project)
 
-        use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
-        use_case.delete_by_object(
-            content_base_link,
-        )
+            use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
+            use_case.delete_by_object(
+                content_base_link,
+            )
 
-        if project.indexer_database == Project.BEDROCK:
-            start_ingestion_job.delay("", post_delete=True)
+            if project.indexer_database == Project.BEDROCK:
+                start_ingestion_job.delay("", post_delete=True)
 
-        event_manager.notify(
-            event="contentbase_link_activity",
-            action_type="D",
-            content_base_link=content_base_link,
-            user=user
-        )
+            event_manager.notify(
+                event="contentbase_link_activity",
+                action_type="D",
+                content_base_link=content_base_link,
+                user=user
+            )
 
-        return Response(status=status.HTTP_204_NO_CONTENT)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ObjectDoesNotExist:
+            indexer = SentenXFileDataBase
+            use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
+            use_case.delete_by_object(
+                content_base_link,
+            )
+            event_manager.notify(
+                event="contentbase_link_activity",
+                action_type="D",
+                content_base_link=content_base_link,
+                user=user
+            )
+            return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class DownloadFileViewSet(views.APIView):
