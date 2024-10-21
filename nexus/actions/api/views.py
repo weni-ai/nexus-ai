@@ -470,4 +470,3 @@ class TemplateActionView(ModelViewSet, ExceptionHandlerMixin):
         template_action = usecase.update_template_action(update_dto)
         serializer = self.get_serializer(template_action)
         return Response(data=serializer.data)
-
