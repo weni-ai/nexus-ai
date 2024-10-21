@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='flow',
             name='flow_uuid',
-            field=models.UUIDField(unique=False),
+            field=models.UUIDField(unique=False, null=False),
         ),
     ]
