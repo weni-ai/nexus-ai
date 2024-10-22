@@ -1,5 +1,7 @@
 import pickle
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from nexus.task_managers import tasks
 from nexus.task_managers import tasks_bedrock
 from nexus.task_managers.file_database.file_database import FileDataBase
@@ -36,9 +38,13 @@ class CeleryFileManager:
             extension_file=extension_file,
         )
         content_base_file = CreateContentBaseFileUseCase().create_content_base_file(content_base_file=content_base_file_dto)
-        project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+        try:
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+            indexer_database = project.indexer_database
+        except ObjectDoesNotExist:
+            indexer_database = Project.SENTENX
 
-        if project.indexer_database == Project.BEDROCK:
+        if indexer_database == Project.BEDROCK:
             print("[+ 🦑 Using BEDROCK 🦑 +]")
             tasks_bedrock.bedrock_upload_file.delay(
                 pickled_file,

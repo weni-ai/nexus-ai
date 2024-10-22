@@ -1,3 +1,8 @@
+
+# 2.6.3
+## *Fix*
+    - fix crud for content AI
+
 # 2.6.2
 ## *Fix*
     - playwright install in docker build
