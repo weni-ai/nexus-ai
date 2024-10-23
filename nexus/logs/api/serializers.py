@@ -2,6 +2,26 @@ from rest_framework import serializers
 from nexus.logs.models import MessageLog, RecentActivities
 
 
+class MessageHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MessageLog
+        fields = [
+            "id",
+            "created_at",
+            "message_text",
+            "tag",
+        ]
+
+    message_text = serializers.SerializerMethodField()
+    tag = serializers.SerializerMethodField()
+
+    def get_message_text(self, obj: MessageLog) -> str:
+        return obj.message.text
+
+    def get_tag(self, obj: MessageLog) -> str:
+        return obj.reflection_data.get("tag", "failed")
+
+
 class MessageLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = MessageLog
