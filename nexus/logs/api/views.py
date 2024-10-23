@@ -115,6 +115,9 @@ class MessageHistoryViewset(
         tag_param = self.request.query_params.get('tag')
         text_param = self.request.query_params.get('text')
 
+        source = self.request.query_params.get('source', 'router')
+        params["source"] = source
+
         if started_day_param:
             params["created_at__date"] = started_day_param
 
