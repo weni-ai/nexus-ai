@@ -2,6 +2,21 @@ from rest_framework import serializers
 from nexus.logs.models import MessageLog, RecentActivities
 
 
+class TagPercentageSerializer(serializers.Serializer):
+
+    class Meta:
+        model = MessageLog
+        fields = [
+            "action_percentage",
+            "succeed_percentage",
+            "failed_percentage",
+        ]
+
+    action_percentage = serializers.FloatField()
+    succeed_percentage = serializers.FloatField()
+    failed_percentage = serializers.FloatField()
+
+
 class MessageHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = MessageLog
