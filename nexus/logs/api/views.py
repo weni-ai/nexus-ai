@@ -14,13 +14,16 @@ from nexus.logs.api.serializers import (
     MessageLogSerializer,
     MessageFullLogSerializer,
     RecentActivitiesSerializer,
-    MessageHistorySerializer
+    MessageHistorySerializer,
+    TagPercentageSerializer
 )
 from nexus.usecases.logs.list import ListLogUsecase
 
 from nexus.projects.permissions import has_project_permission
 
 from django.conf import settings
+from django.db.models import Count, Case, When, IntegerField
+from django.utils.dateparse import parse_date
 
 
 class CustomPageNumberPagination(PageNumberPagination):
@@ -34,6 +37,60 @@ class CustomPageNumberPagination(PageNumberPagination):
             'previous': self.get_previous_link(),
             'results': data
         })
+
+
+class TagPercentageViewSet(
+    ListModelMixin,
+    GenericViewSet
+):
+
+    def list(self, request, *args, **kwargs):
+        user = self.request.user
+        project_uuid = self.kwargs.get('project_uuid')
+
+        has_project_permission(user, project_uuid, 'GET')
+
+        started_day = request.query_params.get('started_day')
+        if not started_day:
+            return Response({"error": "started_day parameter is required"}, status=400)
+
+        started_day = parse_date(started_day)
+        if not started_day:
+            return Response({"error": "Invalid date format for started_day"}, status=400)
+
+        source = request.query_params.get('source', 'router')
+        message_logs = MessageLog.objects.filter(
+            created_at__date=started_day,
+            reflection_data__tag__isnull=False,
+            source=source,
+            project__uuid=str(project_uuid)
+        )
+
+        if not message_logs.exists():
+            return Response({"error": "No logs found for the given started_day"}, status=404)
+
+        tag_counts = message_logs.aggregate(
+            action_count=Count(Case(When(reflection_data__tag='action_started', then=1), output_field=IntegerField())),
+            succeed_count=Count(Case(When(reflection_data__tag='succeed', then=1), output_field=IntegerField())),
+            failed_count=Count(Case(When(reflection_data__tag='failed', then=1), output_field=IntegerField()))
+        )
+
+        total_logs = sum(tag_counts.values())
+        if total_logs == 0:
+            return Response({"error": "No logs found for the given started_day"}, status=404)
+
+        action_percentage = (tag_counts['action_count'] / total_logs) * 100
+        succeed_percentage = (tag_counts['succeed_count'] / total_logs) * 100
+        failed_percentage = (tag_counts['failed_count'] / total_logs) * 100
+
+        data = {
+            "action_percentage": action_percentage,
+            "succeed_percentage": succeed_percentage,
+            "failed_percentage": failed_percentage
+        }
+
+        serializer = TagPercentageSerializer(data)
+        return Response(serializer.data)
 
 
 class MessageHistoryViewset(

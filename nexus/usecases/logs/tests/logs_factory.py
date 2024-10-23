@@ -44,6 +44,7 @@ class MessageLogFactory(factory.django.DjangoModelFactory):
     reflection_data = {
         "tag": "action"
     }
+    source = 'router'
 
 
 class RecentActivitiesFactory(factory.django.DjangoModelFactory):
