@@ -10,7 +10,12 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from nexus.logs.models import MessageLog, RecentActivities
-from nexus.logs.api.serializers import MessageLogSerializer, MessageFullLogSerializer, RecentActivitiesSerializer
+from nexus.logs.api.serializers import (
+    MessageLogSerializer,
+    MessageFullLogSerializer,
+    RecentActivitiesSerializer,
+    MessageHistorySerializer
+)
 from nexus.usecases.logs.list import ListLogUsecase
 
 from nexus.projects.permissions import has_project_permission
@@ -29,6 +34,48 @@ class CustomPageNumberPagination(PageNumberPagination):
             'previous': self.get_previous_link(),
             'results': data
         })
+
+
+class MessageHistoryViewset(
+    ListModelMixin,
+    GenericViewSet
+):
+    pagination_class = CustomPageNumberPagination
+    serializer_class = MessageHistorySerializer
+
+    def get_queryset(self):
+
+        user = self.request.user
+        project_uuid = self.kwargs.get('project_uuid')
+
+        has_project_permission(user, project_uuid, 'GET')
+
+        params = {
+            "project__uuid": project_uuid,
+        }
+
+        started_day_param = self.request.query_params.get('started_day')
+        tag_param = self.request.query_params.get('tag')
+        text_param = self.request.query_params.get('text')
+
+        if started_day_param:
+            params["created_at__date"] = started_day_param
+
+        if tag_param:
+            params["reflection_data__tag"] = tag_param
+
+        if text_param:
+            params["message__text__icontains"] = text_param
+
+        return MessageLog.objects.filter(
+            **params
+        ).exclude(
+            reflection_data__isnull=True
+        ).select_related(
+            'message'
+        ).order_by(
+            '-created_at'
+        )
 
 
 class LogsViewset(
