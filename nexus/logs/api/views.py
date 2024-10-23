@@ -215,10 +215,8 @@ class RecentActivitiesViewset(
             start_date = pendulum.parse(start_date_str)
             filter_params['created_at__gte'] = start_date
 
-        model_group = self.request.query_params.get('model_group')
-        if model_group:
-            action_models = ACTION_MODEL_GROUPS.get(model_group, [])
-            filter_params['action_model__in'] = action_models
+        filtered_action_models = [model for models in ACTION_MODEL_GROUPS.values() for model in models]
+        filter_params['action_model__in'] = filtered_action_models
 
         queryset = RecentActivities.objects.filter(**filter_params).select_related('created_by').order_by('-created_at').exclude(action_details__isnull=True)
 

@@ -225,6 +225,21 @@ class RecentActivitiesViewSetTestCase(TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEquals(json.loads(response.content).get("detail"), "Authentication credentials were not provided.")
 
+    def test_action_model_groups_filter(self):
+        self.recent_activity.action_model = "Invalid"
+        self.recent_activity.save()
+        self.recent_activity.refresh_from_db()
+        request = self.factory.get(f"api/{self.project.uuid}/activities/?page_size=100")
+        force_authenticate(request, user=self.user)
+        response = RecentActivitiesViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        response.render()
+        self.assertEqual(response.status_code, 200)
+        content = json.loads(response.content).get("results")
+        self.assertEquals(len(content), 0)
+
 
 class MessageHistoryViewsetTestCase(TestCase):
     def setUp(self) -> None:
