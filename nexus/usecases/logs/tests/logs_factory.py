@@ -40,6 +40,11 @@ class MessageLogFactory(factory.django.DjangoModelFactory):
         created_by=factory.SelfAttribute('..content_base.intelligence.created_by')
     )
     created_at = pendulum.now()
+    groundedness_score = 10
+    reflection_data = {
+        "tag": "action"
+    }
+    source = 'router'
 
 
 class RecentActivitiesFactory(factory.django.DjangoModelFactory):

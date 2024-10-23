@@ -4,19 +4,25 @@ import pendulum
 from freezegun import freeze_time
 
 from django.test import TestCase
+from django.urls import reverse
 
-from rest_framework.test import force_authenticate
-from rest_framework.test import APIRequestFactory
+from rest_framework.test import APIRequestFactory, force_authenticate, APITestCase
+from rest_framework import status
 
 from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
-from nexus.usecases.logs.tests.logs_factory import RecentActivitiesFactory
+from nexus.usecases.logs.tests.logs_factory import RecentActivitiesFactory, MessageLogFactory
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
 from nexus.logs.models import MessageLog, Message
 from nexus.logs.api.serializers import MessageLogSerializer
 
-from nexus.logs.api.views import LogsViewset, RecentActivitiesViewset
+from nexus.logs.api.views import (
+    LogsViewset,
+    RecentActivitiesViewset,
+    MessageHistoryViewset,
+    TagPercentageViewSet
+)
 
 
 class LogSerializersTestCase(TestCase):
@@ -233,3 +239,127 @@ class RecentActivitiesViewSetTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         content = json.loads(response.content).get("results")
         self.assertEquals(len(content), 0)
+
+
+class MessageHistoryViewsetTestCase(TestCase):
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+
+        MessageLogFactory.create_batch(10, project=self.project)
+
+    def test_message_history_viewset(self):
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100")
+        force_authenticate(request, user=self.user)
+        response = MessageHistoryViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_time_filter(self):
+        started_day = pendulum.now().to_date_string()
+
+        with freeze_time(str(pendulum.now().subtract(months=1))):
+            MessageLogFactory.create_batch(5, project=self.project)
+
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&started_day={started_day}")
+        force_authenticate(request, user=self.user)
+        response = MessageHistoryViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEquals(len(content.get("results")), 10)
+
+    def test_tag_filter(self):
+        tag = "failed"
+
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&tag={tag}")
+        force_authenticate(request, user=self.user)
+        response = MessageHistoryViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEquals(len(content.get("results")), 0)
+
+    def test_null_reflection_data(self):
+        MessageLog.objects.all().update(reflection_data=None)
+
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100")
+        force_authenticate(request, user=self.user)
+        response = MessageHistoryViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEquals(len(content.get("results")), 0)
+
+
+class TagPercentageViewSetTestCase(APITestCase):
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.view = TagPercentageViewSet.as_view({'get': 'list'})
+        self.url = reverse('list-tag-percentage', kwargs={'project_uuid': str(self.project.uuid)})
+
+        MessageLogFactory.create_batch(5, project=self.project, reflection_data={"tag": "action"})
+        MessageLogFactory.create_batch(3, project=self.project, reflection_data={"tag": "succeed"})
+        MessageLogFactory.create_batch(2, project=self.project, reflection_data={"tag": "failed"})
+
+    def test_get_tag_percentages(self):
+        request = self.factory.get(self.url, {'started_day': pendulum.now().to_date_string()})
+        force_authenticate(request, user=self.user)
+        response = self.view(request, project_uuid=str(self.project.uuid))
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        content = response.data
+        self.assertIn('action_percentage', content)
+        self.assertIn('succeed_percentage', content)
+        self.assertIn('failed_percentage', content)
+
+    def test_get_tag_percentages_no_logs(self):
+        MessageLog.objects.all().delete()
+        request = self.factory.get(self.url, {'started_day': pendulum.now().to_date_string()})
+        force_authenticate(request, user=self.user)
+        response = self.view(request, project_uuid=str(self.project.uuid))
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['error'], "No logs found for the given started_day")
+
+    def test_get_tag_percentages_invalid_date(self):
+        request = self.factory.get(self.url, {'started_day': 'invalid-date'})
+        force_authenticate(request, user=self.user)
+        response = self.view(request, project_uuid=str(self.project.uuid))
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['error'], "Invalid date format for started_day")
+
+    def test_get_tag_percentages_missing_date(self):
+        request = self.factory.get(self.url)
+        force_authenticate(request, user=self.user)
+        response = self.view(request, project_uuid=str(self.project.uuid))
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['error'], "started_day parameter is required")
+
