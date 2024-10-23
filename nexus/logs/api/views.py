@@ -58,9 +58,12 @@ class TagPercentageViewSet(
         if not started_day:
             return Response({"error": "Invalid date format for started_day"}, status=400)
 
+        source = request.query_params.get('source', 'router')
         message_logs = MessageLog.objects.filter(
             created_at__date=started_day,
-            reflection_data__tag__isnull=False
+            reflection_data__tag__isnull=False,
+            source=source,
+            project__uuid=str(project_uuid)
         )
 
         if not message_logs.exists():
