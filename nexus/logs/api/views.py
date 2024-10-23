@@ -71,7 +71,7 @@ class TagPercentageViewSet(
 
         tag_counts = message_logs.aggregate(
             action_count=Count(Case(When(reflection_data__tag='action_started', then=1), output_field=IntegerField())),
-            succeed_count=Count(Case(When(reflection_data__tag='succeed', then=1), output_field=IntegerField())),
+            succeed_count=Count(Case(When(reflection_data__tag='success', then=1), output_field=IntegerField())),
             failed_count=Count(Case(When(reflection_data__tag='failed', then=1), output_field=IntegerField()))
         )
 

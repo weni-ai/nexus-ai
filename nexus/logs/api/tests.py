@@ -319,8 +319,8 @@ class TagPercentageViewSetTestCase(APITestCase):
         self.view = TagPercentageViewSet.as_view({'get': 'list'})
         self.url = reverse('list-tag-percentage', kwargs={'project_uuid': str(self.project.uuid)})
 
-        MessageLogFactory.create_batch(5, project=self.project, reflection_data={"tag": "action"})
-        MessageLogFactory.create_batch(3, project=self.project, reflection_data={"tag": "succeed"})
+        MessageLogFactory.create_batch(5, project=self.project, reflection_data={"tag": "action_started"})
+        MessageLogFactory.create_batch(3, project=self.project, reflection_data={"tag": "success"})
         MessageLogFactory.create_batch(2, project=self.project, reflection_data={"tag": "failed"})
 
     def test_get_tag_percentages(self):
