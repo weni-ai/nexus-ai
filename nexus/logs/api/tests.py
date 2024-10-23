@@ -16,7 +16,7 @@ from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by
 from nexus.logs.models import MessageLog, Message
 from nexus.logs.api.serializers import MessageLogSerializer
 
-from nexus.logs.api.views import LogsViewset, RecentActivitiesViewset, ACTION_MODEL_GROUPS
+from nexus.logs.api.views import LogsViewset, RecentActivitiesViewset
 
 
 class LogSerializersTestCase(TestCase):
