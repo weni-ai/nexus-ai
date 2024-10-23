@@ -6,6 +6,7 @@
 
 ## *Fix*
     - Small pep8 fixes
+    - Recent Activities model name params
 
 ## *Deleted*
     - Tru lens unused code
