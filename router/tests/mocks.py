@@ -71,7 +71,7 @@ class FlowsTestRepository(Repository):
 
     def get_project_flow_by_name(self, name: str) -> FlowDTO:
         return FlowDTO(
-            uuid=str(self.flow.uuid),
+            uuid=str(self.flow.flow_uuid),
             name=self.flow.name,
             fallback=self.flow.fallback,
             content_base_uuid=str(self.flow.content_base.uuid),
@@ -81,7 +81,7 @@ class FlowsTestRepository(Repository):
     def project_flow_fallback(self, fallback: bool) -> FlowDTO:
         if self.fallback_flow:
             return FlowDTO(
-                uuid=str(self.fallback_flow.uuid),
+                uuid=str(self.fallback_flow.flow_uuid),
                 name=self.fallback_flow.name,
                 fallback=self.fallback_flow.fallback,
                 content_base_uuid=str(self.fallback_flow.content_base.uuid),

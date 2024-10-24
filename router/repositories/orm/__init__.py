@@ -167,7 +167,7 @@ class FlowsORMRepository(Repository):
             return None
 
         return FlowDTO(
-            uuid=str(flow.uuid),
+            uuid=str(flow.flow_uuid),
             name=flow.name,
             prompt=flow.prompt,
             fallback=flow.fallback,
