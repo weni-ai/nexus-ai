@@ -49,7 +49,7 @@ class LogSerializersTestCase(TestCase):
             metadata={}
         )
         message_log = MessageLogSerializer(log)
-        print(message_log.data)
+        self.assertEqual(message_log.data.get("message_text"), "Test Message")
 
 
 class LogsViewSetTestCase(TestCase):
@@ -246,11 +246,13 @@ class MessageHistoryViewsetTestCase(TestCase):
         self.factory = APIRequestFactory()
         self.project = ProjectFactory()
         self.user = self.project.created_by
+        self.started_day = pendulum.now().subtract(months=1).to_date_string()
+        self.ended_day = pendulum.now().to_date_string()
 
         MessageLogFactory.create_batch(10, project=self.project)
 
     def test_message_history_viewset(self):
-        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100")
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&started_day={self.started_day}&ended_day={self.ended_day}")
         force_authenticate(request, user=self.user)
         response = MessageHistoryViewset.as_view({'get': 'list'})(
             request,
@@ -262,12 +264,13 @@ class MessageHistoryViewsetTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_time_filter(self):
-        started_day = pendulum.now().to_date_string()
+        started_day = pendulum.now().subtract(months=2).to_date_string()
+        ended_day = pendulum.now().to_date_string()
 
-        with freeze_time(str(pendulum.now().subtract(months=1))):
+        with freeze_time(str(pendulum.now().subtract(months=3))):
             MessageLogFactory.create_batch(5, project=self.project)
 
-        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&started_day={started_day}")
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&started_day={started_day}&ended_day={ended_day}")
         force_authenticate(request, user=self.user)
         response = MessageHistoryViewset.as_view({'get': 'list'})(
             request,
@@ -282,7 +285,7 @@ class MessageHistoryViewsetTestCase(TestCase):
     def test_tag_filter(self):
         tag = "failed"
 
-        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&tag={tag}")
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&tag={tag}&started_day={self.started_day}&ended_day={self.ended_day}")
         force_authenticate(request, user=self.user)
         response = MessageHistoryViewset.as_view({'get': 'list'})(
             request,
@@ -297,7 +300,7 @@ class MessageHistoryViewsetTestCase(TestCase):
     def test_null_reflection_data(self):
         MessageLog.objects.all().update(reflection_data=None)
 
-        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100")
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&started_day={self.started_day}&ended_day={self.ended_day}")
         force_authenticate(request, user=self.user)
         response = MessageHistoryViewset.as_view({'get': 'list'})(
             request,
@@ -305,7 +308,6 @@ class MessageHistoryViewsetTestCase(TestCase):
         )
         response.render()
         content = json.loads(response.content)
-
         self.assertEqual(response.status_code, 200)
         self.assertEquals(len(content.get("results")), 0)
 
@@ -318,13 +320,15 @@ class TagPercentageViewSetTestCase(APITestCase):
         self.user = self.project.created_by
         self.view = TagPercentageViewSet.as_view({'get': 'list'})
         self.url = reverse('list-tag-percentage', kwargs={'project_uuid': str(self.project.uuid)})
+        self.started_day = pendulum.now().subtract(months=1).to_date_string()
+        self.ended_day = pendulum.now().to_date_string()
 
         MessageLogFactory.create_batch(5, project=self.project, reflection_data={"tag": "action_started"})
         MessageLogFactory.create_batch(3, project=self.project, reflection_data={"tag": "success"})
         MessageLogFactory.create_batch(2, project=self.project, reflection_data={"tag": "failed"})
 
     def test_get_tag_percentages(self):
-        request = self.factory.get(self.url, {'started_day': pendulum.now().to_date_string()})
+        request = self.factory.get(self.url, {'started_day': self.started_day, 'ended_day': self.ended_day})
         force_authenticate(request, user=self.user)
         response = self.view(request, project_uuid=str(self.project.uuid))
         response.render()
@@ -337,22 +341,22 @@ class TagPercentageViewSetTestCase(APITestCase):
 
     def test_get_tag_percentages_no_logs(self):
         MessageLog.objects.all().delete()
-        request = self.factory.get(self.url, {'started_day': pendulum.now().to_date_string()})
+        request = self.factory.get(self.url, {'started_day': self.started_day, 'ended_day': self.ended_day})
         force_authenticate(request, user=self.user)
         response = self.view(request, project_uuid=str(self.project.uuid))
         response.render()
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data['error'], "No logs found for the given started_day")
+        self.assertEqual(response.data['error'], "No logs found for the given date range")
 
     def test_get_tag_percentages_invalid_date(self):
-        request = self.factory.get(self.url, {'started_day': 'invalid-date'})
+        request = self.factory.get(self.url, {'started_day': 'invalid-date', 'ended_day': self.ended_day})
         force_authenticate(request, user=self.user)
         response = self.view(request, project_uuid=str(self.project.uuid))
         response.render()
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], "Invalid date format for started_day")
+        self.assertEqual(response.data['error'], "Invalid date format for started_day or ended_day")
 
     def test_get_tag_percentages_missing_date(self):
         request = self.factory.get(self.url)
@@ -361,4 +365,4 @@ class TagPercentageViewSetTestCase(APITestCase):
         response.render()
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], "started_day parameter is required")
+        self.assertEqual(response.data['error'], "Date parameters are required")
