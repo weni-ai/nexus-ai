@@ -44,6 +44,7 @@ class MessageLogFactory(factory.django.DjangoModelFactory):
     reflection_data = {
         "tag": "action"
     }
+    source = 'router'
 
 
 class RecentActivitiesFactory(factory.django.DjangoModelFactory):
@@ -51,7 +52,7 @@ class RecentActivitiesFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = RecentActivities
 
-    action_model = 'model'
+    action_model = 'Flow'
     action_type = 'C'
     action_details = {
         "old": "",

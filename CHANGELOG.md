@@ -1,3 +1,15 @@
+# 2.6.4
+## *Add*
+    - MessageLog field source to select logs from preview/router
+    - Message history api
+    - MessageLog tag analytics
+
+## *Fix*
+    - Small pep8 fixes
+    - Recent Activities model name params
+
+## *Deleted*
+    - Tru lens unused code
 
 # 2.6.3
 ## *Fix*
