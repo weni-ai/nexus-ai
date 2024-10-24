@@ -50,34 +50,40 @@ class TagPercentageViewSet(
 
         has_project_permission(user, project_uuid, 'GET')
 
-        started_day = request.query_params.get('started_day')
-        if not started_day:
-            return Response({"error": "started_day parameter is required"}, status=400)
-
+        started_day = self.request.query_params.get(
+            'started_day',
+            pendulum.now().subtract(months=1).to_date_string()
+        )
+        ended_day = self.request.query_params.get(
+            'ended_day',
+            pendulum.now().to_date_string()
+        )
         started_day = parse_date(started_day)
-        if not started_day:
-            return Response({"error": "Invalid date format for started_day"}, status=400)
+        ended_day = parse_date(ended_day)
+        if not started_day or not ended_day:
+            return Response({"error": "Invalid date format for started_day or ended_day"}, status=400)
 
         source = request.query_params.get('source', 'router')
         message_logs = MessageLog.objects.filter(
-            created_at__date=started_day,
+            created_at__date__gte=started_day,
+            created_at__date__lte=ended_day,
             reflection_data__tag__isnull=False,
             source=source,
             project__uuid=str(project_uuid)
         )
 
         if not message_logs.exists():
-            return Response({"error": "No logs found for the given started_day"}, status=404)
+            return Response({"error": "No logs found for the given date range"}, status=404)
 
         tag_counts = message_logs.aggregate(
             action_count=Count(Case(When(reflection_data__tag='action_started', then=1), output_field=IntegerField())),
-            succeed_count=Count(Case(When(reflection_data__tag='succeed', then=1), output_field=IntegerField())),
+            succeed_count=Count(Case(When(reflection_data__tag='success', then=1), output_field=IntegerField())),
             failed_count=Count(Case(When(reflection_data__tag='failed', then=1), output_field=IntegerField()))
         )
 
         total_logs = sum(tag_counts.values())
         if total_logs == 0:
-            return Response({"error": "No logs found for the given started_day"}, status=404)
+            return Response({"error": "No logs found for the given date range"}, status=404)
 
         action_percentage = (tag_counts['action_count'] / total_logs) * 100
         succeed_percentage = (tag_counts['succeed_count'] / total_logs) * 100
@@ -111,12 +117,28 @@ class MessageHistoryViewset(
             "project__uuid": project_uuid,
         }
 
-        started_day_param = self.request.query_params.get('started_day')
+        started_day = self.request.query_params.get(
+            'started_day',
+            pendulum.now().subtract(months=1).to_date_string()
+        )
+        ended_day = self.request.query_params.get(
+            'ended_day',
+            pendulum.now().to_date_string()
+        )
+
+        started_day = parse_date(started_day)
+        ended_day = parse_date(ended_day)
+        if not started_day or not ended_day:
+            return Response({"error": "Invalid date format for started_day or ended_day"}, status=400)
+
+        params["created_at__date__gte"] = started_day
+        params["created_at__date__lte"] = ended_day
+
         tag_param = self.request.query_params.get('tag')
         text_param = self.request.query_params.get('text')
 
-        if started_day_param:
-            params["created_at__date"] = started_day_param
+        source = self.request.query_params.get('source', 'router')
+        params["source"] = source
 
         if tag_param:
             params["reflection_data__tag"] = tag_param
