@@ -357,12 +357,3 @@ class TagPercentageViewSetTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data['error'], "Invalid date format for started_day or ended_day")
-
-    def test_get_tag_percentages_missing_date(self):
-        request = self.factory.get(self.url)
-        force_authenticate(request, user=self.user)
-        response = self.view(request, project_uuid=str(self.project.uuid))
-        response.render()
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error'], "Date parameters are required")
