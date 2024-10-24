@@ -11,7 +11,7 @@ class FlowFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Flow
 
-    uuid = str(uuid4().hex)
+    flow_uuid = str(uuid4().hex)
     name = factory.Sequence(lambda n: 'test%d' % n)
     prompt = factory.Sequence(lambda n: 'test%d' % n)
     content_base = factory.SubFactory(
