@@ -50,11 +50,14 @@ class TagPercentageViewSet(
 
         has_project_permission(user, project_uuid, 'GET')
 
-        started_day = request.query_params.get('started_day')
-        ended_day = request.query_params.get('ended_day')
-        if not started_day or not ended_day:
-            return Response({"error": "Date parameters are required"}, status=400)
-
+        started_day = self.request.query_params.get(
+            'started_day',
+            pendulum.now().subtract(months=1).to_date_string()
+        )
+        ended_day = self.request.query_params.get(
+            'ended_day',
+            pendulum.now().to_date_string()
+        )
         started_day = parse_date(started_day)
         ended_day = parse_date(ended_day)
         if not started_day or not ended_day:
@@ -114,15 +117,19 @@ class MessageHistoryViewset(
             "project__uuid": project_uuid,
         }
 
-        started_day = self.request.query_params.get('started_day')
-        ended_day = self.request.query_params.get('ended_day')
-        if not started_day and not ended_day:
-            return Response({"error": "Date parameters are required"}, status=400)
+        started_day = self.request.query_params.get(
+            'started_day',
+            pendulum.now().subtract(months=1).to_date_string()
+        )
+        ended_day = self.request.query_params.get(
+            'ended_day',
+            pendulum.now().to_date_string()
+        )
 
         started_day = parse_date(started_day)
         ended_day = parse_date(ended_day)
         if not started_day or not ended_day:
-            return MessageLog.objects.none()
+            return Response({"error": "Invalid date format for started_day or ended_day"}, status=400)
 
         params["created_at__date__gte"] = started_day
         params["created_at__date__lte"] = ended_day
