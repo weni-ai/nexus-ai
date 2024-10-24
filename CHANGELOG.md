@@ -1,3 +1,11 @@
+# 2.6.5
+## *Update*
+    - It's now possible to have multiple Flow's pointing to differente flow uuid.
+
+## *Fix*
+    - Issues with message history params not working properly
+    - Some event driven message not normalized before update
+
 # 2.6.4
 ## *Add*
     - MessageLog field source to select logs from preview/router

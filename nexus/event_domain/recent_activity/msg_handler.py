@@ -12,6 +12,16 @@ def recent_activity_message(
     action: str,
     intelligence_activity_message=intelligence_activity_message,
 ):  # pragma: no cover
+
+    action_type_mapping = {
+        "C": "CREATE",
+        "U": "UPDATE",
+        "D": "DELETE",
+    }
+
+    if action not in {"CREATE", "UPDATE", "DELETE"}:
+        action = action_type_mapping.get(action, action)
+
     msg_dto = RecentActivitiesDTO(
         org=org,
         user=user,

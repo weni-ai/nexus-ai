@@ -23,12 +23,6 @@ def _update_comparison_fields(
 
 class ProjectObserver(EventObserver):
 
-    def __init__(
-        self,
-        recent_activity_message=create_recent_activity
-    ):
-        self.recent_activity_message = recent_activity_message
-
     def perform(
         self,
         project,
