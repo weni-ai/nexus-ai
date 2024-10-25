@@ -27,7 +27,7 @@ class BedrockFileDatabase(FileDataBase):
     def invoke_model(self, prompt: str, config_data: Dict):
         data = {
             "top_p": config_data.get("top_p"),
-            "top_k": config_data.get("top_k"),
+            "top_k": int(config_data.get("top_k")),
             "stop": config_data.get("stop"),
             "temperature": config_data.get("temperature"),
             "prompt": prompt
