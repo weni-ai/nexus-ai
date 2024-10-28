@@ -1,3 +1,8 @@
+# 2.6.6
+## *Fix*
+    - Routing and Preview not working for specific actions
+    - top_k typing
+
 # 2.6.5
 ## *Update*
     - It's now possible to have multiple Flow's pointing to differente flow uuid.
