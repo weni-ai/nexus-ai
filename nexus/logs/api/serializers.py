@@ -25,6 +25,7 @@ class MessageHistorySerializer(serializers.ModelSerializer):
             "created_at",
             "message_text",
             "tag",
+            "classification"
         ]
 
     message_text = serializers.SerializerMethodField()
