@@ -84,7 +84,8 @@ class ProjectUpdateUseCase:
 
     def migrate_project(self, project_uuid: str, indexer_database: str, user_email: str):
         project = get_project_by_uuid(project_uuid)
-        content_base_uuid = get_default_content_base_by_project(str(project.uuid))
+        content_base = get_default_content_base_by_project(str(project.uuid))
+        content_base_uuid = str(content_base.uuid)
 
         if indexer_database == Project.BEDROCK:
             project.indexer_database = Project.BEDROCK
@@ -105,7 +106,9 @@ class ProjectUpdateUseCase:
                     type="text",
                     user_email=user_email,
                     filename=file,
-                    content_base_uuid=content_base_uuid)
+                    content_base_uuid=content_base_uuid,
+                    text=text
+                )
 
             for link in content_base.contentbaselinks.all():
                 self.migrate_file_to_bedrock(
