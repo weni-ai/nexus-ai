@@ -1,3 +1,8 @@
+# 2.6.7
+## *Fix*
+    - Missing classification on serializer
+    - Reflection regex not supporting failed messages
+
 # 2.6.6
 ## *Fix*
     - Routing and Preview not working for specific actions
