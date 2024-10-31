@@ -35,8 +35,8 @@ from nexus.usecases.task_managers.file_database import get_gpt_by_content_base_u
 
 from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
 
-from nexus.task_managers.tasks_bedrock import bedrock_upload_text_file, bedrock_send_link, start_ingestion_job
-from nexus.task_managers.tasks import upload_text_file, send_link, delete_file_task
+from nexus.task_managers.tasks_bedrock import bedrock_upload_text_file, start_ingestion_job
+from nexus.task_managers.tasks import upload_text_file, delete_file_task
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
@@ -415,36 +415,11 @@ class ContentBaseTextViewset(
             serializer.is_valid(raise_exception=True)
 
             text = serializer.validated_data.get('text')
-            content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
-            cb_dto = intelligences.ContentBaseDTO(
-                uuid=content_base.uuid,
-                title=content_base.title,
-                intelligence_uuid=content_base.intelligence.uuid,
-                created_by_email=content_base.created_by.email,
-            )
-            cbt_dto = intelligences.ContentBaseTextDTO(
+            content_base_text = CeleryFileManager().upload_link(
                 text=text,
                 content_base_uuid=content_base_uuid,
                 user_email=user_email
             )
-            content_base_text = intelligences.CreateContentBaseTextUseCase().create_contentbasetext(
-                content_base_dto=cb_dto,
-                content_base_text_dto=cbt_dto
-            )
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-            if project.indexer_database == Project.BEDROCK:
-                bedrock_upload_text_file.delay(
-                    content_base_dto=cb_dto.__dict__,
-                    content_base_text_uuid=str(content_base_text.uuid),
-                    text=text
-                )
-
-            else:
-                upload_text_file.delay(
-                    content_base_dto=cb_dto.__dict__,
-                    content_base_text_uuid=content_base_text.uuid,
-                    text=text
-                )
 
             response = ContentBaseTextSerializer(content_base_text).data
 
@@ -454,18 +429,6 @@ class ContentBaseTextViewset(
             )
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
-        except ObjectDoesNotExist:
-            upload_text_file.delay(
-                content_base_dto=cb_dto.__dict__,
-                content_base_text_uuid=content_base_text.uuid,
-                text=text
-            )
-            response = ContentBaseTextSerializer(content_base_text).data
-
-            return Response(
-                response,
-                status=status.HTTP_201_CREATED
-            )
 
     def update(self, request, **kwargs):
         try:
@@ -693,41 +656,18 @@ class ContentBaseLinkViewset(ModelViewSet):
             serializer.is_valid(raise_exception=True)
 
             link = serializer.validated_data.get('link')
-            content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
-            link_dto = intelligences.ContentBaseLinkDTO(
+
+            content_base_link = CeleryFileManager().upload_link(
                 link=link,
-                user_email=user_email,
-                content_base_uuid=str(content_base.uuid)
+                content_base_uuid=content_base_uuid,
+                user_email=user_email
             )
-            content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-
-            if project.indexer_database == Project.BEDROCK:
-                bedrock_send_link.delay(
-                    link=link,
-                    user_email=user_email,
-                    content_base_link_uuid=str(content_base_link.uuid)
-                )
-            else:
-                send_link.delay(
-                    link=link,
-                    user_email=user_email,
-                    content_base_link_uuid=str(content_base_link.uuid)
-                )
-
             response = CreatedContentBaseLinkSerializer(content_base_link).data
 
             return Response(response, status=status.HTTP_201_CREATED)
+
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
-        except ObjectDoesNotExist:
-            send_link.delay(
-                link=link,
-                user_email=user_email,
-                content_base_link_uuid=str(content_base_link.uuid)
-            )
-            response = CreatedContentBaseLinkSerializer(content_base_link).data
-            return Response(response, status=status.HTTP_201_CREATED)
 
     def destroy(self, request, *args, **kwargs):
         try:

@@ -33,3 +33,17 @@ class ProjectUpdateViewset(views.APIView):
         return Response(
             ProjectSerializer(updated_project).data
         )
+
+
+class ProjectIndexerView(views.APIView):
+    def post(self, request, project_uuid):
+        user_email = request.user.email
+        indexer_database = request.data.get("indexer")
+
+        ProjectUpdateUseCase().migrate_project(
+            project_uuid=project_uuid,
+            indexer_database=indexer_database,
+            user_email=user_email
+        )
+
+        return Response({})

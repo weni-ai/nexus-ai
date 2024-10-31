@@ -1,4 +1,5 @@
 import copy
+from django.conf import settings
 
 from nexus.event_driven.publisher.rabbitmq_publisher import RabbitMQPublisher
 from nexus.usecases.projects.dto import UpdateProjectDTO
@@ -8,6 +9,10 @@ from nexus.projects.models import Project, IntegratedFeature
 from nexus.projects.permissions import has_project_permission
 from nexus.usecases import users
 from nexus.events import event_manager
+from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+
+from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
+from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
 
 def update_message(UpdateProjectDTO: UpdateProjectDTO):  # pragma: no cover
@@ -76,6 +81,73 @@ class ProjectUpdateUseCase:
         )
 
         return project
+
+    def migrate_project(self, project_uuid: str, indexer_database: str, user_email: str):
+        project = get_project_by_uuid(project_uuid)
+        content_base_uuid = get_default_content_base_by_project(str(project.uuid))
+
+        if indexer_database == Project.BEDROCK:
+            project.indexer_database = Project.BEDROCK
+            project.save()
+
+            content_base = get_default_content_base_by_project(str(project.uuid))
+
+            for file in content_base.contentbasefiles.all():
+                self.migrate_file_to_bedrock(
+                    type="file",
+                    user_email=user_email,
+                    filename=file.file_name,
+                    file_ext=file.extension_file,
+                    content_base_uuid=content_base_uuid)
+
+            for text in content_base.contentbasetexts.all():
+                self.migrate_file_to_bedrock(
+                    type="text",
+                    user_email=user_email,
+                    filename=file,
+                    content_base_uuid=content_base_uuid)
+
+            for link in content_base.contentbaselinks.all():
+                self.migrate_file_to_bedrock(
+                    type="link",
+                    user_email=user_email,
+                    filename=link.link,
+                    content_base_uuid=content_base_uuid)
+
+    def migrate_file_to_bedrock(self, type, content_base_uuid, user_email, filename, file_ext=None, text=None):
+
+        bucket = settings.AWS_S3_BUCKET_NAME
+
+        if type == "file":
+            f = s3FileDatabase().s3_client.get_object(
+                Bucket=bucket,
+                Key=filename,
+            )
+            if f["ResponseMetadata"]["HTTPStatusCode"] == 200:
+                file = f.get("Body").read()
+                CeleryFileManager().upload_file(
+                    file=file,
+                    content_base_uuid=content_base_uuid,
+                    extension_file=file_ext,
+                    user_email=user_email
+                )
+
+        elif type == "link":
+            CeleryFileManager().upload_link(
+                link=filename,
+                content_base_uuid=content_base_uuid,
+                user_email=user_email
+            )
+
+        elif type == "text":
+            CeleryFileManager().upload_text(
+                text=text,
+                content_base_uuid=content_base_uuid,
+                user_email=user_email
+            )
+
+    def migrate_project_to_sentenx(self):
+        pass
 
 
 class UpdateIntegratedFeatureUseCase:
