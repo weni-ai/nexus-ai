@@ -102,9 +102,6 @@ class Groundedness:
         response_content = gpt_response.choices[0].message.content
         groundedness_values = self.extract_score_and_sentences(response_content)
 
-        if not groundedness_values:
-            return None
-
         score_avg = sum([int(item["score"]) for item in groundedness_values]) / len(groundedness_values)
         tag = "success" if score_avg >= self.score_avg_threshold else "failed"
         finished_groundedness = pendulum.now()
