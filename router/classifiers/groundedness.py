@@ -89,7 +89,6 @@ class Groundedness:
     def classify(self):
 
         started_groundedness = pendulum.now()
-
         formated_prompt = self.get_prompt()
 
         gpt_response = self.client.chat_completions_create(
@@ -101,18 +100,20 @@ class Groundedness:
 
         response_content = gpt_response.choices[0].message.content
         groundedness_values = self.extract_score_and_sentences(response_content)
-
-        score_avg = sum([int(item["score"]) for item in groundedness_values]) / len(groundedness_values)
-        tag = "success" if score_avg >= self.score_avg_threshold else "failed"
         finished_groundedness = pendulum.now()
-
         usage_time = finished_groundedness.diff(started_groundedness).in_seconds()
+
+        if groundedness_values:
+            score_avg = sum(int(item["score"]) for item in groundedness_values) / len(groundedness_values)
+            tag = "success" if score_avg >= self.score_avg_threshold else "failed"
+            self.log.groundedness_score = score_avg
+        else:
+            tag = "failed"
+            self.log.groundedness_score = 0
 
         self.log.reflection_data = {
             "tag": tag,
             "request_time": usage_time,
             "sentence_rankings": response_content
         }
-
-        self.log.groundedness_score = score_avg
         self.log.save()
