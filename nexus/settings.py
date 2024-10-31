@@ -181,9 +181,19 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Celery config
+# Redis Config
 
 REDIS_URL = env.str("CELERY_BROKER_URL", default="redis://localhost:6379/1")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": REDIS_URL,
+        "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+    }
+}
+
+# Celery config
 
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_BROKER_URL = REDIS_URL
