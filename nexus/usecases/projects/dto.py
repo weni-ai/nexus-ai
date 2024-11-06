@@ -45,8 +45,11 @@ class IntegratedFeatureFlowDTO:
             if matching_flow:
                 template_uuid = current_setup_action.get('type', None)
                 template_action = None
-                if template_uuid is not None:
-                    template_action = TemplateAction.objects.get(uuid=current_setup_action.get('type'))
+                if template_uuid:
+                    try:
+                        template_action = TemplateAction.objects.get(uuid=template_uuid)
+                    except TemplateAction.DoesNotExist:
+                        template_action = None
 
                 create_flow_dtos.append(
                     CreateFlowDTO(
