@@ -1,3 +1,7 @@
+# 2.6.8
+## *Fix*
+    - Commerce custom template actions not working
+
 # 2.6.7
 ## *Fix*
     - Missing classification on serializer
