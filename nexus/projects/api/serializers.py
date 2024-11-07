@@ -48,7 +48,6 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             log=obj.messagelog
         )
         sentences = groundedness.extract_score_and_sentences(obj.messagelog.reflection_data.get("sentence_rankings"))
-        print(obj.messagelog.reflection_data.get("sentences"))
         groundedness_details: List[Dict[str, str]] = []
         for sentence in sentences:
             sentence_stats = {
