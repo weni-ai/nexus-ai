@@ -25,7 +25,6 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             "llm_response",
             "is_approved",
             "groundedness",
-            # "reflection_data"
         ]
 
     llm_response = serializers.SerializerMethodField()
