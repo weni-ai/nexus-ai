@@ -13,6 +13,7 @@ from nexus.usecases.logs.create import CreateLogUsecase
 from nexus.projects.api.serializers import MessageDetailSerializer
 from nexus.projects.api.permissions import ProjectPermission
 
+
 class ProjectUpdateViewset(views.APIView):
     permission_classes = [IsAuthenticated]
 
