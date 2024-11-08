@@ -25,6 +25,8 @@ from router.entities import (
 )
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 
+from django.core.cache import cache
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
 django.setup()
@@ -176,6 +178,31 @@ class FlowsORMRepository(Repository):
 
 
 class MessageLogsRepository(Repository):
+
+    def list_cached_messages(
+        self,
+        project_uuid: str,
+        contact_urn: str
+    ):
+        cache_key = f"last_5_messages_{project_uuid}_{contact_urn}"
+        cache_data: list = cache.get(cache_key)
+
+        if cache_data is None:
+            return []
+
+        contact_messages = []
+        for message in cache_data:
+            contact_messages.append(
+                ContactMessageDTO(
+                    contact_urn=message['contact_urn'],
+                    text=message['text'],
+                    llm_respose=message['llm_respose'],
+                    content_base_uuid=message['content_base_uuid'],
+                    project_uuid=message['project_uuid']
+                )
+            )
+
+        return contact_messages
 
     def list_last_messages(self, project_uuid: str, contact_urn: str, number_of_messages: int):
         content_base = get_default_content_base_by_project(project_uuid)
