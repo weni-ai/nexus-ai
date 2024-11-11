@@ -6,7 +6,7 @@ from nexus.logs.models import (
 from django.core.cache import cache
 
 
-class CreateLogUsecase:
+class CreateLogUsecase:  # TODO: rename method
 
     def _create_redis_cache(
         self,
