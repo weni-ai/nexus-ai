@@ -32,6 +32,7 @@ class Message(models.Model):
 class MessageLog(models.Model):
     message = models.OneToOneField(Message, on_delete=models.CASCADE)
     chunks = ArrayField(models.TextField(), null=True)
+    chunks_json = ArrayField(models.JSONField(), null=True)
     prompt = models.TextField()
     project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True)
     content_base = models.ForeignKey(
