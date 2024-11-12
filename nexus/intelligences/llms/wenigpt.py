@@ -87,9 +87,9 @@ class WeniGPTClient(LLMClient):
                 "prompt": self.prompt,
                 "sampling_params": {
                     "max_tokens": int(llm_config.max_length) if isinstance(llm_config.max_length, int) else int(settings.WENIGPT_MAX_LENGHT),
-                    "top_p": float(llm_config.top_p),
-                    "top_k": float(llm_config.top_k),
-                    "temperature": float(llm_config.temperature),
+                    "top_p": float(settings.WENIGPT_TOP_P),
+                    "top_k": float(settings.WENIGPT_TOP_P),
+                    "temperature": float(settings.WENIGPT_TEMPERATURE),
                     "stop": settings.WENIGPT_STOP,
                 }
             }
