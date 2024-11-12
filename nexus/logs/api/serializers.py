@@ -152,32 +152,33 @@ class MessageDetailSerializer(serializers.ModelSerializer):
         return obj.messagelog.is_approved
 
     def get_groundedness(self, obj):
+        if obj.messagelog.chunks_json:
+            groundedness = Groundedness(
+                llm_response=obj.messagelog.llm_response,
+                llm_chunk_used=obj.messagelog.chunks,
+                log=obj.messagelog
+            )
+            reflection_data = obj.messagelog.reflection_data
 
-        groundedness = Groundedness(
-            llm_response=obj.messagelog.llm_response,
-            llm_chunk_used=obj.messagelog.chunks,
-            log=obj.messagelog
-        )
-        reflection_data = obj.messagelog.reflection_data
-
-        if reflection_data and "sentence_rankings" in reflection_data:
-            sentences = groundedness.extract_score_and_sentences(reflection_data.get("sentence_rankings"))
-            groundedness_details: List[Dict[str, str]] = []
-            for sentence in sentences:
-                sentence_stats = {
-                    "sentence": sentence.get("sentence"),
-                    "sources": [],
-                    "score": sentence.get("score"),
-                }
-                for chunk in obj.messagelog.chunks_json:
-                    if sentence.get("evidence") in chunk.get("full_page"):
-                        print("sim")
-                        sentence_stats["sources"].append(
-                            {
-                                "filename": chunk.get("filename"),
-                                "file_uuid": chunk.get("file_uuid")
-                            }
-                        )
-                groundedness_details.append(sentence_stats)
-            return groundedness_details
+            if reflection_data and "sentence_rankings" in reflection_data:
+                sentences = groundedness.extract_score_and_sentences(reflection_data.get("sentence_rankings"))
+                groundedness_details: List[Dict[str, str]] = []
+                for sentence in sentences:
+                    sentence_stats = {
+                        "sentence": sentence.get("sentence"),
+                        "sources": [],
+                        "score": sentence.get("score"),
+                    }
+                    for chunk in obj.messagelog.chunks_json:
+                        if sentence.get("evidence") in chunk.get("full_page"):
+                            print("sim")
+                            sentence_stats["sources"].append(
+                                {
+                                    "filename": chunk.get("filename"),
+                                    "file_uuid": chunk.get("file_uuid")
+                                }
+                            )
+                    groundedness_details.append(sentence_stats)
+                return groundedness_details
+            return
         return
