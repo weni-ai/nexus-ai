@@ -30,6 +30,7 @@ def generate_env():
         "ALLOWED_HOSTS": "*",
         "SECRET_KEY": get_random_secret_key(),
         "DEFAULT_DATABASE": "postgres://nexus:nexus@postgres:5432/nexus",
+        "CELERY_BROKER_URL": "redis://redis:6379/1",
         "WENIGPT_FLOWS_CLASSIFY_TOKEN": "",
         "WENIGPT_FLOWS_SEARCH_TOKEN": "",
         "SENTENX_BASE_URL": "",

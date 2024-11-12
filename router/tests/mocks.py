@@ -63,6 +63,9 @@ class MessageLogsTestRepository(Repository):
             )
         return messages
 
+    def list_cached_messages(self, project_uuid: str, contact_urn: str):
+        return self.list_last_messages(contact_urn, project_uuid, 5)
+
 
 class FlowsTestRepository(Repository):
     def __init__(self, flow, fallback_flow) -> None:
