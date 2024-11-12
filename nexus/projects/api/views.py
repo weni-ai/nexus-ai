@@ -7,10 +7,6 @@ from .serializers import ProjectSerializer
 from nexus.usecases.projects.update import ProjectUpdateUseCase
 from nexus.usecases.projects.dto import UpdateProjectDTO
 from nexus.usecases.projects.retrieve import get_project
-from nexus.usecases.logs.retrieve import RetrieveMessageUseCase
-
-from nexus.projects.api.serializers import MessageDetailSerializer
-from nexus.projects.api.permissions import ProjectPermission
 
 
 class ProjectUpdateViewset(views.APIView):
@@ -37,11 +33,3 @@ class ProjectUpdateViewset(views.APIView):
         return Response(
             ProjectSerializer(updated_project).data
         )
-
-
-class MessageDetailViewSet(views.APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
-
-    def get(self, request, project_uuid, message_uuid):
-        message = RetrieveMessageUseCase().get_by_uuid(message_uuid)
-        return Response(MessageDetailSerializer(message).data)

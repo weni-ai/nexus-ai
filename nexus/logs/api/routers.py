@@ -1,5 +1,11 @@
 from django.urls import path, include
-from nexus.logs.api.views import LogsViewset, RecentActivitiesViewset, MessageHistoryViewset, TagPercentageViewSet
+from nexus.logs.api.views import (
+    LogsViewset,
+    RecentActivitiesViewset,
+    MessageHistoryViewset,
+    TagPercentageViewSet,
+    MessageDetailViewSet
+)
 
 
 urlpatterns = [
@@ -8,6 +14,7 @@ urlpatterns = [
     path('<project_uuid>/activities/', RecentActivitiesViewset.as_view({'get': 'list'}), name='list-activities'),
     path('<project_uuid>/message_history/', MessageHistoryViewset.as_view({'get': 'list'}), name='list-message-history'),
     path('<project_uuid>/tags-analytics/', TagPercentageViewSet.as_view({'get': 'list'}), name='list-tag-percentage'),
+    path('<project_uuid>/message-detail/<log_id>', MessageDetailViewSet.as_view(), name="message-detail"),
 ]
 
 urlpatterns.append(path('prometheus/', include('django_prometheus.urls')))

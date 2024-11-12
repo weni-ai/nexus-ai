@@ -1,6 +1,6 @@
-from nexus.logs.models import Message
+from nexus.logs.models import MessageLog
 
 
-class RetrieveMessageUseCase:
-    def get_by_uuid(self, message_uuid: str):
-        return Message.objects.get(uuid=message_uuid)
+class RetrieveMessageLogUseCase:
+    def get_by_id(self, message_uuid: str):
+        return MessageLog.objects.get(id=message_uuid)
