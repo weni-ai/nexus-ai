@@ -138,6 +138,7 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             "llm_response",
             "is_approved",
             "groundedness",
+            "contact_urn"
         ]
 
     llm_response = serializers.SerializerMethodField()
