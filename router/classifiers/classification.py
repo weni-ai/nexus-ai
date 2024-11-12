@@ -31,8 +31,9 @@ class Classification:
 
     def direct_flows(
         self,
+        user_message,
         flow_dto: FlowDTO,
-        start_flow: bool
+        start_flow: bool,
     ):
 
         print(f"[+ Classification Direct Flow: {flow_dto.uuid} +]")
@@ -42,7 +43,7 @@ class Classification:
                 flow=flow_dto,
                 user=self.user_email,
                 urns=[self.message.contact_urn],
-                user_message="",
+                user_message=user_message,
                 msg_event=self.msg_event,
             )
             self.flow_started = True
@@ -70,7 +71,8 @@ class Classification:
             if flow_dto:
                 return self.direct_flows(
                     flow_dto=flow_dto,
-                    start_flow=start_flow
+                    start_flow=start_flow,
+                    user_message=self.message.attachments
                 )
 
         return self.flow_started
