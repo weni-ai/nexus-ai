@@ -168,7 +168,7 @@ class MessageDetailSerializer(serializers.ModelSerializer):
         )
         reflection_data = obj.messagelog.reflection_data
 
-        if reflection_data:
+        if reflection_data and "sentence_rankings" in reflection_data:
             sentences = groundedness.extract_score_and_sentences(reflection_data.get("sentence_rankings"))
             groundedness_details: List[Dict[str, str]] = []
             for sentence in sentences:
