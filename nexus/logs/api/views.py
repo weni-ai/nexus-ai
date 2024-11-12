@@ -15,11 +15,14 @@ from nexus.logs.api.serializers import (
     MessageFullLogSerializer,
     RecentActivitiesSerializer,
     MessageHistorySerializer,
-    TagPercentageSerializer
+    TagPercentageSerializer,
+    ContactMessageDTOSerializer
 )
 from nexus.usecases.logs.list import ListLogUsecase
 
 from nexus.projects.permissions import has_project_permission
+
+from router.repositories import orm
 
 from django.conf import settings
 from django.db.models import Count, Case, When, IntegerField
@@ -37,6 +40,29 @@ class CustomPageNumberPagination(PageNumberPagination):
             'previous': self.get_previous_link(),
             'results': data
         })
+
+
+class ConversationContextViewset(
+    ListModelMixin,
+    GenericViewSet
+):
+
+    serializer_class = ContactMessageDTOSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        project_uuid = self.kwargs.get('project_uuid')
+        contact_urn = self.kwargs.get('contact_urn')
+
+        has_project_permission(user, project_uuid, 'GET')
+
+        repository = orm.MessageLogsRepository()
+        messages: list = repository.list_cached_messages(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn
+        )
+
+        return messages
 
 
 class TagPercentageViewSet(
