@@ -147,11 +147,8 @@ class MessageDetailSerializer(serializers.ModelSerializer):
     def get_llm_response(self, obj):
         return obj.messagelog.llm_response
 
-    def get_is_approved(self, obj):  # TODO: ADD is_approved
-        try:
-            return obj.messagelog.is_approved
-        except AttributeError:
-            return None
+    def get_is_approved(self, obj):
+        return obj.messagelog.is_approved
 
     def get_groundedness(self, obj):
 

@@ -14,6 +14,7 @@ from nexus.usecases.logs.tests.logs_factory import RecentActivitiesFactory, Mess
 from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.intelligences.create import create_base_brain_structure
+from nexus.usecases.users.tests.user_factory import UserFactory
 
 from nexus.logs.models import MessageLog, Message
 from nexus.logs.api.serializers import MessageLogSerializer
@@ -419,8 +420,6 @@ class MessageDetailViewSetTestCase(TestCase):
         self.assertIsNotNone(content.get("groundedness"))
 
     def test_view_permissions(self):
-        from nexus.usecases.users.tests.user_factory import UserFactory
-
         user_401 = UserFactory()
 
         client = APIClient()
@@ -436,3 +435,23 @@ class MessageDetailViewSetTestCase(TestCase):
 
         response = client.get(url, format='json')
         self.assertEquals(403, response.status_code)
+
+    def test_view_update(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "message-detail",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "log_id": str(self.message.messagelog.id)
+            }
+        )
+        data = {
+            "is_approved": True
+        }
+
+        response = client.patch(url, format='json', data=data)
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEquals(content, data)
