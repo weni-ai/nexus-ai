@@ -217,7 +217,7 @@ class MessageDetailSerializer(serializers.ModelSerializer):
         return obj.messagelog.classification
 
     def get_actions_uuid(self, obj):
-        if self.get_actions_started(obj):
+        if self.get_actions_started(obj) and obj.messagelog.reflection_data:
             action_uuid: str | None = obj.messagelog.reflection_data.get("action_uuid")
 
             # old logs without action info in reflection_data
