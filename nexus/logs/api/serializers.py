@@ -5,9 +5,12 @@ from django.conf import settings
 from rest_framework import serializers
 from nexus.logs.models import MessageLog, RecentActivities, Message
 
+from nexus.usecases.actions.retrieve import FlowDoesNotExist
+
 from router.classifiers.groundedness import Groundedness
 from router.repositories.orm import FlowsORMRepository
 from router.classifiers import Classifier
+
 
 class TagPercentageSerializer(serializers.Serializer):
 
@@ -214,10 +217,14 @@ class MessageDetailSerializer(serializers.ModelSerializer):
 
             # old logs without action info in reflection_data
             if not action_uuid:
-                action = FlowsORMRepository(
-                    project_uuid=str(obj.messagelog.project.uuid)
-                ).get_project_flow_by_name(obj.messagelog.classification)
-                return str(action.pk)
+                try:
+                    action = FlowsORMRepository(
+                        project_uuid=str(obj.messagelog.project.uuid)
+                    ).get_project_flow_by_name(obj.messagelog.classification)
+                    return str(action.pk)
+                except FlowDoesNotExist:
+                    return None
+
             return action_uuid
 
     def get_status(self, obj):
