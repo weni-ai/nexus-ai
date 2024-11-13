@@ -24,7 +24,8 @@ class TestZeroshotClassifier(TestCase):
         batch_flow_build = FlowFactory.build_batch(3)
         for flow in batch_flow_build:
             self.flow_list.append(FlowDTO(
-                uuid=flow.uuid,
+                pk=flow.uuid,
+                uuid=flow.flow_uuid,
                 name=flow.name,
                 prompt=flow.prompt,
                 content_base_uuid=flow.content_base.uuid,
@@ -62,7 +63,8 @@ class TestChatGPTFunctionClassifier(TestCase):
         batch_flow_build = FlowFactory.build_batch(3)
         for flow in batch_flow_build:
             self.flow_list.append(FlowDTO(
-                uuid=flow.uuid,
+                pk=flow.uuid,
+                uuid=flow.flow_uuid,
                 name=flow.name,
                 prompt=flow.prompt,
                 content_base_uuid=flow.content_base.uuid,
