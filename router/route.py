@@ -62,6 +62,7 @@ def route(
             fallback_flow: FlowDTO = flows_repository.project_flow_fallback(fallback=True)
 
             last_messages: List[ContactMessageDTO] = message_logs_repository.list_cached_messages(message.project_uuid, message.contact_urn)
+            print("[ + Last Messages LIST DTO: + ]", last_messages)
 
             agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
             agent = agent.set_default_if_null()
