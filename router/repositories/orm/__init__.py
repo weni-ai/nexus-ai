@@ -92,6 +92,7 @@ class FlowsORMRepository(Repository):
         flow = self.flows.filter(name=name).first()
 
         return FlowDTO(
+            pk=str(flow.uuid),
             uuid=str(flow.flow_uuid),
             name=flow.name,
             prompt=flow.prompt,
@@ -108,6 +109,7 @@ class FlowsORMRepository(Repository):
 
         if flow:
             return FlowDTO(
+                pk=str(flow.uuid),
                 uuid=str(flow.flow_uuid),
                 name=flow.name,
                 prompt=flow.prompt,
@@ -127,6 +129,7 @@ class FlowsORMRepository(Repository):
         for flow in flows:
             flows_list.append(
                 FlowDTO(
+                    pk=str(flow.uuid),
                     uuid=str(flow.flow_uuid),
                     name=flow.name,
                     prompt=flow.prompt,
@@ -146,6 +149,7 @@ class FlowsORMRepository(Repository):
         for flow in flows:
             flows_list.append(
                 FlowDTO(
+                    pk=str(flow.uuid),
                     uuid=str(flow.uuid),
                     name=flow.name,
                     prompt=flow.prompt,

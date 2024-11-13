@@ -4,6 +4,7 @@ from rest_framework import serializers
 from nexus.logs.models import MessageLog, RecentActivities, Message
 
 from router.classifiers.groundedness import Groundedness
+from router.repositories.orm import FlowsORMRepository
 
 
 class TagPercentageSerializer(serializers.Serializer):
@@ -138,12 +139,18 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             "llm_response",
             "is_approved",
             "groundedness",
-            "contact_urn"
+            "contact_urn",
+            "actions_started",
+            "actions_type",
+            "actions_uuid",
         ]
 
     llm_response = serializers.SerializerMethodField()
     is_approved = serializers.SerializerMethodField()
     groundedness = serializers.SerializerMethodField()
+    actions_started = serializers.SerializerMethodField()
+    actions_type = serializers.SerializerMethodField()
+    actions_uuid = serializers.SerializerMethodField()
 
     def get_llm_response(self, obj):
         return obj.messagelog.llm_response
@@ -182,3 +189,27 @@ class MessageDetailSerializer(serializers.ModelSerializer):
                 return groundedness_details
             return
         return
+
+    def get_actions_started(self, obj):
+        tag: str | None = obj.messagelog.reflection_data.get("tag")
+        return tag == "action_started"
+
+    def get_actions_type(self, obj):
+        action_name: str | None = obj.messagelog.reflection_data.get("action_name")
+
+        if action_name:
+            return action_name
+
+        return obj.messagelog.classification
+
+    def get_actions_uuid(self, obj):
+        if self.get_actions_started(obj):
+            action_uuid: str | None = obj.messagelog.reflection_data.get("action_uuid")
+
+            # old logs without action info in reflection_data
+            if not action_uuid:
+                action = FlowsORMRepository(
+                    project_uuid=str(obj.messagelog.project.uuid)
+                ).get_project_flow_by_name(obj.messagelog.classification)
+                return str(action.pk)
+            return action_uuid
