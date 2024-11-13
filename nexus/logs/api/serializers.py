@@ -1,5 +1,7 @@
 from typing import List, Dict
 
+from django.conf import settings
+
 from rest_framework import serializers
 from nexus.logs.models import MessageLog, RecentActivities, Message
 
@@ -221,8 +223,7 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             False: "F"
         }
         if obj.messagelog.groundedness_score:
-            score = obj.messagelog.groundedness_score > 0
-
+            score = obj.messagelog.groundedness_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD
             return status.get(score)
 
         return "S"
