@@ -195,9 +195,12 @@ class MessageLogsRepository(Repository):
         contact_urn: str
     ):
         cache_key = f"last_5_messages_{project_uuid}_{contact_urn}"
+        print("Listed cache key: ", cache_key)
         cache_data: list = cache.get(cache_key)
+        print("Listed cache data: ", cache_data)
 
         if cache_data is None:
+            print("Cache data is None")
             return []
 
         contact_messages = []
