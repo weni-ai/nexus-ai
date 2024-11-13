@@ -13,11 +13,14 @@ class CreateLogUsecase:  # TODO: rename method
         message_log: MessageLog,
         project_uuid: str
     ):
+        print(f"-- Creating redis cache for message {message_log.id} from project {project_uuid} --")
         message = message_log.message
 
         contact_urn = message.contact_urn
         cache_key = f"last_5_messages_{project_uuid}_{contact_urn}"
+        print("Cache key: ", cache_key)
         last_5_messages = cache.get(cache_key, [])
+        print("Current last 5 messages: ", last_5_messages)
         last_5_messages.insert(
             0,
             {
@@ -36,6 +39,7 @@ class CreateLogUsecase:  # TODO: rename method
             last_5_messages.pop()
 
         cache.set(cache_key, last_5_messages)
+        print("Cache updated with: ", last_5_messages)
 
     def create_message(self, text: str, contact_urn: str, status: str = "P") -> Message:
         self.message = Message.objects.create(
@@ -82,4 +86,5 @@ class CreateLogUsecase:  # TODO: rename method
 
         log.save()
         if log.project.uuid:
+            print(" +++++++ Entering redis cache creation +++++++ ")
             self._create_redis_cache(log, log.project.uuid)
