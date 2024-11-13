@@ -7,7 +7,7 @@ from nexus.logs.models import MessageLog, RecentActivities, Message
 
 from router.classifiers.groundedness import Groundedness
 from router.repositories.orm import FlowsORMRepository
-
+from router.classifiers import Classifier
 
 class TagPercentageSerializer(serializers.Serializer):
 
@@ -194,14 +194,17 @@ class MessageDetailSerializer(serializers.ModelSerializer):
         return
 
     def get_actions_started(self, obj):
-        tag: str | None = obj.messagelog.reflection_data.get("tag")
-        return tag == "action_started"
+        if obj.messagelog.reflection_data:
+            tag: str | None = obj.messagelog.reflection_data.get("tag")
+            return tag == "action_started"
+        return obj.messagelog.classification != Classifier.CLASSIFICATION_OTHER
 
     def get_actions_type(self, obj):
-        action_name: str | None = obj.messagelog.reflection_data.get("action_name")
 
-        if action_name:
-            return action_name
+        if obj.messagelog.reflection_data:
+            action_name: str | None = obj.messagelog.reflection_data.get("action_name")
+            if action_name:
+                return action_name
 
         return obj.messagelog.classification
 
