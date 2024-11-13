@@ -31,9 +31,10 @@ class Classification:
 
     def direct_flows(
         self,
-        user_message,
         flow_dto: FlowDTO,
         start_flow: bool,
+        user_message: str = None,
+        attachments: list = None,
     ):
 
         print(f"[+ Classification Direct Flow: {flow_dto.uuid} +]")
@@ -45,6 +46,7 @@ class Classification:
                 urns=[self.message.contact_urn],
                 user_message=user_message,
                 msg_event=self.msg_event,
+                attachments=attachments
             )
             self.flow_started = True
             return self.flow_started
@@ -72,7 +74,8 @@ class Classification:
                 return self.direct_flows(
                     flow_dto=flow_dto,
                     start_flow=start_flow,
-                    user_message=self.message.attachments
+                    attachments=self.message.attachments,
+                    user_message=""
                 )
 
         return self.flow_started
