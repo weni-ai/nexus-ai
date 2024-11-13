@@ -14,14 +14,13 @@ class CreateLogUsecase:  # TODO: rename method
         project_uuid: str
     ):
         message = message_log.message
-        if message.status != "S":
-            return
 
         contact_urn = message.contact_urn
         cache_key = f"last_5_messages_{project_uuid}_{contact_urn}"
         last_5_messages = cache.get(cache_key, [])
         last_5_messages.insert(
-            0, {
+            0,
+            {
                 "text": message.text,
                 "contact_urn": message.contact_urn,
                 "llm_respose": message_log.llm_response,
