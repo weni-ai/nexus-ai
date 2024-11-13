@@ -228,7 +228,9 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             True: "S",
             False: "F"
         }
+        if obj.messagelog.groundedness_score:
+            score = obj.messagelog.groundedness_score > 0
 
-        score = obj.messagelog.groundedness_score > 0
+            return status.get(score)
 
-        return status.get(score)
+        return "S"
