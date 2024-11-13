@@ -402,7 +402,8 @@ class MessageDetailViewSetTestCase(TestCase):
             classification="other",
             llm_response=self.llm_response,
             llm_model=self.llm_model,
-            metadata=self.metadata
+            metadata=self.metadata,
+            groundedness_score=10,
         )
 
     def test_view(self):
@@ -487,7 +488,8 @@ class MessageDetailViewSetTestCase(TestCase):
             classification="other",
             llm_response=self.llm_response,
             llm_model=self.llm_model,
-            metadata=self.metadata
+            metadata=self.metadata,
+            groundedness_score=10,
         )
 
         client = APIClient()
@@ -506,6 +508,7 @@ class MessageDetailViewSetTestCase(TestCase):
         content = json.loads(response.content)
 
         self.assertTrue(content.get("actions_started"))
+        self.assertEquals(content.get("status"), "S")
         self.assertEquals(content.get("actions_uuid"), str(action.uuid))
         self.assertEquals(content.get("actions_type"), str(action.name))
 
@@ -534,7 +537,8 @@ class MessageDetailViewSetTestCase(TestCase):
             classification=action.name,
             llm_response=self.llm_response,
             llm_model=self.llm_model,
-            metadata=self.metadata
+            metadata=self.metadata,
+            groundedness_score=0,
         )
 
         client = APIClient()
@@ -553,5 +557,6 @@ class MessageDetailViewSetTestCase(TestCase):
         content = json.loads(response.content)
 
         self.assertTrue(content.get("actions_started"))
+        self.assertEquals(content.get("status"), "F")
         self.assertEquals(content.get("actions_uuid"), str(action.uuid))
         self.assertEquals(content.get("actions_type"), str(action.name))

@@ -151,6 +151,7 @@ class MessageDetailSerializer(serializers.ModelSerializer):
     actions_started = serializers.SerializerMethodField()
     actions_type = serializers.SerializerMethodField()
     actions_uuid = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
 
     def get_llm_response(self, obj):
         return obj.messagelog.llm_response
@@ -213,3 +214,13 @@ class MessageDetailSerializer(serializers.ModelSerializer):
                 ).get_project_flow_by_name(obj.messagelog.classification)
                 return str(action.pk)
             return action_uuid
+
+    def get_status(self, obj):
+        status = {
+            True: "S",
+            False: "F"
+        }
+
+        score = obj.messagelog.groundedness_score > 0
+
+        return status.get(score)
