@@ -200,6 +200,7 @@ class MessageLogsRepository(Repository):
 
         contact_messages = []
         for message in cache_data:
+            print("Entrou no for do list do cache")
             contact_messages.append(
                 ContactMessageDTO(
                     contact_urn=message['contact_urn'],
@@ -209,6 +210,7 @@ class MessageLogsRepository(Repository):
                     project_uuid=message['project_uuid']
                 )
             )
+            print("Contact messages: ", contact_messages)
 
         return contact_messages
 
