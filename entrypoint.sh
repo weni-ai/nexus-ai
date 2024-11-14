@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export GUNICORN_APP=${GUNICORN_APP:-"nexus.wsgi"}
+export GUNICORN_APP=${GUNICORN_APP:-"nexus.asgi"}
 export GUNICORN_CONF=${GUNICORN_CONF:-"${APP_PATH}/gunicorn.conf.py"}
 export GUNICORN_LOG_CONF=${GUNICORN_LOG_CONF:-"${APP_PATH}/gunicorn-logging.conf"}
 export LOG_LEVEL=${LOG_LEVEL:-"INFO"}

@@ -2,6 +2,7 @@ from nexus.logs.models import (
     Message,
     MessageLog,
 )
+from nexus.projects.signals import send_message_to_websocket
 
 from django.core.cache import cache
 
@@ -43,6 +44,10 @@ class CreateLogUsecase:  # TODO: rename method
 
         saved_data = cache.get(cache_key)
         print("Saved cache data: ", saved_data)
+
+    def __init__(self, message) -> None:
+        self.message = message
+        self.log = self.message.messagelog
 
     def create_message(self, text: str, contact_urn: str, status: str = "P") -> Message:
         self.message = Message.objects.create(
@@ -91,3 +96,7 @@ class CreateLogUsecase:  # TODO: rename method
         if log.project.uuid:
             print(" +++++++ Entering redis cache creation +++++++ ")
             self._create_redis_cache(log, log.project.uuid)
+
+    def send_message(self, **kwargs):
+        message = self.log.message
+        send_message_to_websocket(message)
