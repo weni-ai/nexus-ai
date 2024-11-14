@@ -15,9 +15,9 @@ app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
 task_create_missing_queues = True
 
-app.conf.event_serializer = 'pickle'
-app.conf.task_serializer = 'pickle'
-app.conf.result_serializer = 'pickle'
+app.conf.event_serializer = 'msgpack'
+app.conf.task_serializer = 'msgpack'
+app.conf.result_serializer = 'msgpack'
 app.conf.accept_content = ['application/json', 'application/x-python-serialize']
 
 app.conf.beat_schedule = {
