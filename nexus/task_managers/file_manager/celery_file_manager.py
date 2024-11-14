@@ -1,5 +1,5 @@
 import pickle
-
+import msgpack
 from django.core.exceptions import ObjectDoesNotExist
 
 from nexus.task_managers import tasks
@@ -29,7 +29,8 @@ class CeleryFileManager:
         user_email: str,
         load_type: str = None
     ):
-        pickled_file = pickle.dumps(file)
+        pickled_file = msgpack.packb(file)
+        # pickled_file = pickle.dumps(file)
 
         content_base_file_dto = ContentBaseFileDTO(
             file=file,

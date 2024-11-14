@@ -1,4 +1,6 @@
 import pickle
+import msgpack
+
 from typing import Dict
 
 from django.conf import settings
@@ -66,7 +68,8 @@ def upload_file(
     content_base_file_uuid: str,
     load_type: str = None
 ):
-    file = pickle.loads(file)
+    # file = pickle.loads(file)
+    file = msgpack.unpackb(file)
     file_database_response = s3FileDatabase().add_file(file)
 
     if file_database_response.status != 0:
