@@ -84,9 +84,10 @@ def bedrock_upload_file(
     content_base_file_uuid: str,
 ):
     print("[+ 🦑 BEDROCK: Task to Upload File +]")
-
+    print("Unpickling...")
     file = pickle.loads(file)
-
+    print("Finished unpickling")
+    print("[+++++++++++++++++++++++++++++++]")
     file_database = BedrockFileDatabase()
     file_database_response = file_database.add_file(file, content_base_uuid, content_base_file_uuid)
 
