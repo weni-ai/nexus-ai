@@ -42,6 +42,8 @@ playwright = "^1.47.0"
 html2text = "^2024.2.26"
 django-storages = "^1.14.4"
 ftfy = "^6.2.3"
+channels = {extras = ["daphne"], version = "^4.1.0"}
+channels-redis = "^4.2.0"
 
 
 

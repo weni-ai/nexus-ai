@@ -162,6 +162,7 @@ def route(
                 "tag": "action_started"
             }
         )
+        log_usecase.send_message()
 
         return dispatch(
             message=message,
