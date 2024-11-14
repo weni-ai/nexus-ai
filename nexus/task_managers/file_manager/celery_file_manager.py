@@ -46,11 +46,31 @@ class CeleryFileManager:
 
         if indexer_database == Project.BEDROCK:
             print("[+ 🦑 Using BEDROCK 🦑 +]")
+
+            if "pdf" in extension_file:
+                tasks_bedrock.bedrock_upload_file(
+                    pickled_file,
+                    content_base_uuid,
+                    user_email,
+                    str(content_base_file.uuid),
+                )
+                return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}
+
             tasks_bedrock.bedrock_upload_file.delay(
                 pickled_file,
                 content_base_uuid,
                 user_email,
                 str(content_base_file.uuid),
+            )
+            return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}
+
+        if "pdf" in extension_file:
+            tasks.upload_file(
+                pickled_file,
+                content_base_uuid,
+                extension_file,
+                user_email, str(content_base_file.uuid),
+                load_type
             )
             return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}
 
