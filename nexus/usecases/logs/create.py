@@ -41,6 +41,9 @@ class CreateLogUsecase:  # TODO: rename method
         cache.set(cache_key, last_5_messages)
         print("Cache updated with: ", last_5_messages)
 
+        saved_data = cache.get(cache_key)
+        print("Saved cache data: ", saved_data)
+
     def create_message(self, text: str, contact_urn: str, status: str = "P") -> Message:
         self.message = Message.objects.create(
             text=text,

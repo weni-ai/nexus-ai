@@ -29,7 +29,11 @@ class CeleryFileManager:
         user_email: str,
         load_type: str = None
     ):
+        print("[+ 🦑 START Uploading file 🦑 +]")
+        print("Pickling...")
         pickled_file = pickle.dumps(file)
+        print("Finished pickling")
+        print("[+++++++++++++++++++++++++++++++]")
 
         content_base_file_dto = ContentBaseFileDTO(
             file=file,
