@@ -6,9 +6,10 @@ from nexus.projects.signals import send_message_to_websocket
 
 
 class CreateLogUsecase:
-    def __init__(self, message) -> None:
+    def __init__(self, message = None) -> None:
         self.message = message
-        self.log = self.message.messagelog
+        if self.message:
+            self.log = self.message.messagelog
 
     def create_message(self, text: str, contact_urn: str, status: str = "P") -> Message:
         self.message = Message.objects.create(
