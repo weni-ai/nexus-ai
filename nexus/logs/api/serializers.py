@@ -17,6 +17,14 @@ class TagPercentageSerializer(serializers.Serializer):
     failed_percentage = serializers.FloatField()
 
 
+class ContactMessageDTOSerializer(serializers.Serializer):
+    contact_urn = serializers.CharField()
+    text = serializers.CharField()
+    llm_respose = serializers.CharField()
+    content_base_uuid = serializers.CharField()
+    project_uuid = serializers.CharField()
+
+
 class MessageHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = MessageLog
