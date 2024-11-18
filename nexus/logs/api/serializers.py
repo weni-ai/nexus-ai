@@ -1,9 +1,15 @@
 from typing import List, Dict
 
+from django.conf import settings
+
 from rest_framework import serializers
 from nexus.logs.models import MessageLog, RecentActivities, Message
 
+from nexus.usecases.actions.retrieve import FlowDoesNotExist
+
 from router.classifiers.groundedness import Groundedness
+from router.repositories.orm import FlowsORMRepository
+from router.classifiers import Classifier
 
 
 class TagPercentageSerializer(serializers.Serializer):
@@ -146,12 +152,19 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             "llm_response",
             "is_approved",
             "groundedness",
-            "contact_urn"
+            "contact_urn",
+            "actions_started",
+            "actions_type",
+            "actions_uuid",
         ]
 
     llm_response = serializers.SerializerMethodField()
     is_approved = serializers.SerializerMethodField()
     groundedness = serializers.SerializerMethodField()
+    actions_started = serializers.SerializerMethodField()
+    actions_type = serializers.SerializerMethodField()
+    actions_uuid = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
 
     def get_llm_response(self, obj):
         return obj.messagelog.llm_response
@@ -190,3 +203,45 @@ class MessageDetailSerializer(serializers.ModelSerializer):
                 return groundedness_details
             return
         return
+
+    def get_actions_started(self, obj):
+        if obj.messagelog.reflection_data:
+            tag: str | None = obj.messagelog.reflection_data.get("tag")
+            return tag == "action_started"
+        return obj.messagelog.classification != Classifier.CLASSIFICATION_OTHER
+
+    def get_actions_type(self, obj):
+
+        if obj.messagelog.reflection_data:
+            action_name: str | None = obj.messagelog.reflection_data.get("action_name")
+            if action_name:
+                return action_name
+
+        return obj.messagelog.classification
+
+    def get_actions_uuid(self, obj):
+        if self.get_actions_started(obj) and obj.messagelog.reflection_data:
+            action_uuid: str | None = obj.messagelog.reflection_data.get("action_uuid")
+
+            # old logs without action info in reflection_data
+            if not action_uuid:
+                try:
+                    action = FlowsORMRepository(
+                        project_uuid=str(obj.messagelog.project.uuid)
+                    ).get_project_flow_by_name(obj.messagelog.classification)
+                    return str(action.pk)
+                except FlowDoesNotExist:
+                    return None
+
+            return action_uuid
+
+    def get_status(self, obj):
+        status = {
+            True: "S",
+            False: "F"
+        }
+        if obj.messagelog.groundedness_score:
+            score = obj.messagelog.groundedness_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD
+            return status.get(score)
+
+        return "S"

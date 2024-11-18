@@ -24,6 +24,8 @@ from router.entities import (
     ProjectDTO
 )
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
+from nexus.usecases.actions.retrieve import FlowDoesNotExist
+
 
 from django.core.cache import cache
 
@@ -93,7 +95,11 @@ class FlowsORMRepository(Repository):
 
         flow = self.flows.filter(name=name).first()
 
+        if not flow:
+            raise FlowDoesNotExist
+
         return FlowDTO(
+            pk=str(flow.uuid),
             uuid=str(flow.flow_uuid),
             name=flow.name,
             prompt=flow.prompt,
@@ -110,6 +116,7 @@ class FlowsORMRepository(Repository):
 
         if flow:
             return FlowDTO(
+                pk=str(flow.uuid),
                 uuid=str(flow.flow_uuid),
                 name=flow.name,
                 prompt=flow.prompt,
@@ -129,6 +136,7 @@ class FlowsORMRepository(Repository):
         for flow in flows:
             flows_list.append(
                 FlowDTO(
+                    pk=str(flow.uuid),
                     uuid=str(flow.flow_uuid),
                     name=flow.name,
                     prompt=flow.prompt,
@@ -148,6 +156,7 @@ class FlowsORMRepository(Repository):
         for flow in flows:
             flows_list.append(
                 FlowDTO(
+                    pk=str(flow.uuid),
                     uuid=str(flow.uuid),
                     name=flow.name,
                     prompt=flow.prompt,
@@ -169,6 +178,7 @@ class FlowsORMRepository(Repository):
             return None
 
         return FlowDTO(
+            pk=str(flow.uuid),
             uuid=str(flow.flow_uuid),
             name=flow.name,
             prompt=flow.prompt,
