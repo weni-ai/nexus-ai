@@ -48,6 +48,8 @@ class MessageLog(models.Model):
     groundedness_score = models.IntegerField(null=True)
     reflection_data = models.JSONField(null=True)
 
+    is_approved = models.BooleanField(null=True)
+
     def __str__(self) -> str:
         return f"{self.message}"
 
