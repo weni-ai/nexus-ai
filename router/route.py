@@ -134,6 +134,7 @@ def route(
                 llm_response=llm_response,
                 metadata=metadata.dict
             )
+            log_usecase.send_message()
 
             if fallback_flow:
                 return dispatch(
