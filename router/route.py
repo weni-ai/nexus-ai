@@ -167,6 +167,7 @@ def route(
                 "action_name": flow.name,
             }
         )
+        log_usecase.send_message()
 
         return dispatch(
             message=message,

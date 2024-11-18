@@ -54,6 +54,7 @@ AUTH_USER_MODEL = 'users.User'
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'mozilla_django_oidc',
@@ -119,8 +120,18 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'nexus.wsgi.application'
+ASGI_APPLICATION = 'nexus.asgi.application'
 
+REDIS_CHANNEL_URL = env.str("REDIS_CHANNEL_URL")
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [REDIS_CHANNEL_URL],
+        },
+    },
+}
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
