@@ -45,9 +45,11 @@ class CreateLogUsecase:  # TODO: rename method
         saved_data = cache.get(cache_key)
         print("Saved cache data: ", saved_data)
 
-    def __init__(self, message) -> None:
+class CreateLogUsecase:
+    def __init__(self, message = None) -> None:
         self.message = message
-        self.log = self.message.messagelog
+        if self.message:
+            self.log = self.message.messagelog
 
     def create_message(self, text: str, contact_urn: str, status: str = "P") -> Message:
         self.message = Message.objects.create(
