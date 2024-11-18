@@ -13,11 +13,15 @@ class CreateLogUsecase:
         message_log: MessageLog,
         project_uuid: str
     ):
+        print(f"Setting cache for message: {message_log.id}")
+        print(f"Message to set: {message_log.message.text}")
         message = message_log.message
 
         contact_urn = message.contact_urn
         cache_key = f"last_5_messages_{project_uuid}_{contact_urn}"
+        print("Cache key: ", cache_key)
         last_5_messages = cache.get(cache_key, [])
+        print("old cache: ", last_5_messages)
         last_5_messages.insert(
             0,
             {
@@ -36,6 +40,7 @@ class CreateLogUsecase:
             last_5_messages.pop()
 
         cache.set(cache_key, last_5_messages)
+        print("new cache: ", cache.get(cache_key))
 
     def create_message(self, text: str, contact_urn: str, status: str = "P") -> Message:
         self.message = Message.objects.create(
