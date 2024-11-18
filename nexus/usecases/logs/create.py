@@ -3,8 +3,39 @@ from nexus.logs.models import (
     MessageLog,
 )
 
+from django.core.cache import cache
+
 
 class CreateLogUsecase:
+
+    def _create_redis_cache(
+        self,
+        message_log: MessageLog,
+        project_uuid: str
+    ):
+        message = message_log.message
+
+        contact_urn = message.contact_urn
+        cache_key = f"last_5_messages_{project_uuid}_{contact_urn}"
+        last_5_messages = cache.get(cache_key, [])
+        last_5_messages.insert(
+            0,
+            {
+                "text": message.text,
+                "contact_urn": message.contact_urn,
+                "llm_respose": message_log.llm_response,
+                "project_uuid": project_uuid,
+                "content_base_uuid": str(message_log.content_base.uuid),
+                "created_at": message.created_at.isoformat(),
+                "uuid": str(message.uuid),
+                "log_id": message_log.id
+            }
+        )
+
+        if len(last_5_messages) > 5:
+            last_5_messages.pop()
+
+        cache.set(cache_key, last_5_messages)
 
     def create_message(self, text: str, contact_urn: str, status: str = "P") -> Message:
         self.message = Message.objects.create(
@@ -50,3 +81,5 @@ class CreateLogUsecase:
             setattr(log, key, kwargs.get(key))
 
         log.save()
+        if log.project.uuid:
+            self._create_redis_cache(log, log.project.uuid)
