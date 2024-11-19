@@ -191,8 +191,8 @@ class MessageDetailSerializer(serializers.ModelSerializer):
                         "score": sentence.get("score"),
                     }
                     for chunk in obj.messagelog.chunks_json:
-                        if sentence.get("evidence") in chunk.get("full_page"):
-                            print("sim")
+                        evidence: str = sentence.get("evidence", "").strip('"')
+                        if evidence.lower() in chunk.get("full_page").lower():
                             sentence_stats["sources"].append(
                                 {
                                     "filename": chunk.get("filename"),
