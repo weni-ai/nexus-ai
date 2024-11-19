@@ -425,7 +425,6 @@ class LogUseCaseTestCase(TestCase):
             contact_urn=self.message.contact_urn
         )
 
-
     def test_create(self):
         self.assertIsInstance(self.log_usecase.message, MessageModel)
         self.assertIsInstance(self.log_usecase.log, MessageLog)
@@ -447,6 +446,6 @@ class LogUseCaseTestCase(TestCase):
 
         msg_log_usecase = CreateLogUsecase()
         msg_log_usecase.update_log_field(
-            chunks=chunks, project_id=self.message_log.project.uuid
+            chunks=chunks, project_id=message_log.project.uuid
         )
         self.assertEquals(self.log_usecase.log.chunks, chunks)
