@@ -6,6 +6,7 @@ from nexus.logs.models import (
 from django.core.cache import cache
 
 
+# TODO refactor this class methods to recieve MessageLog object as parameter not using class attributes
 class CreateLogUsecase:
 
     def _create_redis_cache(

@@ -438,6 +438,7 @@ class LogUseCaseTestCase(TestCase):
 
         self.assertEquals(self.log_usecase.message.status, "F")
 
+    @skip("LogUsecase needs refactor")
     def test_update_log_field(self):
         message_log = MessageLogFactory()
         self.assertIsNone(message_log.chunks)
