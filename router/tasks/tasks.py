@@ -12,6 +12,7 @@ from nexus.usecases.logs.create import CreateLogUsecase
 
 from router.route import route
 from router.classifiers.zeroshot import ZeroshotClassifier
+from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier, OpenAIClient
 
 from router.classifiers.pre_classification import PreClassification
 from router.classifiers.classification import Classification
@@ -119,7 +120,9 @@ def start_route(
             ),
         )
 
-        classifier = ZeroshotClassifier(chatbot_goal=agent.goal)
+        # classifier = ZeroshotClassifier(chatbot_goal=agent.goal)
+
+        classifier = ChatGPTFunctionClassifier()
         classification = classification_handler.custom_actions(
             classifier=classifier,
             language=llm_config.language
