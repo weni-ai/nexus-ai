@@ -240,8 +240,10 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             True: "S",
             False: "F"
         }
-        if obj.messagelog.groundedness_score:
-            score = obj.messagelog.groundedness_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD
+        groundedness_score = obj.messagelog.groundedness_score
+
+        if groundedness_score or isinstance(groundedness_score, int):
+            score = groundedness_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD
             return status.get(score)
 
         return "S"
