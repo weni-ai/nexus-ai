@@ -35,8 +35,8 @@ class ChatGPTFunctionClassifier(Classifier):
 
     def __init__(
         self,
-        client: OpenAIClientInterface,
-        chatgpt_model: str,
+        client: OpenAIClientInterface = OpenAIClient(settings.OPENAI_API_KEY),
+        chatgpt_model: str = settings.FUNCTION_CALLING_CHATGPT_MODEL,
     ):
         self.chatgpt_model = chatgpt_model
         self.client = client
