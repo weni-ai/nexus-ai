@@ -41,7 +41,7 @@ class ChatGPTFunctionClassifier(Classifier):
     ):
         self.chatgpt_model = chatgpt_model
         self.client = client
-        self.prompt = settings.CHATGPT_CONTEXT_PROMPT
+        self.prompt = settings.FUNCTION_CALLING_CHATGPT_PROMPT
         self.flow_name_mapping = {}
         self.agent_goal = agent_goal
 
