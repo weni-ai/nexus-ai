@@ -122,7 +122,7 @@ def start_route(
 
         # classifier = ZeroshotClassifier(chatbot_goal=agent.goal)
 
-        classifier = ChatGPTFunctionClassifier()
+        classifier = ChatGPTFunctionClassifier(agent_goal=agent.goal)
         classification = classification_handler.custom_actions(
             classifier=classifier,
             language=llm_config.language
