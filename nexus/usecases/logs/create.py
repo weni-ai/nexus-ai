@@ -5,9 +5,16 @@ from nexus.logs.models import (
 from nexus.projects.signals import send_message_to_websocket
 
 from django.core.cache import cache
+from django.conf import settings
 
 
+# TODO refactor this class methods to recieve MessageLog object as parameter not using class attributes
 class CreateLogUsecase:  # TODO: rename method
+
+    def __init__(self, message=None) -> None:
+        self.message = message
+        if self.message:
+            self.log = self.message.messagelog
 
     def _create_redis_cache(
         self,
@@ -43,10 +50,9 @@ class CreateLogUsecase:  # TODO: rename method
         cache.set(cache_key, last_5_messages)
         print("new cache: ", cache.get(cache_key))
 
-    def __init__(self, message = None) -> None:
-        self.message = message
-        if self.message:
-            self.log = self.message.messagelog
+        key_expiration = settings.REDIS_MESSAGE_CACHE_KEY_DURATION
+
+        cache.set(cache_key, last_5_messages, key_expiration)
 
     def create_message(self, text: str, contact_urn: str, status: str = "P") -> Message:
         self.message = Message.objects.create(
