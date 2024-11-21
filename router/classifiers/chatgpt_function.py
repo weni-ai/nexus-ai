@@ -1,7 +1,7 @@
 import re
 from openai import OpenAI
 
-from typing import List
+from typing import List, Dict
 
 from django.conf import settings
 
@@ -35,6 +35,7 @@ class ChatGPTFunctionClassifier(Classifier):
 
     def __init__(
         self,
+        agent_goal: str,
         client: OpenAIClientInterface = OpenAIClient(settings.OPENAI_API_KEY),
         chatgpt_model: str = settings.FUNCTION_CALLING_CHATGPT_MODEL,
     ):
@@ -42,6 +43,26 @@ class ChatGPTFunctionClassifier(Classifier):
         self.client = client
         self.prompt = settings.CHATGPT_CONTEXT_PROMPT
         self.flow_name_mapping = {}
+        self.agent_goal = agent_goal
+
+    def replace_vars(self, prompt: str, replace_variables: Dict) -> str:
+        for key in replace_variables.keys():
+            replace_str = "{{" + key + "}}"
+            value = replace_variables.get(key)
+            if not isinstance(value, str):
+                value = str(value)
+            prompt = prompt.replace(replace_str, value)
+        return prompt
+
+    def get_prompt(self):
+        variable = {
+            "agent_goal": "".join(self.agent_goal),
+        }
+
+        return self.replace_vars(
+            prompt=self.prompt,
+            replace_variables=variable
+        )
 
     def tools(
         self,
@@ -71,10 +92,11 @@ class ChatGPTFunctionClassifier(Classifier):
     ) -> str:
 
         print(f"[+ ChatGPT message function classification: {message} ({language}) +]")
+        formated_prompt = self.get_prompt()
         msg = [
             {
                 "role": "system",
-                "content": self.prompt
+                "content": formated_prompt
             },
             {
                 "role": "user",
