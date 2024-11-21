@@ -240,10 +240,18 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             True: "S",
             False: "F"
         }
-        groundedness_score = obj.messagelog.groundedness_score
+        groundedness_score: int = obj.messagelog.groundedness_score
 
         if groundedness_score or isinstance(groundedness_score, int):
-            score = groundedness_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD
-            return status.get(score)
+            details: List[str] | None = self.get_groundedness(obj)
+            sources_count = 0
 
-        return "S"
+            if details:
+                for detail in details:
+                    detail_score = int(detail.get("score", 0))
+                    detail_source: List[str] = detail.get("sources")
+                    if detail_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD and detail_source:
+                        sources_count += 1
+                score: bool = sources_count / len(details) >= settings.GROUNDEDNESS_SOURCES_THRESHOLD / 10
+                return status.get(score)
+        return "F"
