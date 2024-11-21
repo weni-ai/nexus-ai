@@ -9,8 +9,7 @@ from django.conf import settings
 
 
 # TODO refactor this class methods to recieve MessageLog object as parameter not using class attributes
-class CreateLogUsecase:  # TODO: rename method
-
+class CreateLogUsecase:
     def __init__(self, message=None) -> None:
         self.message = message
         if self.message:
