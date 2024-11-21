@@ -76,11 +76,10 @@ class TestChatGPTFunctionClassifier(TestCase):
         choice = MockChoice(message)
         self.mock_response = MockResponse([choice])
         self.mock_client = MockOpenAIClient(response=self.mock_response)
-        self.chatgpt_model = "gpt-3.5-turbo"
 
         self.classifier = ChatGPTFunctionClassifier(
             client=self.mock_client,
-            chatgpt_model=self.chatgpt_model,
+            agent_goal="Answer user questions"
         )
 
     def test_predict(self):
