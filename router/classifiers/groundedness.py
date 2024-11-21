@@ -52,7 +52,8 @@ class Groundedness:
         response: str
     ):
         pattern = re.compile(
-            r"Statement Sentence:\s*(?P<sentence>.*?)\.\s*Supporting Evidence:\s*(?P<evidence>.*?)(?:\s*|\.)\s*Score:\s*(?P<score>\d+)"
+            # r"Statement Sentence:\s*(?P<sentence>.*?)\.\s*Supporting Evidence:\s*(?P<evidence>.*?)(?:\s*|\.)\s*Score:\s*(?P<score>\d+)"
+            r"Statement Sentence:\s*(?P<sentence>.*?\.)\s*Supporting Evidence:\s*(?P<evidence>.*?)(?:\s*|[,.])\s*Score:\s*(?P<score>\d+)"
         )
         matches = pattern.findall(response)
 

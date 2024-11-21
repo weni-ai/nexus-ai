@@ -371,9 +371,11 @@ class MessageDetailViewSetTestCase(TestCase):
         self.content_base = self.integrated_intelligence.intelligence.contentbases.get()
         self.user = self.project.created_by
 
+        chunk_evidence = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam faucibus euismod mollis."
+
         self.full_chunks = [
             {
-                'full_page': 'Lorem Ipsum',
+                'full_page': chunk_evidence,
                 'filename': 'testfile.pdf',
                 'file_uuid': '87163514-b6de-4525-b16a-bf3d50e7815c'
             }
@@ -382,7 +384,7 @@ class MessageDetailViewSetTestCase(TestCase):
         self.reflection_data = {
             "tag": "failed",
             "request_time": 10,
-            "sentence_rankings": "Statement Sentence: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam faucibus euismod mollis. Pellentesque imperdiet suscipit nisi, quis lobortis tellus convallis at. Supporting Evidence: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Score: 10",
+            "sentence_rankings": f"Statement Sentence: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam faucibus euismod mollis. Pellentesque imperdiet suscipit nisi, quis lobortis tellus convallis at. Supporting Evidence: {chunk_evidence} Score: 10",
         }
         self.llm_response = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam faucibus euismod mollis. Pellentesque imperdiet suscipit nisi."
         self.llm_model = "wenigpt:shark-1"
@@ -461,8 +463,6 @@ class MessageDetailViewSetTestCase(TestCase):
         self.assertEquals(content, data)
 
     def test_message_action_started(self):
-        from nexus.actions.models import Flow
-        from uuid import uuid4
         action = Flow.objects.create(
             flow_uuid=str(uuid4()),
             name="Test Action",
@@ -508,7 +508,7 @@ class MessageDetailViewSetTestCase(TestCase):
         content = json.loads(response.content)
 
         self.assertTrue(content.get("actions_started"))
-        self.assertEquals(content.get("status"), "S")
+        self.assertEquals(content.get("status"), "F")
         self.assertEquals(content.get("actions_uuid"), str(action.uuid))
         self.assertEquals(content.get("actions_type"), str(action.name))
 
