@@ -4,6 +4,7 @@ from nexus.logs.models import (
 )
 
 from django.core.cache import cache
+from django.conf import settings
 
 
 class CreateLogUsecase:  # TODO: rename method
@@ -35,7 +36,9 @@ class CreateLogUsecase:  # TODO: rename method
         if len(last_5_messages) > 5:
             last_5_messages.pop()
 
-        cache.set(cache_key, last_5_messages)
+        key_expiration = settings.REDIS_MESSAGE_CACHE_KEY_DURATION
+
+        cache.set(cache_key, last_5_messages, key_expiration)
 
     def create_message(self, text: str, contact_urn: str, status: str = "P") -> Message:
         self.message = Message.objects.create(
