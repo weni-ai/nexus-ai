@@ -3,11 +3,38 @@ import json
 from channels.generic.websocket import WebsocketConsumer
 from asgiref.sync import async_to_sync
 
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+
+from nexus.projects.permissions import has_project_permission
+from nexus.projects.exceptions import ProjectDoesNotExist
+
 
 class WebsocketMessageConsumer(WebsocketConsumer):
     def connect(self):
-        self.project = self.scope["url_route"]["kwargs"]["project"]
-        self.room_group_name = f"project_{self.project}"
+        close = False
+
+        try:
+            self.user = self.scope["user"]
+            self.project_uuid = self.scope["url_route"]["kwargs"]["project"]
+            self.room_group_name = f"project_{self.project}"
+        except (KeyError, TypeError, AttributeError):
+            close = True
+
+        try:
+            usecases = ProjectsUseCase()
+            self.project = usecases.get_by_uuid(self.project_uuid)
+        except ProjectDoesNotExist:
+            close = True
+
+        if self.user.is_anonymous or close is True or self.project is None:
+            self.close()
+
+        if not has_project_permission(
+            self.user,
+            self.project,
+            "GET"
+        ):
+            self.close()
 
         async_to_sync(self.channel_layer.group_add)(
             self.room_group_name,
