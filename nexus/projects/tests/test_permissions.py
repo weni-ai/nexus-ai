@@ -18,7 +18,6 @@ from nexus.projects.permissions import (
     has_project_permission,
 )
 
-from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import Permission
 
@@ -130,9 +129,8 @@ class TestProjectPermissions(TestCase):
 
     def test_user_with_can_communicate_internally_permission(self):
 
-        user_model = get_user_model()
         user = UserFactory()
-        content_type = ContentType.objects.get_for_model(user_model)
+        content_type = ContentType.objects.get_for_model(user)
         permission, created = Permission.objects.get_or_create(
             codename="can_communicate_internally",
             name="can communicate internally",
@@ -141,8 +139,8 @@ class TestProjectPermissions(TestCase):
         user.user_permissions.add(permission)
         project = ProjectFactory()
 
-        self.assertTrue(has_project_permission(user, project, 'GET'))
-        self.assertTrue(has_project_permission(user, project, 'POST'))
-        self.assertTrue(has_project_permission(user, project, 'PUT'))
-        self.assertTrue(has_project_permission(user, project, 'PATCH'))
-        self.assertTrue(has_project_permission(user, project, 'DELETE'))
+        self.assertTrue(has_project_permission(user, project, 'GET', module_perm=True))
+        self.assertTrue(has_project_permission(user, project, 'POST', module_perm=True))
+        self.assertTrue(has_project_permission(user, project, 'PUT', module_perm=True))
+        self.assertTrue(has_project_permission(user, project, 'PATCH', module_perm=True))
+        self.assertTrue(has_project_permission(user, project, 'DELETE', module_perm=True))

@@ -587,9 +587,17 @@ class ContentBaseFileViewset(ModelViewSet):
     def create(self, request, content_base_uuid=str):
 
         try:
+            user = request.user
+            permissions.org_has_general_permissions(
+                user=user,
+                org=get_org_by_content_base_uuid(content_base_uuid),
+                method="POST",
+                module_perm=True
+            )
+
             file = request.FILES['file']
             self.get_queryset()
-            user_email = request.user.email
+            user_email = user.email
             extension_file = request.data.get("extension_file")
             load_type = request.data.get("load_type")
             file_manager = CeleryFileManager()
@@ -956,7 +964,7 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
     def update(self, request, *args, **kwargs):
         try:
             project_uuid = kwargs.get('project_uuid')
-            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, request.user.email)
+            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, request.user.email, has_module_permission=True)
             serializer = ContentBasePersonalizationSerializer(content_base, data=request.data, partial=True, context={"request": request})
             if serializer.is_valid():
                 serializer.save()
