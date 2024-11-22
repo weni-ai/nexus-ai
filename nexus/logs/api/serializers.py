@@ -242,4 +242,4 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             return action_uuid
 
     def get_status(self, obj):
-        return self.response_status()
+        return obj.messagelog.response_status
