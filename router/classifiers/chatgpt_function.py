@@ -109,12 +109,20 @@ class ChatGPTFunctionClassifier(Classifier):
             classification = self.CLASSIFICATION_OTHER
             return classification
 
+        print("[+ ChatGPT message function classification data +]")
+        print(f"Tools: {flows_list}")
+        print(f"Model: {self.chatgpt_model}")
+        print(f"Message: {msg}")
+
         response = self.client.chat_completions_create(
             model=self.chatgpt_model,
             messages=msg,
             tools=flows_list,
             tool_choice="auto"
         )
+        print("[+ ChatGPT message function classification response +]")
+        print(f"Response: {response}")
+        print("[++++++++++++++++++++++++++++++++++++++++++++++++]")
 
         tool_calls = response.choices[0].message.tool_calls
 
