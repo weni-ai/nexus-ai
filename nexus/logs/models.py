@@ -29,6 +29,14 @@ class Message(models.Model):
 
     def __str__(self) -> str:
         return f"{self.status} - {self.contact_urn}"
+    
+    def clean_string(self, s: str) -> str:
+        import unicodedata, string, re
+        s = s.lower()
+        s = " ".join(s.split())
+        s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("utf-8")
+        s = re.sub(f"[{re.escape(string.punctuation)}]", "", s)
+        return s
 
     @property
     def groundedness_details(self):
@@ -52,8 +60,10 @@ class Message(models.Model):
                         "score": sentence.get("score"),
                     }
                     for chunk in self.messagelog.chunks_json:
-                        evidence: str = sentence.get("evidence", "").strip('"')
-                        if evidence.lower() in chunk.get("full_page").lower():
+                        sentence = sentence.get("evidence", "")
+                        clean_evidence: str = self.clean_string(sentence)
+                        clean_chunk = self.clean_string(chunk.get("full_page"))
+                        if clean_evidence in clean_chunk:
                             sentence_stats["sources"].append(
                                 {
                                     "filename": chunk.get("filename"),
