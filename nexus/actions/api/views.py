@@ -49,7 +49,7 @@ from router.repositories.orm import (
     FlowsORMRepository,
     MessageLogsRepository
 )
-from router.classifiers.zeroshot import ZeroshotClassifier
+from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
 from router.classifiers.pre_classification import PreClassification
 from router.classifiers.classification import Classification
 from router.entities import (
@@ -58,7 +58,6 @@ from router.entities import (
     LLMSetupDTO,
     Message,
 )
-
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
 from router.route import route
@@ -374,8 +373,8 @@ class MessagePreviewView(APIView):
                 source="preview"
             )
 
-            classifier = ZeroshotClassifier(
-                chatbot_goal=agent.goal
+            classifier = ChatGPTFunctionClassifier(
+                agent_goal=agent.goal
             )
 
             classification = classification_handler.custom_actions(
