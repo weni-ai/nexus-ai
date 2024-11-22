@@ -59,6 +59,7 @@ class RetrieveContentBaseUseCase():
             project_uuid: str,
             user_email: str,
             is_superuser: bool = False,
+            has_module_permission: bool = False
     ):
         project = projects.get_project_by_uuid(project_uuid)
 
@@ -67,7 +68,8 @@ class RetrieveContentBaseUseCase():
             has_project_permission(
                 user=user,
                 project=project,
-                method='GET'
+                method='GET',
+                module_perm=has_module_permission
             )
 
         return get_default_content_base_by_project(project_uuid)
