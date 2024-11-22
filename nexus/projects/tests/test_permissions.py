@@ -4,6 +4,7 @@ from rest_framework.permissions import SAFE_METHODS
 
 from nexus.usecases.projects.tests.project_factory import ProjectFactory, ProjectAuthFactory
 
+from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.orgs.tests.org_factory import OrgAuthFactory
 
 from nexus.projects.models import ProjectAuthorizationRole, ProjectAuth
@@ -13,8 +14,13 @@ from nexus.projects.permissions import (
     is_admin,
     is_contributor,
     is_support,
-    _has_project_general_permission
+    _has_project_general_permission,
+    has_project_permission,
 )
+
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth.models import Permission
 
 
 class TestProjectPermissions(TestCase):
@@ -121,3 +127,22 @@ class TestProjectPermissions(TestCase):
 
         created_project_auth = get_user_auth(org_auth.user, project)
         self.assertIsInstance(created_project_auth, ProjectAuth)
+
+    def test_user_with_can_communicate_internally_permission(self):
+
+        user_model = get_user_model()
+        user = UserFactory()
+        content_type = ContentType.objects.get_for_model(user_model)
+        permission, created = Permission.objects.get_or_create(
+            codename="can_communicate_internally",
+            name="can communicate internally",
+            content_type=content_type,
+        )
+        user.user_permissions.add(permission)
+        project = ProjectFactory()
+
+        self.assertTrue(has_project_permission(user, project, 'GET'))
+        self.assertTrue(has_project_permission(user, project, 'POST'))
+        self.assertTrue(has_project_permission(user, project, 'PUT'))
+        self.assertTrue(has_project_permission(user, project, 'PATCH'))
+        self.assertTrue(has_project_permission(user, project, 'DELETE'))
