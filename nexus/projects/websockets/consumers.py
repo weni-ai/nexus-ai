@@ -1,4 +1,5 @@
 import json
+import logging
 
 from channels.generic.websocket import WebsocketConsumer
 from asgiref.sync import async_to_sync
@@ -8,6 +9,8 @@ from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.projects.permissions import has_project_permission
 from nexus.projects.exceptions import ProjectDoesNotExist
 
+logger = logging.getLogger(__name__)
+
 
 class WebsocketMessageConsumer(WebsocketConsumer):
     def connect(self):
@@ -16,14 +19,16 @@ class WebsocketMessageConsumer(WebsocketConsumer):
         try:
             self.user = self.scope["user"]
             self.project_uuid = self.scope["url_route"]["kwargs"]["project"]
-            self.room_group_name = f"project_{self.project}"
-        except (KeyError, TypeError, AttributeError):
+            self.room_group_name = f"project_{self.project_uuid}"
+        except (KeyError, TypeError, AttributeError) as e:
+            logger.error(f"[ WebsocketError ] {e}")
             close = True
 
         try:
             usecases = ProjectsUseCase()
             self.project = usecases.get_by_uuid(self.project_uuid)
         except ProjectDoesNotExist:
+            logger.error(f"[ WebsocketError ] {self.project_uuid} Does not Exist")
             close = True
 
         if self.user.is_anonymous or close is True or self.project is None:
