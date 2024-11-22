@@ -1,11 +1,8 @@
-from typing import List, Dict
-
 from rest_framework import serializers
 from nexus.logs.models import MessageLog, RecentActivities, Message
 
 from nexus.usecases.actions.retrieve import FlowDoesNotExist
 
-from router.classifiers.groundedness import Groundedness
 from router.repositories.orm import FlowsORMRepository
 from router.classifiers import Classifier
 
@@ -59,7 +56,7 @@ class MessageHistorySerializer(serializers.ModelSerializer):
         return {
             "S": "success",
             "F": "failed"
-        }.get(self.response_status)
+        }.get(obj.message.response_status)
 
 
 class MessageLogSerializer(serializers.ModelSerializer):
@@ -178,37 +175,8 @@ class MessageDetailSerializer(serializers.ModelSerializer):
     def get_is_approved(self, obj):
         return obj.messagelog.is_approved
 
-    def get_groundedness(self, obj):
-        if obj.messagelog.chunks_json:
-            groundedness = Groundedness(
-                llm_response=obj.messagelog.llm_response,
-                llm_chunk_used=obj.messagelog.chunks,
-                log=obj.messagelog
-            )
-            reflection_data = obj.messagelog.reflection_data
-
-            if reflection_data and "sentence_rankings" in reflection_data:
-                sentences = groundedness.extract_score_and_sentences(reflection_data.get("sentence_rankings"))
-                groundedness_details: List[Dict[str, str]] = []
-                for sentence in sentences:
-                    sentence_stats = {
-                        "sentence": sentence.get("sentence"),
-                        "sources": [],
-                        "score": sentence.get("score"),
-                    }
-                    for chunk in obj.messagelog.chunks_json:
-                        evidence: str = sentence.get("evidence", "").strip('"')
-                        if evidence.lower() in chunk.get("full_page").lower():
-                            sentence_stats["sources"].append(
-                                {
-                                    "filename": chunk.get("filename"),
-                                    "file_uuid": chunk.get("file_uuid")
-                                }
-                            )
-                    groundedness_details.append(sentence_stats)
-                return groundedness_details
-            return
-        return
+    def get_groundedness(self, obj) -> str | None:
+        return obj.groundedness_details
 
     def get_actions_started(self, obj):
         if obj.messagelog.reflection_data:
@@ -242,4 +210,4 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             return action_uuid
 
     def get_status(self, obj):
-        return obj.messagelog.response_status
+        return obj.response_status
