@@ -1,5 +1,7 @@
 from django.conf import settings
 
+from rest_framework.permissions import SAFE_METHODS
+
 from nexus.orgs.models import Org, OrgAuth, Role
 from nexus.users.models import User
 from nexus.usecases.orgs.exceptions import OrgAuthDoesNotExists
@@ -131,5 +133,35 @@ def can_download_content_base_file(user: User, org: Org) -> bool:
         usecase = GetOrgAuthUseCase()
         auth = usecase.get_org_auth_by_user(user, org)
         return can_contribute(auth)
+    except OrgAuthDoesNotExists:
+        return False
+
+
+def org_has_general_permissions(
+    user: User,
+    org: Org,
+    method: str,
+    module_perm: bool = False
+):
+    try:
+        if module_perm:
+            if user.has_perm("users.can_communicate_internally"):
+                return True
+
+        usecase = GetOrgAuthUseCase()
+        auth = usecase.get_org_auth_by_user(user=user, org=org)
+
+        if method.upper() in SAFE_METHODS:
+            return True
+
+        if is_admin(auth):
+            return True
+
+        if is_super_user(user.auth_token):
+            return True
+
+        if can_contribute(auth):
+            return True
+
     except OrgAuthDoesNotExists:
         return False
