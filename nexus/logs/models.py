@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 from uuid import uuid4
 
 from django.db import models
@@ -31,6 +31,41 @@ class Message(models.Model):
         return f"{self.status} - {self.contact_urn}"
 
     @property
+    def groundedness_details(self):
+        from router.classifiers.groundedness import Groundedness
+
+        if self.messagelog.chunks_json:
+            groundedness = Groundedness(
+                llm_response=self.messagelog.llm_response,
+                llm_chunk_used=self.messagelog.chunks,
+                log=self.messagelog
+            )
+            reflection_data = self.messagelog.reflection_data
+
+            if reflection_data and "sentence_rankings" in reflection_data:
+                sentences = groundedness.extract_score_and_sentences(reflection_data.get("sentence_rankings"))
+                groundedness_details: List[Dict[str, str]] = []
+                for sentence in sentences:
+                    sentence_stats = {
+                        "sentence": sentence.get("sentence"),
+                        "sources": [],
+                        "score": sentence.get("score"),
+                    }
+                    for chunk in self.messagelog.chunks_json:
+                        evidence: str = sentence.get("evidence", "").strip('"')
+                        if evidence.lower() in chunk.get("full_page").lower():
+                            sentence_stats["sources"].append(
+                                {
+                                    "filename": chunk.get("filename"),
+                                    "file_uuid": chunk.get("file_uuid")
+                                }
+                            )
+                    groundedness_details.append(sentence_stats)
+                return groundedness_details
+            return
+        return
+
+    @property
     def response_status(self):
         status = {
             True: "S",
@@ -39,7 +74,7 @@ class Message(models.Model):
         groundedness_score: int = self.messagelog.groundedness_score
 
         if groundedness_score or isinstance(groundedness_score, int):
-            details: List[str] | None = self.get_groundedness(self)
+            details: List[str] | None = self.groundedness_details
             sources_count = 0
 
             if details:
