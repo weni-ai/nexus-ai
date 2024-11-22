@@ -1,6 +1,8 @@
+from typing import List
 from uuid import uuid4
 
 from django.db import models
+from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 
 from nexus.users.models import User
@@ -27,6 +29,28 @@ class Message(models.Model):
 
     def __str__(self) -> str:
         return f"{self.status} - {self.contact_urn}"
+
+    @property
+    def response_status(self):
+        status = {
+            True: "S",
+            False: "F"
+        }
+        groundedness_score: int = self.messagelog.groundedness_score
+
+        if groundedness_score or isinstance(groundedness_score, int):
+            details: List[str] | None = self.get_groundedness(self)
+            sources_count = 0
+
+            if details:
+                for detail in details:
+                    detail_score = int(detail.get("score", 0))
+                    detail_source: List[str] = detail.get("sources")
+                    if detail_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD and detail_source:
+                        sources_count += 1
+                score: bool = sources_count / len(details) >= settings.GROUNDEDNESS_SOURCES_THRESHOLD / 10
+                return status.get(score)
+        return "F"
 
 
 class MessageLog(models.Model):
