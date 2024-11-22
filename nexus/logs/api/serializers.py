@@ -1,7 +1,5 @@
 from typing import List, Dict
 
-from django.conf import settings
-
 from rest_framework import serializers
 from nexus.logs.models import MessageLog, RecentActivities, Message
 
@@ -45,7 +43,15 @@ class MessageHistorySerializer(serializers.ModelSerializer):
         return obj.message.text
 
     def get_tag(self, obj: MessageLog) -> str:
-        return obj.reflection_data.get("tag", "failed")
+        reflection_tag = obj.reflection_data.get("tag")
+
+        if reflection_tag == "action_started":
+            return reflection_tag
+
+        return {
+            "S": "success",
+            "F": "failed"
+        }.get(self.response_status)
 
 
 class MessageLogSerializer(serializers.ModelSerializer):
@@ -228,22 +234,4 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             return action_uuid
 
     def get_status(self, obj):
-        status = {
-            True: "S",
-            False: "F"
-        }
-        groundedness_score: int = obj.messagelog.groundedness_score
-
-        if groundedness_score or isinstance(groundedness_score, int):
-            details: List[str] | None = self.get_groundedness(obj)
-            sources_count = 0
-
-            if details:
-                for detail in details:
-                    detail_score = int(detail.get("score", 0))
-                    detail_source: List[str] = detail.get("sources")
-                    if detail_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD and detail_source:
-                        sources_count += 1
-                score: bool = sources_count / len(details) >= settings.GROUNDEDNESS_SOURCES_THRESHOLD / 10
-                return status.get(score)
-        return "F"
+        return self.response_status()
