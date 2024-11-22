@@ -11,8 +11,7 @@ from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
 
 from router.route import route
-from router.classifiers.zeroshot import ZeroshotClassifier
-from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier, OpenAIClient
+from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
 
 from router.classifiers.pre_classification import PreClassification
 from router.classifiers.classification import Classification
