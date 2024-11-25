@@ -1,3 +1,6 @@
+import unicodedata
+import re
+import string
 from typing import List, Dict
 from uuid import uuid4
 
@@ -30,6 +33,13 @@ class Message(models.Model):
     def __str__(self) -> str:
         return f"{self.status} - {self.contact_urn}"
 
+    def clean_string(self, s: str) -> str:
+        s = s.lower()
+        s = " ".join(s.split())
+        s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("utf-8")
+        s = re.sub(f"[{re.escape(string.punctuation)}]", "", s)
+        return s
+
     @property
     def groundedness_details(self):
         from router.classifiers.groundedness import Groundedness
@@ -52,8 +62,10 @@ class Message(models.Model):
                         "score": sentence.get("score"),
                     }
                     for chunk in self.messagelog.chunks_json:
-                        evidence: str = sentence.get("evidence", "").strip('"')
-                        if evidence.lower() in chunk.get("full_page").lower():
+                        evidence: str = sentence.get("evidence", "")
+                        clean_evidence: str = self.clean_string(evidence)
+                        clean_chunk: str = self.clean_string(chunk)
+                        if clean_evidence in clean_chunk:
                             sentence_stats["sources"].append(
                                 {
                                     "filename": chunk.get("filename"),
