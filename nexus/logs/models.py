@@ -64,7 +64,7 @@ class Message(models.Model):
                     for chunk in self.messagelog.chunks_json:
                         evidence: str = sentence.get("evidence", "")
                         clean_evidence: str = self.clean_string(evidence)
-                        clean_chunk: str = self.clean_string(chunk.get("full_page"), "")
+                        clean_chunk: str = self.clean_string(chunk.get("full_page", ""))
                         if clean_evidence in clean_chunk:
                             sentence_stats["sources"].append(
                                 {
