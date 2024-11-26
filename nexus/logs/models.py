@@ -13,6 +13,35 @@ from nexus.projects.models import Project
 from nexus.intelligences.models import ContentBase, Intelligence
 
 
+class TextComparer:
+    @staticmethod
+    def similarity(sentence_a: str, sentence_b: str) -> float:
+        from difflib import SequenceMatcher
+        return SequenceMatcher(None, sentence_a, sentence_b).ratio()
+
+    @staticmethod
+    def clean_string(s: str) -> str:
+        s = s.lower()
+        s = " ".join(s.split())
+        s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("utf-8")
+        s = re.sub(f"[{re.escape(string.punctuation)}]", "", s)
+        return s
+
+    @staticmethod
+    def string_in_text(sentence: str, text: str, compare_similarity: bool = True, similarity_threshold: float = 0.8) -> bool:
+        keywords: List[str] = sentence.split()
+
+        if compare_similarity:
+            keywords_in_text = []
+            for keyword in keywords:
+                keyword_in_text = any(TextComparer.similarity(keyword, word) >= similarity_threshold for word in text.split())
+                keywords_in_text.append(keyword_in_text)
+            return all(keywords_in_text)
+
+        keywords_in_text = [keyword in text for keyword in keywords]
+        return all(keywords_in_text)
+
+
 class Message(models.Model):
 
     STATUS_CHOICES = (
@@ -32,13 +61,6 @@ class Message(models.Model):
 
     def __str__(self) -> str:
         return f"{self.status} - {self.contact_urn}"
-
-    def clean_string(self, s: str) -> str:
-        s = s.lower()
-        s = " ".join(s.split())
-        s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("utf-8")
-        s = re.sub(f"[{re.escape(string.punctuation)}]", "", s)
-        return s
 
     @property
     def groundedness_details(self):
@@ -62,10 +84,12 @@ class Message(models.Model):
                         "score": sentence.get("score"),
                     }
                     for chunk in self.messagelog.chunks_json:
+
                         evidence: str = sentence.get("evidence", "")
-                        clean_evidence: str = self.clean_string(evidence)
-                        clean_chunk: str = self.clean_string(chunk.get("full_page", ""))
-                        if clean_evidence in clean_chunk:
+                        clean_evidence: str = TextComparer.clean_string(evidence)
+                        clean_chunk: str = TextComparer.clean_string(chunk.get("full_page", ""))
+
+                        if TextComparer.string_in_text(clean_evidence, clean_chunk):
                             sentence_stats["sources"].append(
                                 {
                                     "filename": chunk.get("filename"),
