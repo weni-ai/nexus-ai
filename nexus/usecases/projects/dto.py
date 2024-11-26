@@ -4,7 +4,7 @@ from typing import List, Dict
 from nexus.projects.models import IntegratedFeature
 from nexus.actions.models import TemplateAction
 from nexus.usecases.actions.create import CreateFlowDTO
-from nexus.usecases.actions.update import UpdateFlowDTO
+from nexus.usecases.actions.update import UpdateIntegratedFlowDTO
 
 
 from nexus.usecases.projects.retrieve import get_integrated_feature
@@ -62,7 +62,7 @@ class IntegratedFeatureFlowDTO:
         return create_flow_dtos
 
     @property
-    def update_dto(self) -> List[UpdateFlowDTO]:
+    def update_dto(self) -> List[UpdateIntegratedFlowDTO]:
         if not self.integrated_feature or not self.integrated_feature.current_version_setup:
             return []
 
@@ -74,7 +74,7 @@ class IntegratedFeatureFlowDTO:
             )
 
             if matching_flow:
-                update_flow_dtos.append(UpdateFlowDTO(
+                update_flow_dtos.append(UpdateIntegratedFlowDTO(
                     flow_uuid=matching_flow.get("uuid"),
                     name=current_setup_action.get("name"),
                     prompt=current_setup_action.get('prompt'),

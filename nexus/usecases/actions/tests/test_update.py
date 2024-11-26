@@ -2,7 +2,7 @@ from django.test import TestCase
 
 from nexus.usecases.actions.tests.flow_factory import FlowFactory, TemplateActionFactory
 from nexus.usecases.actions.update import (
-    UpdateFlowDTO,
+    UpdateActionFlowDTO,
     UpdateFlowsUseCase,
     UpdateTemplateActionDTO,
     UpdateTemplateActionUseCase,
@@ -17,8 +17,8 @@ class TestUpdateFlowUseCase(TestCase):
         self.flow_factory = FlowFactory()
 
     def test_update(self):
-        update_dto = UpdateFlowDTO(
-            flow_uuid=self.flow_factory.uuid,
+        update_dto = UpdateActionFlowDTO(
+            uuid=self.flow_factory.uuid,
             prompt="new prompt",
             name="new flow name"
         )
@@ -35,8 +35,8 @@ class TestUpdateFlowUseCase(TestCase):
         self.assertEqual(updated_flow.prompt, update_dto.prompt)
 
     def test_update_name(self):
-        update_dto = UpdateFlowDTO(
-            flow_uuid=self.flow_factory.uuid,
+        update_dto = UpdateActionFlowDTO(
+            uuid=self.flow_factory.uuid,
             name="test flow name 2"
         )
 

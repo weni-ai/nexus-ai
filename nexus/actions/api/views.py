@@ -28,7 +28,7 @@ from nexus.usecases.actions.delete import (
 )
 from nexus.usecases.actions.update import (
     UpdateFlowsUseCase,
-    UpdateFlowDTO,
+    UpdateActionFlowDTO,
     UpdateTemplateActionDTO,
     UpdateTemplateActionUseCase
 )
@@ -204,8 +204,12 @@ class FlowsViewset(
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def update(self, request, *args, **kwargs):
-        flow_dto = UpdateFlowDTO(
-            flow_uuid=kwargs.get("flow_uuid"),
+        uuid = kwargs.get("flow_uuid")
+        new_flow_uuid = request.data.get("flow_uuid")
+
+        flow_dto = UpdateActionFlowDTO(
+            uuid=uuid,
+            flow_uuid=new_flow_uuid,
             prompt=request.data.get("prompt"),
             name=request.data.get("name"),
         )
