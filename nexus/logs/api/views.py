@@ -16,13 +16,11 @@ from nexus.logs.api.serializers import (
     RecentActivitiesSerializer,
     MessageHistorySerializer,
     TagPercentageSerializer,
-    ContactMessageDTOSerializer
+    ContactMessageSerializer
 )
 from nexus.usecases.logs.list import ListLogUsecase
 
 from nexus.projects.permissions import has_project_permission
-
-from router.repositories import orm
 
 from django.conf import settings
 from django.db.models import Count, Case, When, IntegerField
@@ -47,22 +45,24 @@ class ConversationContextViewset(
     GenericViewSet
 ):
 
-    serializer_class = ContactMessageDTOSerializer
+    serializer_class = ContactMessageSerializer
 
-    def get_queryset(self):
+    def list(self, request, *args, **kwargs):
         user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
-        contact_urn = self.kwargs.get('contact_urn')
+        log_id = self.request.query_params.get('log_id')
+        number_of_messages = self.request.query_params.get('number_of_messages', 5)
 
         has_project_permission(user, project_uuid, 'GET')
 
-        repository = orm.MessageLogsRepository()
-        messages: list = repository.list_cached_messages(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn
+        usecase = ListLogUsecase()
+        logs = usecase.list_last_logs(
+            log_id=log_id,
+            message_count=int(number_of_messages)
         )
+        serializer = ContactMessageSerializer(logs, many=True)
 
-        return messages
+        return Response(serializer.data)
 
 
 class TagPercentageViewSet(

@@ -17,12 +17,20 @@ class TagPercentageSerializer(serializers.Serializer):
     failed_percentage = serializers.FloatField()
 
 
-class ContactMessageDTOSerializer(serializers.Serializer):
-    contact_urn = serializers.CharField()
-    text = serializers.CharField()
-    llm_respose = serializers.CharField()
-    content_base_uuid = serializers.CharField()
-    project_uuid = serializers.CharField()
+class ContactMessageSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = MessageLog
+        fields = [
+            "id",
+            "llm_response",
+            "tag",
+        ]
+
+    tag = serializers.SerializerMethodField()
+
+    def get_tag(self, obj: MessageLog) -> str:
+        return obj.reflection_data.get("tag", "failed")
 
 
 class MessageHistorySerializer(serializers.ModelSerializer):

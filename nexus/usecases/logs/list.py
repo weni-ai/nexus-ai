@@ -19,3 +19,23 @@ class ListLogUsecase:
                 return logs
 
         return logs.order_by(order)
+
+    def list_last_logs(
+        self,
+        log_id: int,
+        message_count: int = 5,
+    ):
+        log = MessageLog.objects.get(id=log_id)
+        project = log.project
+        source = log.source
+        contact_urn = log.message.contact_urn
+        created_at = log.created_at
+
+        logs = MessageLog.objects.filter(
+            project=project,
+            source=source,
+            message__contact_urn=contact_urn,
+            created_at__lt=created_at
+        ).order_by("-created_at")[:message_count]
+
+        return logs
