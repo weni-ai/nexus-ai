@@ -12,13 +12,14 @@ from rest_framework.test import APIRequestFactory, force_authenticate, APITestCa
 
 from nexus.actions.models import Flow
 
+from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory, IntegratedIntelligenceFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.logs.tests.logs_factory import RecentActivitiesFactory, MessageLogFactory
-from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.intelligences.create import create_base_brain_structure
 from nexus.usecases.users.tests.user_factory import UserFactory
 
+from nexus.intelligences.models import IntegratedIntelligence
 from nexus.logs.models import MessageLog, Message
 from nexus.logs.api.serializers import MessageLogSerializer
 
@@ -26,7 +27,8 @@ from nexus.logs.api.views import (
     LogsViewset,
     RecentActivitiesViewset,
     MessageHistoryViewset,
-    TagPercentageViewSet
+    TagPercentageViewSet,
+    ConversationContextViewset
 )
 
 
@@ -560,3 +562,33 @@ class MessageDetailViewSetTestCase(TestCase):
         self.assertEquals(content.get("status"), "F")
         self.assertEquals(content.get("actions_uuid"), str(action.uuid))
         self.assertEquals(content.get("actions_type"), str(action.name))
+
+
+class ConversationContextViewsetTestCase(APITestCase):
+
+    def setUp(self):
+        ii: IntegratedIntelligence = IntegratedIntelligenceFactory()
+        self.project = ii.project
+        self.content_base = ii.intelligence.contentbases.first()
+        self.user = self.project.created_by
+
+        self.msg_log = MessageLogFactory.create_batch(
+            10,
+            project=self.project,
+            content_base=self.content_base,
+            classification="other",
+            message__status="S",
+        )
+        self.factory = APIRequestFactory()
+        self.view = ConversationContextViewset.as_view({'get': 'list'})
+        self.url = reverse('list-conversation-context', kwargs={'project_uuid': str(self.project.uuid)})
+
+    def test_list_last_messages(self):
+        log_id = self.msg_log[-1].id
+        request = self.factory.get(self.url, {'log_id': log_id, 'number_of_messages': 5})
+        force_authenticate(request, user=self.user)
+        response = self.view(request, project_uuid=str(self.project.uuid))
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 5)
