@@ -700,6 +700,13 @@ class ContentBaseLinkViewset(ModelViewSet):
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
 
+            permissions.org_has_general_permissions(
+                user=request.user,
+                org=get_org_by_content_base_uuid(content_base_uuid),
+                method="POST",
+                module_perm=True
+            )
+
             link = serializer.validated_data.get('link')
             content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
             link_dto = intelligences.ContentBaseLinkDTO(
@@ -955,7 +962,7 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
                 user_email = request.user.email
 
             project_uuid = kwargs.get('project_uuid')
-            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, user_email, is_super_user)
+            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, user_email, is_super_user, has_module_permission=True)
             data = ContentBasePersonalizationSerializer(content_base, context={"request": request}).data
             return Response(data=data, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
