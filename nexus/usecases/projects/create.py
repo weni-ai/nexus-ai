@@ -147,7 +147,7 @@ class CreateIntegratedFeatureUseCase:
         for update_dto in update_flow_dtos:
             if update_dto.flow_uuid == flow.get("uuid"):
                 usecase = UpdateFlowsUseCase()
-                updated_flow = usecase.update_flow(flow_dto=update_dto)
+                updated_flow = usecase.update_integrated_feature_flow(flow_dto=update_dto)
                 return updated_flow
 
         raise ValueError("No matching flow found for update")
