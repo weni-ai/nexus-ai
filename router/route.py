@@ -163,7 +163,7 @@ def route(
             classification=classification,
             reflection_data={
                 "tag": "action_started",
-                "action_uuid": str(flow.uuid),
+                "action_uuid": str(flow.pk),
                 "action_name": flow.name,
             }
         )
