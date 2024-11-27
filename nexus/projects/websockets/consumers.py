@@ -50,18 +50,21 @@ class WebsocketMessageConsumer(WebsocketConsumer):
     def receive(self, text_data=None, bytes_data=None):
         text_data_json = json.loads(text_data)
         message = text_data_json["message"]
+        message_type = text_data_json["type"]
 
         async_to_sync(self.channel_layer.group_send)(
             self.room_group_name,
             {
-                "type": "chat_message",
-                "message": message
+                "type": "pong",
+                "message": message,
+                "message_type": message_type,
             }
         )
 
-    def chat_message(self, event):
+    def pong(self, event):
+        mtype = {"ping": "pong"}
         message = event["message"]
-
+        message_type = event["message_type"]
         self.send(text_data=json.dumps(
-            {"type": "ws", "message": message}
+            {"type": mtype.get(message_type, message_type), "message": message}
         ))
