@@ -157,8 +157,9 @@ def org_has_general_permissions(
         if is_admin(auth):
             return True
 
-        if is_super_user(user.auth_token):
-            return True
+        if user.auth_token:
+            if is_super_user(user.auth_token):
+                return True
 
         if can_contribute(auth):
             return True
