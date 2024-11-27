@@ -281,3 +281,29 @@ class MessageDetailViewSet(views.APIView):
                 }
             )
         return Response(response_data)
+
+
+class ConversationContextViewset(
+    ListModelMixin,
+    GenericViewSet
+):
+
+    serializer_class = MessageDetailSerializer
+
+    def list(self, request, *args, **kwargs):
+        user = self.request.user
+        project_uuid = self.kwargs.get('project_uuid')
+        log_id = self.request.query_params.get('log_id')
+        number_of_messages = self.request.query_params.get('number_of_messages', 5)
+
+        has_project_permission(user, project_uuid, 'GET')
+
+        usecase = ListLogUsecase()
+        logs = usecase.list_last_logs(
+            log_id=log_id,
+            message_count=int(number_of_messages)
+        )
+        messages = [log.message for log in logs]
+        serializer = MessageDetailSerializer(messages, many=True)
+
+        return Response(serializer.data)
