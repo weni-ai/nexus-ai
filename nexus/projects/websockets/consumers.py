@@ -55,17 +55,16 @@ class WebsocketMessageConsumer(WebsocketConsumer):
         async_to_sync(self.channel_layer.group_send)(
             self.room_group_name,
             {
-                "type": "chat_message",
+                "type": "pong",
                 "message": message,
                 "message_type": message_type,
             }
         )
 
-    def chat_message(self, event):
+    def pong(self, event):
         mtype = {"ping": "pong"}
         message = event["message"]
         message_type = event["message_type"]
-
         self.send(text_data=json.dumps(
             {"type": mtype.get(message_type, message_type), "message": message}
         ))
