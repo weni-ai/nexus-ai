@@ -55,13 +55,13 @@ class WebsocketMessageConsumer(WebsocketConsumer):
         async_to_sync(self.channel_layer.group_send)(
             self.room_group_name,
             {
-                "type": "pong",
+                "type": "chat_message",
                 "message": message,
                 "message_type": message_type,
             }
         )
 
-    def pong(self, event):
+    def chat_message(self, event):
         mtype = {"ping": "pong"}
         message = event["message"]
         message_type = event["message_type"]
