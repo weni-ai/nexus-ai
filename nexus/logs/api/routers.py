@@ -4,8 +4,8 @@ from nexus.logs.api.views import (
     RecentActivitiesViewset,
     MessageHistoryViewset,
     TagPercentageViewSet,
-    ConversationContextViewset,
     MessageDetailViewSet,
+    ConversationContextViewset
 )
 
 
@@ -17,6 +17,7 @@ urlpatterns = [
     path('<project_uuid>/tags-analytics/', TagPercentageViewSet.as_view({'get': 'list'}), name='list-tag-percentage'),
     path('<project_uuid>/conversation-context/', ConversationContextViewset.as_view({'get': 'list'}), name='list-conversation-context'),
     path('<project_uuid>/message-detail/<log_id>/', MessageDetailViewSet.as_view(), name="message-detail"),
+    path('<project_uuid>/conversation-context/', ConversationContextViewset.as_view({'get': 'list'}), name='list-conversation-context'),
 ]
 
 urlpatterns.append(path('prometheus/', include('django_prometheus.urls')))
