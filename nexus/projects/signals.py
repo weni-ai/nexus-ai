@@ -21,6 +21,7 @@ def send_message_to_websocket(message):
         room_name,
         {
             "type": "chat_message",
-            "message": object_data
+            "message": object_data,
+            "message_type": "ws",
         }
     )
