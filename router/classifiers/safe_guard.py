@@ -5,7 +5,7 @@ import os
 from typing import Dict
 
 
-class SafeGuard:
+class SafeGuardRunPod:
 
     def __init__(self) -> None:
         self.url = os.environ.get("SAFEGUARD_URL")
@@ -58,6 +58,33 @@ class SafeGuard:
         formated_prompt = self.get_prompt(message)
         response = self.request_safe_guard(formated_prompt)
         safety_check = response.json()['output'][0]['choices'][0]['tokens'][0]
+        if safety_check == "safe":
+            return True
+        return False
+
+
+class SafeGuardTogetherAI:
+
+    def __init__(self) -> None:
+        self.url = os.environ.get("TOGETHER_URL")
+        self.api_key = os.environ.get("TOGETHER_API_KEY")
+        self.model = os.environ.get("TOGETHER_MODEL")
+
+    def request_safe_guard(self, message: str):
+        payload = json.dumps({
+            "model": self.model,
+            "messages": [{"role": "user", "content": message}]
+        })
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f"Bearer {self.api_key}"
+        }
+
+        return requests.request("POST", self.url, headers=headers, data=payload)
+
+    def classify(self, message: str):
+        response = self.request_safe_guard(message)
+        safety_check = response.json().get('choices')[0].get('message').get('content')
         if safety_check == "safe":
             return True
         return False
