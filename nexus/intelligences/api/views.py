@@ -42,6 +42,7 @@ from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.projects.models import Project
+from nexus.users.models import User
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
@@ -860,6 +861,19 @@ class RouterContentBaseViewSet(views.APIView):
         user_email = request.user.email
         use_case = intelligences.RetrieveContentBaseUseCase()
         content_base = use_case.get_default_by_project(project_uuid, user_email)
+        return Response(data=RouterContentBaseSerializer(content_base).data, status=200)
+
+
+class RouterRetailViewSet(views.APIView):
+
+    def get(self, request, project_uuid):
+        user: User = request.user
+
+        if not user.has_perm("users.can_communicate_internally"):
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+        use_case = intelligences.RetrieveContentBaseUseCase()
+        content_base = use_case.get_default_by_project(project_uuid, user.email, has_module_permission=True)
         return Response(data=RouterContentBaseSerializer(content_base).data, status=200)
 
 
