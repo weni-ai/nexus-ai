@@ -172,13 +172,13 @@ class MessageHistoryViewset(
         source = self.request.query_params.get('source', 'router')
         params["source"] = source
 
-        if tag_param:
+        if tag_param and tag_param == "action_started":
             params["reflection_data__tag"] = tag_param
 
         if text_param:
             params["message__text__icontains"] = text_param
 
-        return MessageLog.objects.filter(
+        logs = MessageLog.objects.filter(
             **params
         ).exclude(
             reflection_data__isnull=True
@@ -187,6 +187,15 @@ class MessageHistoryViewset(
         ).order_by(
             '-created_at'
         )
+
+        if tag_param and tag_param != "action_started":
+            status = {
+                "success": "S",
+                "failed": "F",
+            }
+            logs = [log for log in logs if log.message.response_status == status.get(tag_param) and log.reflection_data.get("tag") != "action_started"]
+
+        return logs
 
 
 class LogsViewset(
