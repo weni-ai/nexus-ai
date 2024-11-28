@@ -141,6 +141,7 @@ def org_has_general_permissions(
     user: User,
     org: Org,
     method: str,
+    auth_token: str = None,
     module_perm: bool = False
 ):
     try:
@@ -157,8 +158,8 @@ def org_has_general_permissions(
         if is_admin(auth):
             return True
 
-        if user.auth_token:
-            if is_super_user(user.auth_token):
+        if auth_token:
+            if is_super_user(auth_token):
                 return True
 
         if can_contribute(auth):
