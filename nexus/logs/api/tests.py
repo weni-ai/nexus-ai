@@ -317,7 +317,7 @@ class MessageHistoryViewsetTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEquals(len(content.get("results")), 0)
 
-@skip("Testing View")
+
 class TagPercentageViewSetTestCase(APITestCase):
 
     def setUp(self):
@@ -365,6 +365,7 @@ class TagPercentageViewSetTestCase(APITestCase):
         self.assertEqual(response.data['error'], "Invalid date format for started_day or ended_day")
 
 
+@skip("Testing View")
 class MessageDetailViewSetTestCase(TestCase):
     def setUp(self) -> None:
         self.project = ProjectFactory()
