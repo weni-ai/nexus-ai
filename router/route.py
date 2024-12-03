@@ -64,7 +64,7 @@ def route(
             if settings.USE_REDIS_CACHE_CONTEXT:
                 last_messages: List[ContactMessageDTO] = message_logs_repository.list_cached_messages(message.project_uuid, message.contact_urn)
             else:
-                last_messages: List[ContactMessageDTO] = message_logs_repository.list_last_messages(message.project_uuid, message.contact_urn)
+                last_messages: List[ContactMessageDTO] = message_logs_repository.list_last_messages(message.project_uuid, message.contact_urn, 5)
 
             agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
             agent = agent.set_default_if_null()
