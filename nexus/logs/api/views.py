@@ -20,6 +20,7 @@ from nexus.logs.api.serializers import (
 )
 from nexus.usecases.logs.list import ListLogUsecase
 from nexus.usecases.logs.retrieve import RetrieveMessageLogUseCase
+from nexus.usecases.logs.create import CreateLogUsecase
 
 from nexus.projects.permissions import has_project_permission
 
@@ -257,3 +258,26 @@ class MessageDetailViewSet(views.APIView):
         message_log = RetrieveMessageLogUseCase().get_by_id(log_id)
         message = message_log.message
         return Response(MessageDetailSerializer(message).data)
+
+    def patch(self, request, project_uuid, log_id):
+        data = request.data
+        usecase = CreateLogUsecase()
+        message_log = RetrieveMessageLogUseCase().get_by_id(log_id)
+
+        usecase.message = message_log.message
+        usecase.log = message_log
+
+        serializer = MessageDetailSerializer(usecase.message, data=data, partial=True)
+        serializer.is_valid()
+
+        usecase.update_log_field(**data)
+        keys = list(data.keys())
+        response_data = {}
+
+        for key in keys:
+            response_data.update(
+                {
+                    key: getattr(usecase.log, key)
+                }
+            )
+        return Response(response_data)

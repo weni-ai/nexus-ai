@@ -4,7 +4,7 @@ from nexus.logs.models import (
 )
 
 
-class CreateLogUsecase:
+class CreateLogUsecase:  # TODO: rename method
 
     def create_message(self, text: str, contact_urn: str, status: str = "P") -> Message:
         self.message = Message.objects.create(
