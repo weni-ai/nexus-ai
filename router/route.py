@@ -96,6 +96,8 @@ def route(
                     full_page = fix_encoding(full_page)
                     chunks.append(full_page)
 
+                chunk["full_page"] = full_page
+
             print(f"[ + Chunks: {chunks} + ]")
 
             llm_response: str = call_llm(
@@ -125,6 +127,7 @@ def route(
                 instructions=instructions
             )
             log_usecase.update_log_field(
+                chunks_json=full_chunks,
                 chunks=chunks,
                 prompt=llm_client.prompt,
                 project_id=message.project_uuid,
@@ -160,7 +163,9 @@ def route(
             content_base_id=content_base.uuid,
             classification=classification,
             reflection_data={
-                "tag": "action_started"
+                "tag": "action_started",
+                "action_uuid": str(flow.pk),
+                "action_name": flow.name,
             }
         )
         log_usecase.send_message()

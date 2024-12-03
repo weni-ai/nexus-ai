@@ -42,6 +42,9 @@ class Project(BaseModel, SoftDeleteModel):
     def __str__(self):
         return f'{self.uuid} - Project: {self.name} - Org: {self.org.name}'
 
+    def get_user_authorization(self, user_email):
+        return self.authorizations.get(user__email=user_email)
+
 
 class ProjectAuthorizationRole(Enum):
     NOT_SETTED, VIEWER, CONTRIBUTOR, MODERATOR, SUPPORT, CHAT_USER = list(range(6))

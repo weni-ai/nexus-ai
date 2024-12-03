@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class FlowDTO:
+    pk: str
     uuid: str
     name: str
     prompt: str
