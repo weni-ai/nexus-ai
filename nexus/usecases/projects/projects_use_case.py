@@ -95,7 +95,8 @@ class ProjectsUseCase:
             template_type=template_type,
             is_template=project_dto.is_template,
             created_by=user,
-            brain_on=project_dto.brain_on
+            brain_on=project_dto.brain_on,
+            indexer_database=project_dto.indexer_database
         )
 
         self.create_brain_project_base(
