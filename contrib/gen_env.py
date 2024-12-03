@@ -131,7 +131,7 @@ def generate_env():
         "ZEROSHOT_BEDROCK_AWS_REGION": "",
         "AWS_ACCESS_KEY_ID": "",
         "AWS_SECRET_ACCESS_KEY": "",
-
+        "REDIS_CHANNEL_URL": "redis://redis:6379/1"
     }
 
     with open(env_path, "w") as configfile:
