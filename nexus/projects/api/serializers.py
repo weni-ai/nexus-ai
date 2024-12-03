@@ -1,11 +1,6 @@
-from typing import List, Dict
-
 from rest_framework import serializers
 
 from nexus.projects.models import Project
-from nexus.logs.models import Message
-
-from router.classifiers.groundedness import Groundedness
 
 
 class ProjectSerializer(serializers.ModelSerializer):

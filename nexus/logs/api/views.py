@@ -1,5 +1,6 @@
 import pendulum
 
+from rest_framework import views
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import LimitOffsetPagination
@@ -18,12 +19,17 @@ from nexus.logs.api.serializers import (
     TagPercentageSerializer
 )
 from nexus.usecases.logs.list import ListLogUsecase
+from nexus.usecases.logs.retrieve import RetrieveMessageLogUseCase
+from nexus.usecases.logs.create import CreateLogUsecase
 
 from nexus.projects.permissions import has_project_permission
 
 from django.conf import settings
 from django.db.models import Count, Case, When, IntegerField
 from django.utils.dateparse import parse_date
+
+from nexus.logs.api.serializers import MessageDetailSerializer
+from nexus.projects.api.permissions import ProjectPermission
 
 
 class CustomPageNumberPagination(PageNumberPagination):
@@ -243,3 +249,61 @@ class RecentActivitiesViewset(
         queryset = RecentActivities.objects.filter(**filter_params).select_related('created_by').order_by('-created_at').exclude(action_details__isnull=True)
 
         return queryset
+
+
+class MessageDetailViewSet(views.APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid, log_id):
+        message_log = RetrieveMessageLogUseCase().get_by_id(log_id)
+        message = message_log.message
+        return Response(MessageDetailSerializer(message).data)
+
+    def patch(self, request, project_uuid, log_id):
+        data = request.data
+        usecase = CreateLogUsecase()
+        message_log = RetrieveMessageLogUseCase().get_by_id(log_id)
+
+        usecase.message = message_log.message
+        usecase.log = message_log
+
+        serializer = MessageDetailSerializer(usecase.message, data=data, partial=True)
+        serializer.is_valid()
+
+        usecase.update_log_field(**data)
+        keys = list(data.keys())
+        response_data = {}
+
+        for key in keys:
+            response_data.update(
+                {
+                    key: getattr(usecase.log, key)
+                }
+            )
+        return Response(response_data)
+
+
+class ConversationContextViewset(
+    ListModelMixin,
+    GenericViewSet
+):
+
+    serializer_class = MessageDetailSerializer
+
+    def list(self, request, *args, **kwargs):
+        user = self.request.user
+        project_uuid = self.kwargs.get('project_uuid')
+        log_id = self.request.query_params.get('log_id')
+        number_of_messages = self.request.query_params.get('number_of_messages', 5)
+
+        has_project_permission(user, project_uuid, 'GET')
+
+        usecase = ListLogUsecase()
+        logs = usecase.list_last_logs(
+            log_id=log_id,
+            message_count=int(number_of_messages)
+        )
+        messages = [log.message for log in logs]
+        serializer = MessageDetailSerializer(messages, many=True)
+
+        return Response(serializer.data)

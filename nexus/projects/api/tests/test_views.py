@@ -1,18 +1,16 @@
-import json
-
 from django.test import TestCase
-from django.urls import reverse
 
 from unittest.mock import patch
 from rest_framework.test import force_authenticate
 from rest_framework.test import APIRequestFactory
-from rest_framework.test import APIClient
 
 from nexus.projects.api.views import ProjectUpdateViewset
 from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
-from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.intelligences.create import create_base_brain_structure
+
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
+
 from nexus.logs.models import Message, MessageLog
 
 

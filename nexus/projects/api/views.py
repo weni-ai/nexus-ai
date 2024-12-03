@@ -7,6 +7,7 @@ from .serializers import ProjectSerializer
 from nexus.usecases.projects.update import ProjectUpdateUseCase
 from nexus.usecases.projects.dto import UpdateProjectDTO
 from nexus.usecases.projects.retrieve import get_project
+
 from nexus.usecases.logs.retrieve import RetrieveMessageUseCase
 from nexus.usecases.logs.create import CreateLogUsecase
 

@@ -1,4 +1,5 @@
 import json
+from uuid import uuid4
 
 import pendulum
 from freezegun import freeze_time
@@ -6,13 +7,17 @@ from freezegun import freeze_time
 from django.test import TestCase
 from django.urls import reverse
 
-from rest_framework.test import APIRequestFactory, force_authenticate, APITestCase
 from rest_framework import status
+from rest_framework.test import APIRequestFactory, force_authenticate, APITestCase, APIClient
 
-from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory
+from nexus.actions.models import Flow
+
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.logs.tests.logs_factory import RecentActivitiesFactory, MessageLogFactory
+from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+from nexus.usecases.intelligences.create import create_base_brain_structure
+from nexus.usecases.users.tests.user_factory import UserFactory
 
 from nexus.logs.models import MessageLog, Message
 from nexus.logs.api.serializers import MessageLogSerializer
@@ -357,3 +362,201 @@ class TagPercentageViewSetTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data['error'], "Invalid date format for started_day or ended_day")
+
+
+class MessageDetailViewSetTestCase(TestCase):
+    def setUp(self) -> None:
+        self.project = ProjectFactory()
+        self.integrated_intelligence = create_base_brain_structure(self.project)
+        self.content_base = self.integrated_intelligence.intelligence.contentbases.get()
+        self.user = self.project.created_by
+
+        chunk_evidence = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam faucibus euismod mollis."
+
+        self.full_chunks = [
+            {
+                'full_page': chunk_evidence,
+                'filename': 'testfile.pdf',
+                'file_uuid': '87163514-b6de-4525-b16a-bf3d50e7815c'
+            }
+        ]
+
+        self.reflection_data = {
+            "tag": "failed",
+            "request_time": 10,
+            "sentence_rankings": f"Statement Sentence: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam faucibus euismod mollis. Pellentesque imperdiet suscipit nisi, quis lobortis tellus convallis at. Supporting Evidence: {chunk_evidence} Score: 10",
+        }
+        self.llm_response = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aliquam faucibus euismod mollis. Pellentesque imperdiet suscipit nisi."
+        self.llm_model = "wenigpt:shark-1"
+        self.metadata = {'agent': {'goal': 'Tirar duvidas', 'name': 'Tina', 'role': 'Atendente', 'personality': 'Amigável'}, 'instructions': []}
+
+        self.message = Message.objects.create(
+            text="Text",
+            contact_urn="urn",
+            status="S",
+        )
+        self.log = MessageLog.objects.create(
+            message=self.message,
+            project=self.project,
+            content_base=self.content_base,
+            chunks_json=self.full_chunks,
+            reflection_data=self.reflection_data,
+            classification="other",
+            llm_response=self.llm_response,
+            llm_model=self.llm_model,
+            metadata=self.metadata,
+            groundedness_score=10,
+        )
+
+    def test_view(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "message-detail",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "log_id": str(self.message.messagelog.id)
+            }
+        )
+
+        response = client.get(url, format='json')
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertIsNotNone(content.get("groundedness"))
+
+    def test_view_permissions(self):
+        user_401 = UserFactory()
+
+        client = APIClient()
+        client.force_authenticate(user=user_401)
+
+        url = reverse(
+            "message-detail",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "log_id": str(self.message.messagelog.id)
+            }
+        )
+
+        response = client.get(url, format='json')
+        self.assertEquals(403, response.status_code)
+
+    def test_view_update(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "message-detail",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "log_id": str(self.message.messagelog.id)
+            }
+        )
+        data = {
+            "is_approved": True
+        }
+
+        response = client.patch(url, format='json', data=data)
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEquals(content, data)
+
+    def test_message_action_started(self):
+        action = Flow.objects.create(
+            flow_uuid=str(uuid4()),
+            name="Test Action",
+            content_base=self.content_base,
+        )
+        self.message = Message.objects.create(
+            text="Start Action",
+            contact_urn="urn",
+            status="S",
+        )
+        self.reflection_data = {
+            "tag": "action_started",
+            "action_name": action.name,
+            "action_uuid": str(action.uuid)
+        }
+
+        self.log = MessageLog.objects.create(
+            message=self.message,
+            project=self.project,
+            content_base=self.content_base,
+            chunks_json=self.full_chunks,
+            reflection_data=self.reflection_data,
+            classification="other",
+            llm_response=self.llm_response,
+            llm_model=self.llm_model,
+            metadata=self.metadata,
+            groundedness_score=10,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+
+        url = reverse(
+            "message-detail",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "log_id": str(self.message.messagelog.id)
+            }
+        )
+
+        response = client.get(url, format='json')
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertTrue(content.get("actions_started"))
+        self.assertEquals(content.get("status"), "F")
+        self.assertEquals(content.get("actions_uuid"), str(action.uuid))
+        self.assertEquals(content.get("actions_type"), str(action.name))
+
+    def test_message_action_started_old_logs(self):
+        action = Flow.objects.create(
+            flow_uuid=str(uuid4()),
+            name="Test Action",
+            content_base=self.content_base,
+        )
+
+        message = Message.objects.create(
+            text="Start Action",
+            contact_urn="urn",
+            status="S",
+        )
+        reflection_data = {
+            "tag": "action_started",
+        }
+
+        MessageLog.objects.create(
+            message=message,
+            project=self.project,
+            content_base=self.content_base,
+            chunks_json=self.full_chunks,
+            reflection_data=reflection_data,
+            classification=action.name,
+            llm_response=self.llm_response,
+            llm_model=self.llm_model,
+            metadata=self.metadata,
+            groundedness_score=0,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+
+        url = reverse(
+            "message-detail",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "log_id": str(message.messagelog.id)
+            }
+        )
+
+        response = client.get(url, format='json')
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertTrue(content.get("actions_started"))
+        self.assertEquals(content.get("status"), "F")
+        self.assertEquals(content.get("actions_uuid"), str(action.uuid))
+        self.assertEquals(content.get("actions_type"), str(action.name))
