@@ -10,7 +10,18 @@ from nexus.users.models import User
 
 
 @dataclass
-class UpdateFlowDTO:
+class UpdateActionFlowDTO:
+    uuid: str
+    flow_uuid: str = None
+    prompt: str = None
+    name: str = None
+
+    def dict(self):
+        return {key: value for key, value in self.__dict__.items() if value is not None}
+
+
+@dataclass
+class UpdateIntegratedFlowDTO:
     flow_uuid: str
     prompt: str = None
     name: str = None
@@ -59,7 +70,35 @@ class UpdateFlowsUseCase():
 
     def update_flow(
         self,
-        flow_dto: UpdateFlowDTO,
+        flow_dto: UpdateActionFlowDTO,
+        user: User = None,
+    ) -> Flow:
+        flow: Flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(
+            uuid=flow_dto.uuid
+        )
+
+        if flow.editable is False:
+            raise ValueError("Flow is not editable")
+
+        values_before_update = model_to_dict(flow)
+        for attr, value in flow_dto.dict().items():
+            setattr(flow, attr, value)
+        flow.save()
+        values_after_update = model_to_dict(flow)
+
+        if user:
+            self._save_log(
+                action=flow,
+                values_before_update=values_before_update,
+                values_after_update=values_after_update,
+                user=user
+            )
+
+        return flow
+
+    def update_integrated_flow(
+        self,
+        flow_dto: UpdateIntegratedFlowDTO,
         user: User = None,
     ) -> Flow:
         flow: Flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(

@@ -155,7 +155,7 @@ class FlowsViewsetTestCase(TestCase):
         response = FlowsViewset.as_view({'patch': 'update'})(
             request,
             data,
-            flow_uuid=action_uuid,
+            uuid=action_uuid,
             project_uuid=str(self.project.uuid),
             format='json',
         )
