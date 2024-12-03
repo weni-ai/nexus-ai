@@ -1,11 +1,19 @@
 from django.test import TestCase
+from django.urls import reverse
+
+from rest_framework import status
+from rest_framework.test import APIRequestFactory, force_authenticate, APITestCase
+
 from nexus.logs.models import Message, MessageLog
+from nexus.logs.api.views import ConversationContextViewset
+
+from nexus.intelligences.models import IntegratedIntelligence
 
 from nexus.usecases.logs.list import ListLogUsecase
-
-from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory
-from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory, IntegratedIntelligenceFactory
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.logs.tests.logs_factory import MessageLogFactory
 
 
 class ListLogsTestCase(TestCase):
@@ -82,3 +90,33 @@ class ListLogsTestCase(TestCase):
         self.assertEquals(logs.count(), 1)
         self.assertIsInstance(logs.first(), MessageLog)
         self.assertEquals(self.log3, logs.first())
+
+
+class ConversationContextViewsetTestCase(APITestCase):
+
+    def setUp(self):
+        ii: IntegratedIntelligence = IntegratedIntelligenceFactory()
+        self.project = ii.project
+        self.content_base = ii.intelligence.contentbases.first()
+        self.user = self.project.created_by
+
+        self.msg_log = MessageLogFactory.create_batch(
+            10,
+            project=self.project,
+            content_base=self.content_base,
+            classification="other",
+            message__status="S",
+        )
+        self.factory = APIRequestFactory()
+        self.view = ConversationContextViewset.as_view({'get': 'list'})
+        self.url = reverse('list-conversation-context', kwargs={'project_uuid': str(self.project.uuid)})
+
+    def test_list_last_messages(self):
+        log_id = self.msg_log[-1].id
+        request = self.factory.get(self.url, {'log_id': log_id, 'number_of_messages': 5})
+        force_authenticate(request, user=self.user)
+        response = self.view(request, project_uuid=str(self.project.uuid))
+        response.render()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 5)

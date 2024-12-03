@@ -162,7 +162,9 @@ def route(
             content_base_id=content_base.uuid,
             classification=classification,
             reflection_data={
-                "tag": "action_started"
+                "tag": "action_started",
+                "action_uuid": str(flow.pk),
+                "action_name": flow.name,
             }
         )
 
