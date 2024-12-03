@@ -1,5 +1,6 @@
 import pendulum
 
+from rest_framework import views
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import LimitOffsetPagination
@@ -18,12 +19,16 @@ from nexus.logs.api.serializers import (
     TagPercentageSerializer
 )
 from nexus.usecases.logs.list import ListLogUsecase
+from nexus.usecases.logs.retrieve import RetrieveMessageLogUseCase
 
 from nexus.projects.permissions import has_project_permission
 
 from django.conf import settings
 from django.db.models import Count, Case, When, IntegerField
 from django.utils.dateparse import parse_date
+
+from nexus.logs.api.serializers import MessageDetailSerializer
+from nexus.projects.api.permissions import ProjectPermission
 
 
 class CustomPageNumberPagination(PageNumberPagination):
@@ -243,3 +248,12 @@ class RecentActivitiesViewset(
         queryset = RecentActivities.objects.filter(**filter_params).select_related('created_by').order_by('-created_at').exclude(action_details__isnull=True)
 
         return queryset
+
+
+class MessageDetailViewSet(views.APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid, log_id):
+        message_log = RetrieveMessageLogUseCase().get_by_id(log_id)
+        message = message_log.message
+        return Response(MessageDetailSerializer(message).data)
