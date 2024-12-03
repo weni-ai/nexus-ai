@@ -5,9 +5,15 @@ from nexus.logs.models import (
 
 from django.core.cache import cache
 from django.conf import settings
+from nexus.projects.websockets.consumers import send_message_to_websocket
 
 
 class CreateLogUsecase:  # TODO: rename method
+
+    def __init__(self, message=None) -> None:
+        self.message = message
+        if self.message:
+            self.log = self.message.messagelog
 
     def _create_redis_cache(
         self,
@@ -86,3 +92,7 @@ class CreateLogUsecase:  # TODO: rename method
         log.save()
         if log.project.uuid:
             self._create_redis_cache(log, log.project.uuid)
+
+    def send_message(self, **kwargs):
+        message = self.log.message
+        send_message_to_websocket(message)
