@@ -8,6 +8,10 @@ from router.entities.flow import FlowDTO
 from django.conf import settings
 
 
+class ZeroshotException(Exception):
+    pass
+
+
 class ZeroshotClassifier(Classifier):
 
     def __init__(
@@ -21,24 +25,29 @@ class ZeroshotClassifier(Classifier):
         self.client = client
 
     def predict(self, message: str, flows: List[FlowDTO], language: str = "por") -> str:
-        print(f"[+ Zeroshot message classification: {message} ({language}) +]")
-        flows_list = []
-        for flow in flows:
-            flows_list.append(
-                {
-                    "class": flow.name,
-                    "context": flow.prompt,
-                }
-            )
-        if not flows_list:
-            return self.CLASSIFICATION_OTHER
+        try:
+            print(f"[+ Zeroshot message classification: {message} ({language}) +]")
+            flows_list = []
+            for flow in flows:
+                flows_list.append(
+                    {
+                        "class": flow.name,
+                        "context": flow.prompt,
+                    }
+                )
+            if not flows_list:
+                return self.CLASSIFICATION_OTHER
 
-        response: dict = self.client(self.chatbot_goal).fast_predict(message, flows_list, language)
+            response: dict = self.client(self.chatbot_goal).fast_predict(message, flows_list, language)
 
-        if response.get("other"):
-            return self.CLASSIFICATION_OTHER
+            if response.get("other"):
+                return self.CLASSIFICATION_OTHER
 
-        return response.get("classification")
+            return response.get("classification")
+        except Exception as e:
+            message = f"Zeroshot Error: {e}"
+            print(message)
+            raise ZeroshotException(message)
 
 
 if __name__ == "__main__":  # pragma: no cover
