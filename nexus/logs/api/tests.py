@@ -288,7 +288,7 @@ class MessageHistoryViewsetTestCase(TestCase):
         self.assertEquals(len(content.get("results")), 10)
 
     def test_tag_filter(self):
-        tag = "failed"
+        tag = "success"
 
         request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&tag={tag}&started_day={self.started_day}&ended_day={self.ended_day}")
         force_authenticate(request, user=self.user)
@@ -315,6 +315,21 @@ class MessageHistoryViewsetTestCase(TestCase):
         content = json.loads(response.content)
         self.assertEqual(response.status_code, 200)
         self.assertEquals(len(content.get("results")), 0)
+
+    def test_empty_logs_data(self):
+        MessageLog.objects.all().delete()
+
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&started_day={self.started_day}&ended_day={self.ended_day}")
+        force_authenticate(request, user=self.user)
+        response = MessageHistoryViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(content.get("results")), 0)
 
 
 class TagPercentageViewSetTestCase(APITestCase):
