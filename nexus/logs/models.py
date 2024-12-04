@@ -126,7 +126,7 @@ class Message(models.Model):
                 #     if detail_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD and detail_source:
                 #         sources_count += 1
                 # score: bool = sources_count / len(details) >= settings.GROUNDEDNESS_SOURCES_THRESHOLD / 10
-                return status.get(groundedness_score>0)
+                return status.get(groundedness_score>=settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD)
         return "F"
 
 
