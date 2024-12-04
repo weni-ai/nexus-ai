@@ -95,6 +95,8 @@ class InvokeModel:
             data=payload
         )
 
+        response_nlp.raise_for_status()
+
         if response_nlp.status_code == 200:
             classification = response_nlp.json()
             classification_formatter = FormatClassification(classification)
