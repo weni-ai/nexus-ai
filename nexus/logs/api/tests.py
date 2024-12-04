@@ -298,7 +298,6 @@ class MessageHistoryViewsetTestCase(TestCase):
         )
         response.render()
         content = json.loads(response.content)
-
         self.assertEqual(response.status_code, 200)
         self.assertEquals(len(content.get("results")), 10)
 
