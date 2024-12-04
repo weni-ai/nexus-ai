@@ -64,42 +64,48 @@ class Message(models.Model):
 
     @property
     def groundedness_details(self):
-        from router.classifiers.groundedness import Groundedness
+        messagelog_groundedness_details = self.messagelog.groundedness_details
 
-        if self.messagelog.chunks_json:
-            groundedness = Groundedness(
-                llm_response=self.messagelog.llm_response,
-                llm_chunk_used=self.messagelog.chunks,
-                log=self.messagelog
-            )
-            reflection_data = self.messagelog.reflection_data
+        if not messagelog_groundedness_details:
+            from router.classifiers.groundedness import Groundedness
 
-            if reflection_data and "sentence_rankings" in reflection_data:
-                sentences = groundedness.extract_score_and_sentences(reflection_data.get("sentence_rankings"))
-                groundedness_details: List[Dict[str, str]] = []
-                for sentence in sentences:
-                    sentence_stats = {
-                        "sentence": sentence.get("sentence"),
-                        "sources": [],
-                        "score": sentence.get("score"),
-                    }
-                    for chunk in self.messagelog.chunks_json:
+            if self.messagelog.chunks_json:
+                groundedness = Groundedness(
+                    llm_response=self.messagelog.llm_response,
+                    llm_chunk_used=self.messagelog.chunks,
+                    log=self.messagelog
+                )
+                reflection_data = self.messagelog.reflection_data
 
-                        evidence: str = sentence.get("evidence", "")
-                        clean_evidence: str = TextComparer.clean_string(evidence)
-                        clean_chunk: str = TextComparer.clean_string(chunk.get("full_page", ""))
+                if reflection_data and "sentence_rankings" in reflection_data:
+                    sentences = groundedness.extract_score_and_sentences(reflection_data.get("sentence_rankings"))
+                    groundedness_details: List[Dict[str, str]] = []
+                    for sentence in sentences:
+                        sentence_stats = {
+                            "sentence": sentence.get("sentence"),
+                            "sources": [],
+                            "score": sentence.get("score"),
+                        }
+                        for chunk in self.messagelog.chunks_json:
 
-                        if TextComparer.string_in_text(clean_evidence, clean_chunk):
-                            sentence_stats["sources"].append(
-                                {
-                                    "filename": chunk.get("filename"),
-                                    "file_uuid": chunk.get("file_uuid")
-                                }
-                            )
-                    groundedness_details.append(sentence_stats)
-                return groundedness_details
+                            evidence: str = sentence.get("evidence", "")
+                            clean_evidence: str = TextComparer.clean_string(evidence)
+                            clean_chunk: str = TextComparer.clean_string(chunk.get("full_page", ""))
+
+                            if TextComparer.string_in_text(clean_evidence, clean_chunk):
+                                sentence_stats["sources"].append(
+                                    {
+                                        "filename": chunk.get("filename"),
+                                        "file_uuid": chunk.get("file_uuid")
+                                    }
+                                )
+                        groundedness_details.append(sentence_stats)
+                    self.messagelog.groundedness_details = groundedness_details
+                    self.messagelog.save(update_fields=["groundedness_details"])
+                    return groundedness_details
+                return
             return
-        return
+        return messagelog_groundedness_details
 
     @property
     def response_status(self):
@@ -141,6 +147,7 @@ class MessageLog(models.Model):
     source = models.CharField(max_length=255, null=True)
 
     groundedness_score = models.IntegerField(null=True)
+    groundedness_details = models.JSONField(null=True)
     reflection_data = models.JSONField(null=True)
 
     is_approved = models.BooleanField(null=True)
