@@ -288,7 +288,7 @@ class MessageHistoryViewsetTestCase(TestCase):
         self.assertEquals(len(content.get("results")), 10)
 
     def test_tag_filter(self):
-        tag = "failed"
+        tag = "success"
 
         request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&tag={tag}&started_day={self.started_day}&ended_day={self.ended_day}")
         force_authenticate(request, user=self.user)
