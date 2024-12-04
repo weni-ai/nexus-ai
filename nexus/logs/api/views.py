@@ -169,7 +169,7 @@ class MessageHistoryViewset(
             }
             logs = [log for log in logs if log.message.response_status == status.get(tag_param) and log.reflection_data.get("tag") != "action_started"]
 
-        if not logs.exists():
+        if not logs:
             return MessageLog.objects.none()
 
         return logs
