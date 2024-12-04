@@ -73,10 +73,16 @@ class TokenAuthMiddleware(BaseMiddleware):
             query_params = parse_qs(scope["query_string"].decode())
             scope["query_params"] = query_params
             token_key = query_params.get("Token")[0]
+            print("___WS___")
+            print("Query params: ", query_params)
+            print("________")
         except (ValueError, TypeError):
             token_key = None
         try:
             user = await get_keycloak_user(token_key)
+            print("___WS___")
+            print("User: ", user)
+            print("________")
         except (UrllibHTTPError, RequestsHTTPError):
             user = None
             LOGGER.debug("Keycloak Websocket Login failed")
