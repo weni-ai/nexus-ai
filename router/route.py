@@ -116,20 +116,23 @@ def route(
             print(f"[+ LLM Response: {llm_response} +]")
 
             if message_log:
+                print("[+++ Reflection Task Started +++]")
                 if not chunks:
+                    print("[+++ No chunks to reflect on +++]")
                     run_reflection_task.delay(
                         chunks_used=chunks,
                         llm_response=llm_response,
                         message_log_id=message_log.id,
                     )
                 else:
+                    print("[+++ Chunks to reflect on +++]")
                     reflection = Reflection(
                         chunks_used=chunks,
                         llm_response=llm_response,
                         message_log_id=message_log.id,
                     )
                     groundedness_score = reflection.classify()
-
+                    print(f"[+++ Groundedness Score: {groundedness_score} +++]")
                     llm_response = settings.LOW_GROUNDEDNESS_RESPONSE if groundedness_score == 0 else llm_response
                     print("[+++ LLM Response changed to LOW_GROUNDEDNESS_RESPONSE +++]")
 
@@ -151,7 +154,7 @@ def route(
                 llm_response=llm_response,
                 metadata=metadata.dict
             )
-            log_usecase.send_message()
+            # log_usecase.send_message()
 
             if fallback_flow:
                 return dispatch(
