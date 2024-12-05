@@ -1,3 +1,12 @@
+# 2.7.0
+## *Add*
+    - Experience manger endpoints. List logs, tags and more.
+    - Redis for last 5 messages.
+    - Websocket for incoming messages.
+
+## *Update*
+    - Now you can update actions uuid.
+
 # 2.6.8
 ## *Fix*
     - Commerce custom template actions not working

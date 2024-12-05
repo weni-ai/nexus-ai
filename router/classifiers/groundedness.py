@@ -1,4 +1,5 @@
 import re
+import emoji
 import pendulum
 
 from typing import Dict
@@ -51,11 +52,24 @@ class Groundedness:
         self,
         response: str
     ):
+        def normalize_text(text):
+            pattern = r"(Statement Sentence:|Supporting Evidence:|Score:)"
+
+            parts = re.split(pattern, text)
+            normalized_parts = [part.strip() if i % 2 == 0 else part for i, part in enumerate(parts)]
+            normalized_text = ''.join(normalized_parts)
+
+            return normalized_text
+
         pattern = re.compile(
             # r"Statement Sentence:\s*(?P<sentence>.*?)\.\s*Supporting Evidence:\s*(?P<evidence>.*?)(?:\s*|\.)\s*Score:\s*(?P<score>\d+)"
-            r"Statement Sentence:\s*(?P<sentence>.*?[:\.])\s*Supporting Evidence:\s*(?P<evidence>.*?)(?:\s*|[,.])\s*Score:\s*(?P<score>\d+)"
+            # r"Statement Sentence:\s*(?P<sentence>.*?[:\.])\s*Supporting Evidence:\s*(?P<evidence>.*?)(?:\s*|[,.])\s*Score:\s*(?P<score>\d+)",
+            r"Statement Sentence:\s*(?P<sentence>.+?)\s*,?Supporting Evidence:\s*(?P<evidence>.+?)\s*Score:\s*(?P<score>\d+)"
         )
-        matches = pattern.findall(response)
+
+        emojiless_response = emoji.replace_emoji(response, "")
+        normalized_text = normalize_text(emojiless_response)
+        matches = pattern.findall(normalized_text)
 
         result = []
         for match in matches:
@@ -64,7 +78,6 @@ class Groundedness:
                 "evidence": match[1].strip(),
                 "score": match[2]
             })
-
         return result
 
     def replace_vars(self, prompt: str, replace_variables: Dict) -> str:
