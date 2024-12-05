@@ -120,13 +120,13 @@ class Message(models.Model):
             sources_count = 0
 
             if details:
-                for detail in details:
-                    detail_score = int(detail.get("score", 0))
-                    detail_source: List[str] = detail.get("sources")
-                    if detail_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD and detail_source:
-                        sources_count += 1
-                score: bool = sources_count / len(details) >= settings.GROUNDEDNESS_SOURCES_THRESHOLD / 10
-                return status.get(score)
+                # for detail in details:
+                #     detail_score = int(detail.get("score", 0))
+                #     detail_source: List[str] = detail.get("sources")
+                #     if detail_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD and detail_source:
+                #         sources_count += 1
+                # score: bool = sources_count / len(details) >= settings.GROUNDEDNESS_SOURCES_THRESHOLD / 10
+                return status.get(groundedness_score>=settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD)
         return "F"
 
 

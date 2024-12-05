@@ -38,4 +38,6 @@ class ListLogUsecase:
             created_at__lt=created_at
         ).order_by("-created_at")[:message_count]
 
+        logs = list(logs)[::-1]
+
         return logs
