@@ -51,6 +51,10 @@ class TagPercentageViewSet(
 ):
 
     def list(self, request, *args, **kwargs):
+        def count_status(logs, tag):
+            logs = [log for log in logs if log.message.response_status == tag]
+            return len(logs)
+
         user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
 
@@ -81,11 +85,12 @@ class TagPercentageViewSet(
         if not message_logs.exists():
             return Response({"error": "No logs found for the given date range"}, status=404)
 
-        tag_counts = message_logs.aggregate(
-            action_count=Count(Case(When(reflection_data__tag='action_started', then=1), output_field=IntegerField())),
-            succeed_count=Count(Case(When(reflection_data__tag='success', then=1), output_field=IntegerField())),
-            failed_count=Count(Case(When(reflection_data__tag='failed', then=1), output_field=IntegerField()))
-        )
+        tag_counts = message_logs.aggregate(action_count=Count(Case(When(reflection_data__tag='action_started', then=1), output_field=IntegerField())))
+
+        tag_counts.update({
+            "succeed_count": count_status(message_logs, "S"),
+            "failed_count": count_status(message_logs, "F"),
+        })
 
         total_logs = sum(tag_counts.values())
         if total_logs == 0:
