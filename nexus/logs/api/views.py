@@ -85,11 +85,11 @@ class TagPercentageViewSet(
         if not message_logs.exists():
             return Response({"error": "No logs found for the given date range"}, status=404)
 
-        tag_counts=message_logs.aggregate(action_count=Count(Case(When(reflection_data__tag='action_started', then=1), output_field=IntegerField())))
-        tag_counts=message_logs.aggregate(action_count=Count(Case(When(reflection_data__tag='action_started', then=1), output_field=IntegerField())))
+        tag_counts = message_logs.aggregate(action_count=Count(Case(When(reflection_data__tag='action_started', then=1), output_field=IntegerField())))
+
         tag_counts.update({
             "succeed_count": count_status(message_logs, "S"),
-            "failed_count":count_status(message_logs, "F"),
+            "failed_count": count_status(message_logs, "F"),
         })
 
         total_logs = sum(tag_counts.values())

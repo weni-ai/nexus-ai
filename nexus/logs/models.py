@@ -117,7 +117,7 @@ class Message(models.Model):
 
         if groundedness_score or isinstance(groundedness_score, int):
             details: List[str] | None = self.groundedness_details
-            sources_count = 0
+            # sources_count = 0
 
             if details:
                 # for detail in details:
@@ -126,7 +126,7 @@ class Message(models.Model):
                 #     if detail_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD and detail_source:
                 #         sources_count += 1
                 # score: bool = sources_count / len(details) >= settings.GROUNDEDNESS_SOURCES_THRESHOLD / 10
-                return status.get(groundedness_score>=settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD)
+                return status.get(groundedness_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD)
         return "F"
 
 
