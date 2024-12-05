@@ -1,3 +1,5 @@
+import os
+
 from typing import List, Dict
 from django.conf import settings
 from ftfy import fix_encoding
@@ -35,6 +37,16 @@ def get_language_codes(language_code: str):
         "spa": "espanhol",
     }
     return language_codes.get(language_code, "português")
+
+
+def bad_words_filter(text: str):
+    bad_words_list = os.environ.get("BAD_WORDS_LIST", "").split(",")
+
+    for word in bad_words_list:
+        if word in text:
+            return os.environ.get("BAD_WORDS_RESPONSE")
+
+    return text
 
 
 def route(
@@ -112,6 +124,8 @@ def route(
                 llm_config=llm_config,
                 last_messages=last_messages,
             )
+
+            llm_response = bad_words_filter(llm_response)
 
             print(f"[+ LLM Response: {llm_response} +]")
 
