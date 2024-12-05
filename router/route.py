@@ -4,7 +4,7 @@ from ftfy import fix_encoding
 
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.logs.entities import LogMetadata
-from router.classifiers.reflection import run_reflection_task
+from router.classifiers.reflection import run_reflection_task, Reflection
 
 from router.dispatcher import dispatch
 from router.indexer import get_chunks
@@ -116,11 +116,22 @@ def route(
             print(f"[+ LLM Response: {llm_response} +]")
 
             if message_log:
-                run_reflection_task.delay(
-                    chunks_used=chunks,
-                    llm_response=llm_response,
-                    message_log_id=message_log.id,
-                )
+                if not chunks:
+                    run_reflection_task.delay(
+                        chunks_used=chunks,
+                        llm_response=llm_response,
+                        message_log_id=message_log.id,
+                    )
+                else:
+                    reflection = Reflection(
+                        chunks_used=chunks,
+                        llm_response=llm_response,
+                        message_log_id=message_log.id,
+                    )
+                    groundedness_score = reflection.classify()
+
+                    llm_response = settings.LOW_GROUNDEDNESS_RESPONSE if groundedness_score == 0 else llm_response
+                    print("[+++ LLM Response changed to LOW_GROUNDEDNESS_RESPONSE +++]")
 
             metadata = LogMetadata(
                 agent_name=agent.name,
