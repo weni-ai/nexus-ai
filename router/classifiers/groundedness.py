@@ -32,7 +32,7 @@ class Groundedness:
     def __init__(
         self,
         llm_response: str,
-        llm_chunk_used: str,
+        llm_chunk_used: list,
         log: MessageLog,
         system_prompt: str = settings.GROUNDEDNESS_SYSTEM_PROMPT,
         user_prompt: str = settings.GROUNDEDNESS_USER_PROMPT,
@@ -118,3 +118,5 @@ class Groundedness:
             "sentence_rankings": response_content
         }
         self.log.save()
+
+        return self.log.groundedness_score
