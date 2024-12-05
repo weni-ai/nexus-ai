@@ -38,8 +38,8 @@ class Reflection:
     def classify(self):
 
         groundedness = Groundedness(
-            self.llm_response,
-            self.chunk_used,
-            self.log,
+            llm_response=self.llm_response,
+            llm_chunk_used=self.chunk_used,
+            log=self.log,
         )
         return groundedness.classify()
