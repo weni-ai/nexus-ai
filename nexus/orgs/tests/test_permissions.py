@@ -215,6 +215,5 @@ class TestOrgModulePermissions(TestCase):
                 user=self.user,
                 org=self.org,
                 method="POST",
-                module_perm=True
             )
         )

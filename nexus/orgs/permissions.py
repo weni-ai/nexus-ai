@@ -142,12 +142,8 @@ def org_has_general_permissions(
     org: Org,
     method: str,
     auth_token: str = None,
-    module_perm: bool = False
 ):
     try:
-        if module_perm:
-            if user.has_perm("users.can_communicate_internally"):
-                return True
 
         usecase = GetOrgAuthUseCase()
         auth = usecase.get_org_auth_by_user(user=user, org=org)

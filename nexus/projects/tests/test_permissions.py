@@ -139,8 +139,8 @@ class TestProjectPermissions(TestCase):
         user.user_permissions.add(permission)
         project = ProjectFactory()
 
-        self.assertTrue(has_project_permission(user, project, 'GET', module_perm=True))
-        self.assertTrue(has_project_permission(user, project, 'POST', module_perm=True))
-        self.assertTrue(has_project_permission(user, project, 'PUT', module_perm=True))
-        self.assertTrue(has_project_permission(user, project, 'PATCH', module_perm=True))
-        self.assertTrue(has_project_permission(user, project, 'DELETE', module_perm=True))
+        self.assertTrue(has_project_permission(user, project, 'GET'))
+        self.assertTrue(has_project_permission(user, project, 'POST'))
+        self.assertTrue(has_project_permission(user, project, 'PUT'))
+        self.assertTrue(has_project_permission(user, project, 'PATCH'))
+        self.assertTrue(has_project_permission(user, project, 'DELETE'))
