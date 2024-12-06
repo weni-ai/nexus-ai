@@ -864,14 +864,20 @@ class RouterContentBaseViewSet(views.APIView):
 
 class RouterRetailViewSet(views.APIView):
 
+    # TODO - Refactor this view to have only one searializer and no dependencies
     def post(self, request, project_uuid):
         user: User = request.user
+        module_permission = user.has_perm("users.can_communicate_internally")
 
-        if not user.has_perm("users.can_communicate_internally"):
+        if not module_permission:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
         use_case = intelligences.RetrieveContentBaseUseCase()
-        content_base = use_case.get_default_by_project(project_uuid, user.email)
+        content_base = use_case.get_default_by_project(
+            project_uuid,
+            user.email,
+            is_superuser=module_permission
+        )
         links: list = request.data.get("links")
 
         project = ProjectsUseCase().get_project_by_content_base_uuid(content_base.uuid)
