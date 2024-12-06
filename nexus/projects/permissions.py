@@ -95,12 +95,7 @@ def has_project_permission(
     user: User,
     project: Project,
     method: str,
-    module_perm: bool = False
 ) -> bool:
-
-    if module_perm:
-        if user.has_perm("users.can_communicate_internally"):
-            return True
 
     auth = get_user_auth(user=user, project=project)
     return _has_project_general_permission(auth, method)
