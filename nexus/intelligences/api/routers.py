@@ -17,7 +17,8 @@ from .views import (
     LLMDefaultViewset,
     ContentBasePersonalizationViewSet,
     ContentBaseFilePreview,
-    UploadFileView
+    UploadFileView,
+    RouterRetailViewSet
 )
 
 
@@ -54,6 +55,7 @@ urlpatterns = [
     path('<intelligence_uuid>/', include(intelligence_router.urls)),
     path('<content_base_uuid>/', include(content_base_router.urls)),
     path('<project_uuid>/router/', RouterContentBaseViewSet.as_view(), name="project-content-bases"),
+    path('<project_uuid>/commerce-router/', RouterRetailViewSet.as_view(), name="project-commerce-router"),
     path('<project_uuid>/llm/', LLMViewset.as_view(), name='llm'),
     path('<project_uuid>/llm-default/', LLMDefaultViewset.as_view(), name='llm'),
     path('<project_uuid>/document-preview/', ContentBaseFilePreview.as_view(), name="document-preview"),
