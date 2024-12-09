@@ -571,9 +571,9 @@ class TestRetailRouterViewset(APITestCase):
 
         self.assertEqual(response.status_code, 200)
 
-        response_json = json.dumps(response.data)
-        instructions = response_json
+        response_json = json.loads(response.content)
+        instructions = response_json[0].get('instructions', [])
 
-        self.assertEqual(instructions.count(), 2)
-        self.assertEqual(instructions[0].instruction, 'Instruction 1')
-        self.assertEqual(instructions[1].instruction, 'Instruction 2')
+        self.assertEqual(len(instructions), 2)
+        self.assertEqual(instructions[0]['instruction'], 'Try to use emojis')
+        self.assertEqual(instructions[1]['instruction'], 'Dont change the subject')

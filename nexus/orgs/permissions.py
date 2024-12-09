@@ -135,31 +135,3 @@ def can_download_content_base_file(user: User, org: Org) -> bool:
         return can_contribute(auth)
     except OrgAuthDoesNotExists:
         return False
-
-
-def org_has_general_permissions(
-    user: User,
-    org: Org,
-    method: str,
-    auth_token: str = None,
-):
-    try:
-
-        usecase = GetOrgAuthUseCase()
-        auth = usecase.get_org_auth_by_user(user=user, org=org)
-
-        if method.upper() in SAFE_METHODS:
-            return True
-
-        if is_admin(auth):
-            return True
-
-        if auth_token:
-            if is_super_user(auth_token):
-                return True
-
-        if can_contribute(auth):
-            return True
-
-    except OrgAuthDoesNotExists:
-        return False

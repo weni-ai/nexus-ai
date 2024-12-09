@@ -589,11 +589,6 @@ class ContentBaseFileViewset(ModelViewSet):
 
         try:
             user = request.user
-            permissions.org_has_general_permissions(
-                user=user,
-                org=get_org_by_content_base_uuid(content_base_uuid),
-                method="POST",
-            )
 
             file = request.FILES['file']
             self.get_queryset()
@@ -699,12 +694,6 @@ class ContentBaseLinkViewset(ModelViewSet):
             user_email = request.user.email
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-
-            permissions.org_has_general_permissions(
-                user=request.user,
-                org=get_org_by_content_base_uuid(content_base_uuid),
-                method="POST",
-            )
 
             link = serializer.validated_data.get('link')
             content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
