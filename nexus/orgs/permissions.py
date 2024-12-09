@@ -1,7 +1,5 @@
 from django.conf import settings
 
-from rest_framework.permissions import SAFE_METHODS
-
 from nexus.orgs.models import Org, OrgAuth, Role
 from nexus.users.models import User
 from nexus.usecases.orgs.exceptions import OrgAuthDoesNotExists
