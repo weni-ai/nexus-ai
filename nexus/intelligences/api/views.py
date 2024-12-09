@@ -42,6 +42,7 @@ from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.projects.models import Project
+from nexus.users.models import User
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
@@ -587,9 +588,11 @@ class ContentBaseFileViewset(ModelViewSet):
     def create(self, request, content_base_uuid=str):
 
         try:
+            user = request.user
+
             file = request.FILES['file']
             self.get_queryset()
-            user_email = request.user.email
+            user_email = user.email
             extension_file = request.data.get("extension_file")
             load_type = request.data.get("load_type")
             file_manager = CeleryFileManager()
@@ -846,6 +849,92 @@ class RouterContentBaseViewSet(views.APIView):
         use_case = intelligences.RetrieveContentBaseUseCase()
         content_base = use_case.get_default_by_project(project_uuid, user_email)
         return Response(data=RouterContentBaseSerializer(content_base).data, status=200)
+
+
+class RouterRetailViewSet(views.APIView):
+
+    # TODO - Refactor this view to have only one searializer and no dependencies
+    def post(self, request, project_uuid):
+        user: User = request.user
+        module_permission = user.has_perm("users.can_communicate_internally")
+
+        if not module_permission:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+        use_case = intelligences.RetrieveContentBaseUseCase()
+        content_base = use_case.get_default_by_project(
+            project_uuid,
+            user.email,
+            is_superuser=module_permission
+        )
+        links: list = request.data.get("links")
+
+        project = ProjectsUseCase().get_project_by_content_base_uuid(content_base.uuid)
+
+        for link in links:
+
+            link_serializer = ContentBaseLinkSerializer(data={"link": link})
+            link_serializer.is_valid(raise_exception=True)
+            link_dto = intelligences.ContentBaseLinkDTO(
+                link=link,
+                user_email=user.email,
+                content_base_uuid=str(content_base.uuid)
+            )
+            content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
+
+            if project.indexer_database == Project.BEDROCK:
+                bedrock_send_link.delay(
+                    link=link,
+                    user_email=user.email,
+                    content_base_link_uuid=str(content_base_link.uuid)
+                )
+            else:
+                send_link.delay(
+                    link=link,
+                    user_email=user.email,
+                    content_base_link_uuid=str(content_base_link.uuid)
+                )
+
+            link_serializer = CreatedContentBaseLinkSerializer(content_base_link).data
+
+        # ContentBasePersonalization
+
+        agent_data = request.data.get("agent")
+        default_instructions: list = settings.DEFAULT_RETAIL_INSTRUCTIONS
+
+        instructions_objects = []
+        for instruction in default_instructions:
+            instructions_objects.append(
+                {
+                    "instruction": instruction,
+                }
+            )
+
+        agent = {
+            "agent": agent_data,
+            "instructions": instructions_objects
+        }
+        request.data["instructions"] = instructions_objects
+
+        new_request = request._request
+        new_request.data = request.data
+
+        personalization_serializer = ContentBasePersonalizationSerializer(
+            content_base,
+            data=agent,
+            partial=True,
+            context={"request": new_request}
+        )
+
+        if personalization_serializer.is_valid():
+            personalization_serializer.save()
+
+        response = [
+            personalization_serializer.data,
+            link_serializer
+        ]
+
+        return Response(response, status=200)
 
 
 class LLMViewset(views.APIView):
