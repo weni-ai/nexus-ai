@@ -6,10 +6,6 @@ from .models import Project, ProjectAuth, ProjectAuthorizationRole
 from nexus.users.models import User
 from nexus.orgs.models import OrgAuth, Role
 
-from django.contrib.auth import get_user_model
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.auth.models import Permission
-
 
 def get_user_auth(
     user: User,
@@ -71,31 +67,10 @@ def _has_project_general_permission(
         )
 
 
-def check_module_permission(
-    claims,
-    user: User
-):
-
-    User = get_user_model()
-
-    if claims.get("can_communicate_internally", False):
-        content_type = ContentType.objects.get_for_model(User)
-        permission, created = Permission.objects.get_or_create(
-            codename="can_communicate_internally",
-            name="can communicate internally",
-            content_type=content_type,
-        )
-        if not user.has_perm("authentication.can_communicate_internally"):
-            user.user_permissions.add(permission)
-        return True
-    return False
-
-
 def has_project_permission(
     user: User,
     project: Project,
-    method: str,
+    method: str
 ) -> bool:
-
     auth = get_user_auth(user=user, project=project)
     return _has_project_general_permission(auth, method)

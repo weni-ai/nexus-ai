@@ -194,26 +194,3 @@ class TestOrgAuthDoesNotExist(TestCase):
 
     def test_can_download_content_base_file(self):
         self.assertFalse(permissions.can_download_content_base_file(self.user, self.org))
-
-
-class TestOrgModulePermissions(TestCase):
-
-    def setUp(self) -> None:
-        self.user = UserFactory()
-        content_type = ContentType.objects.get_for_model(self.user)
-        permission, created = Permission.objects.get_or_create(
-            codename="can_communicate_internally",
-            name="can communicate internally",
-            content_type=content_type,
-        )
-        self.user.user_permissions.add(permission)
-        self.org = OrgFactory()
-
-    def test_can_communicate_internally(self):
-        self.assertTrue(
-            permissions.org_has_general_permissions(
-                user=self.user,
-                org=self.org,
-                method="POST",
-            )
-        )
