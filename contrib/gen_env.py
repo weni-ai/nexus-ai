@@ -132,7 +132,7 @@ def generate_env():
         "ZEROSHOT_BEDROCK_AWS_REGION": "",
         "AWS_ACCESS_KEY_ID": "",
         "AWS_SECRET_ACCESS_KEY": "",
-
+        "DEFAULT_RETAIL_INSTRUCTIONS": "",
     }
 
     with open(env_path, "w") as configfile:
