@@ -925,6 +925,7 @@ class RouterRetailViewSet(views.APIView):
             "agent": agent_data,
             "instructions": instructions_objects
         }
+        request.data["instructions"] = instructions_objects
 
         new_request = request._request
         new_request.data = request.data
