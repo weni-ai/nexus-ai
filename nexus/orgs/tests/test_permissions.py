@@ -1,13 +1,9 @@
 from django.test import TestCase
 
-from nexus.usecases.orgs.tests.org_factory import OrgAuthFactory, OrgFactory
-from nexus.usecases.users.tests.user_factory import UserFactory
+from nexus.usecases.orgs.tests.org_factory import OrgAuthFactory
 
 from nexus.orgs import permissions
 from nexus.orgs.models import Role
-
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.auth.models import Permission
 
 # TODO: Use parameterized tests
 

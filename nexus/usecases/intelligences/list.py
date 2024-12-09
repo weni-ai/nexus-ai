@@ -128,7 +128,6 @@ class ListContentBaseLinkUseCase():
         user = users.get_by_email(user_email)
 
         has_permission = permissions.can_list_content_bases(user, org)
-
         if not has_permission:
             raise IntelligencePermissionDenied()
 
