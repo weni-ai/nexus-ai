@@ -67,7 +67,7 @@ class RetrieveContentBaseUseCase():
             has_project_permission(
                 user=user,
                 project=project,
-                method='GET',
+                method='GET'
             )
 
         return get_default_content_base_by_project(project_uuid)

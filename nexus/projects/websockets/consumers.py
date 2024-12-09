@@ -29,7 +29,7 @@ def send_message_to_websocket(message):
     }
 
     room_name = f"project_{message.messagelog.project.uuid}"
-    print("channel layer: ", channel_layer)
+
     async_to_sync(channel_layer.group_send)(
         room_name,
         {

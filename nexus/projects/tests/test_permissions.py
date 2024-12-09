@@ -4,7 +4,6 @@ from rest_framework.permissions import SAFE_METHODS
 
 from nexus.usecases.projects.tests.project_factory import ProjectFactory, ProjectAuthFactory
 
-from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.orgs.tests.org_factory import OrgAuthFactory
 
 from nexus.projects.models import ProjectAuthorizationRole, ProjectAuth
@@ -14,12 +13,8 @@ from nexus.projects.permissions import (
     is_admin,
     is_contributor,
     is_support,
-    _has_project_general_permission,
-    has_project_permission,
+    _has_project_general_permission
 )
-
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.auth.models import Permission
 
 
 class TestProjectPermissions(TestCase):
