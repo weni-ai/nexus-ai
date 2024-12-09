@@ -547,6 +547,7 @@ class TestRetailRouterViewset(APITestCase):
         )
         self.user.user_permissions.add(permission)
 
+    @mock.patch('django.conf.settings.DEFAULT_RETAIL_INSTRUCTIONS', ['Try to use emojis', 'Dont change the subject'])
     def test_list(self):
 
         data = {
@@ -569,3 +570,10 @@ class TestRetailRouterViewset(APITestCase):
         response.render()
 
         self.assertEqual(response.status_code, 200)
+
+        response_json = json.dumps(response.data)
+        instructions = response_json
+
+        self.assertEqual(instructions.count(), 2)
+        self.assertEqual(instructions[0].instruction, 'Instruction 1')
+        self.assertEqual(instructions[1].instruction, 'Instruction 2')
