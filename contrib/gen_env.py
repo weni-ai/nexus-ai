@@ -134,6 +134,7 @@ def generate_env():
         "AWS_SECRET_ACCESS_KEY": "",
         "BAD_WORDS_LIST": "bad_word1,bad_word2",
         "BAD_WORDS_RESPONSE": "",
+        "DEFAULT_RETAIL_INSTRUCTIONS": "",
     }
 
     with open(env_path, "w") as configfile:

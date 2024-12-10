@@ -3,9 +3,13 @@ from unittest import skip, mock
 
 from django.conf import settings
 from django.test import TestCase
+from django.urls import reverse
 
-from rest_framework.test import force_authenticate
-from rest_framework.test import APIRequestFactory
+from rest_framework.test import (
+    APIRequestFactory,
+    APITestCase,
+    force_authenticate
+)
 
 from nexus.task_managers.models import ContentBaseLinkTaskManager, TaskManager
 
@@ -16,6 +20,7 @@ from ..views import (
     ContentBaseLinkViewset,
     SentenxIndexerUpdateFile,
     ContentBasePersonalizationViewSet,
+    RouterRetailViewSet
 )
 
 from nexus.usecases.intelligences.tests.intelligence_factory import (
@@ -30,6 +35,9 @@ from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
 from nexus.usecases.intelligences.create import create_base_brain_structure
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth.models import Permission
 
 
 @skip("View Testing")
@@ -519,3 +527,53 @@ class TestContentBasePersonalizationViewSet(TestCase):
             format='json',
         )
         self.assertEqual(response.status_code, 200)
+
+
+class TestRetailRouterViewset(APITestCase):
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.ii = IntegratedIntelligenceFactory()
+        self.user = self.ii.created_by
+        self.project = self.ii.project
+        self.url = reverse('project-commerce-router', kwargs={'project_uuid': str(self.project.uuid)})
+        self.view = RouterRetailViewSet.as_view()
+
+        content_type = ContentType.objects.get_for_model(self.user)
+        permission, created = Permission.objects.get_or_create(
+            codename="can_communicate_internally",
+            name="can communicate internally",
+            content_type=content_type,
+        )
+        self.user.user_permissions.add(permission)
+
+    @mock.patch('django.conf.settings.DEFAULT_RETAIL_INSTRUCTIONS', ['Try to use emojis', 'Dont change the subject'])
+    def test_list(self):
+
+        data = {
+            "agent": {
+                "name": "test",
+                "role": "Doubt analyst",
+                "personality": "Friendly",
+                "goal": "Answer user questions"
+            },
+            "links": [
+                "https://www.example.org/",
+                "https://www.example2.com/",
+                "https://www.example3.com.br/"
+            ]
+        }
+
+        request = self.factory.post(self.url, data=data, format='json')
+        force_authenticate(request, user=self.user)
+        response = self.view(request, project_uuid=str(self.project.uuid))
+        response.render()
+
+        self.assertEqual(response.status_code, 200)
+
+        response_json = json.loads(response.content)
+        instructions = response_json[0].get('instructions', [])
+
+        self.assertEqual(len(instructions), 2)
+        self.assertEqual(instructions[0]['instruction'], 'Try to use emojis')
+        self.assertEqual(instructions[1]['instruction'], 'Dont change the subject')
