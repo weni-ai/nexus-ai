@@ -205,8 +205,8 @@ class FlowsViewset(
 
     def update(self, request, *args, **kwargs):
         flow_dto = UpdateActionFlowDTO(
-            uuid=kwargs.get("uuid"),
-            flow_uuid=kwargs.get("flow_uuid"),
+            uuid=kwargs.get("flow_uuid"),  # TODO:  change lookup url
+            flow_uuid=kwargs.data.get("flow_uuid"),
             prompt=request.data.get("prompt"),
             name=request.data.get("name"),
         )
