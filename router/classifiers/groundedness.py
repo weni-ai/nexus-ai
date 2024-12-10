@@ -91,7 +91,7 @@ class Groundedness:
 
     def get_prompt(self):
         variable = {
-            "premise": "".join(self.llm_chunk_used),
+            "premise": "".join(self.llm_chunk_used if self.llm_chunk_used else []),
             "hypothesis": self.llm_response,
         }
 

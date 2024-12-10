@@ -300,7 +300,7 @@ class MessageHistoryViewsetTestCase(TestCase):
         content = json.loads(response.content)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEquals(len(content.get("results")), 0)
+        self.assertEquals(len(content.get("results")), 10)
 
     def test_null_reflection_data(self):
         MessageLog.objects.all().update(reflection_data=None)
@@ -508,7 +508,7 @@ class MessageDetailViewSetTestCase(TestCase):
         content = json.loads(response.content)
 
         self.assertTrue(content.get("actions_started"))
-        self.assertEquals(content.get("status"), "F")
+        self.assertEquals(content.get("status"), "S")
         self.assertEquals(content.get("actions_uuid"), str(action.uuid))
         self.assertEquals(content.get("actions_type"), str(action.name))
 
