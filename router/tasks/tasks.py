@@ -10,6 +10,8 @@ from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
 
+from router.classifiers.zeroshot import ZeroshotClassifier
+
 from router.route import route
 from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
 
@@ -119,9 +121,11 @@ def start_route(
             ),
         )
 
-        # classifier = ZeroshotClassifier(chatbot_goal=agent.goal)
+        if message.project_uuid == os.environ.get("DEMO_FUNC_CALLING_PROJECT_UUID"):
+            classifier = ChatGPTFunctionClassifier(agent_goal=agent.goal)
+        else:
+            classifier = ZeroshotClassifier(chatbot_goal=agent.goal)
 
-        classifier = ChatGPTFunctionClassifier(agent_goal=agent.goal)
         classification = classification_handler.custom_actions(
             classifier=classifier,
             language=llm_config.language
