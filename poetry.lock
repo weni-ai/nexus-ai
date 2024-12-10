@@ -1189,6 +1189,20 @@ starlette = ["starlette"]
 tornado = ["tornado"]
 
 [[package]]
+name = "emoji"
+version = "2.14.0"
+description = "Emoji for Python"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "emoji-2.14.0-py3-none-any.whl", hash = "sha256:fcc936bf374b1aec67dda5303ae99710ba88cc9cdce2d1a71c5f2204e6d78799"},
+    {file = "emoji-2.14.0.tar.gz", hash = "sha256:f68ac28915a2221667cddb3e6c589303c3c6954c6c5af6fefaec7f9bdf72fdca"},
+]
+
+[package.extras]
+dev = ["coverage", "pytest (>=7.4.4)"]
+
+[[package]]
 name = "exceptiongroup"
 version = "1.2.0"
 description = "Backport of PEP 654 (exception groups)"
@@ -4121,4 +4135,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "e7a8616bb9156a4c6e00784bf207738c35d0c54c53db254075eeea274c34c09e"
+content-hash = "07f4719ede627b88cf5e503aa3391386f36f068a2e4e8ee755c9caef761b5467"
