@@ -1,3 +1,11 @@
+# 2.7.1
+## *Add*
+    - New commerce all in one customization api
+
+## *Fix*
+    - Update Flow not working properly
+    - Custom classfier model for specific projects
+
 # 2.7.0
 ## *Add*
     - Experience manger endpoints. List logs, tags and more.
