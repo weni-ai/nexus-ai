@@ -50,6 +50,7 @@ from router.repositories.orm import (
     MessageLogsRepository
 )
 from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
+from router.classifiers.zeroshot import ZeroshotClassifier
 from router.classifiers.pre_classification import PreClassification
 from router.classifiers.classification import Classification
 from router.entities import (
@@ -374,9 +375,10 @@ class MessagePreviewView(APIView):
                 source="preview"
             )
 
-            classifier = ChatGPTFunctionClassifier(
-                agent_goal=agent.goal
-            )
+            if project_uuid == os.environ.get("DEMO_FUNC_CALLING_PROJECT_UUID"):
+                classifier = ChatGPTFunctionClassifier(agent_goal=agent.goal)
+            else:
+                classifier = ZeroshotClassifier(chatbot_goal=agent.goal)
 
             classification = classification_handler.custom_actions(
                 classifier=classifier,
