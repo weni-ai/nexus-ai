@@ -27,3 +27,4 @@ class TestProjectUpdateViewSet(TestCase):
         response = self.view(request, project_uuid=self.project.uuid)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["brain_on"])
+        self.assertTrue(mock_update_message.called)
