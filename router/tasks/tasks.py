@@ -1,9 +1,8 @@
-
-
 import os
 from typing import Dict
 
 from django.conf import settings
+from redis import Redis
 
 from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
@@ -30,10 +29,10 @@ from router.repositories.orm import (
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
 
-@celery_app.task
-def start_route(
-    message: Dict
-) -> bool:  # pragma: no cover
+@celery_app.task(bind=True)
+def start_route(self, message: Dict) -> bool:  # pragma: no cover
+
+    redis_client = Redis(host=settings.REDIS_HOST, port=6379, db=0)  # Use Redis host from settings
 
     print(f"[+ Message received: {message} +]")
 
@@ -139,6 +138,30 @@ def start_route(
         if llm_config.model.lower() != "wenigpt":
             llm_client.api_key = llm_config.token
 
+        # Check if there's a pending response for this user
+        pending_response_key = f"response:{message.contact_urn}"
+        pending_task_key = f"task:{message.contact_urn}"
+        pending_response = redis_client.get(pending_response_key)
+        pending_task_id = redis_client.get(pending_task_key)
+
+        if pending_response:
+            # Revoke the previous task
+            if pending_task_id:
+                celery_app.control.revoke(pending_task_id.decode('utf-8'), terminate=True)
+
+            # Concatenate the previous message with the new one
+            previous_message = pending_response.decode('utf-8')
+            concatenated_message = f"{previous_message}\n{message.text}"
+            message.text = concatenated_message
+            redis_client.delete(pending_response_key)  # Remove the pending response
+        else:
+            # Store the current message in Redis
+            redis_client.set(pending_response_key, message.text)
+
+        # Store the current task ID in Redis
+        redis_client.set(pending_task_key, self.request.id)
+
+        # Generate response for the concatenated message
         route(
             classification=classification,
             message=message,
@@ -154,6 +177,10 @@ def start_route(
             log_usecase=log_usecase,
             message_log=message_log
         )
+
+        # If response generation completes, remove from Redis
+        redis_client.delete(pending_response_key)
+        redis_client.delete(pending_task_key)
 
         log_usecase.update_status("S")
     except Exception as e:
