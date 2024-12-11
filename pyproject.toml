@@ -46,6 +46,7 @@ hiredis = "^3.0.0"
 django-redis = "^5.4.0"
 channels = {extras = ["daphne"], version = "^4.2.0"}
 channels-redis = "^4.2.1"
+emoji = "^2.14.0"
 
 
 

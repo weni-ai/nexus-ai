@@ -50,6 +50,7 @@ from router.repositories.orm import (
     MessageLogsRepository
 )
 from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
+from router.classifiers.zeroshot import ZeroshotClassifier
 from router.classifiers.pre_classification import PreClassification
 from router.classifiers.classification import Classification
 from router.entities import (
@@ -129,6 +130,7 @@ class FlowsViewset(
             prompt = request.data.get("prompt", "")
             action_type = request.data.get("action_type", "custom")
             group = request.data.get("group", "custom")
+            send_to_llm = request.data.get("send_to_llm", False)
 
             if action_template_uuid:
                 template = TemplateAction.objects.get(
@@ -145,6 +147,7 @@ class FlowsViewset(
                 name=name,
                 prompt=prompt,
                 fallback=fallback,
+                send_to_llm=send_to_llm,
                 action_type=action_type,
                 template=template if action_template_uuid else None,
                 group=group
@@ -204,10 +207,11 @@ class FlowsViewset(
 
     def update(self, request, *args, **kwargs):
         flow_dto = UpdateActionFlowDTO(
-            uuid=kwargs.get("uuid"),
-            flow_uuid=kwargs.get("flow_uuid"),
+            uuid=kwargs.get("flow_uuid"),  # TODO:  change lookup url
+            flow_uuid=request.data.get("flow_uuid"),
             prompt=request.data.get("prompt"),
             name=request.data.get("name"),
+            send_to_llm=request.data.get("send_to_llm", False),
         )
         project_uuid = kwargs.get('project_uuid')
         project = projects.get_project_by_uuid(project_uuid)
@@ -374,9 +378,10 @@ class MessagePreviewView(APIView):
                 source="preview"
             )
 
-            classifier = ChatGPTFunctionClassifier(
-                agent_goal=agent.goal
-            )
+            if project_uuid == os.environ.get("DEMO_FUNC_CALLING_PROJECT_UUID"):
+                classifier = ChatGPTFunctionClassifier(agent_goal=agent.goal)
+            else:
+                classifier = ZeroshotClassifier(chatbot_goal=agent.goal)
 
             classification = classification_handler.custom_actions(
                 classifier=classifier,

@@ -15,6 +15,7 @@ class UpdateActionFlowDTO:
     flow_uuid: str = None
     prompt: str = None
     name: str = None
+    send_to_llm: bool = None
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}

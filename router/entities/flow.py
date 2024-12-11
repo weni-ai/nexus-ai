@@ -9,3 +9,4 @@ class FlowDTO:
     prompt: str
     fallback: str
     content_base_uuid: str
+    send_to_llm: bool = False

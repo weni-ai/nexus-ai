@@ -589,11 +589,6 @@ class ContentBaseFileViewset(ModelViewSet):
 
         try:
             user = request.user
-            permissions.org_has_general_permissions(
-                user=user,
-                org=get_org_by_content_base_uuid(content_base_uuid),
-                method="POST",
-            )
 
             file = request.FILES['file']
             self.get_queryset()

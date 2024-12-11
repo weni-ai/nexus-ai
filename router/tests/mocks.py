@@ -152,7 +152,7 @@ class MockBroadcastHTTPClient():
 
 
 class MockFlowStartHTTPClient():
-    def start_flow(self, flow: str, user: str, urns: List, user_message: str):
+    def start_flow(self, flow: str, user: str, urns: List, user_message: str, llm_response: str):
         print(f"[+ Test: Starting flow {flow} +]")
 
 

@@ -104,7 +104,8 @@ class FlowsORMRepository(Repository):
             name=flow.name,
             prompt=flow.prompt,
             fallback=flow.fallback,
-            content_base_uuid=str(flow.content_base.uuid)
+            content_base_uuid=str(flow.content_base.uuid),
+            send_to_llm=flow.send_to_llm,
         )
 
     def project_flow_fallback(
