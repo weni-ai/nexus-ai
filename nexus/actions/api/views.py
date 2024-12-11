@@ -253,7 +253,8 @@ class MessagePreviewView(APIView):
                 metadata=data.get("metadata", {})
             )
 
-            response = start_route(message, preview=True)
+            task = start_route.delay(message.__dict__, preview=True)
+            response = task.wait()
 
             return Response(data=response)
         except IntelligencePermissionDenied:
