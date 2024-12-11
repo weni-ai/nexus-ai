@@ -130,6 +130,7 @@ class FlowsViewset(
             prompt = request.data.get("prompt", "")
             action_type = request.data.get("action_type", "custom")
             group = request.data.get("group", "custom")
+            send_to_llm = request.data.get("send_to_llm", False)
 
             if action_template_uuid:
                 template = TemplateAction.objects.get(
@@ -146,6 +147,7 @@ class FlowsViewset(
                 name=name,
                 prompt=prompt,
                 fallback=fallback,
+                send_to_llm=send_to_llm,
                 action_type=action_type,
                 template=template if action_template_uuid else None,
                 group=group
@@ -209,6 +211,7 @@ class FlowsViewset(
             flow_uuid=request.data.get("flow_uuid"),
             prompt=request.data.get("prompt"),
             name=request.data.get("name"),
+            send_to_llm=request.data.get("send_to_llm", False),
         )
         project_uuid = kwargs.get('project_uuid')
         project = projects.get_project_by_uuid(project_uuid)

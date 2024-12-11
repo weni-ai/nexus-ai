@@ -64,6 +64,7 @@ class Flow(models.Model):
     name = models.CharField(max_length=255)
     prompt = models.TextField(blank=True, null=True)
     fallback = models.BooleanField(default=False)
+    send_to_llm = models.BooleanField(default=False)
     content_base = models.ForeignKey(ContentBase, on_delete=models.CASCADE, related_name="flows")
     action_type = models.CharField(max_length=50, choices=ACTION_TYPE_CHOICES, default='custom')
     action_template = models.ForeignKey(TemplateAction, on_delete=models.CASCADE, related_name="flows", null=True)

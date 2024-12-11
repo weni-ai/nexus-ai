@@ -67,7 +67,11 @@ def route(
     try:
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
 
-        if classification == Classifier.CLASSIFICATION_OTHER:
+        flow = ""
+        if classification != Classifier.CLASSIFICATION_OTHER:
+            flow: FlowDTO = flows_repository.get_project_flow_by_name(name=classification)
+
+        if not flow or flow.send_to_llm:
 
             print("[ + Fallback + ]")
 
@@ -86,12 +90,6 @@ def route(
 
             if instructions == []:
                 instructions += settings.DEFAULT_INSTRUCTIONS
-
-            # TODO: Implement after changes on create_base_brain_structure usecase.
-            # response_language: str = get_language_codes(llm_config.language)
-
-            # if llm_config.model.lower() != "chatgpt":
-            #     instructions.append(f"Sempre responda em {response_language}")
 
             full_chunks: List[Dict] = get_chunks(
                 indexer,
@@ -154,9 +152,9 @@ def route(
                 llm_response=llm_response,
                 metadata=metadata.dict
             )
-            log_usecase.send_message()
 
             if fallback_flow:
+                log_usecase.send_message()
                 return dispatch(
                     message=message,
                     flow=fallback_flow,
@@ -165,15 +163,32 @@ def route(
                     user_email=flows_user_email
                 )
 
-            return dispatch(
-                llm_response=llm_response,
-                message=message,
-                direct_message=direct_message,
-                user_email=flows_user_email,
-                full_chunks=full_chunks,
-            )
+            if not flow:
+                log_usecase.send_message()
+                return dispatch(
+                    llm_response=llm_response,
+                    message=message,
+                    direct_message=direct_message,
+                    user_email=flows_user_email,
+                    full_chunks=full_chunks,
+                )
 
-        flow: FlowDTO = flows_repository.get_project_flow_by_name(name=classification)
+            # Actions with send_to_llm=True
+            log_usecase.update_log_field(
+                reflection_data={
+                    "tag": "action_started",
+                    "action_uuid": str(flow.pk),
+                    "action_name": flow.name,
+                }
+            )
+            log_usecase.send_message()
+            return dispatch(
+                message=message,
+                flow=flow,
+                flow_start=flow_start,
+                llm_response=llm_response,
+                user_email=flows_user_email
+            )
 
         log_usecase.update_log_field(
             project_id=message.project_uuid,
