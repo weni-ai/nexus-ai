@@ -32,7 +32,8 @@ from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 @celery_app.task(bind=True)
 def start_route(self, message: Dict) -> bool:  # pragma: no cover
 
-    redis_client = Redis(host=settings.REDIS_HOST, port=6379, db=0)  # Use Redis host from settings
+    # Initialize Redis client using the REDIS_URL from settings
+    redis_client = Redis.from_url(settings.REDIS_URL)
 
     print(f"[+ Message received: {message} +]")
 
