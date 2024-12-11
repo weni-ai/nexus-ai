@@ -1,7 +1,5 @@
-import os
 from typing import Dict
 
-from django.conf import settings
 from django.core.exceptions import PermissionDenied
 
 from rest_framework.viewsets import ModelViewSet
@@ -13,7 +11,6 @@ from nexus.actions.models import Flow, TemplateAction
 from nexus.actions.api.serializers import FlowSerializer, TemplateActionSerializer
 
 from nexus.usecases import projects
-from nexus.usecases.logs.create import CreateLogUsecase
 from nexus.usecases.actions.list import ListFlowsUseCase, ListTemplateActionUseCase
 from nexus.usecases.actions.create import (
     CreateFlowDTO,
@@ -34,34 +31,14 @@ from nexus.usecases.actions.update import (
 )
 from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase, FlowDoesNotExist
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
-from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
-from nexus.usecases.intelligences.retrieve import get_file_info
-
-from nexus.intelligences.llms.client import LLMClient
 
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.orgs.permissions import is_super_user
 from nexus.projects.permissions import has_project_permission
 from nexus.projects.exceptions import ProjectAuthorizationDenied
 
-from router.repositories.orm import (
-    ContentBaseORMRepository,
-    FlowsORMRepository,
-    MessageLogsRepository
-)
-from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
-from router.classifiers.zeroshot import ZeroshotClassifier
-from router.classifiers.pre_classification import PreClassification
-from router.classifiers.classification import Classification
-from router.entities import (
-    AgentDTO,
-    ContentBaseDTO,
-    LLMSetupDTO,
-    Message,
-)
-from router.clients.preview.simulator.broadcast import SimulateBroadcast
-from router.clients.preview.simulator.flow_start import SimulateFlowStart
-from router.route import route
+from router.entities import Message as UserMessage
+from router.tasks.tasks import start_route
 
 
 class SearchFlowView(APIView):
@@ -253,8 +230,7 @@ class FlowsViewset(
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-from router.entities import Message as UserMessage
-from router.tasks.tasks import start_route
+
 class MessagePreviewView(APIView):
 
     def post(self, request, *args, **kwargs):

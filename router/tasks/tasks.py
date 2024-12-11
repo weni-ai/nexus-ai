@@ -31,6 +31,7 @@ from nexus.usecases.intelligences.retrieve import get_file_info
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
 
+
 @celery_app.task(bind=True)
 def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: no cover
     def get_action_clients(preview: bool = False):
