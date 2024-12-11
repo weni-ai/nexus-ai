@@ -22,6 +22,7 @@ class CreateFlowDTO:
     group: str = "custom"
     prompt: str = None
     fallback: bool = False
+    send_to_llm: bool = False
     template: TemplateAction = None
     editable: bool = True
 
