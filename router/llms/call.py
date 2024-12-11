@@ -24,6 +24,8 @@ def call_llm(
     llm_config: LLMSetupDTO,
     last_messages: List[ContactMessageDTO]
 ) -> str:
+    
+    print(f"\n\n[+ Message: {message.text} +]\n\n")
 
     response = llm_model.request_gpt(
         instructions=instructions,

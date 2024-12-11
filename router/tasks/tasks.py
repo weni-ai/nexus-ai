@@ -215,6 +215,8 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         redis_client.delete(pending_task_key)
 
         log_usecase.update_status("S")
+        import time
+        time.sleep(5)
         return response
 
     except Exception as e:

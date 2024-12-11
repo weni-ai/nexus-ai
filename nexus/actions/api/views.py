@@ -1,5 +1,7 @@
 from typing import Dict
 
+from celery.exceptions import TaskRevokedError
+
 from django.core.exceptions import PermissionDenied
 
 from rest_framework.viewsets import ModelViewSet
@@ -259,6 +261,8 @@ class MessagePreviewView(APIView):
             return Response(data=response)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except TaskRevokedError:
+            return Response(data={})
 
 
 class GenerateActionNameView(APIView):
