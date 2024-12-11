@@ -74,6 +74,7 @@ class Flow(models.Model):
     )
 
     editable = models.BooleanField(default=True)
+    send_llm_response_to_flow = models.BooleanField(default=False)
 
     class Meta:
         constraints = [

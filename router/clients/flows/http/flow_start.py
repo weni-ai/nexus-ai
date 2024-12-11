@@ -19,19 +19,24 @@ class FlowStartHTTPClient(FlowStart):
         user: str,
         urns: List,
         user_message: str,
+        llm_message: str = None,
         msg_event: dict = None,
         attachments: list = None
     ) -> None:
 
         url = f"{self.__host}/api/v2/internals/flow_starts/"
+        params = {
+            "message": user_message,
+        }
+
+        if llm_message:
+            params.update({"answer": llm_message})
 
         payload = {
             "user": user,
             "flow": flow.uuid,
             "urns": urns,
-            "params": {
-                "message": user_message,
-            }
+            "params": params
         }
 
         if msg_event:

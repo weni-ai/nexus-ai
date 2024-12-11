@@ -64,34 +64,49 @@ def route(
     log_usecase,
     message_log=None
 ):
-    try:
-        content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
 
-        if classification == Classifier.CLASSIFICATION_OTHER:
+    def get_last_messages():
+        if settings.USE_REDIS_CACHE_CONTEXT:
+            last_messages: List[ContactMessageDTO] = message_logs_repository.list_cached_messages(message.project_uuid, message.contact_urn)
+        else:
+            last_messages: List[ContactMessageDTO] = message_logs_repository.list_last_messages(message.project_uuid, message.contact_urn, 5)
 
-            print("[ + Fallback + ]")
+        return last_messages
+    
+    def get_agent():
+        agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
+        agent = agent.set_default_if_null()
+        return agent
+    
+    def get_instructions():
+        instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
+        instructions: List[str] = [instruction.instruction for instruction in instructions]
 
-            fallback_flow: FlowDTO = flows_repository.project_flow_fallback(fallback=True)
+        if instructions == []:
+            instructions += settings.DEFAULT_INSTRUCTIONS
 
-            if settings.USE_REDIS_CACHE_CONTEXT:
-                last_messages: List[ContactMessageDTO] = message_logs_repository.list_cached_messages(message.project_uuid, message.contact_urn)
-            else:
-                last_messages: List[ContactMessageDTO] = message_logs_repository.list_last_messages(message.project_uuid, message.contact_urn, 5)
+        return instructions
+    
+    def get_clean_chunks(full_chunks):
+        chunks: List[str] = []
+        for chunk in full_chunks:
+            full_page = chunk.get("full_page").replace("\x00", "\uFFFD")
+            try:
+                full_page.encode("latin-1")
+                chunks.append(full_page)
+            except UnicodeEncodeError:
+                full_page = fix_encoding(full_page)
+                chunks.append(full_page)
 
-            agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
-            agent = agent.set_default_if_null()
+            chunk["full_page"] = full_page
+        return chunks
+    
+    def get_llm_response(bad_words_filter: bool = True):
+            last_messages: List[ContactMessageDTO] = get_last_messages()
+            agent: AgentDTO = get_agent()
+            instructions: List[str] = get_instructions()
 
-            instructions: List[InstructionDTO] = content_base_repository.list_instructions(content_base.uuid)
-            instructions: List[str] = [instruction.instruction for instruction in instructions]
-
-            if instructions == []:
-                instructions += settings.DEFAULT_INSTRUCTIONS
-
-            # TODO: Implement after changes on create_base_brain_structure usecase.
-            # response_language: str = get_language_codes(llm_config.language)
-
-            # if llm_config.model.lower() != "chatgpt":
-            #     instructions.append(f"Sempre responda em {response_language}")
+            print(f"[+ Instructions: {instructions} +]")
 
             full_chunks: List[Dict] = get_chunks(
                 indexer,
@@ -99,19 +114,7 @@ def route(
                 content_base_uuid=content_base.uuid
             )
 
-            print(f"[+ Instructions: {instructions} +]")
-
-            chunks: List[str] = []
-            for chunk in full_chunks:
-                full_page = chunk.get("full_page").replace("\x00", "\uFFFD")
-                try:
-                    full_page.encode("latin-1")
-                    chunks.append(full_page)
-                except UnicodeEncodeError:
-                    full_page = fix_encoding(full_page)
-                    chunks.append(full_page)
-
-                chunk["full_page"] = full_page
+            chunks: List[str] = get_clean_chunks(full_chunks)
 
             print(f"[ + Chunks: {chunks} + ]")
 
@@ -125,7 +128,25 @@ def route(
                 last_messages=last_messages,
             )
 
-            llm_response = bad_words_filter(llm_response)
+            if bad_words_filter:
+                llm_response = bad_words_filter(llm_response)
+
+            return llm_response
+
+    try:
+        content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
+
+        if classification == Classifier.CLASSIFICATION_OTHER:
+            # print("[ + Fallback + ]")
+            # fallback_flow: FlowDTO = flows_repository.project_flow_fallback(fallback=True)
+            llm_response: str = get_llm_response()
+
+
+            # TODO: Implement after changes on create_base_brain_structure usecase.
+            # response_language: str = get_language_codes(llm_config.language)
+
+            # if llm_config.model.lower() != "chatgpt":
+            #     instructions.append(f"Sempre responda em {response_language}")
 
             print(f"[+ LLM Response: {llm_response} +]")
 
@@ -174,6 +195,9 @@ def route(
             )
 
         flow: FlowDTO = flows_repository.get_project_flow_by_name(name=classification)
+
+        if flow.send_llm_response_to_flow:
+            pass
 
         log_usecase.update_log_field(
             project_id=message.project_uuid,
