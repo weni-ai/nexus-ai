@@ -1,3 +1,7 @@
+# 2.8.0
+## *Add*
+    - Send llm response to actions
+
 # 2.7.1
 ## *Add*
     - New commerce all in one customization api
