@@ -11,4 +11,9 @@ class SimulateFlowStart(FlowStart):
         self.__access_token = access_token
 
     def start_flow(self, flow: FlowDTO, user: str, urns: List, user_message: str, msg_event: dict = None, llm_response: str = None) -> None:
-        return {"type": "flowstart", "uuid": flow.uuid, "name": flow.name, "msg_event": msg_event, "llm_response": llm_response}
+        params = {
+            "message": user_message,
+        }
+        if llm_response:
+            params.update({"answer": llm_response})
+        return {"type": "flowstart", "uuid": flow.uuid, "name": flow.name, "msg_event": msg_event, "params": params}
