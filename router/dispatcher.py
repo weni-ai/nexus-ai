@@ -33,4 +33,5 @@ def dispatch(
         user=user_email,
         urns=urns,
         user_message=message.text,
+        llm_response=llm_response,
     )

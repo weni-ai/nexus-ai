@@ -20,7 +20,8 @@ class FlowStartHTTPClient(FlowStart):
         urns: List,
         user_message: str,
         msg_event: dict = None,
-        attachments: list = None
+        attachments: list = None,
+        llm_response: str = None,
     ) -> None:
 
         url = f"{self.__host}/api/v2/internals/flow_starts/"
@@ -39,6 +40,9 @@ class FlowStartHTTPClient(FlowStart):
 
         if attachments:
             payload["params"]["attachments"] = attachments
+
+        if llm_response:
+            payload["params"]["answer"] = llm_response
 
         params = {
             "token": self.__access_token

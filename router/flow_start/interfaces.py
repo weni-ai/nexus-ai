@@ -11,5 +11,6 @@ class FlowStart(ABC):  # pragma: no cover
         urns: List,
         user_message: str,
         msg_event: dict = None,
+        llm_response: str = None,
     ) -> None:
         pass
