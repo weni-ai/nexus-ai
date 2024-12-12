@@ -56,7 +56,8 @@ class CreateFlowsUseCase():
                 content_base=content_base,
                 action_type=create_dto.action_type,
                 action_template=create_dto.template,
-                group=create_dto.group
+                group=create_dto.group,
+                send_to_llm=create_dto.send_to_llm,
             )
         else:
             flow = Flow.objects.create(
@@ -66,7 +67,8 @@ class CreateFlowsUseCase():
                 fallback=create_dto.fallback,
                 content_base=content_base,
                 action_type=create_dto.action_type,
-                group=create_dto.group
+                group=create_dto.group,
+                send_to_llm=create_dto.send_to_llm,
             )
 
         self.event_manager_notify(
