@@ -22,6 +22,7 @@ class SendMessageHTTPClient(DirectMessage):
         }
 
         payload = json.dumps(payload).encode("utf-8")
+        print(headers)
 
         response = requests.post(url, data=payload, headers=headers)
         print("Resposta: ", response.text)

@@ -27,54 +27,10 @@ from router.repositories.orm import (
     MessageLogsRepository
 )
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
-from nexus.usecases.intelligences.retrieve import get_file_info
-from router.clients.preview.simulator.broadcast import SimulateBroadcast
-from router.clients.preview.simulator.flow_start import SimulateFlowStart
 
 
 @celery_app.task(bind=True)
-def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: no cover
-    def get_action_clients(preview: bool = False):
-        if preview:
-            flow_start = SimulateFlowStart(
-                os.environ.get(
-                    'FLOWS_REST_ENDPOINT'
-                ),
-                os.environ.get(
-                    'FLOWS_INTERNAL_TOKEN'
-                )
-            )
-            broadcast = SimulateBroadcast(
-                os.environ.get(
-                    'FLOWS_REST_ENDPOINT'
-                ),
-                os.environ.get(
-                    'FLOWS_INTERNAL_TOKEN'
-                ),
-                get_file_info
-            )
-            return broadcast, flow_start
-
-        broadcast = SendMessageHTTPClient(
-            os.environ.get(
-                'FLOWS_REST_ENDPOINT'
-            ),
-            os.environ.get(
-                'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
-            )
-        )
-        flow_start = FlowStartHTTPClient(
-            os.environ.get(
-                'FLOWS_REST_ENDPOINT'
-            ),
-            os.environ.get(
-                'FLOWS_INTERNAL_TOKEN'
-            )
-        )
-        return broadcast, flow_start
-
-    source = "preview" if preview else "router"
-    print(f"[+ Message from: {source} +]")
+def start_route(self, message: Dict) -> bool:  # pragma: no cover
 
     # Initialize Redis client using the REDIS_URL from settings
     redis_client = Redis.from_url(settings.REDIS_URL)
@@ -92,14 +48,27 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
     mailroom_msg_event['metadata'] = mailroom_msg_event.get('metadata') or {}
 
     log_usecase = CreateLogUsecase()
-
     try:
         project_uuid: str = message.project_uuid
         indexer = ProjectsUseCase().get_indexer_database_by_uuid(project_uuid)
         flows_repository = FlowsORMRepository(project_uuid=project_uuid)
 
-        broadcast, flow_start = get_action_clients(preview)
-
+        broadcast = SendMessageHTTPClient(
+            os.environ.get(
+                'FLOWS_REST_ENDPOINT'
+            ),
+            os.environ.get(
+                'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
+            )
+        )
+        flow_start = FlowStartHTTPClient(
+            os.environ.get(
+                'FLOWS_REST_ENDPOINT'
+            ),
+            os.environ.get(
+                'FLOWS_INTERNAL_TOKEN'
+            )
+        )
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(
@@ -133,7 +102,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         message_log = log_usecase.create_message_log(
             text=message.text,
             contact_urn=message.contact_urn,
-            source=source,
+            source="router",
         )
 
         llm_model = get_llm_by_project_uuid(project_uuid)
@@ -194,7 +163,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         redis_client.set(pending_task_key, self.request.id)
 
         # Generate response for the concatenated message
-        response: dict = route(
+        route(
             classification=classification,
             message=message,
             content_base_repository=content_base_repository,
@@ -215,9 +184,6 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         redis_client.delete(pending_task_key)
 
         log_usecase.update_status("S")
-
-        return response
-
     except Exception as e:
         print(f"[- START ROUTE - Error: {e} -]")
         if message.text:

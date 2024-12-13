@@ -1,7 +1,7 @@
+import os
 from typing import Dict
 
-from celery.exceptions import TaskRevokedError
-
+from django.conf import settings
 from django.core.exceptions import PermissionDenied
 
 from rest_framework.viewsets import ModelViewSet
@@ -13,6 +13,7 @@ from nexus.actions.models import Flow, TemplateAction
 from nexus.actions.api.serializers import FlowSerializer, TemplateActionSerializer
 
 from nexus.usecases import projects
+from nexus.usecases.logs.create import CreateLogUsecase
 from nexus.usecases.actions.list import ListFlowsUseCase, ListTemplateActionUseCase
 from nexus.usecases.actions.create import (
     CreateFlowDTO,
@@ -33,14 +34,34 @@ from nexus.usecases.actions.update import (
 )
 from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase, FlowDoesNotExist
 from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
+from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
+from nexus.usecases.intelligences.retrieve import get_file_info
+
+from nexus.intelligences.llms.client import LLMClient
 
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.orgs.permissions import is_super_user
 from nexus.projects.permissions import has_project_permission
 from nexus.projects.exceptions import ProjectAuthorizationDenied
 
-from router.entities import Message as UserMessage
-from router.tasks.tasks import start_route
+from router.repositories.orm import (
+    ContentBaseORMRepository,
+    FlowsORMRepository,
+    MessageLogsRepository
+)
+from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
+from router.classifiers.zeroshot import ZeroshotClassifier
+from router.classifiers.pre_classification import PreClassification
+from router.classifiers.classification import Classification
+from router.entities import (
+    AgentDTO,
+    ContentBaseDTO,
+    LLMSetupDTO,
+    Message,
+)
+from router.clients.preview.simulator.broadcast import SimulateBroadcast
+from router.clients.preview.simulator.flow_start import SimulateFlowStart
+from router.route import route
 
 
 class SearchFlowView(APIView):
@@ -237,8 +258,40 @@ class MessagePreviewView(APIView):
 
     def post(self, request, *args, **kwargs):
         try:
+            flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+            flow_start = SimulateFlowStart(
+                os.environ.get(
+                    'FLOWS_REST_ENDPOINT'
+                ),
+                os.environ.get(
+                    'FLOWS_INTERNAL_TOKEN'
+                )
+            )
+            broadcast = SimulateBroadcast(
+                os.environ.get(
+                    'FLOWS_REST_ENDPOINT'
+                ),
+                os.environ.get(
+                    'FLOWS_INTERNAL_TOKEN'
+                ),
+                get_file_info
+            )
+
+            content_base_repository = ContentBaseORMRepository()
+            message_logs_repository = MessageLogsRepository()
+
+            data = request.data
+
             project_uuid = kwargs.get("project_uuid")
+            text = data.get("text")
+            contact_urn = data.get("contact_urn")
+            attachments = data.get("attachments", [])
+            metadata = data.get("metadata", {})
+
             project = projects.get_project_by_uuid(project_uuid)
+            indexer = projects.ProjectsUseCase().get_indexer_database_by_project(
+                project
+            )
 
             has_project_permission(
                 user=request.user,
@@ -246,23 +299,123 @@ class MessagePreviewView(APIView):
                 method="post"
             )
 
-            data = request.data
-            message = UserMessage(
+            log_usecase = CreateLogUsecase()
+
+            message = Message(
                 project_uuid=project_uuid,
-                text=data.get("text"),
-                contact_urn=data.get("contact_urn"),
-                attachments=data.get("attachments", []),
-                metadata=data.get("metadata", {})
+                text=text,
+                contact_urn=contact_urn,
+                attachments=attachments,
+                metadata=metadata
             )
 
-            task = start_route.delay(message.__dict__, preview=True)
-            response = task.wait()
+            print(
+                f"[+ Message: {message.text} - Contact: {message.contact_urn} - Project: {message.project_uuid} +]"
+            )
+
+            project_uuid: str = message.project_uuid
+
+            flows_repository = FlowsORMRepository(project_uuid=project_uuid)
+
+            content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(
+                message.project_uuid
+            )
+
+            agent: AgentDTO = content_base_repository.get_agent(
+                content_base.uuid
+            )
+            agent = agent.set_default_if_null()
+
+            llm_model = get_llm_by_project_uuid(project_uuid)
+
+            llm_config = LLMSetupDTO(
+                model=llm_model.model.lower(),
+                model_version=llm_model.setup.get("version"),
+                temperature=llm_model.setup.get("temperature"),
+                top_k=llm_model.setup.get("top_k"),
+                top_p=llm_model.setup.get("top_p"),
+                token=llm_model.setup.get("token"),
+                max_length=llm_model.setup.get("max_length"),
+                max_tokens=llm_model.setup.get("max_tokens"),
+                language=llm_model.setup.get(
+                    "language", settings.WENIGPT_DEFAULT_LANGUAGE)
+            )
+
+            print(
+                f"[+ LLM model: {llm_config.model}:{llm_config.model_version} +]"
+            )
+
+            pre_classification = PreClassification(
+                flows_repository=flows_repository,
+                message=message,
+                msg_event={},
+                flow_start=flow_start,
+                user_email=flows_user_email
+            )
+
+            pre_classification_response = pre_classification.pre_classification_preview()
+            if pre_classification_response:
+                return Response(pre_classification_response)
+
+            classification_handler = Classification(
+                flows_repository=flows_repository,
+                message=message,
+                msg_event={},
+                flow_start=flow_start,
+                user_email=flows_user_email
+            )
+
+            started_flow = classification_handler.non_custom_actions_preview()
+            if started_flow:
+                return Response(started_flow)
+
+            message_log = log_usecase.create_message_log(
+                text=text,
+                contact_urn=contact_urn,
+                source="preview"
+            )
+
+            if project_uuid == os.environ.get("DEMO_FUNC_CALLING_PROJECT_UUID"):
+                classifier = ChatGPTFunctionClassifier(agent_goal=agent.goal)
+            else:
+                classifier = ZeroshotClassifier(chatbot_goal=agent.goal)
+
+            classification = classification_handler.custom_actions(
+                classifier=classifier,
+                language=llm_config.language
+            )
+
+            llm_client = LLMClient.get_by_type(llm_config.model)
+            llm_client: LLMClient = list(llm_client)[0](
+                model_version=llm_config.model_version
+            )
+
+            if llm_config.model.lower() != "wenigpt":
+                llm_client.api_key = llm_config.token
+
+            print(f"[+ Classfication: {classification} +]")
+
+            response: dict = route(
+                classification=classification,
+                message=message,
+                content_base_repository=content_base_repository,
+                flows_repository=flows_repository,
+                message_logs_repository=message_logs_repository,
+                indexer=indexer(),
+                llm_client=llm_client,
+                direct_message=broadcast,
+                flow_start=flow_start,
+                llm_config=llm_config,
+                flows_user_email=flows_user_email,
+                log_usecase=log_usecase,
+                message_log=message_log
+            )
+
+            log_usecase.update_status("S")
 
             return Response(data=response)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
-        except TaskRevokedError:
-            return Response(data={"type": "broadcast", "message": "", "fonts": []})
 
 
 class GenerateActionNameView(APIView):
