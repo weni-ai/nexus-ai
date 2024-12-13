@@ -84,7 +84,7 @@ class TagPercentageViewSet(
         message_logs = message_logs.exclude(message__status="F")
 
         if not message_logs.exists():
-            return Response({"error": "No logs found for the given date range"}, status=404)
+            return Response([], status=200)
 
         tag_counts = message_logs.aggregate(action_count=Count(Case(When(reflection_data__tag='action_started', then=1), output_field=IntegerField())))
 
@@ -97,7 +97,7 @@ class TagPercentageViewSet(
 
         total_logs = sum(tag_counts.values())
         if total_logs == 0:
-            return Response({"error": "No logs found for the given date range"}, status=404)
+            return Response([], status=200)
 
         action_percentage = (tag_counts['action_count'] / total_logs) * 100
         succeed_percentage = (tag_counts['succeed_count'] / total_logs) * 100
@@ -176,6 +176,9 @@ class MessageHistoryViewset(
                 "failed": "F",
             }
             logs = [log for log in logs if log.message.response_status == status.get(tag_param) and log.reflection_data.get("tag") != "action_started"]
+
+        if not logs:
+            return MessageLog.objects.none()
 
         return logs
 

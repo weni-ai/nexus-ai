@@ -298,7 +298,6 @@ class MessageHistoryViewsetTestCase(TestCase):
         )
         response.render()
         content = json.loads(response.content)
-
         self.assertEqual(response.status_code, 200)
         self.assertEquals(len(content.get("results")), 10)
 
@@ -315,6 +314,21 @@ class MessageHistoryViewsetTestCase(TestCase):
         content = json.loads(response.content)
         self.assertEqual(response.status_code, 200)
         self.assertEquals(len(content.get("results")), 0)
+
+    def test_empty_logs_data(self):
+        MessageLog.objects.all().delete()
+
+        request = self.factory.get(f"/api/{self.project.uuid}/message_history/?page_size=100&started_day={self.started_day}&ended_day={self.ended_day}")
+        force_authenticate(request, user=self.user)
+        response = MessageHistoryViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(content.get("results")), 0)
 
 
 class TagPercentageViewSetTestCase(APITestCase):
@@ -351,8 +365,8 @@ class TagPercentageViewSetTestCase(APITestCase):
         response = self.view(request, project_uuid=str(self.project.uuid))
         response.render()
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data['error'], "No logs found for the given date range")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
 
     def test_get_tag_percentages_invalid_date(self):
         request = self.factory.get(self.url, {'started_day': 'invalid-date', 'ended_day': self.ended_day})
