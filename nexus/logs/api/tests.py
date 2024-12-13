@@ -365,8 +365,8 @@ class TagPercentageViewSetTestCase(APITestCase):
         response = self.view(request, project_uuid=str(self.project.uuid))
         response.render()
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data['error'], "No logs found for the given date range")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
 
     def test_get_tag_percentages_invalid_date(self):
         request = self.factory.get(self.url, {'started_day': 'invalid-date', 'ended_day': self.ended_day})
