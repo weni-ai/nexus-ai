@@ -1,3 +1,7 @@
+# 2.8.1
+## *Fix*
+    - Update router task to enable msg queueing
+
 # 2.8.0
 ## *Add*
     - Send llm response to actions
