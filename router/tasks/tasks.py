@@ -152,10 +152,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             ),
         )
 
-        if message.project_uuid == os.environ.get("DEMO_FUNC_CALLING_PROJECT_UUID"):
-            classifier = ChatGPTFunctionClassifier(agent_goal=agent.goal)
-        else:
-            classifier = ZeroshotClassifier(chatbot_goal=agent.goal)
+        classifier = ChatGPTFunctionClassifier(agent_goal=agent.goal)
 
         classification = classification_handler.custom_actions(
             classifier=classifier,
