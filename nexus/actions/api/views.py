@@ -265,7 +265,7 @@ class MessagePreviewView(APIView):
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
         except TaskRevokedError:
-            return Response(data={"type": "broadcast", "message": "", "fonts": []})
+            return Response(data={"type": "cancelled", "message": "", "fonts": []})
 
 
 class GenerateActionNameView(APIView):
