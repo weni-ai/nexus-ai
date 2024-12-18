@@ -234,7 +234,7 @@ ACTION_MODEL_GROUPS = {
     "Action": ["Flow"],
     "Customization": ["ContentBaseAgent", "ContentBaseInstruction"],
     "Content": ["ContentBase", "ContentBaseFile", "ContentBaseLink", "ContentBaseText"],
-    "Config": ["LLM"],
+    "Config": ["LLM", "Project"],
 }
 
 
@@ -265,6 +265,11 @@ class RecentActivitiesViewset(
 
         filtered_action_models = [model for models in ACTION_MODEL_GROUPS.values() for model in models]
         filter_params['action_model__in'] = filtered_action_models
+
+        model_group = self.request.query_params.get('model_group')
+        if model_group:
+            models_in_group = ACTION_MODEL_GROUPS.get(model_group, [])
+            filter_params['action_model__in'] = models_in_group
 
         queryset = RecentActivities.objects.filter(**filter_params).select_related('created_by').order_by('-created_at').exclude(action_details__isnull=True)
 
