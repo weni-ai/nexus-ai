@@ -17,6 +17,7 @@ from .exceptions import (
     ContentBaseLinkDoesNotExist,
 )
 from nexus.projects.permissions import has_project_permission
+from nexus.intelligences.models import ContentBaseLink
 
 
 class RetrieveIntelligenceUseCase():
@@ -122,6 +123,18 @@ class RetrieveContentBaseLinkUseCase():
         if not has_permission:
             raise IntelligencePermissionDenied()
         return get_by_content_base_link_uuid(contentbaselink_uuid)
+
+    def get_content_base_link_by_link(self, link: str, content_base_uuid: str):
+
+        links = ContentBaseLink.objects.filter(
+            link=link,
+            content_base__uuid=content_base_uuid
+        )
+
+        if not links.exists():
+            raise ContentBaseLink.DoesNotExist()
+
+        return links
 
 
 def get_file_info(file_uuid: str) -> Dict:
