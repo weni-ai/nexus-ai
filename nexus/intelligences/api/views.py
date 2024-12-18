@@ -949,7 +949,7 @@ class RouterRetailViewSet(views.APIView):
 
         return Response(response, status=200)
 
-    def destroy(self, request, project_uuid):
+    def delete(self, request, project_uuid):
 
         user: User = request.user
         module_permission = user.has_perm("users.can_communicate_internally")
