@@ -1,3 +1,8 @@
+# 2.8.3
+## *Fix*
+    - Missing RecentActivities api filters
+    - Brain_on status update not showing up on RecentActivities API
+
 # 2.8.2
 ## *Fix*
     - Change message type in message preview when Task revoked
