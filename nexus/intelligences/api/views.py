@@ -853,6 +853,42 @@ class RouterContentBaseViewSet(views.APIView):
 
 class RouterRetailViewSet(views.APIView):
 
+    def _create_links(
+        self,
+        links: list,
+        user: User,
+        content_base: ContentBase,
+        project: Project
+    ) -> list:
+        created_links = []
+        if links:
+            for link in links:
+
+                link_serializer = ContentBaseLinkSerializer(data={"link": link})
+                link_serializer.is_valid(raise_exception=True)
+                link_dto = intelligences.ContentBaseLinkDTO(
+                    link=link,
+                    user_email=user.email,
+                    content_base_uuid=str(content_base.uuid)
+                )
+                content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
+
+                if project.indexer_database == Project.BEDROCK:
+                    bedrock_send_link.delay(
+                        link=link,
+                        user_email=user.email,
+                        content_base_link_uuid=str(content_base_link.uuid)
+                    )
+                else:
+                    send_link.delay(
+                        link=link,
+                        user_email=user.email,
+                        content_base_link_uuid=str(content_base_link.uuid)
+                    )
+
+                link_serializer = CreatedContentBaseLinkSerializer(content_base_link).data
+                created_links.append(link_serializer)
+
     # TODO - Refactor this view to have only one searializer and no dependencies
     def post(self, request, project_uuid):
         user: User = request.user
@@ -871,44 +907,21 @@ class RouterRetailViewSet(views.APIView):
 
         project = ProjectsUseCase().get_project_by_content_base_uuid(content_base.uuid)
 
-        for link in links:
-
-            link_serializer = ContentBaseLinkSerializer(data={"link": link})
-            link_serializer.is_valid(raise_exception=True)
-            link_dto = intelligences.ContentBaseLinkDTO(
-                link=link,
-                user_email=user.email,
-                content_base_uuid=str(content_base.uuid)
-            )
-            content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
-
-            if project.indexer_database == Project.BEDROCK:
-                bedrock_send_link.delay(
-                    link=link,
-                    user_email=user.email,
-                    content_base_link_uuid=str(content_base_link.uuid)
-                )
-            else:
-                send_link.delay(
-                    link=link,
-                    user_email=user.email,
-                    content_base_link_uuid=str(content_base_link.uuid)
-                )
-
-            link_serializer = CreatedContentBaseLinkSerializer(content_base_link).data
+        created_links = self._create_links(links, user, content_base, project)
 
         # ContentBasePersonalization
 
         agent_data = request.data.get("agent")
-        default_instructions: list = settings.DEFAULT_RETAIL_INSTRUCTIONS
 
         instructions_objects = []
-        for instruction in default_instructions:
-            instructions_objects.append(
-                {
-                    "instruction": instruction,
-                }
-            )
+        if not content_base.instructions.exists():
+            default_instructions: list = settings.DEFAULT_RETAIL_INSTRUCTIONS
+            for instruction in default_instructions:
+                instructions_objects.append(
+                    {
+                        "instruction": instruction,
+                    }
+                )
 
         agent = {
             "agent": agent_data,
@@ -929,12 +942,56 @@ class RouterRetailViewSet(views.APIView):
         if personalization_serializer.is_valid():
             personalization_serializer.save()
 
-        response = [
-            personalization_serializer.data,
-            link_serializer
-        ]
+        response = {
+            "personalization": personalization_serializer.data,
+            "links": created_links
+        }
 
         return Response(response, status=200)
+
+    def destroy(self, request, project_uuid):
+
+        user: User = request.user
+        module_permission = user.has_perm("users.can_communicate_internally")
+
+        if not module_permission:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+        use_case = intelligences.RetrieveContentBaseUseCase()
+        content_base = use_case.get_default_by_project(
+            project_uuid,
+            user.email,
+            is_superuser=module_permission
+        )
+        content_base_uuid: str = content_base.uuid
+
+        use_case = intelligences.RetrieveContentBaseLinkUseCase()
+        existing_links = use_case.get_content_base_link_by_link(
+            content_base_uuid=content_base_uuid,
+            link=request.data.get("link")
+        )
+
+        for link in existing_links:
+            project_use_case = ProjectsUseCase()
+            project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
+            indexer = project_use_case.get_indexer_database_by_project(project)
+
+            use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
+            use_case.delete_by_object(
+                link,
+            )
+
+            if project.indexer_database == Project.BEDROCK:
+                start_ingestion_job.delay("", post_delete=True)
+
+            event_manager.notify(
+                event="contentbase_link_activity",
+                action_type="D",
+                content_base_link=link,
+                user=user
+            )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class LLMViewset(views.APIView):
