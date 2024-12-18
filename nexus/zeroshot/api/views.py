@@ -9,6 +9,8 @@ from nexus.zeroshot.client import InvokeModel
 from nexus.zeroshot.api.permissions import ZeroshotTokenPermission
 from nexus.zeroshot.models import ZeroshotLogs
 
+from django.conf import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,7 @@ class ZeroShotFastPredictAPIView(APIView):
     def post(self, request):
         data = request.data
         try:
+
             invoke_model = InvokeModel(data)
             response = invoke_model.invoke()
 
@@ -30,7 +33,8 @@ class ZeroShotFastPredictAPIView(APIView):
                 other=response["output"].get("other", False),
                 options=data.get("options"),
                 nlp_log=str(json.dumps(response)),
-                language=data.get("language")
+                language=data.get("language"),
+                model=settings.DEFAULT_CLASSIFICATION_MODEL
             )
 
             return Response(status=200, data=response if response.get("output") else {"error": response})

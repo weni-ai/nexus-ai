@@ -7,6 +7,9 @@ from django.conf import settings
 from nexus.zeroshot.format_classification import FormatClassification
 from nexus.zeroshot.format_prompt import FormatPrompt
 
+from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
+from router.entities.flow import FlowDTO
+
 
 class InvokeModel:
     def __init__(
@@ -112,8 +115,47 @@ class InvokeModel:
             "bedrock": self._invoke_bedrock
         }.get(model_backend)
 
+    def _invoke_function_calling(self):
+        # request_data = {
+        #     "context": "Example context",
+        #     "language": "por",
+        #     "text": "This is a sample text",
+        #     "options": [
+        #         {
+        #         "class": "option-class-1",
+        #         "context": "Option 1 context"
+        #         },
+        #         {
+        #         "class": "option-class-2",
+        #         "context": "Option 2 context"
+        #         },
+        #         {
+        #         "class": "option-class-3",
+        #         "context": "Option 3 context"
+        #         }
+        #     ]
+        # }
+
+
+        classifier = ChatGPTFunctionClassifier(
+            agent_goal=self.zeroshot_data.get("context"),
+        )
+
+        flow_dto_list = []
+        for option in self.zeroshot_data.get("options"):
+            flow_dto_list.append(FlowDTO(name=option.get("class"), prompt=option.get("context")))
+
+        prediction = classifier.predict(
+            message=self.zeroshot_data.get("text"),
+            flows=flow_dto_list,
+            language=self.zeroshot_data.get("language")
+        )
+
+
     def invoke(self):
         prompt = self._get_prompt(self.zeroshot_data)
+        if settings.DEFAULT_CLASSIFICATION_MODEL != "zeroshot":
+            return self._invoke_function_calling()
         invoke_zeroshot = self._invoke_zeroshot(self.model_backend)
         if invoke_zeroshot:
             return invoke_zeroshot(prompt)
