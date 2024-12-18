@@ -59,7 +59,7 @@ def get_by_content_base_file_uuid(content_base_uuid: str) -> ContentBaseFile:
         raise (f"[ ContentBaseFile ] - ContentBaseFile error to get - error: `{exception}`")
 
 
-def get_by_content_base_link_uuid(content_base_uuid: str) -> ContentBaseFile:
+def get_by_content_base_link_uuid(content_base_uuid: str) -> ContentBaseLink:
     try:
         return ContentBaseLink.objects.get(uuid=content_base_uuid)
     except ContentBaseLink.DoesNotExist:
