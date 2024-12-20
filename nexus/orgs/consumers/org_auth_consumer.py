@@ -28,7 +28,7 @@ class OrgAuthConsumer(EDAConsumer):
             create()
         except UserDoesNotExists:
             CreateUserUseCase().create_user(org_auth_dto.email)
-            create(org_auth_dto)         
+            create(org_auth_dto)
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
