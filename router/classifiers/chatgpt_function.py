@@ -88,11 +88,16 @@ class ChatGPTFunctionClassifier(Classifier):
         self,
         message: str,
         flows: List[FlowDTO],
+        custom_prompt: str = None,
         language: str = "por"
     ) -> str:
 
         print(f"[+ ChatGPT message function classification: {message} ({language}) +]")
-        formated_prompt = self.get_prompt()
+
+        formated_prompt = custom_prompt
+        if not custom_prompt:
+            formated_prompt = self.get_prompt()
+
         msg = [
             {
                 "role": "system",

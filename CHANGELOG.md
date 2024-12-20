@@ -1,3 +1,7 @@
+# 2.8.2
+## *Fix*
+    - Change message type in message preview when Task revoked
+
 # 2.8.1
 ## *Fix*
     - Update router task to enable msg queueing
