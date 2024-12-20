@@ -1,3 +1,7 @@
+# 2.8.4
+## *Fix*
+    - OpenAI class instance not handleling api_token
+
 # 2.8.3
 ## *Fix*
     - Missing RecentActivities api filters
