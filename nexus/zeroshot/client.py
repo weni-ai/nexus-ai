@@ -116,41 +116,31 @@ class InvokeModel:
         }.get(model_backend)
 
     def _invoke_function_calling(self):
-        # request_data = {
-        #     "context": "Example context",
-        #     "language": "por",
-        #     "text": "This is a sample text",
-        #     "options": [
-        #         {
-        #         "class": "option-class-1",
-        #         "context": "Option 1 context"
-        #         },
-        #         {
-        #         "class": "option-class-2",
-        #         "context": "Option 2 context"
-        #         },
-        #         {
-        #         "class": "option-class-3",
-        #         "context": "Option 3 context"
-        #         }
-        #     ]
-        # }
-
 
         classifier = ChatGPTFunctionClassifier(
             agent_goal=self.zeroshot_data.get("context"),
         )
 
         flow_dto_list = []
-        for option in self.zeroshot_data.get("options"):
+        options = self.zeroshot_data.get("options", [])
+        for option in options:
             flow_dto_list.append(FlowDTO(name=option.get("class"), prompt=option.get("context")))
 
-        prediction = classifier.predict(
+        prediction: str = classifier.predict(
             message=self.zeroshot_data.get("text"),
             flows=flow_dto_list,
             language=self.zeroshot_data.get("language")
         )
 
+        formated_prediction = {
+            "output": prediction
+        }
+
+        classification_formater = FormatClassification(formated_prediction)
+        formatted_classification = classification_formater.get_classification(self.zeroshot_data)
+
+        response = {"output": formatted_classification}
+        return response
 
     def invoke(self):
         prompt = self._get_prompt(self.zeroshot_data)
