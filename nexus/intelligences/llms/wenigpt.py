@@ -15,7 +15,7 @@ class WeniGPTClient(LLMClient):
     code = "wenigpt"
     versions = settings.WENIGPT_VERSIONS
 
-    def __init__(self, model_version: str):
+    def __init__(self, model_version: str, **kwargs):
         self.validate_version(model_version)
 
         self.url = self.get_url(model_version)
