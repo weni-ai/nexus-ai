@@ -164,11 +164,9 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
         llm_client = LLMClient.get_by_type(llm_config.model)
         llm_client: LLMClient = list(llm_client)[0](
-            model_version=llm_config.model_version
+            model_version=llm_config.model_version,
+            api_key=llm_config.token
         )
-
-        if llm_config.model.lower() != "wenigpt":
-            llm_client.api_key = llm_config.token
 
         # Check if there's a pending response for this user
         pending_response_key = f"response:{message.contact_urn}"
