@@ -1,3 +1,7 @@
+# 2.8.5
+## *Add*
+    - Small improvements to the commerce route api
+
 # 2.8.4
 ## *Fix*
     - OpenAI class instance not handleling api_token
