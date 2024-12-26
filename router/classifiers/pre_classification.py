@@ -1,6 +1,6 @@
 from router.repositories.orm import FlowsORMRepository
 
-from router.classifiers.safe_guard import SafeGuard
+from router.classifiers.safe_guard import SafeGuardTogetherAI
 from router.classifiers.prompt_guard import PromptGuard
 from router.flow_start.interfaces import FlowStart
 
@@ -45,7 +45,7 @@ class PreClassification:
     def safety_check(self, start_flow: bool) -> bool:
         flow_dto = self.flows_repository.get_classifier_flow_by_action_type("safe_guard")
         if flow_dto:
-            safeguard = SafeGuard()
+            safeguard = SafeGuardTogetherAI()
             is_safe = safeguard.classify(self.message_text)
             if is_safe:
                 return self.flow_started
