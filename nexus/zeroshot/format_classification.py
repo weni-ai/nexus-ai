@@ -11,6 +11,9 @@ class FormatClassification:
         self.classification_data = classification_data
 
     def get_classification(self, zeroshot_data):
+        if settings.DEFAULT_CLASSIFICATION_MODEL != "zeroshot":
+            return self._get_function_calling_classification(zeroshot_data)
+
         if self.model_backend == "runpod":
             return self._get_runpod_classification(zeroshot_data)
         elif self.model_backend == "bedrock":
@@ -55,3 +58,16 @@ class FormatClassification:
     def _get_bedrock_classification(self, zeroshot_data):
         output_text = self.classification_data.get("outputs")[0].get("text").strip()
         return self._get_formatted_output(output_text, zeroshot_data)
+
+    def _get_function_calling_classification(self, zeroshot_data):
+        output_text = self.classification_data.get("output")
+        classification = {"other": True, "classification": self._get_data_none_class()}
+
+        if output_text:
+            response_prepared = output_text.strip().strip(".").strip("\n").strip("'").lower()
+            all_classes = [option.get("class").lower() for option in zeroshot_data.get("options", [])]
+
+            if response_prepared in all_classes:
+                classification["other"] = False
+                classification["classification"] = response_prepared
+        return classification
