@@ -1,12 +1,13 @@
 import uuid
 import json
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 from os.path import basename
 
 import boto3
 from django.conf import settings
 
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
+from nexus.agents.src.utils.bedrock_agent_helper import AgentsForAmazonBedrock
 
 
 class BedrockFileDatabase(FileDataBase):
@@ -23,6 +24,47 @@ class BedrockFileDatabase(FileDataBase):
         self.bedrock_agent = self.__get_bedrock_agent()
         self.bedrock_agent_runtime = self.__get_bedrock_agent_runtime()
         self.bedrock_runtime = self.__get_bedrock_runtime()
+
+        self.agent_for_amazon_bedrock = AgentsForAmazonBedrock
+        self.agent_foundation_model = [
+            'anthropic.claude-3-sonnet-20nexus/task_managers/file_database/bedrock.py:34240229-v1:0',
+            'anthropic.claude-3-5-sonnet-20240620-v1:0',
+            'anthropic.claude-3-haiku-20240307-v1:0'
+        ]
+
+    def create_supervisor(self, supervisor_name, supervisor_description, supervisor_instructions):
+        supervisor_id, supervisor_alias, supervisor_arn = self.agent_for_amazon_bedrock().create_agent(
+            agent_collaboration='SUPERVISOR_ROUTER',
+            agent_name=supervisor_name,
+            agent_description=supervisor_description,
+            agent_instructions=supervisor_instructions,
+            model_ids=self.agent_foundation_model,
+        )
+        return supervisor_id
+
+    def create_agent_alias(self, agent_id: str, alias_name: str):
+        sub_agent_alias_id, sub_agent_alias_arn = self.agent_for_amazon_bedrock().create_agent_alias(
+            agent_id=agent_id, alias_name=alias_name
+        )
+        return sub_agent_alias_id, sub_agent_alias_arn
+
+    def associate_sub_agents(self, supervisor_id: str, agents_list: str) -> str:
+        supervisor_agent_alias_id, supervisor_agent_alias_arn = self.agent_for_amazon_bedrock().associate_sub_agents(
+            supervisor_agent_id=supervisor_id,
+            sub_agents_list=agents_list,
+        )
+        return supervisor_agent_alias_id
+
+    def create_agent(self, agent_name: str, agent_description: str, agent_instructions: str) -> Tuple[str, str, str]:
+        agent_id, agent_alias, agent_arn = self.agent_for_amazon_bedrock().create_agent(
+            agent_name=agent_name,
+            agent_description=agent_description,
+            agent_instructions=agent_instructions,
+            model_ids=self.agent_foundation_model,
+            agent_collaboration="DISABLED",
+            code_interpretation=False
+        )
+        return agent_id, agent_alias, agent_arn
 
     def invoke_model(self, prompt: str, config_data: Dict):
         data = {
