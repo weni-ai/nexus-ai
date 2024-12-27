@@ -82,6 +82,7 @@ INSTALLED_APPS = [
     'nexus.logs',
     'nexus.sentry',
     'nexus.zeroshot',
+    'nexus.agents',
 ]
 
 MIDDLEWARE = [

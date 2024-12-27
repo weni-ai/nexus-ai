@@ -1,3 +1,5 @@
+from django.template.defaultfilters import slugify
+
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.projects.exceptions import ProjectDoesNotExist
@@ -10,6 +12,8 @@ from nexus.usecases.intelligences.create import (
     create_integrated_intelligence,
     create_llm
 )
+from nexus.usecases.agents import AgentUsecase
+
 from .create import ProjectAuthUseCase
 from nexus.usecases import orgs
 from nexus.events import event_manager
@@ -26,6 +30,7 @@ class ProjectsUseCase:
         event_manager_notify=event_manager.notify,
     ) -> None:
         self.event_manager_notify = event_manager_notify
+        pass
 
     def get_by_uuid(self, project_uuid: str) -> Project:
         try:
@@ -58,7 +63,7 @@ class ProjectsUseCase:
         usecase = CreateContentBaseUseCase(
             event_manager_notify=self.event_manager_notify,
         )
-        usecase.create_contentbase(
+        content_base = usecase.create_contentbase(
             intelligence_uuid=base_intelligence.uuid,
             user_email=user_email,
             title=project_dto.name,
@@ -77,6 +82,22 @@ class ProjectsUseCase:
             }
         )
         create_llm(llm_dto=llm_dto)
+        return content_base
+
+    def create_agent_builder_base(
+        self,
+        project_uuid: str,
+        supervisor_name: str,
+        supervisor_description: str,
+        supervisor_instructions: str,
+    ):
+        agents_usecase = AgentUsecase(BedrockFileDatabase)
+        agents_usecase.create_supervisor(
+            project_uuid=project_uuid,
+            supervisor_name=supervisor_name,
+            supervisor_description=supervisor_description,
+            supervisor_instructions=supervisor_instructions,
+        )
 
     def create_project(
         self,
@@ -117,6 +138,16 @@ class ProjectsUseCase:
                 consumer_msg=auth_consumer_msg
             )
 
+        supervisor_name = slugify(f"{project.name}-{project.uuid}-supervisor")
+        supervisor_description = f"Supervisor Agent for {project.name} {project.uuid}"
+        supervisor_instructions = settings.DEFAULT_AGENT_GOAL
+
+        self.create_agent_builder_base(# TODO: SET ENV VAR TO CHOOSE WHICH PROJECTS CREATE WITH AB 2.0
+            str(project.uuid),
+            supervisor_name=supervisor_name,
+            supervisor_description=supervisor_description,
+            supervisor_instructions=supervisor_instructions,
+        )
         return project
 
     def get_indexer_database_by_uuid(self, project_uuid: str):
