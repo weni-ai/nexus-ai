@@ -216,7 +216,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
         return response
 
-    except Exception as e:
+    except ZeroDivisionError as e:
         print(f"[- START ROUTE - Error: {e} -]")
         if message.text:
             log_usecase.update_status("F", exception_text=e)
