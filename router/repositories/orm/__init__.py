@@ -93,7 +93,7 @@ class FlowsORMRepository(Repository):
         name: str
     ):
 
-        flow = self.flows.filter(name=name).first()
+        flow = self.flows.filter(name__iexact=name).first()
 
         if not flow:
             raise FlowDoesNotExist
