@@ -33,7 +33,7 @@ class PushAgents(APIView):
         agents = []
 
         for agent_dto in agents_dto:
-            agent: Agent = AgentUsecase().create_agent(agent_dto, project_uuid)
+            agent: Agent = AgentUsecase().create_agent(request.user, agent_dto, project_uuid)
 
             agents.append({"agent_name": agent.display_name, "agent_external_id": agent.external_id})
 

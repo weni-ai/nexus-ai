@@ -20,6 +20,10 @@ class AgentUsecase:
     def __init__(self, external_agent_client=BedrockFileDatabase):
         self.external_agent_client = external_agent_client()
 
+    def prepare_agent(self, agent_id: str):
+        self.external_agent_client.prepare_agent(agent_id)
+        return
+
     def create_external_supervisor(
         self,
         supervisor_name: str,
@@ -45,7 +49,7 @@ class AgentUsecase:
         )
         return agent_alias_id, agent_alias_arn
 
-    def create_agent(self, agent_dto: AgentDTO, project_uuid: str, alias_name: str = "v1"):
+    def create_agent(self, user, agent_dto: AgentDTO, project_uuid: str, alias_name: str = "v1"):
         def format_instructions(instructions: List[str]):
             return "\n".join(instructions)
 
@@ -55,11 +59,17 @@ class AgentUsecase:
             agent_description=agent_dto.description,
             agent_instructions=format_instructions(agent_dto.instructions),
         )
+
+        self.prepare_agent(external_id)
+
+        self.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
+
         sub_agent_alias_id, sub_agent_alias_arn = self.create_external_agent_alias(
             agent_id=external_id, alias_name=alias_name
         )
 
         agent = Agent.objects.create(
+            created_by=user,
             project_id=project_uuid,
             external_id=external_id,
             slug=agent_slug,
