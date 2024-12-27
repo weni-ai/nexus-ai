@@ -110,13 +110,14 @@ class InvokeModel:
         return response
 
     def _invoke_zeroshot(self, model_backend: str):
+        print("[ + INVOKE ZEROSHOT + ]")
         return {
             "runpod": self._invoke_runpod,
             "bedrock": self._invoke_bedrock
         }.get(model_backend)
 
     def _invoke_function_calling(self):
-
+        print("[ + INVOKE FUNCTION CALLING + ]")
         classifier = ChatGPTFunctionClassifier(
             agent_goal=self.zeroshot_data.get("context"),
         )
@@ -140,6 +141,7 @@ class InvokeModel:
         formatted_classification = classification_formater.get_classification(self.zeroshot_data)
 
         response = {"output": formatted_classification}
+        print("Function calling response: ", response)
         return response
 
     def invoke(self):

@@ -12,7 +12,7 @@ class NexusZeroshotClient:
         self.prompt = prompt
 
     def fast_predict(self, message: str, actions: List[Dict], language: str = "por"):
-        print("[+ Calling Zeroshot in Nexus +]")
+        print("[+ NexusZeroshotClient FastPredict +]")
         zeroshot_data = {
             'context': self.prompt,
             'language': language,
