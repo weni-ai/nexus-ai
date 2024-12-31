@@ -103,3 +103,23 @@ class AgentUsecase:
             external_id=external_id
         )
         return
+
+    def yaml_dict_to_dto(
+        self,
+        yaml: dict
+    ) -> list[AgentDTO]:
+
+        agents = []
+        for agent_key, agent_value in yaml.get("agents", {}).items():
+            agents.append(
+                AgentDTO(
+                    slug=agent_key,
+                    name=agent_value.get("name"),
+                    description=agent_value.get("description"),
+                    instructions=agent_value.get("instructions"),
+                    guardrails=agent_value.get("guardrails"),
+                    skills=agent_value.get("skills"),
+                    model=agent_value.get("model")
+                )
+            )
+        return agents
