@@ -10,6 +10,8 @@ from django.conf import settings
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 from nexus.agents.src.utils.bedrock_agent_helper import AgentsForAmazonBedrock
 
+from django.template.defaultfilters import slugify
+
 
 class BedrockFileDatabase(FileDataBase):
     def __init__(self) -> None:
@@ -27,12 +29,14 @@ class BedrockFileDatabase(FileDataBase):
         self.bedrock_runtime = self.__get_bedrock_runtime()
 
         self.agent_for_amazon_bedrock = AgentsForAmazonBedrock()
+
+        # TODO: Move this to settings
         self.agent_foundation_model = [
             'anthropic.claude-3-sonnet-2034240229-v1:0',
             'anthropic.claude-3-5-sonnet-20240620-v1:0',
             'anthropic.claude-3-haiku-20240307-v1:0'
         ]
-    
+
     def prepare_agent(self, agent_id: str):
         self.bedrock_agent.prepare_agent(agentId=agent_id)
         time.sleep(5)
@@ -54,7 +58,19 @@ class BedrockFileDatabase(FileDataBase):
         )
         return sub_agent_alias_id, sub_agent_alias_arn
 
-    def associate_sub_agents(self, supervisor_id: str, agents_list: str) -> str:
+    def associate_sub_agents(self, supervisor_id: str, agents_list: list) -> str:
+
+        sub_agents = []
+        for agent in agents_list:
+            agent_name = agent.get("name")
+            association_instruction_base = f"This agent should be called whenever the user is talking about {agent_name}"
+            agent_association_data = {
+                'sub_agent_alias_arn': '',
+                'sub_agent_instruction': association_instruction_base,
+                'sub_agent_association_name': slugify(agent_name),
+            }
+            sub_agents.append(agent_association_data)
+
         supervisor_agent_alias_id, supervisor_agent_alias_arn = self.agent_for_amazon_bedrock.associate_sub_agents(
             supervisor_agent_id=supervisor_id,
             sub_agents_list=agents_list,

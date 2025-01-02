@@ -30,7 +30,6 @@ class ProjectsUseCase:
         event_manager_notify=event_manager.notify,
     ) -> None:
         self.event_manager_notify = event_manager_notify
-        pass
 
     def get_by_uuid(self, project_uuid: str) -> Project:
         try:
@@ -140,9 +139,12 @@ class ProjectsUseCase:
 
         supervisor_name = slugify(f"{project.name}-{project.uuid}-supervisor")
         supervisor_description = f"Supervisor Agent for {project.name} {project.uuid}"
+
+        # TODO: Update deve atualizar esse dado
         supervisor_instructions = settings.DEFAULT_AGENT_GOAL
 
-        self.create_agent_builder_base(# TODO: SET ENV VAR TO CHOOSE WHICH PROJECTS CREATE WITH AB 2.0
+        # TODO: SET ENV VAR TO CHOOSE WHICH PROJECTS CREATE WITH AB 2.0
+        self.create_agent_builder_base(
             str(project.uuid),
             supervisor_name=supervisor_name,
             supervisor_description=supervisor_description,
