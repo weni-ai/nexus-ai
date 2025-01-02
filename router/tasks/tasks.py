@@ -9,8 +9,6 @@ from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
 
-from router.classifiers.zeroshot import ZeroshotClassifier
-
 from router.route import route
 from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
 
