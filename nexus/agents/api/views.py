@@ -16,6 +16,7 @@ class PushAgents(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
 
     def post(self, request, *args, **kwargs):
+        # CLI will send a file and a dictionary of agents
 
         agents: dict = request.data.get("agents")
 
@@ -24,10 +25,17 @@ class PushAgents(APIView):
 
         project_uuid = request.data.get("project")
         agents = []
+
         for agent_dto in agents_dto:
             agent: Agent = AgentUsecase().create_agent(request.user, agent_dto, project_uuid)
-
             agents.append({"agent_name": agent.display_name, "agent_external_id": agent.external_id})
+
+            skills = agent_dto.skills
+            for skill in skills:
+                slug = skill.get('slug')
+                skill_file = request.FILES[slug]
+                usecase.create_skill(skill_file)
+                # agent.create_skill()
 
         return Response({
             "project": str(project_uuid),

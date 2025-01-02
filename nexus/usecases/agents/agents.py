@@ -104,6 +104,17 @@ class AgentUsecase:
         )
         return
 
+    def create_skill(
+        self,
+        file_name: str,
+        file: bytes,
+    ):
+        self.external_agent_client.create_lambda_function(
+            lambda_name=file_name,
+            zip_content=file
+        )
+        pass
+
     def yaml_dict_to_dto(
         self,
         yaml: dict

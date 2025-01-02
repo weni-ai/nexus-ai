@@ -27,6 +27,7 @@ class BedrockFileDatabase(FileDataBase):
         self.bedrock_agent = self.__get_bedrock_agent()
         self.bedrock_agent_runtime = self.__get_bedrock_agent_runtime()
         self.bedrock_runtime = self.__get_bedrock_runtime()
+        self.lambda_client = self.__get_lambda_client()
 
         self.agent_for_amazon_bedrock = AgentsForAmazonBedrock()
 
@@ -88,6 +89,23 @@ class BedrockFileDatabase(FileDataBase):
         )
         time.sleep(5)
         return agent_id, agent_alias, agent_arn
+
+    def create_lambda_function(
+        self,
+        lambda_name: str,
+        lambda_role_name: str,
+        zip_content: bytes,
+    ):
+        lambda_function = self.lambda_client.create_function(
+            FunctionName=lambda_name,
+            Runtime='python3.12',
+            Timeout=180,
+            Role=lambda_role_name,
+            # Role=lambda_iam_role['Role']['Arn'],
+            Code={'ZipFile': zip_content},
+            Handler='lambda_function.lambda_handler'
+        )
+        return lambda_function
 
     def invoke_model(self, prompt: str, config_data: Dict):
         data = {
@@ -285,6 +303,46 @@ class BedrockFileDatabase(FileDataBase):
     def __get_bedrock_runtime(self):
         return boto3.client(
             "bedrock-runtime",
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
+            region_name=self.region_name
+        )
+
+    def __get_lambda_client(self):
+        # try:
+        #     assume_role_policy_document = {
+        #         "Version": "2012-10-17",
+        #         "Statement": [
+        #             {
+        #                 "Effect": "Allow",
+        #                 "Action": "bedrock:InvokeModel",
+        #                 "Principal": {
+        #                     "Service": "lambda.amazonaws.com"
+        #                 },
+        #                 "Action": "sts:AssumeRole"
+        #             }
+        #         ]
+        #     }
+
+        #     assume_role_policy_document_json = json.dumps(assume_role_policy_document)
+
+        #     lambda_iam_role = iam_client.create_role(
+        #         RoleName=lambda_role_name,
+        #         AssumeRolePolicyDocument=assume_role_policy_document_json
+        #     )
+
+        #     # Pause to make sure role is created
+        #     time.sleep(10)
+        #     except:
+        #         lambda_iam_role = iam_client.get_role(RoleName=lambda_role_name)
+
+        #     iam_client.attach_role_policy(
+        #         RoleName=lambda_role_name,
+        #         PolicyArn='arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        # )
+
+        return boto3.client(
+            "lambda",
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
             region_name=self.region_name

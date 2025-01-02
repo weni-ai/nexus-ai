@@ -32,10 +32,9 @@ class TestAgentUseCase(TestCase):
                     "guardrails": ["Não fale sobre apostas"],
                     "skills": [
                         {
-                            "get_order": {
-                                "name": "Get Order",
-                                "requirements": ["numpy: 20.4", "weni-clients: 20.1"]
-                            }
+                            "name": "Get Order",
+                            "path": "temp/file_name.zip",
+                            "slug": "get_order"
                         }
                     ],
                     "model": "model_v1"
@@ -52,9 +51,10 @@ class TestAgentUseCase(TestCase):
                 guardrails=["Não fale sobre apostas"],
                 skills=[
                     {
-                        "get_order": {
+                        {
                             "name": "Get Order",
-                            "requirements": ["numpy: 20.4", "weni-clients: 20.1"]
+                            "path": "temp/file_name.zip",
+                            "slug": "get_order"
                         }
                     }
                 ],
