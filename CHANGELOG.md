@@ -1,3 +1,8 @@
+# 2.8.6
+## *Update*
+    - Change zeroshot from internal communication to function calling
+    - Change default zeroshot classifier on routing to function calling classifier
+
 # 2.8.5
 ## *Add*
     - Small improvements to the commerce route api
