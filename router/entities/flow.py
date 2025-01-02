@@ -3,10 +3,10 @@ from dataclasses import dataclass
 
 @dataclass
 class FlowDTO:
-    pk: str
-    uuid: str
     name: str
     prompt: str
-    fallback: str
-    content_base_uuid: str
+    pk: str = None
+    uuid: str = None
+    fallback: str = None
+    content_base_uuid: str = None
     send_to_llm: bool = False

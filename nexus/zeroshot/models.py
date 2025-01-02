@@ -18,3 +18,4 @@ class ZeroshotLogs(models.Model):
     nlp_log = models.TextField(blank=True)
     created_at = models.DateTimeField("created at", auto_now_add=True)
     language = models.CharField(verbose_name="Language", max_length=64, null=True, blank=True)
+    model = models.CharField(verbose_name="Model", max_length=64, default="zeroshot")
