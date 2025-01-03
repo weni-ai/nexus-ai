@@ -1,3 +1,7 @@
+# 2.8.7
+## *Fix*
+    - Handle openAI returning always lower case response on flows internal communication
+
 # 2.8.6
 ## *Update*
     - Change zeroshot from internal communication to function calling
