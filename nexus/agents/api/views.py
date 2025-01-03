@@ -24,9 +24,14 @@ class PushAgents(APIView):
         agents_dto: list[AgentDTO] = usecase.yaml_dict_to_dto(agents)
 
         project_uuid = request.data.get("project")
+        print(project_uuid)
         agents = []
 
+        print("AGENTS DTO: ")
+        print(agents_dto)
+
         for agent_dto in agents_dto:
+            print('entrou no for')
             agent: Agent = AgentUsecase().create_agent(request.user, agent_dto, project_uuid)
             agents.append({"agent_name": agent.display_name, "agent_external_id": agent.external_id})
 
@@ -35,7 +40,6 @@ class PushAgents(APIView):
                 slug = skill.get('slug')
                 skill_file = request.FILES[slug]
                 usecase.create_skill(skill_file)
-                # agent.create_skill()
 
         return Response({
             "project": str(project_uuid),
