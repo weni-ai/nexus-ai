@@ -73,7 +73,7 @@ class TestFunctionCalling(TestCase):
             expected_response = {
                 'output': {
                     'other': False,
-                    'classification': 'class1'
+                    'classification': 'Class1'
                 }
             }
             self.assertEqual(response, expected_response)

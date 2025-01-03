@@ -36,7 +36,6 @@ class FormatClassification:
         classification = {"other": True, "classification": self._get_data_none_class()}
         response_text = output_text if output_text else self._get_data_none_class()
 
-        response_prepared = response_text.lower()
         response_prepared = response_text.strip().strip(".").strip("\n").strip("'")
 
         output = self._get_number_from_output(response_prepared)
@@ -64,8 +63,8 @@ class FormatClassification:
         classification = {"other": True, "classification": self._get_data_none_class()}
 
         if output_text:
-            response_prepared = output_text.strip().strip(".").strip("\n").strip("'").lower()
-            all_classes = [option.get("class").lower() for option in zeroshot_data.get("options", [])]
+            response_prepared = output_text.strip().strip(".").strip("\n").strip("'")
+            all_classes = [option.get("class") for option in zeroshot_data.get("options", [])]
 
             if response_prepared in all_classes:
                 classification["other"] = False
