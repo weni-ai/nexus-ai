@@ -2,13 +2,21 @@ import json
 from typing import List, Dict, Tuple
 
 import requests
+import tiktoken
 
 from django.conf import settings
 
 from nexus.intelligences.llms.client import LLMClient
+from nexus.intelligences.llms.exceptions import TokenLimitError
 from router.entities import LLMSetupDTO, ContactMessageDTO
 from nexus.intelligences.llms.exceptions import WeniGPTInvalidVersionError
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
+
+
+def count_tokens(text: str, encoding_name: str) -> int:
+    encoding = tiktoken.get_encoding(encoding_name)
+    num_tokens = len(encoding.encode(text))
+    return num_tokens
 
 
 class WeniGPTClient(LLMClient):
@@ -37,6 +45,9 @@ class WeniGPTClient(LLMClient):
         self.post_prompt = settings.WENIGPT_POST_PROMPT
 
         self.headers = self._get_headers()
+
+        self.encoding_name: str = settings.SHARK_MODEL_ENCODING_NAME
+        self.token_limit: int = settings.SHARK_MODEL_TOKEN_LIMIT
 
     def _get_headers(self):
         return {
@@ -80,45 +91,71 @@ class WeniGPTClient(LLMClient):
             prompt += conversation_prompt + next_question_template
         return prompt.replace("\\n", "\n")
 
+    def validate_prompt(
+        self,
+        instructions,
+        chunks,
+        agent,
+        question,
+        last_messages,
+        retry: bool = True
+    ) -> Tuple[bool, str]:
+        prompt = self.format_prompt(instructions, chunks, agent, question, last_messages)
+
+        is_valid = count_tokens(prompt, self.encoding_name) < self.token_limit
+
+        if not is_valid and retry:
+            is_valid, prompt = self.validate_prompt(self, instructions, chunks[:2], agent, question, last_messages, False)
+            return is_valid, prompt
+
+        return is_valid, prompt
+
     def request_runpod(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO] = []):
-        self.prompt = self.format_prompt(instructions, chunks, agent, question, last_messages)
-        data = {
-            "input": {
-                "prompt": self.prompt,
-                "sampling_params": {
-                    "max_tokens": int(llm_config.max_length) if isinstance(llm_config.max_length, int) else int(settings.WENIGPT_MAX_LENGHT),
-                    "top_p": float(settings.WENIGPT_TOP_P),
-                    "top_k": int(settings.WENIGPT_TOP_K),
-                    "temperature": float(settings.WENIGPT_TEMPERATURE),
-                    "stop": settings.WENIGPT_STOP,
+        # self.prompt = self.format_prompt(instructions, chunks, agent, question, last_messages)
+
+        is_valid, self.prompt = self.validate_prompt(instructions, chunks, agent, question, last_messages)
+
+        if is_valid:
+
+            data = {
+                "input": {
+                    "prompt": self.prompt,
+                    "sampling_params": {
+                        "max_tokens": int(llm_config.max_length) if isinstance(llm_config.max_length, int) else int(settings.WENIGPT_MAX_LENGHT),
+                        "top_p": float(settings.WENIGPT_TOP_P),
+                        "top_k": int(settings.WENIGPT_TOP_K),
+                        "temperature": float(settings.WENIGPT_TEMPERATURE),
+                        "stop": settings.WENIGPT_STOP,
+                    }
                 }
             }
-        }
 
-        if settings.TOKEN_LIMIT:
-            data.get("input").get("sampling_params").update({"max_tokens": settings.TOKEN_LIMIT})
+            if settings.TOKEN_LIMIT:
+                data.get("input").get("sampling_params").update({"max_tokens": settings.TOKEN_LIMIT})
 
-        text_answers = None
+            text_answers = None
 
-        try:
-            print(f"Request for WeniGPT: {self.prompt}")
-            response = requests.request("POST", self.url, headers=self.headers, data=json.dumps(data))
-            response_json = response.json()
-            print(f"Resposta Json do WeniGPT: {response_json}")
-            text_answers = response_json["output"][0].get("choices")[0].get("tokens")[0]
+            try:
+                print(f"Request for WeniGPT: {self.prompt}")
+                response = requests.request("POST", self.url, headers=self.headers, data=json.dumps(data))
+                response_json = response.json()
+                print(f"Resposta Json do WeniGPT: {response_json}")
+                text_answers = response_json["output"][0].get("choices")[0].get("tokens")[0]
 
-            return {
-                "answers": [
-                    {
-                        "text": text_answers
-                    }
-                ],
-                "id": "0",
-            }
+                return {
+                    "answers": [
+                        {
+                            "text": text_answers
+                        }
+                    ],
+                    "id": "0",
+                }
 
-        except Exception as e:
-            response = {"error": str(e)}
-            return {"answers": None, "id": "0", "message": response.get("error")}
+            except Exception as e:
+                response = {"error": str(e)}
+                return {"answers": None, "id": "0", "message": response.get("error")}
+
+        raise TokenLimitError
 
     def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO] = []):
 
