@@ -201,8 +201,6 @@ def route(
             }
         )
 
-        log_usecase.send_message()
-
         return dispatch(
             message=message,
             flow_start=flow_start,

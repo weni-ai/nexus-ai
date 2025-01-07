@@ -163,30 +163,6 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             api_key=llm_config.token
         )
 
-        # Check if there's a pending response for this user
-        pending_response_key = f"response:{message.contact_urn}"
-        pending_task_key = f"task:{message.contact_urn}"
-        pending_response = redis_client.get(pending_response_key)
-        pending_task_id = redis_client.get(pending_task_key)
-
-        if pending_response:
-            # Revoke the previous task
-            if pending_task_id:
-                celery_app.control.revoke(pending_task_id.decode('utf-8'), terminate=True)
-
-            # Concatenate the previous message with the new one
-            previous_message = pending_response.decode('utf-8')
-            concatenated_message = f"{previous_message}\n{message.text}"
-            message.text = concatenated_message
-            redis_client.delete(pending_response_key)  # Remove the pending response
-        else:
-            # Store the current message in Redis
-            redis_client.set(pending_response_key, message.text)
-
-        # Store the current task ID in Redis
-        redis_client.set(pending_task_key, self.request.id)
-
-        # Generate response for the concatenated message
         response: dict = route(
             classification=classification,
             message=message,
@@ -202,10 +178,6 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             log_usecase=log_usecase,
             message_log=message_log
         )
-
-        # If response generation completes, remove from Redis
-        redis_client.delete(pending_response_key)
-        redis_client.delete(pending_task_key)
 
         log_usecase.update_status("S")
 

@@ -258,10 +258,9 @@ class MessagePreviewView(APIView):
                 metadata=data.get("metadata", {})
             )
 
-            task = start_route.delay(message.__dict__, preview=True)
-            response = task.wait()
+            task = start_route(message.__dict__, preview=True)
 
-            return Response(data=response)
+            return Response(data=task)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
         except TaskRevokedError:
