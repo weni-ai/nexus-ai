@@ -105,7 +105,7 @@ class WeniGPTClient(LLMClient):
         is_valid = count_tokens(prompt, self.encoding_name) < self.token_limit
 
         if not is_valid and retry:
-            is_valid, prompt = self.validate_prompt(self, instructions, chunks[:2], agent, question, last_messages, False)
+            is_valid, prompt = self.validate_prompt(instructions, chunks[:2], agent, question, last_messages, False)
             return is_valid, prompt
 
         return is_valid, prompt

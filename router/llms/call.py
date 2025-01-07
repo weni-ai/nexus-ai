@@ -29,7 +29,6 @@ def call_llm(
 ) -> str:
 
     try:
-
         print(f"\n\n[+ Message: {message.text} +]\n\n")
 
         response = llm_model.request_gpt(
@@ -41,11 +40,14 @@ def call_llm(
             last_messages=last_messages
         )
     except TokenLimitError:
+        model_version = "gpt-4o-mini"
+        llm_config.model_version = model_version
         llm_model = list(LLMClient.get_by_type("chatgpt"))[0](
-            model_version="gpt-4o-mini",
+            model_version=model_version,
             api_key=settings.OPENAI_API_KEY
         )
-        llm_model.request_gpt(
+
+        response = llm_model.request_gpt(
             instructions=instructions,
             chunks=chunks,
             agent=agent.__dict__,
