@@ -1,3 +1,7 @@
+# 2.8.8
+## *Fix*
+    - Check shark prompt tokens
+
 # 2.8.7
 ## *Fix*
     - Handle openAI returning always lower case response on flows internal communication
