@@ -1,3 +1,5 @@
+import json
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -18,22 +20,19 @@ class PushAgents(APIView):
     def post(self, request, *args, **kwargs):
         # CLI will send a file and a dictionary of agents
 
-        agents: dict = request.data.get("agents")
+        agents: str = request.data.get("agents")
+        agents: dict = json.loads(agents)
 
         usecase = AgentUsecase()
         agents_dto: list[AgentDTO] = usecase.yaml_dict_to_dto(agents)
 
         project_uuid = request.data.get("project")
-        print(project_uuid)
-        agents = []
 
-        print("AGENTS DTO: ")
-        print(agents_dto)
-
+        agents_updated = []
         for agent_dto in agents_dto:
             print('entrou no for')
             agent: Agent = AgentUsecase().create_agent(request.user, agent_dto, project_uuid)
-            agents.append({"agent_name": agent.display_name, "agent_external_id": agent.external_id})
+            agents_updated.append({"agent_name": agent.display_name, "agent_external_id": agent.external_id})
 
             skills = agent_dto.skills
             for skill in skills:
@@ -43,7 +42,7 @@ class PushAgents(APIView):
 
         return Response({
             "project": str(project_uuid),
-            "agents": agents
+            "agents": agents_updated
         })
 
 
