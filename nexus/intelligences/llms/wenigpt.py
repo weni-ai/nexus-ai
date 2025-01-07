@@ -111,8 +111,6 @@ class WeniGPTClient(LLMClient):
         return is_valid, prompt
 
     def request_runpod(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO] = []):
-        # self.prompt = self.format_prompt(instructions, chunks, agent, question, last_messages)
-
         is_valid, self.prompt = self.validate_prompt(instructions, chunks, agent, question, last_messages)
 
         if is_valid:
