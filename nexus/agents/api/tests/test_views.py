@@ -3,10 +3,10 @@ from rest_framework.test import (
     APITestCase,
     force_authenticate
 )
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 import json
 from nexus.agents.api.views import PushAgents
-from nexus.usecases.agents import AgentUsecase, AgentDTO
+from nexus.usecases.agents import AgentDTO
 
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
@@ -102,8 +102,8 @@ class PushAgentsTest(APITestCase):
             }
         }
 
-        file_1 = MagicMock(name='skill1.zip')
-        file_2 = MagicMock(name='skill2.zip')
+        file_1 = MagicMock(name='skill1')
+        file_2 = MagicMock(name='skill2')
 
         data = {
             'agents': json.dumps(yaml_data),
@@ -119,9 +119,8 @@ class PushAgentsTest(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data['agents']), 2)
 
-        # Verificar se create_agent foi chamado com os parâmetros corretos
         calls = [
-            patch.call(self.user, AgentDTO(
+            call(self.user, AgentDTO(
                 slug="agent_1",
                 name="Agent 1",
                 description="Description 1",
@@ -136,7 +135,7 @@ class PushAgentsTest(APITestCase):
                 ],
                 model="model_v1"
             ), str(self.project.uuid)),
-            patch.call(self.user, AgentDTO(
+            call(self.user, AgentDTO(
                 slug="agent_2",
                 name="Agent 2",
                 description="Description 2",
@@ -153,7 +152,10 @@ class PushAgentsTest(APITestCase):
             ), str(self.project.uuid))
         ]
         mock_create_agent.assert_has_calls(calls, any_order=True)
+        self.assertTrue(mock_create_skill.called)
 
-        # Verificar se create_skill foi chamado com os arquivos corretos
-        mock_create_skill.assert_any_call(file_1)
-        mock_create_skill.assert_any_call(file_2)
+        called_with_files = [call[0][0].name for call in mock_create_skill.call_args_list]
+        self.assertIn('skill_1', called_with_files)
+        self.assertIn('skill_2', called_with_files)
+
+# ...existing code...

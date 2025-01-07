@@ -1,3 +1,5 @@
+import os
+
 from django.template.defaultfilters import slugify
 
 from nexus.projects.models import Project
@@ -143,13 +145,15 @@ class ProjectsUseCase:
         # TODO: Update deve atualizar esse dado
         supervisor_instructions = settings.DEFAULT_AGENT_GOAL
 
-        # TODO: SET ENV VAR TO CHOOSE WHICH PROJECTS CREATE WITH AB 2.0
-        self.create_agent_builder_base(
-            str(project.uuid),
-            supervisor_name=supervisor_name,
-            supervisor_description=supervisor_description,
-            supervisor_instructions=supervisor_instructions,
-        )
+        agent_valid_users = os.environ.get("AGENT_VALID_USERS", "").split(",")
+        if project.created_by.email in agent_valid_users:
+            self.create_agent_builder_base(
+                str(project.uuid),
+                supervisor_name=supervisor_name,
+                supervisor_description=supervisor_description,
+                supervisor_instructions=supervisor_instructions,
+            )
+
         return project
 
     def get_indexer_database_by_uuid(self, project_uuid: str):

@@ -1,8 +1,11 @@
 import uuid
 import json
 import time
+import zipfile
 from typing import Dict, List, Any, Tuple
 from os.path import basename
+
+from io import BytesIO
 
 import boto3
 from django.conf import settings
@@ -10,7 +13,9 @@ from django.conf import settings
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 from nexus.agents.src.utils.bedrock_agent_helper import AgentsForAmazonBedrock
 
-from django.template.defaultfilters import slugify
+from django.template.defaultfilters import slugify    
+
+from nexus.celery import app as celery_app
 
 
 class BedrockFileDatabase(FileDataBase):
@@ -94,8 +99,13 @@ class BedrockFileDatabase(FileDataBase):
         self,
         lambda_name: str,
         lambda_role_name: str,
-        zip_content: bytes,
+        source_code_file: bytes,
     ):
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as z:
+            z.write(source_code_file)
+        zip_content = zip_buffer.getvalue()
+
         lambda_function = self.lambda_client.create_function(
             FunctionName=lambda_name,
             Runtime='python3.12',
@@ -347,3 +357,13 @@ class BedrockFileDatabase(FileDataBase):
             aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
+
+
+@celery_app.task
+def run_create_lambda_function(
+    lambda_name: str,
+    lambda_role_name: str,
+    zip_content: bytes,
+    file_database=BedrockFileDatabase()
+):
+    return file_database.create_lambda_function(lambda_name, lambda_role_name, zip_content)

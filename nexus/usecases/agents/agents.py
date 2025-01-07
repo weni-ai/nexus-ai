@@ -2,7 +2,7 @@ from typing import List, Dict, Tuple
 from dataclasses import dataclass
 
 from nexus.agents.models import Agent, Team
-from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, run_create_lambda_function
 
 
 @dataclass
@@ -109,11 +109,10 @@ class AgentUsecase:
         file_name: str,
         file: bytes,
     ):
-        self.external_agent_client.create_lambda_function(
+        run_create_lambda_function.delay(
             lambda_name=file_name,
             zip_content=file
         )
-        pass
 
     def yaml_dict_to_dto(
         self,
