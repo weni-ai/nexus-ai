@@ -23,6 +23,7 @@ class ActiveAgent(BaseModel):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
     team = models.ForeignKey(Team, on_delete=models.CASCADE)
     is_official = models.BooleanField(default=False)
+    metadata = models.JSONField(default=dict)
 
 
 class AgentSkills(BaseModel):
