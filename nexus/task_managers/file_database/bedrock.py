@@ -364,7 +364,7 @@ class BedrockFileDatabase(FileDataBase):
         )
 
 
-# @celery_app.task
+@celery_app.task
 def run_create_lambda_function(
     lambda_name: str,
     agent_name: str,
