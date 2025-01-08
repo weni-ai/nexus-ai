@@ -364,6 +364,6 @@ def run_create_lambda_function(
     lambda_name: str,
     lambda_role_name: str,
     zip_content: bytes,
-    file_database=BedrockFileDatabase()
+    file_database=BedrockFileDatabase
 ):
-    return file_database.create_lambda_function(lambda_name, lambda_role_name, zip_content)
+    return file_database().create_lambda_function(lambda_name, lambda_role_name, zip_content)
