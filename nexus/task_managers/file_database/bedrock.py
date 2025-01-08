@@ -17,6 +17,16 @@ from django.template.defaultfilters import slugify
 
 from nexus.celery import app as celery_app
 
+from dataclasses import dataclass
+
+
+@dataclass
+class BedrockSubAgent:
+    display_name: str
+    slug: str
+    external_id: str
+    alias_arn: str
+
 
 class BedrockFileDatabase(FileDataBase):
     def __init__(self) -> None:
@@ -24,8 +34,8 @@ class BedrockFileDatabase(FileDataBase):
         self.knowledge_base_id = settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID
         self.region_name = settings.AWS_BEDROCK_REGION_NAME
         self.bucket_name = settings.AWS_BEDROCK_BUCKET_NAME
-        self.access_key = settings.AWS_BEDROCK_ACCESS_KEY
-        self.secret_key = settings.AWS_BEDROCK_SECRET_KEY
+        # self.access_key = settings.AWS_BEDROCK_ACCESS_KEY
+        # self.secret_key = settings.AWS_BEDROCK_SECRET_KEY
         self.model_id = settings.AWS_BEDROCK_MODEL_ID
 
         self.s3_client = self.__get_s3_client()
@@ -38,9 +48,7 @@ class BedrockFileDatabase(FileDataBase):
 
         # TODO: Move this to settings
         self.agent_foundation_model = [
-            'anthropic.claude-3-sonnet-2034240229-v1:0',
-            'anthropic.claude-3-5-sonnet-20240620-v1:0',
-            'anthropic.claude-3-haiku-20240307-v1:0'
+            "amazon.nova-lite-v1:0"
         ]
 
     def prepare_agent(self, agent_id: str):
@@ -64,24 +72,25 @@ class BedrockFileDatabase(FileDataBase):
         )
         return sub_agent_alias_id, sub_agent_alias_arn
 
-    def associate_sub_agents(self, supervisor_id: str, agents_list: list) -> str:
+    def associate_sub_agents(self, supervisor_id: str, agents_list: list[BedrockSubAgent]) -> Tuple[str, str]:
 
         sub_agents = []
         for agent in agents_list:
-            agent_name = agent.get("name")
+            agent_name = agent.display_name
             association_instruction_base = f"This agent should be called whenever the user is talking about {agent_name}"
             agent_association_data = {
-                'sub_agent_alias_arn': '',
+                'sub_agent_alias_arn': agent.alias_arn,
                 'sub_agent_instruction': association_instruction_base,
                 'sub_agent_association_name': slugify(agent_name),
+                'relay_conversation_history': 'TO_COLLABORATOR',
             }
             sub_agents.append(agent_association_data)
 
         supervisor_agent_alias_id, supervisor_agent_alias_arn = self.agent_for_amazon_bedrock.associate_sub_agents(
             supervisor_agent_id=supervisor_id,
-            sub_agents_list=agents_list,
+            sub_agents_list=sub_agents,
         )
-        return supervisor_agent_alias_id
+        return supervisor_agent_alias_id, supervisor_agent_alias_arn
 
     def create_agent(self, agent_name: str, agent_description: str, agent_instructions: str) -> Tuple[str, str, str]:
         agent_id, agent_alias, agent_arn = self.agent_for_amazon_bedrock.create_agent(
@@ -294,32 +303,32 @@ class BedrockFileDatabase(FileDataBase):
     def __get_s3_client(self):
         return boto3.client(
             "s3",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            # aws_access_key_id=self.access_key,
+            # aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
     def __get_bedrock_agent(self):
         return boto3.client(
             "bedrock-agent",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            # aws_access_key_id=self.access_key,
+            # aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
     def __get_bedrock_agent_runtime(self):
         return boto3.client(
             "bedrock-agent-runtime",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            # aws_access_key_id=self.access_key,
+            # aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
     def __get_bedrock_runtime(self):
         return boto3.client(
             "bedrock-runtime",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            # aws_access_key_id=self.access_key,
+            # aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
@@ -358,8 +367,8 @@ class BedrockFileDatabase(FileDataBase):
 
         return boto3.client(
             "lambda",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            # aws_access_key_id=self.access_key,
+            # aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
