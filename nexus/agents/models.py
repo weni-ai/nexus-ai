@@ -11,7 +11,7 @@ class Agent(BaseModel):
     is_official = models.BooleanField(default=False)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     metadata = models.JSONField(default=dict)
-    description = models.CharField(max_length=255)
+    description = models.CharField(max_length=255, null=True)
 
 
 class Team(models.Model):
