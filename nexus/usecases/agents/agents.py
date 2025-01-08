@@ -1,7 +1,7 @@
 from typing import List, Dict, Tuple
 from dataclasses import dataclass
 
-from nexus.agents.models import Agent, Team
+from nexus.agents.models import Agent, Team, ActiveAgent
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, run_create_lambda_function
 
 
@@ -75,6 +75,7 @@ class AgentUsecase:
             slug=agent_slug,
             display_name=agent_dto.name,
             model=agent_dto.model,
+            description=agent_dto.description,
             metadata={
                 "engine": "BEDROCK",
                 "_agent_alias_id": _agent_alias_id,
@@ -133,3 +134,26 @@ class AgentUsecase:
                 )
             )
         return agents
+
+    def assign_agent(self, agent_uuid: str, project_uuid: str, created_by):
+        agent = Agent.objects.get(uuid=agent_uuid)
+        team = Team.objects.get(project__uuid=project_uuid)
+
+        active_agent, created = ActiveAgent.objects.get_or_create(
+            agent=agent,
+            team=team,
+            is_official=agent.is_official,
+            created_by=created_by
+        )
+        return active_agent
+
+    def unassign_agent(self, agent_uuid: str, project_uuid: str):
+        agent = Agent.objects.get(uuid=agent_uuid)
+        team = Team.objects.get(project__uuid=project_uuid)
+
+        active_agent = ActiveAgent.objects.get(
+            agent=agent,
+            team=team
+        )
+
+        active_agent.delete()
