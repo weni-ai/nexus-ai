@@ -172,6 +172,8 @@ class AgentsForAmazonBedrock:
         _lambda_function_role_name = f"{agent_name}-lambda-role-{self._suffix}"
         _dynamodb_access_policy_name = f"{agent_name}-dynamodb-policy"
 
+        print(f"Creating IAM role for Lambda function: {_lambda_function_role_name}")
+        print("Lambda function name len: ", len(_lambda_function_role_name))
         # Create IAM Role for the Lambda function
         try:
             _assume_role_policy_document = {
@@ -963,10 +965,6 @@ class AgentsForAmazonBedrock:
                 if verbose:
                     print(f"kwargs: {_kwargs}")
 
-                print("ERWRWERWERWEREW")
-                print(agent_name)
-                print(agent_collaboration)
-                print("ERWRWERWERWEREW")
                 _create_agent_response = self._bedrock_agent_client.create_agent(
                     agentName=agent_name,
                     agentResourceRoleArn=_role_arn,

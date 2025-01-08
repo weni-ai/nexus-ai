@@ -98,21 +98,26 @@ class BedrockFileDatabase(FileDataBase):
     def create_lambda_function(
         self,
         lambda_name: str,
-        lambda_role_name: str,
+        agent_name: str,
         source_code_file: bytes,
     ):
-        zip_buffer = BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w") as z:
-            z.write(source_code_file)
-        zip_content = zip_buffer.getvalue()
+
+        zip_buffer = BytesIO(source_code_file)
+
+        # with zipfile.ZipFile(zip_buffer, "w") as z:
+        #     z.write(source_code_file)
+        # zip_content = zip_buffer.getvalue()
+
+        print("GETTING ROLE FOR LAMBDA")
+        lambda_role = self.agent_for_amazon_bedrock._create_lambda_iam_role(agent_name)
+        print("LAMBDA ROLE: ", lambda_role)
 
         lambda_function = self.lambda_client.create_function(
             FunctionName=lambda_name,
             Runtime='python3.12',
             Timeout=180,
-            Role=lambda_role_name,
-            # Role=lambda_iam_role['Role']['Arn'],
-            Code={'ZipFile': zip_content},
+            Role=lambda_role,
+            Code={'ZipFile': zip_buffer},
             Handler='lambda_function.lambda_handler'
         )
         return lambda_function
@@ -359,11 +364,11 @@ class BedrockFileDatabase(FileDataBase):
         )
 
 
-@celery_app.task
+# @celery_app.task
 def run_create_lambda_function(
     lambda_name: str,
-    lambda_role_name: str,
+    agent_name: str,
     zip_content: bytes,
-    file_database=BedrockFileDatabase()
+    file_database=BedrockFileDatabase
 ):
-    return file_database.create_lambda_function(lambda_name, lambda_role_name, zip_content)
+    return file_database().create_lambda_function(lambda_name, agent_name, zip_content)
