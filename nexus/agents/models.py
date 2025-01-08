@@ -11,6 +11,7 @@ class Agent(BaseModel):
     is_official = models.BooleanField(default=False)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     metadata = models.JSONField(default=dict)
+    description = models.CharField(max_length=255)
 
 
 class Team(models.Model):
@@ -27,5 +28,5 @@ class ActiveAgent(BaseModel):
 class AgentSkills(BaseModel):
     display_name = models.CharField(max_length=255)
     unique_name = models.CharField(max_length=255, unique=True)
-    agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="agent_skills")
     skill = models.JSONField(default=dict)
