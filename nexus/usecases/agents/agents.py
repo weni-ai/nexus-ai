@@ -1,4 +1,5 @@
 import pendulum
+import uuid
 
 from typing import List, Dict, Tuple
 from dataclasses import dataclass
@@ -33,7 +34,7 @@ class AgentUsecase:
         supervisor_name: str,
         supervisor_description: str,
         supervisor_instructions: str,
-    ) -> str:
+    ) -> Tuple[str, str]:
         return self.external_agent_client.create_supervisor(
             supervisor_name,
             supervisor_description,
@@ -103,12 +104,17 @@ class AgentUsecase:
         supervisor_description: str,
         supervisor_instructions: str
     ):
-        external_id = self.create_external_supervisor(
+        external_id, alias_name = self.create_external_supervisor(
             supervisor_name,
             supervisor_description,
             supervisor_instructions,
         )
 
+        # self.prepare_agent(external_id)
+        # self.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
+        # supervisor_alias_id, supervisor_alias_arn = self.create_external_agent_alias(
+        #     agent_id=external_id, alias_name=alias_name
+        # )
         Team.objects.create(
             project_id=project_uuid,
             external_id=external_id
@@ -189,6 +195,12 @@ class AgentUsecase:
                 "supervisor_agent_alias_arn": supervisor_agent_alias_arn,
             }
         )
+        team.metadata.update(
+            {
+                "supervisor_alias_id": supervisor_agent_alias_id,
+                "supervisor_alias_arn": supervisor_agent_alias_arn,
+            })
+        team.save()
         return active_agent
 
     def unassign_agent(self, agent_uuid: str, project_uuid: str):
@@ -201,3 +213,13 @@ class AgentUsecase:
         )
 
         active_agent.delete()
+
+    def invoke_supervisor(self, supervisor_id, supervisor_alias_id, prompt):
+        session_id = str(uuid.uuid4())
+        response = self.external_agent_client.invoke_supervisor(
+            supervisor_id=supervisor_id,
+            supervisor_alias_id=supervisor_alias_id,
+            session_id=session_id,
+            prompt=prompt
+        )
+        return response

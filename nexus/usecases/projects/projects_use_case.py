@@ -1,5 +1,6 @@
 import os
 
+from django.conf import settings
 from django.template.defaultfilters import slugify
 
 from nexus.projects.models import Project
@@ -14,7 +15,7 @@ from nexus.usecases.intelligences.create import (
     create_integrated_intelligence,
     create_llm
 )
-from nexus.usecases.agents import AgentUsecase
+from nexus.usecases.agents import AgentUsecase, Agent
 
 from .create import ProjectAuthUseCase
 from nexus.usecases import orgs
@@ -91,6 +92,7 @@ class ProjectsUseCase:
         supervisor_name: str,
         supervisor_description: str,
         supervisor_instructions: str,
+        user,
     ):
         agents_usecase = AgentUsecase(BedrockFileDatabase)
         agents_usecase.create_supervisor(
@@ -99,6 +101,8 @@ class ProjectsUseCase:
             supervisor_description=supervisor_description,
             supervisor_instructions=supervisor_instructions,
         )
+        agent = Agent.objects.get(external_id=settings.DOUBT_ANALYST_EXTERNAL_ID)
+        agents_usecase.assign_agent(str(agent.uuid), project_uuid, created_by=user)
 
     def create_project(
         self,
@@ -152,6 +156,7 @@ class ProjectsUseCase:
                 supervisor_name=supervisor_name,
                 supervisor_description=supervisor_description,
                 supervisor_instructions=supervisor_instructions,
+                user=user,
             )
 
         return project
