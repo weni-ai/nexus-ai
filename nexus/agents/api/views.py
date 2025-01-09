@@ -6,7 +6,6 @@ from rest_framework.permissions import IsAuthenticated
 
 # from nexus.usecases.projects import get_project_by_uuid
 from nexus.usecases.agents import AgentDTO, AgentUsecase
-from nexus.usecases.agents.exceptions import AgentInstructionsTooShort
 from nexus.agents.models import Agent, Team, ActiveAgent
 
 from nexus.projects.api.permissions import ProjectPermission

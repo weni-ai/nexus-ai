@@ -117,7 +117,7 @@ class BedrockFileDatabase(FileDataBase):
             Runtime='python3.12',
             Timeout=180,
             Role=lambda_role,
-            Code={'ZipFile': zip_buffer},
+            Code={'ZipFile': zip_buffer.getvalue()},
             Handler='lambda_function.lambda_handler'
         )
         return lambda_function
