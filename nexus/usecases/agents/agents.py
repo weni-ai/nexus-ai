@@ -1,12 +1,10 @@
-import pendulum
-
 from typing import List, Dict, Tuple
 from dataclasses import dataclass
 
 from nexus.agents.models import Agent, Team, ActiveAgent
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, run_create_lambda_function, BedrockSubAgent
 
-from nexus.usecases.agents.exceptions import AgentInstructionsTooShort
+from nexus.usecases.agents.exceptions import AgentInstructionsTooShort, AgentNameTooLong
 
 
 @dataclass
@@ -132,7 +130,9 @@ class AgentUsecase:
         self,
         agent_dto: AgentDTO
     ):
-        # TODO - Validate slug length to endorse _create_lambda_iam_role policies
+        if len(agent_dto.slug) > 20:
+            raise AgentNameTooLong
+
         for instruction in agent_dto.instructions:
             if len(instruction) < 40:
                 raise AgentInstructionsTooShort
