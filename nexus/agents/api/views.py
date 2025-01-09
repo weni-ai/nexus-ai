@@ -120,7 +120,7 @@ class AgentsView(APIView):
             query_filter = Q(display_name__icontains=search) | Q(
                 agent_skills__display_name__icontains=search
             )
-            agents = agents.filter(query_filter)
+            agents = agents.filter(query_filter).distinct()
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
@@ -138,7 +138,7 @@ class OfficialAgentsView(APIView):
             query_filter = Q(display_name__icontains=search) | Q(
                 agent_skills__display_name__icontains=search
             )
-            agents = agents.filter(query_filter)
+            agents = agents.filter(query_filter).distinct()
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
