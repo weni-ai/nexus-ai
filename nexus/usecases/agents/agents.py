@@ -54,18 +54,12 @@ class AgentUsecase:
         return agent_alias_id, agent_alias_arn
 
     def create_agent(self, user, agent_dto: AgentDTO, project_uuid: str, alias_name: str = "v1"):
-        import random
-        import string
 
         def format_instructions(instructions: List[str]):
             return "\n".join(instructions)
 
-        def generate_random_hash():
-            return "".join(random.choices(string.ascii_letters + string.digits, k=8))
-
-        agent_slug = f"{agent_dto.slug}-{generate_random_hash()}"
         external_id, _agent_alias_id, _agent_alias_arn = self.create_external_agent(
-            agent_name=agent_slug,
+            agent_name=agent_dto.slug,
             agent_description=agent_dto.description,
             agent_instructions=format_instructions(agent_dto.instructions),
         )
@@ -82,12 +76,13 @@ class AgentUsecase:
             created_by=user,
             project_id=project_uuid,
             external_id=external_id,
-            slug=agent_slug,
+            slug=agent_dto.slug,
             display_name=agent_dto.name,
             model=agent_dto.model,
             description=agent_dto.description,
             metadata={
                 "engine": "BEDROCK",
+                "external_id": external_id,
                 "_agent_alias_id": _agent_alias_id,
                 "_agent_alias_arn": _agent_alias_arn,
                 "agent_alias_id": sub_agent_alias_id,
@@ -118,12 +113,12 @@ class AgentUsecase:
     def create_skill(
         self,
         file_name: str,
-        agent_name: str,
+        agent_external_id: str,
         file: bytes,
     ):
         # TODO - this should use delay()
         run_create_lambda_function(
-            agent_name=agent_name,
+            agent_external_id=agent_external_id,
             lambda_name=file_name,
             zip_content=file
         )
