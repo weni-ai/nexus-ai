@@ -1,5 +1,3 @@
-import pendulum
-
 from typing import List, Dict, Tuple
 from dataclasses import dataclass
 
@@ -72,6 +70,11 @@ class AgentUsecase:
             agent_id=external_id, alias_name=alias_name
         )
 
+        print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        agent_version = self.external_agent_client.get_agent_version(external_id)
+        print("Agent version: ", agent_version)
+        print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+
         agent = Agent.objects.create(
             created_by=user,
             project_id=project_uuid,
@@ -87,6 +90,7 @@ class AgentUsecase:
                 "_agent_alias_arn": _agent_alias_arn,
                 "agent_alias_id": sub_agent_alias_id,
                 "agent_alias_arn": sub_agent_alias_arn,
+                "agentVersion": str(agent_version),
             }
         )
         return agent
@@ -114,12 +118,14 @@ class AgentUsecase:
         self,
         file_name: str,
         agent_external_id: str,
+        agent_version: str,
         file: bytes,
     ):
         # TODO - this should use delay()
         run_create_lambda_function(
             agent_external_id=agent_external_id,
             lambda_name=file_name,
+            agent_version=agent_version,
             zip_content=file
         )
 

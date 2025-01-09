@@ -58,6 +58,7 @@ class PushAgents(APIView):
                 usecase.create_skill(
                     agent_external_id=agent.metadata["external_id"],
                     file_name=slug,
+                    agent_version=agent.metadata.get("agentVersion"),
                     file=skill_file
                 )
 
