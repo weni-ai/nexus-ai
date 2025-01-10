@@ -81,7 +81,8 @@ class BedrockFileDatabase(FileDataBase):
         )
         return sub_agent_alias_id, sub_agent_alias_arn
 
-    def associate_sub_agents(self, supervisor_id: str, agents_list: list[BedrockSubAgent]) -> Tuple[str, str]:
+    # def associate_sub_agents(self, supervisor_id: str, agents_list: list[BedrockSubAgent]) -> Tuple[str, str]:
+    def associate_sub_agents(self, supervisor_id: str, agents_list: list[BedrockSubAgent]) -> None:
 
         sub_agents = []
         for agent in agents_list:
@@ -95,11 +96,24 @@ class BedrockFileDatabase(FileDataBase):
             }
             sub_agents.append(agent_association_data)
 
-        supervisor_agent_alias_id, supervisor_agent_alias_arn = self.agent_for_amazon_bedrock.associate_sub_agents(
-            supervisor_agent_id=supervisor_id,
-            sub_agents_list=sub_agents,
-        )
-        return supervisor_agent_alias_id, supervisor_agent_alias_arn
+            self.bedrock_agent.associate_agent_collaborator(
+                agentId=supervisor_id,
+                agentVersion="DRAFT",
+                agentDescriptor={"aliasArn": agent_association_data["sub_agent_alias_arn"]},
+                collaboratorName=agent_association_data["sub_agent_association_name"],
+                collaborationInstruction=agent_association_data["sub_agent_instruction"],
+                relayConversationHistory=agent_association_data["relay_conversation_history"],
+            )
+            self.agent_for_amazon_bedrock.wait_agent_status_update(supervisor_id)
+            self.bedrock_agent.prepare_agent(agentId=supervisor_id)
+            self.agent_for_amazon_bedrock.wait_agent_status_update(supervisor_id)
+
+        # supervisor_agent_alias_id, supervisor_agent_alias_arn = self.agent_for_amazon_bedrock.associate_sub_agents(
+        #     supervisor_agent_id=supervisor_id,
+        #     sub_agents_list=sub_agents,
+        # )
+        # return supervisor_agent_alias_id, supervisor_agent_alias_arn
+        return
 
     def create_agent(self, agent_name: str, agent_description: str, agent_instructions: str) -> Tuple[str, str, str]:
         agent_id, agent_alias, agent_arn = self.agent_for_amazon_bedrock.create_agent(

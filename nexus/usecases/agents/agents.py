@@ -115,15 +115,15 @@ class AgentUsecase:
         )
 
         # self.prepare_agent(external_id)
-        # self.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
+        self.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
         # supervisor_alias_id, supervisor_alias_arn = self.create_external_agent_alias(
         #     agent_id=external_id, alias_name=alias_name
         # )
-        Team.objects.create(
+        team = Team.objects.create(
             project_id=project_uuid,
             external_id=external_id
         )
-        return
+        return team
 
     def create_skill(
         self,
@@ -195,7 +195,12 @@ class AgentUsecase:
             alias_arn=agent.metadata.get("agent_alias_arn"),
         )
 
-        supervisor_agent_alias_id, supervisor_agent_alias_arn = self.external_agent_client.associate_sub_agents(
+        # supervisor_agent_alias_id, supervisor_agent_alias_arn = self.external_agent_client.associate_sub_agents(
+        #     supervisor_id=team.external_id,
+        #     agents_list=[sub_agent]
+        # )
+
+        self.external_agent_client.associate_sub_agents(
             supervisor_id=team.external_id,
             agents_list=[sub_agent]
         )
@@ -205,17 +210,17 @@ class AgentUsecase:
             team=team,
             is_official=agent.is_official,
             created_by=created_by,
-            metadata={
-                "supervisor_agent_alias_id": supervisor_agent_alias_id,
-                "supervisor_agent_alias_arn": supervisor_agent_alias_arn,
-            }
+            # metadata={
+            #     "supervisor_agent_alias_id": supervisor_agent_alias_id,
+            #     "supervisor_agent_alias_arn": supervisor_agent_alias_arn,
+            # }
         )
-        team.metadata.update(
-            {
-                "supervisor_alias_id": supervisor_agent_alias_id,
-                "supervisor_alias_arn": supervisor_agent_alias_arn,
-            })
-        team.save()
+        # team.metadata.update(
+        #     {
+        #         "supervisor_alias_id": supervisor_agent_alias_id,
+        #         "supervisor_alias_arn": supervisor_agent_alias_arn,
+        #     })
+        # team.save()
         return active_agent
 
     def unassign_agent(self, agent_uuid: str, project_uuid: str):

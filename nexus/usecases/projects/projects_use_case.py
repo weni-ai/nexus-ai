@@ -96,7 +96,7 @@ class ProjectsUseCase:
         user,
     ):
         agents_usecase = AgentUsecase(BedrockFileDatabase)
-        agents_usecase.create_supervisor(
+        team = agents_usecase.create_supervisor(
             project_uuid=project_uuid,
             supervisor_name=supervisor_name,
             supervisor_description=supervisor_description,
@@ -104,6 +104,17 @@ class ProjectsUseCase:
         )
         agent = Agent.objects.get(external_id=settings.DOUBT_ANALYST_EXTERNAL_ID)
         agents_usecase.assign_agent(str(agent.uuid), project_uuid, created_by=user)
+
+        supervisor_agent_alias_id, supervisor_agent_alias_arn = agents_usecase.external_agent_client.create_agent_alias(
+            alias_name=f"{supervisor_name}-multi-agent", agent_id=team.external_id
+        )
+
+        team.metadata.update(
+            {
+                "supervisor_alias_id": supervisor_agent_alias_id,
+                "supervisor_alias_arn": supervisor_agent_alias_arn,
+            })
+        team.save()
 
     def create_project(
         self,
