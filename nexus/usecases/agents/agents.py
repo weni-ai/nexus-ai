@@ -4,11 +4,16 @@ from typing import List, Dict, Tuple
 from dataclasses import dataclass
 
 from django.conf import settings
+from django.template.defaultfilters import slugify
 
 from nexus.agents.models import Agent, Team, ActiveAgent
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, run_create_lambda_function, BedrockSubAgent
 
-from nexus.usecases.agents.exceptions import AgentInstructionsTooShort, AgentNameTooLong
+from nexus.usecases.agents.exceptions import (
+    AgentInstructionsTooShort,
+    AgentNameTooLong,
+    SkillNameTooLong,
+)
 
 
 @dataclass
@@ -61,7 +66,7 @@ class AgentUsecase:
             return "\n".join(instructions)
 
         external_id, _agent_alias_id, _agent_alias_arn = self.create_external_agent(
-            agent_name=agent_dto.slug,
+            agent_name=f"{agent_dto.slug}-project-{project_uuid}",
             agent_description=agent_dto.description,
             agent_instructions=format_instructions(agent_dto.instructions),
         )
@@ -141,7 +146,7 @@ class AgentUsecase:
         self,
         agent_dto: AgentDTO
     ):
-        if len(agent_dto.slug) > 20:
+        if len(agent_dto.slug) > 128:
             raise AgentNameTooLong
 
         for instruction in agent_dto.instructions:
@@ -151,6 +156,11 @@ class AgentUsecase:
         for guardrail in agent_dto.guardrails:
             if len(guardrail) < 40:
                 raise AgentInstructionsTooShort
+        
+        for skill in agent_dto.skills:
+            if len(skill.get('slug')) > 53:
+                raise SkillNameTooLong
+
         return agent_dto
 
     def yaml_dict_to_dto(
@@ -163,7 +173,7 @@ class AgentUsecase:
         for agent_key, agent_value in yaml.get("agents", {}).items():
             agents.append(
                 AgentDTO(
-                    slug=agent_key,
+                    slug=slugify(agent_value.get('name')),
                     name=agent_value.get("name"),
                     description=agent_value.get("description"),
                     instructions=agent_value.get("instructions"),
