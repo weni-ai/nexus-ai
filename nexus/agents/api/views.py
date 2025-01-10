@@ -62,10 +62,9 @@ class PushAgents(APIView):
                     params = {}
                     for param in skill_parameters:
                         params.update(param)
-                    
+
                     skill_parameters = params
-                    
-                
+
                 function_schema = [
                     {
                         "name": skill.get("slug"),
@@ -101,7 +100,7 @@ class ActiveAgentsViewSet(APIView):
         usecase = AgentUsecase()
 
         if assign:
-            active_agent = usecase.assign_agent(
+            usecase.assign_agent(
                 agent_uuid=agent_uuid,
                 project_uuid=project_uuid,
                 created_by=request.user
@@ -140,10 +139,11 @@ class AgentsView(APIView):
             query_filter = Q(display_name__icontains=search) | Q(
                 agent_skills__display_name__icontains=search
             )
-            agents = agents.filter(query_filter)
+            agents = agents.filter(query_filter).distinct('uuid')
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
+
 
 class OfficialAgentsView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
@@ -158,7 +158,7 @@ class OfficialAgentsView(APIView):
             query_filter = Q(display_name__icontains=search) | Q(
                 agent_skills__display_name__icontains=search
             )
-            agents = agents.filter(query_filter)
+            agents = agents.filter(query_filter).distinct('uuid')
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
