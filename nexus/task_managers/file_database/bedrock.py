@@ -116,6 +116,8 @@ class BedrockFileDatabase(FileDataBase):
         agent_external_id: str,
         action_group_name: str,
         lambda_arn: str,
+        agent_version: str,
+        function_schema: List[Dict]
     ):
         self.bedrock_agent.create_agent_action_group(
             actionGroupExecutor={
@@ -124,6 +126,7 @@ class BedrockFileDatabase(FileDataBase):
             actionGroupName=action_group_name,
             agentId=agent_external_id,
             agentVersion='DRAFT',
+            functionSchema={"functions": function_schema}
         )
 
     def create_lambda_function(
@@ -132,6 +135,7 @@ class BedrockFileDatabase(FileDataBase):
         agent_external_id: str,
         agent_version: str,
         source_code_file: bytes,
+        function_schema: List[Dict],
     ):
 
         zip_buffer = BytesIO(source_code_file)
@@ -149,10 +153,6 @@ class BedrockFileDatabase(FileDataBase):
             Code={'ZipFile': zip_buffer.getvalue()},
             Handler='lambda_function.lambda_handler'
         )
-        print("++++++++++++++++++++++++++++++")
-        print("LAMBDA CREATION: ")
-        print(lambda_function)
-        print("++++++++++++++++++++++++++++++")
 
         lambda_arn = lambda_function.get("FunctionArn")
         action_group_name = f"{lambda_name}_action_group"
@@ -163,7 +163,8 @@ class BedrockFileDatabase(FileDataBase):
             agent_external_id=agent_external_id,
             action_group_name=action_group_name,
             lambda_arn=lambda_arn,
-            agent_version=agent_version
+            agent_version=agent_version,
+            function_schema=function_schema
         )
         print("++++++++++++++++++++++++++++++")
         return lambda_function
@@ -416,11 +417,13 @@ def run_create_lambda_function(
     agent_external_id: str,
     zip_content: bytes,
     agent_version: str,
-    file_database=BedrockFileDatabase
+    file_database=BedrockFileDatabase,
+    function_schema: List[Dict]=[]
 ):
     return file_database().create_lambda_function(
         lambda_name=lambda_name,
         agent_external_id=agent_external_id,
         agent_version=agent_version,
-        source_code_file=zip_content
+        source_code_file=zip_content,
+        function_schema=function_schema,
     )

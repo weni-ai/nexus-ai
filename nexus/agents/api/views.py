@@ -44,6 +44,7 @@ class PushAgents(APIView):
             print("Agent created: ", agent.display_name)
 
             skills = agent_dto.skills
+
             for skill in skills:
                 slug = skill.get('slug')
                 skill_file = request.FILES[slug]
@@ -55,11 +56,29 @@ class PushAgents(APIView):
                 # Convert InMemoryUploadedFile to bytes
                 skill_file = skill_file.read()
 
+                skill_parameters = skill.get("parameters")
+
+                if type(skill_parameters) == list:
+                    params = {}
+                    for param in skill_parameters:
+                        params.update(param)
+                    
+                    skill_parameters = params
+                    
+                
+                function_schema = [
+                    {
+                        "name": skill.get("slug"),
+                        "parameters": skill_parameters,
+                    }
+                ]
+
                 usecase.create_skill(
                     agent_external_id=agent.metadata["external_id"],
                     file_name=slug,
                     agent_version=agent.metadata.get("agentVersion"),
-                    file=skill_file
+                    file=skill_file,
+                    function_schema=function_schema,
                 )
 
         return Response({

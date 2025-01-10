@@ -70,10 +70,7 @@ class AgentUsecase:
             agent_id=external_id, alias_name=alias_name
         )
 
-        print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
         agent_version = self.external_agent_client.get_agent_version(external_id)
-        print("Agent version: ", agent_version)
-        print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
 
         agent = Agent.objects.create(
             created_by=user,
@@ -120,13 +117,15 @@ class AgentUsecase:
         agent_external_id: str,
         agent_version: str,
         file: bytes,
+        function_schema: List[Dict],
     ):
         # TODO - this should use delay()
         run_create_lambda_function(
             agent_external_id=agent_external_id,
             lambda_name=file_name,
             agent_version=agent_version,
-            zip_content=file
+            zip_content=file,
+            function_schema=function_schema,
         )
 
     def validate_agent_dto(
@@ -149,6 +148,7 @@ class AgentUsecase:
     ) -> list[AgentDTO]:
 
         agents = []
+
         for agent_key, agent_value in yaml.get("agents", {}).items():
             agents.append(
                 AgentDTO(
