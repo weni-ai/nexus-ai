@@ -1,6 +1,8 @@
 from typing import List, Dict, Tuple
 from dataclasses import dataclass
 
+from django.conf import settings
+
 from nexus.agents.models import Agent, Team, ActiveAgent
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, run_create_lambda_function, BedrockSubAgent
 
@@ -15,7 +17,7 @@ class AgentDTO:
     instructions: List[str]
     guardrails: List[str]
     skills: List[Dict]
-    model: str
+    model: str = settings.AWS_BEDROCK_AGENTS_MODEL_ID
 
 
 class AgentUsecase:
@@ -158,7 +160,6 @@ class AgentUsecase:
                     instructions=agent_value.get("instructions"),
                     guardrails=agent_value.get("guardrails"),
                     skills=agent_value.get("skills"),
-                    model=agent_value.get("model")
                 )
             )
         validate_agents = [self.validate_agent_dto(agent) for agent in agents]
