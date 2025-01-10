@@ -50,6 +50,7 @@ emoji = "^2.14.0"
 tiktoken = "^0.8.0"
 termcolor = "^2.5.0"
 rich = "^13.9.4"
+httpx = "0.27.2"
 
 
 
