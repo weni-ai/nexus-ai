@@ -175,10 +175,11 @@ class AgentUsecase:
             alias_arn=agent.metadata.get("agent_alias_arn"),
         )
 
-        supervisor_agent_alias_id, supervisor_agent_alias_arn = self.external_agent_client.associate_sub_agents(
-            supervisor_id=team.external_id,
-            agents_list=[sub_agent]
-        )
+        # TODO temporary solution for testing
+        # supervisor_agent_alias_id, supervisor_agent_alias_arn = self.external_agent_client.associate_sub_agents(
+        #     supervisor_id=team.external_id,
+        #     agents_list=[sub_agent]
+        # )
 
         active_agent, created = ActiveAgent.objects.get_or_create(
             agent=agent,
@@ -186,8 +187,8 @@ class AgentUsecase:
             is_official=agent.is_official,
             created_by=created_by,
             metadata={
-                "supervisor_agent_alias_id": supervisor_agent_alias_id,
-                "supervisor_agent_alias_arn": supervisor_agent_alias_arn,
+                "supervisor_agent_alias_id": "supervisor_agent_alias_id",
+                "supervisor_agent_alias_arn": "supervisor_agent_alias_arn",
             }
         )
         return active_agent
