@@ -16,6 +16,8 @@ class ProjectPermission(permissions.BasePermission):
             ]
 
             print("\nPROJECT PERMISSION")
+            print(request.data)
+            print(view.kwargs)
             print(uuids)
             print("\n------------------")
 
