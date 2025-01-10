@@ -3,6 +3,7 @@ import os
 from django.conf import settings
 from django.template.defaultfilters import slugify
 
+from nexus.agents.models import Agent
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.projects.exceptions import ProjectDoesNotExist
@@ -15,7 +16,7 @@ from nexus.usecases.intelligences.create import (
     create_integrated_intelligence,
     create_llm
 )
-from nexus.usecases.agents import AgentUsecase, Agent
+from nexus.usecases.agents import AgentUsecase
 
 from .create import ProjectAuthUseCase
 from nexus.usecases import orgs
