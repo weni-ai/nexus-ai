@@ -1,7 +1,6 @@
 import uuid
 import json
 import time
-import zipfile
 from typing import Dict, List, Any, Tuple
 from os.path import basename
 
@@ -13,9 +12,19 @@ from django.conf import settings
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 from nexus.agents.src.utils.bedrock_agent_helper import AgentsForAmazonBedrock
 
-from django.template.defaultfilters import slugify    
+from django.template.defaultfilters import slugify  
 
 from nexus.celery import app as celery_app
+
+from dataclasses import dataclass
+
+
+@dataclass
+class BedrockSubAgent:
+    display_name: str
+    slug: str
+    external_id: str
+    alias_arn: str
 
 
 class BedrockFileDatabase(FileDataBase):
@@ -24,8 +33,8 @@ class BedrockFileDatabase(FileDataBase):
         self.knowledge_base_id = settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID
         self.region_name = settings.AWS_BEDROCK_REGION_NAME
         self.bucket_name = settings.AWS_BEDROCK_BUCKET_NAME
-        self.access_key = settings.AWS_BEDROCK_ACCESS_KEY
-        self.secret_key = settings.AWS_BEDROCK_SECRET_KEY
+        # self.access_key = settings.AWS_BEDROCK_ACCESS_KEY
+        # self.secret_key = settings.AWS_BEDROCK_SECRET_KEY
         self.model_id = settings.AWS_BEDROCK_MODEL_ID
 
         self.s3_client = self.__get_s3_client()
@@ -38,15 +47,21 @@ class BedrockFileDatabase(FileDataBase):
 
         # TODO: Move this to settings
         self.agent_foundation_model = [
-            'anthropic.claude-3-sonnet-2034240229-v1:0',
-            'anthropic.claude-3-5-sonnet-20240620-v1:0',
-            'anthropic.claude-3-haiku-20240307-v1:0'
+            "amazon.nova-lite-v1:0"
         ]
 
     def prepare_agent(self, agent_id: str):
         self.bedrock_agent.prepare_agent(agentId=agent_id)
         time.sleep(5)
         return
+
+    def get_agent(self, agent_id: str):
+        return self.bedrock_agent.get_agent(agentId=agent_id)
+
+    def get_agent_version(self, agent_id: str):
+        agent_version_list: dict = self.bedrock_agent.list_agent_versions(agentId=agent_id)
+        last_agent_version = agent_version_list.get("agentVersionSummaries")[0].get("agentVersion")
+        return last_agent_version
 
     def create_supervisor(self, supervisor_name, supervisor_description, supervisor_instructions):
         supervisor_id, supervisor_alias, supervisor_arn = self.agent_for_amazon_bedrock.create_agent(
@@ -64,24 +79,25 @@ class BedrockFileDatabase(FileDataBase):
         )
         return sub_agent_alias_id, sub_agent_alias_arn
 
-    def associate_sub_agents(self, supervisor_id: str, agents_list: list) -> str:
+    def associate_sub_agents(self, supervisor_id: str, agents_list: list[BedrockSubAgent]) -> Tuple[str, str]:
 
         sub_agents = []
         for agent in agents_list:
-            agent_name = agent.get("name")
+            agent_name = agent.display_name
             association_instruction_base = f"This agent should be called whenever the user is talking about {agent_name}"
             agent_association_data = {
-                'sub_agent_alias_arn': '',
+                'sub_agent_alias_arn': agent.alias_arn,
                 'sub_agent_instruction': association_instruction_base,
                 'sub_agent_association_name': slugify(agent_name),
+                'relay_conversation_history': 'TO_COLLABORATOR',
             }
             sub_agents.append(agent_association_data)
 
         supervisor_agent_alias_id, supervisor_agent_alias_arn = self.agent_for_amazon_bedrock.associate_sub_agents(
             supervisor_agent_id=supervisor_id,
-            sub_agents_list=agents_list,
+            sub_agents_list=sub_agents,
         )
-        return supervisor_agent_alias_id
+        return supervisor_agent_alias_id, supervisor_agent_alias_arn
 
     def create_agent(self, agent_name: str, agent_description: str, agent_instructions: str) -> Tuple[str, str, str]:
         agent_id, agent_alias, agent_arn = self.agent_for_amazon_bedrock.create_agent(
@@ -95,31 +111,62 @@ class BedrockFileDatabase(FileDataBase):
         time.sleep(5)
         return agent_id, agent_alias, agent_arn
 
+    def attach_lambda_function(
+        self,
+        agent_external_id: str,
+        action_group_name: str,
+        lambda_arn: str,
+        agent_version: str,
+        function_schema: List[Dict]
+    ):
+        self.bedrock_agent.create_agent_action_group(
+            actionGroupExecutor={
+                'lambda': lambda_arn
+            },
+            actionGroupName=action_group_name,
+            agentId=agent_external_id,
+            agentVersion='DRAFT',
+            functionSchema={"functions": function_schema}
+        )
+
     def create_lambda_function(
         self,
         lambda_name: str,
-        agent_name: str,
+        agent_external_id: str,
+        agent_version: str,
         source_code_file: bytes,
+        function_schema: List[Dict],
     ):
 
         zip_buffer = BytesIO(source_code_file)
 
-        # with zipfile.ZipFile(zip_buffer, "w") as z:
-        #     z.write(source_code_file)
-        # zip_content = zip_buffer.getvalue()
-
-        print("GETTING ROLE FOR LAMBDA")
-        lambda_role = self.agent_for_amazon_bedrock._create_lambda_iam_role(agent_name)
+        lambda_role = self.agent_for_amazon_bedrock._create_lambda_iam_role(agent_external_id)
         print("LAMBDA ROLE: ", lambda_role)
+
+        print("CREATING LAMBDA FUNCTION")
 
         lambda_function = self.lambda_client.create_function(
             FunctionName=lambda_name,
             Runtime='python3.12',
             Timeout=180,
             Role=lambda_role,
-            Code={'ZipFile': zip_buffer},
+            Code={'ZipFile': zip_buffer.getvalue()},
             Handler='lambda_function.lambda_handler'
         )
+
+        lambda_arn = lambda_function.get("FunctionArn")
+        action_group_name = f"{lambda_name}_action_group"
+
+        print("++++++++++++++++++++++++++++++")
+        print("ATTACHING LAMBDA FUNCTION TO AGENT")
+        self.attach_lambda_function(
+            agent_external_id=agent_external_id,
+            action_group_name=action_group_name,
+            lambda_arn=lambda_arn,
+            agent_version=agent_version,
+            function_schema=function_schema
+        )
+        print("++++++++++++++++++++++++++++++")
         return lambda_function
 
     def invoke_model(self, prompt: str, config_data: Dict):
@@ -294,32 +341,32 @@ class BedrockFileDatabase(FileDataBase):
     def __get_s3_client(self):
         return boto3.client(
             "s3",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            # aws_access_key_id=self.access_key,
+            # aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
     def __get_bedrock_agent(self):
         return boto3.client(
             "bedrock-agent",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            # aws_access_key_id=self.access_key,
+            # aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
     def __get_bedrock_agent_runtime(self):
         return boto3.client(
             "bedrock-agent-runtime",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            # aws_access_key_id=self.access_key,
+            # aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
     def __get_bedrock_runtime(self):
         return boto3.client(
             "bedrock-runtime",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            # aws_access_key_id=self.access_key,
+            # aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
@@ -358,17 +405,25 @@ class BedrockFileDatabase(FileDataBase):
 
         return boto3.client(
             "lambda",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            # aws_access_key_id=self.access_key,
+            # aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
 
-# @celery_app.task
+@celery_app.task
 def run_create_lambda_function(
     lambda_name: str,
-    agent_name: str,
+    agent_external_id: str,
     zip_content: bytes,
-    file_database=BedrockFileDatabase
+    agent_version: str,
+    file_database=BedrockFileDatabase,
+    function_schema: List[Dict]=[]
 ):
-    return file_database().create_lambda_function(lambda_name, agent_name, zip_content)
+    return file_database().create_lambda_function(
+        lambda_name=lambda_name,
+        agent_external_id=agent_external_id,
+        agent_version=agent_version,
+        source_code_file=zip_content,
+        function_schema=function_schema,
+    )
