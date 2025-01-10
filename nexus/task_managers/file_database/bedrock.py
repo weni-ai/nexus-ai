@@ -48,6 +48,9 @@ class BedrockFileDatabase(FileDataBase):
         self.agent_foundation_model = [
             settings.AWS_BEDROCK_AGENTS_MODEL_ID
         ]
+        self.supervisor_foundation_model = [
+            settings.AWS_BEDROCK_SUPERVISOR_MODEL_ID
+        ]
 
     def prepare_agent(self, agent_id: str):
         self.bedrock_agent.prepare_agent(agentId=agent_id)
@@ -68,7 +71,7 @@ class BedrockFileDatabase(FileDataBase):
             agent_name=supervisor_name,
             agent_description=supervisor_description,
             agent_instructions=supervisor_instructions,
-            model_ids=self.agent_foundation_model,
+            model_ids=self.supervisor_foundation_model,
         )
         return supervisor_id, supervisor_alias
 
