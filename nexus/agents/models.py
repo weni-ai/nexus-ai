@@ -17,6 +17,7 @@ class Agent(BaseModel):
 class Team(models.Model):
     external_id = models.CharField(max_length=255, help_text="Supervisor ID")
     project = models.OneToOneField(Project, on_delete=models.CASCADE)
+    metadata = models.JSONField(default=dict)
 
 
 class ActiveAgent(BaseModel):

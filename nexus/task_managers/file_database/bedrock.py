@@ -71,7 +71,7 @@ class BedrockFileDatabase(FileDataBase):
             agent_instructions=supervisor_instructions,
             model_ids=self.agent_foundation_model,
         )
-        return supervisor_id
+        return supervisor_id, supervisor_alias
 
     def create_agent_alias(self, agent_id: str, alias_name: str):
         sub_agent_alias_id, sub_agent_alias_arn = self.agent_for_amazon_bedrock.create_agent_alias(
@@ -409,6 +409,32 @@ class BedrockFileDatabase(FileDataBase):
             # aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
+
+    def get_agent(self, agent_id: str):
+        response = self.bedrock_agent.get_agent(agentId=agent_id)
+        return response
+
+    def invoke_supervisor(self, supervisor_id: str, supervisor_alias_id: str, session_id: str, prompt: str):
+        print("Invoking supervisor")
+
+        response = self.bedrock_agent_runtime.invoke_agent(
+            agentId=supervisor_id,
+            agentAliasId=supervisor_alias_id,
+            sessionId=session_id,
+            inputText=prompt,
+            enableTrace=True,
+        )
+
+        full_response = ""
+
+        for event in response['completion']:
+            if 'trace' in event:
+                print("Trace:", event["trace"])
+            elif 'chunk' in event:
+                chunk = event['chunk']
+                full_response += chunk['bytes'].decode()
+
+        return full_response
 
 
 @celery_app.task

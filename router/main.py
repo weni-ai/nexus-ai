@@ -8,8 +8,10 @@ from nexus.event_driven.signals import message_started, message_finished
 from router.entities import (
     Message, DBCon
 )
-from router.tasks import start_route
-
+from router.tasks import (
+    start_agent_builder,
+    start_route
+)
 
 app = FastAPI()
 
@@ -37,11 +39,17 @@ def messages(request: Request, message: Message):
 
     try:
 
-        print("[+ Mensagem recebida +]")
+        print("[+ Message Received +]")
         print(message)
         print("[+ ----------------- +]")
 
-        start_route.delay(message.dict())
+        agent_builder_2_projects: list = os.environ.get("AGENT_BUILDER_2_PROJECTS")
+
+        if message.project_uuid in agent_builder_2_projects:
+            print("[+ Starting Agent Builder 2.0 +]")
+            start_agent_builder.delay(message.dict())
+        else:
+            start_route.delay(message.dict())
 
     finally:
         message_finished.send(sender=DBCon)
