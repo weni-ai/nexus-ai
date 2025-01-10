@@ -28,6 +28,8 @@ class PushAgents(APIView):
         # CLI will send a file and a dictionary of agents
 
         print("----------------REQUEST STARTED----------------")
+        print(request.data)
+        print("-----------------------------------------------")
         agents: str = request.data.get("agents")
         agents: dict = json.loads(agents)
 

@@ -15,6 +15,10 @@ class ProjectPermission(permissions.BasePermission):
                 request.data.get("project_uuid")
             ]
 
+            print("\nPROJECT PERMISSION")
+            print(uuids)
+            print("\n------------------")
+
             uuids = set(uuids)
             uuids.remove(None)
             project_uuid = list(uuids)[0]
