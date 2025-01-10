@@ -45,9 +45,8 @@ class BedrockFileDatabase(FileDataBase):
 
         self.agent_for_amazon_bedrock = AgentsForAmazonBedrock()
 
-        # TODO: Move this to settings
         self.agent_foundation_model = [
-            "amazon.nova-lite-v1:0"
+            settings.AWS_BEDROCK_AGENTS_MODEL_ID
         ]
 
     def prepare_agent(self, agent_id: str):
