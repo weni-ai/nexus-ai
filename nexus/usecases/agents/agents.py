@@ -1,8 +1,12 @@
+import pendulum
+
 from typing import List, Dict, Tuple
 from dataclasses import dataclass
 
 from nexus.agents.models import Agent, Team
-from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, run_create_lambda_function
+
+from nexus.usecases.agents.exceptions import AgentInstructionsTooShort
 
 
 @dataclass
@@ -50,10 +54,16 @@ class AgentUsecase:
         return agent_alias_id, agent_alias_arn
 
     def create_agent(self, user, agent_dto: AgentDTO, project_uuid: str, alias_name: str = "v1"):
+        import random
+        import string
+
         def format_instructions(instructions: List[str]):
             return "\n".join(instructions)
 
-        agent_slug = f"{agent_dto.slug}-{project_uuid}"
+        def generate_random_hash():
+            return "".join(random.choices(string.ascii_letters + string.digits, k=8))
+
+        agent_slug = f"{agent_dto.slug}-{generate_random_hash()}"
         external_id, _agent_alias_id, _agent_alias_arn = self.create_external_agent(
             agent_name=agent_slug,
             agent_description=agent_dto.description,
@@ -103,3 +113,51 @@ class AgentUsecase:
             external_id=external_id
         )
         return
+
+    def create_skill(
+        self,
+        file_name: str,
+        agent_name: str,
+        file: bytes,
+    ):
+        # TODO - this should use delay()
+        run_create_lambda_function(
+            agent_name=agent_name,
+            lambda_name=file_name,
+            zip_content=file
+        )
+
+    def validate_agent_dto(
+        self,
+        agent_dto: AgentDTO
+    ):
+        # TODO - Validate slug length to endorse _create_lambda_iam_role policies
+        for instruction in agent_dto.instructions:
+            if len(instruction) < 40:
+                raise AgentInstructionsTooShort
+
+        for guardrail in agent_dto.guardrails:
+            if len(guardrail) < 40:
+                raise AgentInstructionsTooShort
+        return agent_dto
+
+    def yaml_dict_to_dto(
+        self,
+        yaml: dict
+    ) -> list[AgentDTO]:
+
+        agents = []
+        for agent_key, agent_value in yaml.get("agents", {}).items():
+            agents.append(
+                AgentDTO(
+                    slug=agent_key,
+                    name=agent_value.get("name"),
+                    description=agent_value.get("description"),
+                    instructions=agent_value.get("instructions"),
+                    guardrails=agent_value.get("guardrails"),
+                    skills=agent_value.get("skills"),
+                    model=agent_value.get("model")
+                )
+            )
+        validate_agents = [self.validate_agent_dto(agent) for agent in agents]
+        return validate_agents

@@ -1,14 +1,21 @@
 import uuid
 import json
 import time
+import zipfile
 from typing import Dict, List, Any, Tuple
 from os.path import basename
+
+from io import BytesIO
 
 import boto3
 from django.conf import settings
 
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 from nexus.agents.src.utils.bedrock_agent_helper import AgentsForAmazonBedrock
+
+from django.template.defaultfilters import slugify    
+
+from nexus.celery import app as celery_app
 
 
 class BedrockFileDatabase(FileDataBase):
@@ -25,14 +32,17 @@ class BedrockFileDatabase(FileDataBase):
         self.bedrock_agent = self.__get_bedrock_agent()
         self.bedrock_agent_runtime = self.__get_bedrock_agent_runtime()
         self.bedrock_runtime = self.__get_bedrock_runtime()
+        self.lambda_client = self.__get_lambda_client()
 
         self.agent_for_amazon_bedrock = AgentsForAmazonBedrock()
+
+        # TODO: Move this to settings
         self.agent_foundation_model = [
             'anthropic.claude-3-sonnet-2034240229-v1:0',
             'anthropic.claude-3-5-sonnet-20240620-v1:0',
             'anthropic.claude-3-haiku-20240307-v1:0'
         ]
-    
+
     def prepare_agent(self, agent_id: str):
         self.bedrock_agent.prepare_agent(agentId=agent_id)
         time.sleep(5)
@@ -54,7 +64,19 @@ class BedrockFileDatabase(FileDataBase):
         )
         return sub_agent_alias_id, sub_agent_alias_arn
 
-    def associate_sub_agents(self, supervisor_id: str, agents_list: str) -> str:
+    def associate_sub_agents(self, supervisor_id: str, agents_list: list) -> str:
+
+        sub_agents = []
+        for agent in agents_list:
+            agent_name = agent.get("name")
+            association_instruction_base = f"This agent should be called whenever the user is talking about {agent_name}"
+            agent_association_data = {
+                'sub_agent_alias_arn': '',
+                'sub_agent_instruction': association_instruction_base,
+                'sub_agent_association_name': slugify(agent_name),
+            }
+            sub_agents.append(agent_association_data)
+
         supervisor_agent_alias_id, supervisor_agent_alias_arn = self.agent_for_amazon_bedrock.associate_sub_agents(
             supervisor_agent_id=supervisor_id,
             sub_agents_list=agents_list,
@@ -72,6 +94,33 @@ class BedrockFileDatabase(FileDataBase):
         )
         time.sleep(5)
         return agent_id, agent_alias, agent_arn
+
+    def create_lambda_function(
+        self,
+        lambda_name: str,
+        agent_name: str,
+        source_code_file: bytes,
+    ):
+
+        zip_buffer = BytesIO(source_code_file)
+
+        # with zipfile.ZipFile(zip_buffer, "w") as z:
+        #     z.write(source_code_file)
+        # zip_content = zip_buffer.getvalue()
+
+        print("GETTING ROLE FOR LAMBDA")
+        lambda_role = self.agent_for_amazon_bedrock._create_lambda_iam_role(agent_name)
+        print("LAMBDA ROLE: ", lambda_role)
+
+        lambda_function = self.lambda_client.create_function(
+            FunctionName=lambda_name,
+            Runtime='python3.12',
+            Timeout=180,
+            Role=lambda_role,
+            Code={'ZipFile': zip_buffer},
+            Handler='lambda_function.lambda_handler'
+        )
+        return lambda_function
 
     def invoke_model(self, prompt: str, config_data: Dict):
         data = {
@@ -273,3 +322,53 @@ class BedrockFileDatabase(FileDataBase):
             aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
+
+    def __get_lambda_client(self):
+        # try:
+        #     assume_role_policy_document = {
+        #         "Version": "2012-10-17",
+        #         "Statement": [
+        #             {
+        #                 "Effect": "Allow",
+        #                 "Action": "bedrock:InvokeModel",
+        #                 "Principal": {
+        #                     "Service": "lambda.amazonaws.com"
+        #                 },
+        #                 "Action": "sts:AssumeRole"
+        #             }
+        #         ]
+        #     }
+
+        #     assume_role_policy_document_json = json.dumps(assume_role_policy_document)
+
+        #     lambda_iam_role = iam_client.create_role(
+        #         RoleName=lambda_role_name,
+        #         AssumeRolePolicyDocument=assume_role_policy_document_json
+        #     )
+
+        #     # Pause to make sure role is created
+        #     time.sleep(10)
+        #     except:
+        #         lambda_iam_role = iam_client.get_role(RoleName=lambda_role_name)
+
+        #     iam_client.attach_role_policy(
+        #         RoleName=lambda_role_name,
+        #         PolicyArn='arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        # )
+
+        return boto3.client(
+            "lambda",
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
+            region_name=self.region_name
+        )
+
+
+# @celery_app.task
+def run_create_lambda_function(
+    lambda_name: str,
+    agent_name: str,
+    zip_content: bytes,
+    file_database=BedrockFileDatabase
+):
+    return file_database().create_lambda_function(lambda_name, agent_name, zip_content)

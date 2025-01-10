@@ -22,3 +22,10 @@ class ActiveAgent(BaseModel):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
     team = models.ForeignKey(Team, on_delete=models.CASCADE)
     is_official = models.BooleanField(default=False)
+
+
+class AgentSkills(BaseModel):
+    display_name = models.CharField(max_length=255)
+    unique_name = models.CharField(max_length=255, unique=True)
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
+    skill = models.JSONField(default=dict)
