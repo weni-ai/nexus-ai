@@ -227,6 +227,11 @@ class AgentUsecase:
         agent = Agent.objects.get(uuid=agent_uuid)
         team = Team.objects.get(project__uuid=project_uuid)
 
+        self.external_agent_client.disassociate_sub_agent(
+            supervisor_id=team.external_id,
+            agent_id=agent.external_id
+        )
+
         active_agent = ActiveAgent.objects.get(
             agent=agent,
             team=team

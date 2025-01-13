@@ -114,6 +114,18 @@ class BedrockFileDatabase(FileDataBase):
         # )
         # return supervisor_agent_alias_id, supervisor_agent_alias_arn
         return
+    
+    def disassociate_sub_agent(self, supervisor_id: str, agent_id: str):
+        print(supervisor_id)
+        print(agent_id)
+        self.bedrock_agent.disassociate_agent_collaborator(
+            agentId=supervisor_id,
+            agentVersion='VERSION 1',
+            collaboratorId=agent_id
+        )
+        self.agent_for_amazon_bedrock.wait_agent_status_update(supervisor_id)
+        self.bedrock_agent.prepare_agent(agentId=supervisor_id)
+        self.agent_for_amazon_bedrock.wait_agent_status_update(supervisor_id)
 
     def create_agent(self, agent_name: str, agent_description: str, agent_instructions: str) -> Tuple[str, str, str]:
         agent_id, agent_alias, agent_arn = self.agent_for_amazon_bedrock.create_agent(
