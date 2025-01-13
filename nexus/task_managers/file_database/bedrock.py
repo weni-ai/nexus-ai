@@ -1,5 +1,7 @@
 import uuid
 import json
+
+from dataclasses import dataclass
 from typing import Dict, List, Any
 from os.path import basename
 
@@ -9,20 +11,35 @@ from django.conf import settings
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 
 
+@dataclass
+class BedrockSubAgent:
+    display_name: str
+    slug: str
+    external_id: str
+    alias_arn: str
+
+
 class BedrockFileDatabase(FileDataBase):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        agent_foundation_model: List = settings.AWS_BEDROCK_AGENTS_MODEL_ID,
+        supervisor_foundation_model: List = settings.AWS_BEDROCK_SUPERVISOR_MODEL_ID,
+    ) -> None:
         self.data_source_id = settings.AWS_BEDROCK_DATASOURCE_ID
         self.knowledge_base_id = settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID
         self.region_name = settings.AWS_BEDROCK_REGION_NAME
         self.bucket_name = settings.AWS_BEDROCK_BUCKET_NAME
-        self.access_key = settings.AWS_BEDROCK_ACCESS_KEY
-        self.secret_key = settings.AWS_BEDROCK_SECRET_KEY
         self.model_id = settings.AWS_BEDROCK_MODEL_ID
 
+        # self.agent_for_amazon_bedrock = AgentsForAmazonBedrock()
         self.s3_client = self.__get_s3_client()
         self.bedrock_agent = self.__get_bedrock_agent()
         self.bedrock_agent_runtime = self.__get_bedrock_agent_runtime()
         self.bedrock_runtime = self.__get_bedrock_runtime()
+        self.lambda_client = self.__get_lambda_client()
+
+        self.agent_foundation_model = agent_foundation_model
+        self.supervisor_foundation_model = supervisor_foundation_model
 
     def invoke_model(self, prompt: str, config_data: Dict):
         data = {
@@ -196,31 +213,29 @@ class BedrockFileDatabase(FileDataBase):
     def __get_s3_client(self):
         return boto3.client(
             "s3",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
     def __get_bedrock_agent(self):
         return boto3.client(
             "bedrock-agent",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
     def __get_bedrock_agent_runtime(self):
         return boto3.client(
             "bedrock-agent-runtime",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
             region_name=self.region_name
         )
 
     def __get_bedrock_runtime(self):
         return boto3.client(
             "bedrock-runtime",
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            region_name=self.region_name
+        )
+
+    def __get_lambda_client(self):
+        return boto3.client(
+            "lambda",
             region_name=self.region_name
         )
