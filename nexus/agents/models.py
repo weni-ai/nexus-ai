@@ -1,3 +1,5 @@
+from typing import Dict
+
 from django.db import models
 from nexus.projects.models import Project
 from nexus.db.models import BaseModel
@@ -18,6 +20,10 @@ class Team(models.Model):
     external_id = models.CharField(max_length=255, help_text="Supervisor ID")
     project = models.OneToOneField(Project, on_delete=models.CASCADE)
     metadata = models.JSONField(default=dict)
+
+    def update_metadata(self, metadata: Dict[str, str]):
+        self.metadata.update(metadata)
+        self.save()
 
 
 class ActiveAgent(BaseModel):
