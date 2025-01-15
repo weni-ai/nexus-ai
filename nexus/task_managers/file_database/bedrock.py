@@ -139,6 +139,20 @@ class BedrockFileDatabase(FileDataBase):
         time.sleep(5)
         return agent_id, agent_alias, agent_arn
 
+    def update_agent(
+        self,
+        agent_id: str,
+        agent_name: str,
+        agentResourceRoleArn: str,
+        foundationModel: str
+    ):
+        self.agent_for_amazon_bedrock.update_agent(
+            agentId=agent_id,
+            agentName=agent_name,
+            agentResourceRoleArn=agentResourceRoleArn,
+            foundationModel=foundationModel
+        )
+
     def attach_lambda_function(
         self,
         agent_external_id: str,

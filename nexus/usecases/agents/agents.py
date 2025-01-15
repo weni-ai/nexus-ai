@@ -26,6 +26,9 @@ class AgentDTO:
     skills: List[Dict]
     model: str = settings.AWS_BEDROCK_AGENTS_MODEL_ID
 
+    def dict(self):
+        return {key: value for key, value in self.__dict__.items() if value is not None}
+
 
 class AgentUsecase:
     def __init__(self, external_agent_client=BedrockFileDatabase):
@@ -60,15 +63,49 @@ class AgentUsecase:
         )
         return agent_alias_id, agent_alias_arn
 
+    def update_external_agent(
+        self,
+        agentId: str,
+        agentName: str,
+        agentResourceRoleArn: str,
+        foundationModel: str,
+
+    ):
+        self.external_agent_client.update_agent(
+            agentId=agentId,
+            agentName=agentName,
+            agentResourceRoleArn=agentResourceRoleArn,
+            foundationModel=foundationModel,
+        )
+
+    def update_agent(self, agent_dto: AgentDTO, agent: Agent):
+
+        for attr, value in agent_dto.dict().items():
+            setattr(agent, attr, value)
+        agent.save()
+
+        self.update_external_agent(
+            agentId=agent.external_id,
+            agentName=agent.bedrock_agent_name,
+            agentResourceRoleArn=agent.metadata.get("agent_alias_arn"),
+        )
+
+        return agent
+
     def create_agent(self, user, agent_dto: AgentDTO, project_uuid: str, alias_name: str = "v1"):
+
+        agent = Agent.objects.filter(slug=agent_dto.slug, project_id=project_uuid)
+        if agent.exists():
+            return agent.first()
 
         def format_instructions(instructions: List[str]):
             return "\n".join(instructions)
 
+        all_instructions = agent_dto.instructions + agent_dto.guardrails
         external_id, _agent_alias_id, _agent_alias_arn = self.create_external_agent(
             agent_name=f"{agent_dto.slug}-project-{project_uuid}",
             agent_description=agent_dto.description,
-            agent_instructions=format_instructions(agent_dto.instructions),
+            agent_instructions=format_instructions(all_instructions),
         )
 
         self.prepare_agent(external_id)
