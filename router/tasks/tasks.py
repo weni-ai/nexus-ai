@@ -114,7 +114,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             user_email=flows_user_email
         )
 
-        if pre_classification.pre_classification_route():
+        if pre_classification.pre_classification():
             return True
 
         classification_handler = Classification(
@@ -125,7 +125,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             user_email=flows_user_email
         )
 
-        if classification_handler.non_custom_actions_route():
+        if classification_handler.non_custom_actions():
             return True
 
         message_log = log_usecase.create_message_log(
