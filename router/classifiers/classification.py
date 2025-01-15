@@ -112,6 +112,14 @@ class Classification:
 
         return self.flow_started
 
+    def non_custom_actions(
+        self,
+        source: str,
+    ):
+        if source == "preview":
+            return self.non_custom_actions_preview()
+        return self.non_custom_actions_route()
+
     def custom_actions(
         self,
         classifier: Classifier,
