@@ -114,8 +114,9 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             user_email=flows_user_email
         )
 
-        if pre_classification.pre_classification(source=source):
-            return True
+        pre_classification = pre_classification.pre_classification(source=source)
+        if pre_classification:
+            return pre_classification if source == "preview" else True
 
         classification_handler = Classification(
             flows_repository=flows_repository,
@@ -125,8 +126,9 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             user_email=flows_user_email
         )
 
-        if classification_handler.non_custom_actions(source=source):
-            return True
+        non_custom_actions = classification_handler.non_custom_actions(source=source)
+        if non_custom_actions:
+            return non_custom_actions if source == "preview" else True
 
         message_log = log_usecase.create_message_log(
             text=message.text,
