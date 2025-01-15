@@ -22,8 +22,11 @@ class ZeroShotFastPredictAPIView(APIView):
 
     def post(self, request):
         data = request.data
-        try:
 
+        try:
+            print("\n___________Zeroshot_____________")
+            print(data)
+            print("________________________________\n")
             invoke_model = InvokeModel(data)
             response = invoke_model.invoke()
 
