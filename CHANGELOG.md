@@ -1,3 +1,7 @@
+# 2.8.9
+## *Update*
+    - Add indexer type field on project api
+
 # 2.8.8
 ## *Fix*
     - Check shark prompt tokens
