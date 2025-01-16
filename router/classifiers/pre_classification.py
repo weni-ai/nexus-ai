@@ -102,3 +102,11 @@ class PreClassification:
                 }
 
         return {}
+
+    def pre_classification(
+        self,
+        source: str
+    ):
+        if source == "preview":
+            return self.pre_classification_preview()
+        return self.pre_classification_route()
