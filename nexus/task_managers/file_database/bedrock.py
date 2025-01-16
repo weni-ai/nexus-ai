@@ -2,12 +2,13 @@ import uuid
 import json
 import time
 
+from io import BytesIO
+
 from dataclasses import dataclass
 from typing import (
     Any,
     Dict,
     List,
-    Tuple,
 )
 from os.path import basename
 
@@ -135,12 +136,129 @@ class BedrockFileDatabase(FileDataBase):
             self.bedrock_agent.prepare_agent(agentId=supervisor_id)
             self.agent_for_amazon_bedrock.wait_agent_status_update(supervisor_id)
 
-        # supervisor_agent_alias_id, supervisor_agent_alias_arn = self.agent_for_amazon_bedrock.associate_sub_agents(
-        #     supervisor_agent_id=supervisor_id,
-        #     sub_agents_list=sub_agents,
-        # )
-        # return supervisor_agent_alias_id, supervisor_agent_alias_arn
         return
+
+    def attach_lambda_function(
+        self,
+        agent_external_id: str,
+        action_group_name: str,
+        lambda_arn: str,
+        agent_version: str,
+        function_schema: List[Dict]
+    ):
+        self.bedrock_agent.create_agent_action_group(
+            actionGroupExecutor={
+                'lambda': lambda_arn
+            },
+            actionGroupName=action_group_name,
+            agentId=agent_external_id,
+            agentVersion='DRAFT',
+            functionSchema={"functions": function_schema}
+        )
+
+    def create_agent(
+        self,
+        agent_name: str,
+        agent_description: str,
+        agent_instructions: str,
+        model_id: str = None,
+        idle_session_tll_in_seconds: int = 1800,
+        memory_configuration: Dict = {},
+        tags: Dict = {},
+        prompt_override_configuration: List[Dict] = [],
+    ) -> str:
+
+        _num_tries = 0
+        _agent_created = False
+        _agent_id = None
+        agent_resource_arn = settings.AGENT_RESOURCE_ROLE_ARN
+
+        kwargs = {}
+
+        if prompt_override_configuration:
+            kwargs["promptOverrideConfiguration"] = prompt_override_configuration
+            print(prompt_override_configuration)
+
+        if memory_configuration:
+            kwargs["memoryConfiguration"] = memory_configuration
+
+        if tags:
+            kwargs["tags"] = tags
+
+        if not model_id:
+            model_id = self.agent_foundation_model[0]
+
+        while not _agent_created and _num_tries <= 2:
+            try:
+                create_agent_response = self.bedrock_agent.create_agent(
+                    agentName=agent_name,
+                    agentResourceRoleArn=agent_resource_arn,
+                    description=agent_description.replace(
+                        "\n", ""
+                    ),
+                    idleSessionTTLInSeconds=idle_session_tll_in_seconds,
+                    foundationModel=model_id,
+                    instruction=agent_instructions,
+                    agentCollaboration="DISABLED",
+                    **kwargs
+                )
+                _agent_id = create_agent_response["agent"]["agentId"]
+                _agent_created = True
+                agent_id = _agent_id
+                self.wait_agent_status_update(_agent_id)
+
+            except Exception as e:
+                print(
+                    f"Error creating agent: {e}\n. Retrying in case it was just waiting to be deleted."
+                )
+                _num_tries += 1
+
+                if _num_tries <= 2:
+                    time.sleep(4)
+                    pass
+                else:
+                    print("Giving up on agent creation after 2 tries.")
+                    raise e
+
+        return agent_id
+
+    def create_lambda_function(
+        self,
+        lambda_name: str,
+        agent_external_id: str,
+        agent_version: str,
+        source_code_file: bytes,
+        function_schema: List[Dict],
+    ):
+
+        zip_buffer = BytesIO(source_code_file)
+
+        lambda_role = self.agent_for_amazon_bedrock._create_lambda_iam_role(agent_external_id)
+        print("LAMBDA ROLE: ", lambda_role)
+
+        print("CREATING LAMBDA FUNCTION")
+
+        lambda_function = self.lambda_client.create_function(
+            FunctionName=lambda_name,
+            Runtime='python3.12',
+            Timeout=180,
+            Role=lambda_role,
+            Code={'ZipFile': zip_buffer.getvalue()},
+            Handler='lambda_function.lambda_handler'
+        )
+
+        lambda_arn = lambda_function.get("FunctionArn")
+        action_group_name = f"{lambda_name}_action_group"
+
+        print("ATTACHING LAMBDA FUNCTION TO AGENT")
+        self.attach_lambda_function(
+            agent_external_id=agent_external_id,
+            action_group_name=action_group_name,
+            lambda_arn=lambda_arn,
+            agent_version=agent_version,
+            function_schema=function_schema
+        )
+        return lambda_function
 
     def delete_file_and_metadata(self, content_base_uuid: str, filename: str):
         print("[+ BEDROCK: Deleteing File and its Metadata +]")
@@ -176,18 +294,6 @@ class BedrockFileDatabase(FileDataBase):
         agent_version_list: dict = self.bedrock_agent.list_agent_versions(agentId=agent_id)
         last_agent_version = agent_version_list.get("agentVersionSummaries")[0].get("agentVersion")
         return last_agent_version
-
-    def create_agent(self, agent_name: str, agent_description: str, agent_instructions: str) -> Tuple[str, str, str]:
-        agent_id, agent_alias, agent_arn = self.agent_for_amazon_bedrock.create_agent(
-            agent_name=agent_name,
-            agent_description=agent_description,
-            agent_instructions=agent_instructions,
-            model_ids=self.agent_foundation_model,
-            agent_collaboration="DISABLED",
-            code_interpretation=False
-        )
-        time.sleep(5)
-        return agent_id, agent_alias, agent_arn
 
     def create_agent_alias(self, agent_id: str, alias_name: str):
         sub_agent_alias_id, sub_agent_alias_arn = self.agent_for_amazon_bedrock.create_agent_alias(
@@ -234,6 +340,11 @@ class BedrockFileDatabase(FileDataBase):
             ]
         )
         return response.get("ingestionJobSummaries")
+
+    def prepare_agent(self, agent_id: str):
+        self.bedrock_agent.prepare_agent(agentId=agent_id)
+        time.sleep(5)
+        return
 
     def search_data(self, content_base_uuid: str, text: str, number_of_results: int = 5) -> Dict[str, Any]:
         retrieval_config = {
