@@ -1231,3 +1231,13 @@ class CommerceHasAgentBuilder(views.APIView):
                 },
                 status=status.HTTP_200_OK
             )
+        else:
+            return Response(
+                {
+                    "message": "The agent isn't configured!",
+                    "data": {
+                        "has_agent": False,
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
