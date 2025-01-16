@@ -1,3 +1,8 @@
+# 2.8.10
+## *Fix*
+    - Default actions not working on preview
+    - Prompt errors on function calling whenever flows client calls it
+
 # 2.8.9
 ## *Update*
     - Add indexer type field on project api
