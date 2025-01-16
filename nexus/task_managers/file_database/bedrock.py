@@ -141,16 +141,12 @@ class BedrockFileDatabase(FileDataBase):
 
     def update_agent(
         self,
-        agent_id: str,
         agent_name: str,
-        agentResourceRoleArn: str,
-        foundationModel: str
+        new_instructions: str,
     ):
         self.agent_for_amazon_bedrock.update_agent(
-            agentId=agent_id,
-            agentName=agent_name,
-            agentResourceRoleArn=agentResourceRoleArn,
-            foundationModel=foundationModel
+            agent_name=agent_name,
+            new_instructions=new_instructions
         )
 
     def attach_lambda_function(

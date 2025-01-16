@@ -63,31 +63,13 @@ class AgentUsecase:
         )
         return agent_alias_id, agent_alias_arn
 
-    def update_external_agent(
-        self,
-        agentId: str,
-        agentName: str,
-        agentResourceRoleArn: str,
-        foundationModel: str,
-
-    ):
-        self.external_agent_client.update_agent(
-            agentId=agentId,
-            agentName=agentName,
-            agentResourceRoleArn=agentResourceRoleArn,
-            foundationModel=foundationModel,
-        )
-
     def update_agent(self, agent_dto: AgentDTO, agent: Agent):
 
-        for attr, value in agent_dto.dict().items():
-            setattr(agent, attr, value)
-        agent.save()
+        new_instructions = agent_dto.instructions + agent_dto.guardrails
 
-        self.update_external_agent(
-            agentId=agent.external_id,
-            agentName=agent.bedrock_agent_name,
-            agentResourceRoleArn=agent.metadata.get("agent_alias_arn"),
+        self.external_agent_client.update_agent(
+            agent_name=agent.bedrock_agent_name,
+            new_instructions=new_instructions,
         )
 
         return agent
@@ -96,7 +78,9 @@ class AgentUsecase:
 
         agent = Agent.objects.filter(slug=agent_dto.slug, project_id=project_uuid)
         if agent.exists():
-            return agent.first()
+            agent = agent.first()
+            updated_agent = self.update_agent(agent_dto, agent.first())
+            return updated_agent, True
 
         def format_instructions(instructions: List[str]):
             return "\n".join(instructions)
@@ -136,7 +120,7 @@ class AgentUsecase:
                 "agentVersion": str(agent_version),
             }
         )
-        return agent
+        return agent, False
 
     def create_supervisor(
         self,

@@ -40,48 +40,48 @@ class PushAgents(APIView):
 
         agents_updated = []
         for agent_dto in agents_dto:
-            agent: Agent = AgentUsecase().create_agent(request.user, agent_dto, project_uuid)
+            agent, updated = AgentUsecase().create_agent(request.user, agent_dto, project_uuid)
             agents_updated.append({"agent_name": agent.display_name, "agent_external_id": agent.external_id})
 
             print("Agent created: ", agent.display_name)
 
             skills = agent_dto.skills
+            if not updated:  # temp while there is no skill update
+                for skill in skills:
+                    slug = skill.get('slug')
+                    skill_file = request.FILES[f"{agent.slug}:{slug}"]
+                    print("------ Skill data ------")
+                    print("Slug: ", slug)
+                    print("Skill file: ", skill_file)
+                    print("Skill file type: ", type(skill_file))
 
-            for skill in skills:
-                slug = skill.get('slug')
-                skill_file = request.FILES[f"{agent.slug}:{slug}"]
-                print("------ Skill data ------")
-                print("Slug: ", slug)
-                print("Skill file: ", skill_file)
-                print("Skill file type: ", type(skill_file))
+                    # Convert InMemoryUploadedFile to bytes
+                    skill_file = skill_file.read()
 
-                # Convert InMemoryUploadedFile to bytes
-                skill_file = skill_file.read()
+                    skill_parameters = skill.get("parameters")
 
-                skill_parameters = skill.get("parameters")
+                    if type(skill_parameters) == list:
+                        params = {}
+                        for param in skill_parameters:
+                            params.update(param)
 
-                if type(skill_parameters) == list:
-                    params = {}
-                    for param in skill_parameters:
-                        params.update(param)
+                        skill_parameters = params
 
-                    skill_parameters = params
+                    slug = f"{slug}-{agent.external_id}"
+                    function_schema = [
+                        {
+                            "name": skill.get("slug"),
+                            "parameters": skill_parameters,
+                        }
+                    ]
 
-                slug = f"{slug}-{agent.external_id}"
-                function_schema = [
-                    {
-                        "name": skill.get("slug"),
-                        "parameters": skill_parameters,
-                    }
-                ]
-
-                usecase.create_skill(
-                    agent_external_id=agent.metadata["external_id"],
-                    file_name=slug,
-                    agent_version=agent.metadata.get("agentVersion"),
-                    file=skill_file,
-                    function_schema=function_schema,
-                )
+                    usecase.create_skill(
+                        agent_external_id=agent.metadata["external_id"],
+                        file_name=slug,
+                        agent_version=agent.metadata.get("agentVersion"),
+                        file=skill_file,
+                        function_schema=function_schema,
+                    )
 
         return Response({
             "project": str(project_uuid),
