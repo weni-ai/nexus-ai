@@ -1224,8 +1224,8 @@ class CommerceHasAgentBuilder(views.APIView):
                     "message": "The agent is configured!",
                     "data": {
                         "name": agent.name,
-                        "goal": agent.objective,
-                        "role": agent.occupation,
+                        "objective": agent.goal,
+                        "occupation": agent.role,
                         "links": links
                     }
                 },
