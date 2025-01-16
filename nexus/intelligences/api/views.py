@@ -1229,5 +1229,5 @@ class CommerceHasAgentBuilder(views.APIView):
                         "links": links
                     }
                 },
-                status=status.HTTP_200__OK
+                status=status.HTTP_200_OK
             )
