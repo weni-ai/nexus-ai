@@ -68,5 +68,5 @@ urlpatterns = [
     path('<content_base_uuid>/content-base-logs/<log_uuid>', LogsViewSet.as_view(), name="content-base-logs"),
     path('<project_uuid>/customization/', ContentBasePersonalizationViewSet.as_view({'get': 'list', 'put': 'update', 'delete': 'destroy'}), name='content-base-personalization'),
     path('<project_uuid>/upload-file', UploadFileView.as_view(), name='upload-file'),
-    path('commerce/check-exists-agent-builder', CommerceHasAgentBuilder.as_views(),name='check-exists-agent-builder')
+    path('commerce/check-exists-agent-builder', CommerceHasAgentBuilder.as_view(), name='check-exists-agent-builder')
 ]

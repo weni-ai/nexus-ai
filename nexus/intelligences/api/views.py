@@ -1219,10 +1219,15 @@ class CommerceHasAgentBuilder(views.APIView):
             links = []
             for content_base_link in content_base.contentbaselinks.all():
                 links.append(content_base_link.link)
-            return Response({"message": "The agent is configured!", "data": {
-                    "name": agent.name,
-                    "goal": agent.objective,
-                    "role": agent.occupation,
-                    "links": links
-                }}, status=status.HTTP_200__OK
+            return Response(
+                {
+                    "message": "The agent is configured!",
+                    "data": {
+                        "name": agent.name,
+                        "goal": agent.objective,
+                        "role": agent.occupation,
+                        "links": links
+                    }
+                },
+                status=status.HTTP_200__OK
             )
