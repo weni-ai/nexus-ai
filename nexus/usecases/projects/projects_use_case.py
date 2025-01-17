@@ -1,6 +1,12 @@
+from django.conf import settings
+from django.template.defaultfilters import slugify
+
+from nexus.agents.models import Agent, Team
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.projects.exceptions import ProjectDoesNotExist
+
+from nexus.usecases.agents import AgentUsecase
 from nexus.usecases.intelligences.intelligences_dto import LLMDTO
 from nexus.usecases.users.get_by_email import get_by_email
 from nexus.usecases.template_type.template_type_usecase import TemplateTypeUseCase
@@ -13,7 +19,6 @@ from nexus.usecases.intelligences.create import (
 from .create import ProjectAuthUseCase
 from nexus.usecases import orgs
 from nexus.events import event_manager
-from django.conf import settings
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 from nexus.intelligences.models import ContentBase, IntegratedIntelligence
@@ -24,8 +29,10 @@ class ProjectsUseCase:
     def __init__(
         self,
         event_manager_notify=event_manager.notify,
+        external_agent_client=BedrockFileDatabase,
     ) -> None:
         self.event_manager_notify = event_manager_notify
+        self.external_agent_client = external_agent_client
 
     def get_by_uuid(self, project_uuid: str) -> Project:
         try:
@@ -34,6 +41,34 @@ class ProjectsUseCase:
             raise ProjectDoesNotExist(f"[ ProjectsUseCase ] Project with uuid `{project_uuid}` does not exists!")
         except Exception as exception:
             raise Exception(f"[ ProjectsUseCase ] error: {str(exception)}")
+
+    def create_multi_agents_base(
+        self,
+        project_uuid: str,
+        supervisor_name: str,
+        supervisor_description: str,
+        supervisor_instructions: str,
+        user,
+    ):
+        agents_usecase = AgentUsecase(self.external_agent_client)
+        team: Team = agents_usecase.create_supervisor(
+            project_uuid=project_uuid,
+            supervisor_name=supervisor_name,
+            supervisor_description=supervisor_description,
+            supervisor_instructions=supervisor_instructions,
+        )
+        agent: Agent = agents_usecase.get_agent_object(external_id=settings.DOUBT_ANALYST_EXTERNAL_ID)
+        agents_usecase.assign_agent(str(agent.uuid), project_uuid, created_by=user)
+
+        supervisor_agent_alias_id, supervisor_agent_alias_arn = agents_usecase.external_agent_client.create_agent_alias(
+            alias_name=f"{supervisor_name}-multi-agent", agent_id=team.external_id
+        )
+        team.update_metadata(
+            {
+                "supervisor_alias_id": supervisor_agent_alias_id,
+                "supervisor_alias_arn": supervisor_agent_alias_arn,
+            }
+        )
 
     def create_brain_project_base(
         self,
@@ -115,6 +150,23 @@ class ProjectsUseCase:
             }
             auth_usecase.create_project_auth(
                 consumer_msg=auth_consumer_msg
+            )
+
+        supervisor_name = slugify(f"{project.name}-{project.uuid}-supervisor")
+        supervisor_description = f"Supervisor Agent for {project.name} {project.uuid}"
+
+        # TODO: Update deve atualizar esse dado
+        supervisor_instructions = settings.DEFAULT_AGENT_GOAL
+
+        agent_valid_users = settings.AGENT_VALID_USERS
+
+        if project.created_by.email in agent_valid_users:
+            self.create_multi_agents_base(
+                str(project.uuid),
+                supervisor_name=supervisor_name,
+                supervisor_description=supervisor_description,
+                supervisor_instructions=supervisor_instructions,
+                user=user,
             )
 
         return project

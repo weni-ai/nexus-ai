@@ -1,5 +1,7 @@
 from uuid import uuid4
+
 from django.test import TestCase
+from unittest.mock import patch
 
 from .project_factory import ProjectFactory, IntegratedFeatureFactory
 from ..projects_use_case import ProjectsUseCase
@@ -13,8 +15,22 @@ from nexus.usecases.projects.create import ProjectAuthUseCase, CreateIntegratedF
 from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.actions.tests.flow_factory import TemplateActionFactory
 
-
 from nexus.actions.models import Flow
+from nexus.agents.models import Agent
+
+
+class MockExternalAgentClient:
+    def create_supervisor(self, supervisor_name, supervisor_description, supervisor_instructions):
+        return "supervisor_id", "supervisor_alias"
+
+    def wait_agent_status_update(self, external_id):
+        pass
+
+    def associate_sub_agents(self, **kwargs):
+        pass
+
+    def create_agent_alias(self, **kwargs):
+        return "sub_agent_alias_id", "sub_agent_alias_arn"
 
 
 class TestCreateProject(TestCase):
@@ -30,6 +46,9 @@ class TestCreateProject(TestCase):
             template_type_uuid=None,
             brain_on=False,
             authorizations=[]
+        )
+        self.official_agents = ProjectFactory(
+            name="Official Agents",
         )
 
     def test_create_project(self):
@@ -51,6 +70,31 @@ class TestCreateProject(TestCase):
         )
         self.assertEqual(project.uuid, self.project_dto.uuid)
         self.assertTrue(project.brain_on)
+
+    def test_create_multi_agents_project(self):
+        self.official_agents = Agent.objects.create(
+            project=self.official_agents,
+            external_id="EXTERNAL_ID",
+            created_by=self.user,
+            is_official=True,
+        )
+
+        with patch.multiple(
+            'django.conf.settings',
+            AGENT_VALID_USERS=self.user.email,
+            DOUBT_ANALYST_EXTERNAL_ID='EXTERNAL_ID'
+        ):
+            self.project_dto.brain_on = True
+            project = ProjectsUseCase(
+                event_manager_notify=mock_event_manager_notify,
+                external_agent_client=MockExternalAgentClient,
+            ).create_project(
+                project_dto=self.project_dto,
+                user_email=self.user.email
+            )
+            self.assertEqual(project.uuid, self.project_dto.uuid)
+            self.assertIsNotNone(project.team.external_id)
+            self.assertTrue(project.brain_on)
 
 
 class ProjectAuthUseCaseTestCase(TestCase):
