@@ -1223,10 +1223,21 @@ class CommerceHasAgentBuilder(views.APIView):
                 {
                     "message": "The agent is configured!",
                     "data": {
+                        "has_agent": True,
                         "name": agent.name,
                         "objective": agent.goal,
                         "occupation": agent.role,
                         "links": links
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                {
+                    "message": "The agent isn't configured!",
+                    "data": {
+                        "has_agent": False,
                     }
                 },
                 status=status.HTTP_200_OK
