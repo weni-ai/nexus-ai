@@ -1215,7 +1215,17 @@ class CommerceHasAgentBuilder(views.APIView):
 
         content_base = get_default_content_base_by_project(project_uuid=project_uuid)
         agent = content_base.agent
-        if len(agent.name) > 0:
+        if agent is None:
+            return Response(
+                {
+                    "message": "The agent isn't configured!",
+                    "data": {
+                        "has_agent": False,
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+        if agent.name:
             links = []
             for content_base_link in content_base.contentbaselinks.all():
                 links.append(content_base_link.link)
