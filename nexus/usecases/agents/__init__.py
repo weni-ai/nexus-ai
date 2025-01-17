@@ -1,1 +1,1 @@
-from .agents import AgentUsecase, AgentDTO
+from .agents import AgentUsecase, AgentDTO, UpdateAgentDTO

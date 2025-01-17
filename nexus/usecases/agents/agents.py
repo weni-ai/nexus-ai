@@ -26,6 +26,18 @@ class AgentDTO:
     skills: List[Dict]
     model: str = settings.AWS_BEDROCK_AGENTS_MODEL_ID
 
+
+@dataclass
+class UpdateAgentDTO:
+    name: str
+    instructions: List[str] = None
+    guardrails: List[str] = None
+    description: str = None
+    memory_configuration: dict = None
+    prompt_override_configuration: dict = None
+    idle_session_ttl_in_seconds: int = None
+    guardrail_configuration: dict = None
+
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
 
@@ -63,14 +75,21 @@ class AgentUsecase:
         )
         return agent_alias_id, agent_alias_arn
 
-    def update_agent(self, agent_dto: AgentDTO, agent: Agent):
+    def update_agent(self, agent_dto: UpdateAgentDTO, project_uuid: str):
 
-        new_instructions = agent_dto.instructions + agent_dto.guardrails
+        agent = Agent.objects.filter(slug=agent_dto.slug, project_id=project_uuid).first()
 
         self.external_agent_client.update_agent(
             agent_name=agent.bedrock_agent_name,
-            new_instructions=new_instructions,
+            agent_id=agent.external_id,
         )
+
+        self.prepare_agent(agent.external_id)
+
+        if agent_dto.description:
+            agent.description = agent_dto.description
+
+        agent.save()
 
         return agent
 
@@ -79,7 +98,7 @@ class AgentUsecase:
         agent = Agent.objects.filter(slug=agent_dto.slug, project_id=project_uuid)
         if agent.exists():
             agent = agent.first()
-            updated_agent = self.update_agent(agent_dto, agent.first())
+            updated_agent = self.update_agent(agent_dto)
             return updated_agent, True
 
         def format_instructions(instructions: List[str]):
@@ -177,12 +196,33 @@ class AgentUsecase:
         for guardrail in agent_dto.guardrails:
             if len(guardrail) < 40:
                 raise AgentInstructionsTooShort
-        
+
         for skill in agent_dto.skills:
             if len(skill.get('slug')) > 53:
                 raise SkillNameTooLong
 
         return agent_dto
+
+    def update_dict_to_dto(
+        self,
+        yaml: dict
+    ) -> list[UpdateAgentDTO]:
+
+        agents = []
+
+        for agent_key, agent_value in yaml.get("agents", {}).items():
+            agents.append(
+                UpdateAgentDTO(
+                    name=agent_value.get("name"),
+                    instructions=agent_value.get("instructions"),
+                    guardrails=agent_value.get("guardrails"),
+                    description=agent_value.get("description"),
+                    memory_configuration=agent_value.get("memory_configuration"),
+                    prompt_override_configuration=agent_value.get("prompt_override_configuration"),
+                    idle_session_ttl_in_seconds=agent_value.get("idle_session_ttl_in_seconds"),
+                    guardrail_configuration=agent_value.get("guardrail_configuration"),
+                )
+            )
 
     def yaml_dict_to_dto(
         self,
@@ -204,6 +244,19 @@ class AgentUsecase:
             )
         validate_agents = [self.validate_agent_dto(agent) for agent in agents]
         return validate_agents
+
+    def agent_dto_handler(
+        self,
+        project_uuid: str,
+        yaml: dict
+    ):
+        display_name = yaml.get("agents", {}).get("name")
+        agent = Agent.objects.filter(display_name=display_name, project_id=project_uuid)
+
+        if not agent.exists():
+            return self.yaml_dict_to_dto(yaml)
+
+        return self.update_dict_to_dto(yaml)
 
     def assign_agent(self, agent_uuid: str, project_uuid: str, created_by):
         agent = Agent.objects.get(uuid=agent_uuid)

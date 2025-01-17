@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
 # from nexus.usecases.projects import get_project_by_uuid
-from nexus.usecases.agents import AgentDTO, AgentUsecase
+from nexus.usecases.agents import AgentDTO, AgentUsecase, UpdateAgentDTO
 from nexus.usecases.agents.exceptions import AgentInstructionsTooShort
 from nexus.agents.models import Agent, Team, ActiveAgent
 
@@ -33,10 +33,19 @@ class PushAgents(APIView):
         agents: str = request.data.get("agents")
         agents: dict = json.loads(agents)
 
-        usecase = AgentUsecase()
-        agents_dto: list[AgentDTO] = usecase.yaml_dict_to_dto(agents)
-
         project_uuid = request.data.get("project_uuid")
+
+        usecase = AgentUsecase()
+        agents_dto = usecase.agent_dto_handler(yaml=agents, project_uuid=project_uuid)
+
+        if agents_dto is UpdateAgentDTO:
+            updated_agent = usecase.update_agent(agents_dto, project_uuid)
+
+            return Response({
+                "project": str(project_uuid),
+                "agents": updated_agent
+            })
+
 
         agents_updated = []
         for agent_dto in agents_dto:
