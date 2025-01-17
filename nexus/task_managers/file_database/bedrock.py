@@ -278,6 +278,14 @@ class BedrockFileDatabase(FileDataBase):
     def delete(self, content_base_uuid: str, content_base_file_uuid: str, filename: str):
         self.delete_file_and_metadata(content_base_uuid, filename)
 
+    def disassociate_sub_agent(self, supervisor_id, supervisor_version, sub_agent_id):
+        response = self.bedrock_agent.disassociate_agent_collaborator(
+            agentId=supervisor_id,
+            agentVersion=supervisor_version,
+            collaboratorId=sub_agent_id
+        )
+        return response
+
     def start_bedrock_ingestion(self) -> str:
         print("[+ Bedrock: Starting ingestion job +]")
         response = self.bedrock_agent.start_ingestion_job(
@@ -290,7 +298,7 @@ class BedrockFileDatabase(FileDataBase):
     def get_agent(self, agent_id: str):
         return self.bedrock_agent.get_agent(agentId=agent_id)
 
-    def get_agent_version(self, agent_id: str):
+    def get_agent_version(self, agent_id: str) -> str:
         agent_version_list: dict = self.bedrock_agent.list_agent_versions(agentId=agent_id)
         last_agent_version = agent_version_list.get("agentVersionSummaries")[0].get("agentVersion")
         return last_agent_version
