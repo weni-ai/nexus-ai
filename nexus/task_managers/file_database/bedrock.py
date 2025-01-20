@@ -70,6 +70,54 @@ class BedrockFileDatabase(FileDataBase):
         )
         return response
 
+    def update_agent(
+        self,
+        agent_id: str,
+        agent_dto,
+    ):
+
+        bedrock_agent = self.get_agent(agent_id)
+        _agent_details = bedrock_agent.get("agent")
+
+        if agent_dto.instructions or agent_dto.guardrails:
+            new_instructions = agent_dto.instructions + agent_dto.guardrails
+            _agent_details["instructions"] = new_instructions
+
+        if agent_dto.description:
+            _agent_details["description"] = agent_dto.description
+
+        if agent_dto.memory_configuration:
+            _agent_details["memoryConfiguration"] = agent_dto.memory_configuration
+
+        # Amazon bedrock client normally preserver override configs
+        if agent_dto.prompt_override_configuration:
+            _agent_details["promptOverrideConfiguration"] = agent_dto.prompt_override_configuration
+
+        if agent_dto.idle_session_ttl_in_seconds:
+            _agent_details["idleSessionTTLInSeconds"] = agent_dto.idle_session_ttl_in_seconds
+
+        if agent_dto.guardrail_configuration:
+            _agent_details["guardrailConfiguration"] = agent_dto.guardrail_configuration
+
+        for key_to_remove in [
+            "clientToken",
+            "createdAt",
+            "updatedAt",
+            "preparedAt",
+            "agentStatus",
+            "agentArn",
+        ]:
+            if key_to_remove in _agent_details:
+                del _agent_details[key_to_remove]
+
+        _update_agent_response = self.bedrock_agent.update_agent(
+            **_agent_details
+        )
+
+        time.sleep(3)
+
+        return _update_agent_response
+
     def add_metadata_json_file(self, filename: str, content_base_uuid: str, file_uuid: str):
         print("[+ BEDROCK: Adding metadata.json file +]")
 

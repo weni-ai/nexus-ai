@@ -31,6 +31,21 @@ class AgentDTO:
     idle_session_tll_in_seconds: int = 1800
 
 
+@dataclass
+class UpdateAgentDTO:
+    name: str
+    instructions: List[str] = None
+    guardrails: List[str] = None
+    description: str = None
+    memory_configuration: dict = None
+    prompt_override_configuration: dict = None
+    idle_session_ttl_in_seconds: int = None
+    guardrail_configuration: dict = None
+
+    def dict(self):
+        return {key: value for key, value in self.__dict__.items() if value is not None}
+
+
 class AgentUsecase:
     def __init__(self, external_agent_client=BedrockFileDatabase):
         self.external_agent_client = external_agent_client()
@@ -61,13 +76,21 @@ class AgentUsecase:
 
     def create_agent(self, user, agent_dto: AgentDTO, project_uuid: str, alias_name: str = "v1"):
 
+        agent = Agent.objects.filter(slug=agent_dto.slug, project_id=project_uuid)
+        if agent.exists():
+            agent = agent.first()
+            updated_agent = self.update_agent(agent_dto)
+            return updated_agent, True
+
         def format_instructions(instructions: List[str]):
             return "\n".join(instructions)
+
+        all_instructions = agent_dto.instructions + agent_dto.guardrails
 
         external_id = self.create_external_agent(
             agent_name=f"{agent_dto.slug}-project-{project_uuid}",
             agent_description=agent_dto.description,
-            agent_instructions=format_instructions(agent_dto.instructions),
+            agent_instructions=format_instructions(all_instructions),
             idle_session_tll_in_seconds=agent_dto.idle_session_tll_in_seconds,
             memory_configuration=agent_dto.memory_configuration,
             prompt_override_configuration=agent_dto.prompt_override_configuration,
@@ -103,7 +126,7 @@ class AgentUsecase:
                 "agentVersion": str(agent_version),
             }
         )
-        return agent
+        return agent, False
 
     def create_external_agent(
         self,
@@ -235,6 +258,24 @@ class AgentUsecase:
                 sub_agent_id=sub_agent_id,
             )
 
+    def update_agent(self, agent_dto: UpdateAgentDTO, project_uuid: str):
+
+        agent = Agent.objects.filter(slug=agent_dto.slug, project_id=project_uuid).first()
+
+        self.external_agent_client.update_agent(
+            agent_name=agent.bedrock_agent_name,
+            agent_id=agent.external_id,
+        )
+
+        self.prepare_agent(agent.external_id)
+
+        if agent_dto.description:
+            agent.description = agent_dto.description
+
+        agent.save()
+
+        return agent
+
     def validate_agent_dto(
         self,
         agent_dto: AgentDTO,
@@ -266,7 +307,28 @@ class AgentUsecase:
 
         return agent_dto
 
-    def yaml_dict_to_dto(
+    def update_dict_to_dto(
+        self,
+        yaml: dict
+    ) -> list[UpdateAgentDTO]:
+
+        agents = []
+
+        for agent_key, agent_value in yaml.get("agents", {}).items():
+            agents.append(
+                UpdateAgentDTO(
+                    name=agent_value.get("name"),
+                    instructions=agent_value.get("instructions"),
+                    guardrails=agent_value.get("guardrails"),
+                    description=agent_value.get("description"),
+                    memory_configuration=agent_value.get("memory_configuration"),
+                    prompt_override_configuration=agent_value.get("prompt_override_configuration"),
+                    idle_session_ttl_in_seconds=agent_value.get("idle_session_ttl_in_seconds"),
+                    guardrail_configuration=agent_value.get("guardrail_configuration"),
+                )
+            )
+
+    def create_dict_to_dto(
         self,
         yaml: dict,
         user_email: str
@@ -292,6 +354,20 @@ class AgentUsecase:
             )
         validate_agents = [self.validate_agent_dto(agent, user_email) for agent in agents]
         return validate_agents
+
+    def agent_dto_handler(
+        self,
+        project_uuid: str,
+        yaml: dict,
+        user_email: str
+    ):
+        display_name = yaml.get("agents", {}).get("name")
+        agent = Agent.objects.filter(display_name=display_name, project_id=project_uuid)
+
+        if not agent.exists():
+            return self.create_dict_to_dto(yaml, user_email)
+
+        return self.update_dict_to_dto(yaml)
 
     def wait_agent_status_update(self, external_id: str):
         self.agent_for_amazon_bedrock.wait_agent_status_update(external_id)

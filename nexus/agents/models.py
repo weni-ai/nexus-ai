@@ -15,6 +15,10 @@ class Agent(BaseModel):
     metadata = models.JSONField(default=dict)
     description = models.CharField(max_length=255, null=True)
 
+    @property
+    def bedrock_agent_name(self):
+        return f"{self.slug}-project-{self.project.uuid}"
+
 
 class Team(models.Model):
     external_id = models.CharField(max_length=255, help_text="Supervisor ID")
