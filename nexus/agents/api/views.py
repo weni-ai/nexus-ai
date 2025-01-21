@@ -1,12 +1,25 @@
 import json
 
+from django.db.models import Q
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-from nexus.usecases.agents import AgentDTO, AgentUsecase
-from nexus.agents.models import Agent
+from nexus.agents.api.serializers import (
+    ActiveAgentSerializer,
+    ActiveAgentTeamSerializer,
+    AgentSerializer,
+)
+from nexus.agents.models import (
+    Agent,
+    ActiveAgent,
+)
 
+from nexus.usecases.agents import (
+    AgentDTO,
+    AgentUsecase
+)
 from nexus.projects.api.permissions import ProjectPermission
 
 
@@ -73,3 +86,80 @@ class PushAgents(APIView):
             "project": str(project_uuid),
             "agents": agents_updated
         })
+
+
+class AgentsView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        search = self.request.query_params.get("search")
+
+        agents = Agent.objects.filter(project__uuid=project_uuid)
+
+        if search:
+            query_filter = Q(display_name__icontains=search) | Q(
+                agent_skills__display_name__icontains=search
+            )
+            agents = agents.filter(query_filter).distinct('uuid')
+
+        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        return Response(serializer.data)
+
+
+class ActiveAgentsViewSet(APIView):
+
+    permission_classes = [IsAuthenticated, ProjectPermission]
+    serializer_class = ActiveAgentSerializer
+
+    def patch(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        agent_uuid = kwargs.get("agent_uuid")
+
+        assign: bool = request.data.get("assigned")
+
+        usecase = AgentUsecase()
+
+        if assign:
+            usecase.assign_agent(
+                agent_uuid=agent_uuid,
+                project_uuid=project_uuid,
+                created_by=request.user
+            )
+            return Response({"assigned": True})
+
+        usecase.unassign_agent(agent_uuid=agent_uuid, project_uuid=project_uuid)
+        return Response({"assigned": False})
+
+
+class OfficialAgentsView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        search = self.request.query_params.get("search")
+
+        agents = Agent.objects.filter(is_official=True)
+
+        if search:
+            query_filter = Q(display_name__icontains=search) | Q(
+                agent_skills__display_name__icontains=search
+            )
+            agents = agents.filter(query_filter).distinct('uuid')
+
+        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        return Response(serializer.data)
+
+
+class TeamView(APIView):
+
+    permission_classes = [IsAuthenticated, ProjectPermission]
+    serializer_class = ActiveAgentTeamSerializer
+
+    def get(self, request, *args, **kwargs):
+
+        project_uuid = kwargs.get("project_uuid")
+
+        team = ActiveAgent.objects.filter(team__project__uuid=project_uuid)
+        serializer = ActiveAgentTeamSerializer(team, many=True)
+        return Response(serializer.data)

@@ -201,6 +201,28 @@ class AgentUsecase:
         self.external_agent_client.prepare_agent(agent_id)
         return
 
+    def unassign_agent(self, agent_uuid, project_uuid):
+        agent: Agent = self.get_agent_object(uuid=agent_uuid)
+        team: Team = self.get_team_object(project__uuid=project_uuid)
+        sub_agent_id = ""
+
+        supervisor_id: str = team.external_id
+        collaborators = BedrockFileDatabase().bedrock_agent.list_agent_collaborators(
+            agentId=supervisor_id,
+            agentVersion='DRAFT'
+        )
+        summaries = collaborators["agentCollaboratorSummaries"]
+        for agent_descriptor in summaries:
+            if agent.external_id in agent_descriptor["agentDescriptor"]["aliasArn"]:
+                sub_agent_id = agent_descriptor["collaboratorId"]
+
+        if sub_agent_id:
+            self.external_agent_client.disassociate_sub_agent(
+                supervisor_id=supervisor_id,
+                supervisor_version='DRAFT',
+                sub_agent_id=sub_agent_id,
+            )
+
     def validate_agent_dto(
         self,
         agent_dto: AgentDTO
