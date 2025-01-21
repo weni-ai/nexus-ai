@@ -86,10 +86,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'django_prometheus.middleware.PrometheusBeforeMiddleware',
     "elasticapm.contrib.django.middleware.TracingMiddleware",
     "elasticapm.contrib.django.middleware.Catch404Middleware",
-    'django_prometheus.middleware.PrometheusBeforeMiddleware',
-    'django_prometheus.middleware.PrometheusAfterMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -100,6 +99,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'nexus.logs.middleware.PrometheusAuthenticationMiddleware',
+    'django_prometheus.middleware.PrometheusAfterMiddleware',
 ]
 
 ROOT_URLCONF = 'nexus.urls'
@@ -139,7 +139,13 @@ CHANNEL_LAYERS = {
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {"default": env.db(var="DEFAULT_DATABASE", default="sqlite:///db.sqlite3")}
+#DATABASES = {"default": env.db(var="DEFAULT_DATABASE", default="sqlite:///db.sqlite3")}
+DATABASES = {
+    'default': {
+        'ENGINE': 'django_prometheus.db.backends.sqlite3',
+        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+    },
+}
 
 
 # Password validation
@@ -204,7 +210,8 @@ USE_REDIS_CACHE_CONTEXT = env.bool("USE_REDIS_CACHE_CONTEXT", default=False)
 
 CACHES = {
     "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
+        #"BACKEND": "django_redis.cache.RedisCache",
+        "BACKEND": "django_prometheus.cache.RedisCache",
         "LOCATION": REDIS_URL,
         "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
     }
