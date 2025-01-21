@@ -230,3 +230,21 @@ def bedrock_send_link(link: str, user_email: str, content_base_link_uuid: str):
     }
 
     return response
+
+
+@app.task
+def run_create_lambda_function(
+    lambda_name: str,
+    agent_external_id: str,
+    zip_content: bytes,
+    agent_version: str,
+    file_database=BedrockFileDatabase,
+    function_schema: List[Dict] = []
+):
+    return file_database().create_lambda_function(
+        lambda_name=lambda_name,
+        agent_external_id=agent_external_id,
+        agent_version=agent_version,
+        source_code_file=zip_content,
+        function_schema=function_schema,
+    )
