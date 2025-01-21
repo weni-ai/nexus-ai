@@ -20,6 +20,7 @@ from nexus.usecases.agents import (
     AgentDTO,
     AgentUsecase
 )
+from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.projects.api.permissions import ProjectPermission
 
 
@@ -28,11 +29,18 @@ class PushAgents(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
 
     def post(self, request, *args, **kwargs):
+        def validate_file_size(files):
+            for file in files:
+                if files[file].size > 10 * (1024**2):
+                    raise SkillFileTooLarge(file)
         # CLI will send a file and a dictionary of agents
 
         print("----------------REQUEST STARTED----------------")
         print(request.data)
         print("-----------------------------------------------")
+
+        files = request.FILES
+        validate_file_size(files)
 
         agents: str = request.data.get("agents")
         agents: dict = json.loads(agents)
@@ -53,7 +61,7 @@ class PushAgents(APIView):
 
             for skill in skills:
                 slug = skill.get('slug')
-                skill_file = request.FILES[f"{agent.slug}:{slug}"]
+                skill_file = files[f"{agent.slug}:{slug}"]
 
                 # Convert InMemoryUploadedFile to bytes
                 skill_file = skill_file.read()
