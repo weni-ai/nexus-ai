@@ -258,6 +258,10 @@ class BedrockFileDatabase(FileDataBase):
             agent_version=agent_version,
             function_schema=function_schema
         )
+        self.agent_for_amazon_bedrock._allow_agent_lambda(
+            agent_external_id,
+            lambda_name
+        )
         return lambda_function
 
     def delete_file_and_metadata(self, content_base_uuid: str, filename: str):
