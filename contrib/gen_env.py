@@ -135,6 +135,10 @@ def generate_env():
         "BAD_WORDS_LIST": "bad_word1,bad_word2",
         "BAD_WORDS_RESPONSE": "",
         "DEFAULT_RETAIL_INSTRUCTIONS": "",
+        "AWS_BEDROCK_AGENTS_MODEL_ID": "",
+        "AWS_BEDROCK_SUPERVISOR_MODEL_ID": "",
+        "AGENT_VALID_USERS": "",
+        "DOUBT_ANALYST_EXTERNAL_ID": "",
     }
 
     with open(env_path, "w") as configfile:
