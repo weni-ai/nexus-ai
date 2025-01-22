@@ -51,16 +51,14 @@ class PushAgents(APIView):
         agents_usecase = AgentUsecase()
         agents_dto = agents_usecase.agent_dto_handler(yaml=agents, project_uuid=project_uuid, user_email=request.user.email)
 
-        if agents_dto is UpdateAgentDTO:
-            updated_agent = agents_usecase.update_agent(agents_dto, project_uuid)
-
-            return Response({
-                "project": str(project_uuid),
-                "agents": updated_agent
-            })
-
         agents_updated = []
         for agent_dto in agents_dto:
+
+            if isinstance(agent_dto, UpdateAgentDTO):
+                updated_agent = agents_usecase.update_agent(agent_dto, project_uuid)
+                agents_updated.append({"agent_name": updated_agent.display_name, "agent_external_id": updated_agent.external_id})
+                continue
+
             agent, updated = agents_usecase.create_agent(request.user, agent_dto, project_uuid)
             agents_updated.append({"agent_name": agent.display_name, "agent_external_id": agent.external_id})
 
