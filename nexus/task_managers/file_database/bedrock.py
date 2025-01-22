@@ -105,6 +105,10 @@ class BedrockFileDatabase(FileDataBase):
             _agent_details["guardrailConfiguration"] = agent_dto.guardrail_configuration
             updated_fields.append("guardrailConfiguration")
 
+        if agent_dto.foundation_model:
+            _agent_details["foundationModel"] = agent_dto.foundation_model
+            updated_fields.append("foundationModel")
+
         keys_to_remove = [
             key for key in _agent_details.keys()
             if key not in updated_fields and key not in required_fields

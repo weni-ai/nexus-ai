@@ -43,6 +43,7 @@ class UpdateAgentDTO:
     prompt_override_configuration: dict = None
     idle_session_ttl_in_seconds: int = None
     guardrail_configuration: dict = None
+    foundation_model: str = None
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
@@ -273,6 +274,9 @@ class AgentUsecase:
 
         if agent_dto.description:
             agent.description = agent_dto.description
+
+        if agent_dto.foundation_model:
+            agent.model = agent_dto.foundation_model
 
         agent.save()
 
