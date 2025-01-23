@@ -290,6 +290,60 @@ class BedrockFileDatabase(FileDataBase):
         )
         return response
 
+    def invoke_supervisor(
+        self,
+        supervisor_id: str,
+        supervisor_alias_id: str,
+        session_id: str,
+        prompt: str,
+        content_base_uuid: str,
+    ):
+        print("Invoking supervisor")
+
+        single_filter = {
+            "equals": {
+                "key": "contentBaseUuid",
+                "value": content_base_uuid
+            }
+        }
+
+        retrieval_configuration = {
+            "vectorSearchConfiguration": {
+                "filter": single_filter
+            }
+        }
+
+        sessionState = {
+            'knowledgeBaseConfigurations': [
+                {
+                    'knowledgeBaseId': self.knowledge_base_id,
+                    'retrievalConfiguration': retrieval_configuration
+                }
+            ]
+        }
+
+        response = self.bedrock_agent_runtime.invoke_agent(
+            agentId=supervisor_id,
+            agentAliasId=supervisor_alias_id,
+            sessionId=session_id,
+            inputText=prompt,
+            enableTrace=True,
+            sessionState=sessionState,
+        )
+
+        full_response = ""
+
+        for event in response['completion']:
+            if 'trace' in event:
+                # TODO: send trace to webhook
+                # print("Trace:", event["trace"])
+                pass
+            elif 'chunk' in event:
+                chunk = event['chunk']
+                full_response += chunk['bytes'].decode()
+
+        return full_response
+
     def start_bedrock_ingestion(self) -> str:
         print("[+ Bedrock: Starting ingestion job +]")
         response = self.bedrock_agent.start_ingestion_job(

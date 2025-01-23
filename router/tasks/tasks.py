@@ -1,4 +1,5 @@
 import os
+import uuid
 from typing import Dict
 
 from django.conf import settings
@@ -26,12 +27,61 @@ from router.repositories.orm import (
 )
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.usecases.intelligences.retrieve import get_file_info
+from nexus.usecases.agents.agents import AgentUsecase
+from nexus.usecases.intelligences.get_by_uuid import (
+    get_default_content_base_by_project,
+)
+
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
+from router.dispatcher import dispatch
+
+from nexus.projects.models import Project
+
+
+def get_action_clients(preview: bool = False):
+    if preview:
+        flow_start = SimulateFlowStart(
+            os.environ.get(
+                'FLOWS_REST_ENDPOINT'
+            ),
+            os.environ.get(
+                'FLOWS_INTERNAL_TOKEN'
+            )
+        )
+        broadcast = SimulateBroadcast(
+            os.environ.get(
+                'FLOWS_REST_ENDPOINT'
+            ),
+            os.environ.get(
+                'FLOWS_INTERNAL_TOKEN'
+            ),
+            get_file_info
+        )
+        return broadcast, flow_start
+
+    broadcast = SendMessageHTTPClient(
+        os.environ.get(
+            'FLOWS_REST_ENDPOINT'
+        ),
+        os.environ.get(
+            'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
+        )
+    )
+    flow_start = FlowStartHTTPClient(
+        os.environ.get(
+            'FLOWS_REST_ENDPOINT'
+        ),
+        os.environ.get(
+            'FLOWS_INTERNAL_TOKEN'
+        )
+    )
+    return broadcast, flow_start
 
 
 @celery_app.task(bind=True)
 def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: no cover
+    # TODO: remove get_action_clients from this function
     def get_action_clients(preview: bool = False):
         if preview:
             flow_start = SimulateFlowStart(
@@ -215,3 +265,35 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         print(f"[- START ROUTE - Error: {e} -]")
         if message.text:
             log_usecase.update_status("F", exception_text=e)
+
+
+@celery_app.task(bind=True)
+def start_agent_builder(self, message: Dict, preview: bool = False) -> bool:  # pragma: no cover
+    # TODO: Logs
+
+    project = Project.objects.get(uuid=message.get("project_uuid"))
+    supervisor = project.team
+    self.contentbase = get_default_content_base_by_project(self.project.uuid)
+    usecase = AgentUsecase()
+    usecase.prepare_agent(supervisor.external_id)
+    session_id = f"project-{project.uuid}-session-{uuid.uuid4()}"
+    full_response = usecase.invoke_supervisor(
+        session_id=session_id,
+        supervisor_id=supervisor.external_id,
+        supervisor_alias_id=supervisor.metadata.get("supervisor_alias_id"),
+        prompt=message.get("text"),
+        content_base_uuid=str(self.contentbase.uuid),
+    )
+
+    broadcast, _ = get_action_clients(preview)
+    flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+
+    full_chunks = []
+
+    return dispatch(
+        llm_response=full_response,
+        message=Message(**message),
+        direct_message=broadcast,
+        user_email=flows_user_email,
+        full_chunks=full_chunks,
+    )
