@@ -27,3 +27,9 @@ class SkillFileTooLarge(APIException):
         if filename:
             detail = f"Skill file: {filename} is too large, maximum size is 10485760 bytes (10MB)"
             super().__init__(detail)
+
+
+class AgentAttributeNotAllowed(APIException):
+    satus_code = 400
+    default_detail = 'You are not allowed to add or update prompt_override_configuration, memory_configuration and foundationModel.'
+    default_code = "agent_attribute_not_allowed"
