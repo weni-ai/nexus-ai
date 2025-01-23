@@ -1,7 +1,8 @@
-from typing import Dict
+from typing import Dict, List
 
 from celery.exceptions import TaskRevokedError
 
+from django.conf import settings
 from django.core.exceptions import PermissionDenied
 
 from rest_framework.viewsets import ModelViewSet
@@ -40,7 +41,10 @@ from nexus.projects.permissions import has_project_permission
 from nexus.projects.exceptions import ProjectAuthorizationDenied
 
 from router.entities import Message as UserMessage
-from router.tasks.tasks import start_route
+from router.tasks.tasks import (
+    start_route,
+    start_multi_agents
+)
 
 
 class SearchFlowView(APIView):
@@ -257,9 +261,14 @@ class MessagePreviewView(APIView):
                 attachments=data.get("attachments", []),
                 metadata=data.get("metadata", {})
             )
-
-            task = start_route.delay(message.__dict__, preview=True)
-            response = task.wait()
+            multi_agents_projects: List[str] = settings.MULTI_AGENTS_PROJECTS
+            if message.project_uuid in multi_agents_projects:
+                print("[+ Starting Agent Builder 2.0 +]")
+                task = start_multi_agents.delay(message.dict(), preview=True)
+                response = task.wait()
+            else:
+                task = start_route.delay(message.__dict__, preview=True)
+                response = task.wait()
 
             return Response(data=response)
         except IntelligencePermissionDenied:

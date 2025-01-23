@@ -199,6 +199,16 @@ class AgentUsecase:
     def get_team_object(self, **kwargs) -> Team:
         return Team.objects.get(**kwargs)
 
+    def invoke_supervisor(self, session_id, supervisor_id, supervisor_alias_id, prompt, content_base_uuid):
+        response = self.external_agent_client.invoke_supervisor(
+            supervisor_id=supervisor_id,
+            supervisor_alias_id=supervisor_alias_id,
+            session_id=session_id,
+            prompt=prompt,
+            content_base_uuid=content_base_uuid,
+        )
+        return response
+
     def prepare_agent(self, agent_id: str):
         self.external_agent_client.prepare_agent(agent_id)
         return
