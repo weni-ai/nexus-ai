@@ -270,7 +270,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
 
 @celery_app.task(bind=True)
-def start_agent_builder(self, message: Dict, preview: bool = False) -> bool:  # pragma: no cover
+def start_multi_agents(self, message: Dict, preview: bool = False) -> bool:  # pragma: no cover
     # TODO: Logs
 
     project = Project.objects.get(uuid=message.get("project_uuid"))
