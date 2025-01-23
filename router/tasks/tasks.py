@@ -272,10 +272,10 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 @celery_app.task(bind=True)
 def start_multi_agents(self, message: Dict, preview: bool = False) -> bool:  # pragma: no cover
     # TODO: Logs
-
-    project = Project.objects.get(uuid=message.get("project_uuid"))
+    project_uuid = message.get("project_uuid")
+    project = Project.objects.get(uuid=project_uuid)
     supervisor = project.team
-    self.contentbase = get_default_content_base_by_project(self.project.uuid)
+    contentbase = get_default_content_base_by_project(project_uuid)
     usecase = AgentUsecase()
     usecase.prepare_agent(supervisor.external_id)
     session_id = f"project-{project.uuid}-session-{uuid.uuid4()}"
@@ -284,7 +284,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False) -> bool:  # p
         supervisor_id=supervisor.external_id,
         supervisor_alias_id=supervisor.metadata.get("supervisor_alias_id"),
         prompt=message.get("text"),
-        content_base_uuid=str(self.contentbase.uuid),
+        content_base_uuid=str(contentbase.uuid),
     )
 
     broadcast, _ = get_action_clients(preview)
