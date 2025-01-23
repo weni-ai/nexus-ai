@@ -325,6 +325,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "mozilla_django_oidc.contrib.drf.OIDCAuthentication"
     ],
+    "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
 }
 
 if TESTING:

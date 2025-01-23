@@ -12,6 +12,7 @@ from nexus.usecases.agents.exceptions import (
     AgentInstructionsTooShort,
     AgentNameTooLong,
     SkillNameTooLong,
+    AgentAttributeNotAllowed
 )
 
 
@@ -71,6 +72,7 @@ class AgentUsecase:
             memory_configuration=agent_dto.memory_configuration,
             prompt_override_configuration=agent_dto.prompt_override_configuration,
             tags=agent_dto.tags,
+            model_id=agent_dto.model[0],
         )
 
         self.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
@@ -225,8 +227,10 @@ class AgentUsecase:
 
     def validate_agent_dto(
         self,
-        agent_dto: AgentDTO
+        agent_dto: AgentDTO,
+        user_email: str,
     ):
+        allowed_users: List[str] = settings.AGENT_CONFIGURATION_ALLOWED_USERS
         if len(agent_dto.slug) > 128:
             raise AgentNameTooLong
 
@@ -242,16 +246,26 @@ class AgentUsecase:
             if len(skill.get('slug')) > 53:
                 raise SkillNameTooLong
 
+        agent_attributes = agent_dto.prompt_override_configuration or agent_dto.memory_configuration
+        if agent_attributes and user_email not in allowed_users:
+            raise AgentAttributeNotAllowed
+
+        agents_model: List[str] = settings.AWS_BEDROCK_AGENTS_MODEL_ID
+        if not set(agent_dto.model).issubset(agents_model) and user_email not in allowed_users:
+            raise AgentAttributeNotAllowed
+
         return agent_dto
 
     def yaml_dict_to_dto(
         self,
-        yaml: dict
+        yaml: dict,
+        user_email: str
     ) -> list[AgentDTO]:
 
         agents = []
 
         for agent_key, agent_value in yaml.get("agents", {}).items():
+            model = agent_value.get("foundationModel")
             agents.append(
                 AgentDTO(
                     slug=slugify(agent_value.get('name')),
@@ -260,13 +274,13 @@ class AgentUsecase:
                     instructions=agent_value.get("instructions"),
                     guardrails=agent_value.get("guardrails"),
                     skills=agent_value.get("skills"),
-                    model=settings.AWS_BEDROCK_AGENTS_MODEL_ID,
+                    model=model if model else settings.AWS_BEDROCK_AGENTS_MODEL_ID,
                     prompt_override_configuration=agent_value.get("prompt_override_configuration"),
                     memory_configuration=agent_value.get("memory_configuration"),
                     tags=agent_value.get("tags"),
                 )
             )
-        validate_agents = [self.validate_agent_dto(agent) for agent in agents]
+        validate_agents = [self.validate_agent_dto(agent, user_email) for agent in agents]
         return validate_agents
 
     def wait_agent_status_update(self, external_id: str):

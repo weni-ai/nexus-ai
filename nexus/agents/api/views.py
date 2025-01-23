@@ -46,7 +46,7 @@ class PushAgents(APIView):
         agents: dict = json.loads(agents)
 
         agents_usecase = AgentUsecase()
-        agents_dto: list[AgentDTO] = agents_usecase.yaml_dict_to_dto(agents)
+        agents_dto: list[AgentDTO] = agents_usecase.yaml_dict_to_dto(agents, user_email=request.user.email)
 
         project_uuid = request.data.get("project_uuid")
 
@@ -89,10 +89,12 @@ class PushAgents(APIView):
                     file=skill_file,
                     function_schema=function_schema,
                 )
-
+        team = agents_usecase.get_team_object(project__uuid=project_uuid)
         return Response({
             "project": str(project_uuid),
-            "agents": agents_updated
+            "agents": agents_updated,
+            "supervisor_id": team.metadata.get("supervisor_alias_id"),
+            "supervisor_alias": team.metadata.get("supervisor_alias_name"),
         })
 
 
