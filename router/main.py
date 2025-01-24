@@ -1,14 +1,17 @@
 
 import os
-
+from typing import List
 from fastapi import FastAPI, Request, HTTPException
-
+from django.conf import settings
 from nexus.event_driven.signals import message_started, message_finished
 
 from router.entities import (
     Message, DBCon
 )
-from router.tasks import start_route
+from router.tasks import (
+    start_route,
+    start_multi_agents
+)
 
 
 app = FastAPI()
@@ -37,11 +40,16 @@ def messages(request: Request, message: Message):
 
     try:
 
-        print("[+ Mensagem recebida +]")
+        multi_agents_projects: List[str] = settings.MULTI_AGENTS_PROJECTS
+        print("[+ Message received +]")
         print(message)
         print("[+ ----------------- +]")
 
-        start_route.delay(message.dict())
+        if message.project_uuid in multi_agents_projects:
+            print("[+ Starting Agent Builder 2.0 +]")
+            start_multi_agents.delay(message.dict())
+        else:
+            start_route.delay(message.dict())
 
     finally:
         message_finished.send(sender=DBCon)
