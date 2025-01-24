@@ -124,7 +124,13 @@ class InvokeModel:
         flow_dto_list = []
         options = self.zeroshot_data.get("options", [])
         for option in options:
-            flow_dto_list.append(FlowDTO(name=option.get("class"), prompt=option.get("context")))
+            option_class = option.get("class")
+            option_prompt = option.get("context")
+
+            if len(option_class) > 64:
+                raise ValueError("Class name must be less than 64 characters")
+
+            flow_dto_list.append(FlowDTO(name=option_class, prompt=option_prompt))
 
         prediction: str = classifier.predict(
             message=self.zeroshot_data.get("text"),
