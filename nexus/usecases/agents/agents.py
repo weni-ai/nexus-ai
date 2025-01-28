@@ -4,7 +4,8 @@ from dataclasses import dataclass, field
 from django.conf import settings
 from django.template.defaultfilters import slugify
 
-from nexus.agents.models import Agent, ActiveAgent, Team
+from nexus.agents.models import Agent, ActiveAgent, Team, AgentSkills
+from nexus.users.models import User
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, BedrockSubAgent
 from nexus.task_managers.tasks_bedrock import run_create_lambda_function, run_update_lambda_function
 
@@ -44,6 +45,7 @@ class UpdateAgentDTO:
     idle_session_ttl_in_seconds: int = None
     guardrail_configuration: dict = None
     foundation_model: str = None
+    model: List[str] = None
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
@@ -77,44 +79,8 @@ class AgentUsecase:
         )
         return active_agent
 
-    def create_agent(self, user, agent_dto: AgentDTO, project_uuid: str, alias_name: str = "v1"):
-
-        agent = Agent.objects.filter(display_name=agent_dto.name, project_id=project_uuid)
-        if agent.exists():
-            agent = agent.first()
-            updated_agent = self.update_agent(agent_dto=agent_dto, project_uuid=project_uuid)
-            
-            # Update skills if they exist in the DTO
-            if agent_dto.skills:
-                for skill in agent_dto.skills:
-                    slug = skill.get('slug')
-                    skill_file = files[f"{agent.slug}:{slug}"]
-                    skill_file = skill_file.read()
-                    skill_parameters = skill.get("parameters")
-
-                    if type(skill_parameters) == list:
-                        params = {}
-                        for param in skill_parameters:
-                            params.update(param)
-                        skill_parameters = params
-
-                    slug = f"{slug}-{agent.external_id}"
-                    function_schema = [
-                        {
-                            "name": skill.get("slug"),
-                            "parameters": skill_parameters,
-                        }
-                    ]
-
-                    self.update_skill(
-                        file_name=slug,
-                        agent_external_id=agent.metadata["external_id"],
-                        agent_version=agent.metadata.get("agentVersion"),
-                        file=skill_file,
-                        function_schema=function_schema,
-                    )
-            
-            return updated_agent, True
+    def create_agent(self, user: User, agent_dto: AgentDTO, project_uuid: str, alias_name: str = "v1"):
+        print("----------- STARTING CREATE AGENT ---------")
 
         def format_instructions(instructions: List[str]):
             return "\n".join(instructions)
@@ -160,7 +126,7 @@ class AgentUsecase:
                 "agentVersion": str(agent_version),
             }
         )
-        return agent, False
+        return agent
 
     def create_external_agent(
         self,
@@ -224,20 +190,106 @@ class AgentUsecase:
 
     def create_skill(
         self,
-        file_name: str,
         agent_external_id: str,
+        file_name: str,
         agent_version: str,
         file: bytes,
         function_schema: List[Dict],
+        user: User,
     ):
-        # TODO - this should use delay()
-        run_create_lambda_function(
+        """
+        Creates a new Lambda function for an agent skill and creates its alias.
+
+        Args:
+            agent_external_id: The external ID of the agent
+            file_name: The name of the Lambda function
+            agent_version: The version of the agent
+            file: The function code, packaged as bytes in .zip format
+            function_schema: The schema defining the function interface
+            user: The user creating the skill
+        """
+        # Create the Lambda function
+        lambda_response = run_create_lambda_function(
             agent_external_id=agent_external_id,
             lambda_name=file_name,
             agent_version=agent_version,
             zip_content=file,
             function_schema=function_schema,
         )
+
+        # Create the 'live' alias pointing to $LATEST version
+        alias_response = self.create_skill_alias(
+            function_name=file_name,
+            version='$LATEST',  # Point to latest version
+            alias_name='live'
+        )
+
+        # Get the agent instance
+        agent = Agent.objects.get(external_id=agent_external_id)
+
+        # Extract the original skill name from the file_name (remove the agent_external_id suffix)
+        original_skill_name = file_name.rsplit('-', 1)[0]
+
+        # Save skill information to AgentSkills model
+        AgentSkills.objects.create(
+            display_name=original_skill_name,
+            unique_name=file_name,
+            agent=agent,
+            skill={
+                'function_name': file_name,
+                'function_arn': lambda_response['FunctionArn'],
+                'runtime': 'python3.12',
+                'role': lambda_response['Role'],
+                'handler': 'lambda_function.lambda_handler',
+                'code_size': lambda_response['CodeSize'],
+                'description': f"Skill function for agent {agent.display_name}",
+                'last_modified': lambda_response['LastModified'],
+                'version': lambda_response['Version'],
+                'alias_name': 'live',
+                'alias_arn': alias_response['AliasArn'],
+                'agent_version': agent_version
+            },
+            created_by=user
+        )
+
+    def create_skill_alias(
+        self,
+        function_name: str,
+        version: str,
+        alias_name: str = 'live',
+        description: str = 'Production alias for the skill'
+    ):
+        """
+        Creates an alias for a Lambda function skill.
+
+        Args:
+            function_name: Name of the Lambda function
+            version: Version of the function to point to (can be version number or $LATEST)
+            alias_name: Name of the alias (defaults to 'live')
+            description: Description of the alias
+        """
+        try:
+            response = self.external_agent_client.lambda_client.create_alias(
+                FunctionName=function_name,
+                Name=alias_name,
+                FunctionVersion=version,
+                Description=description
+            )
+            print(f"Created alias {alias_name} for function {function_name}")
+            return response
+        except self.external_agent_client.lambda_client.exceptions.ResourceConflictException:
+            # If alias already exists, update it
+            print(f"Alias {alias_name} already exists for function {function_name}, updating...")
+            response = self.external_agent_client.lambda_client.update_alias(
+                FunctionName=function_name,
+                Name=alias_name,
+                FunctionVersion=version,
+                Description=description
+            )
+            return response
+        except Exception as e:
+            print(f"Error creating/updating alias for function {function_name}: {str(e)}")
+            raise
 
     def update_skill(
         self,
@@ -246,25 +298,57 @@ class AgentUsecase:
         agent_version: str,
         file: bytes,
         function_schema: List[Dict],
+        user: User,
     ):
         """
         Updates the code for an existing Lambda function associated with an agent skill.
-        
+
         Args:
-            file_name: The name of the Lambda function to update
-            agent_external_id: The external ID of the agent
-            agent_version: The version of the agent
-            file: The function code to update, packaged as bytes in .zip format
-            function_schema: The schema defining the function interface
+            file_name: Name of the Lambda function to update
+            agent_external_id: External ID of the agent
+            agent_version: Version of the agent
+            file: Function code to update (bytes in .zip format)
+            function_schema: Schema defining the function interface
+            user: User updating the skill
         """
-        # TODO - this should use delay()
-        run_update_lambda_function(
+        print("----------- STARTING UPDATE LAMBDA FUNCTION ---------")
+
+        # Get the agent and skill instances first
+        agent = Agent.objects.get(external_id=agent_external_id)
+        skill = AgentSkills.objects.get(unique_name=file_name, agent=agent)
+
+        # Use the stored skill data for the update
+        lambda_response = run_update_lambda_function(
             agent_external_id=agent_external_id,
-            lambda_name=file_name,
+            lambda_name=skill.skill['function_name'],
+            lambda_arn=skill.skill['function_arn'],
             agent_version=agent_version,
             zip_content=file,
             function_schema=function_schema,
         )
+
+        print("----------- UPDATED LAMBDA FUNCTION ---------")
+
+        # Update skill information with new data while preserving existing fields
+        skill.skill.update({
+            'code_size': lambda_response['CodeSize'],
+            'last_modified': lambda_response['LastModified'],
+            'version': lambda_response['Version'],
+            'agent_version': agent_version,
+            # Preserve other important fields from the original skill data
+            'function_name': skill.skill['function_name'],
+            'function_arn': skill.skill['function_arn'],
+            'runtime': skill.skill['runtime'],
+            'role': skill.skill['role'],
+            'handler': skill.skill['handler'],
+            'description': skill.skill['description'],
+            'alias_name': skill.skill['alias_name'],
+            'alias_arn': skill.skill['alias_arn']
+        })
+        skill.modified_by = user
+        skill.save()
+
+        print(f"Updated skill {skill.display_name} for agent {agent.display_name}")
 
     def create_team_object(self, project_uuid: str, external_id: str) -> Team:
         return Team.objects.create(
@@ -346,9 +430,6 @@ class AgentUsecase:
         user_email: str,
         allowed_users: List[str] = settings.AGENT_CONFIGURATION_ALLOWED_USERS
     ):
-        if len(agent_dto.slug) > 128:
-            raise AgentNameTooLong
-
         if agent_dto.slug is not None:
             if len(agent_dto.slug) > 128:
                 raise AgentNameTooLong
@@ -376,9 +457,10 @@ class AgentUsecase:
         if agent_attributes and user_email not in allowed_users:
             raise AgentAttributeNotAllowed
 
-        agents_model: List[str] = settings.AWS_BEDROCK_AGENTS_MODEL_ID
-        if not set(agent_dto.model).issubset(agents_model) and user_email not in allowed_users:
-            raise AgentAttributeNotAllowed
+        if hasattr(agent_dto, 'model') and agent_dto.model is not None:
+            agents_model: List[str] = settings.AWS_BEDROCK_AGENTS_MODEL_ID
+            if not set(agent_dto.model).issubset(agents_model) and user_email not in allowed_users:
+                raise AgentAttributeNotAllowed
 
         return agent_dto
 
@@ -391,7 +473,8 @@ class AgentUsecase:
         def format_instructions(instructions: List[str]):
             return "\n".join(instructions)
 
-        instructions = format_instructions(agent_value.get("instructions"))
+        all_instructions = agent_value.get("instructions") + agent_value.get("guardrails")
+        instructions = format_instructions(all_instructions)
 
         agent_dto = UpdateAgentDTO(
             name=agent_value.get("name"),
@@ -402,6 +485,8 @@ class AgentUsecase:
             prompt_override_configuration=agent_value.get("prompt_override_configuration"),
             idle_session_ttl_in_seconds=agent_value.get("idle_session_ttl_in_seconds"),
             guardrail_configuration=agent_value.get("guardrail_configuration"),
+            model=agent_value.get("model"),
+            skills=agent_value.get("skills"),
         )
         validate_agents = self.validate_agent_dto(agent_dto, user_email)
         return validate_agents
@@ -454,3 +539,62 @@ class AgentUsecase:
 
     def wait_agent_status_update(self, external_id: str):
         self.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
+
+    def handle_agent_skills(
+        self,
+        agent: Agent,
+        skills: List[Dict],
+        files: Dict,
+        user: User
+    ):
+        """
+        Handle creation or update of agent skills.
+
+        Args:
+            agent: The agent to handle skills for
+            skills: List of skill configurations
+            files: Dictionary of uploaded files
+            user: The user creating the skills
+        """
+        for skill in skills:
+            slug = skill.get('slug')
+            skill_file = files[f"{agent.slug}:{slug}"]
+            skill_file = skill_file.read()
+            skill_parameters = skill.get("parameters")
+
+            if type(skill_parameters) == list:
+                params = {}
+                for param in skill_parameters:
+                    params.update(param)
+                skill_parameters = params
+
+            lambda_name = f"{slug}-{agent.external_id}"
+            function_schema = [
+                {
+                    "name": skill.get("slug"),
+                    "parameters": skill_parameters,
+                }
+            ]
+
+            # Check if skill exists before deciding to update or create
+            try:
+                AgentSkills.objects.get(unique_name=lambda_name, agent=agent)
+                print(f"Updating existing skill: {lambda_name}")
+                self.update_skill(
+                    file_name=lambda_name,
+                    agent_external_id=agent.metadata["external_id"],
+                    agent_version=agent.metadata.get("agentVersion"),
+                    file=skill_file,
+                    function_schema=function_schema,
+                    user=user
+                )
+            except AgentSkills.DoesNotExist:
+                print(f"Creating new skill: {lambda_name}")
+                self.create_skill(
+                    agent_external_id=agent.metadata["external_id"],
+                    file_name=lambda_name,
+                    agent_version=agent.metadata.get("agentVersion"),
+                    file=skill_file,
+                    function_schema=function_schema,
+                    user=user
+                )

@@ -559,13 +559,13 @@ class BedrockFileDatabase(FileDataBase):
     ):
         """
         Updates the code of an existing Lambda function and updates its alias.
-        
+
         Args:
             lambda_name: The name of the Lambda function to update
             zip_content: The function code to update, packaged as bytes in .zip format
         """
         zip_buffer = BytesIO(zip_content)
-        
+
         try:
             # Update function code and publish new version
             response = self.lambda_client.update_function_code(
@@ -573,8 +573,9 @@ class BedrockFileDatabase(FileDataBase):
                 ZipFile=zip_buffer.getvalue(),
                 Publish=True  # Create a new version
             )
-            
+
             # Wait for the function to be updated
+            print(" WAITING FOR FUNCTION TO BE UPDATED ...")
             waiter = self.lambda_client.get_waiter('function_updated')
             waiter.wait(
                 FunctionName=lambda_name,
@@ -586,16 +587,29 @@ class BedrockFileDatabase(FileDataBase):
 
             # Get the new version number from the response
             new_version = response['Version']
-            
-            # Update the alias to point to the new version
-            self.lambda_client.update_alias(
-                FunctionName=lambda_name,
-                Name='live',  # Using 'live' as the standard alias name
-                FunctionVersion=new_version
-            )
-            
+
+            print(" UPDATING ALIAS TO POINT TO THE NEW VERSION ...")
+            print("ALIAS ARGS: ", lambda_name, 'live', new_version)
+
+            try:
+                # Try to update the alias
+                self.lambda_client.update_alias(
+                    FunctionName=lambda_name,
+                    Name='live',
+                    FunctionVersion=new_version
+                )
+            except self.lambda_client.exceptions.ResourceNotFoundException:
+                # If alias doesn't exist, create it
+                print(f"Alias 'live' not found for function {lambda_name}, creating...")
+                self.lambda_client.create_alias(
+                    FunctionName=lambda_name,
+                    Name='live',
+                    FunctionVersion=new_version,
+                    Description='Production alias for the skill'
+                )
+
             return response
-            
+
         except Exception as e:
             print(f"Error updating Lambda function {lambda_name}: {str(e)}")
             raise
