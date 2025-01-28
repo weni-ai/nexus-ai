@@ -1,4 +1,5 @@
 from typing import Dict
+from uuid import uuid4
 
 from django.db import models
 from nexus.projects.models import Project
@@ -28,6 +29,22 @@ class Team(models.Model):
     def update_metadata(self, metadata: Dict[str, str]):
         self.metadata.update(metadata)
         self.save()
+
+    @property
+    def current_version(self):
+        return self.versions.last()
+
+    @property
+    def list_versions(self):
+        return self.versions.order_by()
+
+
+class TeamVersion(BaseModel):
+    uuid = models.UUIDField(default=uuid4, editable=True)
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="versions")
+    alias_id = models.CharField(max_length=255, help_text="Supervisor alias ID")
+    alias_name = models.CharField(max_length=255, help_text="Supervisor alias name", null=True)
+    metadata = models.JSONField(default=dict)
 
 
 class ActiveAgent(BaseModel):
