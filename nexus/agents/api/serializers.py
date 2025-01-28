@@ -20,13 +20,17 @@ class ActiveAgentTeamSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ActiveAgent
-        fields = ['uuid', 'name', 'skills', 'is_official']
+        fields = ['uuid', 'name', 'skills', 'is_official', 'external_id']
 
     name = serializers.SerializerMethodField('get_name')
     skills = serializers.SerializerMethodField("get_skills")
+    external_id = serializers.SerializerMethodField("get_external_id")
 
     def get_name(self, obj):
         return obj.agent.display_name
+    
+    def get_external_id(self, obj):
+        return obj.agent.external_id
 
     def get_skills(self, obj):
         skills = obj.agent.agent_skills

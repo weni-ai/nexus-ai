@@ -14,6 +14,7 @@ from nexus.agents.api.serializers import (
 from nexus.agents.models import (
     Agent,
     ActiveAgent,
+    Team
 )
 
 from nexus.usecases.agents import (
@@ -170,6 +171,14 @@ class TeamView(APIView):
 
         project_uuid = kwargs.get("project_uuid")
 
-        team = ActiveAgent.objects.filter(team__project__uuid=project_uuid)
-        serializer = ActiveAgentTeamSerializer(team, many=True)
-        return Response(serializer.data)
+        team = Team.objects.get(project__uuid=project_uuid)
+        team_agents = ActiveAgent.objects.filter(team=team)
+        serializer = ActiveAgentTeamSerializer(team_agents, many=True)
+        print(team.external_id)
+        data = {
+            "manager": {
+                "external_id": team.external_id
+            },
+            "agents": serializer.data
+        }
+        return Response(data)
