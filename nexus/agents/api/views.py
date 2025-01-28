@@ -17,7 +17,6 @@ from nexus.agents.models import (
 )
 
 from nexus.usecases.agents import (
-    AgentDTO,
     AgentUsecase,
     UpdateAgentDTO
 )
@@ -53,52 +52,43 @@ class PushAgents(APIView):
 
         agents_updated = []
         for agent_dto in agents_dto:
-
             if isinstance(agent_dto, UpdateAgentDTO):
                 updated_agent = agents_usecase.update_agent(agent_dto, project_uuid)
-                agents_updated.append({"agent_name": updated_agent.display_name, "agent_external_id": updated_agent.external_id})
+                
+                # Handle skill updates if present
+                if agent_dto.skills:
+                    agents_usecase.handle_agent_skills(
+                        agent=updated_agent,
+                        skills=agent_dto.skills,
+                        files=files,
+                        user=request.user
+                    )
+
+                agents_updated.append({
+                    "agent_name": updated_agent.display_name, 
+                    "agent_external_id": updated_agent.external_id
+                })
                 continue
 
-            agent, updated = agents_usecase.create_agent(request.user, agent_dto, project_uuid)
-            agents_updated.append({"agent_name": agent.display_name, "agent_external_id": agent.external_id})
+            # Handle new agent creation
+            agent = agents_usecase.create_agent(user=request.user, agent_dto=agent_dto, project_uuid=project_uuid)
+            agents_updated.append({
+                "agent_name": agent.display_name, 
+                "agent_external_id": agent.external_id
+            })
 
             print("Agent created: ", agent.display_name)
 
-            skills = agent_dto.skills
-
-            if not updated:
-                for skill in skills:
-                    slug = skill.get('slug')
-                    skill_file = files[f"{agent.slug}:{slug}"]
-
-                    # Convert InMemoryUploadedFile to bytes
-                    skill_file = skill_file.read()
-                    skill_parameters = skill.get("parameters")
-
-                    if type(skill_parameters) == list:
-                        params = {}
-                        for param in skill_parameters:
-                            params.update(param)
-
-                        skill_parameters = params
-
-                    slug = f"{slug}-{agent.external_id}"
-                    function_schema = [
-                        {
-                            "name": skill.get("slug"),
-                            "parameters": skill_parameters,
-                        }
-                    ]
-
-                agents_usecase.create_skill(
-                    agent_external_id=agent.metadata["external_id"],
-                    file_name=slug,
-                    agent_version=agent.metadata.get("agentVersion"),
-                    file=skill_file,
-                    function_schema=function_schema,
+            # Create skills for new agent if present
+            if agent_dto.skills:
+                agents_usecase.handle_agent_skills(
+                    agent=agent,
+                    skills=agent_dto.skills,
+                    files=files,
+                    user=request.user
                 )
-            team = agents_usecase.get_team_object(project__uuid=project_uuid)
 
+        team = agents_usecase.get_team_object(project__uuid=project_uuid)
 
         return Response({
             "project": str(project_uuid),
