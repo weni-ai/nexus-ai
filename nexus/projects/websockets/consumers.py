@@ -96,3 +96,77 @@ class WebsocketMessageConsumer(WebsocketConsumer):
         self.send(text_data=json.dumps(
             {"type": mtype.get(message_type, message_type), "message": message}
         ))
+
+
+class PreviewMultiagentsConsumer(WebsocketConsumer):
+    def connect(self):
+        try:
+            self.user = self.scope["user"]
+            self.project_uuid = self.scope["url_route"]["kwargs"]["project"]
+            self.room_group_name = f"preview_multiagents_{self.project_uuid}"
+        except (KeyError, TypeError, AttributeError) as e:
+            logger.error(f"[ WebsocketError ] {e}")
+            self.close()
+            return
+
+        try:
+            usecases = ProjectsUseCase()
+            self.project = usecases.get_by_uuid(self.project_uuid)
+        except ProjectDoesNotExist:
+            logger.error(f"[ WebsocketError ] {self.project_uuid} Does not Exist")
+            self.close()
+            return
+
+        if self.user.is_anonymous or self.project is None:
+            self.close()
+            return
+
+        if not has_project_permission(
+            self.user,
+            self.project,
+            "GET"
+        ):
+            self.close()
+            return
+
+        async_to_sync(self.channel_layer.group_add)(
+            self.room_group_name,
+            self.channel_name
+        )
+        self.accept()
+
+    def receive(self, text_data=None, bytes_data=None):
+        text_data_json = json.loads(text_data)
+        message = text_data_json["message"]
+        message_type = text_data_json["type"]
+
+        async_to_sync(self.channel_layer.group_send)(
+            self.room_group_name,
+            {
+                "type": "preview_message",
+                "message": message,
+                "message_type": message_type,
+            }
+        )
+
+    def preview_message(self, event):
+        message = event["message"]
+        message_type = event["message_type"]
+        self.send(text_data=json.dumps({
+            "type": message_type,
+            "message": message
+        }))
+
+
+def send_preview_message_to_websocket(project_uuid, message_data):
+    channel_layer = get_channel_layer()
+    room_name = f"preview_multiagents_{project_uuid}"
+
+    async_to_sync(channel_layer.group_send)(
+        room_name,
+        {
+            "type": "preview_message",
+            "message": message_data,
+            "message_type": "preview",
+        }
+    )
