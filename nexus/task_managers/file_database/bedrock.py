@@ -70,6 +70,61 @@ class BedrockFileDatabase(FileDataBase):
         )
         return response
 
+    def update_agent(
+        self,
+        agent_id: str,
+        agent_dto,
+    ):
+        bedrock_agent = self.get_agent(agent_id)
+        _agent_details = bedrock_agent.get("agent")
+
+        updated_fields = []
+        required_fields = ["agentId", "agentName", "agentResourceRoleArn", "foundationModel"]
+
+        if agent_dto.instructions:
+            _agent_details["instruction"] = agent_dto.instructions
+            updated_fields.append("instruction")
+
+        if agent_dto.description:
+            _agent_details["description"] = agent_dto.description
+            updated_fields.append("description")
+
+        if agent_dto.memory_configuration:
+            _agent_details["memoryConfiguration"] = agent_dto.memory_configuration
+            updated_fields.append("memoryConfiguration")
+
+        if agent_dto.prompt_override_configuration:
+            _agent_details["promptOverrideConfiguration"] = agent_dto.prompt_override_configuration
+            updated_fields.append("promptOverrideConfiguration")
+
+        if agent_dto.idle_session_ttl_in_seconds:
+            _agent_details["idleSessionTTLInSeconds"] = agent_dto.idle_session_ttl_in_seconds
+            updated_fields.append("idleSessionTTLInSeconds")
+
+        if agent_dto.guardrail_configuration:
+            _agent_details["guardrailConfiguration"] = agent_dto.guardrail_configuration
+            updated_fields.append("guardrailConfiguration")
+
+        if agent_dto.foundation_model:
+            _agent_details["foundationModel"] = agent_dto.foundation_model
+            updated_fields.append("foundationModel")
+
+        keys_to_remove = [
+            key for key in _agent_details.keys()
+            if key not in updated_fields and key not in required_fields
+        ]
+
+        for key in keys_to_remove:
+            del _agent_details[key]
+
+        _update_agent_response = self.bedrock_agent.update_agent(
+            **_agent_details
+        )
+
+        time.sleep(3)
+
+        return _update_agent_response
+
     def add_metadata_json_file(self, filename: str, content_base_uuid: str, file_uuid: str):
         print("[+ BEDROCK: Adding metadata.json file +]")
 

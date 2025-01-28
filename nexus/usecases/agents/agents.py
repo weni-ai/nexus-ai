@@ -31,6 +31,24 @@ class AgentDTO:
     idle_session_tll_in_seconds: int = 1800
 
 
+@dataclass
+class UpdateAgentDTO:
+    name: str
+    slug: str = None
+    skills: List[Dict] = None
+    instructions: str = None
+    guardrails: List[str] = None
+    description: str = None
+    memory_configuration: dict = None
+    prompt_override_configuration: dict = None
+    idle_session_ttl_in_seconds: int = None
+    guardrail_configuration: dict = None
+    foundation_model: str = None
+
+    def dict(self):
+        return {key: value for key, value in self.__dict__.items() if value is not None}
+
+
 class AgentUsecase:
     def __init__(self, external_agent_client=BedrockFileDatabase):
         self.external_agent_client = external_agent_client()
@@ -61,13 +79,21 @@ class AgentUsecase:
 
     def create_agent(self, user, agent_dto: AgentDTO, project_uuid: str, alias_name: str = "v1"):
 
+        agent = Agent.objects.filter(display_name=agent_dto.name, project_id=project_uuid)
+        if agent.exists():
+            agent = agent.first()
+            updated_agent = self.update_agent(agent_dto=agent_dto, project_uuid=project_uuid)
+            return updated_agent, True
+
         def format_instructions(instructions: List[str]):
             return "\n".join(instructions)
+
+        all_instructions = agent_dto.instructions + agent_dto.guardrails
 
         external_id = self.create_external_agent(
             agent_name=f"{agent_dto.slug}-project-{project_uuid}",
             agent_description=agent_dto.description,
-            agent_instructions=format_instructions(agent_dto.instructions),
+            agent_instructions=format_instructions(all_instructions),
             idle_session_tll_in_seconds=agent_dto.idle_session_tll_in_seconds,
             memory_configuration=agent_dto.memory_configuration,
             prompt_override_configuration=agent_dto.prompt_override_configuration,
@@ -103,7 +129,7 @@ class AgentUsecase:
                 "agentVersion": str(agent_version),
             }
         )
-        return agent
+        return agent, False
 
     def create_external_agent(
         self,
@@ -235,26 +261,58 @@ class AgentUsecase:
                 sub_agent_id=sub_agent_id,
             )
 
+    def update_agent(self, agent_dto: UpdateAgentDTO, project_uuid: str):
+
+        agent = Agent.objects.filter(display_name=agent_dto.name, project_id=project_uuid).first()
+
+        self.external_agent_client.update_agent(
+            agent_dto=agent_dto,
+            agent_id=agent.external_id,
+        )
+
+        self.prepare_agent(agent.external_id)
+
+        if agent_dto.description:
+            agent.description = agent_dto.description
+
+        if agent_dto.foundation_model:
+            agent.model = agent_dto.foundation_model
+
+        agent.save()
+
+        return agent
+
     def validate_agent_dto(
         self,
         agent_dto: AgentDTO,
         user_email: str,
-    ):
         allowed_users: List[str] = settings.AGENT_CONFIGURATION_ALLOWED_USERS
+    ):
         if len(agent_dto.slug) > 128:
             raise AgentNameTooLong
 
-        for instruction in agent_dto.instructions:
-            if len(instruction) < 40:
-                raise AgentInstructionsTooShort
+        if agent_dto.slug is not None:
+            if len(agent_dto.slug) > 128:
+                raise AgentNameTooLong
 
-        for guardrail in agent_dto.guardrails:
-            if len(guardrail) < 40:
-                raise AgentInstructionsTooShort
+        if agent_dto.instructions is not None:
+            if isinstance(agent_dto, UpdateAgentDTO):
+                if len(agent_dto.instructions) < 40:
+                    raise AgentInstructionsTooShort
+            else:
+                for instruction in agent_dto.instructions:
+                    if len(instruction) < 40:
+                        raise AgentInstructionsTooShort
 
-        for skill in agent_dto.skills:
-            if len(skill.get('slug')) > 53:
-                raise SkillNameTooLong
+        if agent_dto.guardrails is not None:
+            for guardrail in agent_dto.guardrails:
+                if len(guardrail) < 40:
+                    raise AgentInstructionsTooShort
+
+        if agent_dto.skills is not None:
+            for skill in agent_dto.skills:
+                if len(skill.get('slug')) > 53:
+                    raise SkillNameTooLong
 
         agent_attributes = agent_dto.prompt_override_configuration or agent_dto.memory_configuration
         if agent_attributes and user_email not in allowed_users:
@@ -266,32 +324,75 @@ class AgentUsecase:
 
         return agent_dto
 
-    def yaml_dict_to_dto(
+    def update_dict_to_dto(
         self,
+        agent_value: dict,
+        user_email: str
+    ) -> UpdateAgentDTO:
+
+        def format_instructions(instructions: List[str]):
+            return "\n".join(instructions)
+
+        instructions = format_instructions(agent_value.get("instructions"))
+
+        agent_dto = UpdateAgentDTO(
+            name=agent_value.get("name"),
+            instructions=instructions,
+            guardrails=agent_value.get("guardrails"),
+            description=agent_value.get("description"),
+            memory_configuration=agent_value.get("memory_configuration"),
+            prompt_override_configuration=agent_value.get("prompt_override_configuration"),
+            idle_session_ttl_in_seconds=agent_value.get("idle_session_ttl_in_seconds"),
+            guardrail_configuration=agent_value.get("guardrail_configuration"),
+        )
+        validate_agents = self.validate_agent_dto(agent_dto, user_email)
+        return validate_agents
+
+    def create_dict_to_dto(
+        self,
+        agent_value: dict,
+        user_email: str
+    ) -> AgentDTO:
+
+        agent_dto = AgentDTO(
+            slug=slugify(agent_value.get('name')),
+            name=agent_value.get("name"),
+            description=agent_value.get("description"),
+            instructions=agent_value.get("instructions"),
+            guardrails=agent_value.get("guardrails"),
+            skills=agent_value.get("skills"),
+            model=settings.AWS_BEDROCK_AGENTS_MODEL_ID,
+            prompt_override_configuration=agent_value.get("prompt_override_configuration"),
+            memory_configuration=agent_value.get("memory_configuration"),
+            tags=agent_value.get("tags"),
+        )
+        validate_agents = self.validate_agent_dto(agent_dto, user_email)
+        return validate_agents
+
+    def agent_dto_handler(
+        self,
+        project_uuid: str,
         yaml: dict,
         user_email: str
-    ) -> list[AgentDTO]:
+    ):
 
-        agents = []
-
+        existing_agents_dto = []
+        to_create_agents_dto = []
         for agent_key, agent_value in yaml.get("agents", {}).items():
-            model = agent_value.get("foundationModel")
-            agents.append(
-                AgentDTO(
-                    slug=slugify(agent_value.get('name')),
-                    name=agent_value.get("name"),
-                    description=agent_value.get("description"),
-                    instructions=agent_value.get("instructions"),
-                    guardrails=agent_value.get("guardrails"),
-                    skills=agent_value.get("skills"),
-                    model=model if model else settings.AWS_BEDROCK_AGENTS_MODEL_ID,
-                    prompt_override_configuration=agent_value.get("prompt_override_configuration"),
-                    memory_configuration=agent_value.get("memory_configuration"),
-                    tags=agent_value.get("tags"),
-                )
+
+            agent = Agent.objects.filter(
+                display_name=agent_value.get("name"),
+                project_id=project_uuid
             )
-        validate_agents = [self.validate_agent_dto(agent, user_email) for agent in agents]
-        return validate_agents
+
+            if agent.exists():
+                dto = self.update_dict_to_dto(agent_value=agent_value, user_email=user_email)
+                existing_agents_dto.append(dto)
+            else:
+                dto = self.create_dict_to_dto(agent_value=agent_value, user_email=user_email)
+                to_create_agents_dto.append(dto)
+
+        return existing_agents_dto + to_create_agents_dto
 
     def wait_agent_status_update(self, external_id: str):
         self.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
