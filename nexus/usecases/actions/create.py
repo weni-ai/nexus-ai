@@ -45,6 +45,9 @@ class CreateFlowsUseCase():
         if create_dto.action_type == "custom" and create_dto.prompt is None:
             raise ValueError("Prompt is required for custom actions")
 
+        if len(create_dto.name) > 64:
+            raise ValueError("Name must be less than 64 characters")
+
         content_base = get_default_content_base_by_project(create_dto.project_uuid)
 
         if create_dto.template:

@@ -38,6 +38,9 @@ class ZeroShotFastPredictAPIView(APIView):
             )
 
             return Response(status=200, data=response if response.get("output") else {"error": response})
+        except ValueError as error:
+            logger.error(f"[ - ] Zeroshot fast predict: {error}")
+            return Response(status=400, data={"error": str(error)})
         except Exception as error:
             traceback.print_exc()
             logger.error(f"[ - ] Zeroshot fast predict: {error}")
