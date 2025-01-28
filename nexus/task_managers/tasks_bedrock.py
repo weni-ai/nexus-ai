@@ -248,3 +248,32 @@ def run_create_lambda_function(
         source_code_file=zip_content,
         function_schema=function_schema,
     )
+
+
+def run_update_lambda_function(
+    agent_external_id: str,
+    lambda_name: str,
+    agent_version: str,
+    zip_content: bytes,
+    function_schema: List[Dict],
+):
+    """
+    Updates an existing Lambda function's code and updates its association with the agent.
+    """
+    bedrock_client = BedrockFileDatabase()
+    
+    # Update the Lambda function code and its alias
+    bedrock_client.update_lambda_function(
+        lambda_name=lambda_name,
+        zip_content=zip_content,
+    )
+
+    # Update the action group to ensure schema is updated
+    action_group_name = f"{lambda_name}_action_group"
+    bedrock_client.update_agent_action_group(
+        agent_external_id=agent_external_id,
+        action_group_name=action_group_name,
+        lambda_arn=f"arn:aws:lambda:{bedrock_client.region_name}:{bedrock_client.account_id}:function:{lambda_name}",
+        agent_version=agent_version,
+        function_schema=function_schema
+    )

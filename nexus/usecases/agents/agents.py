@@ -6,7 +6,7 @@ from django.template.defaultfilters import slugify
 
 from nexus.agents.models import Agent, ActiveAgent, Team
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, BedrockSubAgent
-from nexus.task_managers.tasks_bedrock import run_create_lambda_function
+from nexus.task_managers.tasks_bedrock import run_create_lambda_function, run_update_lambda_function
 
 from nexus.usecases.agents.exceptions import (
     AgentInstructionsTooShort,
@@ -83,6 +83,37 @@ class AgentUsecase:
         if agent.exists():
             agent = agent.first()
             updated_agent = self.update_agent(agent_dto=agent_dto, project_uuid=project_uuid)
+            
+            # Update skills if they exist in the DTO
+            if agent_dto.skills:
+                for skill in agent_dto.skills:
+                    slug = skill.get('slug')
+                    skill_file = files[f"{agent.slug}:{slug}"]
+                    skill_file = skill_file.read()
+                    skill_parameters = skill.get("parameters")
+
+                    if type(skill_parameters) == list:
+                        params = {}
+                        for param in skill_parameters:
+                            params.update(param)
+                        skill_parameters = params
+
+                    slug = f"{slug}-{agent.external_id}"
+                    function_schema = [
+                        {
+                            "name": skill.get("slug"),
+                            "parameters": skill_parameters,
+                        }
+                    ]
+
+                    self.update_skill(
+                        file_name=slug,
+                        agent_external_id=agent.metadata["external_id"],
+                        agent_version=agent.metadata.get("agentVersion"),
+                        file=skill_file,
+                        function_schema=function_schema,
+                    )
+            
             return updated_agent, True
 
         def format_instructions(instructions: List[str]):
@@ -201,6 +232,33 @@ class AgentUsecase:
     ):
         # TODO - this should use delay()
         run_create_lambda_function(
+            agent_external_id=agent_external_id,
+            lambda_name=file_name,
+            agent_version=agent_version,
+            zip_content=file,
+            function_schema=function_schema,
+        )
+
+    def update_skill(
+        self,
+        file_name: str,
+        agent_external_id: str,
+        agent_version: str,
+        file: bytes,
+        function_schema: List[Dict],
+    ):
+        """
+        Updates the code for an existing Lambda function associated with an agent skill.
+        
+        Args:
+            file_name: The name of the Lambda function to update
+            agent_external_id: The external ID of the agent
+            agent_version: The version of the agent
+            file: The function code to update, packaged as bytes in .zip format
+            function_schema: The schema defining the function interface
+        """
+        # TODO - this should use delay()
+        run_update_lambda_function(
             agent_external_id=agent_external_id,
             lambda_name=file_name,
             agent_version=agent_version,

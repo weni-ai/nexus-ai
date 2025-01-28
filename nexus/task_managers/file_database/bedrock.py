@@ -551,3 +551,77 @@ class BedrockFileDatabase(FileDataBase):
             "lambda",
             region_name=self.region_name
         )
+
+    def update_lambda_function(
+        self,
+        lambda_name: str,
+        zip_content: bytes,
+    ):
+        """
+        Updates the code of an existing Lambda function and updates its alias.
+        
+        Args:
+            lambda_name: The name of the Lambda function to update
+            zip_content: The function code to update, packaged as bytes in .zip format
+        """
+        zip_buffer = BytesIO(zip_content)
+        
+        try:
+            # Update function code and publish new version
+            response = self.lambda_client.update_function_code(
+                FunctionName=lambda_name,
+                ZipFile=zip_buffer.getvalue(),
+                Publish=True  # Create a new version
+            )
+            
+            # Wait for the function to be updated
+            waiter = self.lambda_client.get_waiter('function_updated')
+            waiter.wait(
+                FunctionName=lambda_name,
+                WaiterConfig={
+                    'Delay': 5,
+                    'MaxAttempts': 60
+                }
+            )
+
+            # Get the new version number from the response
+            new_version = response['Version']
+            
+            # Update the alias to point to the new version
+            self.lambda_client.update_alias(
+                FunctionName=lambda_name,
+                Name='live',  # Using 'live' as the standard alias name
+                FunctionVersion=new_version
+            )
+            
+            return response
+            
+        except Exception as e:
+            print(f"Error updating Lambda function {lambda_name}: {str(e)}")
+            raise
+
+    def update_agent_action_group(
+        self,
+        agent_external_id: str,
+        action_group_name: str,
+        lambda_arn: str,
+        agent_version: str,
+        function_schema: List[Dict]
+    ):
+        """
+        Updates an existing action group for an agent.
+        """
+        try:
+            response = self.bedrock_agent.update_agent_action_group(
+                actionGroupExecutor={
+                    'lambda': lambda_arn
+                },
+                actionGroupName=action_group_name,
+                agentId=agent_external_id,
+                agentVersion=agent_version,
+                functionSchema={"functions": function_schema}
+            )
+            return response
+        except Exception as e:
+            print(f"Error updating agent action group: {str(e)}")
+            raise
