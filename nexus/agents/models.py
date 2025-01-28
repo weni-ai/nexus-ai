@@ -20,6 +20,14 @@ class Agent(BaseModel):
     def bedrock_agent_name(self):
         return f"{self.slug}-project-{self.project.uuid}"
 
+    @property
+    def current_version(self):
+        return self.versions.last()
+
+    @property
+    def list_versions(self):
+        return self.versions.order_by("created_at")
+
 
 class Team(models.Model):
     external_id = models.CharField(max_length=255, help_text="Supervisor ID")
@@ -59,3 +67,11 @@ class AgentSkills(BaseModel):
     unique_name = models.CharField(max_length=255, unique=True)
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="agent_skills")
     skill = models.JSONField(default=dict)
+
+
+class AgentVersion(BaseModel):
+    uuid = models.UUIDField(default=uuid4, editable=True)
+    alias_id = models.CharField(max_length=255, help_text="Supervisor alias ID")
+    alias_name = models.CharField(max_length=255, help_text="Supervisor alias name", null=True)
+    metadata = models.JSONField(default=dict)
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="versions")

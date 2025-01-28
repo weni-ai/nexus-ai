@@ -170,6 +170,7 @@ class BedrockFileDatabase(FileDataBase):
         sub_agents = []
         for agent in agents_list:
             agent_name = agent.display_name
+            # TODO: Change the default instruction
             association_instruction_base = f"This agent should be called whenever the user is talking about {agent_name}"
             agent_association_data = {
                 'sub_agent_alias_arn': agent.alias_arn,
