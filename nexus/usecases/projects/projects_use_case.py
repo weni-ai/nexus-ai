@@ -63,12 +63,11 @@ class ProjectsUseCase:
         supervisor_agent_alias_id, supervisor_agent_alias_arn = agents_usecase.external_agent_client.create_agent_alias(
             alias_name=alias_name, agent_id=team.external_id
         )
-        team.update_metadata(
-            {
-                "supervisor_alias_id": supervisor_agent_alias_id,
-                "supervisor_alias_arn": supervisor_agent_alias_arn,
-                "supervisor_alias_name": alias_name,
-            }
+        team.versions.create(
+            alias_id=supervisor_agent_alias_id,
+            alias_name=alias_name,
+            metadata={"supervisor_alias_arn": supervisor_agent_alias_arn},
+            created_by=user,
         )
 
     def create_brain_project_base(

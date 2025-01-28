@@ -275,6 +275,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False) -> bool:  # p
     project_uuid = message.get("project_uuid")
     project = Project.objects.get(uuid=project_uuid)
     supervisor = project.team
+    supervisor_version = supervisor.current_version
     contentbase = get_default_content_base_by_project(project_uuid)
     usecase = AgentUsecase()
     usecase.prepare_agent(supervisor.external_id)
@@ -282,7 +283,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False) -> bool:  # p
     full_response = usecase.invoke_supervisor(
         session_id=session_id,
         supervisor_id=supervisor.external_id,
-        supervisor_alias_id=supervisor.metadata.get("supervisor_alias_id"),
+        supervisor_alias_id=supervisor_version.alias_id,
         prompt=message.get("text"),
         content_base_uuid=str(contentbase.uuid),
     )

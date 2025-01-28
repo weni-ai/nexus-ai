@@ -14,6 +14,7 @@ from nexus.agents.api.serializers import (
 from nexus.agents.models import (
     Agent,
     ActiveAgent,
+    Team,
 )
 
 from nexus.usecases.agents import (
@@ -125,7 +126,7 @@ class ActiveAgentsViewSet(APIView):
     def patch(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         agent_uuid = kwargs.get("agent_uuid")
-
+        user = request.user
         assign: bool = request.data.get("assigned")
 
         usecase = AgentUsecase()
@@ -134,11 +135,13 @@ class ActiveAgentsViewSet(APIView):
             usecase.assign_agent(
                 agent_uuid=agent_uuid,
                 project_uuid=project_uuid,
-                created_by=request.user
+                created_by=user
             )
+            usecase.create_supervisor_version(project_uuid, user)
             return Response({"assigned": True})
 
         usecase.unassign_agent(agent_uuid=agent_uuid, project_uuid=project_uuid)
+        usecase.create_supervisor_version(project_uuid, user)
         return Response({"assigned": False})
 
 
@@ -170,6 +173,7 @@ class TeamView(APIView):
 
         project_uuid = kwargs.get("project_uuid")
 
-        team = ActiveAgent.objects.filter(team__project__uuid=project_uuid)
-        serializer = ActiveAgentTeamSerializer(team, many=True)
+        team = Team.objects.get(project__uuid=project_uuid)
+        team_agents = ActiveAgent.objects.filter(team=team)
+        serializer = ActiveAgentTeamSerializer(team_agents, many=True)
         return Response(serializer.data)

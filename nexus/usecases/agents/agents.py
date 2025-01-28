@@ -4,8 +4,14 @@ from dataclasses import dataclass, field
 from django.conf import settings
 from django.template.defaultfilters import slugify
 
-from nexus.agents.models import Agent, ActiveAgent, Team, AgentSkills
 from nexus.users.models import User
+from nexus.agents.models import (
+    ActiveAgent,
+    Agent,
+    AgentSkills,
+    Team
+)
+from nexus.projects.models import Project
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, BedrockSubAgent
 from nexus.task_managers.tasks_bedrock import run_create_lambda_function, run_update_lambda_function
 
@@ -172,7 +178,8 @@ class AgentUsecase:
         self.external_agent_client.wait_agent_status_update(external_id)
         team: Team = self.create_team_object(
             project_uuid=project_uuid,
-            external_id=external_id
+            external_id=external_id,
+            metadata={"supervisor_name": supervisor_name}
         )
         return team
 
@@ -350,10 +357,11 @@ class AgentUsecase:
 
         print(f"Updated skill {skill.display_name} for agent {agent.display_name}")
 
-    def create_team_object(self, project_uuid: str, external_id: str) -> Team:
+    def create_team_object(self, project_uuid: str, external_id: str, metadata: Dict) -> Team:
         return Team.objects.create(
             project_id=project_uuid,
-            external_id=external_id
+            external_id=external_id,
+            metadata=metadata,
         )
 
     def get_agent_object(self, **kwargs) -> Agent:
@@ -598,3 +606,38 @@ class AgentUsecase:
                     function_schema=function_schema,
                     user=user
                 )
+    def create_supervisor_version(self, project_uuid, user):
+        project = Project.objects.get(uuid=project_uuid)
+        team = project.team
+        current_version = team.current_version
+        supervisor_name = team.metadata.get("supervisor_name")
+        supervisor_id = team.external_id
+
+        # self.bedrock_agent.list_agent_versions(agentId=supervisor_id)
+        if team.list_versions.count() == 9:
+            oldest_version = team.list_versions.first()
+            self.delete_supervisor_version(team.external_id, oldest_version)
+
+        alias_name = f"{supervisor_name}-multi-agent-{current_version.id+1}"
+
+        supervisor_agent_alias_id, supervisor_agent_alias_arn = self.external_agent_client.create_agent_alias(
+            alias_name=alias_name, agent_id=supervisor_id
+        )
+        team.versions.create(
+            alias_id=supervisor_agent_alias_id,
+            alias_name=alias_name,
+            metadata={"supervisor_alias_arn": supervisor_agent_alias_arn},
+            created_by=user,
+        )
+
+    def delete_supervisor_version(self, agent_id: str, version):
+        try:
+            response = self.external_agent_client.bedrock_agent.delete_agent_alias(
+                agentId=agent_id,
+                agentAliasId=version.alias_id
+            )
+            print(response)
+            version.delete()
+            return response
+        except Exception:
+            raise
