@@ -67,38 +67,38 @@ jobs:
           password: ${{ secrets.AWS_SECRET_ACCESS_KEY_SHARED }}
 
       # Cache
-      - name: Cache var-cache-apt
-        uses: actions/cache@v3
-        with:
-          path: var-cache-apt
-          key: var-cache-apt-${{ hashFiles('Dockerfile') }}
-      - name: Cache var-lib-apt
-        uses: actions/cache@v3
-        with:
-          path: var-lib-apt
-          key: var-lib-apt-${{ hashFiles('Dockerfile') }}
-      - name: Cache pip
-        uses: actions/cache@v3
-        with:
-          path: cache-pip
-          key: cache-pip-${{ hashFiles('Dockerfile') }}
+      # - name: Cache var-cache-apt
+      #   uses: actions/cache@v3
+      #   with:
+      #     path: var-cache-apt
+      #     key: var-cache-apt-${{ hashFiles('Dockerfile') }}
+      # - name: Cache var-lib-apt
+      #   uses: actions/cache@v3
+      #   with:
+      #     path: var-lib-apt
+      #     key: var-lib-apt-${{ hashFiles('Dockerfile') }}
+      # - name: Cache pip
+      #   uses: actions/cache@v3
+      #   with:
+      #     path: cache-pip
+      #     key: cache-pip-${{ hashFiles('Dockerfile') }}
 
       # Inject cache
-      - name: inject var-cache-apt into docker
-        uses: reproducible-containers/buildkit-cache-dance@v2.1.3
-        with:
-          cache-source: var-cache-apt
-          cache-target: /var/cache/apt
-      - name: inject var-lib-apt into docker
-        uses: reproducible-containers/buildkit-cache-dance@v2.1.3
-        with:
-          cache-source: var-lib-apt
-          cache-target: /var/lib/apt
-      - name: inject pip cache into docker
-        uses: reproducible-containers/buildkit-cache-dance@v2.1.3
-        with:
-          cache-source: cache-pip
-          cache-target: /pip_cache
+      # - name: inject var-cache-apt into docker
+      #   uses: reproducible-containers/buildkit-cache-dance@v2.1.3
+      #   with:
+      #     cache-source: var-cache-apt
+      #     cache-target: /var/cache/apt
+      # - name: inject var-lib-apt into docker
+      #   uses: reproducible-containers/buildkit-cache-dance@v2.1.3
+      #   with:
+      #     cache-source: var-lib-apt
+      #     cache-target: /var/lib/apt
+      # - name: inject pip cache into docker
+      #   uses: reproducible-containers/buildkit-cache-dance@v2.1.3
+      #   with:
+      #     cache-source: cache-pip
+      #     cache-target: /pip_cache
 
       - name: Build and push - Nexus-ai Image
         uses: docker/build-push-action@v5
