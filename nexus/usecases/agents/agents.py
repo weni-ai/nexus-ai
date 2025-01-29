@@ -113,47 +113,7 @@ class AgentUsecase:
             tags=agent_dto.tags,
             model_id=agent_dto.model[0],
         )
-
-        self.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
-
-        self.prepare_agent(external_id)
-
-        self.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
-
-        sub_agent_alias_id, sub_agent_alias_arn, agent_alias_version = self.create_external_agent_alias(
-            agent_id=external_id, alias_name=alias_name
-        )
-
-        agent_version = self.external_agent_client.get_agent_version(external_id)
-
-        agent = Agent.objects.create(
-            created_by=user,
-            project_id=project_uuid,
-            external_id=external_id,
-            slug=agent_dto.slug,
-            display_name=agent_dto.name,
-            model=agent_dto.model,
-            description=agent_dto.description,
-            metadata={
-                "engine": "BEDROCK",
-                "external_id": external_id,
-                "agent_alias_id": sub_agent_alias_id,
-                "agent_alias_arn": sub_agent_alias_arn,
-                "agentVersion": str(agent_version),
-            }
-        )
-
-        agent.versions.create(
-            alias_id=sub_agent_alias_id,
-            alias_name=alias_name,
-            metadata={
-                "agent_alias": sub_agent_alias_arn,
-                "agent_alias_version": agent_alias_version,
-            },
-            created_by=user,
-        )
-
-        return agent
+        return external_id
 
     def create_external_agent(
         self,
@@ -511,8 +471,6 @@ class AgentUsecase:
             agent_id=agent.external_id,
         )
 
-        self.prepare_agent(agent.external_id)
-
         # Update local agent model with changed fields
         if agent_dto.description:
             agent.description = agent_dto.description
@@ -751,11 +709,11 @@ class AgentUsecase:
                     user=user
                 )
             except AgentSkills.DoesNotExist:
-                print(f"Creating new skill: {lambda_name}")
+                print(f"[+ Creating new skill: {lambda_name} +]")
                 self.create_skill(
-                    agent_external_id=agent.metadata["external_id"],
+                    agent_external_id=agent.external_id,
                     file_name=lambda_name,
-                    agent_version=agent.metadata.get("agentVersion"),
+                    agent_version=agent.current_version.metadata.get("agent_alias_version"),
                     file=skill_file,
                     function_schema=function_schema,
                     user=user,

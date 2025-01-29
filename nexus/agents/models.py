@@ -28,6 +28,23 @@ class Agent(BaseModel):
     def list_versions(self):
         return self.versions.order_by("created_at")
 
+    def create_version(
+            self,
+            agent_alias_id: str,
+            agent_alias_name: str,
+            agent_alias_arn: str,
+            agent_alias_version: str
+        ):
+        self.versions.create(
+            alias_id=agent_alias_id,
+            alias_name=agent_alias_name,
+            metadata={
+                "agent_alias": agent_alias_arn,
+                "agent_alias_version": agent_alias_version,
+            },
+            created_by=self.created_by,
+        )
+
 
 class Team(models.Model):
     external_id = models.CharField(max_length=255, help_text="Supervisor ID")
