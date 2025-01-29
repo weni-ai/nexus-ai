@@ -46,22 +46,22 @@ from nexus.projects.websockets.consumers import send_preview_message_to_websocke
 client = OpenAI()
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-def get_trace_summary(trace):
-    try:
-        # Add a small delay between API calls to respect rate limits
-        time.sleep(1)
-        
+def get_trace_summary(language, trace):
+    try:        
         prompt = f"""
-        You are an AI agent naturally describing your current action. Write a first-person summary that feels conversational and engaging.
+          Generate a concise, one-line summary of the trace of the action, in {language}.
+          This summary must describe the orchestrator's action, referring to all actions as "skills."
 
-        Here's the trace of your action:
-        {json.dumps(trace, indent=2)}
-        
-        Guidelines for your response:
-        - Write a concise, one-line summary (maximum 10 words)
-        - Use varied summary like "Greeting", "Order cancellation request", "Forwarded to Order Analyst"...
-        - Don't use punctuation marks
-        - Avoid technical details about models or architecture
+          Guidelines for your response:
+          - Use the following language for the summary: {language}.
+          - The text to be summarized is the trace of the action.
+          - Use a systematic style (e.g., "Cancel Order skill activated", "Forwarding request to Reporting skill").
+          - The summary must not exceed 10 words.
+          - Use varied gerunds (e.g., "Checking", "Cancelling", "Forwarding").
+          - Do not include technical details about models, architectures, language codes, or anything unrelated to summarizing the action.
+
+          Here is the trace of the action:
+          {json.dumps(trace, indent=2)}
         """
 
         response = client.chat.completions.create(
@@ -309,7 +309,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
 
 @celery_app.task(bind=True)
-def start_multi_agents(self, message: Dict, preview: bool = False) -> bool:  # pragma: no cover
+def start_multi_agents(self, message: Dict, preview: bool = False, language: str = "en") -> bool:  # pragma: no cover
     # TODO: Logs
     project_uuid = message.get("project_uuid")
     project = Project.objects.get(uuid=project_uuid)
@@ -351,8 +351,8 @@ def start_multi_agents(self, message: Dict, preview: bool = False) -> bool:  # p
                     }
                 )
             elif event['type'] == 'trace':
-                # Get summary from Claude
-                event['content']['summary'] = get_trace_summary(event['content'])
+                # Get summary from Claude with specified language
+                event['content']['summary'] = get_trace_summary(language, event['content'])
                 # Send trace data through WebSocket
                 send_preview_message_to_websocket(
                     project_uuid=str(project.uuid),
