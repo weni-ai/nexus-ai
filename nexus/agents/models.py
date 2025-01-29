@@ -75,3 +75,9 @@ class AgentVersion(BaseModel):
     alias_name = models.CharField(max_length=255, help_text="Supervisor alias name", null=True)
     metadata = models.JSONField(default=dict)
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="versions")
+
+
+class AgentSkillVersion(BaseModel):
+    uuid = models.UUIDField(default=uuid4, editable=True)
+    agent_skill = models.ForeignKey(AgentSkills, on_delete=models.CASCADE, related_name="versions")
+    metadata = models.JSONField(default=dict)

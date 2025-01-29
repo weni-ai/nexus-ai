@@ -19,6 +19,8 @@ from django.template.defaultfilters import slugify
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 from nexus.agents.src.utils.bedrock_agent_helper import AgentsForAmazonBedrock
 
+from nexus.agents.models import Agent
+
 
 @dataclass
 class BedrockSubAgent:
@@ -82,7 +84,9 @@ class BedrockFileDatabase(FileDataBase):
         required_fields = ["agentId", "agentName", "agentResourceRoleArn", "foundationModel"]
 
         if agent_dto.instructions:
-            _agent_details["instruction"] = agent_dto.instructions
+            all_instructions = agent_dto.instructions + agent_dto.guardrails
+            instructions = "\n".join(all_instructions)
+            _agent_details["instruction"] = instructions
             updated_fields.append("instruction")
 
         if agent_dto.description:
@@ -200,9 +204,10 @@ class BedrockFileDatabase(FileDataBase):
         action_group_name: str,
         lambda_arn: str,
         agent_version: str,
-        function_schema: List[Dict]
+        function_schema: List[Dict],
+        agent: Agent,
     ):
-        self.bedrock_agent.create_agent_action_group(
+        action_group = self.bedrock_agent.create_agent_action_group(
             actionGroupExecutor={
                 'lambda': lambda_arn
             },
@@ -211,6 +216,19 @@ class BedrockFileDatabase(FileDataBase):
             agentVersion='DRAFT',
             functionSchema={"functions": function_schema}
         )
+
+        data = {
+            'actionGroupId': action_group['agentActionGroup']['actionGroupId'],
+            'actionGroupName': action_group['agentActionGroup']['actionGroupName'],
+            'actionGroupState': action_group['agentActionGroup']['actionGroupState'],
+            'agentVersion': action_group['agentActionGroup']['agentVersion'],
+            'functionSchema': action_group['agentActionGroup']['functionSchema'],
+            'createdAt': action_group['agentActionGroup']['createdAt'].isoformat(),
+            'updatedAt': action_group['agentActionGroup']['updatedAt'].isoformat(),
+        }
+
+        agent.metadata['action_group'] = data
+        agent.save()
 
     def create_agent(
         self,
@@ -285,6 +303,7 @@ class BedrockFileDatabase(FileDataBase):
         agent_version: str,
         source_code_file: bytes,
         function_schema: List[Dict],
+        agent: Agent,
     ):
 
         zip_buffer = BytesIO(source_code_file)
@@ -312,7 +331,8 @@ class BedrockFileDatabase(FileDataBase):
             action_group_name=action_group_name,
             lambda_arn=lambda_arn,
             agent_version=agent_version,
-            function_schema=function_schema
+            function_schema=function_schema,
+            agent=agent
         )
         self.agent_for_amazon_bedrock._allow_agent_lambda(
             agent_external_id,
@@ -411,6 +431,18 @@ class BedrockFileDatabase(FileDataBase):
 
     def get_agent(self, agent_id: str):
         return self.bedrock_agent.get_agent(agentId=agent_id)
+
+    def get_agent_action_group(
+        self,
+        agent_id: str,
+        action_group_id: str,
+        agent_version: str,
+    ):
+        return self.bedrock_agent.get_agent_action_group(
+            agentId=agent_id,
+            agentVersion=agent_version,
+            actionGroupId=action_group_id
+        )
 
     def get_agent_version(self, agent_id: str) -> str:
         agent_version_list: dict = self.bedrock_agent.list_agent_versions(agentId=agent_id)
@@ -621,22 +653,21 @@ class BedrockFileDatabase(FileDataBase):
         action_group_name: str,
         lambda_arn: str,
         agent_version: str,
+        action_group_id: str,
         function_schema: List[Dict]
     ):
         """
         Updates an existing action group for an agent.
         """
-        try:
-            response = self.bedrock_agent.update_agent_action_group(
-                actionGroupExecutor={
-                    'lambda': lambda_arn
-                },
-                actionGroupName=action_group_name,
-                agentId=agent_external_id,
-                agentVersion=agent_version,
-                functionSchema={"functions": function_schema}
-            )
-            return response
-        except Exception as e:
-            print(f"Error updating agent action group: {str(e)}")
-            raise
+        print("SCHEMA UPDATE: ", function_schema)
+        response = self.bedrock_agent.update_agent_action_group(
+            actionGroupExecutor={
+                'lambda': lambda_arn
+            },
+            actionGroupName=action_group_name,
+            agentId=agent_external_id,
+            actionGroupId=action_group_id,
+            agentVersion=agent_version,
+            functionSchema={"functions": function_schema}
+        )
+        return response

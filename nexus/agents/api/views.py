@@ -19,7 +19,6 @@ from nexus.agents.models import (
 
 from nexus.usecases.agents import (
     AgentUsecase,
-    UpdateAgentDTO
 )
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.projects.api.permissions import ProjectPermission
@@ -49,32 +48,60 @@ class PushAgents(APIView):
         project_uuid = request.data.get("project_uuid")
 
         agents_usecase = AgentUsecase()
-        agents_dto = agents_usecase.agent_dto_handler(yaml=agents, project_uuid=project_uuid, user_email=request.user.email)
+        agents_dto = agents_usecase.agent_dto_handler(
+            yaml=agents,
+            project_uuid=project_uuid,
+            user_email=request.user.email
+        )
 
         agents_updated = []
         for agent_dto in agents_dto:
-            if isinstance(agent_dto, UpdateAgentDTO):
-                agent = agents_usecase.update_agent(agent_dto, project_uuid)
+            if hasattr(agent_dto, 'is_update') and agent_dto.is_update:
+                # Handle update
+                agent = agents_usecase.update_agent(
+                    agent_dto=agent_dto,
+                    project_uuid=project_uuid
+                )
 
-                # Handle skill updates if present
+                # Handle skills if present
                 if agent_dto.skills:
-                    agents_usecase.handle_agent_skills(
-                        agent=agent,
-                        skills=agent_dto.skills,
-                        files=files,
-                        user=request.user
-                    )
+                    for skill in agent_dto.skills:
+                        skill_file = files[f"{agent.slug}:{skill['slug']}"]
+                        if skill['is_update']:
+                            # Update existing skill
+                            agents_usecase.update_skill(
+                                file_name=f"{skill['slug']}-{agent.external_id}",
+                                agent_external_id=agent.metadata["external_id"],
+                                agent_version=agent.metadata.get("agentVersion"),
+                                file=skill_file.read(),
+                                function_schema=self._create_function_schema(skill),
+                                user=request.user
+                            )
+                        else:
+                            # Create new skill
+                            agents_usecase.create_skill(
+                                agent_external_id=agent.metadata["external_id"],
+                                file_name=f"{skill['slug']}-{agent.external_id}",
+                                agent_version=agent.metadata.get("agentVersion"),
+                                file=skill_file.read(),
+                                function_schema=self._create_function_schema(skill),
+                                user=request.user,
+                                agent=agent
+                            )
 
                 agents_updated.append({
                     "agent_name": agent.display_name,
                     "agent_external_id": agent.external_id
                 })
                 agents_usecase.create_agent_version(agent.external_id, request.user)
-                # agents_usecase.create_supervisor_version(project_uuid, request.user)
                 continue
 
             # Handle new agent creation
-            agent = agents_usecase.create_agent(user=request.user, agent_dto=agent_dto, project_uuid=project_uuid)
+            agent = agents_usecase.create_agent(
+                user=request.user,
+                agent_dto=agent_dto,
+                project_uuid=project_uuid
+            )
             agents_updated.append({
                 "agent_name": agent.display_name, 
                 "agent_external_id": agent.external_id
@@ -99,6 +126,20 @@ class PushAgents(APIView):
             "supervisor_id": team.metadata.get("supervisor_alias_id"),
             "supervisor_alias": team.metadata.get("supervisor_alias_name"),
         })
+
+    def _create_function_schema(self, skill: dict) -> list[dict]:
+        """Helper method to create function schema from skill data"""
+        skill_parameters = skill.get("parameters")
+        if isinstance(skill_parameters, list):
+            params = {}
+            for param in skill_parameters:
+                params.update(param)
+            skill_parameters = params
+
+        return [{
+            "name": skill.get("slug"),
+            "parameters": skill_parameters,
+        }]
 
 
 class AgentsView(APIView):
