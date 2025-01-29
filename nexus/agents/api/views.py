@@ -54,21 +54,23 @@ class PushAgents(APIView):
         agents_updated = []
         for agent_dto in agents_dto:
             if isinstance(agent_dto, UpdateAgentDTO):
-                updated_agent = agents_usecase.update_agent(agent_dto, project_uuid)
-                
+                agent = agents_usecase.update_agent(agent_dto, project_uuid)
+
                 # Handle skill updates if present
                 if agent_dto.skills:
                     agents_usecase.handle_agent_skills(
-                        agent=updated_agent,
+                        agent=agent,
                         skills=agent_dto.skills,
                         files=files,
                         user=request.user
                     )
 
                 agents_updated.append({
-                    "agent_name": updated_agent.display_name, 
-                    "agent_external_id": updated_agent.external_id
+                    "agent_name": agent.display_name,
+                    "agent_external_id": agent.external_id
                 })
+                agents_usecase.create_agent_version(agent.external_id, request.user)
+                # agents_usecase.create_supervisor_version(project_uuid, request.user)
                 continue
 
             # Handle new agent creation

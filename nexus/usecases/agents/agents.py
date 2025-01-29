@@ -9,7 +9,8 @@ from nexus.agents.models import (
     ActiveAgent,
     Agent,
     AgentSkills,
-    Team
+    Team,
+    AgentVersion
 )
 from nexus.projects.models import Project
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, BedrockSubAgent
@@ -69,7 +70,7 @@ class AgentUsecase:
             display_name=agent.display_name,
             slug=agent.slug,
             external_id=agent.external_id,
-            alias_arn=agent.metadata.get("agent_alias_arn"),
+            alias_arn=agent.current_version.metadata.get("agent_alias"),
         )
 
         self.external_agent_client.associate_sub_agents(
@@ -132,6 +133,14 @@ class AgentUsecase:
                 "agentVersion": str(agent_version),
             }
         )
+
+        agent.versions.create(
+            alias_id=sub_agent_alias_id,
+            alias_name=alias_name,
+            metadata={"agent_alias": sub_agent_alias_arn},
+            created_by=user,
+        )
+
         return agent
 
     def create_external_agent(
@@ -194,6 +203,28 @@ class AgentUsecase:
             supervisor_description,
             supervisor_instructions,
         )
+
+    def create_agent_version(self, agent_external_id, user):
+        print("Creating a new agent version ...")
+        agent = Agent.objects.get(external_id=agent_external_id)
+        current_version = agent.current_version
+
+        if agent.list_versions.count() == 9:
+            oldest_version = agent.list_versions.first()
+            self.delete_agent_version(agent_external_id, oldest_version)
+
+        alias_name = f"v{current_version.id+1}"
+
+        agent_alias_id, agent_alias_arn = self.external_agent_client.create_agent_alias(
+            alias_name=alias_name, agent_id=agent_external_id
+        )
+        agent_version: AgentVersion = agent.versions.create(
+            alias_id=agent_alias_id,
+            alias_name=alias_name,
+            metadata={"agent_alias": agent_alias_arn},
+            created_by=user,
+        )
+        return agent_version
 
     def create_skill(
         self,
@@ -570,7 +601,7 @@ class AgentUsecase:
             skill_file = skill_file.read()
             skill_parameters = skill.get("parameters")
 
-            if type(skill_parameters) == list:
+            if isinstance(skill_parameters, list):
                 params = {}
                 for param in skill_parameters:
                     params.update(param)
@@ -606,6 +637,7 @@ class AgentUsecase:
                     function_schema=function_schema,
                     user=user
                 )
+
     def create_supervisor_version(self, project_uuid, user):
         project = Project.objects.get(uuid=project_uuid)
         team = project.team
@@ -616,7 +648,7 @@ class AgentUsecase:
         # self.bedrock_agent.list_agent_versions(agentId=supervisor_id)
         if team.list_versions.count() == 9:
             oldest_version = team.list_versions.first()
-            self.delete_supervisor_version(team.external_id, oldest_version)
+            self.delete_agent_version(team.external_id, oldest_version)
 
         alias_name = f"{supervisor_name}-multi-agent-{current_version.id+1}"
 
@@ -630,7 +662,7 @@ class AgentUsecase:
             created_by=user,
         )
 
-    def delete_supervisor_version(self, agent_id: str, version):
+    def delete_agent_version(self, agent_id: str, version):
         try:
             response = self.external_agent_client.bedrock_agent.delete_agent_alias(
                 agentId=agent_id,
