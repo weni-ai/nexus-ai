@@ -1,6 +1,7 @@
 import uuid
 import json
 import time
+from typing import TYPE_CHECKING
 
 from io import BytesIO
 
@@ -20,6 +21,9 @@ from nexus.task_managers.file_database.file_database import FileDataBase, FileRe
 from nexus.agents.src.utils.bedrock_agent_helper import AgentsForAmazonBedrock
 
 from nexus.agents.models import Agent
+
+if TYPE_CHECKING:
+    from router.entities import Message
 
 
 @dataclass
@@ -371,8 +375,8 @@ class BedrockFileDatabase(FileDataBase):
         supervisor_id: str,
         supervisor_alias_id: str,
         session_id: str,
-        prompt: str,
         content_base_uuid: str,
+        message: "Message"
     ):
         print("Invoking supervisor")
 
@@ -398,11 +402,16 @@ class BedrockFileDatabase(FileDataBase):
             ]
         }
 
+        sessionState["promptSessionAttributes"] = {
+            "contact_urn": message.contact_urn,
+            "contact_fields": message.contact_fields_as_json,
+        }
+
         response = self.bedrock_agent_runtime.invoke_agent(
             agentId=supervisor_id,
             agentAliasId=supervisor_alias_id,
             sessionId=session_id,
-            inputText=prompt,
+            inputText=message.text,
             enableTrace=True,
             sessionState=sessionState,
         )

@@ -18,7 +18,7 @@ from router.classifiers.classification import Classification
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.entities import (
-    Message, AgentDTO, ContentBaseDTO, LLMSetupDTO
+    message_factory, AgentDTO, ContentBaseDTO, LLMSetupDTO
 )
 from router.repositories.orm import (
     ContentBaseORMRepository,
@@ -132,7 +132,16 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
     content_base_repository = ContentBaseORMRepository()
     message_logs_repository = MessageLogsRepository()
 
-    message = Message(**message)
+    message = message_factory(
+        project_uuid=message.get("project_uuid"),
+        text=message.get("text"),
+        contact_urn=message.get("contact_urn"),
+        metadata=message.get("metadata"),
+        attachments=message.get("attachments"),
+        msg_event=message.get("msg_event"),
+        contact_fields=message.get("contact_fields", {}),
+    )
+
     mailroom_msg_event = message.msg_event
     mailroom_msg_event['attachments'] = mailroom_msg_event.get(
         'attachments'
@@ -271,21 +280,33 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
 @celery_app.task(bind=True)
 def start_multi_agents(self, message: Dict, preview: bool = False) -> bool:  # pragma: no cover
-    # TODO: Logs
-    project_uuid = message.get("project_uuid")
-    project = Project.objects.get(uuid=project_uuid)
+
+    message = message_factory(
+        project_uuid=message.get("project_uuid"),
+        text=message.get("text"),
+        contact_urn=message.get("contact_urn"),
+        metadata=message.get("metadata"),
+        attachments=message.get("attachments"),
+        msg_event=message.get("msg_event"),
+        contact_fields=message.get("contact_fields", {}),
+    )
+
+    project = Project.objects.get(uuid=message.project_uuid)
     supervisor = project.team
     supervisor_version = supervisor.current_version
-    contentbase = get_default_content_base_by_project(project_uuid)
+
+    contentbase = get_default_content_base_by_project(message.project_uuid)
+
     usecase = AgentUsecase()
     usecase.prepare_agent(supervisor.external_id)
     session_id = f"project-{project.uuid}-session-{uuid.uuid4()}"
+
     full_response = usecase.invoke_supervisor(
         session_id=session_id,
         supervisor_id=supervisor.external_id,
         supervisor_alias_id=supervisor_version.alias_id,
-        prompt=message.get("text"),
         content_base_uuid=str(contentbase.uuid),
+        message=message,
     )
 
     broadcast, _ = get_action_clients(preview)
@@ -295,7 +316,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False) -> bool:  # p
 
     return dispatch(
         llm_response=full_response,
-        message=Message(**message),
+        message=message,
         direct_message=broadcast,
         user_email=flows_user_email,
         full_chunks=full_chunks,
