@@ -527,17 +527,10 @@ class AgentUsecase:
             if len(agent_dto.slug) > 128:
                 raise AgentNameTooLong
 
-        print(agent_dto.instructions)
-        print(type(agent_dto.instructions))
-        print("AGENT DTO TYPE: ", type(agent_dto))
-        if agent_dto.instructions:
-            for instruction in agent_dto.instructions:
+        all_instructions = agent_dto.instructions + agent_dto.guardrails
+        if all_instructions:
+            for instruction in all_instructions:
                 if len(instruction) < 40:
-                    raise AgentInstructionsTooShort
-
-        if agent_dto.guardrails:
-            for guardrail in agent_dto.guardrails:
-                if len(guardrail) < 40:
                     raise AgentInstructionsTooShort
 
         if agent_dto.skills:
