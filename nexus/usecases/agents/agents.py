@@ -36,7 +36,14 @@ class AgentDTO:
     tags: Dict = field(default_factory=dict)
     prompt_override_configuration: Dict = field(default_factory=dict)
     memory_configuration: Dict = field(default_factory=dict)
-    idle_session_tll_in_seconds: int = 1800
+    idle_session_ttl_in_seconds: int = 1800
+    is_update: bool = False
+    update_fields: dict = field(default_factory=dict)
+    foundation_model: str = None
+    guardrail_configuration: dict = None
+
+    def dict(self):
+        return {key: value for key, value in self.__dict__.items() if value is not None}
 
 
 @dataclass
@@ -98,7 +105,7 @@ class AgentUsecase:
             agent_name=f"{agent_dto.slug}-project-{project_uuid}",
             agent_description=agent_dto.description,
             agent_instructions=format_instructions(all_instructions),
-            idle_session_tll_in_seconds=agent_dto.idle_session_tll_in_seconds,
+            idle_session_tll_in_seconds=agent_dto.idle_session_ttl_in_seconds,
             memory_configuration=agent_dto.memory_configuration,
             prompt_override_configuration=agent_dto.prompt_override_configuration,
             tags=agent_dto.tags,
@@ -234,6 +241,7 @@ class AgentUsecase:
         file: bytes,
         function_schema: List[Dict],
         user: User,
+        agent: Agent,
     ):
         """
         Creates a new Lambda function for an agent skill and creates its alias.
@@ -253,6 +261,7 @@ class AgentUsecase:
             agent_version=agent_version,
             zip_content=file,
             function_schema=function_schema,
+            agent=agent
         )
 
         # Create the 'live' alias pointing to $LATEST version
@@ -285,7 +294,8 @@ class AgentUsecase:
                 'version': lambda_response['Version'],
                 'alias_name': 'live',
                 'alias_arn': alias_response['AliasArn'],
-                'agent_version': agent_version
+                'agent_version': agent_version,
+                'function_schema': function_schema
             },
             created_by=user
         )
@@ -365,6 +375,23 @@ class AgentUsecase:
             function_schema=function_schema,
         )
 
+        # Get the action group for the agent
+        action_group = self.external_agent_client.get_agent_action_group(
+            agent_id=agent.external_id,
+            action_group_id=agent.metadata.get('action_group').get('actionGroupId'),
+            agent_version=agent.metadata.get('agentVersion')
+        )
+
+        # Update the action group
+        self.external_agent_client.update_agent_action_group(
+            agent_external_id=agent.external_id,
+            action_group_name=action_group['agentActionGroup']['actionGroupName'],
+            lambda_arn=lambda_response['FunctionArn'],
+            agent_version=agent.metadata.get('agentVersion'),
+            action_group_id=action_group['agentActionGroup']['actionGroupId'],
+            function_schema=function_schema
+        )
+
         print("----------- UPDATED LAMBDA FUNCTION ---------")
 
         # Update skill information with new data while preserving existing fields
@@ -442,17 +469,19 @@ class AgentUsecase:
                 sub_agent_id=sub_agent_id,
             )
 
-    def update_agent(self, agent_dto: UpdateAgentDTO, project_uuid: str):
-
+    def update_agent(self, agent_dto: AgentDTO, project_uuid: str):
+        """Update an existing agent with new data"""
         agent = Agent.objects.filter(display_name=agent_dto.name, project_id=project_uuid).first()
 
+        # Update agent in Bedrock
         self.external_agent_client.update_agent(
-            agent_dto=agent_dto,
+            agent_dto=agent_dto,  # Use the dict method to get valid fields
             agent_id=agent.external_id,
         )
 
         self.prepare_agent(agent.external_id)
 
+        # Update local agent model with changed fields
         if agent_dto.description:
             agent.description = agent_dto.description
 
@@ -469,25 +498,25 @@ class AgentUsecase:
         user_email: str,
         allowed_users: List[str] = settings.AGENT_CONFIGURATION_ALLOWED_USERS
     ):
+        """Validate the AgentDTO fields"""
         if agent_dto.slug is not None:
             if len(agent_dto.slug) > 128:
                 raise AgentNameTooLong
 
-        if agent_dto.instructions is not None:
-            if isinstance(agent_dto, UpdateAgentDTO):
-                if len(agent_dto.instructions) < 40:
+        print(agent_dto.instructions)
+        print(type(agent_dto.instructions))
+        print("AGENT DTO TYPE: ", type(agent_dto))
+        if agent_dto.instructions:
+            for instruction in agent_dto.instructions:
+                if len(instruction) < 40:
                     raise AgentInstructionsTooShort
-            else:
-                for instruction in agent_dto.instructions:
-                    if len(instruction) < 40:
-                        raise AgentInstructionsTooShort
 
-        if agent_dto.guardrails is not None:
+        if agent_dto.guardrails:
             for guardrail in agent_dto.guardrails:
                 if len(guardrail) < 40:
                     raise AgentInstructionsTooShort
 
-        if agent_dto.skills is not None:
+        if agent_dto.skills:
             for skill in agent_dto.skills:
                 if len(skill.get('slug')) > 53:
                     raise SkillNameTooLong
@@ -496,7 +525,7 @@ class AgentUsecase:
         if agent_attributes and user_email not in allowed_users:
             raise AgentAttributeNotAllowed
 
-        if hasattr(agent_dto, 'model') and agent_dto.model is not None:
+        if agent_dto.model:
             agents_model: List[str] = settings.AWS_BEDROCK_AGENTS_MODEL_ID
             if not set(agent_dto.model).issubset(agents_model) and user_email not in allowed_users:
                 raise AgentAttributeNotAllowed
@@ -507,25 +536,22 @@ class AgentUsecase:
         self,
         agent_value: dict,
         user_email: str
-    ) -> UpdateAgentDTO:
-
-        def format_instructions(instructions: List[str]):
-            return "\n".join(instructions)
-
-        all_instructions = agent_value.get("instructions") + agent_value.get("guardrails")
-        instructions = format_instructions(all_instructions)
-
-        agent_dto = UpdateAgentDTO(
+    ) -> AgentDTO:
+        """Convert update dictionary to AgentDTO"""
+        agent_dto = AgentDTO(
+            slug=slugify(agent_value.get('name')),
             name=agent_value.get("name"),
-            instructions=instructions,
-            guardrails=agent_value.get("guardrails"),
             description=agent_value.get("description"),
-            memory_configuration=agent_value.get("memory_configuration"),
+            instructions=agent_value.get("instructions", []),
+            guardrails=agent_value.get("guardrails", []),
+            skills=agent_value.get("skills", []),
+            model=agent_value.get("model"),
             prompt_override_configuration=agent_value.get("prompt_override_configuration"),
+            memory_configuration=agent_value.get("memory_configuration"),
             idle_session_ttl_in_seconds=agent_value.get("idle_session_ttl_in_seconds"),
             guardrail_configuration=agent_value.get("guardrail_configuration"),
-            model=agent_value.get("model"),
-            skills=agent_value.get("skills"),
+            foundation_model=agent_value.get("foundation_model"),
+            is_update=True  # Mark as update
         )
         validate_agents = self.validate_agent_dto(agent_dto, user_email)
         return validate_agents
@@ -535,18 +561,21 @@ class AgentUsecase:
         agent_value: dict,
         user_email: str
     ) -> AgentDTO:
-
+        """Convert dictionary to AgentDTO for creation or update"""
         agent_dto = AgentDTO(
             slug=slugify(agent_value.get('name')),
             name=agent_value.get("name"),
             description=agent_value.get("description"),
-            instructions=agent_value.get("instructions"),
-            guardrails=agent_value.get("guardrails"),
-            skills=agent_value.get("skills"),
+            instructions=agent_value.get("instructions", []),
+            guardrails=agent_value.get("guardrails", []),
+            skills=agent_value.get("skills", []),
             model=settings.AWS_BEDROCK_AGENTS_MODEL_ID,
             prompt_override_configuration=agent_value.get("prompt_override_configuration"),
             memory_configuration=agent_value.get("memory_configuration"),
             tags=agent_value.get("tags"),
+            idle_session_ttl_in_seconds=agent_value.get("idle_session_ttl_in_seconds", 1800),
+            foundation_model=agent_value.get("foundation_model"),
+            guardrail_configuration=agent_value.get("guardrail_configuration"),
         )
         validate_agents = self.validate_agent_dto(agent_dto, user_email)
         return validate_agents
@@ -557,24 +586,93 @@ class AgentUsecase:
         yaml: dict,
         user_email: str
     ):
-
-        existing_agents_dto = []
-        to_create_agents_dto = []
+        """
+        Handles both creation and updates of agents using the same DTO structure.
+        Compares existing agent data with incoming data to determine what needs to be updated.
+        """
+        agents_dto = []
         for agent_key, agent_value in yaml.get("agents", {}).items():
-
             agent = Agent.objects.filter(
                 display_name=agent_value.get("name"),
                 project_id=project_uuid
+            ).first()
+
+            # Convert incoming data to DTO
+            agent_dto = self.create_dict_to_dto(
+                agent_value=agent_value,
+                user_email=user_email
             )
 
-            if agent.exists():
-                dto = self.update_dict_to_dto(agent_value=agent_value, user_email=user_email)
-                existing_agents_dto.append(dto)
-            else:
-                dto = self.create_dict_to_dto(agent_value=agent_value, user_email=user_email)
-                to_create_agents_dto.append(dto)
+            if agent:
+                # If agent exists, compare and mark fields that need updating
+                agent_dto.is_update = True
+                agent_dto.update_fields = self._get_update_fields(agent, agent_dto)
 
-        return existing_agents_dto + to_create_agents_dto
+                # Compare skills and mark which ones need to be updated or created
+                if agent_dto.skills:
+                    agent_dto.skills = self._process_skills_update(agent, agent_dto.skills)
+
+            agents_dto.append(agent_dto)
+
+        return agents_dto
+
+    def _get_update_fields(self, existing_agent: Agent, new_dto: AgentDTO) -> dict:
+        """
+        Compares existing agent with new DTO to determine which fields need updating.
+        """
+        updates = {}
+
+        if existing_agent.description != new_dto.description:
+            updates['description'] = new_dto.description
+
+        if new_dto.instructions:
+            current_instructions = "\n".join(existing_agent.metadata.get('instructions', []))
+            new_instructions = "\n".join(new_dto.instructions)
+            if current_instructions != new_instructions:
+                updates['instructions'] = new_dto.instructions
+
+        if new_dto.guardrails:
+            current_guardrails = "\n".join(existing_agent.metadata.get('guardrails', []))
+            new_guardrails = "\n".join(new_dto.guardrails)
+            if current_guardrails != new_guardrails:
+                updates['guardrails'] = new_dto.guardrails
+
+        if new_dto.model and existing_agent.model != new_dto.model:
+            updates['model'] = new_dto.model
+
+        return updates
+
+    def _process_skills_update(self, existing_agent: Agent, new_skills: List[Dict]) -> List[Dict]:
+        """
+        Processes skills to determine which need to be updated or created.
+        Adds update/create flag to each skill.
+        """
+        processed_skills = []
+
+        for skill in new_skills:
+            skill_name = f"{skill['slug']}-{existing_agent.external_id}"
+            existing_skill = AgentSkills.objects.filter(
+                unique_name=skill_name,
+                agent=existing_agent
+            ).first()
+
+            if existing_skill:
+                # Mark skill for update and include existing data
+                skill['is_update'] = True
+                skill['existing_data'] = {
+                    'function_name': existing_skill.skill['function_name'],
+                    'function_arn': existing_skill.skill['function_arn'],
+                    'runtime': existing_skill.skill['runtime'],
+                    'handler': existing_skill.skill['handler'],
+                    'role': existing_skill.skill['role']
+                }
+            else:
+                # Mark as new skill
+                skill['is_update'] = False
+
+            processed_skills.append(skill)
+
+        return processed_skills
 
     def wait_agent_status_update(self, external_id: str):
         self.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
@@ -635,7 +733,8 @@ class AgentUsecase:
                     agent_version=agent.metadata.get("agentVersion"),
                     file=skill_file,
                     function_schema=function_schema,
-                    user=user
+                    user=user,
+                    agent=agent
                 )
 
     def create_supervisor_version(self, project_uuid, user):

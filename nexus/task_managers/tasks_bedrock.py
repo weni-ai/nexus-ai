@@ -4,6 +4,8 @@ from typing import List, Dict
 
 from botocore.exceptions import ClientError
 
+from nexus.agents.models import Agent
+
 from nexus.celery import app
 
 from nexus.task_managers.models import ContentBaseFileTaskManager, TaskManager
@@ -238,8 +240,9 @@ def run_create_lambda_function(
     agent_external_id: str,
     zip_content: bytes,
     agent_version: str,
+    agent: Agent,
+    function_schema: List[Dict] = [],
     file_database=BedrockFileDatabase,
-    function_schema: List[Dict] = []
 ):
     return file_database().create_lambda_function(
         lambda_name=lambda_name,
@@ -247,6 +250,7 @@ def run_create_lambda_function(
         agent_version=agent_version,
         source_code_file=zip_content,
         function_schema=function_schema,
+        agent=agent,
     )
 
 
