@@ -468,12 +468,11 @@ class BedrockFileDatabase(FileDataBase):
         # create_agent_alias is not returning agent version
         agent_alias_version = "DRAFT"
         for version in response["agentVersionSummaries"]:
-            print("------------------------------------------------")
+            print("-----------------Agent Version------------------")
             print(version)
             print("------------------------------------------------")
             created_at = pendulum.instance(version["createdAt"])
             if start <= created_at <= end:
-                print("achou uma versao")
                 agent_alias_version = version["agentVersion"]
 
         return agent_alias_id, agent_alias_arn, agent_alias_version
@@ -690,7 +689,7 @@ class BedrockFileDatabase(FileDataBase):
             actionGroupName=action_group_name,
             agentId=agent_external_id,
             actionGroupId=action_group_id,
-            agentVersion=agent_version,
+            agentVersion="DRAFT",
             functionSchema={"functions": function_schema}
         )
         return response

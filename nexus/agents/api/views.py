@@ -62,7 +62,12 @@ class PushAgents(APIView):
                     agent_dto=agent_dto,
                     project_uuid=project_uuid
                 )
-
+                agents_usecase.create_agent_version(agent.external_id, request.user, agent)
+                agent.refresh_from_db()
+                print("-----------------------------------")
+                print(agent.current_version.metadata)
+                print(f"Criou a versão nova do agente: {agent.current_version.metadata.get('agent_alias_version')}")
+                print("-----------------------------------")
                 # Handle skills if present
                 if agent_dto.skills:
                     for skill in agent_dto.skills:
@@ -71,8 +76,8 @@ class PushAgents(APIView):
                             # Update existing skill
                             agents_usecase.update_skill(
                                 file_name=f"{skill['slug']}-{agent.external_id}",
-                                agent_external_id=agent.metadata["external_id"],
-                                agent_version=agent.metadata.get("agentVersion"),
+                                agent_external_id=agent.external_id,
+                                agent_version=agent.current_version.metadata.get("agent_alias_version"),
                                 file=skill_file.read(),
                                 function_schema=self._create_function_schema(skill),
                                 user=request.user
@@ -93,10 +98,12 @@ class PushAgents(APIView):
                     "agent_name": agent.display_name,
                     "agent_external_id": agent.external_id
                 })
-                agents_usecase.create_agent_version(agent.external_id, request.user)
 
-                agents_usecase.update_supervisor_collaborator(project_uuid, agent)
-                agents_usecase.create_supervisor_version(project_uuid, request.user)
+                agents_usecase.create_agent_version(agent.external_id, request.user, agent)
+
+                if ActiveAgent.objects.filter(team__project__uuid=project_uuid, agent=agent).exists():
+                    agents_usecase.update_supervisor_collaborator(project_uuid, agent)
+                    agents_usecase.create_supervisor_version(project_uuid, request.user)
 
                 continue
 

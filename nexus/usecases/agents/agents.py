@@ -146,7 +146,10 @@ class AgentUsecase:
         agent.versions.create(
             alias_id=sub_agent_alias_id,
             alias_name=alias_name,
-            metadata={"agent_alias": sub_agent_alias_arn},
+            metadata={
+                "agent_alias": sub_agent_alias_arn,
+                "agent_alias_version": agent_alias_version,
+            },
             created_by=user,
         )
 
@@ -213,9 +216,10 @@ class AgentUsecase:
             supervisor_instructions,
         )
 
-    def create_agent_version(self, agent_external_id, user):
+    def create_agent_version(self, agent_external_id, user, agent):
         print("Creating a new agent version ...")
-        agent = Agent.objects.get(external_id=agent_external_id)
+        # agent = Agent.objects.get(external_id=agent_external_id)
+        # agent.refresh_from_db()
         current_version = agent.current_version
 
         if agent.list_versions.count() == 9:
@@ -406,7 +410,7 @@ class AgentUsecase:
         action_group = self.external_agent_client.get_agent_action_group(
             agent_id=agent.external_id,
             action_group_id=agent.metadata.get('action_group').get('actionGroupId'),
-            agent_version=agent.metadata.get('agentVersion')
+            agent_version=agent.current_version.metadata.get("agent_alias_version")
         )
 
         # Update the action group
@@ -414,7 +418,7 @@ class AgentUsecase:
             agent_external_id=agent.external_id,
             action_group_name=action_group['agentActionGroup']['actionGroupName'],
             lambda_arn=lambda_response['FunctionArn'],
-            agent_version=agent.metadata.get('agentVersion'),
+            agent_version=agent.current_version.metadata.get("agent_alias_version"),
             action_group_id=action_group['agentActionGroup']['actionGroupId'],
             function_schema=function_schema
         )
