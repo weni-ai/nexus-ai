@@ -56,3 +56,31 @@ class FlowsRESTClient(RestClient):
             return response.json()
         except requests.exceptions.HTTPError:
             return []
+
+    def list_project_contact_fields(self, project_uuid: str):
+        try:
+            params = dict(project=project_uuid)
+            
+            response = requests.get(
+                url=self._get_url("/api/v2/internals/contacts_fields"),
+                headers=self.authentication_instance.headers,
+                params=params
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError:
+            return []
+
+    def create_project_contact_field(self, project_uuid: str, key: str, value_type: str):
+        try:
+            body = dict(project=project_uuid, label=key, value_type=value_type)
+            
+            response = requests.post(
+                url=self._get_url("/api/v2/internals/contacts_fields"),
+                headers=self.authentication_instance.headers,
+                json=body
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError:
+            return {}
