@@ -211,7 +211,7 @@ class AgentUsecase:
 
         if agent.list_versions.count() == 9:
             oldest_version = agent.list_versions.first()
-            self.delete_supervisor_version(agent_external_id, oldest_version)
+            self.delete_agent_version(agent_external_id, oldest_version)
 
         alias_name = f"v{current_version.id+1}"
 
@@ -648,7 +648,7 @@ class AgentUsecase:
         # self.bedrock_agent.list_agent_versions(agentId=supervisor_id)
         if team.list_versions.count() == 9:
             oldest_version = team.list_versions.first()
-            self.delete_supervisor_version(team.external_id, oldest_version)
+            self.delete_agent_version(team.external_id, oldest_version)
 
         alias_name = f"{supervisor_name}-multi-agent-{current_version.id+1}"
 
@@ -662,7 +662,7 @@ class AgentUsecase:
             created_by=user,
         )
 
-    def delete_supervisor_version(self, agent_id: str, version):
+    def delete_agent_version(self, agent_id: str, version):
         try:
             response = self.external_agent_client.bedrock_agent.delete_agent_alias(
                 agentId=agent_id,
