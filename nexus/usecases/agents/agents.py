@@ -360,12 +360,15 @@ class AgentUsecase:
             function_schema: Schema defining the function interface
             user: User updating the skill
         """
-
         print("----------- STARTING UPDATE LAMBDA FUNCTION ---------")
 
         # Get the agent and skill instances first
         agent = Agent.objects.get(external_id=agent_external_id)
         skill_object = AgentSkills.objects.get(unique_name=file_name, agent=agent)
+
+        # Check if this skill has contact_field enabled
+        if function_schema and function_schema[0].get('parameters', {}).get('contact_field'):
+            self.contact_field_handler(skill_object)
 
         # Store current version data before update
         AgentSkillVersion.objects.create(
@@ -789,3 +792,10 @@ class AgentUsecase:
             return response
         except Exception:
             raise
+
+    def contact_field_handler(self, skill_object: AgentSkills):
+        """
+        Handler for skills that have contact field functionality.
+        This will be implemented later.
+        """
+        pass

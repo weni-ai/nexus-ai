@@ -67,6 +67,7 @@ class PushAgents(APIView):
                 if agent_dto.skills:
                     for skill in agent_dto.skills:
                         skill_file = files[f"{agent.slug}:{skill['slug']}"]
+                        function_schema = self._create_function_schema(skill)
                         if skill['is_update']:
                             # Update existing skill
                             agents_usecase.update_skill(
@@ -74,7 +75,7 @@ class PushAgents(APIView):
                                 agent_external_id=agent.metadata["external_id"],
                                 agent_version=agent.metadata.get("agentVersion"),
                                 file=skill_file.read(),
-                                function_schema=self._create_function_schema(skill),
+                                function_schema=function_schema,
                                 user=request.user
                             )
                         else:
@@ -84,7 +85,7 @@ class PushAgents(APIView):
                                 file_name=f"{skill['slug']}-{agent.external_id}",
                                 agent_version=agent.metadata.get("agentVersion"),
                                 file=skill_file.read(),
-                                function_schema=self._create_function_schema(skill),
+                                function_schema=function_schema,
                                 user=request.user,
                                 agent=agent
                             )
