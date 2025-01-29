@@ -70,13 +70,15 @@ class PushAgents(APIView):
                     "agent_external_id": agent.external_id
                 })
                 agents_usecase.create_agent_version(agent.external_id, request.user)
-                # agents_usecase.create_supervisor_version(project_uuid, request.user)
+
+                agents_usecase.update_supervisor_collaborator(project_uuid, agent)
+                agents_usecase.create_supervisor_version(project_uuid, request.user)
                 continue
 
             # Handle new agent creation
             agent = agents_usecase.create_agent(user=request.user, agent_dto=agent_dto, project_uuid=project_uuid)
             agents_updated.append({
-                "agent_name": agent.display_name, 
+                "agent_name": agent.display_name,
                 "agent_external_id": agent.external_id
             })
 
