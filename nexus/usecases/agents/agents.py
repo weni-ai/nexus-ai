@@ -10,7 +10,8 @@ from nexus.agents.models import (
     Agent,
     AgentSkills,
     Team,
-    AgentVersion
+    AgentVersion,
+    AgentSkillVersion
 )
 from nexus.projects.models import Project
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, BedrockSubAgent
@@ -359,17 +360,39 @@ class AgentUsecase:
             function_schema: Schema defining the function interface
             user: User updating the skill
         """
+
         print("----------- STARTING UPDATE LAMBDA FUNCTION ---------")
 
         # Get the agent and skill instances first
         agent = Agent.objects.get(external_id=agent_external_id)
-        skill = AgentSkills.objects.get(unique_name=file_name, agent=agent)
+        skill_object = AgentSkills.objects.get(unique_name=file_name, agent=agent)
+
+        # Store current version data before update
+        AgentSkillVersion.objects.create(
+            agent_skill=skill_object,
+            metadata={
+                'function_name': skill_object.skill['function_name'],
+                'function_arn': skill_object.skill['function_arn'],
+                'runtime': skill_object.skill['runtime'],
+                'role': skill_object.skill['role'],
+                'handler': skill_object.skill['handler'],
+                'code_size': skill_object.skill['code_size'],
+                'description': skill_object.skill['description'],
+                'version': skill_object.skill['version'],
+                'alias_name': skill_object.skill['alias_name'],
+                'alias_arn': skill_object.skill['alias_arn'],
+                'agent_version': skill_object.skill['agent_version'],
+                'function_schema': skill_object.skill['function_schema'],
+                'lambda_version': skill_object.skill.get('lambda_version', '$LATEST')
+            },
+            created_by=user
+        )
 
         # Use the stored skill data for the update
         lambda_response = run_update_lambda_function(
             agent_external_id=agent_external_id,
-            lambda_name=skill.skill['function_name'],
-            lambda_arn=skill.skill['function_arn'],
+            lambda_name=skill_object.skill['function_name'],
+            lambda_arn=skill_object.skill['function_arn'],
             agent_version=agent_version,
             zip_content=file,
             function_schema=function_schema,
@@ -395,25 +418,26 @@ class AgentUsecase:
         print("----------- UPDATED LAMBDA FUNCTION ---------")
 
         # Update skill information with new data while preserving existing fields
-        skill.skill.update({
+        skill_object.skill.update({
             'code_size': lambda_response['CodeSize'],
             'last_modified': lambda_response['LastModified'],
             'version': lambda_response['Version'],
             'agent_version': agent_version,
+            'lambda_version': lambda_response['Version'],  # Store Lambda version number
             # Preserve other important fields from the original skill data
-            'function_name': skill.skill['function_name'],
-            'function_arn': skill.skill['function_arn'],
-            'runtime': skill.skill['runtime'],
-            'role': skill.skill['role'],
-            'handler': skill.skill['handler'],
-            'description': skill.skill['description'],
-            'alias_name': skill.skill['alias_name'],
-            'alias_arn': skill.skill['alias_arn']
+            'function_name': skill_object.skill['function_name'],
+            'function_arn': skill_object.skill['function_arn'],
+            'runtime': skill_object.skill['runtime'],
+            'role': skill_object.skill['role'],
+            'handler': skill_object.skill['handler'],
+            'description': skill_object.skill['description'],
+            'alias_name': skill_object.skill['alias_name'],
+            'alias_arn': skill_object.skill['alias_arn']
         })
-        skill.modified_by = user
-        skill.save()
+        skill_object.modified_by = user
+        skill_object.save()
 
-        print(f"Updated skill {skill.display_name} for agent {agent.display_name}")
+        print(f"Updated skill {skill_object.display_name} for agent {agent.display_name}")
 
     def create_team_object(self, project_uuid: str, external_id: str, metadata: Dict) -> Team:
         return Team.objects.create(
