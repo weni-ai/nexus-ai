@@ -57,9 +57,15 @@ class TeamVersion(BaseModel):
 
 class ActiveAgent(BaseModel):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
-    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="team_agents")
     is_official = models.BooleanField(default=False)
     metadata = models.JSONField(default=dict)
+
+    class Meta:
+        unique_together = ("agent", "team")
+
+    def __str__(self):
+        return f"{self.agent.display_name} - {self.team.project} - {self.is_official}"
 
 
 class AgentSkills(BaseModel):
