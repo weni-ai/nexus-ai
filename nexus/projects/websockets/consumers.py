@@ -150,10 +150,11 @@ class PreviewMultiagentsConsumer(WebsocketConsumer):
         )
 
     def preview_message(self, event):
+        mtype = {"ping": "pong"}
         message = event["message"]
         message_type = event["message_type"]
         self.send(text_data=json.dumps({
-            "type": message_type,
+            "type": mtype.get(message_type, message_type),
             "message": message
         }))
 
