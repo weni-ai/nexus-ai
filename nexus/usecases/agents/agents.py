@@ -685,7 +685,7 @@ class AgentUsecase:
         agent: Agent,
         skills: List[Dict],
         files: Dict,
-        user: User
+        user: User,
     ):
         """
         Handle creation or update of agent skills.
@@ -697,6 +697,7 @@ class AgentUsecase:
             user: The user creating the skills
         """
         for skill in skills:
+            skill_handler = skill.get("source").get("entrypoint")
             slug = skill.get('slug')
             skill_file = files[f"{agent.slug}:{slug}"]
             skill_file = skill_file.read()
@@ -720,14 +721,16 @@ class AgentUsecase:
             try:
                 AgentSkills.objects.get(unique_name=lambda_name, agent=agent)
                 print(f"Updating existing skill: {lambda_name}")
-                self.update_skill(
+                warnings = self.update_skill(
                     file_name=lambda_name,
                     agent_external_id=agent.metadata["external_id"],
                     agent_version=agent.metadata.get("agentVersion"),
                     file=skill_file,
                     function_schema=function_schema,
-                    user=user
+                    user=user,
+                    skill_handler=skill_handler
                 )
+                return warnings
             except AgentSkills.DoesNotExist:
                 print(f"[+ Creating new skill: {lambda_name} +]")
                 self.create_skill(
@@ -737,7 +740,8 @@ class AgentUsecase:
                     file=skill_file,
                     function_schema=function_schema,
                     user=user,
-                    agent=agent
+                    agent=agent,
+                    skill_handler=skill_handler
                 )
 
     def create_supervisor_version(self, project_uuid, user):

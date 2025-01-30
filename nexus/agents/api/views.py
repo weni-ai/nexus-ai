@@ -56,6 +56,7 @@ class PushAgents(APIView):
         )
 
         agents_updated = []
+        response_warnings = []
         for agent_dto in agents_dto:
             if hasattr(agent_dto, 'is_update') and agent_dto.is_update:
                 # Handle update
@@ -66,7 +67,6 @@ class PushAgents(APIView):
 
                 # Handle skills if present
                 if agent_dto.skills:
-                    response_warnings = []
                     for skill in agent_dto.skills:
                         skill_file = files[f"{agent.slug}:{skill['slug']}"]
                         function_schema = self._create_function_schema(skill)
@@ -81,6 +81,7 @@ class PushAgents(APIView):
                                 file=skill_file.read(),
                                 function_schema=function_schema,
                                 user=request.user,
+                                skill_handler=skill_handler
                             )
                             if warnings:
                                 response_warnings.extend(warnings)
@@ -140,13 +141,16 @@ class PushAgents(APIView):
             )
 
             if agent_dto.skills:
-                agents_usecase.handle_agent_skills(
+                warnings = agents_usecase.handle_agent_skills(
                     agent=agent,
                     skills=agent_dto.skills,
                     files=files,
-                    user=request.user
+                    user=request.user,
                 )
-            alias_name="v1"
+                if warnings:
+                    response_warnings.extend(warnings)
+
+            alias_name = "v1"
 
             agents_usecase.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
             agents_usecase.prepare_agent(external_id)
