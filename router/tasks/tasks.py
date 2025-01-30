@@ -361,7 +361,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
             session_id=session_id,
             supervisor_id=supervisor.external_id,
             supervisor_alias_id=supervisor_version.alias_id,
-            prompt=message,
+            message=message,
             content_base_uuid=contentbase,
         ):
             if event['type'] == 'chunk':
