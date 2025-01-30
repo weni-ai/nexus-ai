@@ -73,12 +73,8 @@ class PushAgents(APIView):
                         skill_handler = skill.get("source").get("entrypoint")
                         if skill['is_update']:
                             # Update existing skill
-<<<<<<< HEAD
-                            warnings = agents_usecase.update_skill(
-=======
                             agent_version = agent.current_version.metadata.get("agent_alias_version")
-                            agents_usecase.update_skill(
->>>>>>> main
+                            warnings = agents_usecase.update_skill(
                                 file_name=f"{skill['slug']}-{agent.external_id}",
                                 agent_external_id=agent.external_id,
                                 agent_version=agent_version,
