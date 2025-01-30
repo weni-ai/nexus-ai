@@ -265,7 +265,7 @@ class MessagePreviewView(APIView):
             if message.project_uuid in multi_agents_projects:
                 print("[+ Starting Agent Builder 2.0 +]")
                 language = data.get("language", "en")
-                task = start_multi_agents.delay(message.dict(), preview=True, language=language, user=request.user)
+                task = start_multi_agents.delay(message.dict(), preview=True, language=language, user_email=request.user.email)
                 response = task.wait()
             else:
                 task = start_route.delay(message.__dict__, preview=True)

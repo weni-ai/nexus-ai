@@ -15,8 +15,8 @@ from nexus.projects.exceptions import ProjectDoesNotExist
 
 logger = logging.getLogger(__name__)
 
-def sanitize_user(user):
-    return re.sub('[^A-Za-z0-9]+', '', str(user))
+def sanitize_user_email(user_email):
+    return re.sub('[^A-Za-z0-9]+', '', str(user_email))
 
 
 def send_message_to_websocket(message):
@@ -107,7 +107,7 @@ class PreviewConsumer(WebsocketConsumer):
         try:
             self.user = self.scope["user"]
             self.project_uuid = self.scope["url_route"]["kwargs"]["project"]
-            self.room_group_name = f"preview_{self.project_uuid}_{sanitize_user(self.user)}"
+            self.room_group_name = f"preview_{self.project_uuid}_{sanitize_user_email(self.user.email)}"
         except (KeyError, TypeError, AttributeError) as e:
             logger.error(f"[ WebsocketError ] {e}")
             self.close()
@@ -163,10 +163,10 @@ class PreviewConsumer(WebsocketConsumer):
         }))
 
 
-def send_preview_message_to_websocket(project_uuid, message_data, user):
+def send_preview_message_to_websocket(project_uuid, message_data, user_email):
 
     channel_layer = get_channel_layer()
-    room_name = f"preview_{project_uuid}_{sanitize_user(user)}"
+    room_name = f"preview_{project_uuid}_{sanitize_user_email(user_email)}"
 
     async_to_sync(channel_layer.group_send)(
         room_name,
