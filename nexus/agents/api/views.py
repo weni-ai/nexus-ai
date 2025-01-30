@@ -65,19 +65,23 @@ class PushAgents(APIView):
 
                 # Handle skills if present
                 if agent_dto.skills:
+                    response_warnings = []
                     for skill in agent_dto.skills:
                         skill_file = files[f"{agent.slug}:{skill['slug']}"]
                         function_schema = self._create_function_schema(skill)
+                        skill_handler = skill.get("source").get("entrypoint")
                         if skill['is_update']:
                             # Update existing skill
-                            agents_usecase.update_skill(
+                            warnings = agents_usecase.update_skill(
                                 file_name=f"{skill['slug']}-{agent.external_id}",
                                 agent_external_id=agent.metadata["external_id"],
                                 agent_version=agent.metadata.get("agentVersion"),
                                 file=skill_file.read(),
                                 function_schema=function_schema,
-                                user=request.user
+                                user=request.user,
                             )
+                            if warnings:
+                                response_warnings.extend(warnings)
                         else:
                             # Create new skill
                             agents_usecase.create_skill(
@@ -87,7 +91,8 @@ class PushAgents(APIView):
                                 file=skill_file.read(),
                                 function_schema=function_schema,
                                 user=request.user,
-                                agent=agent
+                                agent=agent,
+                                skill_handler=skill_handler
                             )
 
                 agents_updated.append({
@@ -121,12 +126,17 @@ class PushAgents(APIView):
 
         team = agents_usecase.get_team_object(project__uuid=project_uuid)
 
-        return Response({
+        response = {
             "project": str(project_uuid),
             "agents": agents_updated,
             "supervisor_id": team.metadata.get("supervisor_alias_id"),
             "supervisor_alias": team.metadata.get("supervisor_alias_name"),
-        })
+        }
+
+        if response_warnings:
+            response["warnings"] = list(set(response_warnings))
+
+        return Response(response)
 
     def _create_function_schema(self, skill: dict) -> list[dict]:
         """Helper method to create function schema from skill data"""

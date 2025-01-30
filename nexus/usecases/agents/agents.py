@@ -250,6 +250,7 @@ class AgentUsecase:
         function_schema: List[Dict],
         user: User,
         agent: Agent,
+        skill_handler: str
     ):
         """
         Creates a new Lambda function for an agent skill and creates its alias.
@@ -262,6 +263,7 @@ class AgentUsecase:
             function_schema: The schema defining the function interface
             user: The user creating the skill
         """
+
         # Create the Lambda function
         lambda_response = run_create_lambda_function(
             agent_external_id=agent_external_id,
@@ -269,7 +271,8 @@ class AgentUsecase:
             agent_version=agent_version,
             zip_content=file,
             function_schema=function_schema,
-            agent=agent
+            agent=agent,
+            skill_handler=skill_handler
         )
 
         # Create the 'live' alias pointing to $LATEST version
@@ -303,7 +306,8 @@ class AgentUsecase:
                 'alias_name': 'live',
                 'alias_arn': alias_response['AliasArn'],
                 'agent_version': agent_version,
-                'function_schema': function_schema
+                'function_schema': function_schema,
+                'skill_handler': skill_handler
             },
             created_by=user
         )
@@ -355,7 +359,8 @@ class AgentUsecase:
         file: bytes,
         function_schema: List[Dict],
         user: User,
-    ):
+        skill_handler: str
+    ) -> Tuple[AgentSkills, List[str]]:
         """
         Updates the code for an existing Lambda function associated with an agent skill.
         """
@@ -391,7 +396,8 @@ class AgentUsecase:
                 'alias_arn': skill_object.skill['alias_arn'],
                 'agent_version': skill_object.skill['agent_version'],
                 'function_schema': skill_object.skill['function_schema'],
-                'lambda_version': skill_object.skill.get('lambda_version', '$LATEST')
+                'lambda_version': skill_object.skill.get('lambda_version', '$LATEST'),
+                'skill_handler': skill_object.skill['skill_handler']
             },
             created_by=user
         )
@@ -446,6 +452,12 @@ class AgentUsecase:
         skill_object.save()
 
         print(f"Updated skill {skill_object.display_name} for agent {agent.display_name}")
+
+        warnings = []
+        if skill_object.skill['skill_handler'] != skill_handler:
+            warnings.append(f"Skill handler changed from {skill_object.skill['handler']} to {skill_handler}")
+
+        return warnings
 
     def create_team_object(self, project_uuid: str, external_id: str, metadata: Dict) -> Team:
         return Team.objects.create(
