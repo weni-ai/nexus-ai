@@ -501,7 +501,7 @@ class BedrockFileDatabase(FileDataBase):
         Creates a new supervisor agent using an existing agent as base.
         Returns tuple of (supervisor_id, supervisor_alias_name)
         """
-        print("-------------- STARTING SUPERVISOR CREATION -------------")
+
         # Get existing agent to use as base
         base_agent_response = self.bedrock_agent.get_agent(
             agentId=settings.AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID
@@ -539,17 +539,26 @@ class BedrockFileDatabase(FileDataBase):
         )
 
         function_schema = base_action_group_response['agentActionGroup']['functionSchema']['functions']
-        # parent_signature = "AMAZON.UserInput"
 
         self.bedrock_agent.create_agent_action_group(
             actionGroupExecutor={
                 'lambda': lambda_arn
             },
             actionGroupName=action_group_name,
+            actionGroupState="ENABLED",
             agentId=supervisor_id,
             agentVersion='DRAFT',
             functionSchema={"functions": function_schema},
-            # parentActionGroupSignature=parent_signature
+        )
+
+        parent_signature = "AMAZON.UserInput"
+
+        self.bedrock_agent.create_agent_action_group(
+            actionGroupName="UserInputAction",
+            actionGroupState="ENABLED",
+            agentId=supervisor_id,
+            agentVersion="DRAFT",
+            parentActionGroupSignature=parent_signature
         )
 
         self.attach_agent_knowledge_base(
