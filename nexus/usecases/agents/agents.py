@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from django.conf import settings
 from django.template.defaultfilters import slugify
 
+from nexus.internals.flows import FlowsRESTClient
+
 from nexus.users.models import User
 from nexus.agents.models import (
     ActiveAgent,
@@ -67,8 +69,13 @@ class UpdateAgentDTO:
 
 
 class AgentUsecase:
-    def __init__(self, external_agent_client=BedrockFileDatabase):
+    def __init__(
+        self,
+        external_agent_client=BedrockFileDatabase,
+        flows_client=FlowsRESTClient
+    ):
         self.external_agent_client = external_agent_client()
+        self.flows_client = flows_client()
 
     def assign_agent(self, agent_uuid: str, project_uuid: str, created_by):
         agent: Agent = self.get_agent_object(uuid=agent_uuid)
@@ -793,9 +800,37 @@ class AgentUsecase:
         except Exception:
             raise
 
+    # TODO: Make it assync
     def contact_field_handler(self, skill_object: AgentSkills):
         """
         Handler for skills that have contact field functionality.
-        This will be implemented later.
+        Checks parameters for contact_field flag and creates corresponding contact fields.
         """
-        pass
+        parameters = skill_object.skill['function_schema'][0]['parameters']
+
+        contact_field_params = []
+        for param_key, param_data in parameters.items():
+            if isinstance(param_data, dict) and param_data.get('contact_field') is True:
+                contact_field_params.append({
+                    'key': param_key,  # Use the parameter key as the contact field key
+                    'value_type': param_data.get('type', 'text').lower()  # Convert type to value_type
+                })
+
+        if contact_field_params:
+            flows_contact_fields = self.flows_client.list_project_contact_fields(
+                str(skill_object.agent.project.uuid)
+            )
+            
+            # Handle both list and dict responses
+            results = flows_contact_fields.get('results', []) if isinstance(flows_contact_fields, dict) else flows_contact_fields
+            existing_keys = set(field.get('key', '') for field in results)
+
+            for param in contact_field_params:
+                if param['key'] not in existing_keys:
+                    self.flows_client.create_project_contact_field(
+                        project_uuid=str(skill_object.agent.project.uuid),
+                        key=param['key'],
+                        value_type=param['value_type']
+                    )
+
+        return True
