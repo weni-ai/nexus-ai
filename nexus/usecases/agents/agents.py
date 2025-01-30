@@ -81,7 +81,7 @@ class AgentUsecase:
             alias_arn=agent.current_version.metadata.get("agent_alias"),
         )
 
-        self.external_agent_client.associate_sub_agents(
+        agent_collaborator_id = self.external_agent_client.associate_sub_agents(
             supervisor_id=team.external_id,
             agents_list=[sub_agent]
         )
@@ -91,6 +91,7 @@ class AgentUsecase:
             team=team,
             is_official=agent.is_official,
             created_by=created_by,
+            metadata={"agent_collaborator_id": agent_collaborator_id}
         )
         return active_agent
 
@@ -112,44 +113,7 @@ class AgentUsecase:
             tags=agent_dto.tags,
             model_id=agent_dto.model[0],
         )
-
-        self.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
-
-        self.prepare_agent(external_id)
-
-        self.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
-
-        sub_agent_alias_id, sub_agent_alias_arn = self.create_external_agent_alias(
-            agent_id=external_id, alias_name=alias_name
-        )
-
-        agent_version = self.external_agent_client.get_agent_version(external_id)
-
-        agent = Agent.objects.create(
-            created_by=user,
-            project_id=project_uuid,
-            external_id=external_id,
-            slug=agent_dto.slug,
-            display_name=agent_dto.name,
-            model=agent_dto.model,
-            description=agent_dto.description,
-            metadata={
-                "engine": "BEDROCK",
-                "external_id": external_id,
-                "agent_alias_id": sub_agent_alias_id,
-                "agent_alias_arn": sub_agent_alias_arn,
-                "agentVersion": str(agent_version),
-            }
-        )
-
-        agent.versions.create(
-            alias_id=sub_agent_alias_id,
-            alias_name=alias_name,
-            metadata={"agent_alias": sub_agent_alias_arn},
-            created_by=user,
-        )
-
-        return agent
+        return external_id
 
     def create_external_agent(
         self,
@@ -173,11 +137,11 @@ class AgentUsecase:
             prompt_override_configuration,
         )
 
-    def create_external_agent_alias(self, agent_id: str, alias_name: str) -> Tuple[str, str]:
-        agent_alias_id, agent_alias_arn = self.external_agent_client.create_agent_alias(
+    def create_external_agent_alias(self, agent_id: str, alias_name: str) -> Tuple[str, str, str]:
+        agent_alias_id, agent_alias_arn, agent_alias_version = self.external_agent_client.create_agent_alias(
             agent_id=agent_id, alias_name=alias_name
         )
-        return agent_alias_id, agent_alias_arn
+        return agent_alias_id, agent_alias_arn, agent_alias_version
 
     def create_supervisor(
         self,
@@ -212,9 +176,10 @@ class AgentUsecase:
             supervisor_instructions,
         )
 
-    def create_agent_version(self, agent_external_id, user):
+    def create_agent_version(self, agent_external_id, user, agent):
         print("Creating a new agent version ...")
-        agent = Agent.objects.get(external_id=agent_external_id)
+        # agent = Agent.objects.get(external_id=agent_external_id)
+        # agent.refresh_from_db()
         current_version = agent.current_version
 
         if agent.list_versions.count() == 9:
@@ -223,13 +188,16 @@ class AgentUsecase:
 
         alias_name = f"v{current_version.id+1}"
 
-        agent_alias_id, agent_alias_arn = self.external_agent_client.create_agent_alias(
+        agent_alias_id, agent_alias_arn, agent_alias_version = self.external_agent_client.create_agent_alias(
             alias_name=alias_name, agent_id=agent_external_id
         )
         agent_version: AgentVersion = agent.versions.create(
             alias_id=agent_alias_id,
             alias_name=alias_name,
-            metadata={"agent_alias": agent_alias_arn},
+            metadata={
+                "agent_alias": agent_alias_arn,
+                "agent_alias_version": agent_alias_version,
+            },
             created_by=user,
         )
         return agent_version
@@ -402,7 +370,7 @@ class AgentUsecase:
         action_group = self.external_agent_client.get_agent_action_group(
             agent_id=agent.external_id,
             action_group_id=agent.metadata.get('action_group').get('actionGroupId'),
-            agent_version=agent.metadata.get('agentVersion')
+            agent_version=agent.current_version.metadata.get("agent_alias_version")
         )
 
         # Update the action group
@@ -410,7 +378,7 @@ class AgentUsecase:
             agent_external_id=agent.external_id,
             action_group_name=action_group['agentActionGroup']['actionGroupName'],
             lambda_arn=lambda_response['FunctionArn'],
-            agent_version=agent.metadata.get('agentVersion'),
+            agent_version=agent.current_version.metadata.get("agent_alias_version"),
             action_group_id=action_group['agentActionGroup']['actionGroupId'],
             function_schema=function_schema
         )
@@ -502,8 +470,6 @@ class AgentUsecase:
             agent_dto=agent_dto,  # Use the dict method to get valid fields
             agent_id=agent.external_id,
         )
-
-        self.prepare_agent(agent.external_id)
 
         # Update local agent model with changed fields
         if agent_dto.description:
@@ -743,11 +709,11 @@ class AgentUsecase:
                     user=user
                 )
             except AgentSkills.DoesNotExist:
-                print(f"Creating new skill: {lambda_name}")
+                print(f"[+ Creating new skill: {lambda_name} +]")
                 self.create_skill(
-                    agent_external_id=agent.metadata["external_id"],
+                    agent_external_id=agent.external_id,
                     file_name=lambda_name,
-                    agent_version=agent.metadata.get("agentVersion"),
+                    agent_version=agent.current_version.metadata.get("agent_alias_version"),
                     file=skill_file,
                     function_schema=function_schema,
                     user=user,
@@ -768,13 +734,16 @@ class AgentUsecase:
 
         alias_name = f"{supervisor_name}-multi-agent-{current_version.id+1}"
 
-        supervisor_agent_alias_id, supervisor_agent_alias_arn = self.external_agent_client.create_agent_alias(
+        supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = self.external_agent_client.create_agent_alias(
             alias_name=alias_name, agent_id=supervisor_id
         )
         team.versions.create(
             alias_id=supervisor_agent_alias_id,
             alias_name=alias_name,
-            metadata={"supervisor_alias_arn": supervisor_agent_alias_arn},
+            metadata={
+                "supervisor_alias_arn": supervisor_agent_alias_arn,
+                "supervisor_alias_version": supervisor_alias_version,
+            },
             created_by=user,
         )
 
@@ -789,3 +758,24 @@ class AgentUsecase:
             return response
         except Exception:
             raise
+
+    def update_supervisor_collaborator(self, project_uuid: str, agent):
+        """Update multi-agent DRAFT to point to updated agent version"""
+        team = Team.objects.get(project__uuid=project_uuid)
+        response = self.external_agent_client.bedrock_agent.get_agent_collaborator(
+            agentId=team.external_id,
+            agentVersion=team.current_version.metadata.get("supervisor_alias_version"),
+            collaboratorId=team.team_agents.get(agent__external_id=agent.external_id).metadata.get("agent_collaborator_id")
+        )
+        current_agent_collaborator = response["agentCollaborator"]
+
+        response = self.external_agent_client.bedrock_agent.update_agent_collaborator(
+            agentDescriptor={
+                'aliasArn': agent.current_version.metadata["agent_alias"]
+            },
+            agentId=current_agent_collaborator["agentId"],
+            agentVersion="DRAFT",
+            collaborationInstruction=current_agent_collaborator["collaborationInstruction"],
+            collaboratorId=current_agent_collaborator["collaboratorId"],
+            collaboratorName=current_agent_collaborator["collaboratorName"],
+        )
