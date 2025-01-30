@@ -375,16 +375,15 @@ class BedrockFileDatabase(FileDataBase):
         )
         return response
 
-    def invoke_supervisor(
+    def invoke_supervisor_stream(
         self,
         supervisor_id: str,
         supervisor_alias_id: str,
         session_id: str,
-        content_base_uuid: str,
         content_base: "ContentBase",
         message: "Message"
     ):
-        print("Invoking supervisor")
+        print("Invoking supervisor with streaming")
 
         content_base_uuid = str(content_base.uuid)
         agent = content_base.agent
@@ -433,60 +432,6 @@ class BedrockFileDatabase(FileDataBase):
             agentAliasId=supervisor_alias_id,
             sessionId=session_id,
             inputText=message.text,
-            enableTrace=True,
-            sessionState=sessionState,
-        )
-
-        full_response = ""
-
-        for event in response['completion']:
-            if 'trace' in event:
-                # TODO: send trace to webhook
-                # print("Trace:", event["trace"])
-                pass
-            elif 'chunk' in event:
-                chunk = event['chunk']
-                full_response += chunk['bytes'].decode()
-
-        return full_response
-
-    def invoke_supervisor_stream(
-        self,
-        supervisor_id: str,
-        supervisor_alias_id: str,
-        session_id: str,
-        prompt: str,
-        content_base_uuid: str,
-    ):
-        print("Invoking supervisor with streaming")
-
-        single_filter = {
-            "equals": {
-                "key": "contentBaseUuid",
-                "value": content_base_uuid
-            }
-        }
-
-        retrieval_configuration = {
-            "vectorSearchConfiguration": {
-                "filter": single_filter
-            }
-        }
-
-        sessionState = {
-            'knowledgeBaseConfigurations': [
-                {
-                    'knowledgeBaseId': self.knowledge_base_id,
-                    'retrievalConfiguration': retrieval_configuration
-                }
-            ]
-        }
-
-        response = self.bedrock_agent_runtime.invoke_agent(
-            agentId=supervisor_id,
-            agentAliasId=supervisor_alias_id,
-            sessionId=session_id,
-            inputText=prompt,
             enableTrace=True,
             sessionState=sessionState,
         )

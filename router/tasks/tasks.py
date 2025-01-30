@@ -361,8 +361,8 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
             session_id=session_id,
             supervisor_id=supervisor.external_id,
             supervisor_alias_id=supervisor_version.alias_id,
-            prompt=message.get("text"),
-            content_base_uuid=str(contentbase.uuid),
+            prompt=message,
+            content_base_uuid=contentbase,
         ):
             if event['type'] == 'chunk':
                 chunk = event['content']
@@ -370,7 +370,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 if user_email:
                     # Send chunk through WebSocket
                     send_preview_message_to_websocket(
-                        project_uuid=str(project.uuid),
+                        project_uuid=str(message.project_uuid),
                         user_email=user_email,
                         message_data={
                             "type": "chunk",
@@ -384,7 +384,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 if user_email:
                     # Send trace data through WebSocket
                     send_preview_message_to_websocket(
-                        project_uuid=str(project.uuid),
+                        project_uuid=str(message.project_uuid),
                         user_email=user_email,
                         message_data={
                             "type": "trace_update",
