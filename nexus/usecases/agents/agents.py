@@ -360,7 +360,7 @@ class AgentUsecase:
         function_schema: List[Dict],
         user: User,
         skill_handler: str
-    ) -> Tuple[AgentSkills, List[str]]:
+    ):
         """
         Updates the code for an existing Lambda function associated with an agent skill.
         """
