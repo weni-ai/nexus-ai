@@ -457,12 +457,12 @@ class AgentUsecase:
     def get_team_object(self, **kwargs) -> Team:
         return Team.objects.get(**kwargs)
 
-    def invoke_supervisor(self, session_id, supervisor_id, supervisor_alias_id, content_base_uuid, message):
+    def invoke_supervisor(self, session_id, supervisor_id, supervisor_alias_id, content_base, message):
         response = self.external_agent_client.invoke_supervisor(
             supervisor_id=supervisor_id,
             supervisor_alias_id=supervisor_alias_id,
             session_id=session_id,
-            content_base_uuid=content_base_uuid,
+            content_base=content_base,
             message=message
         )
         return response

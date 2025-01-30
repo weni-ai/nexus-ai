@@ -305,7 +305,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False) -> bool:  # p
         session_id=session_id,
         supervisor_id=supervisor.external_id,
         supervisor_alias_id=supervisor_version.alias_id,
-        content_base_uuid=str(contentbase.uuid),
+        content_base=contentbase,
         message=message,
     )
 

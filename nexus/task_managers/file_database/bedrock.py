@@ -25,6 +25,7 @@ from nexus.agents.models import Agent
 
 if TYPE_CHECKING:
     from router.entities import Message
+    from nexus.intelligences.models import ContentBase
 
 
 @dataclass
@@ -377,9 +378,14 @@ class BedrockFileDatabase(FileDataBase):
         supervisor_alias_id: str,
         session_id: str,
         content_base_uuid: str,
+        content_base: "ContentBase",
         message: "Message"
     ):
         print("Invoking supervisor")
+
+        content_base_uuid = str(content_base.uuid)
+        agent = content_base.agent
+        instructions = content_base.instructions.all()
 
         single_filter = {
             "equals": {
@@ -407,7 +413,17 @@ class BedrockFileDatabase(FileDataBase):
             "contact_urn": message.contact_urn,
             "contact_fields": message.contact_fields_as_json,
             "date_time_now": datetime.now().isoformat(),
+            "project_id": message.project_uuid,
+            "specific_personality": json.dumps({
+                "function": agent.role,
+                "name": agent.name,
+                "goal": agent.goal,
+                "adjective": agent.personality,
+                "instructions": list(instructions.values_list("instruction", flat=True))
+            })
         }
+
+        print("Session State: ", sessionState)
 
         response = self.bedrock_agent_runtime.invoke_agent(
             agentId=supervisor_id,
