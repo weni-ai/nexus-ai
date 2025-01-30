@@ -41,6 +41,7 @@ from router.clients.preview.simulator.flow_start import SimulateFlowStart
 from router.dispatcher import dispatch
 
 from nexus.projects.models import Project
+from nexus.users.models import User
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 
 client = OpenAI()
@@ -309,7 +310,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
 
 @celery_app.task(bind=True)
-def start_multi_agents(self, message: Dict, preview: bool = False, language: str = "en") -> bool:  # pragma: no cover
+def start_multi_agents(self, message: Dict, preview: bool = False, language: str = "en", user: User = None) -> bool:  # pragma: no cover
     # TODO: Logs
     project_uuid = message.get("project_uuid")
     project = Project.objects.get(uuid=project_uuid)
@@ -321,6 +322,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     # Send initial status through WebSocket
     send_preview_message_to_websocket(
         project_uuid=str(project.uuid),
+        user=user,
         message_data={
             "type": "status",
             "content": "Starting multi-agent processing",
@@ -344,6 +346,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 # Send chunk through WebSocket
                 send_preview_message_to_websocket(
                     project_uuid=str(project.uuid),
+                    user=user,
                     message_data={
                         "type": "chunk",
                         "content": chunk,
@@ -356,6 +359,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 # Send trace data through WebSocket
                 send_preview_message_to_websocket(
                     project_uuid=str(project.uuid),
+                    user=user,
                     message_data={
                         "type": "trace_update",
                         "trace": event['content'],
@@ -370,6 +374,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
         # Send completion status
         send_preview_message_to_websocket(
+            user=user,
             project_uuid=str(project.uuid),
             message_data={
                 "type": "status",
@@ -389,6 +394,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     except Exception as e:
         # Send error status through WebSocket
         send_preview_message_to_websocket(
+            user=user,
             project_uuid=str(project.uuid),
             message_data={
                 "type": "error",

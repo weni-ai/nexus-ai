@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from asgiref.sync import async_to_sync
 
@@ -13,6 +14,9 @@ from nexus.projects.exceptions import ProjectDoesNotExist
 
 
 logger = logging.getLogger(__name__)
+
+def sanitize_user(user):
+    return re.sub('[^A-Za-z0-9]+', '', str(user))
 
 
 def send_message_to_websocket(message):
@@ -98,12 +102,12 @@ class WebsocketMessageConsumer(WebsocketConsumer):
         ))
 
 
-class PreviewMultiagentsConsumer(WebsocketConsumer):
+class PreviewConsumer(WebsocketConsumer):
     def connect(self):
         try:
             self.user = self.scope["user"]
             self.project_uuid = self.scope["url_route"]["kwargs"]["project"]
-            self.room_group_name = f"preview_multiagents_{self.project_uuid}"
+            self.room_group_name = f"preview_{self.project_uuid}_{sanitize_user(self.user)}"
         except (KeyError, TypeError, AttributeError) as e:
             logger.error(f"[ WebsocketError ] {e}")
             self.close()
@@ -159,9 +163,10 @@ class PreviewMultiagentsConsumer(WebsocketConsumer):
         }))
 
 
-def send_preview_message_to_websocket(project_uuid, message_data):
+def send_preview_message_to_websocket(project_uuid, message_data, user):
+
     channel_layer = get_channel_layer()
-    room_name = f"preview_multiagents_{project_uuid}"
+    room_name = f"preview_{project_uuid}_{sanitize_user(user)}"
 
     async_to_sync(channel_layer.group_send)(
         room_name,
