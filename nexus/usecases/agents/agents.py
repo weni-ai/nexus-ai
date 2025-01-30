@@ -719,7 +719,7 @@ class AgentUsecase:
                 self.update_skill(
                     file_name=lambda_name,
                     agent_external_id=agent.metadata["external_id"],
-                    agent_version=agent.metadata.get("agentVersion"),
+                    agent_version=agent.current_version.metadata.get("agent_alias_version"),
                     file=skill_file,
                     function_schema=function_schema,
                     user=user
