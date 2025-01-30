@@ -420,14 +420,15 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         )
 
     except Exception as e:
-        # Send error status through WebSocket
-        send_preview_message_to_websocket(
-            user_email=user_email,
-            project_uuid=str(project.uuid),
-            message_data={
-                "type": "error",
-                "content": str(e),
-                "session_id": session_id
-            }
-        )
+        if user_email:
+          # Send error status through WebSocket
+          send_preview_message_to_websocket(
+              user_email=user_email,
+              project_uuid=str(project.uuid),
+              message_data={
+                  "type": "error",
+                  "content": str(e),
+                  "session_id": session_id
+              }
+          )
         raise
