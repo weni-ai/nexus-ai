@@ -57,8 +57,9 @@ class ProjectsUseCase:
             supervisor_description=supervisor_description,
             supervisor_instructions=supervisor_instructions,
         )
-        agent: Agent = agents_usecase.get_agent_object(external_id=settings.DOUBT_ANALYST_EXTERNAL_ID)
-        agents_usecase.assign_agent(str(agent.uuid), project_uuid, created_by=user)
+        # agent: Agent = agents_usecase.get_agent_object(external_id=settings.DOUBT_ANALYST_EXTERNAL_ID)
+        # agents_usecase.assign_agent(str(agent.uuid), project_uuid, created_by=user)
+
         alias_name = f"{supervisor_name}-multi-agent"
         supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = agents_usecase.external_agent_client.create_agent_alias(
             alias_name=alias_name, agent_id=team.external_id
@@ -159,7 +160,7 @@ class ProjectsUseCase:
         supervisor_description = f"Supervisor Agent for {project.name} {project.uuid}"
 
         # TODO: Update deve atualizar esse dado
-        supervisor_instructions = settings.DEFAULT_AGENT_GOAL
+        supervisor_instructions = settings.AWS_BEDROCK_SUPERVISOR_INSTRUCTIONS
 
         agent_valid_users = settings.AGENT_VALID_USERS
 

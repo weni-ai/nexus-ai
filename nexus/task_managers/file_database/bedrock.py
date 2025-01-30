@@ -231,6 +231,20 @@ class BedrockFileDatabase(FileDataBase):
         agent.metadata['action_group'] = data
         agent.save()
 
+    def attach_agent_knowledge_base(
+        self,
+        agent_id: str,
+        agent_version: str,
+        knowledge_base_instruction: str,
+        knowledge_base_id: str,
+    ):
+        self.bedrock_agent.associate_agent_knowledge_base(
+            agentId=agent_id,
+            agentVersion=agent_version,
+            description=knowledge_base_instruction,
+            knowledgeBaseId=knowledge_base_id
+        )
+
     def create_agent(
         self,
         agent_name: str,
@@ -478,15 +492,90 @@ class BedrockFileDatabase(FileDataBase):
 
         return agent_alias_id, agent_alias_arn, agent_alias_version
 
-    def create_supervisor(self, supervisor_name, supervisor_description, supervisor_instructions):
-        supervisor_id, supervisor_alias, supervisor_arn = self.agent_for_amazon_bedrock.create_agent(
-            agent_collaboration='SUPERVISOR_ROUTER',
-            agent_name=supervisor_name,
-            agent_description=supervisor_description,
-            agent_instructions=supervisor_instructions,
-            model_ids=self.supervisor_foundation_model,
+    def create_supervisor(
+        self,
+        supervisor_name: str,
+        supervisor_description: str,
+    ) -> Tuple[str, str]:
+        """
+        Creates a new supervisor agent using an existing agent as base.
+        Returns tuple of (supervisor_id, supervisor_alias_name)
+        """
+        print("-------------- STARTING SUPERVISOR CREATION -------------")
+        # Get existing agent to use as base
+        base_agent_response = self.bedrock_agent.get_agent(
+            agentId=settings.AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID
         )
-        return supervisor_id, supervisor_alias
+        base_agent = base_agent_response['agent']
+        memory_configuration = base_agent['memoryConfiguration']
+        print("BASE AGENT: ", base_agent_response)
+
+        # Create new supervisor using base agent's configuration
+        response = self.bedrock_agent.create_agent(
+            agentName=supervisor_name,
+            description=supervisor_description,
+            instruction=base_agent['instruction'],
+            agentResourceRoleArn=base_agent['agentResourceRoleArn'],
+            foundationModel=base_agent['foundationModel'],
+            idleSessionTTLInSeconds=base_agent['idleSessionTTLInSeconds'],
+            agentCollaboration='SUPERVISOR_ROUTER',
+            guardrailConfiguration={
+                'guardrailIdentifier': settings.AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
+                'guardrailVersion': str(settings.AWS_BEDROCK_GUARDRAIL_VERSION)
+            },
+            memoryConfiguration=memory_configuration
+        )
+
+        self.wait_agent_status_update(response['agent']['agentId'])
+
+        print("============== CREATED SUPERVISOR ==============")
+        print(response)
+        print("================================================")
+
+        supervisor_id = response['agent']['agentId']
+
+        action_group_name = f"{supervisor_name}_action_group"
+        lambda_arn = settings.AWS_BEDROCK_LAMBDA_ARN
+
+        base_action_group_response = self.get_agent_action_group(
+            agent_id=settings.AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID,
+            action_group_id=settings.AWS_BEDROCK_SUPERVISOR_ACTION_GROUP_ID,
+            agent_version='DRAFT'
+        )
+
+        print("============== BASE ACTION GROUP ==============")
+        print(base_action_group_response)
+        print("================================================")
+
+        function_schema = base_action_group_response['agentActionGroup']['functionSchema']['functions']
+        # parent_signature = "AMAZON.UserInput"
+
+        created_action_group = self.bedrock_agent.create_agent_action_group(
+            actionGroupExecutor={
+                'lambda': lambda_arn
+            },
+            actionGroupName=action_group_name,
+            agentId=supervisor_id,
+            agentVersion='DRAFT',
+            functionSchema={"functions": function_schema},
+            # parentActionGroupSignature=parent_signature
+        )
+
+        print("============== CREATED ACTION GROUP ==============")
+        print(created_action_group)
+        print("================================================")
+
+        self.attach_agent_knowledge_base(
+            agent_id=supervisor_id,
+            agent_version='DRAFT',
+            knowledge_base_instruction=settings.AWS_BEDROCK_SUPERVISOR_KNOWLEDGE_BASE_INSTRUCTIONS,
+            knowledge_base_id=self.knowledge_base_id
+        )
+
+        print("============== ATTACH KNOWLEDGE BASE ==============")
+
+
+        return supervisor_id, supervisor_name
 
     def get_bedrock_ingestion_status(self, job_id: str):
         response = self.bedrock_agent.get_ingestion_job(
