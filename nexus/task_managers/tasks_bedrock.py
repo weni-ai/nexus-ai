@@ -240,6 +240,7 @@ def run_create_lambda_function(
     agent_external_id: str,
     zip_content: bytes,
     agent_version: str,
+    skill_handler: str,
     agent: Agent,
     function_schema: List[Dict] = [],
     file_database=BedrockFileDatabase,
@@ -251,6 +252,7 @@ def run_create_lambda_function(
         source_code_file=zip_content,
         function_schema=function_schema,
         agent=agent,
+        skill_handler=skill_handler
     )
 
 
