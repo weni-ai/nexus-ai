@@ -8,6 +8,9 @@ from nexus.event_driven.signals import message_started, message_finished
 from router.entities import (
     Message, DBCon
 )
+
+from .http_bodies import MessageHTTPBody
+
 from router.tasks import (
     start_route,
     start_multi_agents
@@ -33,7 +36,7 @@ def healthcheck():
 
 
 @app.post('/messages')
-def messages(request: Request, message: Message):
+def messages(request: Request, message: MessageHTTPBody):
     message_started.send(sender=DBCon)
 
     authenticate(request.query_params.get("token"))
