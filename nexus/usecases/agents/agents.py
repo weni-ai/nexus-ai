@@ -358,14 +358,6 @@ class AgentUsecase:
     ):
         """
         Updates the code for an existing Lambda function associated with an agent skill.
-
-        Args:
-            file_name: Name of the Lambda function to update
-            agent_external_id: External ID of the agent
-            agent_version: Version of the agent
-            file: Function code to update (bytes in .zip format)
-            function_schema: Schema defining the function interface
-            user: User updating the skill
         """
         print("----------- STARTING UPDATE LAMBDA FUNCTION ---------")
 
@@ -373,9 +365,15 @@ class AgentUsecase:
         agent = Agent.objects.get(external_id=agent_external_id)
         skill_object = AgentSkills.objects.get(unique_name=file_name, agent=agent)
 
-        # Check if this skill has contact_field enabled
-        if function_schema and function_schema[0].get('parameters', {}).get('contact_field'):
-            self.contact_field_handler(skill_object)
+        # Check if any parameter in the function schema has contact_field=True
+        if function_schema and function_schema[0].get('parameters'):
+            parameters = function_schema[0]['parameters']
+            has_contact_field = any(
+                isinstance(param_data, dict) and param_data.get('contact_field') is True
+                for param_data in parameters.values()
+            )
+            if has_contact_field:
+                self.contact_field_handler(skill_object)
 
         # Store current version data before update
         AgentSkillVersion.objects.create(
@@ -820,7 +818,7 @@ class AgentUsecase:
             flows_contact_fields = self.flows_client.list_project_contact_fields(
                 str(skill_object.agent.project.uuid)
             )
-            
+
             # Handle both list and dict responses
             results = flows_contact_fields.get('results', []) if isinstance(flows_contact_fields, dict) else flows_contact_fields
             existing_keys = set(field.get('key', '') for field in results)
