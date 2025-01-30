@@ -81,6 +81,10 @@ class UpdateFlowsUseCase():
         if flow.editable is False:
             raise ValueError("Flow is not editable")
 
+        if flow_dto.name:
+            if len(flow_dto.name) > 64:
+                raise ValueError("Name must be less than 64 characters")
+
         values_before_update = model_to_dict(flow)
         for attr, value in flow_dto.dict().items():
             setattr(flow, attr, value)

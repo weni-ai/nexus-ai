@@ -4,6 +4,8 @@ from typing import List, Dict
 
 from botocore.exceptions import ClientError
 
+from nexus.agents.models import Agent
+
 from nexus.celery import app
 
 from nexus.task_managers.models import ContentBaseFileTaskManager, TaskManager
@@ -238,8 +240,10 @@ def run_create_lambda_function(
     agent_external_id: str,
     zip_content: bytes,
     agent_version: str,
+    skill_handler: str,
+    agent: Agent,
+    function_schema: List[Dict] = [],
     file_database=BedrockFileDatabase,
-    function_schema: List[Dict] = []
 ):
     return file_database().create_lambda_function(
         lambda_name=lambda_name,
@@ -247,4 +251,37 @@ def run_create_lambda_function(
         agent_version=agent_version,
         source_code_file=zip_content,
         function_schema=function_schema,
+        agent=agent,
+        skill_handler=skill_handler
     )
+
+
+def run_update_lambda_function(
+    agent_external_id: str,
+    lambda_name: str,
+    lambda_arn: str,
+    agent_version: str,
+    zip_content: bytes,
+    function_schema: List[Dict],
+):
+    """
+    Updates an existing Lambda function's code.
+
+    Args:
+        agent_external_id: External ID of the agent
+        lambda_name: Name of the Lambda function
+        lambda_arn: ARN of the Lambda function
+        agent_version: Version of the agent
+        zip_content: Function code in zip format
+        function_schema: Schema defining the function interface
+    """
+    bedrock_client = BedrockFileDatabase()
+
+    # Update the Lambda function code and its alias
+    print(" UPDATE LAMBDA FUNCTION CODE ...")
+    lambda_response = bedrock_client.update_lambda_function(
+        lambda_name=lambda_name,
+        zip_content=zip_content,
+    )
+
+    return lambda_response

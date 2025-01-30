@@ -317,6 +317,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     project_uuid = message.get("project_uuid")
     project = Project.objects.get(uuid=project_uuid)
     supervisor = project.team
+    supervisor_version = supervisor.current_version
     contentbase = get_default_content_base_by_project(project_uuid)
     usecase = AgentUsecase()
     session_id = f"project-{project.uuid}-session-{uuid.uuid4()}"
