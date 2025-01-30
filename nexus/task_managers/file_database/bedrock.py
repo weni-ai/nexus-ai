@@ -433,6 +433,67 @@ class BedrockFileDatabase(FileDataBase):
 
         return full_response
 
+    def invoke_supervisor_stream(
+        self,
+        supervisor_id: str,
+        supervisor_alias_id: str,
+        session_id: str,
+        prompt: str,
+        content_base_uuid: str,
+    ):
+        print("Invoking supervisor with streaming")
+
+        single_filter = {
+            "equals": {
+                "key": "contentBaseUuid",
+                "value": content_base_uuid
+            }
+        }
+
+        retrieval_configuration = {
+            "vectorSearchConfiguration": {
+                "filter": single_filter
+            }
+        }
+
+        sessionState = {
+            'knowledgeBaseConfigurations': [
+                {
+                    'knowledgeBaseId': self.knowledge_base_id,
+                    'retrievalConfiguration': retrieval_configuration
+                }
+            ]
+        }
+
+        response = self.bedrock_agent_runtime.invoke_agent(
+            agentId=supervisor_id,
+            agentAliasId=supervisor_alias_id,
+            sessionId=session_id,
+            inputText=prompt,
+            enableTrace=True,
+            sessionState=sessionState,
+        )
+
+        for event in response['completion']:
+            if 'chunk' in event:
+                chunk = event['chunk']
+                yield {
+                    'type': 'chunk',
+                    'content': chunk['bytes'].decode()
+                }
+            elif 'trace' in event:
+                trace_data = event['trace']
+                print("Trace:", trace_data)
+                yield {
+                    'type': 'trace',
+                    'content': {
+                        'agentAliasId': supervisor_alias_id,
+                        'agentId': supervisor_id,
+                        'sessionId': session_id,
+                        'trace': trace_data
+                    }
+                }
+
     def start_bedrock_ingestion(self) -> str:
         print("[+ Bedrock: Starting ingestion job +]")
         response = self.bedrock_agent.start_ingestion_job(
