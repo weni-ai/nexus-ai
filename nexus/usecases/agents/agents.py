@@ -455,6 +455,16 @@ class AgentUsecase:
         )
         return response
 
+    def invoke_supervisor_stream(self, session_id, supervisor_id, supervisor_alias_id, prompt, content_base_uuid):
+        for chunk in self.external_agent_client.invoke_supervisor_stream(
+            supervisor_id=supervisor_id,
+            supervisor_alias_id=supervisor_alias_id,
+            session_id=session_id,
+            prompt=prompt,
+            content_base_uuid=content_base_uuid,
+        ):
+            yield chunk
+
     def prepare_agent(self, agent_id: str):
         self.external_agent_client.prepare_agent(agent_id)
         return

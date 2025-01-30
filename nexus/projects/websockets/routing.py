@@ -1,8 +1,12 @@
 from django.urls import re_path
 
-from nexus.projects.websockets.consumers import WebsocketMessageConsumer
+from nexus.projects.websockets.consumers import (
+    WebsocketMessageConsumer,
+    PreviewConsumer
+)
 
 
 websocket_urlpatterns = [
-    re_path(r'ws/socket-server/project/(?P<project>[0-9a-f-]+)/$', WebsocketMessageConsumer.as_asgi())
+    re_path(r'ws/monitoring/(?P<project>[0-9a-f-]+)/$', WebsocketMessageConsumer.as_asgi()),
+    re_path(r'ws/preview/(?P<project>[0-9a-f-]+)/$', PreviewConsumer.as_asgi())
 ]

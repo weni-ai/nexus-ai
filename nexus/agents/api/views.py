@@ -287,4 +287,10 @@ class TeamView(APIView):
         team = Team.objects.get(project__uuid=project_uuid)
         team_agents = ActiveAgent.objects.filter(team=team)
         serializer = ActiveAgentTeamSerializer(team_agents, many=True)
-        return Response(serializer.data)
+        data = {
+            "manager": {
+                "external_id": team.external_id
+            },
+            "agents": serializer.data
+        }
+        return Response(data)
