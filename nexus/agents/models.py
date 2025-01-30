@@ -29,12 +29,12 @@ class Agent(BaseModel):
         return self.versions.order_by("created_at")
 
     def create_version(
-            self,
-            agent_alias_id: str,
-            agent_alias_name: str,
-            agent_alias_arn: str,
-            agent_alias_version: str
-        ):
+        self,
+        agent_alias_id: str,
+        agent_alias_name: str,
+        agent_alias_arn: str,
+        agent_alias_version: str
+    ):
         self.versions.create(
             alias_id=agent_alias_id,
             alias_name=agent_alias_name,

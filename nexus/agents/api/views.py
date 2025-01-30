@@ -140,7 +140,7 @@ class PushAgents(APIView):
                     files=files,
                     user=request.user
                 )
-            alias_name="v1"
+            alias_name = "v1"
 
             agents_usecase.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
             agents_usecase.prepare_agent(external_id)
