@@ -362,7 +362,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
             supervisor_id=supervisor.external_id,
             supervisor_alias_id=supervisor_version.alias_id,
             message=message,
-            content_base_uuid=contentbase,
+            content_base=contentbase,
         ):
             if event['type'] == 'chunk':
                 chunk = event['content']
