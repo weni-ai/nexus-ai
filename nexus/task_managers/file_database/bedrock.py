@@ -508,10 +508,9 @@ class BedrockFileDatabase(FileDataBase):
         )
         base_agent = base_agent_response['agent']
         memory_configuration = base_agent['memoryConfiguration']
-        print("BASE AGENT: ", base_agent_response)
 
         # Create new supervisor using base agent's configuration
-        response = self.bedrock_agent.create_agent(
+        response_create_supervisor = self.bedrock_agent.create_agent(
             agentName=supervisor_name,
             description=supervisor_description,
             instruction=base_agent['instruction'],
@@ -526,13 +525,9 @@ class BedrockFileDatabase(FileDataBase):
             memoryConfiguration=memory_configuration
         )
 
-        self.wait_agent_status_update(response['agent']['agentId'])
+        self.wait_agent_status_update(response_create_supervisor['agent']['agentId'])
 
-        print("============== CREATED SUPERVISOR ==============")
-        print(response)
-        print("================================================")
-
-        supervisor_id = response['agent']['agentId']
+        supervisor_id = response_create_supervisor['agent']['agentId']
 
         action_group_name = f"{supervisor_name}_action_group"
         lambda_arn = settings.AWS_BEDROCK_LAMBDA_ARN
@@ -543,14 +538,10 @@ class BedrockFileDatabase(FileDataBase):
             agent_version='DRAFT'
         )
 
-        print("============== BASE ACTION GROUP ==============")
-        print(base_action_group_response)
-        print("================================================")
-
         function_schema = base_action_group_response['agentActionGroup']['functionSchema']['functions']
         # parent_signature = "AMAZON.UserInput"
 
-        created_action_group = self.bedrock_agent.create_agent_action_group(
+        self.bedrock_agent.create_agent_action_group(
             actionGroupExecutor={
                 'lambda': lambda_arn
             },
@@ -561,19 +552,12 @@ class BedrockFileDatabase(FileDataBase):
             # parentActionGroupSignature=parent_signature
         )
 
-        print("============== CREATED ACTION GROUP ==============")
-        print(created_action_group)
-        print("================================================")
-
         self.attach_agent_knowledge_base(
             agent_id=supervisor_id,
             agent_version='DRAFT',
             knowledge_base_instruction=settings.AWS_BEDROCK_SUPERVISOR_KNOWLEDGE_BASE_INSTRUCTIONS,
             knowledge_base_id=self.knowledge_base_id
         )
-
-        print("============== ATTACH KNOWLEDGE BASE ==============")
-
 
         return supervisor_id, supervisor_name
 
