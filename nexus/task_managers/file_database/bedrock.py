@@ -1,7 +1,6 @@
 import uuid
 import json
 import time
-
 from io import BytesIO
 
 from dataclasses import dataclass
@@ -9,10 +8,12 @@ from typing import (
     Any,
     Dict,
     List,
+    Tuple,
 )
 from os.path import basename
 
 import boto3
+import pendulum
 from django.conf import settings
 from django.template.defaultfilters import slugify
 
@@ -170,7 +171,7 @@ class BedrockFileDatabase(FileDataBase):
 
         return response
 
-    def associate_sub_agents(self, supervisor_id: str, agents_list: list[BedrockSubAgent]) -> None:
+    def associate_sub_agents(self, supervisor_id: str, agents_list: list[BedrockSubAgent]) -> str:
         sub_agents = []
         for agent in agents_list:
             agent_name = agent.display_name
@@ -184,7 +185,7 @@ class BedrockFileDatabase(FileDataBase):
             }
             sub_agents.append(agent_association_data)
 
-            self.bedrock_agent.associate_agent_collaborator(
+            response = self.bedrock_agent.associate_agent_collaborator(
                 agentId=supervisor_id,
                 agentVersion="DRAFT",
                 agentDescriptor={"aliasArn": agent_association_data["sub_agent_alias_arn"]},
@@ -196,7 +197,7 @@ class BedrockFileDatabase(FileDataBase):
             self.bedrock_agent.prepare_agent(agentId=supervisor_id)
             self.agent_for_amazon_bedrock.wait_agent_status_update(supervisor_id)
 
-        return
+        return response["agentCollaborator"]["collaboratorId"]
 
     def attach_lambda_function(
         self,
@@ -450,11 +451,32 @@ class BedrockFileDatabase(FileDataBase):
         last_agent_version = agent_version_list.get("agentVersionSummaries")[0].get("agentVersion")
         return last_agent_version
 
-    def create_agent_alias(self, agent_id: str, alias_name: str):
-        sub_agent_alias_id, sub_agent_alias_arn = self.agent_for_amazon_bedrock.create_agent_alias(
-            agent_id=agent_id, alias_name=alias_name
+    def create_agent_alias(self, agent_id: str, alias_name: str) -> Tuple[str, str, str]:
+        start = pendulum.now()
+        agent_alias = self.bedrock_agent.create_agent_alias(
+            agentAliasName=alias_name, agentId=agent_id
         )
-        return sub_agent_alias_id, sub_agent_alias_arn
+        # wait aws create version
+        time.sleep(5)
+        end = pendulum.now()
+
+        agent_alias_id = agent_alias["agentAlias"]["agentAliasId"]
+        agent_alias_arn = agent_alias["agentAlias"]["agentAliasArn"]
+
+        response = self.bedrock_agent.list_agent_versions(
+            agentId=agent_id,
+        )
+        # create_agent_alias is not returning agent version
+        agent_alias_version = "DRAFT"
+        for version in response["agentVersionSummaries"]:
+            print("-----------------Agent Version------------------")
+            print(version)
+            print("------------------------------------------------")
+            created_at = pendulum.instance(version["createdAt"])
+            if start <= created_at <= end:
+                agent_alias_version = version["agentVersion"]
+
+        return agent_alias_id, agent_alias_arn, agent_alias_version
 
     def create_supervisor(self, supervisor_name, supervisor_description, supervisor_instructions):
         supervisor_id, supervisor_alias, supervisor_arn = self.agent_for_amazon_bedrock.create_agent(
@@ -668,7 +690,7 @@ class BedrockFileDatabase(FileDataBase):
             actionGroupName=action_group_name,
             agentId=agent_external_id,
             actionGroupId=action_group_id,
-            agentVersion=agent_version,
+            agentVersion="DRAFT",
             functionSchema={"functions": function_schema}
         )
         return response
