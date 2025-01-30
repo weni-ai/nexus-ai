@@ -31,12 +31,15 @@ class Message(BaseModel):
         return json.dumps(contact_fields)
 
 
-def message_factory(*args, contact_fields: dict = {}, **kwargs) -> Message:
+def message_factory(*args, contact_fields: dict = {}, metadata: dict = {}, **kwargs) -> Message:
     fields = []
+
+    if metadata is None:
+        metadata = {}
 
     if contact_fields:
         for key, value in contact_fields.items():
             field = ContactField(key=key, value=value.get("value") if value else None)
             fields.append(field)
 
-    return Message(*args, **kwargs, contact_fields=fields)
+    return Message(*args, **kwargs, contact_fields=fields, metadata=metadata)

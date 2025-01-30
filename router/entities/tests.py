@@ -44,3 +44,19 @@ class MailroomMessageTest(TestCase):
 
         expected_result = json.dumps({})
         self.assertEqual(message.contact_fields_as_json, expected_result)
+
+    def test_metadata_serialization_with_values(self):
+        message = message_factory(project_uuid="123", text="Hello", contact_urn="123", metadata={"123":"12"})
+
+        self.assertIsNotNone(message.metadata)
+        self.assertEqual(message.metadata, {"123":"12"})
+
+    def test_metadata_serialization_with_none(self):
+        message = message_factory(project_uuid="123", text="Hello", contact_urn="123", metadata=None)
+
+        self.assertEqual(message.metadata, {})
+
+    def test_metadata_serialization_without_metadata(self):
+        message = message_factory(project_uuid="123", text="Hello", contact_urn="123")
+
+        self.assertEqual(message.metadata, {})
