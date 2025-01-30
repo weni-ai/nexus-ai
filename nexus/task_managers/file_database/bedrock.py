@@ -2,6 +2,7 @@ import uuid
 import json
 import time
 from typing import TYPE_CHECKING
+from datetime import datetime
 
 from io import BytesIO
 
@@ -405,6 +406,7 @@ class BedrockFileDatabase(FileDataBase):
         sessionState["promptSessionAttributes"] = {
             "contact_urn": message.contact_urn,
             "contact_fields": message.contact_fields_as_json,
+            "date_time_now": datetime.now().isoformat(),
         }
 
         response = self.bedrock_agent_runtime.invoke_agent(
