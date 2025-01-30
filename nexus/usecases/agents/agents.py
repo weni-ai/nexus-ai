@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from django.conf import settings
 from django.template.defaultfilters import slugify
 
+from nexus.internals.flows import FlowsRESTClient
+
 from nexus.users.models import User
 from nexus.agents.models import (
     ActiveAgent,
@@ -67,8 +69,13 @@ class UpdateAgentDTO:
 
 
 class AgentUsecase:
-    def __init__(self, external_agent_client=BedrockFileDatabase):
+    def __init__(
+        self,
+        external_agent_client=BedrockFileDatabase,
+        flows_client=FlowsRESTClient
+    ):
         self.external_agent_client = external_agent_client()
+        self.flows_client = flows_client()
 
     def assign_agent(self, agent_uuid: str, project_uuid: str, created_by):
         agent: Agent = self.get_agent_object(uuid=agent_uuid)
@@ -211,6 +218,7 @@ class AgentUsecase:
         function_schema: List[Dict],
         user: User,
         agent: Agent,
+        skill_handler: str
     ):
         """
         Creates a new Lambda function for an agent skill and creates its alias.
@@ -223,6 +231,7 @@ class AgentUsecase:
             function_schema: The schema defining the function interface
             user: The user creating the skill
         """
+
         # Create the Lambda function
         lambda_response = run_create_lambda_function(
             agent_external_id=agent_external_id,
@@ -230,7 +239,8 @@ class AgentUsecase:
             agent_version=agent_version,
             zip_content=file,
             function_schema=function_schema,
-            agent=agent
+            agent=agent,
+            skill_handler=skill_handler
         )
 
         # Create the 'live' alias pointing to $LATEST version
@@ -264,7 +274,8 @@ class AgentUsecase:
                 'alias_name': 'live',
                 'alias_arn': alias_response['AliasArn'],
                 'agent_version': agent_version,
-                'function_schema': function_schema
+                'function_schema': function_schema,
+                'skill_handler': skill_handler
             },
             created_by=user
         )
@@ -316,24 +327,26 @@ class AgentUsecase:
         file: bytes,
         function_schema: List[Dict],
         user: User,
+        skill_handler: str
     ):
         """
         Updates the code for an existing Lambda function associated with an agent skill.
-
-        Args:
-            file_name: Name of the Lambda function to update
-            agent_external_id: External ID of the agent
-            agent_version: Version of the agent
-            file: Function code to update (bytes in .zip format)
-            function_schema: Schema defining the function interface
-            user: User updating the skill
         """
-
         print("----------- STARTING UPDATE LAMBDA FUNCTION ---------")
 
         # Get the agent and skill instances first
         agent = Agent.objects.get(external_id=agent_external_id)
         skill_object = AgentSkills.objects.get(unique_name=file_name, agent=agent)
+
+        # Check if any parameter in the function schema has contact_field=True
+        if function_schema and function_schema[0].get('parameters'):
+            parameters = function_schema[0]['parameters']
+            has_contact_field = any(
+                isinstance(param_data, dict) and param_data.get('contact_field') is True
+                for param_data in parameters.values()
+            )
+            if has_contact_field:
+                self.contact_field_handler(skill_object)
 
         # Store current version data before update
         AgentSkillVersion.objects.create(
@@ -351,7 +364,8 @@ class AgentUsecase:
                 'alias_arn': skill_object.skill['alias_arn'],
                 'agent_version': skill_object.skill['agent_version'],
                 'function_schema': skill_object.skill['function_schema'],
-                'lambda_version': skill_object.skill.get('lambda_version', '$LATEST')
+                'lambda_version': skill_object.skill.get('lambda_version', '$LATEST'),
+                'skill_handler': skill_object.skill['skill_handler']
             },
             created_by=user
         )
@@ -406,6 +420,12 @@ class AgentUsecase:
         skill_object.save()
 
         print(f"Updated skill {skill_object.display_name} for agent {agent.display_name}")
+
+        warnings = []
+        if skill_object.skill['skill_handler'] != skill_handler:
+            warnings.append(f"Skill handler changed from {skill_object.skill['handler']} to {skill_handler}")
+
+        return warnings
 
     def create_team_object(self, project_uuid: str, external_id: str, metadata: Dict) -> Team:
         return Team.objects.create(
@@ -665,7 +685,7 @@ class AgentUsecase:
         agent: Agent,
         skills: List[Dict],
         files: Dict,
-        user: User
+        user: User,
     ):
         """
         Handle creation or update of agent skills.
@@ -677,6 +697,7 @@ class AgentUsecase:
             user: The user creating the skills
         """
         for skill in skills:
+            skill_handler = skill.get("source").get("entrypoint")
             slug = skill.get('slug')
             skill_file = files[f"{agent.slug}:{slug}"]
             skill_file = skill_file.read()
@@ -700,14 +721,16 @@ class AgentUsecase:
             try:
                 AgentSkills.objects.get(unique_name=lambda_name, agent=agent)
                 print(f"Updating existing skill: {lambda_name}")
-                self.update_skill(
+                warnings = self.update_skill(
                     file_name=lambda_name,
                     agent_external_id=agent.metadata["external_id"],
                     agent_version=agent.metadata.get("agentVersion"),
                     file=skill_file,
                     function_schema=function_schema,
-                    user=user
+                    user=user,
+                    skill_handler=skill_handler
                 )
+                return warnings
             except AgentSkills.DoesNotExist:
                 print(f"[+ Creating new skill: {lambda_name} +]")
                 self.create_skill(
@@ -717,7 +740,8 @@ class AgentUsecase:
                     file=skill_file,
                     function_schema=function_schema,
                     user=user,
-                    agent=agent
+                    agent=agent,
+                    skill_handler=skill_handler
                 )
 
     def create_supervisor_version(self, project_uuid, user):
@@ -758,6 +782,41 @@ class AgentUsecase:
             return response
         except Exception:
             raise
+
+    # TODO: Make it assync
+    def contact_field_handler(self, skill_object: AgentSkills):
+        """
+        Handler for skills that have contact field functionality.
+        Checks parameters for contact_field flag and creates corresponding contact fields.
+        """
+        parameters = skill_object.skill['function_schema'][0]['parameters']
+
+        contact_field_params = []
+        for param_key, param_data in parameters.items():
+            if isinstance(param_data, dict) and param_data.get('contact_field') is True:
+                contact_field_params.append({
+                    'key': param_key,  # Use the parameter key as the contact field key
+                    'value_type': param_data.get('type', 'text').lower()  # Convert type to value_type
+                })
+
+        if contact_field_params:
+            flows_contact_fields = self.flows_client.list_project_contact_fields(
+                str(skill_object.agent.project.uuid)
+            )
+
+            # Handle both list and dict responses
+            results = flows_contact_fields.get('results', []) if isinstance(flows_contact_fields, dict) else flows_contact_fields
+            existing_keys = set(field.get('key', '') for field in results)
+
+            for param in contact_field_params:
+                if param['key'] not in existing_keys:
+                    self.flows_client.create_project_contact_field(
+                        project_uuid=str(skill_object.agent.project.uuid),
+                        key=param['key'],
+                        value_type=param['value_type']
+                    )
+
+        return True
 
     def update_supervisor_collaborator(self, project_uuid: str, agent):
         """Update multi-agent DRAFT to point to updated agent version"""

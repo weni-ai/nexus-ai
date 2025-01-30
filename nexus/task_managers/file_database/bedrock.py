@@ -302,6 +302,7 @@ class BedrockFileDatabase(FileDataBase):
         lambda_name: str,
         agent_external_id: str,
         agent_version: str,
+        skill_handler: str,
         source_code_file: bytes,
         function_schema: List[Dict],
         agent: Agent,
@@ -320,7 +321,7 @@ class BedrockFileDatabase(FileDataBase):
             Timeout=180,
             Role=lambda_role,
             Code={'ZipFile': zip_buffer.getvalue()},
-            Handler='lambda_function.lambda_handler'
+            Handler=skill_handler
         )
 
         lambda_arn = lambda_function.get("FunctionArn")
