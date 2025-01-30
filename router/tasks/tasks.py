@@ -48,7 +48,10 @@ client = OpenAI()
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def get_trace_summary(language, trace):
-    try:        
+    try:
+        # Add a small delay between API calls to respect rate limits
+        time.sleep(3)
+
         prompt = f"""
           Generate a concise, one-line summary of the trace of the action, in {language}.
           This summary must describe the orchestrator's action, referring to all actions as "skills."
