@@ -321,16 +321,17 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     usecase = AgentUsecase()
     session_id = f"project-{project.uuid}-session-{uuid.uuid4()}"
 
-    # Send initial status through WebSocket
-    send_preview_message_to_websocket(
-        project_uuid=str(project.uuid),
-        user_email=user_email,
-        message_data={
-            "type": "status",
-            "content": "Starting multi-agent processing",
-            "session_id": session_id
-        }
-    )
+    if user_email:
+        # Send initial status through WebSocket
+        send_preview_message_to_websocket(
+            project_uuid=str(project.uuid),
+            user_email=user_email,
+            message_data={
+                "type": "status",
+                "content": "Starting multi-agent processing",
+                "session_id": session_id
+            }
+        )
 
     try:
         # Stream supervisor response
@@ -345,45 +346,48 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
             if event['type'] == 'chunk':
                 chunk = event['content']
                 full_response += chunk
-                # Send chunk through WebSocket
-                send_preview_message_to_websocket(
-                    project_uuid=str(project.uuid),
-                    user_email=user_email,
-                    message_data={
-                        "type": "chunk",
-                        "content": chunk,
-                        "session_id": session_id
-                    }
-                )
+                if user_email:
+                    # Send chunk through WebSocket
+                    send_preview_message_to_websocket(
+                        project_uuid=str(project.uuid),
+                        user_email=user_email,
+                        message_data={
+                            "type": "chunk",
+                            "content": chunk,
+                            "session_id": session_id
+                        }
+                    )
             elif event['type'] == 'trace':
                 # Get summary from Claude with specified language
                 event['content']['summary'] = get_trace_summary(language, event['content'])
-                # Send trace data through WebSocket
-                send_preview_message_to_websocket(
-                    project_uuid=str(project.uuid),
-                    user_email=user_email,
-                    message_data={
-                        "type": "trace_update",
-                        "trace": event['content'],
-                        "session_id": session_id
-                    }
-                )
+                if user_email:
+                    # Send trace data through WebSocket
+                    send_preview_message_to_websocket(
+                        project_uuid=str(project.uuid),
+                        user_email=user_email,
+                        message_data={
+                            "type": "trace_update",
+                            "trace": event['content'],
+                            "session_id": session_id
+                        }
+                    )
 
         broadcast, _ = get_action_clients(preview)
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
         full_chunks = []
 
-        # Send completion status
-        send_preview_message_to_websocket(
-            user_email=user_email,
-            project_uuid=str(project.uuid),
-            message_data={
-                "type": "status",
-                "content": "Processing complete",
-                "session_id": session_id
-            }
-        )
+        if user_email:
+            # Send completion status
+            send_preview_message_to_websocket(
+                user_email=user_email,
+                project_uuid=str(project.uuid),
+                message_data={
+                    "type": "status",
+                    "content": "Processing complete",
+                    "session_id": session_id
+                }
+            )
 
         return dispatch(
             llm_response=full_response,
@@ -394,14 +398,15 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         )
 
     except Exception as e:
-        # Send error status through WebSocket
-        send_preview_message_to_websocket(
-            user_email=user_email,
-            project_uuid=str(project.uuid),
-            message_data={
-                "type": "error",
-                "content": str(e),
-                "session_id": session_id
-            }
-        )
+        if user_email:
+          # Send error status through WebSocket
+          send_preview_message_to_websocket(
+              user_email=user_email,
+              project_uuid=str(project.uuid),
+              message_data={
+                  "type": "error",
+                  "content": str(e),
+                  "session_id": session_id
+              }
+          )
         raise
