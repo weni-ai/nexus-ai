@@ -343,14 +343,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     usecase = AgentUsecase()
     session_id = f"project-{project.uuid}-session-{uuid.uuid4()}"
 
-    full_response = usecase.invoke_supervisor(
-        session_id=session_id,
-        supervisor_id=supervisor.external_id,
-        supervisor_alias_id=supervisor_version.alias_id,
-        content_base_uuid=str(contentbase.uuid),
-        message=message,
-    )
-
     # Send initial status through WebSocket
     send_preview_message_to_websocket(
         project_uuid=str(project.uuid),
