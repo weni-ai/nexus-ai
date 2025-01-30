@@ -108,7 +108,11 @@ class AgentUsecase:
         def format_instructions(instructions: List[str]):
             return "\n".join(instructions)
 
-        all_instructions = agent_dto.instructions + agent_dto.guardrails
+        all_instructions = ""
+        if agent_dto.instructions:
+            all_instructions = agent_dto.instructions
+            if agent_dto.guardrails:
+                all_instructions = agent_dto.instructions + agent_dto.guardrails
 
         external_id = self.create_external_agent(
             agent_name=f"{agent_dto.slug}-project-{project_uuid}",
@@ -480,6 +484,8 @@ class AgentUsecase:
                 supervisor_version='DRAFT',
                 sub_agent_id=sub_agent_id,
             )
+            active_agent = team.team_agents.get(agent=agent)
+            active_agent.delete()
 
     def update_agent(self, agent_dto: AgentDTO, project_uuid: str):
         """Update an existing agent with new data"""

@@ -147,6 +147,7 @@ class PushAgents(APIView):
                     files=files,
                     user=request.user,
                 )
+
                 if warnings:
                     response_warnings.extend(warnings)
 
