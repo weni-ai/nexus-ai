@@ -360,8 +360,8 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         for event in usecase.invoke_supervisor_stream(
             session_id=session_id,
             supervisor_id=supervisor.external_id,
-            supervisor_alias_id=supervisor.metadata.get("supervisor_alias_id"),
-            prompt=message.get("text"),
+            supervisor_alias_id=supervisor_version.alias_id,
+            prompt=message.text,
             content_base_uuid=str(contentbase.uuid),
         ):
             if event['type'] == 'chunk':
