@@ -56,6 +56,7 @@ class PushAgents(APIView):
         )
 
         agents_updated = []
+        response_warnings = []
         for agent_dto in agents_dto:
             if hasattr(agent_dto, 'is_update') and agent_dto.is_update:
                 # Handle update
@@ -68,17 +69,22 @@ class PushAgents(APIView):
                 if agent_dto.skills:
                     for skill in agent_dto.skills:
                         skill_file = files[f"{agent.slug}:{skill['slug']}"]
+                        function_schema = self._create_function_schema(skill)
+                        skill_handler = skill.get("source").get("entrypoint")
                         if skill['is_update']:
                             # Update existing skill
                             agent_version = agent.current_version.metadata.get("agent_alias_version")
-                            agents_usecase.update_skill(
+                            warnings = agents_usecase.update_skill(
                                 file_name=f"{skill['slug']}-{agent.external_id}",
                                 agent_external_id=agent.external_id,
                                 agent_version=agent_version,
                                 file=skill_file.read(),
-                                function_schema=self._create_function_schema(skill),
-                                user=request.user
+                                function_schema=function_schema,
+                                user=request.user,
+                                skill_handler=skill_handler
                             )
+                            if warnings:
+                                response_warnings.extend(warnings)
                         else:
                             # Create new skill
                             agent_version = agent.current_version.metadata.get("agent_alias_version")
@@ -87,9 +93,10 @@ class PushAgents(APIView):
                                 file_name=f"{skill['slug']}-{agent.external_id}",
                                 agent_version=agent_version,
                                 file=skill_file.read(),
-                                function_schema=self._create_function_schema(skill),
+                                function_schema=function_schema,
                                 user=request.user,
-                                agent=agent
+                                agent=agent,
+                                skill_handler=skill_handler
                             )
 
                 agents_updated.append({
@@ -134,12 +141,16 @@ class PushAgents(APIView):
             )
 
             if agent_dto.skills:
-                agents_usecase.handle_agent_skills(
+                warnings = agents_usecase.handle_agent_skills(
                     agent=agent,
                     skills=agent_dto.skills,
                     files=files,
-                    user=request.user
+                    user=request.user,
                 )
+
+                if warnings:
+                    response_warnings.extend(warnings)
+
             alias_name = "v1"
 
             agents_usecase.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
@@ -173,12 +184,17 @@ class PushAgents(APIView):
 
         team = agents_usecase.get_team_object(project__uuid=project_uuid)
 
-        return Response({
+        response = {
             "project": str(project_uuid),
             "agents": agents_updated,
             "supervisor_id": team.metadata.get("supervisor_alias_id"),
             "supervisor_alias": team.metadata.get("supervisor_alias_name"),
-        })
+        }
+
+        if response_warnings:
+            response["warnings"] = list(set(response_warnings))
+
+        return Response(response)
 
     def _create_function_schema(self, skill: dict) -> list[dict]:
         """Helper method to create function schema from skill data"""
