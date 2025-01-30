@@ -91,7 +91,9 @@ class BedrockFileDatabase(FileDataBase):
         required_fields = ["agentId", "agentName", "agentResourceRoleArn", "foundationModel"]
 
         if agent_dto.instructions:
-            all_instructions = agent_dto.instructions + agent_dto.guardrails
+            all_instructions = agent_dto.instructions
+            if agent_dto.guardrails:
+                all_instructions = agent_dto.instructions + agent_dto.guardrails
             instructions = "\n".join(all_instructions)
             _agent_details["instruction"] = instructions
             updated_fields.append("instruction")
