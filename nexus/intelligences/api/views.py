@@ -45,6 +45,7 @@ from nexus.projects.models import Project
 from nexus.users.models import User
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
+from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
 
 class IntelligencesViewset(
@@ -1194,3 +1195,58 @@ class UploadFileView(views.APIView):
         delete_file_task.apply_async((file_name,), countdown=600)
 
         return Response({"file_url": file_url}, status=status.HTTP_201_CREATED)
+
+
+class CommerceHasAgentBuilder(views.APIView):
+
+    def get(eslf, request):
+        user: User = request.user
+        module_permission = user.has_perm("users.can_communicate_internally")
+
+        if not module_permission:
+            return Response({"error": "you dont have permission"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        project_uuid = request.query_params.get("project_uuid", None)
+
+        if not project_uuid:
+            return Response({"Error": "The project_uuid is required!"}, status=status.HTTP_400_BAD_REQUEST)
+
+        content_base = get_default_content_base_by_project(project_uuid=project_uuid)
+        agent = content_base.agent
+        if agent is None:
+            return Response(
+                {
+                    "message": "The agent isn't configured!",
+                    "data": {
+                        "has_agent": False,
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+        if agent.name:
+            links = []
+            for content_base_link in content_base.contentbaselinks.all():
+                links.append(content_base_link.link)
+            return Response(
+                {
+                    "message": "The agent is configured!",
+                    "data": {
+                        "has_agent": True,
+                        "name": agent.name,
+                        "objective": agent.goal,
+                        "occupation": agent.role,
+                        "links": links
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                {
+                    "message": "The agent isn't configured!",
+                    "data": {
+                        "has_agent": False,
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
