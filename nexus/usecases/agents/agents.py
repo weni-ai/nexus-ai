@@ -759,10 +759,10 @@ class AgentUsecase:
             oldest_version = team.list_versions.first()
             self.delete_agent_version(team.external_id, oldest_version)
 
+        alias_name = f"{supervisor_name}-multi-agent"
         if current_version:
-            alias_name = f"{supervisor_name}-multi-agent-{current_version.id+1}"
-        else:
-            alias_name = f"{supervisor_name}-multi-agent"
+            alias_name = f"{supervisor_name}-multi-agent-{uuid.uuid4()}"
+            alias_name = alias_name[:99]
 
         supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = self.external_agent_client.create_agent_alias(
             alias_name=alias_name, agent_id=supervisor_id
