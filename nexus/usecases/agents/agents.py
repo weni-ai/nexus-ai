@@ -452,15 +452,15 @@ class AgentUsecase:
     def get_team_object(self, **kwargs) -> Team:
         return Team.objects.get(**kwargs)
 
-    def invoke_supervisor(self, session_id, supervisor_id, supervisor_alias_id, prompt, content_base_uuid):
-        response = self.external_agent_client.invoke_supervisor(
+    def invoke_supervisor_stream(self, session_id, supervisor_id, supervisor_alias_id, content_base, message):
+        for chunk in self.external_agent_client.invoke_supervisor_stream(
             supervisor_id=supervisor_id,
             supervisor_alias_id=supervisor_alias_id,
             session_id=session_id,
-            prompt=prompt,
-            content_base_uuid=content_base_uuid,
-        )
-        return response
+            content_base=content_base,
+            message=message
+        ):
+            yield chunk
 
     def prepare_agent(self, agent_id: str):
         self.external_agent_client.prepare_agent(agent_id)

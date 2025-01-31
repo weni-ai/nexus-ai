@@ -1,6 +1,9 @@
 import uuid
 import json
 import time
+from typing import TYPE_CHECKING
+from datetime import datetime
+
 from io import BytesIO
 
 from dataclasses import dataclass
@@ -20,6 +23,10 @@ from django.template.defaultfilters import slugify
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 
 from nexus.agents.models import Agent
+
+if TYPE_CHECKING:
+    from router.entities import Message
+    from nexus.intelligences.models import ContentBase
 
 
 @dataclass
@@ -407,15 +414,19 @@ class BedrockFileDatabase(FileDataBase):
                 foundationModel=agent_to_update['foundationModel'],
             )
 
-    def invoke_supervisor(
+    def invoke_supervisor_stream(
         self,
         supervisor_id: str,
         supervisor_alias_id: str,
         session_id: str,
-        prompt: str,
-        content_base_uuid: str,
+        content_base: "ContentBase",
+        message: "Message"
     ):
-        print("Invoking supervisor")
+        print("Invoking supervisor with streaming")
+
+        content_base_uuid = str(content_base.uuid)
+        agent = content_base.agent
+        instructions = content_base.instructions.all()
 
         single_filter = {
             "equals": {
@@ -439,27 +450,50 @@ class BedrockFileDatabase(FileDataBase):
             ]
         }
 
+        sessionState["promptSessionAttributes"] = {
+            "contact_urn": message.contact_urn,
+            "contact_fields": message.contact_fields_as_json,
+            "date_time_now": datetime.now().isoformat(),
+            "project_id": message.project_uuid,
+            "specific_personality": json.dumps({
+                "function": agent.role,
+                "name": agent.name,
+                "goal": agent.goal,
+                "adjective": agent.personality,
+                "instructions": list(instructions.values_list("instruction", flat=True))
+            })
+        }
+
+        print("Session State: ", sessionState)
+
         response = self.bedrock_agent_runtime.invoke_agent(
             agentId=supervisor_id,
             agentAliasId=supervisor_alias_id,
             sessionId=session_id,
-            inputText=prompt,
+            inputText=message.text,
             enableTrace=True,
             sessionState=sessionState,
         )
 
-        full_response = ""
-
         for event in response['completion']:
-            if 'trace' in event:
-                # TODO: send trace to webhook
-                # print("Trace:", event["trace"])
-                pass
-            elif 'chunk' in event:
+            if 'chunk' in event:
                 chunk = event['chunk']
-                full_response += chunk['bytes'].decode()
-
-        return full_response
+                yield {
+                    'type': 'chunk',
+                    'content': chunk['bytes'].decode()
+                }
+            elif 'trace' in event:
+                trace_data = event['trace']
+                print("Trace:", trace_data)
+                yield {
+                    'type': 'trace',
+                    'content': {
+                        'agentAliasId': supervisor_alias_id,
+                        'agentId': supervisor_id,
+                        'sessionId': session_id,
+                        'trace': trace_data
+                    }
+                }
 
     def start_bedrock_ingestion(self) -> str:
         print("[+ Bedrock: Starting ingestion job +]")

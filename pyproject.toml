@@ -48,6 +48,8 @@ channels = {extras = ["daphne"], version = "^4.2.0"}
 channels-redis = "^4.2.1"
 emoji = "^2.14.0"
 tiktoken = "^0.8.0"
+termcolor = "^2.5.0"
+rich = "^13.9.4"
 
 
 

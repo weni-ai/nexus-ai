@@ -1,6 +1,10 @@
 import os
 import uuid
+import json
+import time
 from typing import Dict
+from tenacity import retry, stop_after_attempt, wait_exponential
+from openai import OpenAI
 
 from django.conf import settings
 from redis import Redis
@@ -18,7 +22,7 @@ from router.classifiers.classification import Classification
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.entities import (
-    Message, AgentDTO, ContentBaseDTO, LLMSetupDTO
+    message_factory, AgentDTO, ContentBaseDTO, LLMSetupDTO
 )
 from router.repositories.orm import (
     ContentBaseORMRepository,
@@ -37,6 +41,46 @@ from router.clients.preview.simulator.flow_start import SimulateFlowStart
 from router.dispatcher import dispatch
 
 from nexus.projects.models import Project
+from nexus.projects.websockets.consumers import send_preview_message_to_websocket
+
+client = OpenAI()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def get_trace_summary(language, trace):
+    try:
+        # Add a small delay between API calls to respect rate limits
+        time.sleep(3)
+
+        prompt = f"""
+          Generate a concise, one-line summary of the trace of the action, in {language}.
+          This summary must describe the orchestrator's action, referring to all actions as "skills."
+
+          Guidelines for your response:
+          - Use the following language for the summary: {language}.
+          - The text to be summarized is the trace of the action.
+          - Use a systematic style (e.g., "Cancel Order skill activated", "Forwarding request to Reporting skill").
+          - The summary must not exceed 10 words.
+          - Use varied gerunds (e.g., "Checking", "Cancelling", "Forwarding").
+          - Do not include technical details about models, architectures, language codes, or anything unrelated to summarizing the action.
+
+          Here is the trace of the action:
+          {json.dumps(trace, indent=2)}
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            max_tokens=100,
+            messages=[{
+                "role": "user",
+                "content": prompt
+            }]
+        )
+
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"Error getting trace summary: {str(e)}")
+        return "Processing your request now"
 
 
 def get_action_clients(preview: bool = False):
@@ -132,7 +176,16 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
     content_base_repository = ContentBaseORMRepository()
     message_logs_repository = MessageLogsRepository()
 
-    message = Message(**message)
+    message = message_factory(
+        project_uuid=message.get("project_uuid"),
+        text=message.get("text"),
+        contact_urn=message.get("contact_urn"),
+        metadata=message.get("metadata"),
+        attachments=message.get("attachments"),
+        msg_event=message.get("msg_event"),
+        contact_fields=message.get("contact_fields", {}),
+    )
+
     mailroom_msg_event = message.msg_event
     mailroom_msg_event['attachments'] = mailroom_msg_event.get(
         'attachments'
@@ -270,33 +323,113 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
 
 @celery_app.task(bind=True)
-def start_multi_agents(self, message: Dict, preview: bool = False) -> bool:  # pragma: no cover
+def start_multi_agents(self, message: Dict, preview: bool = False, language: str = "en", user_email: str = '') -> bool:  # pragma: no cover
     # TODO: Logs
-    project_uuid = message.get("project_uuid")
-    project = Project.objects.get(uuid=project_uuid)
+    message = message_factory(
+        project_uuid=message.get("project_uuid"),
+        text=message.get("text"),
+        contact_urn=message.get("contact_urn"),
+        metadata=message.get("metadata"),
+        attachments=message.get("attachments"),
+        msg_event=message.get("msg_event"),
+        contact_fields=message.get("contact_fields", {}),
+    )
+
+    project = Project.objects.get(uuid=message.project_uuid)
     supervisor = project.team
     supervisor_version = supervisor.current_version
-    contentbase = get_default_content_base_by_project(project_uuid)
+
+    contentbase = get_default_content_base_by_project(message.project_uuid)
+
     usecase = AgentUsecase()
-    usecase.prepare_agent(supervisor.external_id)
     session_id = f"project-{project.uuid}-session-{uuid.uuid4()}"
-    full_response = usecase.invoke_supervisor(
-        session_id=session_id,
-        supervisor_id=supervisor.external_id,
-        supervisor_alias_id=supervisor_version.alias_id,
-        prompt=message.get("text"),
-        content_base_uuid=str(contentbase.uuid),
-    )
 
-    broadcast, _ = get_action_clients(preview)
-    flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+    if user_email:
+        # Send initial status through WebSocket
+        send_preview_message_to_websocket(
+            project_uuid=str(project.uuid),
+            user_email=user_email,
+            message_data={
+                "type": "status",
+                "content": "Starting multi-agent processing",
+                "session_id": session_id
+            }
+        )
 
-    full_chunks = []
+    try:
+        # Stream supervisor response
+        full_response = ""
+        for event in usecase.invoke_supervisor_stream(
+            session_id=session_id,
+            supervisor_id=supervisor.external_id,
+            supervisor_alias_id=supervisor_version.alias_id,
+            message=message,
+            content_base=contentbase,
+        ):
+            if event['type'] == 'chunk':
+                chunk = event['content']
+                full_response += chunk
+                if user_email:
+                    # Send chunk through WebSocket
+                    send_preview_message_to_websocket(
+                        project_uuid=str(message.project_uuid),
+                        user_email=user_email,
+                        message_data={
+                            "type": "chunk",
+                            "content": chunk,
+                            "session_id": session_id
+                        }
+                    )
+            elif event['type'] == 'trace':
+                # Get summary from Claude with specified language
+                event['content']['summary'] = get_trace_summary(language, event['content'])
+                if user_email:
+                    # Send trace data through WebSocket
+                    send_preview_message_to_websocket(
+                        project_uuid=str(message.project_uuid),
+                        user_email=user_email,
+                        message_data={
+                            "type": "trace_update",
+                            "trace": event['content'],
+                            "session_id": session_id
+                        }
+                    )
 
-    return dispatch(
-        llm_response=full_response,
-        message=Message(**message),
-        direct_message=broadcast,
-        user_email=flows_user_email,
-        full_chunks=full_chunks,
-    )
+        broadcast, _ = get_action_clients(preview)
+        flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+
+        full_chunks = []
+
+        if user_email:
+            # Send completion status
+            send_preview_message_to_websocket(
+                user_email=user_email,
+                project_uuid=str(project.uuid),
+                message_data={
+                    "type": "status",
+                    "content": "Processing complete",
+                    "session_id": session_id
+                }
+            )
+
+        return dispatch(
+            llm_response=full_response,
+            message=message,
+            direct_message=broadcast,
+            user_email=flows_user_email,
+            full_chunks=full_chunks,
+        )
+
+    except Exception as e:
+        if user_email:
+            # Send error status through WebSocket
+            send_preview_message_to_websocket(
+                user_email=user_email,
+                project_uuid=str(project.uuid),
+                message_data={
+                    "type": "error",
+                    "content": str(e),
+                    "session_id": session_id
+                }
+            )
+        raise
