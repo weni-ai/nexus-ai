@@ -1,6 +1,7 @@
+import uuid
+
 from typing import Dict, List, Tuple
 from dataclasses import dataclass, field
-
 from django.conf import settings
 from django.template.defaultfilters import slugify
 
@@ -189,15 +190,13 @@ class AgentUsecase:
 
     def create_agent_version(self, agent_external_id, user, agent):
         print("Creating a new agent version ...")
-        # agent = Agent.objects.get(external_id=agent_external_id)
-        # agent.refresh_from_db()
-        current_version = agent.current_version
 
         if agent.list_versions.count() == 9:
             oldest_version = agent.list_versions.first()
             self.delete_agent_version(agent_external_id, oldest_version)
 
-        alias_name = f"v{current_version.id+1}"
+        random_uuid = str(uuid.uuid4())
+        alias_name = f"version-{random_uuid}"
 
         agent_alias_id, agent_alias_arn, agent_alias_version = self.external_agent_client.create_agent_alias(
             alias_name=alias_name, agent_id=agent_external_id
