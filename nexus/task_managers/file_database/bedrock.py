@@ -193,6 +193,7 @@ class BedrockFileDatabase(FileDataBase):
                 collaborationInstruction=agent_association_data["sub_agent_instruction"],
                 relayConversationHistory=agent_association_data["relay_conversation_history"],
             )
+
             self.agent_for_amazon_bedrock.wait_agent_status_update(supervisor_id)
             self.bedrock_agent.prepare_agent(agentId=supervisor_id)
             self.agent_for_amazon_bedrock.wait_agent_status_update(supervisor_id)
@@ -382,6 +383,20 @@ class BedrockFileDatabase(FileDataBase):
         )
         return response
 
+    def bedrock_agent_to_supervisor(self, agent_id: str):
+        agent_to_update = self.bedrock_agent.get_agent(agentId=agent_id)
+        agent_to_update = agent_to_update['agent']
+
+        if agent_to_update['agentCollaboration'] == 'DISABLED':
+            self.bedrock_agent.update_agent(
+                agentId=agent_to_update['agentId'],
+                agentName=agent_to_update['agentName'],
+                agentResourceRoleArn=agent_to_update['agentResourceRoleArn'],
+                agentCollaboration='SUPERVISOR_ROUTER',
+                foundationModel=agent_to_update['foundationModel'],
+            )
+
+
     def invoke_supervisor(
         self,
         supervisor_id: str,
@@ -528,9 +543,6 @@ class BedrockFileDatabase(FileDataBase):
         self.wait_agent_status_update(response_create_supervisor['agent']['agentId'])
         supervisor_id = response_create_supervisor['agent']['agentId']
 
-        # Create a valid action group name that matches ^[a-zA-Z0-9_-]{1,64}$
-        action_group_name = ''.join(c for c in supervisor_name if c.isalnum() or c in '_-')
-        action_group_name = f"{action_group_name}_action"[:63]  # Ensure max length of 64
         lambda_arn = settings.AWS_BEDROCK_LAMBDA_ARN
 
         base_action_group_response = self.get_agent_action_group(
@@ -539,21 +551,18 @@ class BedrockFileDatabase(FileDataBase):
             agent_version='DRAFT'
         )
 
-        # Get and sanitize function schema
         function_schema = base_action_group_response['agentActionGroup']['functionSchema']['functions']
         print("FUNCTION SCHEMA: ", function_schema)
         for function in function_schema:
-            # Ensure function name matches Claude's requirements
             function['name'] = ''.join(c for c in function['name'] if c.isalnum() or c in '_-')
 
         print("FUNCTION SCHEMA SANITIZED: ", function_schema)
-        print("ACTION GROUP NAME: ", action_group_name)
 
         self.bedrock_agent.create_agent_action_group(
             actionGroupExecutor={
                 'lambda': lambda_arn
             },
-            actionGroupName=, # Simplify
+            actionGroupName="action_group",
             actionGroupState="ENABLED",
             agentId=supervisor_id,
             agentVersion='DRAFT',
@@ -576,6 +585,8 @@ class BedrockFileDatabase(FileDataBase):
             knowledge_base_instruction=settings.AWS_BEDROCK_SUPERVISOR_KNOWLEDGE_BASE_INSTRUCTIONS,
             knowledge_base_id=self.knowledge_base_id
         )
+
+        # self.prepare_agent(agent_id=supervisor_id)
 
         return supervisor_id, supervisor_name
 

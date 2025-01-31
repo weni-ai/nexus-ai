@@ -150,6 +150,10 @@ class AgentUsecase:
         )
         return agent_alias_id, agent_alias_arn, agent_alias_version
 
+    def update_agent_to_supervisor(self, agent_id: str):
+        self.external_agent_client.bedrock_agent_to_supervisor(agent_id)
+        self.external_agent_client.wait_agent_status_update(agent_id)
+
     def create_supervisor(
         self,
         project_uuid: str,
@@ -756,7 +760,10 @@ class AgentUsecase:
             oldest_version = team.list_versions.first()
             self.delete_agent_version(team.external_id, oldest_version)
 
-        alias_name = f"{supervisor_name}-multi-agent-{current_version.id+1}"
+        if current_version:
+            alias_name = f"{supervisor_name}-multi-agent-{current_version.id+1}"
+        else:
+            alias_name = f"{supervisor_name}-multi-agent"
 
         supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = self.external_agent_client.create_agent_alias(
             alias_name=alias_name, agent_id=supervisor_id

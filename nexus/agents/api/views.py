@@ -1,4 +1,5 @@
 import json
+import time
 
 from django.db.models import Q
 
@@ -47,8 +48,9 @@ class PushAgents(APIView):
         agents: dict = json.loads(agents)
 
         project_uuid = request.data.get("project_uuid")
-
         agents_usecase = AgentUsecase()
+
+        team = agents_usecase.get_team_object(project__uuid=project_uuid)
         agents_dto = agents_usecase.agent_dto_handler(
             yaml=agents,
             project_uuid=project_uuid,
@@ -181,7 +183,7 @@ class PushAgents(APIView):
                 "agent_external_id": agent.external_id
             })
 
-        team = agents_usecase.get_team_object(project__uuid=project_uuid)
+        team.refresh_from_db()
 
         response = {
             "project": str(project_uuid),
@@ -236,6 +238,7 @@ class ActiveAgentsViewSet(APIView):
 
     def patch(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
+        team = Team.objects.get(project__uuid=project_uuid)
         agent_uuid = kwargs.get("agent_uuid")
         user = request.user
         assign: bool = request.data.get("assigned")
@@ -243,6 +246,8 @@ class ActiveAgentsViewSet(APIView):
         usecase = AgentUsecase()
 
         if assign:
+            print("------------------------ UPDATING AGENT ---------------------")
+            # usecase.update_agent_to_supervisor(team.external_id)
             usecase.assign_agent(
                 agent_uuid=agent_uuid,
                 project_uuid=project_uuid,

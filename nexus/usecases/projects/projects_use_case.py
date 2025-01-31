@@ -61,18 +61,18 @@ class ProjectsUseCase:
         # agents_usecase.assign_agent(str(agent.uuid), project_uuid, created_by=user)
 
         alias_name = f"{supervisor_name}-multi-agent"
-        supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = agents_usecase.external_agent_client.create_agent_alias(
-            alias_name=alias_name, agent_id=team.external_id
-        )
-        team.versions.create(
-            alias_id=supervisor_agent_alias_id,
-            alias_name=alias_name,
-            metadata={
-                "supervisor_alias_arn": supervisor_agent_alias_arn,
-                "supervisor_alias_version": supervisor_alias_version,
-            },
-            created_by=user,
-        )
+        # supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = agents_usecase.external_agent_client.create_agent_alias(
+        #     alias_name=alias_name, agent_id=team.external_id
+        # )
+        # team.versions.create(
+        #     # alias_id=supervisor_agent_alias_id,
+        #     alias_name=alias_name,
+        #     metadata={
+        #         "supervisor_alias_arn": 'DRAFT',
+        #         "supervisor_alias_version": 'DRAFT',
+        #     },
+        #     created_by=user,
+        # )
 
     def create_brain_project_base(
         self,
