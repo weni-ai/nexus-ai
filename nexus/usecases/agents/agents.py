@@ -687,7 +687,7 @@ class AgentUsecase:
         return processed_skills
 
     def wait_agent_status_update(self, external_id: str):
-        self.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
+        self.external_agent_client.wait_agent_status_update(external_id)
 
     def handle_agent_skills(
         self,
