@@ -21,7 +21,6 @@ from django.conf import settings
 from django.template.defaultfilters import slugify
 
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
-from nexus.agents.src.utils.bedrock_agent_helper import AgentsForAmazonBedrock
 
 from nexus.agents.models import Agent
 
@@ -50,14 +49,15 @@ class BedrockFileDatabase(FileDataBase):
         self.bucket_name = settings.AWS_BEDROCK_BUCKET_NAME
         self.model_id = settings.AWS_BEDROCK_MODEL_ID
 
-        self.agent_for_amazon_bedrock = AgentsForAmazonBedrock()
-        # self.agent_for_amazon_bedrock = ...  #  TODO: add AgentsForAmazonBedrock lib
-        self.s3_client = self.__get_s3_client()
+        self.account_id = self.__get_sts_client().get_caller_identity()["Account"]
+        self.iam_client = self.__get_iam_client()
         self.bedrock_agent = self.__get_bedrock_agent()
         self.bedrock_agent_runtime = self.__get_bedrock_agent_runtime()
         self.bedrock_runtime = self.__get_bedrock_runtime()
         self.lambda_client = self.__get_lambda_client()
+        self.s3_client = self.__get_s3_client()
 
+        self._suffix = f"{self.region_name}-{self.account_id}"
         self.agent_foundation_model = agent_foundation_model
         self.supervisor_foundation_model = supervisor_foundation_model
 
@@ -92,7 +92,9 @@ class BedrockFileDatabase(FileDataBase):
         required_fields = ["agentId", "agentName", "agentResourceRoleArn", "foundationModel"]
 
         if agent_dto.instructions:
-            all_instructions = agent_dto.instructions + agent_dto.guardrails
+            all_instructions = agent_dto.instructions
+            if agent_dto.guardrails:
+                all_instructions = agent_dto.instructions + agent_dto.guardrails
             instructions = "\n".join(all_instructions)
             _agent_details["instruction"] = instructions
             updated_fields.append("instruction")
@@ -192,6 +194,15 @@ class BedrockFileDatabase(FileDataBase):
             }
             sub_agents.append(agent_association_data)
 
+            print("---------------------------------------")
+            print(supervisor_id)
+            print("DRAFT")
+            print({"aliasArn": agent_association_data["sub_agent_alias_arn"]})
+            print(agent_association_data["sub_agent_association_name"])
+            print(agent_association_data["sub_agent_instruction"])
+            print(agent_association_data["relay_conversation_history"])
+            print("---------------------------------------")
+
             response = self.bedrock_agent.associate_agent_collaborator(
                 agentId=supervisor_id,
                 agentVersion="DRAFT",
@@ -200,9 +211,10 @@ class BedrockFileDatabase(FileDataBase):
                 collaborationInstruction=agent_association_data["sub_agent_instruction"],
                 relayConversationHistory=agent_association_data["relay_conversation_history"],
             )
-            self.agent_for_amazon_bedrock.wait_agent_status_update(supervisor_id)
+
+            self.wait_agent_status_update(supervisor_id)
             self.bedrock_agent.prepare_agent(agentId=supervisor_id)
-            self.agent_for_amazon_bedrock.wait_agent_status_update(supervisor_id)
+            self.wait_agent_status_update(supervisor_id)
 
         return response["agentCollaborator"]["collaboratorId"]
 
@@ -237,6 +249,20 @@ class BedrockFileDatabase(FileDataBase):
 
         agent.metadata['action_group'] = data
         agent.save()
+
+    def attach_agent_knowledge_base(
+        self,
+        agent_id: str,
+        agent_version: str,
+        knowledge_base_instruction: str,
+        knowledge_base_id: str,
+    ):
+        self.bedrock_agent.associate_agent_knowledge_base(
+            agentId=agent_id,
+            agentVersion=agent_version,
+            description=knowledge_base_instruction,
+            knowledgeBaseId=knowledge_base_id
+        )
 
     def create_agent(
         self,
@@ -317,7 +343,7 @@ class BedrockFileDatabase(FileDataBase):
 
         zip_buffer = BytesIO(source_code_file)
 
-        lambda_role = self.agent_for_amazon_bedrock._create_lambda_iam_role(agent_external_id)
+        lambda_role = self._create_lambda_iam_role(agent_external_id)
         print("LAMBDA ROLE: ", lambda_role)
 
         print("CREATING LAMBDA FUNCTION")
@@ -343,7 +369,7 @@ class BedrockFileDatabase(FileDataBase):
             function_schema=function_schema,
             agent=agent
         )
-        self.agent_for_amazon_bedrock._allow_agent_lambda(
+        self._allow_agent_lambda(
             agent_external_id,
             lambda_name
         )
@@ -374,6 +400,19 @@ class BedrockFileDatabase(FileDataBase):
             collaboratorId=sub_agent_id
         )
         return response
+
+    def bedrock_agent_to_supervisor(self, agent_id: str):
+        agent_to_update = self.bedrock_agent.get_agent(agentId=agent_id)
+        agent_to_update = agent_to_update['agent']
+
+        if agent_to_update['agentCollaboration'] == 'DISABLED':
+            self.bedrock_agent.update_agent(
+                agentId=agent_to_update['agentId'],
+                agentName=agent_to_update['agentName'],
+                agentResourceRoleArn=agent_to_update['agentResourceRoleArn'],
+                agentCollaboration='SUPERVISOR_ROUTER',
+                foundationModel=agent_to_update['foundationModel'],
+            )
 
     def invoke_supervisor_stream(
         self,
@@ -512,15 +551,88 @@ class BedrockFileDatabase(FileDataBase):
 
         return agent_alias_id, agent_alias_arn, agent_alias_version
 
-    def create_supervisor(self, supervisor_name, supervisor_description, supervisor_instructions):
-        supervisor_id, supervisor_alias, supervisor_arn = self.agent_for_amazon_bedrock.create_agent(
-            agent_collaboration='SUPERVISOR_ROUTER',
-            agent_name=supervisor_name,
-            agent_description=supervisor_description,
-            agent_instructions=supervisor_instructions,
-            model_ids=self.supervisor_foundation_model,
+    def create_supervisor(
+        self,
+        supervisor_name: str,
+        supervisor_description: str,
+        supervisor_instructions: str
+    ) -> Tuple[str, str]:
+        """
+        Creates a new supervisor agent using an existing agent as base.
+        Returns tuple of (supervisor_id, supervisor_alias_name)
+        """
+        # Get existing agent to use as base
+        base_agent_response = self.bedrock_agent.get_agent(
+            agentId=settings.AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID
         )
-        return supervisor_id, supervisor_alias
+        base_agent = base_agent_response['agent']
+        memory_configuration = base_agent['memoryConfiguration']
+
+        # Create new supervisor using base agent's configuration
+        response_create_supervisor = self.bedrock_agent.create_agent(
+            agentName=supervisor_name,
+            description=supervisor_description,
+            instruction=base_agent['instruction'],
+            agentResourceRoleArn=settings.AGENT_RESOURCE_ROLE_ARN,
+            foundationModel=base_agent['foundationModel'],
+            idleSessionTTLInSeconds=base_agent['idleSessionTTLInSeconds'],
+            agentCollaboration='SUPERVISOR_ROUTER',
+            guardrailConfiguration={
+                'guardrailIdentifier': settings.AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
+                'guardrailVersion': str(settings.AWS_BEDROCK_GUARDRAIL_VERSION)
+            },
+            memoryConfiguration=memory_configuration
+        )
+
+        self.wait_agent_status_update(response_create_supervisor['agent']['agentId'])
+        supervisor_id = response_create_supervisor['agent']['agentId']
+
+        lambda_arn = settings.AWS_BEDROCK_LAMBDA_ARN
+
+        base_action_group_response = self.get_agent_action_group(
+            agent_id=settings.AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID,
+            action_group_id=settings.AWS_BEDROCK_SUPERVISOR_ACTION_GROUP_ID,
+            agent_version='DRAFT'
+        )
+
+        function_schema = base_action_group_response['agentActionGroup']['functionSchema']['functions']
+        # print("FUNCTION SCHEMA: ", function_schema)
+        for function in function_schema:
+            function['name'] = ''.join(c for c in function['name'] if c.isalnum() or c in '_-')
+
+        # print("FUNCTION SCHEMA SANITIZED: ", function_schema)
+
+        self.bedrock_agent.create_agent_action_group(
+            actionGroupExecutor={
+                'lambda': lambda_arn
+            },
+            actionGroupName="action_group",
+            actionGroupState="ENABLED",
+            agentId=supervisor_id,
+            agentVersion='DRAFT',
+            functionSchema={"functions": function_schema},
+        )
+
+        parent_signature = "AMAZON.UserInput"
+
+        self.bedrock_agent.create_agent_action_group(
+            actionGroupName="UserInputAction",
+            actionGroupState="ENABLED",
+            agentId=supervisor_id,
+            agentVersion="DRAFT",
+            parentActionGroupSignature=parent_signature
+        )
+
+        self.attach_agent_knowledge_base(
+            agent_id=supervisor_id,
+            agent_version='DRAFT',
+            knowledge_base_instruction=settings.AWS_BEDROCK_SUPERVISOR_KNOWLEDGE_BASE_INSTRUCTIONS,
+            knowledge_base_id=self.knowledge_base_id
+        )
+
+        # self.prepare_agent(agent_id=supervisor_id)
+
+        return supervisor_id, supervisor_name
 
     def get_bedrock_ingestion_status(self, job_id: str):
         response = self.bedrock_agent.get_ingestion_job(
@@ -534,9 +646,6 @@ class BedrockFileDatabase(FileDataBase):
             return response.get("ingestionJob").get("status")
 
         raise Exception(f"get_ingestion_job returned status code {status_code}")
-
-    def wait_agent_status_update(self, external_id: str):
-        self.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
 
     def list_bedrock_ingestion(self, filter_values: List = ['STARTING', 'IN_PROGRESS']):
         response = self.bedrock_agent.list_ingestion_jobs(
@@ -642,6 +751,43 @@ class BedrockFileDatabase(FileDataBase):
             region_name=self.region_name
         )
 
+    def __get_iam_client(self):
+        return boto3.client(
+            "iam",
+            region_name=self.region_name
+        )
+
+    def __get_sts_client(self):
+        return boto3.client(
+            "sts",
+            region_name=self.region_name
+        )
+
+    def _allow_agent_lambda(self, agent_id: str, lambda_function_name: str) -> None:
+        self.lambda_client.add_permission(
+            FunctionName=lambda_function_name,
+            StatementId=f"allow_bedrock_{agent_id}",
+            Action="lambda:InvokeFunction",
+            Principal="bedrock.amazonaws.com",
+            SourceArn=f"arn:aws:bedrock:{self.region_name}:{self.account_id}:agent/{agent_id}",
+        )
+
+    def wait_agent_status_update(self, agent_id):
+        response = self.bedrock_agent.get_agent(agentId=agent_id)
+        agent_status = response["agent"]["agentStatus"]
+        _waited_at_least_once = False
+        while agent_status.endswith("ING"):
+            print(f"Waiting for agent status to change. Current status {agent_status}")
+            time.sleep(5)
+            _waited_at_least_once = True
+            try:
+                response = self.bedrock_agent.get_agent(agentId=agent_id)
+                agent_status = response["agent"]["agentStatus"]
+            except self.bedrock_agent.exceptions.ResourceNotFoundException:
+                agent_status = "DELETED"
+        if _waited_at_least_once:
+            print(f"Agent id {agent_id} current status: {agent_status}")
+
     def update_lambda_function(
         self,
         lambda_name: str,
@@ -728,3 +874,40 @@ class BedrockFileDatabase(FileDataBase):
             functionSchema={"functions": function_schema}
         )
         return response
+
+    def _create_lambda_iam_role(
+        self,
+        agent_name: str,
+    ) -> object:
+        # TODO: use default role for lambda functions
+        _lambda_function_role_name = f"{agent_name}-lambda-role-{self._suffix}"
+        try:
+            _assume_role_policy_document = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": "bedrock:InvokeModel",  # noqa
+                        "Principal": {"Service": "lambda.amazonaws.com"},
+                        "Action": "sts:AssumeRole",  # noqa
+                    }
+                ],
+            }
+
+            _lambda_iam_role = self.iam_client.create_role(
+                RoleName=_lambda_function_role_name,
+                AssumeRolePolicyDocument=json.dumps(_assume_role_policy_document),
+            )
+
+            time.sleep(10)
+        except:  # noqa
+            _lambda_iam_role = self.iam_client.get_role(
+                RoleName=_lambda_function_role_name
+            )
+
+        self.iam_client.attach_role_policy(
+            RoleName=_lambda_function_role_name,
+            PolicyArn="arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+        )
+
+        return _lambda_iam_role["Role"]["Arn"]

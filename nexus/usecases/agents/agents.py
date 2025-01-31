@@ -1,6 +1,7 @@
+import uuid
+
 from typing import Dict, List, Tuple
 from dataclasses import dataclass, field
-
 from django.conf import settings
 from django.template.defaultfilters import slugify
 
@@ -108,7 +109,11 @@ class AgentUsecase:
         def format_instructions(instructions: List[str]):
             return "\n".join(instructions)
 
-        all_instructions = agent_dto.instructions + agent_dto.guardrails
+        all_instructions = ""
+        if agent_dto.instructions:
+            all_instructions = agent_dto.instructions
+            if agent_dto.guardrails:
+                all_instructions = agent_dto.instructions + agent_dto.guardrails
 
         external_id = self.create_external_agent(
             agent_name=f"{agent_dto.slug}-project-{project_uuid}",
@@ -150,6 +155,10 @@ class AgentUsecase:
         )
         return agent_alias_id, agent_alias_arn, agent_alias_version
 
+    def update_agent_to_supervisor(self, agent_id: str):
+        self.external_agent_client.bedrock_agent_to_supervisor(agent_id)
+        self.external_agent_client.wait_agent_status_update(agent_id)
+
     def create_supervisor(
         self,
         project_uuid: str,
@@ -160,7 +169,7 @@ class AgentUsecase:
         external_id, alias_name = self.create_external_supervisor(
             supervisor_name,
             supervisor_description,
-            supervisor_instructions,
+            supervisor_instructions
         )
 
         self.external_agent_client.wait_agent_status_update(external_id)
@@ -175,25 +184,23 @@ class AgentUsecase:
         self,
         supervisor_name: str,
         supervisor_description: str,
-        supervisor_instructions: str,
+        supervisor_instructions: str
     ) -> Tuple[str, str]:
         return self.external_agent_client.create_supervisor(
             supervisor_name,
             supervisor_description,
-            supervisor_instructions,
+            supervisor_instructions
         )
 
     def create_agent_version(self, agent_external_id, user, agent):
         print("Creating a new agent version ...")
-        # agent = Agent.objects.get(external_id=agent_external_id)
-        # agent.refresh_from_db()
-        current_version = agent.current_version
 
         if agent.list_versions.count() == 9:
             oldest_version = agent.list_versions.first()
             self.delete_agent_version(agent_external_id, oldest_version)
 
-        alias_name = f"v{current_version.id+1}"
+        random_uuid = str(uuid.uuid4())
+        alias_name = f"version-{random_uuid}"
 
         agent_alias_id, agent_alias_arn, agent_alias_version = self.external_agent_client.create_agent_alias(
             alias_name=alias_name, agent_id=agent_external_id
@@ -480,6 +487,8 @@ class AgentUsecase:
                 supervisor_version='DRAFT',
                 sub_agent_id=sub_agent_id,
             )
+            active_agent = team.team_agents.get(agent=agent)
+            active_agent.delete()
 
     def update_agent(self, agent_dto: AgentDTO, project_uuid: str):
         """Update an existing agent with new data"""
@@ -678,7 +687,7 @@ class AgentUsecase:
         return processed_skills
 
     def wait_agent_status_update(self, external_id: str):
-        self.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
+        self.external_agent_client.wait_agent_status_update(external_id)
 
     def handle_agent_skills(
         self,
@@ -723,8 +732,8 @@ class AgentUsecase:
                 print(f"Updating existing skill: {lambda_name}")
                 warnings = self.update_skill(
                     file_name=lambda_name,
-                    agent_external_id=agent.metadata["external_id"],
-                    agent_version=agent.metadata.get("agentVersion"),
+                    agent_external_id=agent.external_id,
+                    agent_version=agent.current_version.metadata.get("agent_alias_version"),
                     file=skill_file,
                     function_schema=function_schema,
                     user=user,
@@ -756,7 +765,10 @@ class AgentUsecase:
             oldest_version = team.list_versions.first()
             self.delete_agent_version(team.external_id, oldest_version)
 
-        alias_name = f"{supervisor_name}-multi-agent-{current_version.id+1}"
+        alias_name = f"{supervisor_name}-multi-agent"
+        if current_version:
+            alias_name = f"{supervisor_name}-multi-agent-{uuid.uuid4()}"
+            alias_name = alias_name[:99]
 
         supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = self.external_agent_client.create_agent_alias(
             alias_name=alias_name, agent_id=supervisor_id
