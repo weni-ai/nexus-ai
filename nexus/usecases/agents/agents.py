@@ -1,6 +1,7 @@
+import uuid
+
 from typing import Dict, List, Tuple
 from dataclasses import dataclass, field
-
 from django.conf import settings
 from django.template.defaultfilters import slugify
 
@@ -154,6 +155,10 @@ class AgentUsecase:
         )
         return agent_alias_id, agent_alias_arn, agent_alias_version
 
+    def update_agent_to_supervisor(self, agent_id: str):
+        self.external_agent_client.bedrock_agent_to_supervisor(agent_id)
+        self.external_agent_client.wait_agent_status_update(agent_id)
+
     def create_supervisor(
         self,
         project_uuid: str,
@@ -164,7 +169,7 @@ class AgentUsecase:
         external_id, alias_name = self.create_external_supervisor(
             supervisor_name,
             supervisor_description,
-            supervisor_instructions,
+            supervisor_instructions
         )
 
         self.external_agent_client.wait_agent_status_update(external_id)
@@ -179,25 +184,23 @@ class AgentUsecase:
         self,
         supervisor_name: str,
         supervisor_description: str,
-        supervisor_instructions: str,
+        supervisor_instructions: str
     ) -> Tuple[str, str]:
         return self.external_agent_client.create_supervisor(
             supervisor_name,
             supervisor_description,
-            supervisor_instructions,
+            supervisor_instructions
         )
 
     def create_agent_version(self, agent_external_id, user, agent):
         print("Creating a new agent version ...")
-        # agent = Agent.objects.get(external_id=agent_external_id)
-        # agent.refresh_from_db()
-        current_version = agent.current_version
 
         if agent.list_versions.count() == 9:
             oldest_version = agent.list_versions.first()
             self.delete_agent_version(agent_external_id, oldest_version)
 
-        alias_name = f"v{current_version.id+1}"
+        random_uuid = str(uuid.uuid4())
+        alias_name = f"version-{random_uuid}"
 
         agent_alias_id, agent_alias_arn, agent_alias_version = self.external_agent_client.create_agent_alias(
             alias_name=alias_name, agent_id=agent_external_id
@@ -762,7 +765,10 @@ class AgentUsecase:
             oldest_version = team.list_versions.first()
             self.delete_agent_version(team.external_id, oldest_version)
 
-        alias_name = f"{supervisor_name}-multi-agent-{current_version.id+1}"
+        alias_name = f"{supervisor_name}-multi-agent"
+        if current_version:
+            alias_name = f"{supervisor_name}-multi-agent-{uuid.uuid4()}"
+            alias_name = alias_name[:99]
 
         supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = self.external_agent_client.create_agent_alias(
             alias_name=alias_name, agent_id=supervisor_id

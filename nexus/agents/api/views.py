@@ -47,8 +47,9 @@ class PushAgents(APIView):
         agents: dict = json.loads(agents)
 
         project_uuid = request.data.get("project_uuid")
-
         agents_usecase = AgentUsecase()
+
+        team = agents_usecase.get_team_object(project__uuid=project_uuid)
         agents_dto = agents_usecase.agent_dto_handler(
             yaml=agents,
             project_uuid=project_uuid,
@@ -182,7 +183,7 @@ class PushAgents(APIView):
                 "agent_external_id": agent.external_id
             })
 
-        team = agents_usecase.get_team_object(project__uuid=project_uuid)
+        team.refresh_from_db()
 
         response = {
             "project": str(project_uuid),
@@ -244,6 +245,8 @@ class ActiveAgentsViewSet(APIView):
         usecase = AgentUsecase()
 
         if assign:
+            print("------------------------ UPDATING AGENT ---------------------")
+            # usecase.update_agent_to_supervisor(team.external_id)
             usecase.assign_agent(
                 agent_uuid=agent_uuid,
                 project_uuid=project_uuid,
