@@ -496,12 +496,12 @@ class BedrockFileDatabase(FileDataBase):
         self,
         supervisor_name: str,
         supervisor_description: str,
+        supervisor_instructions: str
     ) -> Tuple[str, str]:
         """
         Creates a new supervisor agent using an existing agent as base.
         Returns tuple of (supervisor_id, supervisor_alias_name)
         """
-
         # Get existing agent to use as base
         base_agent_response = self.bedrock_agent.get_agent(
             agentId=settings.AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID
@@ -526,10 +526,11 @@ class BedrockFileDatabase(FileDataBase):
         )
 
         self.wait_agent_status_update(response_create_supervisor['agent']['agentId'])
-
         supervisor_id = response_create_supervisor['agent']['agentId']
 
-        action_group_name = f"{supervisor_name}_action_group"
+        # Create a valid action group name that matches ^[a-zA-Z0-9_-]{1,64}$
+        action_group_name = ''.join(c for c in supervisor_name if c.isalnum() or c in '_-')
+        action_group_name = f"{action_group_name}_action"[:63]  # Ensure max length of 64
         lambda_arn = settings.AWS_BEDROCK_LAMBDA_ARN
 
         base_action_group_response = self.get_agent_action_group(
@@ -538,13 +539,21 @@ class BedrockFileDatabase(FileDataBase):
             agent_version='DRAFT'
         )
 
+        # Get and sanitize function schema
         function_schema = base_action_group_response['agentActionGroup']['functionSchema']['functions']
+        print("FUNCTION SCHEMA: ", function_schema)
+        for function in function_schema:
+            # Ensure function name matches Claude's requirements
+            function['name'] = ''.join(c for c in function['name'] if c.isalnum() or c in '_-')
+
+        print("FUNCTION SCHEMA SANITIZED: ", function_schema)
+        print("ACTION GROUP NAME: ", action_group_name)
 
         self.bedrock_agent.create_agent_action_group(
             actionGroupExecutor={
                 'lambda': lambda_arn
             },
-            actionGroupName=action_group_name,
+            actionGroupName=, # Simplify
             actionGroupState="ENABLED",
             agentId=supervisor_id,
             agentVersion='DRAFT',

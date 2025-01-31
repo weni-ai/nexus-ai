@@ -160,7 +160,7 @@ class AgentUsecase:
         external_id, alias_name = self.create_external_supervisor(
             supervisor_name,
             supervisor_description,
-            supervisor_instructions,
+            supervisor_instructions
         )
 
         self.external_agent_client.wait_agent_status_update(external_id)
@@ -175,12 +175,12 @@ class AgentUsecase:
         self,
         supervisor_name: str,
         supervisor_description: str,
-        supervisor_instructions: str,
+        supervisor_instructions: str
     ) -> Tuple[str, str]:
         return self.external_agent_client.create_supervisor(
             supervisor_name,
             supervisor_description,
-            supervisor_instructions,
+            supervisor_instructions
         )
 
     def create_agent_version(self, agent_external_id, user, agent):
