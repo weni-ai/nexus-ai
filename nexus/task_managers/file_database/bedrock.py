@@ -405,7 +405,6 @@ class BedrockFileDatabase(FileDataBase):
                 foundationModel=agent_to_update['foundationModel'],
             )
 
-
     def invoke_supervisor(
         self,
         supervisor_id: str,

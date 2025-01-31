@@ -1,5 +1,4 @@
 import json
-import time
 
 from django.db.models import Q
 
@@ -238,7 +237,6 @@ class ActiveAgentsViewSet(APIView):
 
     def patch(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
-        team = Team.objects.get(project__uuid=project_uuid)
         agent_uuid = kwargs.get("agent_uuid")
         user = request.user
         assign: bool = request.data.get("assigned")

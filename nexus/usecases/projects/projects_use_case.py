@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.template.defaultfilters import slugify
 
-from nexus.agents.models import Agent, Team
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.projects.exceptions import ProjectDoesNotExist
@@ -51,7 +50,7 @@ class ProjectsUseCase:
         user,
     ):
         agents_usecase = AgentUsecase(self.external_agent_client)
-        team: Team = agents_usecase.create_supervisor(
+        team = agents_usecase.create_supervisor(
             project_uuid=project_uuid,
             supervisor_name=supervisor_name,
             supervisor_description=supervisor_description,
@@ -60,7 +59,7 @@ class ProjectsUseCase:
         # agent: Agent = agents_usecase.get_agent_object(external_id=settings.DOUBT_ANALYST_EXTERNAL_ID)
         # agents_usecase.assign_agent(str(agent.uuid), project_uuid, created_by=user)
 
-        alias_name = f"{supervisor_name}-multi-agent"
+        # alias_name = f"{supervisor_name}-multi-agent"
         # supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = agents_usecase.external_agent_client.create_agent_alias(
         #     alias_name=alias_name, agent_id=team.external_id
         # )
@@ -73,6 +72,8 @@ class ProjectsUseCase:
         #     },
         #     created_by=user,
         # )
+
+        return team
 
     def create_brain_project_base(
         self,
