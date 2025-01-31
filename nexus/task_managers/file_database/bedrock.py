@@ -185,6 +185,15 @@ class BedrockFileDatabase(FileDataBase):
             }
             sub_agents.append(agent_association_data)
 
+            print("---------------------------------------")
+            print(supervisor_id)
+            print("DRAFT")
+            print({"aliasArn": agent_association_data["sub_agent_alias_arn"]})
+            print(agent_association_data["sub_agent_association_name"])
+            print(agent_association_data["sub_agent_instruction"])
+            print(agent_association_data["relay_conversation_history"])
+            print("---------------------------------------")
+
             response = self.bedrock_agent.associate_agent_collaborator(
                 agentId=supervisor_id,
                 agentVersion="DRAFT",
@@ -529,7 +538,7 @@ class BedrockFileDatabase(FileDataBase):
             agentName=supervisor_name,
             description=supervisor_description,
             instruction=base_agent['instruction'],
-            agentResourceRoleArn=base_agent['agentResourceRoleArn'],
+            agentResourceRoleArn=settings.AGENT_RESOURCE_ROLE_ARN,
             foundationModel=base_agent['foundationModel'],
             idleSessionTTLInSeconds=base_agent['idleSessionTTLInSeconds'],
             agentCollaboration='SUPERVISOR_ROUTER',
@@ -552,11 +561,11 @@ class BedrockFileDatabase(FileDataBase):
         )
 
         function_schema = base_action_group_response['agentActionGroup']['functionSchema']['functions']
-        print("FUNCTION SCHEMA: ", function_schema)
+        # print("FUNCTION SCHEMA: ", function_schema)
         for function in function_schema:
             function['name'] = ''.join(c for c in function['name'] if c.isalnum() or c in '_-')
 
-        print("FUNCTION SCHEMA SANITIZED: ", function_schema)
+        # print("FUNCTION SCHEMA SANITIZED: ", function_schema)
 
         self.bedrock_agent.create_agent_action_group(
             actionGroupExecutor={
