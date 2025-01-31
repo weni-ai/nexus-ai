@@ -90,7 +90,7 @@ class PushAgents(APIView):
                             # Create new skill
                             agent_version = agent.current_version.metadata.get("agent_alias_version")
                             agents_usecase.create_skill(
-                                agent_external_id=agent.metadata["external_id"],
+                                agent_external_id=agent.external_id,
                                 file_name=f"{skill['slug']}-{agent.external_id}",
                                 agent_version=agent_version,
                                 file=skill_file.read(),
@@ -106,7 +106,7 @@ class PushAgents(APIView):
                 })
 
                 agents_usecase.prepare_agent(agent.external_id)
-                agents_usecase.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(agent.external_id)
+                agents_usecase.external_agent_client.wait_agent_status_update(agent.external_id)
                 agents_usecase.create_agent_version(agent.external_id, request.user, agent)
 
                 if ActiveAgent.objects.filter(team__project__uuid=project_uuid, agent=agent).exists():
@@ -154,9 +154,9 @@ class PushAgents(APIView):
 
             alias_name = "v1"
 
-            agents_usecase.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
+            agents_usecase.external_agent_client.wait_agent_status_update(external_id)
             agents_usecase.prepare_agent(external_id)
-            agents_usecase.external_agent_client.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
+            agents_usecase.external_agent_client.wait_agent_status_update(external_id)
 
             sub_agent_alias_id, sub_agent_alias_arn, agent_alias_version = agents_usecase.create_external_agent_alias(
                 agent_id=external_id, alias_name=alias_name

@@ -18,7 +18,6 @@ from django.conf import settings
 from django.template.defaultfilters import slugify
 
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
-from nexus.agents.src.utils.bedrock_agent_helper import AgentsForAmazonBedrock
 
 from nexus.agents.models import Agent
 
@@ -43,14 +42,15 @@ class BedrockFileDatabase(FileDataBase):
         self.bucket_name = settings.AWS_BEDROCK_BUCKET_NAME
         self.model_id = settings.AWS_BEDROCK_MODEL_ID
 
-        self.agent_for_amazon_bedrock = AgentsForAmazonBedrock()
-        # self.agent_for_amazon_bedrock = ...  #  TODO: add AgentsForAmazonBedrock lib
-        self.s3_client = self.__get_s3_client()
+        self.account_id = self.__get_sts_client().get_caller_identity()["Account"]
+        self.iam_client = self.__get_iam_client()
         self.bedrock_agent = self.__get_bedrock_agent()
         self.bedrock_agent_runtime = self.__get_bedrock_agent_runtime()
         self.bedrock_runtime = self.__get_bedrock_runtime()
         self.lambda_client = self.__get_lambda_client()
+        self.s3_client = self.__get_s3_client()
 
+        self._suffix = f"{self.region_name}-{self.account_id}"
         self.agent_foundation_model = agent_foundation_model
         self.supervisor_foundation_model = supervisor_foundation_model
 
@@ -205,9 +205,9 @@ class BedrockFileDatabase(FileDataBase):
                 relayConversationHistory=agent_association_data["relay_conversation_history"],
             )
 
-            self.agent_for_amazon_bedrock.wait_agent_status_update(supervisor_id)
+            self.wait_agent_status_update(supervisor_id)
             self.bedrock_agent.prepare_agent(agentId=supervisor_id)
-            self.agent_for_amazon_bedrock.wait_agent_status_update(supervisor_id)
+            self.wait_agent_status_update(supervisor_id)
 
         return response["agentCollaborator"]["collaboratorId"]
 
@@ -336,7 +336,7 @@ class BedrockFileDatabase(FileDataBase):
 
         zip_buffer = BytesIO(source_code_file)
 
-        lambda_role = self.agent_for_amazon_bedrock._create_lambda_iam_role(agent_external_id)
+        lambda_role = self._create_lambda_iam_role(agent_external_id)
         print("LAMBDA ROLE: ", lambda_role)
 
         print("CREATING LAMBDA FUNCTION")
@@ -362,7 +362,7 @@ class BedrockFileDatabase(FileDataBase):
             function_schema=function_schema,
             agent=agent
         )
-        self.agent_for_amazon_bedrock._allow_agent_lambda(
+        self._allow_agent_lambda(
             agent_external_id,
             lambda_name
         )
@@ -613,9 +613,6 @@ class BedrockFileDatabase(FileDataBase):
 
         raise Exception(f"get_ingestion_job returned status code {status_code}")
 
-    def wait_agent_status_update(self, external_id: str):
-        self.agent_for_amazon_bedrock.wait_agent_status_update(external_id)
-
     def list_bedrock_ingestion(self, filter_values: List = ['STARTING', 'IN_PROGRESS']):
         response = self.bedrock_agent.list_ingestion_jobs(
             dataSourceId=self.data_source_id,
@@ -720,6 +717,43 @@ class BedrockFileDatabase(FileDataBase):
             region_name=self.region_name
         )
 
+    def __get_iam_client(self):
+        return boto3.client(
+            "iam",
+            region_name=self.region_name
+        )
+
+    def __get_sts_client(self):
+        return boto3.client(
+            "sts",
+            region_name=self.region_name
+        )
+
+    def _allow_agent_lambda(self, agent_id: str, lambda_function_name: str) -> None:
+        self.lambda_client.add_permission(
+            FunctionName=lambda_function_name,
+            StatementId=f"allow_bedrock_{agent_id}",
+            Action="lambda:InvokeFunction",
+            Principal="bedrock.amazonaws.com",
+            SourceArn=f"arn:aws:bedrock:{self.region_name}:{self.account_id}:agent/{agent_id}",
+        )
+
+    def wait_agent_status_update(self, agent_id):
+        response = self.bedrock_agent.get_agent(agentId=agent_id)
+        agent_status = response["agent"]["agentStatus"]
+        _waited_at_least_once = False
+        while agent_status.endswith("ING"):
+            print(f"Waiting for agent status to change. Current status {agent_status}")
+            time.sleep(5)
+            _waited_at_least_once = True
+            try:
+                response = self.bedrock_agent.get_agent(agentId=agent_id)
+                agent_status = response["agent"]["agentStatus"]
+            except self.bedrock_agent.exceptions.ResourceNotFoundException:
+                agent_status = "DELETED"
+        if _waited_at_least_once:
+            print(f"Agent id {agent_id} current status: {agent_status}")
+
     def update_lambda_function(
         self,
         lambda_name: str,
@@ -806,3 +840,40 @@ class BedrockFileDatabase(FileDataBase):
             functionSchema={"functions": function_schema}
         )
         return response
+
+    def _create_lambda_iam_role(
+        self,
+        agent_name: str,
+    ) -> object:
+        # TODO: use default role for lambda functions
+        _lambda_function_role_name = f"{agent_name}-lambda-role-{self._suffix}"
+        try:
+            _assume_role_policy_document = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": "bedrock:InvokeModel",  # noqa
+                        "Principal": {"Service": "lambda.amazonaws.com"},
+                        "Action": "sts:AssumeRole",  # noqa
+                    }
+                ],
+            }
+
+            _lambda_iam_role = self.iam_client.create_role(
+                RoleName=_lambda_function_role_name,
+                AssumeRolePolicyDocument=json.dumps(_assume_role_policy_document),
+            )
+
+            time.sleep(10)
+        except:  # noqa
+            _lambda_iam_role = self.iam_client.get_role(
+                RoleName=_lambda_function_role_name
+            )
+
+        self.iam_client.attach_role_policy(
+            RoleName=_lambda_function_role_name,
+            PolicyArn="arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+        )
+
+        return _lambda_iam_role["Role"]["Arn"]
