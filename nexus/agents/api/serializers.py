@@ -29,7 +29,7 @@ class ActiveAgentTeamSerializer(serializers.ModelSerializer):
 
     def get_name(self, obj):
         return obj.agent.display_name
-    
+
     def get_external_id(self, obj):
         return obj.agent.external_id
 

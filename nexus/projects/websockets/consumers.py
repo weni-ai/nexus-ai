@@ -15,6 +15,7 @@ from nexus.projects.exceptions import ProjectDoesNotExist
 
 logger = logging.getLogger(__name__)
 
+
 def sanitize_user_email(user_email):
     return re.sub('[^A-Za-z0-9]+', '', str(user_email))
 

@@ -45,6 +45,7 @@ from nexus.projects.websockets.consumers import send_preview_message_to_websocke
 
 client = OpenAI()
 
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def get_trace_summary(language, trace):
     try:
@@ -75,11 +76,12 @@ def get_trace_summary(language, trace):
                 "content": prompt
             }]
         )
-        
+
         return response.choices[0].message.content
     except Exception as e:
         print(f"Error getting trace summary: {str(e)}")
         return "Processing your request now"
+
 
 def get_action_clients(preview: bool = False):
     if preview:
@@ -420,14 +422,14 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
     except Exception as e:
         if user_email:
-          # Send error status through WebSocket
-          send_preview_message_to_websocket(
-              user_email=user_email,
-              project_uuid=str(project.uuid),
-              message_data={
-                  "type": "error",
-                  "content": str(e),
-                  "session_id": session_id
-              }
-          )
+            # Send error status through WebSocket
+            send_preview_message_to_websocket(
+                user_email=user_email,
+                project_uuid=str(project.uuid),
+                message_data={
+                    "type": "error",
+                    "content": str(e),
+                    "session_id": session_id
+                }
+            )
         raise

@@ -5,9 +5,7 @@ from fastapi import FastAPI, Request, HTTPException
 from django.conf import settings
 from nexus.event_driven.signals import message_started, message_finished
 
-from router.entities import (
-    Message, DBCon
-)
+from router.entities import DBCon
 
 from .http_bodies import MessageHTTPBody
 
