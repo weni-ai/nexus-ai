@@ -456,7 +456,7 @@ class BedrockFileDatabase(FileDataBase):
             "date_time_now": datetime.now().isoformat(),
             "project_id": message.project_uuid,
             "specific_personality": json.dumps({
-                "function": agent.role,
+                "occupation": agent.role,
                 "name": agent.name,
                 "goal": agent.goal,
                 "adjective": agent.personality,
