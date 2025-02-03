@@ -55,24 +55,22 @@ class ProjectsUseCase:
             supervisor_name=supervisor_name,
             supervisor_description=supervisor_description,
             supervisor_instructions=supervisor_instructions,
+            is_single_agent=True
         )
-        # agent: Agent = agents_usecase.get_agent_object(external_id=settings.DOUBT_ANALYST_EXTERNAL_ID)
-        # agents_usecase.assign_agent(str(agent.uuid), project_uuid, created_by=user)
 
-        # alias_name = f"{supervisor_name}-multi-agent"
-        # supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = agents_usecase.external_agent_client.create_agent_alias(
-        #     alias_name=alias_name, agent_id=team.external_id
-        # )
-        # team.versions.create(
-        #     # alias_id=supervisor_agent_alias_id,
-        #     alias_name=alias_name,
-        #     metadata={
-        #         "supervisor_alias_arn": 'DRAFT',
-        #         "supervisor_alias_version": 'DRAFT',
-        #     },
-        #     created_by=user,
-        # )
-
+        alias_name = f"{supervisor_name}-multi-agent"
+        supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = agents_usecase.external_agent_client.create_agent_alias(
+            alias_name=alias_name, agent_id=team.external_id
+        )
+        team.versions.create(
+            alias_id=supervisor_agent_alias_id,
+            alias_name=alias_name,
+            metadata={
+                "supervisor_alias_arn": supervisor_agent_alias_arn,
+                "supervisor_alias_version": supervisor_alias_version,
+            },
+            created_by=user,
+        )
         return team
 
     def create_brain_project_base(

@@ -90,6 +90,9 @@ class AgentUsecase:
             description=agent.description,
         )
 
+        if team.metadata.get("is_single_agent"):
+            self.update_multi_agent(team)
+
         agent_collaborator_id = self.external_agent_client.associate_sub_agents(
             supervisor_id=team.external_id,
             agents_list=[sub_agent]
@@ -156,8 +159,8 @@ class AgentUsecase:
         )
         return agent_alias_id, agent_alias_arn, agent_alias_version
 
-    def update_agent_to_supervisor(self, agent_id: str):
-        self.external_agent_client.bedrock_agent_to_supervisor(agent_id)
+    def update_agent_to_supervisor(self, agent_id: str, to_supervisor: bool = True):
+        self.external_agent_client.bedrock_agent_to_supervisor(agent_id, to_supervisor)
         self.external_agent_client.wait_agent_status_update(agent_id)
 
     def create_supervisor(
@@ -165,32 +168,40 @@ class AgentUsecase:
         project_uuid: str,
         supervisor_name: str,
         supervisor_description: str,
-        supervisor_instructions: str
+        supervisor_instructions: str,
+        is_single_agent: bool,
     ):
         external_id, alias_name = self.create_external_supervisor(
             supervisor_name,
             supervisor_description,
-            supervisor_instructions
+            supervisor_instructions,
+            is_single_agent
         )
 
         self.external_agent_client.wait_agent_status_update(external_id)
         team: Team = self.create_team_object(
             project_uuid=project_uuid,
             external_id=external_id,
-            metadata={"supervisor_name": supervisor_name}
+            metadata={
+                "supervisor_name": supervisor_name,
+                "is_single_agent": is_single_agent,
+            }
         )
+        self.prepare_agent(team.external_id)
         return team
 
     def create_external_supervisor(
         self,
         supervisor_name: str,
         supervisor_description: str,
-        supervisor_instructions: str
+        supervisor_instructions: str,
+        is_single_agent: bool,
     ) -> Tuple[str, str]:
         return self.external_agent_client.create_supervisor(
             supervisor_name,
             supervisor_description,
-            supervisor_instructions
+            supervisor_instructions,
+            is_single_agent
         )
 
     def create_agent_version(self, agent_external_id, user, agent):
@@ -490,6 +501,9 @@ class AgentUsecase:
             )
             active_agent = team.team_agents.get(agent=agent)
             active_agent.delete()
+
+        if not team.team_agents.exists():
+            self.update_multi_agent(team, multi_agent=False)
 
     def update_agent(self, agent_dto: AgentDTO, project_uuid: str):
         """Update an existing agent with new data"""
@@ -851,3 +865,10 @@ class AgentUsecase:
             collaboratorId=current_agent_collaborator["collaboratorId"],
             collaboratorName=current_agent_collaborator["collaboratorName"],
         )
+
+    def update_multi_agent(self, team: Team, multi_agent: bool = True):
+        # TODO: organize code ("multi_agent" and "is_single_agent")
+        self.external_agent_client.bedrock_agent_to_supervisor(team.external_id, multi_agent)
+        team.metadata["is_single_agent"] = not multi_agent
+        team.save(update_fields=["metadata"])
+        return
