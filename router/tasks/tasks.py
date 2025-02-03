@@ -362,7 +362,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
         full_chunks = []
         full_response = ""
-        # if supervisor.team_agents.exists():
         for event in usecase.invoke_supervisor_stream(
             session_id=session_id,
             supervisor_id=supervisor.external_id,
@@ -410,8 +409,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                     "session_id": session_id
                 }
             )
-        # else:
-        #     full_response = "Assign an agent to the team"
 
         return dispatch(
             llm_response=full_response,
