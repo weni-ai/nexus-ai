@@ -362,56 +362,53 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
         full_chunks = []
         full_response = ""
-        if supervisor.team_agents.exists():
-            for event in usecase.invoke_supervisor_stream(
-                session_id=session_id,
-                supervisor_id=supervisor.external_id,
-                supervisor_alias_id=supervisor_version.alias_id,
-                message=message,
-                content_base=contentbase,
-            ):
-                if event['type'] == 'chunk':
-                    chunk = event['content']
-                    full_response += chunk
-                    if user_email:
-                        # Send chunk through WebSocket
-                        send_preview_message_to_websocket(
-                            project_uuid=str(message.project_uuid),
-                            user_email=user_email,
-                            message_data={
-                                "type": "chunk",
-                                "content": chunk,
-                                "session_id": session_id
-                            }
-                        )
-                elif event['type'] == 'trace':
-                    # Get summary from Claude with specified language
-                    event['content']['summary'] = get_trace_summary(language, event['content'])
-                    if user_email:
-                        # Send trace data through WebSocket
-                        send_preview_message_to_websocket(
-                            project_uuid=str(message.project_uuid),
-                            user_email=user_email,
-                            message_data={
-                                "type": "trace_update",
-                                "trace": event['content'],
-                                "session_id": session_id
-                            }
-                        )
+        for event in usecase.invoke_supervisor_stream(
+            session_id=session_id,
+            supervisor_id=supervisor.external_id,
+            supervisor_alias_id=supervisor_version.alias_id,
+            message=message,
+            content_base=contentbase,
+        ):
+            if event['type'] == 'chunk':
+                chunk = event['content']
+                full_response += chunk
+                if user_email:
+                    # Send chunk through WebSocket
+                    send_preview_message_to_websocket(
+                        project_uuid=str(message.project_uuid),
+                        user_email=user_email,
+                        message_data={
+                            "type": "chunk",
+                            "content": chunk,
+                            "session_id": session_id
+                        }
+                    )
+            elif event['type'] == 'trace':
+                # Get summary from Claude with specified language
+                event['content']['summary'] = get_trace_summary(language, event['content'])
+                if user_email:
+                    # Send trace data through WebSocket
+                    send_preview_message_to_websocket(
+                        project_uuid=str(message.project_uuid),
+                        user_email=user_email,
+                        message_data={
+                            "type": "trace_update",
+                            "trace": event['content'],
+                            "session_id": session_id
+                        }
+                    )
 
-            if user_email:
-                # Send completion status
-                send_preview_message_to_websocket(
-                    user_email=user_email,
-                    project_uuid=str(project.uuid),
-                    message_data={
-                        "type": "status",
-                        "content": "Processing complete",
-                        "session_id": session_id
-                    }
-                )
-        else:
-            full_response = "Assign an agent to the team"
+        if user_email:
+            # Send completion status
+            send_preview_message_to_websocket(
+                user_email=user_email,
+                project_uuid=str(project.uuid),
+                message_data={
+                    "type": "status",
+                    "content": "Processing complete",
+                    "session_id": session_id
+                }
+            )
 
         return dispatch(
             llm_response=full_response,

@@ -402,18 +402,23 @@ class BedrockFileDatabase(FileDataBase):
         )
         return response
 
-    def bedrock_agent_to_supervisor(self, agent_id: str):
+    def bedrock_agent_to_supervisor(self, agent_id: str, to_supervisor: bool = True):
         agent_to_update = self.bedrock_agent.get_agent(agentId=agent_id)
         agent_to_update = agent_to_update['agent']
 
-        if agent_to_update['agentCollaboration'] == 'DISABLED':
-            self.bedrock_agent.update_agent(
-                agentId=agent_to_update['agentId'],
-                agentName=agent_to_update['agentName'],
-                agentResourceRoleArn=agent_to_update['agentResourceRoleArn'],
-                agentCollaboration='SUPERVISOR_ROUTER',
-                foundationModel=agent_to_update['foundationModel'],
-            )
+        agent_collaboration = {
+            True: "SUPERVISOR_ROUTER",
+            False: "DISABLED"
+        }
+
+        self.bedrock_agent.update_agent(
+            agentId=agent_to_update['agentId'],
+            agentName=agent_to_update['agentName'],
+            agentResourceRoleArn=agent_to_update['agentResourceRoleArn'],
+            agentCollaboration=agent_collaboration.get(to_supervisor),
+            instruction=agent_to_update["instruction"],
+            foundationModel=agent_to_update['foundationModel'],
+        )
 
     def invoke_supervisor_stream(
         self,
@@ -556,12 +561,19 @@ class BedrockFileDatabase(FileDataBase):
         self,
         supervisor_name: str,
         supervisor_description: str,
-        supervisor_instructions: str
+        supervisor_instructions: str,
+        is_single_agent: bool = False
     ) -> Tuple[str, str]:
         """
         Creates a new supervisor agent using an existing agent as base.
         Returns tuple of (supervisor_id, supervisor_alias_name)
         """
+
+        agent_collaboration = {
+            True: "DISABLED",
+            False: "SUPERVISOR_ROUTER"
+        }
+
         # Get existing agent to use as base
         base_agent_response = self.bedrock_agent.get_agent(
             agentId=settings.AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID
@@ -577,7 +589,7 @@ class BedrockFileDatabase(FileDataBase):
             agentResourceRoleArn=settings.AGENT_RESOURCE_ROLE_ARN,
             foundationModel=base_agent['foundationModel'],
             idleSessionTTLInSeconds=base_agent['idleSessionTTLInSeconds'],
-            agentCollaboration='SUPERVISOR_ROUTER',
+            agentCollaboration=agent_collaboration.get(is_single_agent),
             guardrailConfiguration={
                 'guardrailIdentifier': settings.AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
                 'guardrailVersion': str(settings.AWS_BEDROCK_GUARDRAIL_VERSION)
