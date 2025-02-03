@@ -87,6 +87,7 @@ class AgentUsecase:
             slug=agent.slug,
             external_id=agent.external_id,
             alias_arn=agent.current_version.metadata.get("agent_alias"),
+            description=agent.description,
         )
 
         agent_collaborator_id = self.external_agent_client.associate_sub_agents(
@@ -846,7 +847,7 @@ class AgentUsecase:
             },
             agentId=current_agent_collaborator["agentId"],
             agentVersion="DRAFT",
-            collaborationInstruction=current_agent_collaborator["collaborationInstruction"],
+            collaborationInstruction=agent.description,
             collaboratorId=current_agent_collaborator["collaboratorId"],
             collaboratorName=current_agent_collaborator["collaboratorName"],
         )
