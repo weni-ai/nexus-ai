@@ -344,7 +344,8 @@ class BedrockFileDatabase(FileDataBase):
 
         zip_buffer = BytesIO(source_code_file)
 
-        lambda_role = self._create_lambda_iam_role(agent_external_id)
+        # lambda_role = self._create_lambda_iam_role(agent_external_id)
+        lambda_role = settings.AGENT_RESOURCE_ROLE_ARN
         print("LAMBDA ROLE: ", lambda_role)
 
         print("CREATING LAMBDA FUNCTION")
