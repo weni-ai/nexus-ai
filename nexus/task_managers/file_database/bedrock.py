@@ -408,7 +408,7 @@ class BedrockFileDatabase(FileDataBase):
         agent_to_update = agent_to_update['agent']
 
         agent_collaboration = {
-            True: "SUPERVISOR_ROUTER",
+            True: "SUPERVISOR",
             False: "DISABLED"
         }
 
@@ -419,6 +419,7 @@ class BedrockFileDatabase(FileDataBase):
             agentCollaboration=agent_collaboration.get(to_supervisor),
             instruction=agent_to_update["instruction"],
             foundationModel=agent_to_update['foundationModel'],
+            memoryConfiguration=agent_to_update["memoryConfiguration"]
         )
 
     def invoke_supervisor_stream(
@@ -572,7 +573,7 @@ class BedrockFileDatabase(FileDataBase):
 
         agent_collaboration = {
             True: "DISABLED",
-            False: "SUPERVISOR_ROUTER"
+            False: "SUPERVISOR"
         }
 
         # Get existing agent to use as base
