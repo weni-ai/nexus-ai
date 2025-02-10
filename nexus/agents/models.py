@@ -49,7 +49,7 @@ class Credential(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="credentials")
     key = models.CharField(max_length=255, null=True)
     label = models.CharField(max_length=255)
-    value = models.CharField(max_length=255)
+    value = models.CharField(max_length=8192)
     placeholder = models.CharField(max_length=255, null=True)
     is_confidential = models.BooleanField(default=True)
     metadata = models.JSONField(default=dict)
