@@ -142,17 +142,22 @@ class PushAgents(APIView):
                 agent_alias_version="DRAFT",
             )
 
-            if agent_dto.credentials:
-                
-                for credential in agent_dto.credentials:
-                    credential = Credential.objects.create(
-                        project_id=project_uuid,
-                        label=credential.get("label"),
-                        value=credential.get("value"),
-                        is_confidential=credential.get("is_confidential", True),
-                        placeholder=credential.get("placeholder", None),
-                    )
-                    credential.agents.add(agent)
+            if agent_dto.credentials:                
+                for credential_dict in agent_dto.credentials:
+                    for key, properties in credential_dict.items():
+                        props = {}
+                        for prop in properties:
+                            props.update(prop)
+                        
+                        credential = Credential.objects.create(
+                            project_id=project_uuid,
+                            key=key,
+                            label=props.get("label", key),
+                            value=key,
+                            is_confidential=props.get("is_confidential", True),
+                            placeholder=props.get("placeholder", None),
+                        )
+                        credential.agents.add(agent)
 
             if agent_dto.skills:
                 warnings = agents_usecase.handle_agent_skills(

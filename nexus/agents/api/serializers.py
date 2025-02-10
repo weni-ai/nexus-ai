@@ -82,12 +82,14 @@ class AgentSerializer(serializers.ModelSerializer):
             "model",
             "is_official",
             "project",
+            "credentials",
             # "metadata",
         ]
 
     name = serializers.SerializerMethodField('get_name')
     skills = serializers.SerializerMethodField("get_skills")
     assigned = serializers.SerializerMethodField("get_is_assigned")
+    credentials = serializers.SerializerMethodField("get_credentials")
     # skills = SkillSerializer(read_only=True, source="agent_skills")
 
     def get_name(self, obj):
@@ -101,3 +103,15 @@ class AgentSerializer(serializers.ModelSerializer):
         project_uuid = self.context.get("project_uuid")
         active_agent = ActiveAgent.objects.filter(team__project__uuid=project_uuid, agent=obj)
         return active_agent.exists()
+
+    def get_credentials(self, obj):
+        credentials = obj.credential_set.all()
+        return [
+            {
+                "name": credential.value,
+                "label": credential.label,
+                "placeholder": credential.placeholder,
+                "is_confidential": credential.is_confidential,
+            }
+            for credential in credentials
+        ]

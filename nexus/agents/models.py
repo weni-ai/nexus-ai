@@ -47,6 +47,7 @@ class Agent(BaseModel):
 
 class Credential(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="credentials")
+    key = models.CharField(max_length=255, null=True)
     label = models.CharField(max_length=255)
     value = models.CharField(max_length=255)
     placeholder = models.CharField(max_length=255, null=True)
