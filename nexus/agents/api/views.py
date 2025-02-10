@@ -15,6 +15,7 @@ from nexus.agents.models import (
     Agent,
     ActiveAgent,
     Team,
+    Credential,
 )
 
 from nexus.usecases.agents import (
@@ -140,6 +141,18 @@ class PushAgents(APIView):
                 agent_alias_arn="DRAFT",
                 agent_alias_version="DRAFT",
             )
+
+            if agent_dto.credentials:
+                
+                for credential in agent_dto.credentials:
+                    credential = Credential.objects.create(
+                        project_id=project_uuid,
+                        label=credential.get("label"),
+                        value=credential.get("value"),
+                        is_confidential=credential.get("is_confidential", True),
+                        placeholder=credential.get("placeholder", None),
+                    )
+                    credential.agents.add(agent)
 
             if agent_dto.skills:
                 warnings = agents_usecase.handle_agent_skills(

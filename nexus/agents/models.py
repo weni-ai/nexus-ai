@@ -45,6 +45,14 @@ class Agent(BaseModel):
             created_by=self.created_by,
         )
 
+class Credential(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="credentials")
+    label = models.CharField(max_length=255)
+    value = models.CharField(max_length=255)
+    placeholder = models.CharField(max_length=255, null=True)
+    is_confidential = models.BooleanField(default=True)
+    metadata = models.JSONField(default=dict)
+    agents = models.ManyToManyField(Agent)
 
 class Team(models.Model):
     external_id = models.CharField(max_length=255, help_text="Supervisor ID")
