@@ -121,7 +121,7 @@ class AgentSerializer(serializers.ModelSerializer):
 class ProjectCredentialsListSerializer(serializers.ModelSerializer):
     agents_using = serializers.SerializerMethodField("get_agents_using")
     name = serializers.SerializerMethodField("get_name")
-
+    value = serializers.SerializerMethodField("get_value")
     class Meta:
         model = Credential
         fields = [
@@ -144,3 +144,9 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
 
     def get_name(self, obj):
         return obj.key
+    
+    def get_value(self, obj):
+        if obj.is_confidential:
+            return obj.value
+        return obj.decrypted_value
+        
