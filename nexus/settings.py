@@ -35,7 +35,8 @@ env = environ.Env(
     APM_SERVICE_NAME=(str, ""),
     APM_SECRET_TOKEN=(str, ""),
     APM_SERVER_URL=(str, ""),
-    FILTER_SENTRY_EVENTS=(list, [])
+    FILTER_SENTRY_EVENTS=(list, []),
+    CREDENTIAL_ENCRYPTION_KEY=(str, None),
 )
 
 # Quick-start development settings - unsuitable for production
@@ -535,3 +536,10 @@ AGENT_CONFIGURATION_ALLOWED_USERS = env.list("AGENT_CONFIGURATION_ALLOWED_USERS"
 AGENT_RESOURCE_ROLE_ARN = env.str("AGENT_RESOURCE_ROLE_ARN")
 MULTI_AGENTS_PROJECTS = env.list("MULTI_AGENTS_PROJECTS", "")
 AWS_BEDROCK_LAMBDA_ARN = env.str("AWS_BEDROCK_LAMBDA_ARN", "")
+
+# Credential encryption settings
+CREDENTIAL_ENCRYPTION_KEY = env.str('CREDENTIAL_ENCRYPTION_KEY', default=None)
+if not CREDENTIAL_ENCRYPTION_KEY and not TESTING:
+    # Generate a new key if not configured and not in testing mode
+    from cryptography.fernet import Fernet
+    CREDENTIAL_ENCRYPTION_KEY = Fernet.generate_key()

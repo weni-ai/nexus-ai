@@ -4,6 +4,7 @@ from uuid import uuid4
 from django.db import models
 from nexus.projects.models import Project
 from nexus.db.models import BaseModel
+from nexus.agents.encryption import encrypt_value, decrypt_value
 
 
 class Agent(BaseModel):
@@ -54,6 +55,22 @@ class Credential(models.Model):
     is_confidential = models.BooleanField(default=True)
     metadata = models.JSONField(default=dict)
     agents = models.ManyToManyField(Agent)
+
+    def save(self, *args, **kwargs):
+        if self.value:
+            self.value = encrypt_value(self.value)
+        super().save(*args, **kwargs)
+
+    @property
+    def decrypted_value(self):
+        """Get the decrypted value of the credential"""
+        if self.value:
+            try:
+                decrypted = decrypt_value(self.value)
+                return decrypted
+            except Exception as e:
+                return self.value
+        return self.value
 
 class Team(models.Model):
     external_id = models.CharField(max_length=255, help_text="Supervisor ID")
