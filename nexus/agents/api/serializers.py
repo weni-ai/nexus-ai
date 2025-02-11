@@ -6,6 +6,7 @@ from nexus.agents.models import (
     Agent,
     ActiveAgent,
     AgentSkills,
+    Credential,
 )
 
 
@@ -115,3 +116,31 @@ class AgentSerializer(serializers.ModelSerializer):
             }
             for credential in credentials
         ]
+
+
+class ProjectCredentialsListSerializer(serializers.ModelSerializer):
+    agents_using = serializers.SerializerMethodField("get_agents_using")
+    name = serializers.SerializerMethodField("get_name")
+
+    class Meta:
+        model = Credential
+        fields = [
+            "name",
+            "label",
+            "placeholder",
+            "is_confidential",
+            "value",
+            "agents_using"
+        ]
+
+    def get_agents_using(self, obj):
+        return [
+            {
+                "uuid": agent.uuid,
+                "name": agent.display_name,
+            }
+            for agent in obj.agents.all()
+        ]
+
+    def get_name(self, obj):
+        return obj.key

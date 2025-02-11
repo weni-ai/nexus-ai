@@ -10,6 +10,7 @@ from nexus.agents.api.serializers import (
     ActiveAgentSerializer,
     ActiveAgentTeamSerializer,
     AgentSerializer,
+    ProjectCredentialsListSerializer,
 )
 from nexus.agents.models import (
     Agent,
@@ -322,6 +323,17 @@ class TeamView(APIView):
 
 class ProjectCredentialsView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        credentials = Credential.objects.filter(project__uuid=project_uuid)
+        
+        official_credentials = credentials.filter(agents__is_official=True).distinct()
+        custom_credentials = credentials.filter(agents__is_official=False).distinct()
+
+        return Response({
+            "official_agents_credentials": ProjectCredentialsListSerializer(official_credentials, many=True).data,
+            "my_agents_credentials": ProjectCredentialsListSerializer(custom_credentials, many=True).data
+        })
 
     def patch(self, request, project_uuid):
         credentials_data = request.data
