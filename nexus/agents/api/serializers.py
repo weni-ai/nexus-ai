@@ -108,7 +108,7 @@ class AgentSerializer(serializers.ModelSerializer):
         credentials = obj.credential_set.all()
         return [
             {
-                "name": credential.value,
+                "name": credential.key,
                 "label": credential.label,
                 "placeholder": credential.placeholder,
                 "is_confidential": credential.is_confidential,

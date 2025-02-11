@@ -149,13 +149,15 @@ class PushAgents(APIView):
                         for prop in properties:
                             props.update(prop)
                         
-                        credential = Credential.objects.create(
+                        credential = Credential.objects.get_or_create(
                             project_id=project_uuid,
                             key=key,
-                            label=props.get("label", key),
-                            value=key,
-                            is_confidential=props.get("is_confidential", True),
-                            placeholder=props.get("placeholder", None),
+                            defaults={
+                                "label": props.get("label", key),
+                                "value": key,
+                                "is_confidential": props.get("is_confidential", True),
+                                "placeholder": props.get("placeholder", None),
+                            }
                         )
                         credential.agents.add(agent)
 
@@ -316,3 +318,25 @@ class TeamView(APIView):
             "agents": serializer.data
         }
         return Response(data)
+
+
+class ProjectCredentialsView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def patch(self, request, project_uuid):
+        credentials_data = request.data
+
+        updated_credentials = []
+        for key, value in credentials_data.items():
+            try:
+                credential = Credential.objects.get(project__uuid=project_uuid, key=key)
+                credential.value = value
+                credential.save()
+                updated_credentials.append(key)
+            except Credential.DoesNotExist:
+                continue
+
+        return Response({
+            "message": "Credentials updated successfully",
+            "updated_credentials": updated_credentials
+        })
