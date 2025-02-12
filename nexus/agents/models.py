@@ -45,6 +45,8 @@ class Agent(BaseModel):
             created_by=self.created_by,
         )
 
+    def __str__(self):
+        return f"{self.display_name} - {self.external_id} - {self.project} - is_official: {self.is_official}"
 
 class Team(models.Model):
     external_id = models.CharField(max_length=255, help_text="Supervisor ID")
@@ -61,7 +63,7 @@ class Team(models.Model):
 
     @property
     def list_versions(self):
-        return self.versions.order_by()
+        return self.versions.order_by("created_at")
 
 
 class TeamVersion(BaseModel):

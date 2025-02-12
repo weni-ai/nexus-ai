@@ -22,6 +22,7 @@ from nexus.usecases.agents import (
 )
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.projects.api.permissions import ProjectPermission
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 
 class PushAgents(APIView):
@@ -47,7 +48,7 @@ class PushAgents(APIView):
         agents: dict = json.loads(agents)
 
         project_uuid = request.data.get("project_uuid")
-        agents_usecase = AgentUsecase()
+        agents_usecase = AgentUsecase(external_agent_client=BedrockFileDatabase)
 
         team = agents_usecase.get_team_object(project__uuid=project_uuid)
         agents_dto = agents_usecase.agent_dto_handler(
@@ -58,6 +59,7 @@ class PushAgents(APIView):
 
         agents_updated = []
         response_warnings = []
+
         for agent_dto in agents_dto:
             if hasattr(agent_dto, 'is_update') and agent_dto.is_update:
                 # Handle update
@@ -107,7 +109,7 @@ class PushAgents(APIView):
 
                 agents_usecase.prepare_agent(agent.external_id)
                 agents_usecase.external_agent_client.wait_agent_status_update(agent.external_id)
-                agents_usecase.create_agent_version(agent.external_id, request.user, agent)
+                agents_usecase.create_agent_version(agent.external_id, request.user, agent, team)
 
                 if ActiveAgent.objects.filter(team__project__uuid=project_uuid, agent=agent).exists():
                     agents_usecase.update_supervisor_collaborator(project_uuid, agent)
@@ -247,12 +249,21 @@ class ActiveAgentsViewSet(APIView):
         if assign:
             print("------------------------ UPDATING AGENT ---------------------")
             # usecase.update_agent_to_supervisor(team.external_id)
-            usecase.assign_agent(
+            active_agent = usecase.assign_agent(
                 agent_uuid=agent_uuid,
                 project_uuid=project_uuid,
                 created_by=user
             )
             usecase.create_supervisor_version(project_uuid, user)
+            active_agent.metadata.update({
+                "supervisor_versions": [
+                    {
+                        "supervisor_version_alias_id": active_agent.team.current_version.alias_id,
+                        "supervisor_alias_version":active_agent.team.current_version.metadata.get("supervisor_alias_version"),
+                    }
+                ]
+            })
+            active_agent.save()
             return Response({"assigned": True})
 
         usecase.unassign_agent(agent_uuid=agent_uuid, project_uuid=project_uuid)
