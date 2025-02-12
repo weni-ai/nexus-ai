@@ -37,10 +37,14 @@ class PushAgents(APIView):
             agent_dto: The agent data transfer object containing credentials
             project_uuid: UUID of the project
             agent: Agent instance to associate credentials with
+            
+        Returns:
+            list: List of warning messages for existing credentials
         """
         if not agent_dto.credentials:
-            return
+            return []
 
+        warnings = []
         print('-----------------Agent Credentials------------------')
         for credential_dict in agent_dto.credentials:
             for key, properties in credential_dict.items():
@@ -49,28 +53,45 @@ class PushAgents(APIView):
                     if isinstance(prop, dict):
                         props.update(prop)
                 
-                credential, created = Credential.objects.get_or_create(
-                    project_id=project_uuid,
-                    key=key,
-                    defaults={
-                        "label": props.get("label", key),
-                        "value": "",
-                        "is_confidential": props.get("is_confidential", True),
-                        "placeholder": props.get("placeholder", None),
-                    }
-                )
+                try:
+                    existing_credential = Credential.objects.filter(
+                        project_id=project_uuid,
+                        key=key
+                    ).first()
 
-                if not created:
-                    # Update existing credential properties
-                    credential.label = props.get("label", credential.label)
-                    credential.is_confidential = props.get("is_confidential", credential.is_confidential)
-                    credential.placeholder = props.get("placeholder", credential.placeholder)
-                    credential.save()
+                    if existing_credential:
+                        warnings.append(f"Credential '{key}' already exists for this project")
+                    
+                    credential, created = Credential.objects.get_or_create(
+                        project_id=project_uuid,
+                        key=key,
+                        defaults={
+                            "label": props.get("label", key),
+                            "value": props.get("value", ""),
+                            "is_confidential": props.get("is_confidential", True),
+                            "placeholder": props.get("placeholder", None),
+                        }
+                    )
 
-                credential.agents.add(agent)
+                    if not created:
+                        # Update existing credential properties
+                        credential.label = props.get("label", credential.label)
+                        credential.is_confidential = props.get("is_confidential", credential.is_confidential)
+                        credential.placeholder = props.get("placeholder", credential.placeholder)
+                        credential.save()
 
-                print(key)
+                    credential.agents.add(agent)
+
+                    print(key)
+
+                except Exception as e:
+                    error_message = str(e)
+                    warnings.append(f"Error processing credential '{key}': {error_message}")
+                    print(f"Error processing credential '{key}': {error_message}")
+                    continue
+
         print('----------------------------------------------------')
+        return warnings
 
     def post(self, request, *args, **kwargs):
         def validate_file_size(files):
@@ -111,8 +132,10 @@ class PushAgents(APIView):
                     project_uuid=project_uuid
                 )
 
-                # Handle credentials
-                self._handle_agent_credentials(agent_dto, project_uuid, agent)
+                # Handle credentials and collect warnings
+                credential_warnings = self._handle_agent_credentials(agent_dto, project_uuid, agent)
+                if credential_warnings:
+                    response_warnings.extend(credential_warnings)
 
                 # Handle skills if present
                 if agent_dto.skills:
@@ -190,8 +213,10 @@ class PushAgents(APIView):
                 agent_alias_version="DRAFT",
             )
 
-            # Handle credentials
-            self._handle_agent_credentials(agent_dto, project_uuid, agent)
+            # Handle credentials and collect warnings
+            credential_warnings = self._handle_agent_credentials(agent_dto, project_uuid, agent)
+            if credential_warnings:
+                response_warnings.extend(credential_warnings)
 
             if agent_dto.skills:
                 warnings = agents_usecase.handle_agent_skills(
