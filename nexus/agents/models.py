@@ -5,6 +5,13 @@ from django.db import models
 from nexus.projects.models import Project
 from nexus.db.models import BaseModel
 from nexus.agents.encryption import encrypt_value, decrypt_value
+from nexus.agents.exceptions import (
+    CredentialKeyInvalid,
+    CredentialLabelInvalid,
+    CredentialValueInvalid,
+    CredentialPlaceholderInvalid,
+    CredentialIsConfidentialInvalid,
+)
 
 
 class Agent(BaseModel):
@@ -56,7 +63,33 @@ class Credential(models.Model):
     metadata = models.JSONField(default=dict)
     agents = models.ManyToManyField(Agent)
 
+    def clean(self):
+        if not isinstance(self.key, str):
+            raise CredentialKeyInvalid(field_name=self.key)
+        if self.key and len(self.key) > 255:
+            raise CredentialKeyInvalid.length_exceeded(field_name=self.key)
+
+        if not isinstance(self.label, str) or not self.label:
+            raise CredentialLabelInvalid(field_name=self.key)
+        if len(self.label) > 255:
+            raise CredentialLabelInvalid.length_exceeded(field_name=self.key)
+
+        if not isinstance(self.value, str) or not self.value:
+            raise CredentialValueInvalid(field_name=self.key)
+        if len(self.value) > 8192:
+            raise CredentialValueInvalid.length_exceeded(field_name=self.key)
+
+        if self.placeholder is not None:
+            if not isinstance(self.placeholder, str):
+                raise CredentialPlaceholderInvalid(field_name=self.key)
+            if len(self.placeholder) > 255:
+                raise CredentialPlaceholderInvalid.length_exceeded(field_name=self.key)
+
+        if not isinstance(self.is_confidential, bool):
+            raise CredentialIsConfidentialInvalid(field_name=str(self.key))
+
     def save(self, *args, **kwargs):
+        self.clean()
         if self.value:
             self.value = encrypt_value(self.value)
         super().save(*args, **kwargs)
