@@ -74,7 +74,7 @@ class Credential(models.Model):
         if len(self.label) > 255:
             raise CredentialLabelInvalid.length_exceeded(field_name=self.key)
 
-        if not isinstance(self.value, str) or not self.value:
+        if not isinstance(self.value, str):
             raise CredentialValueInvalid(field_name=self.key)
         if len(self.value) > 8192:
             raise CredentialValueInvalid.length_exceeded(field_name=self.key)

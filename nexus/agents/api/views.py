@@ -63,6 +63,7 @@ class PushAgents(APIView):
         for agent_dto in agents_dto:
             if hasattr(agent_dto, 'is_update') and agent_dto.is_update:
                 # Handle update
+                print(f"[+ Updating existing agent +]")
                 agent = agents_usecase.update_agent(
                     agent_dto=agent_dto,
                     project_uuid=project_uuid
@@ -118,6 +119,7 @@ class PushAgents(APIView):
                 continue
 
             # Handle new agent creation
+            print(f"[+ Creating new agent {agent_dto.name} +]")
             external_id = agents_usecase.create_agent(
                 user=request.user,
                 agent_dto=agent_dto,
@@ -143,24 +145,31 @@ class PushAgents(APIView):
                 agent_alias_version="DRAFT",
             )
 
-            if agent_dto.credentials:                
+            if agent_dto.credentials:
+                print('-----------------Agent Credentials------------------')
+
                 for credential_dict in agent_dto.credentials:
                     for key, properties in credential_dict.items():
                         props = {}
                         for prop in properties:
-                            props.update(prop)
+                            if isinstance(prop, dict):
+                                props.update(prop)
                         
-                        credential = Credential.objects.get_or_create(
+                        credential, created = Credential.objects.get_or_create(
                             project_id=project_uuid,
                             key=key,
                             defaults={
                                 "label": props.get("label", key),
-                                "value": key,
+                                "value": "",
                                 "is_confidential": props.get("is_confidential", True),
                                 "placeholder": props.get("placeholder", None),
                             }
                         )
+
                         credential.agents.add(agent)
+
+                        print(key)
+                        print('--------------------------------')
 
             if agent_dto.skills:
                 warnings = agents_usecase.handle_agent_skills(
