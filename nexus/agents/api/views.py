@@ -169,7 +169,8 @@ class PushAgents(APIView):
                         credential.agents.add(agent)
 
                         print(key)
-                        print('--------------------------------')
+
+                print('----------------------------------------------------')
 
             if agent_dto.skills:
                 warnings = agents_usecase.handle_agent_skills(
