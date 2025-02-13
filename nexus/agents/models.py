@@ -4,7 +4,7 @@ from uuid import uuid4
 from django.db import models
 from nexus.projects.models import Project
 from nexus.db.models import BaseModel
-from nexus.agents.encryption import encrypt_value, decrypt_value
+from nexus.agents.encryption import decrypt_value
 from nexus.agents.exceptions import (
     CredentialKeyInvalid,
     CredentialLabelInvalid,
@@ -90,8 +90,6 @@ class Credential(models.Model):
 
     def save(self, *args, **kwargs):
         self.clean()
-        if self.value:
-            self.value = encrypt_value(self.value)
         super().save(*args, **kwargs)
 
     @property

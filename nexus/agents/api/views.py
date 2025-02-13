@@ -6,6 +6,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+from nexus.agents.encryption import encrypt_value, decrypt_value
+
 from nexus.agents.api.serializers import (
     ActiveAgentSerializer,
     ActiveAgentTeamSerializer,
@@ -67,7 +69,6 @@ class PushAgents(APIView):
                         key=key,
                         defaults={
                             "label": props.get("label", key),
-                            "value": props.get("value", ""),
                             "is_confidential": props.get("is_confidential", True),
                             "placeholder": props.get("placeholder", None),
                         }
@@ -75,10 +76,19 @@ class PushAgents(APIView):
 
                     if not created:
                         # Update existing credential properties
-                        credential.label = props.get("label", credential.label)
-                        credential.is_confidential = props.get("is_confidential", credential.is_confidential)
-                        credential.placeholder = props.get("placeholder", credential.placeholder)
-                        credential.save()
+                        credential.label = props.get("label", key)
+                        credential.placeholder = props.get("placeholder", None)
+                        
+                        new_confidential = props.get("is_confidential", True)
+                        if new_confidential != credential.is_confidential:
+                            if new_confidential:
+                                credential.value = encrypt_value(credential.value)
+                            else:
+                                credential.value = decrypt_value(credential.value)
+
+                        credential.is_confidential = props.get("is_confidential", True)
+
+                        credential.save(update_fields=['label', 'is_confidential', 'placeholder', 'value'])
 
                     credential.agents.add(agent)
 
@@ -398,7 +408,7 @@ class ProjectCredentialsView(APIView):
         for key, value in credentials_data.items():
             try:
                 credential = Credential.objects.get(project__uuid=project_uuid, key=key)
-                credential.value = value
+                credential.value = encrypt_value(value) if credential.is_confidential else value
                 credential.save()
                 updated_credentials.append(key)
             except Credential.DoesNotExist:
