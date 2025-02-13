@@ -408,7 +408,7 @@ class BedrockFileDatabase(FileDataBase):
         agent_to_update = agent_to_update['agent']
 
         agent_collaboration = {
-            True: "SUPERVISOR_ROUTER",
+            True: "SUPERVISOR",
             False: "DISABLED"
         }
 
@@ -419,6 +419,7 @@ class BedrockFileDatabase(FileDataBase):
             agentCollaboration=agent_collaboration.get(to_supervisor),
             instruction=agent_to_update["instruction"],
             foundationModel=agent_to_update['foundationModel'],
+            memoryConfiguration=agent_to_update["memoryConfiguration"]
         )
 
     def invoke_supervisor_stream(
@@ -456,6 +457,17 @@ class BedrockFileDatabase(FileDataBase):
                 }
             ]
         }
+
+        credentials = {}
+        try:
+            agent_model = Agent.objects.filter(project_id=message.project_uuid).first()
+            if agent_model:
+                for credential in agent_model.credential_set.all():
+                    credentials[credential.key] = credential.decrypted_value
+        except Exception as e:
+            print(f"Error fetching credentials: {str(e)}")
+
+        sessionState["sessionAttributes"] = { "credentials": credentials }
 
         sessionState["promptSessionAttributes"] = {
             "contact_urn": message.contact_urn,
@@ -572,7 +584,7 @@ class BedrockFileDatabase(FileDataBase):
 
         agent_collaboration = {
             True: "DISABLED",
-            False: "SUPERVISOR_ROUTER"
+            False: "SUPERVISOR"
         }
 
         # Get existing agent to use as base

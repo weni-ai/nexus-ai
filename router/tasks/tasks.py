@@ -322,7 +322,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             log_usecase.update_status("F", exception_text=e)
 
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, soft_time_limit=120, time_limit=125)
 def start_multi_agents(self, message: Dict, preview: bool = False, language: str = "en", user_email: str = '') -> bool:  # pragma: no cover
     # TODO: Logs
     message = message_factory(
