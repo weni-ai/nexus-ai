@@ -6,15 +6,19 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+from nexus.agents.encryption import encrypt_value, decrypt_value
+
 from nexus.agents.api.serializers import (
     ActiveAgentSerializer,
     ActiveAgentTeamSerializer,
     AgentSerializer,
+    ProjectCredentialsListSerializer,
 )
 from nexus.agents.models import (
     Agent,
     ActiveAgent,
     Team,
+    Credential,
 )
 
 from nexus.usecases.agents import (
@@ -27,6 +31,77 @@ from nexus.projects.api.permissions import ProjectPermission
 class PushAgents(APIView):
 
     permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def _handle_agent_credentials(self, agent_dto, project_uuid, agent):
+        """Helper method to handle agent credentials creation and updates.
+        
+        Args:
+            agent_dto: The agent data transfer object containing credentials
+            project_uuid: UUID of the project
+            agent: Agent instance to associate credentials with
+            
+        Returns:
+            list: List of warning messages for existing credentials
+        """
+        if not agent_dto.credentials:
+            return []
+
+        warnings = []
+        print('-----------------Agent Credentials------------------')
+        for credential_dict in agent_dto.credentials:
+            for key, properties in credential_dict.items():
+                props = {}
+                for prop in properties:
+                    if isinstance(prop, dict):
+                        props.update(prop)
+                
+                try:
+                    existing_credential = Credential.objects.filter(
+                        project_id=project_uuid,
+                        key=key
+                    ).first()
+
+                    if existing_credential:
+                        warnings.append(f"Credential '{key}' already exists for this project")
+                    
+                    credential, created = Credential.objects.get_or_create(
+                        project_id=project_uuid,
+                        key=key,
+                        defaults={
+                            "label": props.get("label", key),
+                            "is_confidential": props.get("is_confidential", True),
+                            "placeholder": props.get("placeholder", None),
+                        }
+                    )
+
+                    if not created:
+                        # Update existing credential properties
+                        credential.label = props.get("label", key)
+                        credential.placeholder = props.get("placeholder", None)
+                        
+                        new_confidential = props.get("is_confidential", True)
+                        if new_confidential != credential.is_confidential:
+                            if new_confidential:
+                                credential.value = encrypt_value(credential.value)
+                            else:
+                                credential.value = decrypt_value(credential.value)
+
+                        credential.is_confidential = props.get("is_confidential", True)
+
+                        credential.save(update_fields=['label', 'is_confidential', 'placeholder', 'value'])
+
+                    credential.agents.add(agent)
+
+                    print(key)
+
+                except Exception as e:
+                    error_message = str(e)
+                    warnings.append(f"Error processing credential '{key}': {error_message}")
+                    print(f"Error processing credential '{key}': {error_message}")
+                    continue
+
+        print('----------------------------------------------------')
+        return warnings
 
     def post(self, request, *args, **kwargs):
         def validate_file_size(files):
@@ -61,10 +136,16 @@ class PushAgents(APIView):
         for agent_dto in agents_dto:
             if hasattr(agent_dto, 'is_update') and agent_dto.is_update:
                 # Handle update
+                print(f"[+ Updating existing agent +]")
                 agent = agents_usecase.update_agent(
                     agent_dto=agent_dto,
                     project_uuid=project_uuid
                 )
+
+                # Handle credentials and collect warnings
+                credential_warnings = self._handle_agent_credentials(agent_dto, project_uuid, agent)
+                if credential_warnings:
+                    response_warnings.extend(credential_warnings)
 
                 # Handle skills if present
                 if agent_dto.skills:
@@ -116,6 +197,7 @@ class PushAgents(APIView):
                 continue
 
             # Handle new agent creation
+            print(f"[+ Creating new agent {agent_dto.name} +]")
             external_id = agents_usecase.create_agent(
                 user=request.user,
                 agent_dto=agent_dto,
@@ -140,6 +222,11 @@ class PushAgents(APIView):
                 agent_alias_arn="DRAFT",
                 agent_alias_version="DRAFT",
             )
+
+            # Handle credentials and collect warnings
+            credential_warnings = self._handle_agent_credentials(agent_dto, project_uuid, agent)
+            if credential_warnings:
+                response_warnings.extend(credential_warnings)
 
             if agent_dto.skills:
                 warnings = agents_usecase.handle_agent_skills(
@@ -298,3 +385,36 @@ class TeamView(APIView):
             "agents": serializer.data
         }
         return Response(data)
+
+
+class ProjectCredentialsView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        credentials = Credential.objects.filter(project__uuid=project_uuid)
+        
+        official_credentials = credentials.filter(agents__is_official=True).distinct()
+        custom_credentials = credentials.filter(agents__is_official=False).distinct()
+
+        return Response({
+            "official_agents_credentials": ProjectCredentialsListSerializer(official_credentials, many=True).data,
+            "my_agents_credentials": ProjectCredentialsListSerializer(custom_credentials, many=True).data
+        })
+
+    def patch(self, request, project_uuid):
+        credentials_data = request.data
+
+        updated_credentials = []
+        for key, value in credentials_data.items():
+            try:
+                credential = Credential.objects.get(project__uuid=project_uuid, key=key)
+                credential.value = encrypt_value(value) if credential.is_confidential else value
+                credential.save()
+                updated_credentials.append(key)
+            except Credential.DoesNotExist:
+                continue
+
+        return Response({
+            "message": "Credentials updated successfully",
+            "updated_credentials": updated_credentials
+        })

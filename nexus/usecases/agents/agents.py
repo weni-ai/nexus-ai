@@ -45,6 +45,7 @@ class AgentDTO:
     update_fields: dict = field(default_factory=dict)
     foundation_model: str = None
     guardrail_configuration: dict = None
+    credentials: List[Dict] = None
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
@@ -603,6 +604,7 @@ class AgentUsecase:
             idle_session_ttl_in_seconds=agent_value.get("idle_session_ttl_in_seconds", 1800),
             foundation_model=agent_value.get("foundation_model"),
             guardrail_configuration=agent_value.get("guardrail_configuration"),
+            credentials=agent_value.get("credentials"),
         )
         validate_agents = self.validate_agent_dto(agent_dto, user_email)
         return validate_agents

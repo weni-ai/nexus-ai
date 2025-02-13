@@ -467,6 +467,17 @@ class BedrockFileDatabase(FileDataBase):
             ]
         }
 
+        credentials = {}
+        try:
+            agent_model = Agent.objects.filter(project_id=message.project_uuid).first()
+            if agent_model:
+                for credential in agent_model.credential_set.all():
+                    credentials[credential.key] = credential.decrypted_value
+        except Exception as e:
+            print(f"Error fetching credentials: {str(e)}")
+
+        sessionState["sessionAttributes"] = { "credentials": json.dumps(credentials, default=str) }
+
         sessionState["promptSessionAttributes"] = {
             "contact_urn": message.contact_urn,
             "contact_fields": message.contact_fields_as_json,
