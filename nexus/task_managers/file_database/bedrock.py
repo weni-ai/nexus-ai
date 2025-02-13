@@ -467,7 +467,7 @@ class BedrockFileDatabase(FileDataBase):
         except Exception as e:
             print(f"Error fetching credentials: {str(e)}")
 
-        sessionState["sessionAttributes"] = credentials
+        sessionState["sessionAttributes"] = { "credentials": credentials }
 
         sessionState["promptSessionAttributes"] = {
             "contact_urn": message.contact_urn,
