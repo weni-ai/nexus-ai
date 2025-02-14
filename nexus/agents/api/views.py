@@ -313,8 +313,11 @@ class PushAgents(APIView):
                             key=key,
                             value_type=types.get(param[key].get("type"))
                         )
-                    if param[key].get("contact_field") is not None:
-                        param["order_id"].pop("contact_field")
+                    # if param[key].get("contact_field") is not None:
+                    try:
+                        param[key].pop("contact_field")
+                    except:
+                        pass
 
                 params.update(param)
             skill_parameters = params
