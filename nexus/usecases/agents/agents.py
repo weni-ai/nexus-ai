@@ -712,7 +712,13 @@ class AgentUsecase:
         skills: List[Dict],
         files: Dict,
         user: User,
+        project_uuid: str
     ):
+        from nexus.internals.flows import FlowsRESTClient
+        flows_client = FlowsRESTClient()
+        flows_contact_fields = flows_client.list_project_contact_fields(project_uuid)
+        results = flows_contact_fields.get('results', []) if isinstance(flows_contact_fields, dict) else flows_contact_fields
+        existing_keys = set(field.get('key', '') for field in results)
         """
         Handle creation or update of agent skills.
 
@@ -728,12 +734,36 @@ class AgentUsecase:
             skill_file = files[f"{agent.slug}:{slug}"]
             skill_file = skill_file.read()
             skill_parameters = skill.get("parameters")
+ 
 
             if isinstance(skill_parameters, list):
                 params = {}
+                types = {
+                    "string": "text",
+                    "datetime":"datetime",
+                    "state":"state",
+                    "district":"district",
+                    "ward":"ward",
+                    "numeric":"numeric"
+                }
+
                 for param in skill_parameters:
-                    params.update(param)
-                skill_parameters = params
+                    for key, value in param.items():
+                        param_value = value.copy() if isinstance(value, dict) else value
+                        
+                        if isinstance(param_value, dict):
+                            if param_value.get("contact_field") and key not in existing_keys:
+                                flows_client.create_project_contact_field(
+                                    project_uuid=project_uuid,
+                                    key=key,
+                                    value_type=types.get(param_value.get("type"))
+                                )
+                            param_value.pop("contact_field", None)
+                            params[key] = param_value
+                        else:
+                            params[key] = param_value
+
+            skill_parameters = params
 
             lambda_name = f"{slug}-{agent.external_id}"
             function_schema = [
