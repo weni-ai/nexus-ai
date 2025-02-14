@@ -306,20 +306,22 @@ class PushAgents(APIView):
             }
 
             for param in skill_parameters:
-                for key in param:
-                    if param[key].get("contact_field") and key not in existing_keys:
-                        flows_client.create_project_contact_field(
-                            project_uuid=project_uuid,
-                            key=key,
-                            value_type=types.get(param[key].get("type"))
-                        )
-                    # if param[key].get("contact_field") is not None:
-                    try:
-                        param[key].pop("contact_field")
-                    except:
-                        pass
+                for key, value in param.items():
+                    param_value = value.copy() if isinstance(value, dict) else value
+                    
+                    if isinstance(param_value, dict):
+                        if param_value.get("contact_field") and key not in existing_keys:
+                            flows_client.create_project_contact_field(
+                                project_uuid=project_uuid,
+                                key=key,
+                                value_type=types.get(param_value.get("type"))
+                            )
+                        # Remove contact_field from the copied dictionary
+                        param_value.pop("contact_field", None)
+                        params[key] = param_value
+                    else:
+                        params[key] = param_value
 
-                params.update(param)
             skill_parameters = params
 
         return [{
