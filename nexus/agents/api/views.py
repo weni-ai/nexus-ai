@@ -151,7 +151,7 @@ class PushAgents(APIView):
                 if agent_dto.skills:
                     for skill in agent_dto.skills:
                         skill_file = files[f"{agent.slug}:{skill['slug']}"]
-                        function_schema = self._create_function_schema(skill)
+                        function_schema = self._create_function_schema(skill, project_uuid)
                         skill_handler = skill.get("source").get("entrypoint")
                         if skill['is_update']:
                             # Update existing skill
@@ -284,12 +284,38 @@ class PushAgents(APIView):
 
         return Response(response)
 
-    def _create_function_schema(self, skill: dict) -> list[dict]:
+    def _create_function_schema(self, skill: dict, project_uuid: str) -> list[dict]:
+        from nexus.internals.flows import FlowsRESTClient
+
+        flows_client = FlowsRESTClient()
+        flows_contact_fields = flows_client.list_project_contact_fields(project_uuid)
+        results = flows_contact_fields.get('results', []) if isinstance(flows_contact_fields, dict) else flows_contact_fields
+        existing_keys = set(field.get('key', '') for field in results)
+
         """Helper method to create function schema from skill data"""
         skill_parameters = skill.get("parameters")
         if isinstance(skill_parameters, list):
             params = {}
+            types = {
+                "string": "text",
+                "datetime":"datetime",
+                "state":"state",
+                "district":"district",
+                "ward":"ward",
+                "numeric":"numeric"
+            }
+
             for param in skill_parameters:
+                for key in param:
+                    if param[key].get("contact_field") and key not in existing_keys:
+                        flows_client.create_project_contact_field(
+                            project_uuid=project_uuid,
+                            key=key,
+                            value_type=types.get(param[key].get("type"))
+                        )
+                    if param[key].get("contact_field") is not None:
+                        param["order_id"].pop("contact_field")
+
                 params.update(param)
             skill_parameters = params
 
