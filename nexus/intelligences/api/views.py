@@ -587,6 +587,54 @@ class ContentBaseFileViewset(ModelViewSet):
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def create(self, request, content_base_uuid=str):
+        from django.core.files.uploadedfile import InMemoryUploadedFile
+        from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
+        from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
+        from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
+
+        try:
+            self.get_queryset()
+
+            user: User = request.user
+            file: InMemoryUploadedFile = request.FILES['file']
+            user_email: str = user.email
+            extension_file: str = request.data.get("extension_file")
+
+            file_manager = CeleryFileManager()
+            file_database_response = file_manager.add_file_to_s3(
+                file,
+                file.name,
+                content_base_uuid,
+                extension_file,
+                user_email,
+            )
+            print("ooooooooooooooooooooooooooooo")
+            print(file_database_response)
+            print("ooooooooooooooooooooooooooooo")
+            content_base_file_dto = UpdateContentBaseFileDTO(
+                file_url=file_database_response.file_url,
+                file_name=file_database_response.file_name
+            )
+            content_base_file = UpdateContentBaseFileUseCase().update_content_base_file(
+                content_base_file_uuid=file_database_response.content_base_file_uuid,
+                user_email=user_email,
+                update_content_base_file_dto=content_base_file_dto
+            )
+            task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(
+                content_base_file=content_base_file
+            )
+            start_ingestion_job(str(task_manager.uuid))
+            return Response(
+                    {"uuid": str(content_base_file.uuid), "extension_file": extension_file},
+                    status=status.HTTP_201_CREATED
+                )
+        except MultiValueDictKeyError:
+            return Response(data={"message": "file is required"}, status=status.HTTP_400_BAD_REQUEST)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+    def _create(self, request, content_base_uuid=str):
 
         try:
             user = request.user

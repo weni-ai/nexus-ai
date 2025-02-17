@@ -21,6 +21,43 @@ class CeleryFileManager:
     ):
         self._file_database = file_database
 
+    def add_file_to_s3(
+        self,
+        file: bytes,
+        filename: str,
+        content_base_uuid: str,
+        extension_file: str,
+        user_email: str,
+    ):
+        from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
+        from nexus.task_managers.file_database.file_database import FileResponseDTO
+        response = FileResponseDTO()
+        try:
+            content_base_file_dto = ContentBaseFileDTO(
+                file=file,
+                file_name=filename,
+                user_email=user_email,
+                content_base_uuid=content_base_uuid,
+                extension_file=extension_file,
+            )
+            content_base_file = CreateContentBaseFileUseCase().create_content_base_file(content_base_file=content_base_file_dto)
+            content_base_file_uuid = str(content_base_file.uuid)
+            file_database = BedrockFileDatabase()
+            file_name, file_url = file_database.multipart_upload(file, content_base_uuid, content_base_file_uuid)
+            file_database.add_metadata_json_file(file_name, content_base_uuid, content_base_file_uuid)
+            response = FileResponseDTO(
+                status=0,
+                file_url=file_url,
+                file_name=file_name,
+                content_base_file_uuid=content_base_file_uuid
+            )
+
+        except Exception as exception:
+            response.status = 1
+            response.err = str(exception)
+
+        return response
+
     def upload_file(
         self,
         file: bytes,
