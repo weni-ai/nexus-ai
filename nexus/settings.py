@@ -543,3 +543,5 @@ if not CREDENTIAL_ENCRYPTION_KEY and not TESTING:
     # Generate a new key if not configured and not in testing mode
     from cryptography.fernet import Fernet
     CREDENTIAL_ENCRYPTION_KEY = Fernet.generate_key()
+
+BEDROCK_FILE_SIZE_LIMIT = env.int("BEDROCK_FILE_SIZE_LIMIT", 50)

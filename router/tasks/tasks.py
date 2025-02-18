@@ -342,7 +342,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     contentbase = get_default_content_base_by_project(message.project_uuid)
 
     usecase = AgentUsecase()
-    session_id = f"project-{project.uuid}-session-{uuid.uuid4()}"
+    session_id = f"project-{project.uuid}-session-{message.contact_urn}"
 
     if user_email:
         # Send initial status through WebSocket
