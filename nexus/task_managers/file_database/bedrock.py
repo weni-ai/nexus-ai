@@ -141,6 +141,9 @@ class BedrockFileDatabase(FileDataBase):
         return _update_agent_response
 
     def add_metadata_json_file(self, filename: str, content_base_uuid: str, file_uuid: str):
+        import os
+        import tempfile
+        from io import BytesIO
         print("[+ BEDROCK: Adding metadata.json file +]")
 
         data = {
@@ -152,13 +155,62 @@ class BedrockFileDatabase(FileDataBase):
         }
 
         filename_metadata_json = f"{filename}.metadata.json"
+        key = f"{content_base_uuid}/{filename_metadata_json}"
+        print("\n\n\n\n\n")
+        print(filename_metadata_json)
+        print(key)
+        print("\n\n\n\n\n")
+        bytes_stream = BytesIO(json.dumps(data).encode('utf-8'))
+        self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
 
-        file_path = f"/tmp/{filename_metadata_json}"
+    
+    def multipart_upload(self, file, content_base_uuid: str, file_uuid: str, part_size: int = 5 * 1024 * 1024):
+        from io import BytesIO
+        s3_client = self.s3_client
+        bucket_name = self.bucket_name
+        file_name = self.__create_unique_filename(basename(file.name))
+        key = f"{content_base_uuid}/{file_name}"
 
-        with open(file_path, "w+b") as file:
-            file.write(json.dumps(data).encode('utf-8'))
-            file.seek(0)
-            self.s3_client.upload_fileobj(file, self.bucket_name, f"{content_base_uuid}/{filename_metadata_json}")
+        response = s3_client.create_multipart_upload(Bucket=bucket_name, Key=key)
+        upload_id = response['UploadId']
+
+        parts = []
+        try:
+            part_number = 1
+            while True:
+                data = file.read(part_size)
+                if not data:
+                    break
+
+                response = s3_client.upload_part(
+                    Bucket=bucket_name,
+                    Key=key,
+                    PartNumber=part_number,
+                    UploadId=upload_id,
+                    Body=data
+                )
+                part_info = {'PartNumber': part_number, 'ETag': response['ETag']}
+                parts.append(part_info)
+                part_number += 1
+            
+            response = s3_client.complete_multipart_upload(
+                Bucket=bucket_name,
+                Key=key,
+                UploadId=upload_id,
+                MultipartUpload={'Parts': parts}
+            )
+
+            print(f"Upload finalizado: {response['Location']}")
+            return file_name, response['Location']
+
+        except Exception as e:
+            print(f"Erro no upload: {e}")
+            s3_client.abort_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id)
+
+        # parts = []
+        # part_number = 1
+        # part_size = 5 * 1024 * 1024  # 5MB
+        
 
     def add_file(self, file, content_base_uuid: str, file_uuid: str) -> FileResponseDTO:
         try:
