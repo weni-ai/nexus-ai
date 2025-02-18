@@ -11,6 +11,16 @@ from nexus.projects.models import Project
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
 from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from rest_framework import status as http_status
+
+from nexus.usecases.intelligences.intelligences_dto import (
+    UpdateContentBaseFileDTO,
+)
+from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
+from nexus.usecases.task_managers.celery_task_manager import (
+    CeleryTaskManagerUseCase,
+)
+from nexus.task_managers.tasks_bedrock import start_ingestion_job
 
 
 class CeleryFileManager:
@@ -57,6 +67,43 @@ class CeleryFileManager:
             response.err = str(exception)
 
         return response
+
+    def upload_and_ingest_file(
+        self,
+        file: bytes,
+        filename: str,
+        content_base_uuid: str,
+        extension_file: str,
+        user_email: str,
+    ) -> tuple[dict, int]:
+
+        file_database_response = self.add_file_to_s3(
+            file,
+            filename,
+            content_base_uuid,
+            extension_file,
+            user_email,
+        )
+
+        if file_database_response.status != 0:
+            data = {"message": file_database_response.err}
+            status = http_status.HTTP_500_INTERNAL_SERVER_ERROR
+            return data, status
+
+        content_base_file_dto = UpdateContentBaseFileDTO(
+            file_url=file_database_response.file_url,
+            file_name=file_database_response.file_name
+        )
+        content_base_file = UpdateContentBaseFileUseCase().update_content_base_file(
+            content_base_file_uuid=file_database_response.content_base_file_uuid,
+            user_email=user_email,
+            update_content_base_file_dto=content_base_file_dto
+        )
+        task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(
+            content_base_file=content_base_file
+        )
+        start_ingestion_job(str(task_manager.uuid))
+        return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}, http_status.HTTP_201_CREATED
 
     def upload_file(
         self,
