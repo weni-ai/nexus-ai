@@ -16,4 +16,5 @@ urlpatterns = [
     path('agents/official/<project_uuid>', OfficialAgentsView.as_view(), name="official-agents"),
     path('project/<project_uuid>/assign/<str:agent_uuid>', ActiveAgentsViewSet.as_view(), name="assign-agents"),
     path('project/<project_uuid>/credentials', ProjectCredentialsView.as_view(), name="project-credentials"),
+    path('project/<project_uuid>/credentials/<str:agent_uuid>', ProjectCredentialsView.as_view(), name="project-credentials-update"),
 ]

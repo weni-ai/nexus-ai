@@ -54,7 +54,7 @@ class PushAgents(APIView):
                 for prop in properties:
                     if isinstance(prop, dict):
                         props.update(prop)
-                
+
                 try:
                     existing_credential = Credential.objects.filter(
                         project_id=project_uuid,
@@ -391,8 +391,13 @@ class ProjectCredentialsView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, project_uuid):
-        credentials = Credential.objects.filter(project__uuid=project_uuid)
-        
+        active_agents = ActiveAgent.objects.filter(team__project__uuid=project_uuid)
+        active_agent_ids = active_agents.values_list('agent_id', flat=True)
+        credentials = Credential.objects.filter(
+            project__uuid=project_uuid,
+            agents__in=active_agent_ids
+        )
+
         official_credentials = credentials.filter(agents__is_official=True).distinct()
         custom_credentials = credentials.filter(agents__is_official=False).distinct()
 
@@ -417,4 +422,48 @@ class ProjectCredentialsView(APIView):
         return Response({
             "message": "Credentials updated successfully",
             "updated_credentials": updated_credentials
+        })
+
+    def post(self, request, project_uuid):
+        credentials_data = request.data.get('credentials', {})
+        agent_uuid = request.data.get('agent_uuid')
+        is_confidential = request.data.get('is_confidential', True)
+
+        if not agent_uuid or not credentials_data:
+            return Response(
+                {"error": "agent_uuid and credentials are required"}, 
+                status=400
+            )
+
+        try:
+            agent = Agent.objects.get(uuid=agent_uuid)
+        except Agent.DoesNotExist:
+            return Response(
+                {"error": "Agent not found"}, 
+                status=404
+            )
+
+        created_credentials = []
+        for key, value in credentials_data.items():
+            existing_credential = Credential.objects.filter(
+                project_id=project_uuid,
+                key=key
+            ).first()
+
+            if not existing_credential:
+                # Create new credential if it doesn't exist
+              credential = Credential.objects.create(
+                  project_id=project_uuid,
+                  key=key,
+                  value=encrypt_value(value) if is_confidential else value,
+                  is_confidential=is_confidential,
+                  label=key
+              )
+              credential.agents.add(agent)
+
+            created_credentials.append(key)
+
+        return Response({
+            "message": "Credentials created successfully",
+            "created_credentials": created_credentials
         })

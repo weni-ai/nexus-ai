@@ -9,7 +9,6 @@ from nexus.agents.models import (
     Credential,
 )
 
-
 class ActiveAgentSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -139,7 +138,7 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
                 "uuid": agent.uuid,
                 "name": agent.display_name,
             }
-            for agent in obj.agents.all()
+            for agent in obj.agents.filter(active_agents__team = obj.project.team)
         ]
 
     def get_name(self, obj):
@@ -149,4 +148,4 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
         if obj.is_confidential:
             return obj.value
         return obj.decrypted_value
-        
+
