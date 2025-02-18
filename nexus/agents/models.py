@@ -130,7 +130,7 @@ class TeamVersion(BaseModel):
 
 
 class ActiveAgent(BaseModel):
-    agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="active_agents")
     team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="team_agents")
     is_official = models.BooleanField(default=False)
     metadata = models.JSONField(default=dict)
