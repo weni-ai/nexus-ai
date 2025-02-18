@@ -207,11 +207,6 @@ class BedrockFileDatabase(FileDataBase):
             print(f"Erro no upload: {e}")
             s3_client.abort_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id)
 
-        # parts = []
-        # part_number = 1
-        # part_size = 5 * 1024 * 1024  # 5MB
-        
-
     def add_file(self, file, content_base_uuid: str, file_uuid: str) -> FileResponseDTO:
         try:
             print("[+ BEDROCK: Adding file to bucket +]")
