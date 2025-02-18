@@ -205,12 +205,12 @@ class AgentUsecase:
             is_single_agent
         )
 
-    def create_agent_version(self, agent_external_id, user, agent):
+    def create_agent_version(self, agent_external_id, user, agent, team):
         print("Creating a new agent version ...")
 
-        if agent.list_versions.count() == 9:
+        if agent.list_versions.count() >= 9:
             oldest_version = agent.list_versions.first()
-            self.delete_agent_version(agent_external_id, oldest_version)
+            self.delete_agent_version(agent_external_id, oldest_version, team, user)
 
         random_uuid = str(uuid.uuid4())
         alias_name = f"version-{random_uuid}"
@@ -777,15 +777,10 @@ class AgentUsecase:
         supervisor_name = team.metadata.get("supervisor_name")
         supervisor_id = team.external_id
 
-        # self.bedrock_agent.list_agent_versions(agentId=supervisor_id)
-        if team.list_versions.count() == 9:
-            oldest_version = team.list_versions.first()
-            self.delete_agent_version(team.external_id, oldest_version)
+        if current_version:
+            self.delete_supervisor_version(team.external_id, current_version)
 
         alias_name = f"{supervisor_name}-multi-agent"
-        if current_version:
-            alias_name = f"{supervisor_name}-multi-agent-{uuid.uuid4()}"
-            alias_name = alias_name[:99]
 
         supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = self.external_agent_client.create_agent_alias(
             alias_name=alias_name, agent_id=supervisor_id
@@ -800,15 +795,48 @@ class AgentUsecase:
             created_by=user,
         )
 
-    def delete_agent_version(self, agent_id: str, version):
+    def delete_supervisor_version(self, agent_id: str, version):
         try:
             response = self.external_agent_client.bedrock_agent.delete_agent_alias(
                 agentId=agent_id,
                 agentAliasId=version.alias_id
             )
+            self.external_agent_client.bedrock_agent.delete_agent_version(
+                agentId=agent_id,
+                agentVersion=version.metadata["supervisor_alias_version"]
+            )
             print(response)
             version.delete()
             return response
+        except Exception:
+            raise
+
+    def delete_agent_version(self, agent_id: str, version, team, user):
+        try:
+            project = team.project
+            project_uuid = str(project.uuid)
+            reasign_agent = False
+
+            if version.alias_id != "DRAFT":
+                agent = project.agent_set.get(external_id=agent_id)
+                active_agent_qs = team.team_agents.filter(agent=agent)
+
+                if active_agent_qs.exists():
+                    reasign_agent = True
+                    self.unassign_agent(str(agent.uuid), project_uuid)
+                    self.delete_supervisor_version(team.external_id, team.current_version)
+                    self.prepare_agent(agent_id)
+                    self.prepare_agent(team.external_id)
+                    self.external_agent_client.bedrock_agent.delete_agent_alias(
+                        agentId=agent_id,
+                        agentAliasId=version.alias_id
+                    )
+                if reasign_agent:
+                    self.assign_agent(str(agent.uuid), project_uuid, user)
+                    self.create_supervisor_version(project_uuid, user)
+
+            version.delete()
+            return
         except Exception:
             raise
 
