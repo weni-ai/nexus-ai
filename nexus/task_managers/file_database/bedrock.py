@@ -669,7 +669,7 @@ class BedrockFileDatabase(FileDataBase):
         self.wait_agent_status_update(response_create_supervisor['agent']['agentId'])
         supervisor_id = response_create_supervisor['agent']['agentId']
 
-        lambda_arn = settings.AWS_BEDROCK_LAMBDA_ARN
+        lambda_arn = f"{settings.AWS_BEDROCK_LAMBDA_ARN}:$LATEST"
 
         base_action_group_response = self.get_agent_action_group(
             agent_id=settings.AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID,
