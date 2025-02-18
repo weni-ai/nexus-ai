@@ -407,6 +407,15 @@ class BedrockFileDatabase(FileDataBase):
         agent_to_update = self.bedrock_agent.get_agent(agentId=agent_id)
         agent_to_update = agent_to_update['agent']
 
+        try:
+            memory_configuration = agent_to_update["memoryConfiguration"]
+        except KeyError:
+            memory_configuration = {
+                "enabledMemoryTypes": ["SESSION_SUMMARY"],
+                "sessionSummaryConfiguration": {"maxRecentSessions": 5},
+                "storageDays": 30
+            }
+
         agent_collaboration = {
             True: "SUPERVISOR",
             False: "DISABLED"
@@ -419,7 +428,7 @@ class BedrockFileDatabase(FileDataBase):
             agentCollaboration=agent_collaboration.get(to_supervisor),
             instruction=agent_to_update["instruction"],
             foundationModel=agent_to_update['foundationModel'],
-            memoryConfiguration=agent_to_update["memoryConfiguration"]
+            memoryConfiguration=memory_configuration,
         )
 
     def invoke_supervisor_stream(
