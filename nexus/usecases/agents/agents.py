@@ -26,6 +26,7 @@ from nexus.usecases.agents.exceptions import (
     SkillNameTooLong,
     AgentAttributeNotAllowed
 )
+from nexus.internals.flows import FlowsRESTClient
 
 
 @dataclass
@@ -131,6 +132,31 @@ class AgentUsecase:
             model_id=agent_dto.model[0],
         )
         return external_id
+
+    def create_contact_fields(self, project_uuid: str, fields: List[Dict[str, str]]):
+        types = {
+            "string": "text",
+            "bool": "text",
+            "datetime":"datetime",
+            "state":"state",
+            "district":"district",
+            "ward":"ward",
+            "numeric":"numeric"
+        }
+
+        flows_client = FlowsRESTClient()
+        flows_contact_fields = flows_client.list_project_contact_fields(project_uuid)
+        results = flows_contact_fields.get('results', []) if isinstance(flows_contact_fields, dict) else flows_contact_fields
+        existing_keys = set(field.get('key', '') for field in results)
+
+        for field in fields:
+            if field.get('key') not in existing_keys:
+                print(f"Creating contact field: {field.get('key')}")
+                flows_client.create_project_contact_field(
+                    project_uuid=project_uuid,
+                    key=field.get('key'),
+                    value_type=types.get(field.get('type'))
+                )
 
     def create_external_agent(
         self,
@@ -712,6 +738,7 @@ class AgentUsecase:
         skills: List[Dict],
         files: Dict,
         user: User,
+        project_uuid: str
     ):
         """
         Handle creation or update of agent skills.
@@ -729,11 +756,22 @@ class AgentUsecase:
             skill_file = skill_file.read()
             skill_parameters = skill.get("parameters")
 
+            fields = []
+
             if isinstance(skill_parameters, list):
                 params = {}
                 for param in skill_parameters:
+                    for key, value in param.items():
+                        if value.get("contact_field"):
+                            fields.append({
+                                "key": key,
+                                "value_type": value.get("type")
+                            })
+                        param[key].pop("contact_field", None)
                     params.update(param)
                 skill_parameters = params
+            
+            self.create_contact_fields(project_uuid, fields)
 
             lambda_name = f"{slug}-{agent.external_id}"
             function_schema = [
