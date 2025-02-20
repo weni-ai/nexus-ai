@@ -105,7 +105,7 @@ class AgentSerializer(serializers.ModelSerializer):
         return active_agent.exists()
 
     def get_credentials(self, obj):
-        credentials = obj.credential_set.all()
+        credentials = obj.credential_set.all().distinct("label")
         return [
             {
                 "name": credential.key,
