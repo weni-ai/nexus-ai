@@ -151,7 +151,7 @@ class PushAgents(APIView):
                 if agent_dto.skills:
                     for skill in agent_dto.skills:
                         skill_file = files[f"{agent.slug}:{skill['slug']}"]
-                        function_schema = self._create_function_schema(skill)
+                        function_schema = self._create_function_schema(skill, project_uuid)
                         skill_handler = skill.get("source").get("entrypoint")
                         if skill['is_update']:
                             # Update existing skill
@@ -234,6 +234,7 @@ class PushAgents(APIView):
                     skills=agent_dto.skills,
                     files=files,
                     user=request.user,
+                    project_uuid=project_uuid
                 )
 
                 if warnings:
@@ -284,14 +285,26 @@ class PushAgents(APIView):
 
         return Response(response)
 
-    def _create_function_schema(self, skill: dict) -> list[dict]:
+    def _create_function_schema(self, skill: dict, project_uuid: str) -> list[dict]:
         """Helper method to create function schema from skill data"""
         skill_parameters = skill.get("parameters")
+        fields = []
+
         if isinstance(skill_parameters, list):
-            params = {}
-            for param in skill_parameters:
-                params.update(param)
-            skill_parameters = params
+                params = {}
+                for param in skill_parameters:
+                    for key, value in param.items():
+                        if value.get("contact_field"):
+                            fields.append({
+                                "key": key,
+                                "value_type": value.get("type")
+                            })
+                        param[key].pop("contact_field", None)
+                    params.update(param)
+                skill_parameters = params
+
+        agents_usecase = AgentUsecase()
+        agents_usecase.create_contact_fields(project_uuid, fields)
 
         return [{
             "name": skill.get("slug"),
