@@ -845,9 +845,13 @@ class DownloadFileViewSet(views.APIView):
                 user_email=user_email
             )
             content_base_uuid = str(content_base_file.content_base.uuid)
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+            try:
+                project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+                indexer_database = project.indexer_database
+            except ObjectDoesNotExist:
+                indexer_database = Project.SENTENX
 
-            if project.indexer_database == Project.BEDROCK:
+            if indexer_database == Project.BEDROCK:
                 file_name = f"{content_base_uuid}/{file_name}"
                 file = BedrockFileDatabase().create_presigned_url(file_name)
             else:
