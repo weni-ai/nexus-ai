@@ -261,8 +261,7 @@ class MessagePreviewView(APIView):
                 attachments=data.get("attachments", []),
                 metadata=data.get("metadata", {})
             )
-            multi_agents_projects: List[str] = settings.MULTI_AGENTS_PROJECTS
-            if message.project_uuid in multi_agents_projects:
+            if project.is_multi_agent:
                 print("[+ Starting Agent Builder 2.0 +]")
                 language = data.get("language", "en")
                 task = start_multi_agents.delay(message.dict(), preview=True, language=language, user_email=request.user.email)
