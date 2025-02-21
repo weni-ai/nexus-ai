@@ -22,7 +22,7 @@ from django.template.defaultfilters import slugify
 
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 
-from nexus.agents.models import Agent
+from nexus.agents.models import Agent, Credential
 
 if TYPE_CHECKING:
     from router.entities import Message
@@ -516,10 +516,9 @@ class BedrockFileDatabase(FileDataBase):
 
         credentials = {}
         try:
-            agent_model = Agent.objects.filter(project_id=message.project_uuid).first()
-            if agent_model:
-                for credential in agent_model.credential_set.all():
-                    credentials[credential.key] = credential.decrypted_value
+            credentials = Credential.objects.filter(project_id=message.project_uuid)
+            for credential in credentials:
+                credentials[credential.key] = credential.decrypted_value
         except Exception as e:
             print(f"Error fetching credentials: {str(e)}")
 
