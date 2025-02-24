@@ -31,10 +31,12 @@ class WeniGPTDatabase(GPTDatabase):
     def request_gpt(self, contexts: List, question: str, language: str, content_base_uuid: str, testing: bool = False):
         from nexus.task_managers.tasks import create_wenigpt_logs
 
-        self.default_instructions.append(f"Responda sempre em {self.language_codes.get(language, 'português')}")
+
+        instructions = [f"Responda sempre em {self.language_codes.get(language, 'português')}"]
+        instructions.extend(self.default_instructions)
 
         gpt_response = self.default_wenigpt_client.request_gpt(
-            self.default_instructions,
+            instructions,
             contexts,
             self.default_agent,
             question,
