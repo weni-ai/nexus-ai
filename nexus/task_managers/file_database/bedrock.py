@@ -538,6 +538,10 @@ class BedrockFileDatabase(FileDataBase):
             })
         }
 
+        streamingConfigurations = {
+            'streamFinalResponse': True
+        }
+
         print("Session State: ", sessionState)
 
         response = self.bedrock_agent_runtime.invoke_agent(
@@ -547,6 +551,7 @@ class BedrockFileDatabase(FileDataBase):
             inputText=message.text,
             enableTrace=True,
             sessionState=sessionState,
+            streamingConfigurations=streamingConfigurations
         )
 
         for event in response['completion']:
