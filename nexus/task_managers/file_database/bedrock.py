@@ -687,7 +687,7 @@ class BedrockFileDatabase(FileDataBase):
             actionGroupExecutor={
                 'lambda': lambda_arn
             },
-            actionGroupName="action_group",
+            actionGroupName=base_action_group_response["agentActionGroup"]["actionGroupName"],
             actionGroupState="ENABLED",
             agentId=supervisor_id,
             agentVersion='DRAFT',
