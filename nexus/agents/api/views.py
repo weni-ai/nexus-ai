@@ -34,12 +34,12 @@ class PushAgents(APIView):
 
     def _handle_agent_credentials(self, agent_dto, project_uuid, agent):
         """Helper method to handle agent credentials creation and updates.
-        
+
         Args:
             agent_dto: The agent data transfer object containing credentials
             project_uuid: UUID of the project
             agent: Agent instance to associate credentials with
-            
+
         Returns:
             list: List of warning messages for existing credentials
         """
@@ -63,7 +63,7 @@ class PushAgents(APIView):
 
                     if existing_credential:
                         warnings.append(f"Credential '{key}' already exists for this project")
-                    
+
                     credential, created = Credential.objects.get_or_create(
                         project_id=project_uuid,
                         key=key,
@@ -78,7 +78,7 @@ class PushAgents(APIView):
                         # Update existing credential properties
                         credential.label = props.get("label", key)
                         credential.placeholder = props.get("placeholder", None)
-                        
+
                         new_confidential = props.get("is_confidential", True)
                         if new_confidential != credential.is_confidential:
                             if new_confidential:
@@ -136,7 +136,7 @@ class PushAgents(APIView):
         for agent_dto in agents_dto:
             if hasattr(agent_dto, 'is_update') and agent_dto.is_update:
                 # Handle update
-                print(f"[+ Updating existing agent +]")
+                print("[+ Updating existing agent +]")
                 agent = agents_usecase.update_agent(
                     agent_dto=agent_dto,
                     project_uuid=project_uuid
@@ -151,7 +151,7 @@ class PushAgents(APIView):
                 if agent_dto.skills:
                     for skill in agent_dto.skills:
                         skill_file = files[f"{agent.slug}:{skill['slug']}"]
-                        function_schema = self._create_function_schema(skill)
+                        function_schema = self._create_function_schema(skill, project_uuid)
                         skill_handler = skill.get("source").get("entrypoint")
                         if skill['is_update']:
                             # Update existing skill
@@ -188,7 +188,7 @@ class PushAgents(APIView):
 
                 agents_usecase.prepare_agent(agent.external_id)
                 agents_usecase.external_agent_client.wait_agent_status_update(agent.external_id)
-                agents_usecase.create_agent_version(agent.external_id, request.user, agent)
+                agents_usecase.create_agent_version(agent.external_id, request.user, agent, team)
 
                 if ActiveAgent.objects.filter(team__project__uuid=project_uuid, agent=agent).exists():
                     agents_usecase.update_supervisor_collaborator(project_uuid, agent)
@@ -234,6 +234,7 @@ class PushAgents(APIView):
                     skills=agent_dto.skills,
                     files=files,
                     user=request.user,
+                    project_uuid=project_uuid
                 )
 
                 if warnings:
@@ -284,14 +285,26 @@ class PushAgents(APIView):
 
         return Response(response)
 
-    def _create_function_schema(self, skill: dict) -> list[dict]:
+    def _create_function_schema(self, skill: dict, project_uuid: str) -> list[dict]:
         """Helper method to create function schema from skill data"""
         skill_parameters = skill.get("parameters")
+        fields = []
+
         if isinstance(skill_parameters, list):
-            params = {}
-            for param in skill_parameters:
-                params.update(param)
-            skill_parameters = params
+                params = {}
+                for param in skill_parameters:
+                    for key, value in param.items():
+                        if value.get("contact_field"):
+                            fields.append({
+                                "key": key,
+                                "value_type": value.get("type")
+                            })
+                        param[key].pop("contact_field", None)
+                    params.update(param)
+                skill_parameters = params
+
+        agents_usecase = AgentUsecase()
+        agents_usecase.create_contact_fields(project_uuid, fields)
 
         return [{
             "name": skill.get("slug"),
@@ -333,7 +346,6 @@ class ActiveAgentsViewSet(APIView):
 
         if assign:
             print("------------------------ UPDATING AGENT ---------------------")
-            # usecase.update_agent_to_supervisor(team.external_id)
             usecase.assign_agent(
                 agent_uuid=agent_uuid,
                 project_uuid=project_uuid,
@@ -431,7 +443,7 @@ class ProjectCredentialsView(APIView):
 
         if not agent_uuid or not credentials_data:
             return Response(
-                {"error": "agent_uuid and credentials are required"}, 
+                {"error": "agent_uuid and credentials are required"},
                 status=400
             )
 
@@ -439,7 +451,7 @@ class ProjectCredentialsView(APIView):
             agent = Agent.objects.get(uuid=agent_uuid)
         except Agent.DoesNotExist:
             return Response(
-                {"error": "Agent not found"}, 
+                {"error": "Agent not found"},
                 status=404
             )
 
@@ -451,15 +463,14 @@ class ProjectCredentialsView(APIView):
             ).first()
 
             if not existing_credential:
-                # Create new credential if it doesn't exist
-              credential = Credential.objects.create(
-                  project_id=project_uuid,
-                  key=key,
-                  value=encrypt_value(value) if is_confidential else value,
-                  is_confidential=is_confidential,
-                  label=key
-              )
-              credential.agents.add(agent)
+                credential = Credential.objects.create(
+                    project_id=project_uuid,
+                    key=key,
+                    value=encrypt_value(value) if is_confidential else value,
+                    is_confidential=is_confidential,
+                    label=key
+                )
+                credential.agents.add(agent)
 
             created_credentials.append(key)
 

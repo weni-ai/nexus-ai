@@ -1,51 +1,74 @@
-from django.core.exceptions import PermissionDenied
-from django.utils.datastructures import MultiValueDictKeyError
 from django.conf import settings
-from django.core.exceptions import ObjectDoesNotExist
-
-from rest_framework import status, parsers, views
-from rest_framework.viewsets import ModelViewSet
-from rest_framework.response import Response
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.utils.datastructures import MultiValueDictKeyError
+from rest_framework import parsers, status, views
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.viewsets import ModelViewSet
 
+from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import event_manager
-from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
+from nexus.intelligences.models import (
+    ContentBase,
+    ContentBaseFile,
+    ContentBaseText,
+    Intelligence,
+)
+from nexus.orgs import permissions
+from nexus.paginations import CustomCursorPagination
+from nexus.projects.models import Project
+from nexus.projects.permissions import has_project_permission
+from nexus.storage import AttachmentPreviewStorage, validate_mime_type
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
+from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
+from nexus.task_managers.file_database.sentenx_file_database import (
+    SentenXDocumentPreview,
+    SentenXFileDataBase,
+)
+from nexus.task_managers.file_manager.celery_file_manager import (
+    CeleryFileManager,
+)
+from nexus.task_managers.models import ContentBaseFileTaskManager
+from nexus.task_managers.tasks import (
+    delete_file_task,
+    send_link,
+    upload_text_file,
+)
+from nexus.task_managers.tasks_bedrock import (
+    bedrock_send_link,
+    bedrock_upload_text_file,
+    start_ingestion_job,
+)
+from nexus.usecases import intelligences
+from nexus.usecases.intelligences.exceptions import (
+    IntelligencePermissionDenied,
+)
+from nexus.usecases.intelligences.get_by_uuid import (
+    get_default_content_base_by_project,
+)
+from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
+from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.usecases.task_managers.celery_task_manager import (
+    CeleryTaskManagerUseCase,
+)
+from nexus.usecases.task_managers.file_database import (
+    get_gpt_by_content_base_uuid,
+)
+from nexus.users.models import User
+
 from .serializers import (
-    IntelligenceSerializer,
+    ContentBaseFileSerializer,
+    ContentBaseLinkSerializer,
+    ContentBasePersonalizationSerializer,
     ContentBaseSerializer,
     ContentBaseTextSerializer,
-    ContentBaseFileSerializer,
-    RouterContentBaseSerializer,
-    ContentBaseLinkSerializer,
     CreatedContentBaseLinkSerializer,
+    IntelligenceSerializer,
     LLMConfigSerializer,
-    ContentBasePersonalizationSerializer,
+    RouterContentBaseSerializer,
 )
-from nexus.storage import AttachmentPreviewStorage, validate_mime_type
-from nexus.usecases import intelligences
-from nexus.paginations import CustomCursorPagination
-from nexus.orgs import permissions
-from nexus.projects.permissions import has_project_permission
-from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
-from nexus.intelligences.models import Intelligence, ContentBase, ContentBaseText, ContentBaseFile
-
-from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase, SentenXDocumentPreview
-from nexus.usecases.task_managers.file_database import get_gpt_by_content_base_uuid
-
-from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
-
-from nexus.task_managers.tasks_bedrock import bedrock_upload_text_file, bedrock_send_link, start_ingestion_job
-from nexus.task_managers.tasks import upload_text_file, send_link, delete_file_task
-from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
-from nexus.task_managers.models import ContentBaseFileTaskManager
-from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
-from nexus.authentication import AUTHENTICATION_CLASSES
-from nexus.projects.models import Project
-from nexus.users.models import User
-from nexus.usecases.projects.projects_use_case import ProjectsUseCase
-from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
-from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
 
 class IntelligencesViewset(
@@ -587,16 +610,42 @@ class ContentBaseFileViewset(ModelViewSet):
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
     def create(self, request, content_base_uuid=str):
+        from rest_framework import status as http_status
+
+        def validate_file_size(file):
+            # default 50 MiB
+            if file.size > (settings.BEDROCK_FILE_SIZE_LIMIT * (1024**2)):
+                return Response(data={"message": "File size is too large"}, status=http_status.HTTP_400_BAD_REQUEST)
 
         try:
-            user = request.user
-
-            file = request.FILES['file']
             self.get_queryset()
-            user_email = user.email
-            extension_file = request.data.get("extension_file")
+
+            user: User = request.user
+            file: InMemoryUploadedFile = request.FILES['file']
+            validate_file_size(file)
+            user_email: str = user.email
+            extension_file: str = request.data.get("extension_file")
             load_type = request.data.get("load_type")
+
             file_manager = CeleryFileManager()
+
+            try:
+                project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+                indexer_database = project.indexer_database
+            except ObjectDoesNotExist:
+                indexer_database = Project.SENTENX
+
+            if indexer_database == Project.BEDROCK:
+                data, status = file_manager.upload_and_ingest_file(
+                    file,
+                    file.name,
+                    content_base_uuid,
+                    extension_file,
+                    user_email,
+                )
+                return Response(data=data, status=status)
+
+            # will be removed in the future
             response = file_manager.upload_file(
                 file,
                 content_base_uuid,
@@ -607,12 +656,13 @@ class ContentBaseFileViewset(ModelViewSet):
 
             return Response(
                 response,
-                status=status.HTTP_201_CREATED
+                status=http_status.HTTP_201_CREATED
             )
+
         except MultiValueDictKeyError:
-            return Response(data={"message": "file is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(data={"message": "file is required"}, status=http_status.HTTP_400_BAD_REQUEST)
         except IntelligencePermissionDenied:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+            return Response(status=http_status.HTTP_401_UNAUTHORIZED)
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
@@ -795,9 +845,13 @@ class DownloadFileViewSet(views.APIView):
                 user_email=user_email
             )
             content_base_uuid = str(content_base_file.content_base.uuid)
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+            try:
+                project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+                indexer_database = project.indexer_database
+            except ObjectDoesNotExist:
+                indexer_database = Project.SENTENX
 
-            if project.indexer_database == Project.BEDROCK:
+            if indexer_database == Project.BEDROCK:
                 file_name = f"{content_base_uuid}/{file_name}"
                 file = BedrockFileDatabase().create_presigned_url(file_name)
             else:

@@ -8,6 +8,7 @@ class FileResponseDTO:
     file_url: str = None
     err: str = None
     file_name: str = None
+    content_base_file_uuid: str = None
 
 
 class FileDataBase(ABC):

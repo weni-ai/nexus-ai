@@ -45,6 +45,14 @@ class Project(BaseModel, SoftDeleteModel):
     def get_user_authorization(self, user_email):
         return self.authorizations.get(user__email=user_email)
 
+    @property
+    def is_multi_agent(self):
+        try:
+            self.team
+            return True
+        except Exception:
+            return False
+
 
 class ProjectAuthorizationRole(Enum):
     NOT_SETTED, VIEWER, CONTRIBUTOR, MODERATOR, SUPPORT, CHAT_USER = list(range(6))

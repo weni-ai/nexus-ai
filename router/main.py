@@ -14,6 +14,8 @@ from router.tasks import (
     start_multi_agents
 )
 
+from nexus.projects.models import Project
+
 
 app = FastAPI()
 
@@ -40,13 +42,12 @@ def messages(request: Request, message: MessageHTTPBody):
     authenticate(request.query_params.get("token"))
 
     try:
-
-        multi_agents_projects: List[str] = settings.MULTI_AGENTS_PROJECTS
+        project = Project.objects.get(uuid=message.project_uuid)
         print("[+ Message received +]")
         print(message)
         print("[+ ----------------- +]")
 
-        if message.project_uuid in multi_agents_projects:
+        if project.is_multi_agent:
             print("[+ Starting Agent Builder 2.0 +]")
             start_multi_agents.delay(message.dict())
         else:
