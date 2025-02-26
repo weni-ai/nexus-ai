@@ -437,9 +437,8 @@ class ProjectCredentialsView(APIView):
         })
 
     def post(self, request, project_uuid):
-        credentials_data = request.data.get('credentials', {})
+        credentials_data = request.data.get('credentials', [])
         agent_uuid = request.data.get('agent_uuid')
-        is_confidential = request.data.get('is_confidential', True)
 
         if not agent_uuid or not credentials_data:
             return Response(
@@ -456,22 +455,38 @@ class ProjectCredentialsView(APIView):
             )
 
         created_credentials = []
-        for key, value in credentials_data.items():
-            existing_credential = Credential.objects.filter(
+        for cred_item in credentials_data:
+            key = cred_item.get('name')
+            if not key:
+                continue
+
+            value = cred_item.get('value')
+            label = cred_item.get('label', key)
+            placeholder = cred_item.get('placeholder')
+            is_confidential = cred_item.get('is_confidential', True)
+            
+
+            treated_value = encrypt_value(value) if is_confidential else value
+            
+            credential, created = Credential.objects.get_or_create(
                 project_id=project_uuid,
-                key=key
-            ).first()
+                key=key,
+                defaults={
+                    "label": label,
+                    "is_confidential": is_confidential,
+                    "placeholder": placeholder,
+                    "value": treated_value
+                }
+            )
 
-            if not existing_credential:
-                credential = Credential.objects.create(
-                    project_id=project_uuid,
-                    key=key,
-                    value=encrypt_value(value) if is_confidential else value,
-                    is_confidential=is_confidential,
-                    label=key
-                )
-                credential.agents.add(agent)
+            if not created:
+                credential.label = label
+                credential.placeholder = placeholder
+                credential.value = treated_value
+                credential.is_confidential = is_confidential
+                credential.save(update_fields=['label', 'is_confidential', 'placeholder', 'value'])
 
+            credential.agents.add(agent)
             created_credentials.append(key)
 
         return Response({
