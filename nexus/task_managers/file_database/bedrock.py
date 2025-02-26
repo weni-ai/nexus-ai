@@ -527,7 +527,7 @@ class BedrockFileDatabase(FileDataBase):
         sessionState["promptSessionAttributes"] = {
             "contact_urn": message.contact_urn,
             "contact_fields": message.contact_fields_as_json,
-            "date_time_now": datetime.now().isoformat(),
+            "date_time_now": pendulum.now("America/Sao_Paulo").isoformat(),
             "project_id": message.project_uuid,
             "specific_personality": json.dumps({
                 "occupation": agent.role,
@@ -687,7 +687,7 @@ class BedrockFileDatabase(FileDataBase):
             actionGroupExecutor={
                 'lambda': lambda_arn
             },
-            actionGroupName="action_group",
+            actionGroupName=base_action_group_response["agentActionGroup"]["actionGroupName"],
             actionGroupState="ENABLED",
             agentId=supervisor_id,
             agentVersion='DRAFT',
