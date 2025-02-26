@@ -516,8 +516,8 @@ class BedrockFileDatabase(FileDataBase):
 
         credentials = {}
         try:
-            credentials = Credential.objects.filter(project_id=message.project_uuid)
-            for credential in credentials:
+            agent_credentials = Credential.objects.filter(project_id=message.project_uuid)
+            for credential in agent_credentials:
                 credentials[credential.key] = credential.decrypted_value
         except Exception as e:
             print(f"Error fetching credentials: {str(e)}")
