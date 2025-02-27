@@ -366,6 +366,9 @@ class AgentUsecase:
             print(f"Error creating/updating alias for function {function_name}: {str(e)}")
             raise
 
+    def delete_agent(self, agent_external_id: str):
+        self.external_agent_client.delete_agent(agent_external_id)
+
     def update_skill(
         self,
         file_name: str,
