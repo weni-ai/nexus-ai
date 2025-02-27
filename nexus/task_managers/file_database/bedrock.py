@@ -22,7 +22,7 @@ from django.template.defaultfilters import slugify
 
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 
-from nexus.agents.models import Agent
+from nexus.agents.models import Agent, Credential
 
 if TYPE_CHECKING:
     from router.entities import Message
@@ -206,11 +206,6 @@ class BedrockFileDatabase(FileDataBase):
         except Exception as e:
             print(f"Erro no upload: {e}")
             s3_client.abort_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id)
-
-        # parts = []
-        # part_number = 1
-        # part_size = 5 * 1024 * 1024  # 5MB
-        
 
     def add_file(self, file, content_base_uuid: str, file_uuid: str) -> FileResponseDTO:
         try:
@@ -521,10 +516,9 @@ class BedrockFileDatabase(FileDataBase):
 
         credentials = {}
         try:
-            agent_model = Agent.objects.filter(project_id=message.project_uuid).first()
-            if agent_model:
-                for credential in agent_model.credential_set.all():
-                    credentials[credential.key] = credential.decrypted_value
+            agent_credentials = Credential.objects.filter(project_id=message.project_uuid)
+            for credential in agent_credentials:
+                credentials[credential.key] = credential.decrypted_value
         except Exception as e:
             print(f"Error fetching credentials: {str(e)}")
 
@@ -533,7 +527,7 @@ class BedrockFileDatabase(FileDataBase):
         sessionState["promptSessionAttributes"] = {
             "contact_urn": message.contact_urn,
             "contact_fields": message.contact_fields_as_json,
-            "date_time_now": datetime.now().isoformat(),
+            "date_time_now": pendulum.now("America/Sao_Paulo").isoformat(),
             "project_id": message.project_uuid,
             "specific_personality": json.dumps({
                 "occupation": agent.role,
@@ -674,7 +668,7 @@ class BedrockFileDatabase(FileDataBase):
         self.wait_agent_status_update(response_create_supervisor['agent']['agentId'])
         supervisor_id = response_create_supervisor['agent']['agentId']
 
-        lambda_arn = settings.AWS_BEDROCK_LAMBDA_ARN
+        lambda_arn = f"{settings.AWS_BEDROCK_LAMBDA_ARN}:$LATEST"
 
         base_action_group_response = self.get_agent_action_group(
             agent_id=settings.AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID,
@@ -693,7 +687,7 @@ class BedrockFileDatabase(FileDataBase):
             actionGroupExecutor={
                 'lambda': lambda_arn
             },
-            actionGroupName="action_group",
+            actionGroupName=base_action_group_response["agentActionGroup"]["actionGroupName"],
             actionGroupState="ENABLED",
             agentId=supervisor_id,
             agentVersion='DRAFT',
