@@ -23,6 +23,7 @@ from django.template.defaultfilters import slugify
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 
 from nexus.agents.models import Agent, Credential
+from nexus.agents.components import get_all_formats
 
 if TYPE_CHECKING:
     from router.entities import Message
@@ -528,6 +529,7 @@ class BedrockFileDatabase(FileDataBase):
         sessionState["sessionAttributes"] = { "credentials": json.dumps(credentials, default=str) }
 
         sessionState["promptSessionAttributes"] = {
+            "format_components": get_all_formats(),
             "contact_urn": message.contact_urn,
             "contact_fields": message.contact_fields_as_json,
             "date_time_now": pendulum.now("America/Sao_Paulo").isoformat(),
