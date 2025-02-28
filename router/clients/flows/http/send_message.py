@@ -3,6 +3,7 @@ from typing import List, Dict
 import requests
 import json
 
+from nexus.internals.flows import FlowsRESTClient
 from router.direct_message import DirectMessage, exceptions
 
 
@@ -25,6 +26,25 @@ class SendMessageHTTPClient(DirectMessage):
 
         response = requests.post(url, data=payload, headers=headers)
         print("Resposta: ", response.text)
+        try:
+            response.raise_for_status()
+        except Exception as error:
+            raise exceptions.UnableToSendMessage(str(error))
+
+
+
+class WhatsAppBroadcastHTTPClient(DirectMessage):
+
+    def __init__(self, host: str, access_token: str) -> None:
+        self.__host = host
+        self.__access_token = access_token
+
+    def send_direct_message(
+        self, 
+        msg: Dict, 
+        urns: List,
+    ) -> None:
+        response = FlowsRESTClient().whatsapp_broadcast(urns, msg)
         try:
             response.raise_for_status()
         except Exception as error:
