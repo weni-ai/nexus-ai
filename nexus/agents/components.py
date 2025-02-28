@@ -18,10 +18,8 @@ CTA_MESSAGE = '<exemplo>{"msg": {"text": "Visit our online store!", "interaction
 CATALOG = '<exemplo>{"msg": {"text":"Check out our premium cookware line:", "header": {"text":"🏆 Premium Line","type":"text"}, "footer":"Free shipping nationwide", "catalog_message": {"send_catalog": false, "action_button_name":"flow", "products": [{"product":"Stainless Steel Cookware Set", "product_retailer_ids":["PAN789#a"]}, {"product":"Ceramic Cookware Set", "product_retailer_ids":["PAN101#a"]}], "action_button_text":"Learn more"}}}</exemplo>'
 
 def get_all_formats():
-    return (SIMPLE_TEXT + " " + 
-            ATTACHMENT + " " + 
-            TEXT_WITH_ATTACHMENT + " " + 
+    return (LIST_MESSAGE + " " + 
             QUICK_REPLIES + " " + 
-            LIST_MESSAGE + " " + 
+            SIMPLE_TEXT + " " + 
             CTA_MESSAGE + " " + 
             CATALOG)
