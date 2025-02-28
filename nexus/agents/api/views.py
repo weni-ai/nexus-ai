@@ -1,4 +1,5 @@
 import json
+import logging
 
 from django.db.models import Q
 
@@ -103,111 +104,89 @@ class PushAgents(APIView):
         print('----------------------------------------------------')
         return warnings
 
-    def post(self, request, *args, **kwargs):
+    def _validate_request(self, request):
+        """Validate request data and return processed inputs"""
         def validate_file_size(files):
             for file in files:
                 if files[file].size > 10 * (1024**2):
                     raise SkillFileTooLarge(file)
 
-        # CLI will send a file and a dictionary of agents
-        print(["+ Pushing Agents +"])
-        print("----------------REQUEST STARTED----------------")
-        print(request.data)
-        print("-----------------------------------------------")
-
         files = request.FILES
         validate_file_size(files)
 
-        agents: str = request.data.get("agents")
-        agents: dict = json.loads(agents)
-
+        agents = json.loads(request.data.get("agents"))
         project_uuid = request.data.get("project_uuid")
-        agents_usecase = AgentUsecase()
 
-        team = agents_usecase.get_team_object(project__uuid=project_uuid)
-        agents_dto = agents_usecase.agent_dto_handler(
-            yaml=agents,
-            project_uuid=project_uuid,
-            user_email=request.user.email
+        return files, agents, project_uuid
+
+    def _handle_agent_update(self, agent_dto, project_uuid, files, request, team):
+        """Handle updating an existing agent"""
+        agents_usecase = AgentUsecase()
+        response_warnings = []
+
+        # Update agent
+        agent = agents_usecase.update_agent(
+            agent_dto=agent_dto,
+            project_uuid=project_uuid
         )
 
-        agents_updated = []
+        # Handle credentials
+        credential_warnings = self._handle_agent_credentials(agent_dto, project_uuid, agent)
+        if credential_warnings:
+            response_warnings.extend(credential_warnings)
+
+        # Handle skills
+        if agent_dto.skills:
+            for skill in agent_dto.skills:
+                try:
+                    warnings = self._process_skill(
+                        skill=skill,
+                        agent=agent,
+                        files=files,
+                        request=request,
+                        project_uuid=project_uuid,
+                        is_update=True
+                    )
+                    if warnings:
+                        response_warnings.extend(warnings)
+                except Exception as e:
+                    # For updates, we log errors but continue processing
+                    response_warnings.append(f"Error updating skill {skill['slug']}: {str(e)}")
+
+        # Update agent versions and supervisor if needed
+        self._update_agent_versions(agent, project_uuid, team, request)
+
+        return agent, response_warnings
+    
+    def _update_agent_versions(self, agent, project_uuid, team, request):
+        """Update agent versions and supervisor if needed"""
+        agents_usecase = AgentUsecase()
+        agents_usecase.prepare_agent(agent.external_id)
+        agents_usecase.external_agent_client.wait_agent_status_update(agent.external_id)
+        agents_usecase.create_agent_version(agent.external_id, request.user, agent, team)
+
+        if ActiveAgent.objects.filter(agent=agent, team=team).exists():
+            agents_usecase.update_supervisor_collaborator(project_uuid, agent)
+            agents_usecase.create_agent_version(agent.external_id, request.user, agent, team)
+
+
+    def _handle_agent_creation(self, agent_dto, project_uuid, files, request):
+        """Handle creating a new agent with rollback on failure"""
+        agents_usecase = AgentUsecase()
         response_warnings = []
-        for agent_dto in agents_dto:
-            if hasattr(agent_dto, 'is_update') and agent_dto.is_update:
-                # Handle update
-                print("[+ Updating existing agent +]")
-                agent = agents_usecase.update_agent(
-                    agent_dto=agent_dto,
-                    project_uuid=project_uuid
-                )
+        created_agent = None
+        logger = logging.getLogger(__name__)
 
-                # Handle credentials and collect warnings
-                credential_warnings = self._handle_agent_credentials(agent_dto, project_uuid, agent)
-                if credential_warnings:
-                    response_warnings.extend(credential_warnings)
-
-                # Handle skills if present
-                if agent_dto.skills:
-                    for skill in agent_dto.skills:
-                        skill_file = files[f"{agent.slug}:{skill['slug']}"]
-                        function_schema = self._create_function_schema(skill, project_uuid)
-                        skill_handler = skill.get("source").get("entrypoint")
-                        if skill['is_update']:
-                            # Update existing skill
-                            agent_version = agent.current_version.metadata.get("agent_alias_version")
-                            warnings = agents_usecase.update_skill(
-                                file_name=f"{skill['slug']}-{agent.external_id}",
-                                agent_external_id=agent.external_id,
-                                agent_version=agent_version,
-                                file=skill_file.read(),
-                                function_schema=function_schema,
-                                user=request.user,
-                                skill_handler=skill_handler
-                            )
-                            if warnings:
-                                response_warnings.extend(warnings)
-                        else:
-                            # Create new skill
-                            agent_version = agent.current_version.metadata.get("agent_alias_version")
-                            agents_usecase.create_skill(
-                                agent_external_id=agent.external_id,
-                                file_name=f"{skill['slug']}-{agent.external_id}",
-                                agent_version=agent_version,
-                                file=skill_file.read(),
-                                function_schema=function_schema,
-                                user=request.user,
-                                agent=agent,
-                                skill_handler=skill_handler
-                            )
-
-                agents_updated.append({
-                    "agent_name": agent.display_name,
-                    "agent_external_id": agent.external_id
-                })
-
-                agents_usecase.prepare_agent(agent.external_id)
-                agents_usecase.external_agent_client.wait_agent_status_update(agent.external_id)
-                agents_usecase.create_agent_version(agent.external_id, request.user, agent, team)
-
-                if ActiveAgent.objects.filter(team__project__uuid=project_uuid, agent=agent).exists():
-                    agents_usecase.update_supervisor_collaborator(project_uuid, agent)
-                    agents_usecase.create_supervisor_version(project_uuid, request.user)
-
-                continue
-
-            # Handle new agent creation
-            print(f"[+ Creating new agent {agent_dto.name} +]")
+        try:
+            # Create external agent first
             external_id = agents_usecase.create_agent(
                 user=request.user,
                 agent_dto=agent_dto,
                 project_uuid=project_uuid
             )
 
-            print(f"[+ Agent created {external_id} +]")
-
-            # Create skills for new agent if present
-            agent = Agent.objects.create(
+            # Create local agent record
+            created_agent = Agent.objects.create(
                 created_by=request.user,
                 project_id=project_uuid,
                 external_id=external_id,
@@ -216,74 +195,165 @@ class PushAgents(APIView):
                 model=agent_dto.model,
                 description=agent_dto.description,
             )
-            agent.create_version(
+            logger.debug(f"Created agent - PK: {created_agent.pk}, UUID: {created_agent.uuid}, Slug: {created_agent.slug}")
+            
+            created_agent.create_version(
                 agent_alias_id="DRAFT",
                 agent_alias_name="DRAFT",
                 agent_alias_arn="DRAFT",
                 agent_alias_version="DRAFT",
             )
 
-            # Handle credentials and collect warnings
-            credential_warnings = self._handle_agent_credentials(agent_dto, project_uuid, agent)
+            # Handle credentials
+            credential_warnings = self._handle_agent_credentials(agent_dto, project_uuid, created_agent)
             if credential_warnings:
                 response_warnings.extend(credential_warnings)
 
+            # Handle skills
             if agent_dto.skills:
-                warnings = agents_usecase.handle_agent_skills(
-                    agent=agent,
-                    skills=agent_dto.skills,
-                    files=files,
-                    user=request.user,
-                    project_uuid=project_uuid
-                )
+                for skill in agent_dto.skills:
+                    try:
+                        logger.debug(f"Processing skill {skill['slug']} for agent {created_agent.pk}")
+                        warnings = self._process_skill(
+                            skill=skill,
+                            agent=created_agent,
+                            files=files,
+                            request=request,
+                            project_uuid=project_uuid,
+                            is_update=False
+                        )
+                        if warnings:
+                            response_warnings.extend(warnings)
+                    except Exception as e:
+                        logger.error(f"Error during skill creation: {str(e)}")
+                        logger.error(f"Agent state during rollback - PK: {created_agent.pk}, UUID: {created_agent.uuid}")
+                        # If skill creation fails, rollback everything and re-raise the original exception
+                        if created_agent and created_agent.pk:
+                            self._rollback_agent_creation(created_agent, external_id)
+                        raise  # Re-raise the original exception
 
-                if warnings:
-                    response_warnings.extend(warnings)
+            # Create agent alias and update metadata
+            self._finalize_agent_creation(created_agent, external_id)
 
-            alias_name = "v1"
+            return created_agent, response_warnings
 
-            agents_usecase.external_agent_client.wait_agent_status_update(external_id)
-            agents_usecase.prepare_agent(external_id)
-            agents_usecase.external_agent_client.wait_agent_status_update(external_id)
+        except Exception as e:
+            if created_agent and created_agent.pk:
+                self._rollback_agent_creation(created_agent, external_id)
+            raise
 
-            sub_agent_alias_id, sub_agent_alias_arn, agent_alias_version = agents_usecase.create_external_agent_alias(
-                agent_id=external_id, alias_name=alias_name
+    def _process_skill(self, skill, agent, files, request, project_uuid, is_update):
+        """Process a single skill for an agent"""
+        agents_usecase = AgentUsecase()
+        skill_file = files[f"{agent.slug}:{skill['slug']}"]
+        function_schema = self._create_function_schema(skill, project_uuid)
+        skill_handler = skill.get("source").get("entrypoint")
+        agent_version = agent.current_version.metadata.get("agent_alias_version")
+
+        if is_update and skill.get('is_update'):
+            return agents_usecase.update_skill(
+                file_name=f"{skill['slug']}-{agent.external_id}",
+                agent_external_id=agent.external_id,
+                agent_version=agent_version,
+                file=skill_file.read(),
+                function_schema=function_schema,
+                user=request.user,
+                skill_handler=skill_handler
+            )
+        else:
+            agents_usecase.create_skill(
+                agent_external_id=agent.external_id,
+                file_name=f"{skill['slug']}-{agent.external_id}",
+                agent_version=agent_version,
+                file=skill_file.read(),
+                function_schema=function_schema,
+                user=request.user,
+                agent=agent,
+                skill_handler=skill_handler
+            )
+            return []
+
+    def _rollback_agent_creation(self, agent, external_id):
+        """Rollback agent creation in case of failure"""
+        logger = logging.getLogger(__name__)
+        
+        logger.warning(f"Rolling back agent creation for agent {agent.slug} (external_id: {external_id})")
+        agents_usecase = AgentUsecase()
+        
+        try:
+            # Delete the external agent
+            agents_usecase.external_agent_client.delete_agent(external_id)
+        except Exception as e:
+            logger.error(f"Failed to delete external agent {external_id}: {str(e)}")
+            # Continue with local cleanup despite external deletion failure
+
+        try:
+            # Delete the local agent record
+            agent.delete()
+        except Exception as e:
+            logger.error(f"Failed to delete local agent {agent.slug}: {str(e)}")
+            raise  # Re-raise the exception since we can't guarantee cleanup
+
+    def post(self, request, *args, **kwargs):
+        """Handle agent creation and updates"""
+        try:
+            # Validate and process request data
+            files, agents_data, project_uuid = self._validate_request(request)
+            
+            # Initialize usecase and get team
+            agents_usecase = AgentUsecase()
+            team = agents_usecase.get_team_object(project__uuid=project_uuid)
+            
+            # Process agents
+            agents_dto = agents_usecase.agent_dto_handler(
+                yaml=agents_data,
+                project_uuid=project_uuid,
+                user_email=request.user.email
             )
 
-            agent.metadata.update(
-                {
-                    "engine": "BEDROCK",
-                    "external_id": external_id,
-                    "agent_alias_id": sub_agent_alias_id,
-                    "agent_alias_arn": sub_agent_alias_arn,
-                    "agentVersion": str(agent_alias_version),
-                }
+            agents_updated = []
+            response_warnings = []
+
+            # Process each agent
+            for agent_dto in agents_dto:
+                if hasattr(agent_dto, 'is_update') and agent_dto.is_update:
+                    agent, warnings = self._handle_agent_update(
+                        agent_dto, project_uuid, files, request, team
+                    )
+                else:
+                    agent, warnings = self._handle_agent_creation(
+                        agent_dto, project_uuid, files, request
+                    )
+
+                response_warnings.extend(warnings)
+                agents_updated.append({
+                    "agent_name": agent.display_name,
+                    "agent_external_id": agent.external_id
+                })
+
+            # Prepare response
+            team.refresh_from_db()
+            response = {
+                "project": str(project_uuid),
+                "agents": agents_updated,
+                "supervisor_id": team.metadata.get("supervisor_alias_id"),
+                "supervisor_alias": team.metadata.get("supervisor_alias_name"),
+            }
+
+            if response_warnings:
+                response["warnings"] = list(set(response_warnings))
+
+            return Response(response)
+
+        except Exception as e:
+            # Log the error and return appropriate error response
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in PushAgents: {e}", exc_info=True)
+            error_message = f"{e.__class__.__name__}: {str(e)}" if str(e) else str(e.__class__.__name__)
+            return Response(
+                {"error": error_message},
+                status=500
             )
-            agent.create_version(
-                agent_alias_id=sub_agent_alias_id,
-                agent_alias_name=alias_name,
-                agent_alias_arn=sub_agent_alias_arn,
-                agent_alias_version=agent_alias_version,
-            )
-
-            agents_updated.append({
-                "agent_name": agent.display_name,
-                "agent_external_id": agent.external_id
-            })
-
-        team.refresh_from_db()
-
-        response = {
-            "project": str(project_uuid),
-            "agents": agents_updated,
-            "supervisor_id": team.metadata.get("supervisor_alias_id"),
-            "supervisor_alias": team.metadata.get("supervisor_alias_name"),
-        }
-
-        if response_warnings:
-            response["warnings"] = list(set(response_warnings))
-
-        return Response(response)
 
     def _create_function_schema(self, skill: dict, project_uuid: str) -> list[dict]:
         """Helper method to create function schema from skill data"""
@@ -310,6 +380,39 @@ class PushAgents(APIView):
             "name": skill.get("slug"),
             "parameters": skill_parameters,
         }]
+
+    def _finalize_agent_creation(self, agent, external_id):
+        """Finalize agent creation by creating alias and updating metadata"""
+        agents_usecase = AgentUsecase()
+        
+        # Wait for agent to be ready and prepare it
+        agents_usecase.external_agent_client.wait_agent_status_update(external_id)
+        agents_usecase.prepare_agent(external_id)
+        agents_usecase.external_agent_client.wait_agent_status_update(external_id)
+
+        # Create initial version (v1)
+        alias_name = "v1"
+        sub_agent_alias_id, sub_agent_alias_arn, agent_alias_version = agents_usecase.create_external_agent_alias(
+            agent_id=external_id, 
+            alias_name=alias_name
+        )
+
+        # Update agent metadata
+        agent.metadata.update({
+            "engine": "BEDROCK",
+            "external_id": external_id,
+            "agent_alias_id": sub_agent_alias_id,
+            "agent_alias_arn": sub_agent_alias_arn,
+            "agentVersion": str(agent_alias_version),
+        })
+
+        # Create version record
+        agent.create_version(
+            agent_alias_id=sub_agent_alias_id,
+            agent_alias_name=alias_name,
+            agent_alias_arn=sub_agent_alias_arn,
+            agent_alias_version=agent_alias_version,
+        )
 
 
 class AgentsView(APIView):

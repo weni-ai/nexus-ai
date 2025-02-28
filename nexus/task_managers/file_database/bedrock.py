@@ -478,6 +478,9 @@ class BedrockFileDatabase(FileDataBase):
             memoryConfiguration=memory_configuration,
         )
 
+    def delete_agent(self, agent_id: str):
+        self.bedrock_agent.delete_agent(agentId=agent_id)
+
     def invoke_supervisor_stream(
         self,
         supervisor_id: str,
