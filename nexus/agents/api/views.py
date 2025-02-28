@@ -119,7 +119,7 @@ class PushAgents(APIView):
 
         return files, agents, project_uuid
 
-    def _handle_agent_update(self, agent_dto, project_uuid, files, request):
+    def _handle_agent_update(self, agent_dto, project_uuid, files, request, team):
         """Handle updating an existing agent"""
         agents_usecase = AgentUsecase()
         response_warnings = []
@@ -154,9 +154,21 @@ class PushAgents(APIView):
                     response_warnings.append(f"Error updating skill {skill['slug']}: {str(e)}")
 
         # Update agent versions and supervisor if needed
-        self._update_agent_versions(agent, project_uuid, request)
+        self._update_agent_versions(agent, project_uuid, team, request)
 
         return agent, response_warnings
+    
+    def _update_agent_versions(self, agent, project_uuid, team, request):
+        """Update agent versions and supervisor if needed"""
+        agents_usecase = AgentUsecase()
+        agents_usecase.prepare_agent(agent.external_id)
+        agents_usecase.external_agent_client.wait_agent_status_update(agent.external_id)
+        agents_usecase.create_agent_version(agent.external_id, request.user, agent, team)
+
+        if ActiveAgent.objects.filter(agent=agent, team=team).exists():
+            agents_usecase.update_supervisor_collaborator(project_uuid, agent)
+            agents_usecase.create_agent_version(agent.external_id, request.user, agent, team)
+
 
     def _handle_agent_creation(self, agent_dto, project_uuid, files, request):
         """Handle creating a new agent with rollback on failure"""
@@ -306,7 +318,7 @@ class PushAgents(APIView):
             for agent_dto in agents_dto:
                 if hasattr(agent_dto, 'is_update') and agent_dto.is_update:
                     agent, warnings = self._handle_agent_update(
-                        agent_dto, project_uuid, files, request
+                        agent_dto, project_uuid, files, request, team
                     )
                 else:
                     agent, warnings = self._handle_agent_creation(
