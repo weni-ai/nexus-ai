@@ -20,7 +20,7 @@ from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
 from router.classifiers.pre_classification import PreClassification
 from router.classifiers.classification import Classification
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
-from router.clients.flows.http.send_message import SendMessageHTTPClient
+from router.clients.flows.http.send_message import SendMessageHTTPClient, WhatsAppBroadcastHTTPClient
 from router.entities import (
     message_factory, AgentDTO, ContentBaseDTO, LLMSetupDTO
 )
@@ -83,7 +83,7 @@ def get_trace_summary(language, trace):
         return "Processing your request now"
 
 
-def get_action_clients(preview: bool = False):
+def get_action_clients(preview: bool = False, multi_agents: bool = False):
     if preview:
         flow_start = SimulateFlowStart(
             os.environ.get(
@@ -104,14 +104,26 @@ def get_action_clients(preview: bool = False):
         )
         return broadcast, flow_start
 
-    broadcast = SendMessageHTTPClient(
-        os.environ.get(
-            'FLOWS_REST_ENDPOINT'
-        ),
-        os.environ.get(
-            'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
+    if multi_agents:
+
+        broadcast = WhatsAppBroadcastHTTPClient(
+            os.environ.get(
+                'FLOWS_REST_ENDPOINT'
+            ),
+            os.environ.get(
+                'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
+            )
         )
-    )
+    else:
+        broadcast = SendMessageHTTPClient(
+            os.environ.get(
+                'FLOWS_REST_ENDPOINT'
+            ),
+            os.environ.get(
+                'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
+            )
+        )
+
     flow_start = FlowStartHTTPClient(
         os.environ.get(
             'FLOWS_REST_ENDPOINT'
@@ -358,7 +370,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
     try:
         # Stream supervisor response
-        broadcast, _ = get_action_clients(preview)
+        broadcast, _ = get_action_clients(preview, multi_agents=True)
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
         full_chunks = []
         full_response = ""
