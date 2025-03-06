@@ -90,11 +90,17 @@ class FlowsRESTClient(RestClient):
         url = self._get_url("/api/v2/internals/whatsapp_broadcasts")
 
         body = dict(urns=urns, project=project_uuid)
+
+        if isinstance(msg, str):
+            msg = json.loads(msg)
+
         body.update(msg)
 
         print("----Whatsapp broadcast----")
         print(url)
-        print(body)
+        print(urns)
+        print(msg)
+        print(project_uuid)
         print("--------------------------")
 
         response = requests.post(
