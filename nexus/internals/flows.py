@@ -87,19 +87,18 @@ class FlowsRESTClient(RestClient):
             return {}
 
     def whatsapp_broadcast(self, urns: List[str], msg: Dict):
-        url = f"{self.__host}/api/v2/whatsapp_broadcasts"
+        url = self._get_url("/api/v2/whatsapp_broadcasts")
 
         payload = {
             "urns": urns,
             "msg": msg
         }
 
-        headers = {
-            "Authorization": f"Token {self.__access_token}",
-            "Content-Type": "application/json"
-        }
-
         payload = json.dumps(payload).encode("utf-8")
 
-        response = requests.post(url, data=payload, headers=headers)
+        response = requests.post(
+            url,
+            data=payload,
+            headers=self.authentication_instance.headers
+        )
         return response
