@@ -2,6 +2,7 @@ from typing import List, Dict
 
 import requests
 import json
+import re
 
 from nexus.internals.flows import FlowsRESTClient
 from router.direct_message import DirectMessage, exceptions
@@ -47,6 +48,10 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         user: str,
         full_chunks: List[Dict] = None
     ) -> None:
+        if isinstance(msg, str):
+            msg = msg.replace("\n", "\\n")
+            msg = re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]', '', msg)
+            msg = json.loads(msg)
         response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid)
         try:
             response.raise_for_status()

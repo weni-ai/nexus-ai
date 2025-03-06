@@ -1,9 +1,9 @@
-from django.conf import settings
-import json
+from typing import Dict, List
+
 import requests
+from django.conf import settings
 
 from nexus.internals import InternalAuthentication, RestClient
-from typing import List, Dict
 
 
 class FlowsRESTClient(RestClient):
@@ -90,10 +90,6 @@ class FlowsRESTClient(RestClient):
         url = self._get_url("/api/v2/internals/whatsapp_broadcasts")
 
         body = dict(urns=urns, project=project_uuid)
-
-        if isinstance(msg, str):
-            msg = json.loads(msg)
-
         body.update(msg)
 
         print("----Whatsapp broadcast----")
