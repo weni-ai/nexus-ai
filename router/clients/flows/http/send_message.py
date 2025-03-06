@@ -47,7 +47,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         user: str,
         full_chunks: List[Dict] = None
     ) -> None:
-        response = FlowsRESTClient().whatsapp_broadcast(urns, msg)
+        response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid)
         try:
             response.raise_for_status()
         except Exception as error:
