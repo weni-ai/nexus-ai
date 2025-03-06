@@ -40,9 +40,12 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         self.__access_token = access_token
 
     def send_direct_message(
-        self, 
-        msg: Dict, 
+        self,
+        msg: Dict,
         urns: List,
+        project_uuid: str,
+        user: str,
+        full_chunks: List[Dict] = None
     ) -> None:
         response = FlowsRESTClient().whatsapp_broadcast(urns, msg)
         try:
