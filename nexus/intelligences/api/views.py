@@ -943,6 +943,7 @@ class RouterRetailViewSet(views.APIView):
 
                 link_serializer = CreatedContentBaseLinkSerializer(content_base_link).data
                 created_links.append(link_serializer)
+        return created_links
 
     # TODO - Refactor this view to have only one searializer and no dependencies
     def post(self, request, project_uuid):
