@@ -86,10 +86,10 @@ class FlowsRESTClient(RestClient):
         except requests.exceptions.HTTPError:
             return {}
 
-    def whatsapp_broadcast(self, urns: List[str], msg: Dict):
+    def whatsapp_broadcast(self, urns: List[str], msg: Dict, project_uuid: str):
         url = self._get_url("/api/v2/internals/whatsapp_broadcasts")
 
-        body = dict(urns=urns, msg=msg)
+        body = dict(urns=urns, msg=msg, project=project_uuid)
 
         print("----Whatsapp broadcast----")
         print(url)
