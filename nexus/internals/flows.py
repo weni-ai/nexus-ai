@@ -89,7 +89,8 @@ class FlowsRESTClient(RestClient):
     def whatsapp_broadcast(self, urns: List[str], msg: Dict, project_uuid: str):
         url = self._get_url("/api/v2/internals/whatsapp_broadcasts")
 
-        body = dict(urns=urns, msg=msg, project=project_uuid)
+        body = dict(urns=urns, project=project_uuid)
+        body.update(msg)
 
         print("----Whatsapp broadcast----")
         print(url)
