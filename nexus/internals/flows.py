@@ -1,6 +1,7 @@
-from django.conf import settings
+from typing import Dict, List
 
 import requests
+from django.conf import settings
 
 from nexus.internals import InternalAuthentication, RestClient
 
@@ -84,3 +85,23 @@ class FlowsRESTClient(RestClient):
             return response.json()
         except requests.exceptions.HTTPError:
             return {}
+
+    def whatsapp_broadcast(self, urns: List[str], msg: Dict, project_uuid: str):
+        url = self._get_url("/api/v2/internals/whatsapp_broadcasts")
+
+        body = dict(urns=urns, project=project_uuid)
+        body.update(msg)
+
+        print("----Whatsapp broadcast----")
+        print(url)
+        print(urns)
+        print(msg)
+        print(project_uuid)
+        print("--------------------------")
+
+        response = requests.post(
+            url,
+            json=body,
+            headers=self.authentication_instance.headers
+        )
+        return response
