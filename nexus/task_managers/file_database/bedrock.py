@@ -469,6 +469,8 @@ class BedrockFileDatabase(FileDataBase):
             False: "DISABLED"
         }
 
+        self.wait_agent_status_update(agent_id)
+
         self.bedrock_agent.update_agent(
             agentId=agent_to_update['agentId'],
             agentName=agent_to_update['agentName'],

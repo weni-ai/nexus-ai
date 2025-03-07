@@ -396,19 +396,20 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                         }
                     )
             elif event['type'] == 'trace':
-                # Get summary from Claude with specified language
-                event['content']['summary'] = get_trace_summary(language, event['content'])
-                if user_email:
-                    # Send trace data through WebSocket
-                    send_preview_message_to_websocket(
-                        project_uuid=str(message.project_uuid),
-                        user_email=user_email,
-                        message_data={
-                            "type": "trace_update",
-                            "trace": event['content'],
-                            "session_id": session_id
-                        }
-                    )
+                if preview:
+                    # Get summary from Claude with specified language
+                    event['content']['summary'] = get_trace_summary(language, event['content'])
+                    if user_email:
+                        # Send trace data through WebSocket
+                        send_preview_message_to_websocket(
+                            project_uuid=str(message.project_uuid),
+                            user_email=user_email,
+                            message_data={
+                                "type": "trace_update",
+                                "trace": event['content'],
+                                "session_id": session_id
+                            }
+                        )
 
         if user_email:
             # Send completion status
