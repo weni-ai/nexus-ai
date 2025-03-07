@@ -100,6 +100,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
                         result.append(json_dict)
                 except json.JSONDecodeError as e:
                     pass
+        return result
 
     def send_direct_message(
         self,
