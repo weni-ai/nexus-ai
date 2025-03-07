@@ -40,7 +40,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         self.__host = host
         self.__access_token = access_token
 
-    def fix_json_string(json_str):
+    def fix_json_string(self, json_str):
         """
         Fix a JSON string with control characters and unescaped quotes
         """
@@ -63,7 +63,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         
         return json_str
 
-    def parse_json_strings(json_str):
+    def parse_json_strings(self, json_str):
         try:
             obj = json.loads(json_str)
             return obj
