@@ -3,7 +3,7 @@ from typing import List, Dict
 import requests
 import json
 import re
-
+import ast
 from nexus.internals.flows import FlowsRESTClient
 from router.direct_message import DirectMessage, exceptions
 
@@ -40,6 +40,67 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         self.__host = host
         self.__access_token = access_token
 
+    def fix_json_string(json_str):
+        """
+        Fix a JSON string with control characters and unescaped quotes
+        """
+        # First, escape the quotes inside the text content
+        # Look for patterns like: Notebook 15" and escape the quote
+        json_str = re.sub(r'(\w+)(\s*)(\")(\s*\w+)', r'\1\2\\\"\4', json_str)
+        
+        # Remove newlines and whitespace between JSON structural elements
+        # This regex finds newlines and spaces between JSON structure parts
+        json_str = re.sub(r'{\s*"', '{"', json_str)
+        json_str = re.sub(r'",\s*"', '","', json_str)
+        json_str = re.sub(r':\s*{', ':{', json_str)
+        json_str = re.sub(r'}\s*}', '}}', json_str)
+        
+        # Preserve newlines in text content by converting them to \\n
+        # This will handle the actual text content newlines
+        json_str = re.sub(r'(text":\s*")([^"]*?)(")', 
+                        lambda m: m.group(1) + m.group(2).replace('\n', '\\n') + m.group(3),
+                        json_str)
+        
+        return json_str
+
+    def parse_json_strings(json_str):
+        try:
+            obj = json.loads(json_str)
+            return obj
+        except json.JSONDecodeError:
+            try:
+                json_str_escaped = json_str.replace('\n', '\\n')
+                obj = json.loads(json_str_escaped)
+                return obj
+            except json.JSONDecodeError:
+                try:
+                    # print(f"Error parsing JSON: {json_str}")
+                    obj = ast.literal_eval(json_str)
+                    return obj
+                except Exception as e:
+                    try:
+                        json_str_escaped = json_str.replace('\n', '\\n')
+                        obj = ast.literal_eval(json_str_escaped)
+                        return obj
+                    except Exception:
+                        # if json is not valid ignore it
+                        pass
+
+    def get_json_strings(self, text):
+        marked_text = re.sub(r'(?<=[}\]"])\s*{"msg":', r'SPLIT_HERE{"msg":', text)
+        json_strings = marked_text.split('SPLIT_HERE')
+        result = []
+        for json_str in json_strings:
+            json_str = json_str.strip().strip('\n')
+            json_str = self.fix_json_string(json_str)
+            if json_str.startswith('{"msg":'):
+                try:
+                    json_dict = self.parse_json_strings(json_str)
+                    if json_dict:
+                        result.append(json_dict)
+                except json.JSONDecodeError as e:
+                    pass
+
     def send_direct_message(
         self,
         msg: Dict,
@@ -48,12 +109,10 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         user: str,
         full_chunks: List[Dict] = None
     ) -> None:
-        if isinstance(msg, str):
-            msg = msg.replace("\n", "\\n")
-            msg = re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]', '', msg)
-            msg = json.loads(msg)
-        response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid)
-        try:
-            response.raise_for_status()
-        except Exception as error:
-            raise exceptions.UnableToSendMessage(str(error))
+        msgs = self.get_json_strings(msg)
+        for msg in msgs:
+            response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid)
+            try:
+                response.raise_for_status()
+            except Exception as error:
+                raise exceptions.UnableToSendMessage(str(error))
