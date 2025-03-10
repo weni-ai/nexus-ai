@@ -850,6 +850,8 @@ class AgentUsecase:
             print(response)
             version.delete()
             return response
+        except self.external_agent_client.bedrock_agent.exceptions.ResourceNotFoundException:
+            return
         except Exception:
             raise
 
