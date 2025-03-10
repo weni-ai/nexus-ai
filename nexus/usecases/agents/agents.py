@@ -327,6 +327,23 @@ class AgentUsecase:
             created_by=user
         )
 
+    def delete_all_skills(
+        self,
+        external_id: str
+    ):
+
+        queryset = AgentSkills.objects.filter(agent__external_id=external_id)
+        for skill in queryset:
+            # Delete skill on lambda bedrock client
+            function_name = skill.function_name
+            print("Deleting skill: ", function_name)
+            self.external_agent_client.delete_lambda_function(
+                lambda_name=function_name,
+            )
+            skill.versions.all().delete()
+
+        queryset.delete()
+
     def create_skill_alias(
         self,
         function_name: str,

@@ -424,6 +424,21 @@ class BedrockFileDatabase(FileDataBase):
         )
         return lambda_function
 
+    def delete_lambda_function(
+        self,
+        lambda_name: str,
+        version: str = None,
+    ):
+        if version:
+            return self.lambda_client.delete_function(
+                FunctionName=lambda_name,
+                Qualifier=version
+            )
+
+        return self.lambda_client.delete_function(
+            FunctionName=lambda_name
+        )
+
     def delete_file_and_metadata(self, content_base_uuid: str, filename: str):
         print("[+ BEDROCK: Deleteing File and its Metadata +]")
 
@@ -955,6 +970,16 @@ class BedrockFileDatabase(FileDataBase):
             functionSchema={"functions": function_schema}
         )
         return response
+
+    def delete_agent_action_group(
+        self,
+    ):
+        # TODO: Implement this method
+        self.bedrock_agent.delete_agent_action_group(
+            actionGroupId='string',
+            agentId='string',
+            agentVersion='string',
+        )
 
     def _create_lambda_iam_role(
         self,

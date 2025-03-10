@@ -180,6 +180,8 @@ class PushAgents(APIView):
                                 agent=agent,
                                 skill_handler=skill_handler
                             )
+                else:
+                    agents_usecase.delete_all_skills(agent_dto.external_id)
 
                 agents_updated.append({
                     "agent_name": agent.display_name,

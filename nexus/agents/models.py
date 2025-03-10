@@ -53,6 +53,7 @@ class Agent(BaseModel):
             created_by=self.created_by,
         )
 
+
 class Credential(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="credentials")
     key = models.CharField(max_length=255, null=True)
@@ -102,6 +103,7 @@ class Credential(models.Model):
             except Exception as e:
                 return self.value
         return self.value
+
 
 class Team(models.Model):
     external_id = models.CharField(max_length=255, help_text="Supervisor ID")
