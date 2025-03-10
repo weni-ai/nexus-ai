@@ -7,6 +7,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import OpenAI
 
 from django.conf import settings
+from django.template.defaultfilters import slugify
 from redis import Redis
 
 from nexus.celery import app as celery_app
@@ -354,7 +355,10 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     contentbase = get_default_content_base_by_project(message.project_uuid)
 
     usecase = AgentUsecase()
-    session_id = f"project-{project.uuid}-session-{message.contact_urn}"
+
+    # Use the sanitized URN in the session ID
+    session_id = f"project-{project.uuid}-session-{message.sanitized_urn}"
+    session_id = slugify(session_id)
 
     if user_email:
         # Send initial status through WebSocket

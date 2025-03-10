@@ -30,6 +30,16 @@ class Message(BaseModel):
 
         return json.dumps(contact_fields)
 
+    @property
+    def sanitized_urn(self):
+        sanitized = ""
+        for char in self.contact_urn:
+            if not char.isalnum() and char not in '-_.:':
+                sanitized += f"_{ord(char)}"
+            else:
+                sanitized += char
+        return sanitized
+
 
 def message_factory(*args, contact_fields: dict = {}, metadata: dict = {}, **kwargs) -> Message:
     fields = []
