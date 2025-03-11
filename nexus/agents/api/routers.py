@@ -10,6 +10,7 @@ from nexus.agents.api.views import (
     VtexAppAgentsView,
     VtexAppOfficialAgentsView,
     VTexAppTeamView,
+    VtexAppProjectCredentialsView,
 )
 
 
@@ -25,4 +26,5 @@ urlpatterns = [
     path('project/<project_uuid>/app-assign/<str:agent_uuid>', VtexAppActiveAgentsViewSet.as_view(), name="vtex-assign-agents"),
     path('project/<project_uuid>/credentials', ProjectCredentialsView.as_view(), name="project-credentials"),
     path('project/<project_uuid>/credentials/<str:agent_uuid>', ProjectCredentialsView.as_view(), name="project-credentials-update"),
+    path('project/<project_uuid>/app-credentials', VtexAppProjectCredentialsView.as_view(), name="vtex-project-credentials"),
 ]
