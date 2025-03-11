@@ -711,3 +711,99 @@ class AgentTracesView(
             return Response(trace_data)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
+
+class VtexAppProjectCredentialsView(APIView):
+
+    permission_classes = [InternalCommunicationPermission]
+
+    def get(self, request, project_uuid):
+        active_agents = ActiveAgent.objects.filter(team__project__uuid=project_uuid)
+        active_agent_ids = active_agents.values_list('agent_id', flat=True)
+        credentials = Credential.objects.filter(
+            project__uuid=project_uuid,
+            agents__in=active_agent_ids
+        )
+
+        official_credentials = credentials.filter(agents__is_official=True).distinct()
+        custom_credentials = credentials.filter(agents__is_official=False).distinct()
+
+        return Response({
+            "official_agents_credentials": ProjectCredentialsListSerializer(official_credentials, many=True).data,
+            "my_agents_credentials": ProjectCredentialsListSerializer(custom_credentials, many=True).data
+        })
+
+    def patch(self, request, project_uuid):
+        credentials_data = request.data
+
+        updated_credentials = []
+        for key, value in credentials_data.items():
+            try:
+                credential = Credential.objects.get(project__uuid=project_uuid, key=key)
+                credential.value = encrypt_value(value) if credential.is_confidential else value
+                credential.save()
+                updated_credentials.append(key)
+            except Credential.DoesNotExist:
+                continue
+
+        return Response({
+            "message": "Credentials updated successfully",
+            "updated_credentials": updated_credentials
+        })
+
+    def post(self, request, project_uuid):
+        credentials_data = request.data.get('credentials', [])
+        agent_uuid = request.data.get('agent_uuid')
+
+        if not agent_uuid or not credentials_data:
+            return Response(
+                {"error": "agent_uuid and credentials are required"},
+                status=400
+            )
+
+        try:
+            agent = Agent.objects.get(uuid=agent_uuid)
+        except Agent.DoesNotExist:
+            return Response(
+                {"error": "Agent not found"},
+                status=404
+            )
+
+        created_credentials = []
+        for cred_item in credentials_data:
+            key = cred_item.get('name')
+            if not key:
+                continue
+
+            value = cred_item.get('value')
+            label = cred_item.get('label', key)
+            placeholder = cred_item.get('placeholder')
+            is_confidential = cred_item.get('is_confidential', True)
+
+            treated_value = encrypt_value(value) if is_confidential else value
+
+            credential, created = Credential.objects.get_or_create(
+                project_id=project_uuid,
+                key=key,
+                defaults={
+                    "label": label,
+                    "is_confidential": is_confidential,
+                    "placeholder": placeholder,
+                    "value": treated_value
+                }
+            )
+
+            if not created:
+                credential.label = label
+                credential.placeholder = placeholder
+                credential.value = treated_value
+                credential.is_confidential = is_confidential
+                credential.save(update_fields=['label', 'is_confidential', 'placeholder', 'value'])
+
+            credential.agents.add(agent)
+            created_credentials.append(key)
+
+        return Response({
+            "message": "Credentials created successfully",
+            "created_credentials": created_credentials
+        })
