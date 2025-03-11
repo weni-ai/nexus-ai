@@ -105,8 +105,7 @@ def get_action_clients(preview: bool = False, multi_agents: bool = False):
         )
         return broadcast, flow_start
 
-    if multi_agents:
-
+    if multi_agents and settings.AGENT_USE_COMPONENTS:
         broadcast = WhatsAppBroadcastHTTPClient(
             os.environ.get(
                 'FLOWS_REST_ENDPOINT'
