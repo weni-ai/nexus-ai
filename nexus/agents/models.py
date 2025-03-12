@@ -31,7 +31,7 @@ class Agent(BaseModel):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     metadata = models.JSONField(default=dict)
     description = models.CharField(max_length=255, null=True)
-    type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
+    source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
 
     @property
     def bedrock_agent_name(self):
@@ -61,6 +61,7 @@ class Agent(BaseModel):
             },
             created_by=self.created_by,
         )
+
 
 class Credential(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="credentials")
