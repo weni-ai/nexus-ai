@@ -5,7 +5,7 @@ from django.db.models import Q
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, BasePermission
 
 from nexus.agents.encryption import encrypt_value, decrypt_value
 
@@ -27,6 +27,12 @@ from nexus.usecases.agents import (
 )
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.projects.api.permissions import ProjectPermission
+
+
+class InternalCommunicationPermission(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        return user.has_perm("users.can_communicate_internally")
 
 
 class PushAgents(APIView):
@@ -157,7 +163,7 @@ class PushAgents(APIView):
         self._update_agent_versions(agent, project_uuid, team, request)
 
         return agent, response_warnings
-    
+
     def _update_agent_versions(self, agent, project_uuid, team, request):
         """Update agent versions and supervisor if needed"""
         agents_usecase = AgentUsecase()
@@ -168,7 +174,6 @@ class PushAgents(APIView):
         if ActiveAgent.objects.filter(agent=agent, team=team).exists():
             agents_usecase.update_supervisor_collaborator(project_uuid, agent)
             agents_usecase.create_agent_version(agent.external_id, request.user, agent, team)
-
 
     def _handle_agent_creation(self, agent_dto, project_uuid, files, request):
         """Handle creating a new agent with rollback on failure"""
@@ -196,7 +201,7 @@ class PushAgents(APIView):
                 description=agent_dto.description,
             )
             logger.debug(f"Created agent - PK: {created_agent.pk}, UUID: {created_agent.uuid}, Slug: {created_agent.slug}")
-            
+
             created_agent.create_version(
                 agent_alias_id="DRAFT",
                 agent_alias_name="DRAFT",
@@ -276,10 +281,10 @@ class PushAgents(APIView):
     def _rollback_agent_creation(self, agent, external_id):
         """Rollback agent creation in case of failure"""
         logger = logging.getLogger(__name__)
-        
+
         logger.warning(f"Rolling back agent creation for agent {agent.slug} (external_id: {external_id})")
         agents_usecase = AgentUsecase()
-        
+
         try:
             # Delete the external agent
             agents_usecase.external_agent_client.delete_agent(external_id)
@@ -299,11 +304,11 @@ class PushAgents(APIView):
         try:
             # Validate and process request data
             files, agents_data, project_uuid = self._validate_request(request)
-            
+
             # Initialize usecase and get team
             agents_usecase = AgentUsecase()
             team = agents_usecase.get_team_object(project__uuid=project_uuid)
-            
+
             # Process agents
             agents_dto = agents_usecase.agent_dto_handler(
                 yaml=agents_data,
@@ -384,7 +389,7 @@ class PushAgents(APIView):
     def _finalize_agent_creation(self, agent, external_id):
         """Finalize agent creation by creating alias and updating metadata"""
         agents_usecase = AgentUsecase()
-        
+
         # Wait for agent to be ready and prepare it
         agents_usecase.external_agent_client.wait_agent_status_update(external_id)
         agents_usecase.prepare_agent(external_id)
@@ -434,6 +439,25 @@ class AgentsView(APIView):
         return Response(serializer.data)
 
 
+class VtexAppAgentsView(APIView):
+    permission_classes = [InternalCommunicationPermission]
+
+    def get(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        search = self.request.query_params.get("search")
+
+        agents = Agent.objects.filter(project__uuid=project_uuid)
+
+        if search:
+            query_filter = Q(display_name__icontains=search) | Q(
+                agent_skills__display_name__icontains=search
+            )
+            agents = agents.filter(query_filter).distinct('uuid')
+
+        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        return Response(serializer.data)
+
+
 class ActiveAgentsViewSet(APIView):
 
     permission_classes = [IsAuthenticated, ProjectPermission]
@@ -462,6 +486,33 @@ class ActiveAgentsViewSet(APIView):
         return Response({"assigned": False})
 
 
+class VtexAppActiveAgentsViewSet(APIView):
+
+    permission_classes = [InternalCommunicationPermission]
+    serializer_class = ActiveAgentSerializer
+
+    def patch(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        agent_uuid = kwargs.get("agent_uuid")
+        user = request.user
+        assign: bool = request.data.get("assigned")
+
+        usecase = AgentUsecase()
+
+        if assign:
+            usecase.assign_agent(
+                agent_uuid=agent_uuid,
+                project_uuid=project_uuid,
+                created_by=user
+            )
+            usecase.create_supervisor_version(project_uuid, user)
+            return Response({"assigned": True})
+
+        usecase.unassign_agent(agent_uuid=agent_uuid, project_uuid=project_uuid)
+        usecase.create_supervisor_version(project_uuid, user)
+        return Response({"assigned": False})
+
+
 class OfficialAgentsView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
 
@@ -469,7 +520,26 @@ class OfficialAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(is_official=True)
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+
+        if search:
+            query_filter = Q(display_name__icontains=search) | Q(
+                agent_skills__display_name__icontains=search
+            )
+            agents = agents.filter(query_filter).distinct('uuid')
+
+        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        return Response(serializer.data)
+
+
+class VtexAppOfficialAgentsView(APIView):
+    permission_classes = [InternalCommunicationPermission]
+
+    def get(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        search = self.request.query_params.get("search")
+
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.VTEX_APP)
 
         if search:
             query_filter = Q(display_name__icontains=search) | Q(
@@ -484,6 +554,27 @@ class OfficialAgentsView(APIView):
 class TeamView(APIView):
 
     permission_classes = [IsAuthenticated, ProjectPermission]
+    serializer_class = ActiveAgentTeamSerializer
+
+    def get(self, request, *args, **kwargs):
+
+        project_uuid = kwargs.get("project_uuid")
+
+        team = Team.objects.get(project__uuid=project_uuid)
+        team_agents = ActiveAgent.objects.filter(team=team)
+        serializer = ActiveAgentTeamSerializer(team_agents, many=True)
+        data = {
+            "manager": {
+                "external_id": team.external_id
+            },
+            "agents": serializer.data
+        }
+        return Response(data)
+
+
+class VTexAppTeamView(APIView):
+
+    permission_classes = [InternalCommunicationPermission]
     serializer_class = ActiveAgentTeamSerializer
 
     def get(self, request, *args, **kwargs):
@@ -567,10 +658,105 @@ class ProjectCredentialsView(APIView):
             label = cred_item.get('label', key)
             placeholder = cred_item.get('placeholder')
             is_confidential = cred_item.get('is_confidential', True)
-            
 
             treated_value = encrypt_value(value) if is_confidential else value
-            
+
+            credential, created = Credential.objects.get_or_create(
+                project_id=project_uuid,
+                key=key,
+                defaults={
+                    "label": label,
+                    "is_confidential": is_confidential,
+                    "placeholder": placeholder,
+                    "value": treated_value
+                }
+            )
+
+            if not created:
+                credential.label = label
+                credential.placeholder = placeholder
+                credential.value = treated_value
+                credential.is_confidential = is_confidential
+                credential.save(update_fields=['label', 'is_confidential', 'placeholder', 'value'])
+
+            credential.agents.add(agent)
+            created_credentials.append(key)
+
+        return Response({
+            "message": "Credentials created successfully",
+            "created_credentials": created_credentials
+        })
+
+
+class VtexAppProjectCredentialsView(APIView):
+
+    permission_classes = [InternalCommunicationPermission]
+
+    def get(self, request, project_uuid):
+        active_agents = ActiveAgent.objects.filter(team__project__uuid=project_uuid)
+        active_agent_ids = active_agents.values_list('agent_id', flat=True)
+        credentials = Credential.objects.filter(
+            project__uuid=project_uuid,
+            agents__in=active_agent_ids
+        )
+
+        official_credentials = credentials.filter(agents__is_official=True).distinct()
+        custom_credentials = credentials.filter(agents__is_official=False).distinct()
+
+        return Response({
+            "official_agents_credentials": ProjectCredentialsListSerializer(official_credentials, many=True).data,
+            "my_agents_credentials": ProjectCredentialsListSerializer(custom_credentials, many=True).data
+        })
+
+    def patch(self, request, project_uuid):
+        credentials_data = request.data
+
+        updated_credentials = []
+        for key, value in credentials_data.items():
+            try:
+                credential = Credential.objects.get(project__uuid=project_uuid, key=key)
+                credential.value = encrypt_value(value) if credential.is_confidential else value
+                credential.save()
+                updated_credentials.append(key)
+            except Credential.DoesNotExist:
+                continue
+
+        return Response({
+            "message": "Credentials updated successfully",
+            "updated_credentials": updated_credentials
+        })
+
+    def post(self, request, project_uuid):
+        credentials_data = request.data.get('credentials', [])
+        agent_uuid = request.data.get('agent_uuid')
+
+        if not agent_uuid or not credentials_data:
+            return Response(
+                {"error": "agent_uuid and credentials are required"},
+                status=400
+            )
+
+        try:
+            agent = Agent.objects.get(uuid=agent_uuid)
+        except Agent.DoesNotExist:
+            return Response(
+                {"error": "Agent not found"},
+                status=404
+            )
+
+        created_credentials = []
+        for cred_item in credentials_data:
+            key = cred_item.get('name')
+            if not key:
+                continue
+
+            value = cred_item.get('value')
+            label = cred_item.get('label', key)
+            placeholder = cred_item.get('placeholder')
+            is_confidential = cred_item.get('is_confidential', True)
+
+            treated_value = encrypt_value(value) if is_confidential else value
+
             credential, created = Credential.objects.get_or_create(
                 project_id=project_uuid,
                 key=key,
