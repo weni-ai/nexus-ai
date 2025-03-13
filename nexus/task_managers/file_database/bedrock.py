@@ -490,7 +490,44 @@ class BedrockFileDatabase(FileDataBase):
         content_base: "ContentBase",
         message: "Message"
     ):
-        print("Invoking supervisor with streaming")
+        print("\n[DEBUG] ========== INVOKE SUPERVISOR STREAM ==========")
+        print(f"[DEBUG] Supervisor ID: {supervisor_id}")
+        print(f"[DEBUG] Supervisor Alias ID: {supervisor_alias_id}")
+        print(f"[DEBUG] Session ID: {session_id}")
+        print(f"[DEBUG] Content Base UUID: {content_base.uuid}")
+        print(f"[DEBUG] Message: {message.text}")
+
+        # Validate agent existence and status
+        print("\n[DEBUG] ========== VALIDATING AGENT ==========")
+        try:
+            agent_details = self.bedrock_agent.get_agent(agentId=supervisor_id)
+            print(f"[DEBUG] Agent Details: {json.dumps(agent_details, indent=2, default=str)}")
+            
+            # Check agent status
+            agent_status = agent_details.get('agent', {}).get('agentStatus')
+            print(f"[DEBUG] Agent Status: {agent_status}")
+            
+            # List agent aliases
+            aliases = self.bedrock_agent.list_agent_aliases(agentId=supervisor_id)
+            print(f"[DEBUG] Agent Aliases: {json.dumps(aliases, indent=2, default=str)}")
+            
+            # Validate specific alias   
+            alias_exists = False
+            for alias in aliases.get('agentAliasSummaries', []):
+                if alias.get('agentAliasId') == supervisor_alias_id:
+                    alias_exists = True
+                    print(f"[DEBUG] Found matching alias: {json.dumps(alias, indent=2, default=str)}")
+                    break
+            
+            if not alias_exists:
+                print(f"[DEBUG] WARNING: Alias ID {supervisor_alias_id} not found in agent aliases")
+                
+        except self.bedrock_agent.exceptions.ResourceNotFoundException as e:
+            print(f"[DEBUG] Agent validation failed: {str(e)}")
+            raise
+        except Exception as e:
+            print(f"[DEBUG] Unexpected error during agent validation: {str(e)}")
+            raise
 
         content_base_uuid = str(content_base.uuid)
         agent = content_base.agent
@@ -524,9 +561,9 @@ class BedrockFileDatabase(FileDataBase):
             for credential in agent_credentials:
                 credentials[credential.key] = credential.decrypted_value
         except Exception as e:
-            print(f"Error fetching credentials: {str(e)}")
+            print(f"[DEBUG] Error fetching credentials: {str(e)}")
 
-        sessionState["sessionAttributes"] = { "credentials": json.dumps(credentials, default=str) }
+        sessionState["sessionAttributes"] = {"credentials": json.dumps(credentials, default=str)}
 
         sessionState["promptSessionAttributes"] = {
             "format_components": get_all_formats(),
@@ -543,36 +580,75 @@ class BedrockFileDatabase(FileDataBase):
             })
         }
 
-        print("Session State: ", sessionState)
+        print("\n[DEBUG] ========== REQUEST PARAMETERS ==========")
+        print(f"[DEBUG] Knowledge Base ID: {self.knowledge_base_id}")
+        print(f"[DEBUG] Retrieval Configuration: {retrieval_configuration}")
+        print(f"[DEBUG] Session State: {json.dumps(sessionState, indent=2)}")
 
-        response = self.bedrock_agent_runtime.invoke_agent(
-            agentId=supervisor_id,
-            agentAliasId=supervisor_alias_id,
-            sessionId=session_id,
-            inputText=message.text,
-            enableTrace=True,
-            sessionState=sessionState,
-        )
+        try:
+            print("\n[DEBUG] ========== MAKING BEDROCK REQUEST ==========")
+            response = self.bedrock_agent_runtime.invoke_agent(
+                agentId=supervisor_id,
+                agentAliasId=supervisor_alias_id,
+                sessionId=session_id,
+                inputText=message.text,
+                enableTrace=True,
+                sessionState=sessionState,
+            )
+            print("\n[DEBUG] ========== BEDROCK RESPONSE ==========")
+            print(f"[DEBUG] Response Type: {type(response)}")
+            print(f"[DEBUG] Response Keys: {response.keys()}")
+            print(f"[DEBUG] Response Metadata: {response.get('ResponseMetadata', {})}")
+            
+            if 'completion' in response:
+                print("\n[DEBUG] ========== COMPLETION DETAILS ==========")
+                print(f"[DEBUG] Completion Type: {type(response['completion'])}")
+                try:
+                    # Try to peek at the first event without consuming it
+                    completion_iter = response['completion']
+                    first_event = next(completion_iter, None)
+                    if first_event:
+                        print(f"[DEBUG] First Event Type: {type(first_event)}")
+                        print(f"[DEBUG] First Event Keys: {first_event.keys() if isinstance(first_event, dict) else 'Not a dict'}")
+                        print(f"[DEBUG] First Event Content: {first_event}")
+                    else:
+                        print("[DEBUG] Completion iterator is empty")
+                except Exception as e:
+                    print(f"[DEBUG] Error inspecting completion: {str(e)}")
+            else:
+                print("[DEBUG] No completion found in response")
 
-        for event in response['completion']:
-            if 'chunk' in event:
-                chunk = event['chunk']
-                yield {
-                    'type': 'chunk',
-                    'content': chunk['bytes'].decode()
-                }
-            elif 'trace' in event:
-                trace_data = event['trace']
-                print("Trace:", trace_data)
-                yield {
-                    'type': 'trace',
-                    'content': {
-                        'agentAliasId': supervisor_alias_id,
-                        'agentId': supervisor_id,
-                        'sessionId': session_id,
-                        'trace': trace_data
-                    }
-                }
+            print("\n[DEBUG] ========== PROCESSING EVENTS ==========")
+            for event in response['completion']:
+                print(f"[DEBUG] Processing Event Type: {type(event)}")
+                print(f"[DEBUG] Processing Event Content: {event}")
+                
+                if isinstance(event, dict):
+                    if 'chunk' in event:
+                        chunk = event['chunk']
+                        print(f"[DEBUG] Found chunk: {chunk}")
+                        yield {
+                            'type': 'chunk',
+                            'content': chunk['bytes'].decode()
+                        }
+                    elif 'trace' in event:
+                        trace_data = event['trace']
+                        print(f"[DEBUG] Found trace data: {trace_data}")
+                        yield {
+                            'type': 'trace',
+                            'content': trace_data
+                        }
+                    else:
+                        print(f"[DEBUG] Unknown event structure: {event}")
+                else:
+                    print(f"[DEBUG] Unexpected event type: {type(event)}")
+                    print(f"[DEBUG] Event content: {event}")
+
+        except Exception as e:
+            print(f"[DEBUG] Error invoking supervisor stream: {str(e)}")
+            print(f"[DEBUG] Error type: {type(e)}")
+            print(f"[DEBUG] Error details: {e.__dict__ if hasattr(e, '__dict__') else 'No details available'}")
+            raise
 
     def start_bedrock_ingestion(self) -> str:
         print("[+ Bedrock: Starting ingestion job +]")
