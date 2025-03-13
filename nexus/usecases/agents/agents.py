@@ -46,6 +46,7 @@ class AgentDTO:
     foundation_model: str = None
     guardrail_configuration: dict = None
     credentials: List[Dict] = None
+    source_type: str = None
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
@@ -130,6 +131,7 @@ class AgentUsecase:
             tags=agent_dto.tags,
             model_id=agent_dto.model[0],
         )
+
         return external_id
 
     def create_contact_fields(self, project_uuid: str, fields: List[Dict[str, str]]):
@@ -635,6 +637,7 @@ class AgentUsecase:
             foundation_model=agent_value.get("foundation_model"),
             guardrail_configuration=agent_value.get("guardrail_configuration"),
             credentials=agent_value.get("credentials"),
+            source_type=agent_value.get("source_type"),
         )
         validate_agents = self.validate_agent_dto(agent_dto, user_email)
         return validate_agents
