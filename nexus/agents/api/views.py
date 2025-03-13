@@ -246,7 +246,7 @@ class PushAgents(APIView):
         """Process a single skill for an agent"""
         agents_usecase = AgentUsecase()
         skill_file = files[f"{agent.slug}:{skill['slug']}"]
-        function_schema = self._create_function_schema(skill, project_uuid)
+        function_schema = self._create_function_schema(skill, project_uuid, agent)
         skill_handler = skill.get("source").get("entrypoint")
         agent_version = agent.current_version.metadata.get("agent_alias_version")
 
@@ -355,7 +355,7 @@ class PushAgents(APIView):
                 status=500
             )
 
-    def _create_function_schema(self, skill: dict, project_uuid: str) -> list[dict]:
+    def _create_function_schema(self, skill: dict, project_uuid: str, agent: Agent) -> list[dict]:
         """Helper method to create function schema from skill data"""
         skill_parameters = skill.get("parameters")
         fields = []
@@ -374,7 +374,7 @@ class PushAgents(APIView):
                 skill_parameters = params
 
         agents_usecase = AgentUsecase()
-        agents_usecase.create_contact_fields(project_uuid, fields)
+        agents_usecase.create_contact_fields(project_uuid, fields, agent=agent)
 
         return [{
             "name": skill.get("slug"),

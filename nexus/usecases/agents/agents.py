@@ -95,7 +95,7 @@ class AgentUsecase:
                     "key": key,
                     "value_type": value_type
                 })
-            self.create_contact_fields(project_uuid, fields)
+            self.create_contact_fields(project_uuid, fields, agent=agent)
 
         sub_agent = BedrockSubAgent(
             display_name=agent.display_name,
@@ -146,7 +146,7 @@ class AgentUsecase:
         )
         return external_id
 
-    def create_contact_fields(self, project_uuid: str, fields: List[Dict[str, str]], convert_fields: bool = True):
+    def create_contact_fields(self, project_uuid: str, fields: List[Dict[str, str]], agent, convert_fields: bool = True):
         types = {
             "string": "text",
             "boolean": "text",
@@ -175,7 +175,8 @@ class AgentUsecase:
                 ContactField.objects.create(
                     project_id=project_uuid,
                     key=contact_field.get('key'),
-                    value_type=value_type
+                    value_type=value_type,
+                    agent=agent,
                 )
                 flows_client.create_project_contact_field(
                     project_uuid=project_uuid,
@@ -799,7 +800,7 @@ class AgentUsecase:
                     params.update(param)
                 skill_parameters = params
 
-            self.create_contact_fields(project_uuid, fields, convert_fields=False)
+            self.create_contact_fields(project_uuid, fields, convert_fields=False, agent=agent)
 
             lambda_name = f"{slug}-{agent.external_id}"
             function_schema = [
