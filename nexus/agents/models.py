@@ -161,3 +161,10 @@ class AgentSkillVersion(BaseModel):
     uuid = models.UUIDField(default=uuid4, editable=True)
     agent_skill = models.ForeignKey(AgentSkills, on_delete=models.CASCADE, related_name="versions")
     metadata = models.JSONField(default=dict)
+
+
+class ContactField(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="contact_fields")
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="contact_fields")
+    key = models.CharField(max_length=255)
+    value_type = models.CharField(max_length=255)
