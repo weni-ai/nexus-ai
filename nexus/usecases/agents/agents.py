@@ -132,18 +132,6 @@ class AgentUsecase:
             model_id=agent_dto.model[0],
         )
 
-        # Create local agent record
-        Agent.objects.create(
-            created_by=user,
-            project_id=project_uuid,
-            external_id=external_id,
-            slug=agent_dto.slug,
-            display_name=agent_dto.name,
-            model=agent_dto.model,
-            description=agent_dto.description,
-            source_type=agent_dto.source_type if agent_dto.source_type else Agent.PLATFORM,
-        )
-
         return external_id
 
     def create_contact_fields(self, project_uuid: str, fields: List[Dict[str, str]]):
