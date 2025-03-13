@@ -95,7 +95,7 @@ class AgentUsecase:
                     "key": key,
                     "value_type": value_type
                 })
-            self.create_contact_fields(project_uuid, fields, agent=agent)
+            self.create_contact_fields(project_uuid, fields, agent=agent, convert_fields=False)
 
         sub_agent = BedrockSubAgent(
             display_name=agent.display_name,
