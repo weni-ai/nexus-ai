@@ -769,6 +769,7 @@ class AgentUsecase:
         user: User,
         project_uuid: str
     ):
+        # deprecated
         """
         Handle creation or update of agent skills.
 
@@ -800,7 +801,7 @@ class AgentUsecase:
                     params.update(param)
                 skill_parameters = params
 
-            self.create_contact_fields(project_uuid, fields, convert_fields=False, agent=agent)
+            self.create_contact_fields(project_uuid, fields, agent=agent)
 
             lambda_name = f"{slug}-{agent.external_id}"
             function_schema = [

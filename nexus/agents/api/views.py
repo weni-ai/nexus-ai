@@ -374,7 +374,7 @@ class PushAgents(APIView):
                 skill_parameters = params
 
         agents_usecase = AgentUsecase()
-        agents_usecase.create_contact_fields(project_uuid, fields, agent=agent)
+        agents_usecase.create_contact_fields(project_uuid, fields, agent=agent, convert_fields=False)
 
         return [{
             "name": skill.get("slug"),
