@@ -618,19 +618,27 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                 )
                             first_rationale_text = None
 
-                    # Process orchestration trace rationale
-                    rationale_text = (
-                        trace_data.get('trace', {})
-                        .get('orchestrationTrace', {})
-                        .get('rationale', {})
-                        .get('text')
-                    )
+                    # Process orchestration trace rationale - Ajustando a estrutura do trace
+                    print("[DEBUG] Processing rationale from trace")
+                    print(f"[DEBUG] Trace data structure: {json.dumps(trace_data, indent=2)}")
+
+                    rationale_text = None
+                    if 'trace' in trace_data:
+                        inner_trace = trace_data['trace']
+                        if 'orchestrationTrace' in inner_trace:
+                            orchestration = inner_trace['orchestrationTrace']
+                            if 'rationale' in orchestration:
+                                rationale_text = orchestration['rationale'].get('text')
+                                print(f"[DEBUG] Found rationale text: {rationale_text}")
 
                     if rationale_text:
+                        print(f"[DEBUG] Processing rationale text: {rationale_text}")
                         if is_first_rationale:
+                            print("[DEBUG] This is the first rationale")
                             first_rationale_text = rationale_text
                             is_first_rationale = False
                         else:
+                            print("[DEBUG] This is a subsequent rationale")
                             improved_text = improve_rationale_text(
                                 rationale_text,
                                 rationale_history,
