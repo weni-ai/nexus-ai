@@ -1,7 +1,8 @@
 import os
-import uuid
 import json
 import time
+import logging
+
 from typing import Dict
 from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import OpenAI
@@ -10,10 +11,12 @@ from django.conf import settings
 from django.template.defaultfilters import slugify
 from redis import Redis
 
+
 from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 from router.route import route
 from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
@@ -45,7 +48,159 @@ from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 
 client = OpenAI()
+logger = logging.getLogger(__name__)
 
+
+def improve_rationale_text(rationale_text: str, previous_rationales: list = [], user_input: str = "", is_first_rationale: bool = False) -> str:
+    try:
+        # Get the Bedrock runtime client
+        bedrock_db = BedrockFileDatabase()
+        bedrock_client = bedrock_db.__get_bedrock_agent_runtime()
+
+        # Set the model ID for Amazon Nova Lite
+        model_id = "amazon.nova-lite-v1:0"
+
+        # Prepare the complete instruction content for the user message
+        instruction_content = """
+            RULES:
+                1. CRITICAL: When returning "invalid", return ONLY the word invalid with NO additional text, quotes, punctuation, or formatting.
+            """
+
+        # Add first rationale-specific instructions
+        if is_first_rationale:
+            instruction_content += """
+                2. IMPORTANT: This is the FIRST rationale. NEVER mark first rationales as invalid. Always improve them.
+            """
+
+        instruction_content += """
+            2. Mark as invalid if the rationale:
+            - Contains greetings, generic assistance, or simple acknowledgments
+            - Mentions internal components (e.g., "ProductConcierge") without adding value
+            - Describes communication actions with the user (e.g., "Vou informar ao usuário")
+            - Is vague, generic, or lacks specific actionable content
+            - Conveys essentially the same information as any previous rationale, even if worded differently
+            - Addresses the same topic or message as the immediately previous rationale
+
+            3. Transform all other rationales by:
+            - Keeping them concise and direct (max 15 words)
+            - Using active voice and present tense
+            - Removing conversation starters and technical jargon
+            - Clearly stating the current action or error condition
+            - Preserving essential details from the original rationale
+            - Returning ONLY the transformed text with NO additional explanation or formatting
+
+            EXAMPLES:
+
+            Valid transformations:
+            "Consultando o ProductConcierge sobre sugestões de roupas formais" → Buscando roupas formais para você.
+
+            "O usuário está procurando voos de Maceió para São Paulo para uma pessoa, com datas específicas. Vou utilizar o agente de viagens para buscar essas informações." → Verificando voos de Maceió para São Paulo nas datas especificadas.
+
+            "Recebi um erro porque as datas fornecidas são no passado. Preciso informar ao usuário que é necessário fornecer datas futuras para a pesquisa." → Datas fornecidas estão no passado, necessário datas futuras.
+
+            Invalid examples:
+            "Dando as boas-vindas e oferecendo assistência ao usuário" → invalid
+
+            "Vou informar ao usuário sobre o resultado da busca" → invalid
+
+            "O agente de viagens informou que as datas fornecidas já passaram. Vou informar ao usuário e solicitar novas datas." → invalid
+
+            Redundancy examples (second rationale invalid):
+            1st: "Buscando um hotel em São Paulo com piscina e academia." → Localizando hotéis em São Paulo com piscina e academia.
+            2nd: "Procurando hotéis em São Paulo que tenham piscina e academia disponíveis." → invalid
+
+            1st: "Nenhum voo encontrado para as datas solicitadas." → Nenhum voo disponível nas datas solicitadas.
+            2nd: "Nenhum voo disponível para as datas solicitadas, oferecendo alternativas." → invalid
+
+            REMEMBER: Your output MUST be either the transformed rationale OR exactly the word invalid. Never add explanations, quotes, punctuation, or formatting.
+        """
+
+        # First rationale reminder
+        if is_first_rationale:
+            instruction_content += """
+                FINAL REMINDER: This is the FIRST rationale. You MUST improve it and NOT return "invalid". Transform it into a concise, clear message.
+            """
+
+        instruction_content += """
+            Analyze the following rationale text:
+        """
+
+        # Add user input context if available
+        if user_input:
+            instruction_content += f"""
+                User's current message: "{user_input}"
+            """
+
+        # Add previous rationales if available
+        if previous_rationales:
+            instruction_content += f"""
+                Previous rationales:
+                {' '.join([f"- {r}" for r in previous_rationales])}
+            """
+
+        # Add the main instructions and few-shot examples within the instruction content
+        instruction_content += rationale_text
+
+        # Build conversation with just one user message and an expected assistant response
+        conversation = [
+            # Single user message with all instructions and the rationale to analyze
+            {
+                "role": "user",
+                "content": [{"text": instruction_content}]
+            }
+        ]
+
+        # Send the request to Amazon Bedrock
+        response = bedrock_client.converse(
+            modelId=model_id,
+            messages=conversation,
+            inferenceConfig={
+                "maxTokens": 150,
+                "temperature": 0.5,
+                "topP": 0.9
+            }
+        )
+
+        print(f"Improvement Response: {response}")
+        # Extract the response text
+        response_text = response["output"]["message"]["content"][0]["text"]
+
+        # For first rationales, make sure they're never "invalid"
+        if is_first_rationale and response_text.strip().lower() == "invalid":
+            # If somehow still got "invalid", force a generic improvement
+            return "Processando sua solicitação agora."
+
+        # Remove any quotes from the response
+        return response_text.strip().strip('"\'')
+    except Exception as e:
+        logger.error(f"Error improving rationale text: {str(e)}")
+        return rationale_text  # Return original text if transformation fails
+
+
+@celery_app.task
+def task_send_message_http_client(
+    text: str,
+    urns: list,
+    project_uuid: str,
+    user: str,
+    full_chunks: list[Dict] = None
+) -> None:
+    broadcast = SendMessageHTTPClient(
+        os.environ.get(
+            'FLOWS_REST_ENDPOINT'
+        ),
+        os.environ.get(
+            'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
+        )
+    )
+
+    broadcast.send_direct_message(
+        text=text,
+        urns=urns,
+        project_uuid=project_uuid,
+        user=user,
+        full_chunks=full_chunks
+    )
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def get_trace_summary(language, trace):
@@ -336,6 +491,9 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
 @celery_app.task(bind=True, soft_time_limit=120, time_limit=125)
 def start_multi_agents(self, message: Dict, preview: bool = False, language: str = "en", user_email: str = '') -> bool:  # pragma: no cover
+    print(f"[DEBUG] Starting multi_agents task with message: {message}")
+    print(f"[DEBUG] Preview mode: {preview}, Language: {language}, User email: {user_email}")
+
     # TODO: Logs
     message = message_factory(
         project_uuid=message.get("project_uuid"),
@@ -346,12 +504,17 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         msg_event=message.get("msg_event"),
         contact_fields=message.get("contact_fields", {}),
     )
+    print(f"[DEBUG] Processed message factory: Project UUID: {message.project_uuid}, Text: {message.text}")
 
     project = Project.objects.get(uuid=message.project_uuid)
+    print(f"[DEBUG] Found project: {project.uuid}")
+    
     supervisor = project.team
     supervisor_version = supervisor.current_version
+    print(f"[DEBUG] Supervisor details - ID: {supervisor.external_id}, Version Alias: {supervisor_version.alias_id}")
 
     contentbase = get_default_content_base_by_project(message.project_uuid)
+    print(f"[DEBUG] Retrieved contentbase for project: {contentbase}")
 
     usecase = AgentUsecase()
 
@@ -373,10 +536,20 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
     try:
         # Stream supervisor response
+        print("[+ Starting multi-agents +]")
         broadcast, _ = get_action_clients(preview, multi_agents=True)
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
         full_chunks = []
+        rationale_history = []
         full_response = ""
+        first_rationale_text = None
+        is_first_rationale = True
+        print("[DEBUG] Starting supervisor stream invocation with parameters:")
+        print(f"[DEBUG] Session ID: {session_id}")
+        print(f"[DEBUG] Supervisor ID: {supervisor.external_id}")
+        print(f"[DEBUG] Supervisor Alias ID: {supervisor_version.alias_id}")
+        print(f"[DEBUG] Message: {message}")
+        print(f"[DEBUG] Content Base: {contentbase}")
         for event in usecase.invoke_supervisor_stream(
             session_id=session_id,
             supervisor_id=supervisor.external_id,
@@ -413,6 +586,86 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                 "session_id": session_id
                             }
                         )
+                print('==================')
+                print(f"[DEBUG] Received trace event: {event}")
+                trace_data = event['content']
+                try:
+                    # Handle first rationale for multi-agent scenarios
+                    if first_rationale_text and 'callerChain' in trace_data:
+                        caller_chain = trace_data['callerChain']
+                        if isinstance(caller_chain, list) and len(caller_chain) > 1:
+                            improved_text = improve_rationale_text(
+                                first_rationale_text,
+                                rationale_history,
+                                message.text,
+                                is_first_rationale=True
+                            )
+                            logger.info(f"First rationale from multi-agents: {improved_text}")
+
+                            if improved_text.lower() != "invalid":
+                                rationale_history.append(improved_text)
+                                task_send_message_http_client.delay(
+                                    text=improved_text,
+                                    urns=[message.contact_urn],
+                                    project_uuid=str(message.project_uuid),
+                                    user=user_email,
+                                )
+                            first_rationale_text = None
+
+                    # Process orchestration trace rationale
+                    rationale_text = (
+                        trace_data.get('trace', {})
+                        .get('orchestrationTrace', {})
+                        .get('rationale', {})
+                        .get('text')
+                    )
+
+                    if rationale_text:
+                        if is_first_rationale:
+                            first_rationale_text = rationale_text
+                            is_first_rationale = False
+                        else:
+                            improved_text = improve_rationale_text(
+                                rationale_text,
+                                rationale_history,
+                                message.text
+                            )
+                            logger.info(f"Subsequent rationale: {improved_text}")
+
+                            if improved_text.lower() != "invalid":
+                                rationale_history.append(improved_text)
+                                if user_email:
+                                    task_send_message_http_client.delay(
+                                        text=improved_text,
+                                        urns=[message.contact_urn],
+                                        project_uuid=str(message.project_uuid),
+                                        user=user_email,
+                                    )
+
+                    # Get summary from Claude with specified language
+                    event['content']['summary'] = get_trace_summary(language, event['content'])
+                    if user_email:
+                        send_preview_message_to_websocket(
+                            project_uuid=str(message.project_uuid),
+                            user_email=user_email,
+                            message_data={
+                                "type": "trace_update",
+                                "trace": event['content'],
+                                "session_id": session_id
+                            }
+                        )
+                except Exception as e:
+                    logger.error(f"Error processing rationale: {str(e)}")
+                    if user_email:
+                        send_preview_message_to_websocket(
+                            project_uuid=str(message.project_uuid),
+                            user_email=user_email,
+                            message_data={
+                                "type": "error",
+                                "content": f"Error processing rationale: {str(e)}",
+                                "session_id": session_id
+                            }
+                        )
 
         if user_email:
             # Send completion status
@@ -435,6 +688,9 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         )
 
     except Exception as e:
+        print(f"[DEBUG] Error in start_multi_agents: {str(e)}")
+        print(f"[DEBUG] Error type: {type(e)}")
+        print(f"[DEBUG] Full exception details: {e.__dict__}")
         if user_email:
             # Send error status through WebSocket
             send_preview_message_to_websocket(
