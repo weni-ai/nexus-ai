@@ -12,6 +12,7 @@ from nexus.agents.models import (
     ActiveAgent,
     Agent,
     AgentSkills,
+    ContactField,
     Team,
     AgentVersion,
     AgentSkillVersion
@@ -83,6 +84,19 @@ class AgentUsecase:
         agent: Agent = self.get_agent_object(uuid=agent_uuid)
         team: Team = self.get_team_object(project__uuid=project_uuid)
 
+        if str(agent.project.uuid) != project_uuid:
+            print("[+ Creating contact fields for agent +]")
+            fields = []
+            for contact_field in agent.contact_fields.distinct("key"):
+                key = contact_field.key
+                value_type = contact_field.value_type
+                print(f"Contact field: {key} {value_type}")
+                fields.append({
+                    "key": key,
+                    "value_type": value_type
+                })
+            self.create_contact_fields(project_uuid, fields, agent=agent, convert_fields=False)
+
         sub_agent = BedrockSubAgent(
             display_name=agent.display_name,
             slug=agent.slug,
@@ -135,7 +149,7 @@ class AgentUsecase:
         )
         return external_id
 
-    def create_contact_fields(self, project_uuid: str, fields: List[Dict[str, str]]):
+    def create_contact_fields(self, project_uuid: str, fields: List[Dict[str, str]], agent, convert_fields: bool = True):
         types = {
             "string": "text",
             "boolean": "text",
@@ -155,11 +169,22 @@ class AgentUsecase:
 
         for contact_field in fields:
             if contact_field.get('key') not in existing_keys:
-                print(f"Creating contact field: {contact_field.get('key')} {contact_field.get('value_type')}")
+                if convert_fields:
+                    value_type = types.get(contact_field.get('value_type'))
+                else:
+                    value_type = contact_field.get('value_type')
+                    
+                print(f"Creating contact field: {contact_field.get('key')} {value_type}")
+                ContactField.objects.create(
+                    project_id=project_uuid,
+                    key=contact_field.get('key'),
+                    value_type=value_type,
+                    agent=agent,
+                )
                 flows_client.create_project_contact_field(
                     project_uuid=project_uuid,
                     key=contact_field.get('key'),
-                    value_type=types.get(contact_field.get('value_type'))
+                    value_type=value_type
                 )
 
     def create_external_agent(
@@ -747,6 +772,7 @@ class AgentUsecase:
         user: User,
         project_uuid: str
     ):
+        # deprecated
         """
         Handle creation or update of agent skills.
 
@@ -778,7 +804,7 @@ class AgentUsecase:
                     params.update(param)
                 skill_parameters = params
 
-            self.create_contact_fields(project_uuid, fields)
+            self.create_contact_fields(project_uuid, fields, agent=agent)
 
             lambda_name = f"{slug}-{agent.external_id}"
             function_schema = [
