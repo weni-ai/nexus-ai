@@ -94,6 +94,9 @@ class AgentUsecase:
         if team.metadata.get("is_single_agent"):
             self.update_multi_agent(team)
 
+        self.external_agent_client.wait_agent_status_update(team.external_id)
+        self.external_agent_client.wait_agent_status_update(agent.external_id)
+
         agent_collaborator_id = self.external_agent_client.associate_sub_agents(
             supervisor_id=team.external_id,
             agents_list=[sub_agent]
@@ -850,6 +853,8 @@ class AgentUsecase:
             print(response)
             version.delete()
             return response
+        except self.external_agent_client.bedrock_agent.exceptions.ResourceNotFoundException:
+            return
         except Exception:
             raise
 

@@ -469,6 +469,16 @@ class BedrockFileDatabase(FileDataBase):
             False: "DISABLED"
         }
 
+        self.wait_agent_status_update(agent_id)
+
+        guardrail_configuration = agent_to_update.get("guardrailConfiguration")
+
+        if not guardrail_configuration:
+            guardrail_configuration = {
+                "guardrailIdentifier": settings.AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
+                "guardrailVersion": settings.AWS_BEDROCK_GUARDRAIL_VERSION
+            }
+
         self.bedrock_agent.update_agent(
             agentId=agent_to_update['agentId'],
             agentName=agent_to_update['agentName'],
@@ -477,6 +487,7 @@ class BedrockFileDatabase(FileDataBase):
             instruction=agent_to_update["instruction"],
             foundationModel=agent_to_update['foundationModel'],
             memoryConfiguration=memory_configuration,
+            guardrailConfiguration=guardrail_configuration
         )
 
     def delete_agent(self, agent_id: str):
@@ -529,7 +540,7 @@ class BedrockFileDatabase(FileDataBase):
         sessionState["sessionAttributes"] = { "credentials": json.dumps(credentials, default=str) }
 
         sessionState["promptSessionAttributes"] = {
-            "format_components": get_all_formats(),
+            # "format_components": get_all_formats(),
             "contact_urn": message.contact_urn,
             "contact_fields": message.contact_fields_as_json,
             "date_time_now": pendulum.now("America/Sao_Paulo").isoformat(),
@@ -673,7 +684,7 @@ class BedrockFileDatabase(FileDataBase):
         self.wait_agent_status_update(response_create_supervisor['agent']['agentId'])
         supervisor_id = response_create_supervisor['agent']['agentId']
 
-        lambda_arn = f"{settings.AWS_BEDROCK_LAMBDA_ARN}:$LATEST"
+        lambda_arn = f"{settings.AWS_BEDROCK_LAMBDA_ARN}"
 
         base_action_group_response = self.get_agent_action_group(
             agent_id=settings.AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID,

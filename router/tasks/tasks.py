@@ -7,6 +7,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import OpenAI
 
 from django.conf import settings
+from django.template.defaultfilters import slugify
 from redis import Redis
 
 from nexus.celery import app as celery_app
@@ -104,8 +105,7 @@ def get_action_clients(preview: bool = False, multi_agents: bool = False):
         )
         return broadcast, flow_start
 
-    if multi_agents:
-
+    if multi_agents and settings.AGENT_USE_COMPONENTS:
         broadcast = WhatsAppBroadcastHTTPClient(
             os.environ.get(
                 'FLOWS_REST_ENDPOINT'
@@ -354,7 +354,10 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     contentbase = get_default_content_base_by_project(message.project_uuid)
 
     usecase = AgentUsecase()
-    session_id = f"project-{project.uuid}-session-{message.contact_urn}"
+
+    # Use the sanitized URN in the session ID
+    session_id = f"project-{project.uuid}-session-{message.sanitized_urn}"
+    session_id = slugify(session_id)
 
     if user_email:
         # Send initial status through WebSocket
@@ -396,19 +399,20 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                         }
                     )
             elif event['type'] == 'trace':
-                # Get summary from Claude with specified language
-                event['content']['summary'] = get_trace_summary(language, event['content'])
-                if user_email:
-                    # Send trace data through WebSocket
-                    send_preview_message_to_websocket(
-                        project_uuid=str(message.project_uuid),
-                        user_email=user_email,
-                        message_data={
-                            "type": "trace_update",
-                            "trace": event['content'],
-                            "session_id": session_id
-                        }
-                    )
+                if preview:
+                    # Get summary from Claude with specified language
+                    event['content']['summary'] = get_trace_summary(language, event['content'])
+                    if user_email:
+                        # Send trace data through WebSocket
+                        send_preview_message_to_websocket(
+                            project_uuid=str(message.project_uuid),
+                            user_email=user_email,
+                            message_data={
+                                "type": "trace_update",
+                                "trace": event['content'],
+                                "session_id": session_id
+                            }
+                        )
 
         if user_email:
             # Send completion status

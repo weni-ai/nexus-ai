@@ -93,15 +93,18 @@ class FlowsRESTClient(RestClient):
         body.update(msg)
 
         print("----Whatsapp broadcast----")
-        print(url)
-        print(urns)
-        print(msg)
-        print(project_uuid)
-        print("--------------------------")
+        print("URL: ", url)
+        print("URNs: ", urns)
+        print("Msg: ", msg)
+        print("Body: ", body)
+        print("Project UUID: ", project_uuid)
 
         response = requests.post(
             url,
             json=body,
             headers=self.authentication_instance.headers
         )
+        print("response status: ", response.status_code)
+        print("response: ", response.text)
+        print("--------------------------")
         return response
