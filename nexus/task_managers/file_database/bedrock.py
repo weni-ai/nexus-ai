@@ -163,8 +163,7 @@ class BedrockFileDatabase(FileDataBase):
         print("\n\n\n\n\n")
         bytes_stream = BytesIO(json.dumps(data).encode('utf-8'))
         self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
-
-    
+ 
     def multipart_upload(self, file, content_base_uuid: str, file_uuid: str, part_size: int = 5 * 1024 * 1024):
         from io import BytesIO
         s3_client = self.s3_client
@@ -276,6 +275,7 @@ class BedrockFileDatabase(FileDataBase):
         function_schema: List[Dict],
         agent: Agent,
     ):
+        
         kwargs = {
             "actionGroupExecutor":{
                 'lambda': lambda_arn
@@ -286,7 +286,11 @@ class BedrockFileDatabase(FileDataBase):
         }
 
         if function_schema:
-            kwargs.update({"functionSchema": {"functions": function_schema}})
+            kwargs.update({"functionSchema": {"functions": self._clean_function_schema(function_schema)}})
+        
+        print("1. ================================================")
+        print("kwargs: ", kwargs)
+        print("================================================")
 
         action_group = self.bedrock_agent.create_agent_action_group(**kwargs)
 
@@ -317,6 +321,12 @@ class BedrockFileDatabase(FileDataBase):
             description=knowledge_base_instruction,
             knowledgeBaseId=knowledge_base_id
         )
+
+    def _clean_function_schema(self, function_schema: List[Dict]) -> List[Dict]:
+        for function in function_schema:
+            if not function.get('parameters'):
+                function.pop('parameters', None)
+        return function_schema
 
     def create_agent(
         self,
@@ -704,7 +714,11 @@ class BedrockFileDatabase(FileDataBase):
         }
 
         if function_schema:
-            kwargs.update({"functionSchema": {"functions": function_schema}})
+            kwargs.update({"functionSchema": {"functions": self._clean_function_schema(function_schema)}})
+
+        print("2. ================================================")
+        print("kwargs: ", kwargs)
+        print("================================================")
 
         self.bedrock_agent.create_agent_action_group(**kwargs)
 
@@ -971,7 +985,11 @@ class BedrockFileDatabase(FileDataBase):
         }
 
         if function_schema:
-            kwargs.update({"functionSchema": {"functions": function_schema}})
+            kwargs.update({"functionSchema": {"functions": self._clean_function_schema(function_schema)}})
+
+        print("3. ================================================")
+        print("kwargs: ", kwargs)
+        print("================================================")
 
         response = self.bedrock_agent.update_agent_action_group(**kwargs)
         return response
