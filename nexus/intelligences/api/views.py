@@ -214,6 +214,10 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
 
         data = request.data
 
+        print("+++++++++++ WENIGPT DATA +++++++++++")
+        print(data)
+        print("++++++++++++++++++++++")
+
         content_base_uuid = data.get("content_base_uuid")
         generative_ai_database = get_gpt_by_content_base_uuid(content_base_uuid)
 
@@ -238,6 +242,10 @@ class QuickTestAIAPIView(views.APIView):
 
             data = request.data
             content_base_uuid = data.get("content_base_uuid")
+
+            print("+++++++++++ WENIGPT DATA QUICK TEST +++++++++++")
+            print(data)
+            print("++++++++++++++++++++++")
 
             user = request.user
             org = get_org_by_content_base_uuid(content_base_uuid)

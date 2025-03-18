@@ -87,6 +87,12 @@ class SentenXFileDataBase:
         response = requests.post(url=url, headers=self.headers, json=body)
         response.raise_for_status()
 
+        print("+++++++++++ SENTENX CHUNKS +++++++++++")
+        print(url)
+        print(body)
+        print(response.text)
+        print("++++++++++++++++++++++")
+
         if response.status_code == 200:
             return {
                 "status": response.status_code,

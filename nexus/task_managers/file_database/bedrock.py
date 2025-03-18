@@ -788,6 +788,11 @@ class BedrockFileDatabase(FileDataBase):
 
         llm_chunk_list: List[Dict] = self.__format_search_data_response(chunks)
 
+        print("+++++++++++ BEDROCK CHUNKS +++++++++++")
+        print(retrieval_config)
+        print(response)
+        print("++++++++++++++++++++++") 
+
         return {
             "status": status,
             "data": {
