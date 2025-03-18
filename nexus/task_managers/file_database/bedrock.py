@@ -276,15 +276,20 @@ class BedrockFileDatabase(FileDataBase):
         function_schema: List[Dict],
         agent: Agent,
     ):
-        action_group = self.bedrock_agent.create_agent_action_group(
-            actionGroupExecutor={
+        kwargs = {
+            "actionGroupExecutor":{
                 'lambda': lambda_arn
             },
-            actionGroupName=action_group_name,
-            agentId=agent_external_id,
-            agentVersion='DRAFT',
-            functionSchema={"functions": function_schema}
-        )
+            "actionGroupName": action_group_name,
+            "agentId": agent_external_id,
+            "agentVersion": "DRAFT",
+        }
+
+        if function_schema:
+            kwargs.update({"functionSchema": {"functions": function_schema}})
+
+        action_group = self.bedrock_agent.create_agent_action_group(**kwargs)
+
 
         data = {
             'actionGroupId': action_group['agentActionGroup']['actionGroupId'],
@@ -775,16 +780,20 @@ class BedrockFileDatabase(FileDataBase):
 
         # print("FUNCTION SCHEMA SANITIZED: ", function_schema)
 
-        self.bedrock_agent.create_agent_action_group(
-            actionGroupExecutor={
+        kwargs = {
+            "actionGroupExecutor": {
                 'lambda': lambda_arn
             },
-            actionGroupName=base_action_group_response["agentActionGroup"]["actionGroupName"],
-            actionGroupState="ENABLED",
-            agentId=supervisor_id,
-            agentVersion='DRAFT',
-            functionSchema={"functions": function_schema},
-        )
+            "actionGroupName": base_action_group_response["agentActionGroup"]["actionGroupName"],
+            "actionGroupState": "ENABLED",
+            "agentId": supervisor_id,
+            "agentVersion": "DRAFT",
+        }
+
+        if function_schema:
+            kwargs.update({"functionSchema": {"functions": function_schema}})
+
+        self.bedrock_agent.create_agent_action_group(**kwargs)
 
         parent_signature = "AMAZON.UserInput"
 
@@ -1036,16 +1045,22 @@ class BedrockFileDatabase(FileDataBase):
         Updates an existing action group for an agent.
         """
         print("SCHEMA UPDATE: ", function_schema)
-        response = self.bedrock_agent.update_agent_action_group(
-            actionGroupExecutor={
+
+
+        kwargs = {
+            "actionGroupExecutor": {
                 'lambda': lambda_arn
             },
-            actionGroupName=action_group_name,
-            agentId=agent_external_id,
-            actionGroupId=action_group_id,
-            agentVersion="DRAFT",
-            functionSchema={"functions": function_schema}
-        )
+            "actionGroupName": action_group_name,
+            "agentId": agent_external_id,
+            "actionGroupId": action_group_id,
+            "agentVersion": "DRAFT",
+        }
+
+        if function_schema:
+            kwargs.update({"functionSchema": {"functions": function_schema}})
+
+        response = self.bedrock_agent.update_agent_action_group(**kwargs)
         return response
 
     def _create_lambda_iam_role(
