@@ -58,7 +58,7 @@ def improve_rationale_text(rationale_text: str, previous_rationales: list = [], 
     try:
         # Get the Bedrock runtime client
         bedrock_db = BedrockFileDatabase()
-        bedrock_client = bedrock_db.__get_bedrock_agent_runtime()
+        bedrock_client = bedrock_db._BedrockFileDatabase__get_bedrock_agent_runtime()
 
         # Set the model ID for Amazon Nova Lite
         model_id = "amazon.nova-lite-v1:0"
