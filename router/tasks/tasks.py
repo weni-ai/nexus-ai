@@ -608,8 +608,9 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                     text=improved_text,
                                     urns=[message.contact_urn],
                                     project_uuid=str(message.project_uuid),
-                                    user=user_email,
+                                    user=flows_user_email,
                                 )
+
                             first_rationale_text = None
 
                     # Process orchestration trace rationale - Ajustando a estrutura do trace
@@ -642,13 +643,12 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
                             if improved_text.lower() != "invalid":
                                 rationale_history.append(improved_text)
-                                if user_email:
-                                    task_send_message_http_client.delay(
-                                        text=improved_text,
-                                        urns=[message.contact_urn],
-                                        project_uuid=str(message.project_uuid),
-                                        user=user_email,
-                                    )
+                                task_send_message_http_client.delay(
+                                    text=improved_text,
+                                    urns=[message.contact_urn],
+                                    project_uuid=str(message.project_uuid),
+                                    user=flows_user_email,
+                                )
 
                     # Get summary from Claude with specified language
                     event['content']['summary'] = get_trace_summary(language, event['content'])
