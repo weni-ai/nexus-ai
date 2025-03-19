@@ -491,6 +491,8 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
 @celery_app.task(bind=True, soft_time_limit=120, time_limit=125)
 def start_multi_agents(self, message: Dict, preview: bool = False, language: str = "en", user_email: str = '') -> bool:  # pragma: no cover
+
+    # TODO: Logs
     message = message_factory(
         project_uuid=message.get("project_uuid"),
         text=message.get("text"),
@@ -501,40 +503,18 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         contact_fields=message.get("contact_fields", {}),
     )
 
-    # Initialize Redis client
-    redis_client = Redis.from_url(settings.REDIS_URL)
-    
-    # Check if there's a pending response for this user
-    pending_response_key = f"multi_response:{message.contact_urn}"
-    pending_task_key = f"multi_task:{message.contact_urn}"
-    pending_response = redis_client.get(pending_response_key)
-    pending_task_id = redis_client.get(pending_task_key)
-
-    if pending_response:
-        # Revoke the previous task
-        if pending_task_id:
-            celery_app.control.revoke(pending_task_id.decode('utf-8'), terminate=True)
-
-        # Concatenate the previous message with the new one
-        previous_message = pending_response.decode('utf-8')
-        concatenated_message = f"{previous_message}\n{message.text}"
-        message.text = concatenated_message
-        redis_client.delete(pending_response_key)  # Remove the pending response
-    else:
-        # Store the current message in Redis
-        redis_client.set(pending_response_key, message.text)
-
-    # Store the current task ID in Redis
-    redis_client.set(pending_task_key, self.request.id)
-
     project = Project.objects.get(uuid=message.project_uuid)
+
     supervisor = project.team
     supervisor_version = supervisor.current_version
+
     contentbase = get_default_content_base_by_project(message.project_uuid)
+
     usecase = AgentUsecase()
     session_id = f"project-{project.uuid}-session-{message.contact_urn}"
 
     if user_email:
+        # Send initial status through WebSocket
         send_preview_message_to_websocket(
             project_uuid=str(project.uuid),
             user_email=user_email,
@@ -546,6 +526,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         )
 
     try:
+        # Stream supervisor response
         broadcast, _ = get_action_clients(preview, multi_agents=True)
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
         full_chunks = []
@@ -553,7 +534,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         full_response = ""
         first_rationale_text = None
         is_first_rationale = True
-
         for event in usecase.invoke_supervisor_stream(
             session_id=session_id,
             supervisor_id=supervisor.external_id,
@@ -565,6 +545,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 chunk = event['content']
                 full_response += chunk
                 if user_email:
+                    # Send chunk through WebSocket
                     send_preview_message_to_websocket(
                         project_uuid=str(message.project_uuid),
                         user_email=user_email,
@@ -596,9 +577,10 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                     project_uuid=str(message.project_uuid),
                                     user=flows_user_email,
                                 )
+
                             first_rationale_text = None
 
-                    # Process orchestration trace rationale
+                    # Process orchestration trace rationale - Ajustando a estrutura do trace
                     rationale_text = None
                     if 'trace' in trace_data:
                         inner_trace = trace_data['trace']
@@ -653,6 +635,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                         )
 
         if user_email:
+            # Send completion status
             send_preview_message_to_websocket(
                 user_email=user_email,
                 project_uuid=str(project.uuid),
@@ -663,10 +646,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 }
             )
 
-        # Clean up Redis keys after successful completion
-        redis_client.delete(pending_response_key)
-        redis_client.delete(pending_task_key)
-
         return dispatch(
             llm_response=full_response,
             message=message,
@@ -676,11 +655,8 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         )
 
     except Exception as e:
-        # Clean up Redis keys in case of error
-        redis_client.delete(pending_response_key)
-        redis_client.delete(pending_task_key)
-        
         if user_email:
+            # Send error status through WebSocket
             send_preview_message_to_websocket(
                 user_email=user_email,
                 project_uuid=str(project.uuid),
