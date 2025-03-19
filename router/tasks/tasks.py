@@ -511,17 +511,13 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         msg_event=message.get("msg_event"),
         contact_fields=message.get("contact_fields", {}),
     )
-    print(f"[DEBUG] Processed message factory: Project UUID: {message.project_uuid}, Text: {message.text}")
 
     project = Project.objects.get(uuid=message.project_uuid)
-    print(f"[DEBUG] Found project: {project.uuid}")
 
     supervisor = project.team
     supervisor_version = supervisor.current_version
-    print(f"[DEBUG] Supervisor details - ID: {supervisor.external_id}, Version Alias: {supervisor_version.alias_id}")
 
     contentbase = get_default_content_base_by_project(message.project_uuid)
-    print(f"[DEBUG] Retrieved contentbase for project: {contentbase}")
 
     usecase = AgentUsecase()
 
@@ -570,6 +566,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         # Stream supervisor response
         broadcast, _ = get_action_clients(preview, multi_agents=True, project_use_components=project_use_components)
         print("[+ Starting multi-agents +]")
+
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
         full_chunks = []
         rationale_history = []
@@ -578,12 +575,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
         first_rationale_text = None
         is_first_rationale = True
-        print("[DEBUG] Starting supervisor stream invocation with parameters:")
-        print(f"[DEBUG] Session ID: {session_id}")
-        print(f"[DEBUG] Supervisor ID: {supervisor.external_id}")
-        print(f"[DEBUG] Supervisor Alias ID: {supervisor_version.alias_id}")
-        print(f"[DEBUG] Message: {message}")
-        print(f"[DEBUG] Content Base: {contentbase}")
         for event in usecase.invoke_supervisor_stream(
             session_id=session_id,
             supervisor_id=supervisor.external_id,
@@ -635,7 +626,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                 message.text,
                                 is_first_rationale=True
                             )
-                            logger.info(f"First rationale from multi-agents: {improved_text}")
 
                             if improved_text.lower() != "invalid":
                                 rationale_history.append(improved_text)
@@ -649,9 +639,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                             first_rationale_text = None
 
                     # Process orchestration trace rationale - Ajustando a estrutura do trace
-                    print("[DEBUG] Processing rationale from trace")
-                    print(f"[DEBUG] Trace data structure: {json.dumps(trace_data, indent=2)}")
-
                     rationale_text = None
                     if 'trace' in trace_data:
                         inner_trace = trace_data['trace']
@@ -659,22 +646,17 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                             orchestration = inner_trace['orchestrationTrace']
                             if 'rationale' in orchestration:
                                 rationale_text = orchestration['rationale'].get('text')
-                                print(f"[DEBUG] Found rationale text: {rationale_text}")
 
                     if rationale_text:
-                        print(f"[DEBUG] Processing rationale text: {rationale_text}")
                         if is_first_rationale:
-                            print("[DEBUG] This is the first rationale")
                             first_rationale_text = rationale_text
                             is_first_rationale = False
                         else:
-                            print("[DEBUG] This is a subsequent rationale")
                             improved_text = improve_rationale_text(
                                 rationale_text,
                                 rationale_history,
                                 message.text
                             )
-                            logger.info(f"Subsequent rationale: {improved_text}")
 
                             if improved_text.lower() != "invalid":
                                 rationale_history.append(improved_text)
