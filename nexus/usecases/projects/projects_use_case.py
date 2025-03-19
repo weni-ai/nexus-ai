@@ -189,6 +189,12 @@ class ProjectsUseCase:
             Project.SENTENX: SentenXFileDataBase
         }.get(project.indexer_database)
 
+    def get_indexer_database(self, indexer_database: str):
+        return {
+            Project.BEDROCK: BedrockFileDatabase,
+            Project.SENTENX: SentenXFileDataBase
+        }.get(indexer_database)
+
     def get_project_by_content_base_uuid(self, content_base_uuid: str) -> Project:
         content_base = ContentBase.objects.get(uuid=content_base_uuid)
         intelligence = content_base.intelligence
