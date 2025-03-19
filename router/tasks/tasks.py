@@ -55,7 +55,7 @@ def improve_rationale_text(rationale_text: str, previous_rationales: list = [], 
     try:
         # Get the Bedrock runtime client
         bedrock_db = BedrockFileDatabase()
-        bedrock_client = bedrock_db._BedrockFileDatabase__get_bedrock_agent_runtime()
+        bedrock_client = bedrock_db._BedrockFileDatabase__get_bedrock_agent()
 
         # Set the model ID for Amazon Nova Lite
         model_id = "amazon.nova-lite-v1:0"
@@ -508,7 +508,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
     project = Project.objects.get(uuid=message.project_uuid)
     print(f"[DEBUG] Found project: {project.uuid}")
-    
+
     supervisor = project.team
     supervisor_version = supervisor.current_version
     print(f"[DEBUG] Supervisor details - ID: {supervisor.external_id}, Version Alias: {supervisor_version.alias_id}")
