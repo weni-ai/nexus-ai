@@ -540,28 +540,7 @@ class BedrockFileDatabase(FileDataBase):
         content_base: "ContentBase",
         message: "Message"
     ):
-        # Validate agent existence and status
-        try:
-            # List agent aliases
-            aliases = self.bedrock_agent.list_agent_aliases(agentId=supervisor_id)
-
-            # Validate specific alias   
-            alias_exists = False
-            for alias in aliases.get('agentAliasSummaries', []):
-                if alias.get('agentAliasId') == supervisor_alias_id:
-                    alias_exists = True
-                    print(f"[DEBUG] Found matching alias: {json.dumps(alias, indent=2, default=str)}")
-                    break
-
-            if not alias_exists:
-                print(f"[DEBUG] WARNING: Alias ID {supervisor_alias_id} not found in agent aliases")
-
-        except self.bedrock_agent.exceptions.ResourceNotFoundException as e:
-            print(f"[DEBUG] Agent validation failed: {str(e)}")
-            raise
-        except Exception as e:
-            print(f"[DEBUG] Unexpected error during agent validation: {str(e)}")
-            raise
+        print("Invoking supervisor with streaming")
 
         content_base_uuid = str(content_base.uuid)
         agent = content_base.agent

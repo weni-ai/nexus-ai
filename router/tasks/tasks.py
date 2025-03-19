@@ -539,9 +539,12 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     redis_client.set(pending_task_key, self.request.id)
 
     project = Project.objects.get(uuid=message.project_uuid)
+
     supervisor = project.team
     supervisor_version = supervisor.current_version
+
     contentbase = get_default_content_base_by_project(message.project_uuid)
+
     usecase = AgentUsecase()
 
     # Use the sanitized URN in the session ID
@@ -572,6 +575,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     redis_client.set(pending_task_key, self.request.id)
 
     if user_email:
+        # Send initial status through WebSocket
         send_preview_message_to_websocket(
             project_uuid=str(project.uuid),
             user_email=user_email,
@@ -597,7 +601,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
         first_rationale_text = None
         is_first_rationale = True
-
         for event in usecase.invoke_supervisor_stream(
             session_id=session_id,
             supervisor_id=supervisor.external_id,
@@ -609,6 +612,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 chunk = event['content']
                 full_response += chunk
                 if user_email:
+                    # Send chunk through WebSocket
                     send_preview_message_to_websocket(
                         project_uuid=str(message.project_uuid),
                         user_email=user_email,
@@ -657,9 +661,10 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                     project_uuid=str(message.project_uuid),
                                     user=flows_user_email,
                                 )
+
                             first_rationale_text = None
 
-                    # Process orchestration trace rationale
+                    # Process orchestration trace rationale - Ajustando a estrutura do trace
                     rationale_text = None
                     if 'trace' in trace_data:
                         inner_trace = trace_data['trace']
@@ -724,6 +729,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
             session_id,
         )
         if user_email:
+            # Send completion status
             send_preview_message_to_websocket(
                 user_email=user_email,
                 project_uuid=str(project.uuid),
@@ -733,10 +739,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                     "session_id": session_id
                 }
             )
-
-        # Clean up Redis keys after successful completion
-        redis_client.delete(pending_response_key)
-        redis_client.delete(pending_task_key)
 
         return dispatch(
             llm_response=full_response,
@@ -756,6 +758,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         print(f"[DEBUG] Full exception details: {e.__dict__}")
         
         if user_email:
+            # Send error status through WebSocket
             send_preview_message_to_websocket(
                 user_email=user_email,
                 project_uuid=str(project.uuid),
