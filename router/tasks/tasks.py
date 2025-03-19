@@ -491,8 +491,6 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
 @celery_app.task(bind=True, soft_time_limit=120, time_limit=125)
 def start_multi_agents(self, message: Dict, preview: bool = False, language: str = "en", user_email: str = '') -> bool:  # pragma: no cover
-    print(f"[DEBUG] Starting multi_agents task with message: {message}")
-    print(f"[DEBUG] Preview mode: {preview}, Language: {language}, User email: {user_email}")
 
     # TODO: Logs
     message = message_factory(
@@ -504,21 +502,16 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         msg_event=message.get("msg_event"),
         contact_fields=message.get("contact_fields", {}),
     )
-    print(f"[DEBUG] Processed message factory: Project UUID: {message.project_uuid}, Text: {message.text}")
 
     project = Project.objects.get(uuid=message.project_uuid)
-    print(f"[DEBUG] Found project: {project.uuid}")
 
     supervisor = project.team
     supervisor_version = supervisor.current_version
-    print(f"[DEBUG] Supervisor details - ID: {supervisor.external_id}, Version Alias: {supervisor_version.alias_id}")
 
     contentbase = get_default_content_base_by_project(message.project_uuid)
-    print(f"[DEBUG] Retrieved contentbase for project: {contentbase}")
 
     usecase = AgentUsecase()
     session_id = f"project-{project.uuid}-session-{message.contact_urn}"
-    print(f"[DEBUG] Created session ID: {session_id}")
 
     if user_email:
         # Send initial status through WebSocket
@@ -534,7 +527,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
     try:
         # Stream supervisor response
-        print("[+ Starting multi-agents +]")
         broadcast, _ = get_action_clients(preview, multi_agents=True)
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
         full_chunks = []
@@ -542,12 +534,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         full_response = ""
         first_rationale_text = None
         is_first_rationale = True
-        print("[DEBUG] Starting supervisor stream invocation with parameters:")
-        print(f"[DEBUG] Session ID: {session_id}")
-        print(f"[DEBUG] Supervisor ID: {supervisor.external_id}")
-        print(f"[DEBUG] Supervisor Alias ID: {supervisor_version.alias_id}")
-        print(f"[DEBUG] Message: {message}")
-        print(f"[DEBUG] Content Base: {contentbase}")
         for event in usecase.invoke_supervisor_stream(
             session_id=session_id,
             supervisor_id=supervisor.external_id,
@@ -570,8 +556,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                         }
                     )
             elif event['type'] == 'trace':
-                print('==================')
-                print(f"[DEBUG] Received trace event: {event}")
                 trace_data = event['content']
                 try:
                     # Handle first rationale for multi-agent scenarios
@@ -584,7 +568,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                 message.text,
                                 is_first_rationale=True
                             )
-                            logger.info(f"First rationale from multi-agents: {improved_text}")
 
                             if improved_text.lower() != "invalid":
                                 rationale_history.append(improved_text)
@@ -598,9 +581,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                             first_rationale_text = None
 
                     # Process orchestration trace rationale - Ajustando a estrutura do trace
-                    print("[DEBUG] Processing rationale from trace")
-                    print(f"[DEBUG] Trace data structure: {json.dumps(trace_data, indent=2)}")
-
                     rationale_text = None
                     if 'trace' in trace_data:
                         inner_trace = trace_data['trace']
@@ -608,22 +588,17 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                             orchestration = inner_trace['orchestrationTrace']
                             if 'rationale' in orchestration:
                                 rationale_text = orchestration['rationale'].get('text')
-                                print(f"[DEBUG] Found rationale text: {rationale_text}")
 
                     if rationale_text:
-                        print(f"[DEBUG] Processing rationale text: {rationale_text}")
                         if is_first_rationale:
-                            print("[DEBUG] This is the first rationale")
                             first_rationale_text = rationale_text
                             is_first_rationale = False
                         else:
-                            print("[DEBUG] This is a subsequent rationale")
                             improved_text = improve_rationale_text(
                                 rationale_text,
                                 rationale_history,
                                 message.text
                             )
-                            logger.info(f"Subsequent rationale: {improved_text}")
 
                             if improved_text.lower() != "invalid":
                                 rationale_history.append(improved_text)
@@ -680,9 +655,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         )
 
     except Exception as e:
-        print(f"[DEBUG] Error in start_multi_agents: {str(e)}")
-        print(f"[DEBUG] Error type: {type(e)}")
-        print(f"[DEBUG] Full exception details: {e.__dict__}")
         if user_email:
             # Send error status through WebSocket
             send_preview_message_to_websocket(
