@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, ObjectDoesNotExist
 
 from nexus.db.models import BaseModel, SoftDeleteModel
 from nexus.orgs.models import Org
@@ -56,11 +56,18 @@ class Languages(Enum):
 
 
 class ContentBase(BaseModel, SoftDeleteModel):
+    SENTENX = "SENTENX"
+    BEDROCK = "BEDROCK"
 
     LANGUAGES = (
         (Languages.ENGLISH.value, "English"),
         (Languages.PORTUGUESE.value, "Portuguese"),
         (Languages.SPANISH.value, "Spanish")
+    )
+
+    INDEXER_CHOICES = (
+        (SENTENX, "Sentenx"),
+        (BEDROCK, "Bedrock"),
     )
 
     title = models.CharField(max_length=255)
@@ -76,7 +83,18 @@ class ContentBase(BaseModel, SoftDeleteModel):
         choices=LANGUAGES
     )
     is_router = models.BooleanField(default=False)
+    _indexer_database = models.CharField(max_length=15, choices=INDEXER_CHOICES, null=True, blank=True)
 
+    @property
+    def indexer_database(self):
+        try:
+            intelligence = self.intelligence
+            project = IntegratedIntelligence.objects.get(intelligence=intelligence).project
+            return project.indexer_database
+        except ObjectDoesNotExist:
+            if self._indexer_database:
+                return self._indexer_database
+            return ContentBase.SENTENX
 
 class ContentBaseFile(BaseModel, SoftDeleteModel):
     file = models.URLField(null=True, blank=True)

@@ -456,8 +456,10 @@ class ContentBaseTextViewset(
                 content_base_dto=cb_dto,
                 content_base_text_dto=cbt_dto
             )
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-            if project.indexer_database == Project.BEDROCK:
+
+            indexer_database = content_base.indexer_database
+
+            if indexer_database == Project.BEDROCK:
                 bedrock_upload_text_file.delay(
                     content_base_dto=cb_dto.__dict__,
                     content_base_text_uuid=str(content_base_text.uuid),
@@ -511,8 +513,9 @@ class ContentBaseTextViewset(
                 user_email=user_email,
                 text=text
             )
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-            file_database = ProjectsUseCase().get_indexer_database_by_project(project)
+
+            indexer_database = content_base.indexer_database
+            file_database = ProjectsUseCase().get_indexer_database(indexer_database)
 
             delete_use_case = intelligences.DeleteContentBaseTextUseCase(file_database())
             delete_use_case.delete_content_base_text_from_index(
@@ -521,7 +524,7 @@ class ContentBaseTextViewset(
                 content_base_text.file_name
             )
 
-            if project.indexer_database == Project.BEDROCK:
+            if indexer_database == Project.BEDROCK:
                 bedrock_upload_text_file.delay(
                     content_base_dto=cb_dto.__dict__,
                     content_base_text_uuid=str(content_base_text.uuid),
@@ -629,11 +632,8 @@ class ContentBaseFileViewset(ModelViewSet):
 
             file_manager = CeleryFileManager()
 
-            try:
-                project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-                indexer_database = project.indexer_database
-            except ObjectDoesNotExist:
-                indexer_database = Project.SENTENX
+            content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
+            indexer_database = content_base.indexer_database
 
             if indexer_database == Project.BEDROCK:
                 data, status = file_manager.upload_and_ingest_file(
@@ -695,12 +695,13 @@ class ContentBaseFileViewset(ModelViewSet):
                 contentbasefile_uuid=contentbasefile_uuid,
                 user_email=user_email
             )
-            project_use_case = ProjectsUseCase()
-            project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
-            indexer = project_use_case.get_indexer_database_by_project(project)
+
+            content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
+            indexer_database = content_base.indexer_database
+            indexer = ProjectsUseCase().get_indexer_database(indexer_database)
             intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
 
-            if project.indexer_database == Project.BEDROCK:
+            if indexer_database == Project.BEDROCK:
                 start_ingestion_job.delay("", post_delete=True)
 
             event_manager.notify(
@@ -748,15 +749,15 @@ class ContentBaseLinkViewset(ModelViewSet):
 
             link = serializer.validated_data.get('link')
             content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
+            indexer_database = content_base.indexer_database
             link_dto = intelligences.ContentBaseLinkDTO(
                 link=link,
                 user_email=user_email,
                 content_base_uuid=str(content_base.uuid)
             )
             content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
 
-            if project.indexer_database == Project.BEDROCK:
+            if indexer_database == Project.BEDROCK:
                 bedrock_send_link.delay(
                     link=link,
                     user_email=user_email,
@@ -795,16 +796,17 @@ class ContentBaseLinkViewset(ModelViewSet):
                 contentbaselink_uuid=contentbaselink_uuid,
                 user_email=user_email
             )
-            project_use_case = ProjectsUseCase()
-            project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
-            indexer = project_use_case.get_indexer_database_by_project(project)
+
+            content_base = intelligences.get_by_contentbase_uuid(content_base_uuid)
+            indexer_database = content_base.indexer_database
+            indexer = ProjectsUseCase().get_indexer_database(indexer_database)
 
             use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
             use_case.delete_by_object(
                 content_base_link,
             )
 
-            if project.indexer_database == Project.BEDROCK:
+            if indexer_database == Project.BEDROCK:
                 start_ingestion_job.delay("", post_delete=True)
 
             event_manager.notify(
@@ -845,11 +847,7 @@ class DownloadFileViewSet(views.APIView):
                 user_email=user_email
             )
             content_base_uuid = str(content_base_file.content_base.uuid)
-            try:
-                project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-                indexer_database = project.indexer_database
-            except ObjectDoesNotExist:
-                indexer_database = Project.SENTENX
+            indexer_database = content_base_file.content_base.indexer_database
 
             if indexer_database == Project.BEDROCK:
                 file_name = f"{content_base_uuid}/{file_name}"
@@ -927,8 +925,9 @@ class RouterRetailViewSet(views.APIView):
                     content_base_uuid=str(content_base.uuid)
                 )
                 content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
+                indexer_database = content_base.indexer_database
 
-                if project.indexer_database == Project.BEDROCK:
+                if indexer_database == Project.BEDROCK:
                     bedrock_send_link.delay(
                         link=link,
                         user_email=user.email,
@@ -1028,16 +1027,15 @@ class RouterRetailViewSet(views.APIView):
         )
 
         for link in existing_links:
-            project_use_case = ProjectsUseCase()
-            project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
-            indexer = project_use_case.get_indexer_database_by_project(project)
+            indexer_database = content_base.indexer_database
+            indexer = ProjectsUseCase().get_indexer_database(indexer_database)
 
             use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
             use_case.delete_by_object(
                 link,
             )
 
-            if project.indexer_database == Project.BEDROCK:
+            if indexer_database == Project.BEDROCK:
                 start_ingestion_job.delay("", post_delete=True)
 
             event_manager.notify(

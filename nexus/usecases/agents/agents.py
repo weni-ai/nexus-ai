@@ -88,7 +88,7 @@ class AgentUsecase:
         if str(agent.project.uuid) != project_uuid:
             print("[+ Creating contact fields for agent +]")
             fields = []
-            for contact_field in agent.contact_fields.all():
+            for contact_field in agent.contact_fields.distinct("key"):
                 key = contact_field.key
                 value_type = contact_field.value_type
                 print(f"Contact field: {key} {value_type}")
