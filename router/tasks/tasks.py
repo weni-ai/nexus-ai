@@ -594,6 +594,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                     if first_rationale_text and 'callerChain' in trace_data:
                         caller_chain = trace_data['callerChain']
                         if isinstance(caller_chain, list) and len(caller_chain) > 1:
+                            print(f"[DEBUG] Current rationale history before first rationale: {rationale_history}")
                             improved_text = improve_rationale_text(
                                 first_rationale_text,
                                 rationale_history,
@@ -604,6 +605,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
                             if improved_text.lower() != "invalid":
                                 rationale_history.append(improved_text)
+                                print(f"[DEBUG] Rationale history after adding first rationale: {rationale_history}")
                                 task_send_message_http_client.delay(
                                     text=improved_text,
                                     urns=[message.contact_urn],
@@ -615,7 +617,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
                     # Process orchestration trace rationale - Ajustando a estrutura do trace
                     print("[DEBUG] Processing rationale from trace")
-                    print(f"[DEBUG] Trace data structure: {json.dumps(trace_data, indent=2)}")
 
                     rationale_text = None
                     if 'trace' in trace_data:
@@ -630,10 +631,12 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                         print(f"[DEBUG] Processing rationale text: {rationale_text}")
                         if is_first_rationale:
                             print("[DEBUG] This is the first rationale")
+                            print(f"[DEBUG] Current rationale history (should be empty): {rationale_history}")
                             first_rationale_text = rationale_text
                             is_first_rationale = False
                         else:
                             print("[DEBUG] This is a subsequent rationale")
+                            print(f"[DEBUG] Current rationale history before improvement: {rationale_history}")
                             improved_text = improve_rationale_text(
                                 rationale_text,
                                 rationale_history,
@@ -643,6 +646,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
                             if improved_text.lower() != "invalid":
                                 rationale_history.append(improved_text)
+                                print(f"[DEBUG] Rationale history after adding subsequent rationale: {rationale_history}")
                                 task_send_message_http_client.delay(
                                     text=improved_text,
                                     urns=[message.contact_urn],
