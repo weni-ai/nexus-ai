@@ -36,6 +36,7 @@ from nexus.usecases.agents.agents import AgentUsecase
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
@@ -377,6 +378,8 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
         full_chunks = []
         full_response = ""
+        trace_events = []
+
         for event in usecase.invoke_supervisor_stream(
             session_id=session_id,
             supervisor_id=supervisor.external_id,
@@ -413,7 +416,17 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                 "session_id": session_id
                             }
                         )
+                trace_events.append(event['content'])
 
+        save_trace_events.delay(
+            trace_events,
+            str(project.uuid),
+            str(project.team.id),
+            message.text,
+            message.contact_urn,
+            full_response,
+            preview
+        )
         if user_email:
             # Send completion status
             send_preview_message_to_websocket(
@@ -447,3 +460,34 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 }
             )
         raise
+
+
+def trace_events_to_json(trace_event):
+    return json.dumps(trace_event, default=str)
+
+from nexus.agents.models import AgentMessage
+
+@celery_app.task()
+def save_trace_events(trace_events, project_uuid, team_id, user_text, contact_urn, agent_response, preview: bool):
+    source = {
+        True: "preview",
+        False: "router"
+    }
+    data = ""
+    message = AgentMessage.objects.create(
+        project_id=project_uuid,
+        team_id=team_id,
+        user_text=user_text,
+        agent_response=agent_response,
+        contact_urn=contact_urn,
+        source=source.get(preview)
+    )
+
+    filename = f"{message.uuid}.jsonl"
+
+    for trace_event in trace_events:
+        trace_events_json = trace_events_to_json(trace_event)
+        data += trace_events_json + '\n'
+
+    key = f"traces/{project_uuid}/{filename}"
+    BedrockFileDatabase().upload_traces(data, key)

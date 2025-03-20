@@ -164,7 +164,6 @@ class BedrockFileDatabase(FileDataBase):
         bytes_stream = BytesIO(json.dumps(data).encode('utf-8'))
         self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
 
-    
     def multipart_upload(self, file, content_base_uuid: str, file_uuid: str, part_size: int = 5 * 1024 * 1024):
         from io import BytesIO
         s3_client = self.s3_client
@@ -1008,3 +1007,7 @@ class BedrockFileDatabase(FileDataBase):
         )
 
         return _lambda_iam_role["Role"]["Arn"]
+
+    def upload_traces(self, data, key):
+        bytes_stream = BytesIO(data.encode('utf-8'))
+        self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
