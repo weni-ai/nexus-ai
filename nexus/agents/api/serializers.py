@@ -7,6 +7,7 @@ from nexus.agents.models import (
     ActiveAgent,
     AgentSkills,
     Credential,
+    AgentMessage,
 )
 
 class ActiveAgentSerializer(serializers.ModelSerializer):
@@ -149,3 +150,82 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
             return obj.value
         return obj.decrypted_value
 
+
+class AgentMessageHistorySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = AgentMessage
+        fields = [
+            'id',
+            'created_at',
+            'message_text',
+            'tag',
+            'classification',
+        ]
+    
+    message_text = serializers.SerializerMethodField()
+    tag = serializers.SerializerMethodField()
+    classification = serializers.SerializerMethodField()
+
+    def get_message_text(self, obj):
+        return obj.user_text
+
+    def get_tag(self, obj):
+        return "S"
+    
+    def get_classification(self, obj):
+        return "other"
+
+
+class AgentMessageDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AgentMessage
+        fields = [
+            "id",
+            "uuid",
+            "text",
+            "status",
+            "llm_response",
+            "groundedness",
+            "contact_urn",
+            "actions_started",
+            "actions_uuid",
+            "actions_type",
+            "is_approved",
+        ]
+
+    text = serializers.SerializerMethodField()
+    llm_response = serializers.SerializerMethodField()
+    groundedness = serializers.SerializerMethodField()
+    actions_started = serializers.SerializerMethodField()
+    actions_type = serializers.SerializerMethodField()
+    actions_uuid = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+    is_approved = serializers.SerializerMethodField()
+
+    def get_text(self, obj):
+        return obj.user_text
+        return obj.response_status
+
+    def get_llm_response(self, obj):
+        return obj.agent_response
+
+    def get_groundedness(self, obj) -> str | None:
+        return None
+
+    def get_actions_started(self, obj):
+        return False
+
+    def get_actions_type(self, obj):
+        return "other"
+
+    def get_actions_uuid(self, obj):
+        return None
+
+    def get_status(self, obj):
+        return "S"
+
+    def get_is_approved(self, obj):
+        return True
+
+# class AgentTraceSerializer(serializers.ModelSerializer):
