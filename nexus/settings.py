@@ -547,3 +547,8 @@ if not CREDENTIAL_ENCRYPTION_KEY and not TESTING:
     CREDENTIAL_ENCRYPTION_KEY = Fernet.generate_key()
 
 BEDROCK_FILE_SIZE_LIMIT = env.int("BEDROCK_FILE_SIZE_LIMIT", 50)
+
+
+# Rationale agents
+
+AWS_RATIONALE_MODEL = env.str("AWS_RATIONALE_MODEL", "amazon.nova-pro-v1:0")
