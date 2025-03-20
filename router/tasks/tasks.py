@@ -57,7 +57,7 @@ def improve_rationale_text(rationale_text: str, previous_rationales: list = [], 
         bedrock_client = bedrock_db._BedrockFileDatabase__get_bedrock_agent()
 
         # Set the model ID for Amazon Nova Lite
-        model_id = "amazon.nova-lite-v1:0"
+        model_id = settings.AWS_RATIONALE_MODEL
 
         # Prepare the complete instruction content for the user message
         instruction_content = """
@@ -577,10 +577,9 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                     project_uuid=str(message.project_uuid),
                                     user=flows_user_email,
                                 )
-
                             first_rationale_text = None
 
-                    # Process orchestration trace rationale - Ajustando a estrutura do trace
+                    # Process orchestration trace rationale
                     rationale_text = None
                     if 'trace' in trace_data:
                         inner_trace = trace_data['trace']
@@ -594,6 +593,8 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                             first_rationale_text = rationale_text
                             is_first_rationale = False
                         else:
+                            # Commented code: Sending all the rationales to the user
+                            """
                             improved_text = improve_rationale_text(
                                 rationale_text,
                                 rationale_history,
@@ -608,6 +609,14 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                     project_uuid=str(message.project_uuid),
                                     user=flows_user_email,
                                 )
+                            """
+                            improved_text = improve_rationale_text(
+                                rationale_text,
+                                rationale_history,
+                                message.text
+                            )
+                            if improved_text.lower() != "invalid":
+                                rationale_history.append(improved_text)
 
                     # Get summary from Claude with specified language
                     event['content']['summary'] = get_trace_summary(language, event['content'])
