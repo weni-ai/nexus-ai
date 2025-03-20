@@ -27,6 +27,7 @@ from nexus.usecases.agents import (
 )
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.projects.api.permissions import ProjectPermission
+from nexus.projects.permissions import has_project_permission
 
 
 class InternalCommunicationPermission(BasePermission):
@@ -782,3 +783,27 @@ class VtexAppProjectCredentialsView(APIView):
             "message": "Credentials created successfully",
             "created_credentials": created_credentials
         })
+
+
+class AgentTracesView(
+    APIView
+):
+    def get(self, request):
+        user = self.request.user
+
+        project_uuid = request.query_params.get('project_uuid')
+        log_id = request.query_params.get('log_id')
+
+        print(project_uuid, log_id)
+
+        has_project_permission(user, project_uuid, 'GET')
+
+        if not log_id:
+            return Response({"error": "log_id is required"}, status=400)
+            
+        usecase = AgentUsecase()
+        try:
+            trace_data = usecase.get_traces(project_uuid, log_id)
+            return Response(trace_data)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)

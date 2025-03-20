@@ -30,6 +30,9 @@ from django.utils.dateparse import parse_date
 
 from nexus.logs.api.serializers import MessageDetailSerializer
 from nexus.projects.api.permissions import ProjectPermission
+from nexus.agents.models import AgentMessage, Team
+from nexus.agents.api.serializers import AgentMessageHistorySerializer, AgentMessageDetailSerializer
+from nexus.projects.models import Project
 
 
 class CustomPageNumberPagination(PageNumberPagination):
@@ -154,34 +157,64 @@ class MessageHistoryViewset(
         source = self.request.query_params.get('source', 'router')
         params["source"] = source
 
-        if tag_param and tag_param == "action_started":
-            params["reflection_data__tag"] = tag_param
 
-        if text_param:
-            params["message__text__icontains"] = text_param
+        project = Project.objects.get(uuid=project_uuid)
 
-        logs = MessageLog.objects.filter(
-            **params
-        ).exclude(
-            reflection_data__isnull=True
-        ).select_related(
-            'message'
-        ).order_by(
-            '-created_at'
-        )
+        try:
+            project.team
 
-        if tag_param and tag_param != "action_started":
-            status = {
-                "success": "S",
-                "failed": "F",
-            }
-            logs = [log for log in logs if log.message.response_status == status.get(tag_param) and log.reflection_data.get("tag") != "action_started"]
+            if text_param:
+                params["user__text__icontains"] = text_param
+            
+            print(params)
+            print(AgentMessage.objects.all())
 
-        if not logs:
-            return MessageLog.objects.none()
+            logs = AgentMessage.objects.filter(
+                **params
+            ).order_by('-created_at')
+
+            if not logs:
+                return MessageLog.objects.none()
+
+            return logs
+
+        except:
+            if tag_param and tag_param == "action_started":
+                params["reflection_data__tag"] = tag_param
+
+            if text_param:
+                params["message__text__icontains"] = text_param
+
+            logs = MessageLog.objects.filter(
+                **params
+            ).exclude(
+                reflection_data__isnull=True
+            ).select_related(
+                'message'
+            ).order_by(
+                '-created_at'
+            )
+
+            if tag_param and tag_param != "action_started":
+                status = {
+                    "success": "S",
+                    "failed": "F",
+                }
+                logs = [log for log in logs if log.message.response_status == status.get(tag_param) and log.reflection_data.get("tag") != "action_started"]
+
+            if not logs:
+                return MessageLog.objects.none()
 
         return logs
 
+    def get_serializer_class(self):
+        queryset = self.get_queryset()
+        model = queryset.model
+        serializers_map = {
+            MessageLog: MessageHistorySerializer,
+            AgentMessage: AgentMessageHistorySerializer
+        }
+        return serializers_map.get(model, self.serializer_class)
 
 class LogsViewset(
     ReadOnlyModelViewSet
@@ -275,37 +308,54 @@ class RecentActivitiesViewset(
 
         return queryset
 
+from nexus.usecases.agents.agents import AgentUsecase
+from django.core.exceptions import ObjectDoesNotExist
 
 class MessageDetailViewSet(views.APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, project_uuid, log_id):
-        message_log = RetrieveMessageLogUseCase().get_by_id(log_id)
-        message = message_log.message
-        return Response(MessageDetailSerializer(message).data)
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+            project.team
+            message_log = AgentUsecase().get_agent_message_by_id(log_id)
+            return Response(AgentMessageDetailSerializer(message_log).data)
+        except Project.DoesNotExist:
+            return Response({"error": "Project not found"}, status=404)
+        except AttributeError:
+            message_log = RetrieveMessageLogUseCase().get_by_id(log_id)
+            message = message_log.message
+            return Response(MessageDetailSerializer(message).data)
 
     def patch(self, request, project_uuid, log_id):
         data = request.data
-        usecase = CreateLogUsecase()
-        message_log = RetrieveMessageLogUseCase().get_by_id(log_id)
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+            project.team
+            # TODO: update AgentMessage object
+        except Project.DoesNotExist:
+            return Response({"error": "Project not found"}, status=404)
+        except AttributeError:
+            usecase = CreateLogUsecase()
+            message_log = RetrieveMessageLogUseCase().get_by_id(log_id)
 
-        usecase.message = message_log.message
-        usecase.log = message_log
+            usecase.message = message_log.message
+            usecase.log = message_log
 
-        serializer = MessageDetailSerializer(usecase.message, data=data, partial=True)
-        serializer.is_valid()
+            serializer = MessageDetailSerializer(usecase.message, data=data, partial=True)
+            serializer.is_valid()
 
-        usecase.update_log_field(**data)
-        keys = list(data.keys())
-        response_data = {}
+            usecase.update_log_field(**data)
+            keys = list(data.keys())
+            response_data = {}
 
-        for key in keys:
-            response_data.update(
-                {
-                    key: getattr(usecase.log, key)
-                }
-            )
-        return Response(response_data)
+            for key in keys:
+                response_data.update(
+                    {
+                        key: getattr(usecase.log, key)
+                    }
+                )
+            return Response(response_data)
 
 
 class ConversationContextViewset(
@@ -313,7 +363,7 @@ class ConversationContextViewset(
     GenericViewSet
 ):
 
-    serializer_class = MessageDetailSerializer
+    # serializer_class = MessageDetailSerializer
 
     def list(self, request, *args, **kwargs):
         user = self.request.user
@@ -323,12 +373,25 @@ class ConversationContextViewset(
 
         has_project_permission(user, project_uuid, 'GET')
 
-        usecase = ListLogUsecase()
-        logs = usecase.list_last_logs(
-            log_id=log_id,
-            message_count=int(number_of_messages)
-        )
-        messages = [log.message for log in logs]
-        serializer = MessageDetailSerializer(messages, many=True)
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+            project.team
+            usecase = AgentUsecase()
+            messages = usecase.list_last_logs(
+                log_id=log_id,
+                message_count=int(number_of_messages)
+            )
+            serializer = AgentMessageDetailSerializer(messages, many=True)
+            return Response(serializer.data)
+        except Project.DoesNotExist:
+            return Response({"error": "Project not found"}, status=404)
+        except AttributeError:
+            usecase = ListLogUsecase()
+            logs = usecase.list_last_logs(
+                log_id=log_id,
+                message_count=int(number_of_messages)
+            )
+            messages = [log.message for log in logs]
+            serializer = MessageDetailSerializer(messages, many=True)
 
-        return Response(serializer.data)
+            return Response(serializer.data)

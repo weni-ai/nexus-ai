@@ -1,4 +1,5 @@
 import uuid
+import json
 
 from typing import Dict, List, Tuple
 from dataclasses import dataclass, field
@@ -27,6 +28,7 @@ from nexus.usecases.agents.exceptions import (
     SkillNameTooLong,
     AgentAttributeNotAllowed
 )
+from nexus.agents.models import AgentMessage
 
 
 @dataclass
@@ -978,3 +980,39 @@ class AgentUsecase:
         team.metadata["is_single_agent"] = not multi_agent
         team.save(update_fields=["metadata"])
         return
+
+    def get_agent_message_by_id(self, agent_message_id: str):
+        return AgentMessage.objects.get(id=agent_message_id)
+
+    def list_last_logs(
+        self,
+        log_id: int,
+        message_count: int = 5,
+    ):
+        log = AgentMessage.objects.get(id=log_id)
+        project = log.project
+        source = log.source
+        contact_urn = log.contact_urn
+        created_at = log.created_at
+
+        logs = AgentMessage.objects.filter(
+            project=project,
+            source=source,
+            contact_urn=contact_urn,
+            session_id=log.session_id,
+            created_at__lt=created_at
+        ).order_by("-created_at")[:message_count]
+
+        logs = list(logs)[::-1]
+
+        return logs
+
+    def get_traces(self, project_uuid: str, log_id: str):
+        log = AgentMessage.objects.get(id=log_id)
+        key = f"traces/{project_uuid}/{log.uuid}.jsonl"
+        traces_data = BedrockFileDatabase().get_trace_file(key)
+        if traces_data:
+            traces = [json.loads(line) for line in traces_data.splitlines() if line]
+            return traces
+        return []
+        
