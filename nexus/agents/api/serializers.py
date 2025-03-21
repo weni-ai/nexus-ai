@@ -227,5 +227,3 @@ class AgentMessageDetailSerializer(serializers.ModelSerializer):
 
     def get_is_approved(self, obj):
         return True
-
-# class AgentTraceSerializer(serializers.ModelSerializer):

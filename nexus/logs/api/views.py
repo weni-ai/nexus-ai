@@ -165,9 +165,6 @@ class MessageHistoryViewset(
 
             if text_param:
                 params["user_text__icontains"] = text_param
-            
-            print(params)
-            print(AgentMessage.objects.all())
 
             logs = AgentMessage.objects.filter(
                 **params
