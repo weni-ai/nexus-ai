@@ -1,3 +1,5 @@
+import os
+
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.core.files.uploadedfile import InMemoryUploadedFile
@@ -214,11 +216,15 @@ class GenerativeIntelligenceQuestionAPIView(views.APIView):
 
         data = request.data
 
+        custom_rules_content_base_uuid = os.environ.get("CUSTOM_RULES_CONTENT_BASE_UUID")
+
         content_base_uuid = data.get("content_base_uuid")
         generative_ai_database = get_gpt_by_content_base_uuid(content_base_uuid)
 
+        db = SentenXFileDataBase() if content_base_uuid != custom_rules_content_base_uuid else BedrockFileDatabase()
+
         intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
-            search_file_database=SentenXFileDataBase(),
+            search_file_database=db,
             generative_ai_database=generative_ai_database
         )
         data = intelligence_usecase.search(content_base_uuid=content_base_uuid, text=data.get("text"), language=data.get("language"))
@@ -243,11 +249,15 @@ class QuickTestAIAPIView(views.APIView):
             org = get_org_by_content_base_uuid(content_base_uuid)
             has_permission = permissions.can_list_content_bases(user, org)
 
+            custom_rules_content_base_uuid = os.environ.get("CUSTOM_RULES_CONTENT_BASE_UUID")
+
+            db = SentenXFileDataBase() if content_base_uuid != custom_rules_content_base_uuid else BedrockFileDatabase()
+
             if has_permission:
                 generative_ai_database = get_gpt_by_content_base_uuid(content_base_uuid)
 
                 intelligence_usecase = intelligences.IntelligenceGenerativeSearchUseCase(
-                    search_file_database=SentenXFileDataBase(),
+                    search_file_database=db,
                     generative_ai_database=generative_ai_database,
                     testing=True,
                 )
