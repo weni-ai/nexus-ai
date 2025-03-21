@@ -1,5 +1,7 @@
 import pendulum
 
+from django.db.models.query import QuerySet
+
 from rest_framework import views
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.permissions import IsAuthenticated
@@ -198,11 +200,18 @@ class MessageHistoryViewset(
                     "failed": "F",
                 }
                 logs = [log for log in logs if log.message.response_status == status.get(tag_param) and log.reflection_data.get("tag") != "action_started"]
+                logs = self.make_queryset(logs, MessageLog)
 
             if not logs:
                 return MessageLog.objects.none()
 
         return logs
+
+    def make_queryset(self, obj_list, model):
+        queryset = QuerySet(model=model)
+        queryset._result_cache = list(obj_list)
+        queryset._prefetch_related_lookups = ()
+        return queryset
 
     def get_serializer_class(self):
         queryset = self.get_queryset()
