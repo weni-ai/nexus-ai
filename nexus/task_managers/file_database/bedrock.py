@@ -1011,3 +1011,10 @@ class BedrockFileDatabase(FileDataBase):
     def upload_traces(self, data, key):
         bytes_stream = BytesIO(data.encode('utf-8'))
         self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
+
+    def get_trace_file(self, key):
+        try:
+            response = self.s3_client.get_object(Bucket=self.bucket_name, Key=key)
+            return response['Body'].read().decode('utf-8')
+        except self.s3_client.exceptions.NoSuchKey:
+            return []
