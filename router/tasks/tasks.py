@@ -2,7 +2,7 @@ import os
 import uuid
 import json
 import time
-from typing import Dict
+from typing import Dict, List
 from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import OpenAI
 
@@ -44,6 +44,8 @@ from router.dispatcher import dispatch
 
 from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
+from nexus.agents.models import AgentMessage
+
 
 client = OpenAI()
 
@@ -465,10 +467,18 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 def trace_events_to_json(trace_event):
     return json.dumps(trace_event, default=str)
 
-from nexus.agents.models import AgentMessage
+
 
 @celery_app.task()
-def save_trace_events(trace_events, project_uuid, team_id, user_text, contact_urn, agent_response, preview: bool):
+def save_trace_events(
+    trace_events: List[Dict],
+    project_uuid: str,
+    team_id: str,
+    user_text: str,
+    contact_urn: str,
+    agent_response: str,
+    preview: bool
+):
     source = {
         True: "preview",
         False: "router"
