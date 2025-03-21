@@ -50,6 +50,9 @@ class BedrockFileDatabase(FileDataBase):
         self.region_name = settings.AWS_BEDROCK_REGION_NAME
         self.bucket_name = settings.AWS_BEDROCK_BUCKET_NAME
         self.model_id = settings.AWS_BEDROCK_MODEL_ID
+        self.nexus_bucket_name = settings.AWS_S3_BUCKET_NAME
+        self.nexus_region_name = settings.AWS_S3_REGION_NAME
+
 
         self.account_id = self.__get_sts_client().get_caller_identity()["Account"]
         self.iam_client = self.__get_iam_client()
@@ -58,6 +61,7 @@ class BedrockFileDatabase(FileDataBase):
         self.bedrock_runtime = self.__get_bedrock_runtime()
         self.lambda_client = self.__get_lambda_client()
         self.s3_client = self.__get_s3_client()
+        self.nexus_s3_client = self.__get_nexus_s3_client()
 
         self._suffix = f"{self.region_name}-{self.account_id}"
         self.agent_foundation_model = agent_foundation_model
@@ -823,6 +827,12 @@ class BedrockFileDatabase(FileDataBase):
             region_name=self.region_name
         )
 
+    def __get_nexus_s3_client(self):
+        return boto3.client(
+            "s3",
+            region_name=self.nexus_region_name
+        )
+
     def __get_bedrock_agent(self):
         return boto3.client(
             "bedrock-agent",
@@ -1009,12 +1019,13 @@ class BedrockFileDatabase(FileDataBase):
         return _lambda_iam_role["Role"]["Arn"]
 
     def upload_traces(self, data, key):
+        
         bytes_stream = BytesIO(data.encode('utf-8'))
-        self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
+        self.sa_s3_client.upload_fileobj(bytes_stream, self.sa_bucket_name, key)
 
     def get_trace_file(self, key):
         try:
-            response = self.s3_client.get_object(Bucket=self.bucket_name, Key=key)
+            response = self.sa_s3_client.get_object(Bucket=self.sa_bucket_name, Key=key)
             return response['Body'].read().decode('utf-8')
-        except self.s3_client.exceptions.NoSuchKey:
+        except self.sa_s3_client.exceptions.NoSuchKey:
             return []
