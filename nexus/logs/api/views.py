@@ -164,7 +164,7 @@ class MessageHistoryViewset(
             project.team
 
             if text_param:
-                params["user__text__icontains"] = text_param
+                params["user_text__icontains"] = text_param
             
             print(params)
             print(AgentMessage.objects.all())
