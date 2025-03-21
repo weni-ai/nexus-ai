@@ -427,7 +427,8 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
             message.text,
             message.contact_urn,
             full_response,
-            preview
+            preview,
+            session_id,
         )
         if user_email:
             # Send completion status
@@ -477,7 +478,8 @@ def save_trace_events(
     user_text: str,
     contact_urn: str,
     agent_response: str,
-    preview: bool
+    preview: bool,
+    session_id: str
 ):
     source = {
         True: "preview",
@@ -490,7 +492,8 @@ def save_trace_events(
         user_text=user_text,
         agent_response=agent_response,
         contact_urn=contact_urn,
-        source=source.get(preview)
+        source=source.get(preview),
+        session_id=session_id
     )
 
     filename = f"{message.uuid}.jsonl"
