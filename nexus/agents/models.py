@@ -182,6 +182,8 @@ class ContactField(models.Model):
 
 
 class AgentMessage(models.Model):
+    TRACES_BASE_PATH = "traces"
+
     uuid = models.UUIDField(default=uuid4, editable=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="agent_messages")
     team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="agent_messages")
@@ -192,3 +194,7 @@ class AgentMessage(models.Model):
     session_id = models.CharField(max_length=255)
     metadata = models.JSONField(default=dict)
     source = models.CharField(max_length=255)
+
+    @property
+    def trace_path(self):
+        return f"{self.TRACES_BASE_PATH}/{self.project.uuid}/{self.uuid}.jsonl"
