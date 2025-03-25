@@ -35,9 +35,8 @@ class BedrockSubAgent:
     display_name: str
     slug: str
     external_id: str
-    agent_instructions: str
+    alias_arn: str
     description: str
-    foundation_model: str = None
 
 
 class BedrockFileDatabase(FileDataBase):
@@ -82,6 +81,65 @@ class BedrockFileDatabase(FileDataBase):
             trace='ENABLED'
         )
         return response
+
+    def update_agent(
+        self,
+        agent_id: str,
+        agent_dto,
+    ):
+        bedrock_agent = self.get_agent(agent_id)
+        _agent_details = bedrock_agent.get("agent")
+
+        updated_fields = []
+        required_fields = ["agentId", "agentName", "agentResourceRoleArn", "foundationModel"]
+
+        if agent_dto.instructions:
+            all_instructions = agent_dto.instructions
+            if agent_dto.guardrails:
+                all_instructions = agent_dto.instructions + agent_dto.guardrails
+            instructions = "\n".join(all_instructions)
+            _agent_details["instruction"] = instructions
+            updated_fields.append("instruction")
+
+        if agent_dto.description:
+            _agent_details["description"] = agent_dto.description
+            updated_fields.append("description")
+
+        if agent_dto.memory_configuration:
+            _agent_details["memoryConfiguration"] = agent_dto.memory_configuration
+            updated_fields.append("memoryConfiguration")
+
+        if agent_dto.prompt_override_configuration:
+            _agent_details["promptOverrideConfiguration"] = agent_dto.prompt_override_configuration
+            updated_fields.append("promptOverrideConfiguration")
+
+        if agent_dto.idle_session_ttl_in_seconds:
+            _agent_details["idleSessionTTLInSeconds"] = agent_dto.idle_session_ttl_in_seconds
+            updated_fields.append("idleSessionTTLInSeconds")
+
+        if agent_dto.guardrail_configuration:
+            _agent_details["guardrailConfiguration"] = agent_dto.guardrail_configuration
+            updated_fields.append("guardrailConfiguration")
+
+        if agent_dto.foundation_model:
+            _agent_details["foundationModel"] = agent_dto.foundation_model
+            updated_fields.append("foundationModel")
+
+        keys_to_remove = [
+            key for key in _agent_details.keys()
+            if key not in updated_fields and key not in required_fields
+        ]
+
+        for key in keys_to_remove:
+            del _agent_details[key]
+
+        _update_agent_response = self.bedrock_agent.update_agent(
+            **_agent_details
+        )
+
+        time.sleep(3)
+
+        return _update_agent_response
 
     def add_metadata_json_file(self, filename: str, content_base_uuid: str, file_uuid: str):
         import os
@@ -170,6 +228,202 @@ class BedrockFileDatabase(FileDataBase):
 
         return response
 
+    def associate_sub_agents(self, supervisor_id: str, agents_list: list[BedrockSubAgent]) -> str:
+        sub_agents = []
+        for agent in agents_list:
+            agent_name = agent.display_name
+            # TODO: Change the default instruction
+            association_instruction_base = agent.description
+            agent_association_data = {
+                'sub_agent_alias_arn': agent.alias_arn,
+                'sub_agent_instruction': association_instruction_base,
+                'sub_agent_association_name': slugify(agent_name),
+                'relay_conversation_history': 'TO_COLLABORATOR',
+            }
+            sub_agents.append(agent_association_data)
+
+            print("---------------------------------------")
+            print(supervisor_id)
+            print("DRAFT")
+            print({"aliasArn": agent_association_data["sub_agent_alias_arn"]})
+            print(agent_association_data["sub_agent_association_name"])
+            print(agent_association_data["sub_agent_instruction"])
+            print(agent_association_data["relay_conversation_history"])
+            print("---------------------------------------")
+
+            response = self.bedrock_agent.associate_agent_collaborator(
+                agentId=supervisor_id,
+                agentVersion="DRAFT",
+                agentDescriptor={"aliasArn": agent_association_data["sub_agent_alias_arn"]},
+                collaboratorName=agent_association_data["sub_agent_association_name"],
+                collaborationInstruction=agent_association_data["sub_agent_instruction"],
+                relayConversationHistory=agent_association_data["relay_conversation_history"],
+            )
+
+            self.wait_agent_status_update(supervisor_id)
+            self.bedrock_agent.prepare_agent(agentId=supervisor_id)
+            self.wait_agent_status_update(supervisor_id)
+
+        return response["agentCollaborator"]["collaboratorId"]
+
+    def attach_lambda_function(
+        self,
+        agent_external_id: str,
+        action_group_name: str,
+        lambda_arn: str,
+        agent_version: str,
+        function_schema: List[Dict],
+        agent: Agent,
+    ):
+        action_group = self.bedrock_agent.create_agent_action_group(
+            actionGroupExecutor={
+                'lambda': lambda_arn
+            },
+            actionGroupName=action_group_name,
+            agentId=agent_external_id,
+            agentVersion='DRAFT',
+            functionSchema={"functions": function_schema}
+        )
+
+        data = {
+            'actionGroupId': action_group['agentActionGroup']['actionGroupId'],
+            'actionGroupName': action_group['agentActionGroup']['actionGroupName'],
+            'actionGroupState': action_group['agentActionGroup']['actionGroupState'],
+            'agentVersion': action_group['agentActionGroup']['agentVersion'],
+            'functionSchema': action_group['agentActionGroup']['functionSchema'],
+            'createdAt': action_group['agentActionGroup']['createdAt'].isoformat(),
+            'updatedAt': action_group['agentActionGroup']['updatedAt'].isoformat(),
+        }
+
+        agent.metadata['action_group'] = data
+        agent.save()
+
+    def attach_agent_knowledge_base(
+        self,
+        agent_id: str,
+        agent_version: str,
+        knowledge_base_instruction: str,
+        knowledge_base_id: str,
+    ):
+        self.bedrock_agent.associate_agent_knowledge_base(
+            agentId=agent_id,
+            agentVersion=agent_version,
+            description=knowledge_base_instruction,
+            knowledgeBaseId=knowledge_base_id
+        )
+
+    def create_agent(
+        self,
+        agent_name: str,
+        agent_description: str,
+        agent_instructions: str,
+        model_id: str = None,
+        idle_session_tll_in_seconds: int = 1800,
+        memory_configuration: Dict = {},
+        tags: Dict = {},
+        prompt_override_configuration: List[Dict] = [],
+    ) -> str:
+
+        _num_tries = 0
+        _agent_created = False
+        _agent_id = None
+        agent_resource_arn = settings.AGENT_RESOURCE_ROLE_ARN
+
+        kwargs = {}
+
+        if prompt_override_configuration:
+            kwargs["promptOverrideConfiguration"] = prompt_override_configuration
+            print(prompt_override_configuration)
+
+        if memory_configuration:
+            kwargs["memoryConfiguration"] = memory_configuration
+
+        if tags:
+            kwargs["tags"] = tags
+
+        if not model_id:
+            model_id = self.agent_foundation_model[0]
+
+        while not _agent_created and _num_tries <= 2:
+            try:
+                create_agent_response = self.bedrock_agent.create_agent(
+                    agentName=agent_name,
+                    agentResourceRoleArn=agent_resource_arn,
+                    description=agent_description.replace(
+                        "\n", ""
+                    ),
+                    idleSessionTTLInSeconds=idle_session_tll_in_seconds,
+                    foundationModel=model_id,
+                    instruction=agent_instructions,
+                    agentCollaboration="DISABLED",
+                    **kwargs
+                )
+                _agent_id = create_agent_response["agent"]["agentId"]
+                _agent_created = True
+                agent_id = _agent_id
+                self.wait_agent_status_update(_agent_id)
+
+            except Exception as e:
+                print(
+                    f"Error creating agent: {e}\n. Retrying in case it was just waiting to be deleted."
+                )
+                _num_tries += 1
+
+                if _num_tries <= 2:
+                    time.sleep(4)
+                    pass
+                else:
+                    print("Giving up on agent creation after 2 tries.")
+                    raise e
+
+        return agent_id
+
+    def create_lambda_function(
+        self,
+        lambda_name: str,
+        agent_external_id: str,
+        agent_version: str,
+        skill_handler: str,
+        source_code_file: bytes,
+        function_schema: List[Dict],
+        agent: Agent,
+    ):
+
+        zip_buffer = BytesIO(source_code_file)
+
+        # lambda_role = self._create_lambda_iam_role(agent_external_id)
+        lambda_role = settings.AGENT_RESOURCE_ROLE_ARN
+        print("LAMBDA ROLE: ", lambda_role)
+
+        print("CREATING LAMBDA FUNCTION")
+
+        lambda_function = self.lambda_client.create_function(
+            FunctionName=lambda_name,
+            Runtime='python3.12',
+            Timeout=180,
+            Role=lambda_role,
+            Code={'ZipFile': zip_buffer.getvalue()},
+            Handler=skill_handler
+        )
+
+        lambda_arn = lambda_function.get("FunctionArn")
+        action_group_name = f"{lambda_name}_action_group"
+
+        print("ATTACHING LAMBDA FUNCTION TO AGENT")
+        self.attach_lambda_function(
+            agent_external_id=agent_external_id,
+            action_group_name=action_group_name,
+            lambda_arn=lambda_arn,
+            agent_version=agent_version,
+            function_schema=function_schema,
+            agent=agent
+        )
+        self._allow_agent_lambda(
+            agent_external_id,
+            lambda_name
+        )
+        return lambda_function
+
     def delete_file_and_metadata(self, content_base_uuid: str, filename: str):
         print("[+ BEDROCK: Deleteing File and its Metadata +]")
 
@@ -188,142 +442,65 @@ class BedrockFileDatabase(FileDataBase):
     def delete(self, content_base_uuid: str, content_base_file_uuid: str, filename: str):
         self.delete_file_and_metadata(content_base_uuid, filename)
 
-    def create_lambda_function(
-        self,
-        lambda_name: str,
-        agent_external_id: str,
-        agent_version: str,
-        skill_handler: str,
-        source_code_file: bytes,
-        function_schema: List[Dict],
-        agent: Agent,
-    ):
-        zip_buffer = BytesIO(source_code_file)
-        lambda_role = settings.AGENT_RESOURCE_ROLE_ARN
-        print("LAMBDA ROLE: ", lambda_role)
+    def disassociate_sub_agent(self, supervisor_id, supervisor_version, sub_agent_id):
+        response = self.bedrock_agent.disassociate_agent_collaborator(
+            agentId=supervisor_id,
+            agentVersion=supervisor_version,
+            collaboratorId=sub_agent_id
+        )
+        return response
 
-        print("CREATING LAMBDA FUNCTION")
+    def bedrock_agent_to_supervisor(self, agent_id: str, to_supervisor: bool = True):
+        agent_to_update = self.bedrock_agent.get_agent(agentId=agent_id)
+        agent_to_update = agent_to_update['agent']
 
-        lambda_function = self.lambda_client.create_function(
-            FunctionName=lambda_name,
-            Runtime='python3.12',
-            Timeout=180,
-            Role=lambda_role,
-            Code={'ZipFile': zip_buffer.getvalue()},
-            Handler=skill_handler
+        try:
+            memory_configuration = agent_to_update["memoryConfiguration"]
+        except KeyError:
+            memory_configuration = {
+                "enabledMemoryTypes": ["SESSION_SUMMARY"],
+                "sessionSummaryConfiguration": {"maxRecentSessions": 5},
+                "storageDays": 30
+            }
+
+        agent_collaboration = {
+            True: "SUPERVISOR",
+            False: "DISABLED"
+        }
+
+        self.wait_agent_status_update(agent_id)
+
+        guardrail_configuration = agent_to_update.get("guardrailConfiguration")
+
+        if not guardrail_configuration:
+            guardrail_configuration = {
+                "guardrailIdentifier": settings.AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
+                "guardrailVersion": settings.AWS_BEDROCK_GUARDRAIL_VERSION
+            }
+
+        self.bedrock_agent.update_agent(
+            agentId=agent_to_update['agentId'],
+            agentName=agent_to_update['agentName'],
+            agentResourceRoleArn=agent_to_update['agentResourceRoleArn'],
+            agentCollaboration=agent_collaboration.get(to_supervisor),
+            instruction=agent_to_update["instruction"],
+            foundationModel=agent_to_update['foundationModel'],
+            memoryConfiguration=memory_configuration,
+            guardrailConfiguration=guardrail_configuration
         )
 
-        lambda_arn = lambda_function.get("FunctionArn")
-        return lambda_function
+    def delete_agent(self, agent_id: str):
+        self.bedrock_agent.delete_agent(agentId=agent_id)
 
-    def invoke_inline_agent(
+    def invoke_supervisor_stream(
         self,
+        supervisor_id: str,
+        supervisor_alias_id: str,
         session_id: str,
-        input_text: str,
-        instruction: str,
-        foundation_model: str = None,
-        action_groups: List[Dict] = None,
-        knowledge_bases: List[Dict] = None,
-        collaborator_configurations: Dict = None,
-        collaborators: List[Dict] = None,
-        prompt_override_configuration: Dict = None,
-        guardrail_configuration: Dict = None,
-        enable_trace: bool = True,
-        idle_session_ttl_in_seconds: int = 1800,
-        end_session: bool = False,
-        inline_session_state: Dict = None,
-        customer_encryption_key_arn: str = None,
-    ):
-        """
-        Invoke an inline agent with the specified configuration.
-        
-        Args:
-            session_id: Unique identifier for the conversation session
-            input_text: User input text to send to the agent
-            instruction: Instructions for the agent
-            foundation_model: Model ID to use for the agent
-            action_groups: List of action groups the agent can use
-            knowledge_bases: List of knowledge bases the agent can use
-            collaborator_configurations: Configuration for collaborator agents
-            collaborators: List of collaborator agents
-            prompt_override_configuration: Configuration to override the default prompts
-            guardrail_configuration: Configuration for guardrails
-            enable_trace: Whether to enable tracing
-            idle_session_ttl_in_seconds: Time after which the session expires
-            end_session: Whether to end the session
-            inline_session_state: State to persist through the session
-            customer_encryption_key_arn: ARN of KMS key to encrypt agent resources
-            
-        Returns:
-            Response from the inline agent
-        """
-        if not foundation_model:
-            foundation_model = self.agent_foundation_model[0]
-            
-        params = {
-            "sessionId": session_id,
-            "inputText": input_text,
-            "instruction": instruction,
-            "foundationModel": foundation_model,
-            "enableTrace": enable_trace,
-            "endSession": end_session,
-            "idleSessionTTLInSeconds": idle_session_ttl_in_seconds,
-        }
-        
-        if action_groups:
-            params["actionGroups"] = action_groups
-            
-        if knowledge_bases:
-            params["knowledgeBases"] = knowledge_bases
-            
-        if collaborator_configurations:
-            params["collaboratorConfigurations"] = collaborator_configurations
-            
-        if collaborators:
-            params["collaborators"] = collaborators
-            
-        if prompt_override_configuration:
-            params["promptOverrideConfiguration"] = prompt_override_configuration
-            
-        if guardrail_configuration:
-            params["guardrailConfiguration"] = guardrail_configuration
-            
-        if inline_session_state:
-            params["inlineSessionState"] = inline_session_state
-            
-        if customer_encryption_key_arn:
-            params["customerEncryptionKeyArn"] = customer_encryption_key_arn
-            
-        return self.bedrock_agent_runtime.invoke_inline_agent(**params)
-
-    def invoke_inline_agent_stream(
-        self,
-        session_id: str,
-        input_text: str,
-        instruction: str,
         content_base: "ContentBase",
-        message: "Message",
-        foundation_model: str = None,
-        action_groups: List[Dict] = None,
-        enable_trace: bool = True,
+        message: "Message"
     ):
-        """
-        Invoke an inline agent with streaming response.
-        
-        Args:
-            session_id: Unique identifier for the conversation session
-            input_text: User input text to send to the agent
-            instruction: Instructions for the agent
-            content_base: Content base to use for the agent
-            message: Message object with user input
-            foundation_model: Model ID to use for the agent
-            action_groups: List of action groups the agent can use
-            enable_trace: Whether to enable tracing
-            
-        Yields:
-            Streaming response chunks from the inline agent
-        """
-        print("Invoking inline agent with streaming")
+        print("Invoking supervisor with streaming")
 
         content_base_uuid = str(content_base.uuid)
         agent = content_base.agent
@@ -342,13 +519,15 @@ class BedrockFileDatabase(FileDataBase):
             }
         }
 
-        knowledge_bases = [{
-            "knowledgeBaseId": self.knowledge_base_id,
-            "description": "Use this KB to get all the info needed to answer questions",
-            "retrievalConfiguration": retrieval_configuration
-        }]
+        sessionState = {
+            'knowledgeBaseConfigurations': [
+                {
+                    'knowledgeBaseId': self.knowledge_base_id,
+                    'retrievalConfiguration': retrieval_configuration
+                }
+            ]
+        }
 
-        # Prepare session state with credentials
         credentials = {}
         try:
             agent_credentials = Credential.objects.filter(project_id=message.project_uuid)
@@ -357,13 +536,10 @@ class BedrockFileDatabase(FileDataBase):
         except Exception as e:
             print(f"Error fetching credentials: {str(e)}")
 
-        # Set up session attributes
-        session_attributes = {
-            "credentials": json.dumps(credentials, default=str)
-        }
+        sessionState["sessionAttributes"] = { "credentials": json.dumps(credentials, default=str) }
 
-        # Set up prompt session attributes
-        prompt_session_attributes = {
+        sessionState["promptSessionAttributes"] = {
+            # "format_components": get_all_formats(),
             "contact_urn": message.contact_urn,
             "contact_fields": message.contact_fields_as_json,
             "date_time_now": pendulum.now("America/Sao_Paulo").isoformat(),
@@ -377,54 +553,18 @@ class BedrockFileDatabase(FileDataBase):
             })
         }
 
-        # Configure inline session state
-        inline_session_state = {
-            "sessionAttributes": session_attributes,
-            "promptSessionAttributes": prompt_session_attributes
-        }
+        print("Session State: ", sessionState)
 
-        # Set up guardrail if configured
-        guardrail_configuration = None
-        if hasattr(settings, "AWS_BEDROCK_GUARDRAIL_IDENTIFIER") and settings.AWS_BEDROCK_GUARDRAIL_IDENTIFIER:
-            guardrail_configuration = {
-                "guardrailIdentifier": settings.AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
-                "guardrailVersion": settings.AWS_BEDROCK_GUARDRAIL_VERSION
-            }
-
-        # Default action groups, including UserInput
-        if not action_groups:
-            action_groups = [
-                {
-                    "name": "UserInputAction",
-                    "parentActionGroupSignature": "AMAZON.UserInput"
-                }
-            ]
-
-        # Add Code Interpreter if needed
-        if getattr(settings, "ENABLE_CODE_INTERPRETER", False):
-            action_groups.append({
-                "name": "CodeInterpreterAction",
-                "parentActionGroupSignature": "AMAZON.CodeInterpreter"
-            })
-
-        if not foundation_model:
-            foundation_model = self.agent_foundation_model[0]
-
-        # Call the inline agent with streaming
-        response = self.bedrock_agent_runtime.invoke_inline_agent(
+        response = self.bedrock_agent_runtime.invoke_agent(
+            agentId=supervisor_id,
+            agentAliasId=supervisor_alias_id,
             sessionId=session_id,
-            foundationModel=foundation_model,
-            instruction=instruction,
-            inputText=input_text,
-            enableTrace=enable_trace,
-            actionGroups=action_groups,
-            knowledgeBases=knowledge_bases,
-            inlineSessionState=inline_session_state,
-            guardrailConfiguration=guardrail_configuration
+            inputText=message.text,
+            enableTrace=True,
+            sessionState=sessionState,
         )
 
-        # Process and yield streaming response
-        for event in response.get('completion', []):
+        for event in response['completion']:
             if 'chunk' in event:
                 chunk = event['chunk']
                 yield {
@@ -437,6 +577,8 @@ class BedrockFileDatabase(FileDataBase):
                 yield {
                     'type': 'trace',
                     'content': {
+                        'agentAliasId': supervisor_alias_id,
+                        'agentId': supervisor_id,
                         'sessionId': session_id,
                         'trace': trace_data
                     }
@@ -450,6 +592,143 @@ class BedrockFileDatabase(FileDataBase):
         )
         ingestion_job_id = response.get("ingestionJob").get("ingestionJobId")
         return ingestion_job_id
+
+    def get_agent(self, agent_id: str):
+        return self.bedrock_agent.get_agent(agentId=agent_id)
+
+    def get_agent_action_group(
+        self,
+        agent_id: str,
+        action_group_id: str,
+        agent_version: str,
+    ):
+        return self.bedrock_agent.get_agent_action_group(
+            agentId=agent_id,
+            agentVersion=agent_version,
+            actionGroupId=action_group_id
+        )
+
+    def get_agent_version(self, agent_id: str) -> str:
+        agent_version_list: dict = self.bedrock_agent.list_agent_versions(agentId=agent_id)
+        last_agent_version = agent_version_list.get("agentVersionSummaries")[0].get("agentVersion")
+        return last_agent_version
+
+    def create_agent_alias(self, agent_id: str, alias_name: str) -> Tuple[str, str, str]:
+        start = pendulum.now()
+        agent_alias = self.bedrock_agent.create_agent_alias(
+            agentAliasName=alias_name, agentId=agent_id
+        )
+        # wait aws create version
+        time.sleep(5)
+        end = pendulum.now()
+
+        agent_alias_id = agent_alias["agentAlias"]["agentAliasId"]
+        agent_alias_arn = agent_alias["agentAlias"]["agentAliasArn"]
+
+        response = self.bedrock_agent.list_agent_versions(
+            agentId=agent_id,
+        )
+        # create_agent_alias is not returning agent version
+        agent_alias_version = "DRAFT"
+        for version in response["agentVersionSummaries"]:
+            print("-----------------Agent Version------------------")
+            print(version)
+            print("------------------------------------------------")
+            created_at = pendulum.instance(version["createdAt"])
+            if start <= created_at <= end:
+                agent_alias_version = version["agentVersion"]
+
+        return agent_alias_id, agent_alias_arn, agent_alias_version
+
+    def create_supervisor(
+        self,
+        supervisor_name: str,
+        supervisor_description: str,
+        supervisor_instructions: str,
+        is_single_agent: bool = False
+    ) -> Tuple[str, str]:
+        """
+        Creates a new supervisor agent using an existing agent as base.
+        Returns tuple of (supervisor_id, supervisor_alias_name)
+        """
+
+        agent_collaboration = {
+            True: "DISABLED",
+            False: "SUPERVISOR"
+        }
+
+        # Get existing agent to use as base
+        base_agent_response = self.bedrock_agent.get_agent(
+            agentId=settings.AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID
+        )
+        base_agent = base_agent_response['agent']
+        memory_configuration = base_agent['memoryConfiguration']
+
+        # Create new supervisor using base agent's configuration
+        response_create_supervisor = self.bedrock_agent.create_agent(
+            agentName=supervisor_name,
+            description=supervisor_description,
+            instruction=base_agent['instruction'],
+            agentResourceRoleArn=settings.AGENT_RESOURCE_ROLE_ARN,
+            foundationModel=base_agent['foundationModel'],
+            idleSessionTTLInSeconds=base_agent['idleSessionTTLInSeconds'],
+            agentCollaboration=agent_collaboration.get(is_single_agent),
+            guardrailConfiguration={
+                'guardrailIdentifier': settings.AWS_BEDROCK_GUARDRAIL_IDENTIFIER,
+                'guardrailVersion': str(settings.AWS_BEDROCK_GUARDRAIL_VERSION)
+            },
+            memoryConfiguration=memory_configuration
+        )
+
+        self.wait_agent_status_update(response_create_supervisor['agent']['agentId'])
+        supervisor_id = response_create_supervisor['agent']['agentId']
+
+        lambda_arn = f"{settings.AWS_BEDROCK_LAMBDA_ARN}"
+
+        base_action_group_response = self.get_agent_action_group(
+            agent_id=settings.AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID,
+            action_group_id=settings.AWS_BEDROCK_SUPERVISOR_ACTION_GROUP_ID,
+            agent_version='DRAFT'
+        )
+
+        function_schema = base_action_group_response['agentActionGroup']['functionSchema']['functions']
+        # print("FUNCTION SCHEMA: ", function_schema)
+        for function in function_schema:
+            function['name'] = ''.join(c for c in function['name'] if c.isalnum() or c in '_-')
+
+        # print("FUNCTION SCHEMA SANITIZED: ", function_schema)
+
+        self.bedrock_agent.create_agent_action_group(
+            actionGroupExecutor={
+                'lambda': lambda_arn
+            },
+            actionGroupName=base_action_group_response["agentActionGroup"]["actionGroupName"],
+            actionGroupState="ENABLED",
+            agentId=supervisor_id,
+            agentVersion='DRAFT',
+            functionSchema={"functions": function_schema},
+        )
+
+        parent_signature = "AMAZON.UserInput"
+
+        self.bedrock_agent.create_agent_action_group(
+            actionGroupName="UserInputAction",
+            actionGroupState="ENABLED",
+            agentId=supervisor_id,
+            agentVersion="DRAFT",
+            parentActionGroupSignature=parent_signature
+        )
+
+        self.attach_agent_knowledge_base(
+            agent_id=supervisor_id,
+            agent_version='DRAFT',
+            knowledge_base_instruction=settings.AWS_BEDROCK_SUPERVISOR_KNOWLEDGE_BASE_INSTRUCTIONS,
+            knowledge_base_id=self.knowledge_base_id
+        )
+
+        # self.prepare_agent(agent_id=supervisor_id)
+
+        return supervisor_id, supervisor_name
 
     def get_bedrock_ingestion_status(self, job_id: str):
         response = self.bedrock_agent.get_ingestion_job(
@@ -477,6 +756,11 @@ class BedrockFileDatabase(FileDataBase):
             ]
         )
         return response.get("ingestionJobSummaries")
+
+    def prepare_agent(self, agent_id: str):
+        self.bedrock_agent.prepare_agent(agentId=agent_id)
+        time.sleep(5)
+        return
 
     def search_data(self, content_base_uuid: str, text: str, number_of_results: int = 5) -> Dict[str, Any]:
         retrieval_config = {
@@ -575,17 +859,30 @@ class BedrockFileDatabase(FileDataBase):
             region_name=self.region_name
         )
 
-    def _allow_agent_lambda(self, lambda_function_name: str) -> None:
-        """
-        Grant Lambda invocation permissions to the inline agent.
-        """
+    def _allow_agent_lambda(self, agent_id: str, lambda_function_name: str) -> None:
         self.lambda_client.add_permission(
             FunctionName=lambda_function_name,
-            StatementId=f"allow_bedrock_inline_{uuid.uuid4()}",
+            StatementId=f"allow_bedrock_{agent_id}",
             Action="lambda:InvokeFunction",
             Principal="bedrock.amazonaws.com",
-            SourceArn=f"arn:aws:bedrock:{self.region_name}:{self.account_id}:*",
+            SourceArn=f"arn:aws:bedrock:{self.region_name}:{self.account_id}:agent/{agent_id}",
         )
+
+    def wait_agent_status_update(self, agent_id):
+        response = self.bedrock_agent.get_agent(agentId=agent_id)
+        agent_status = response["agent"]["agentStatus"]
+        _waited_at_least_once = False
+        while agent_status.endswith("ING"):
+            print(f"Waiting for agent status to change. Current status {agent_status}")
+            time.sleep(5)
+            _waited_at_least_once = True
+            try:
+                response = self.bedrock_agent.get_agent(agentId=agent_id)
+                agent_status = response["agent"]["agentStatus"]
+            except self.bedrock_agent.exceptions.ResourceNotFoundException:
+                agent_status = "DELETED"
+        if _waited_at_least_once:
+            print(f"Agent id {agent_id} current status: {agent_status}")
 
     def update_lambda_function(
         self,
@@ -648,6 +945,68 @@ class BedrockFileDatabase(FileDataBase):
         except Exception as e:
             print(f"Error updating Lambda function {lambda_name}: {str(e)}")
             raise
+
+    def update_agent_action_group(
+        self,
+        agent_external_id: str,
+        action_group_name: str,
+        lambda_arn: str,
+        agent_version: str,
+        action_group_id: str,
+        function_schema: List[Dict]
+    ):
+        """
+        Updates an existing action group for an agent.
+        """
+        print("SCHEMA UPDATE: ", function_schema)
+        response = self.bedrock_agent.update_agent_action_group(
+            actionGroupExecutor={
+                'lambda': lambda_arn
+            },
+            actionGroupName=action_group_name,
+            agentId=agent_external_id,
+            actionGroupId=action_group_id,
+            agentVersion="DRAFT",
+            functionSchema={"functions": function_schema}
+        )
+        return response
+
+    def _create_lambda_iam_role(
+        self,
+        agent_name: str,
+    ) -> object:
+        # TODO: use default role for lambda functions
+        _lambda_function_role_name = f"{agent_name}-lambda-role-{self._suffix}"
+        try:
+            _assume_role_policy_document = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": "bedrock:InvokeModel",  # noqa
+                        "Principal": {"Service": "lambda.amazonaws.com"},
+                        "Action": "sts:AssumeRole",  # noqa
+                    }
+                ],
+            }
+
+            _lambda_iam_role = self.iam_client.create_role(
+                RoleName=_lambda_function_role_name,
+                AssumeRolePolicyDocument=json.dumps(_assume_role_policy_document),
+            )
+
+            time.sleep(10)
+        except:  # noqa
+            _lambda_iam_role = self.iam_client.get_role(
+                RoleName=_lambda_function_role_name
+            )
+
+        self.iam_client.attach_role_policy(
+            RoleName=_lambda_function_role_name,
+            PolicyArn="arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+        )
+
+        return _lambda_iam_role["Role"]["Arn"]
 
     def upload_traces(self, data, key):
         bytes_stream = BytesIO(data.encode('utf-8'))

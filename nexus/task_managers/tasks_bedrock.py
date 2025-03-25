@@ -245,52 +245,15 @@ def run_create_lambda_function(
     function_schema: List[Dict] = [],
     file_database=BedrockFileDatabase,
 ):
-    """
-    Creates a Lambda function for use with inline agents.
-    
-    Args:
-        lambda_name: Name of the Lambda function to create
-        agent_external_id: Database ID of the agent (for reference only)
-        zip_content: Lambda function code as zip file bytes
-        agent_version: Version string (for backward compatibility)
-        skill_handler: Handler function for the Lambda
-        agent: Agent database object
-        function_schema: Schema defining the function interface
-        file_database: Database client class
-    """
-    bedrock_client = file_database()
-    
-    # Create the Lambda function
-    lambda_response = bedrock_client.create_lambda_function(
+    return file_database().create_lambda_function(
         lambda_name=lambda_name,
         agent_external_id=agent_external_id,
         agent_version=agent_version,
-        skill_handler=skill_handler,
         source_code_file=zip_content,
         function_schema=function_schema,
-        agent=agent
+        agent=agent,
+        skill_handler=skill_handler
     )
-    
-    # Create 'live' alias pointing to $LATEST
-    try:
-        alias_response = bedrock_client.lambda_client.create_alias(
-            FunctionName=lambda_name,
-            Name='live',
-            FunctionVersion='$LATEST',
-            Description='Production alias for inline agent skill'
-        )
-    except bedrock_client.lambda_client.exceptions.ResourceConflictException:
-        # If alias already exists, update it
-        alias_response = bedrock_client.lambda_client.update_alias(
-            FunctionName=lambda_name,
-            Name='live',
-            FunctionVersion='$LATEST'
-        )
-    
-    # Grant permissions for Bedrock to invoke the Lambda
-    bedrock_client._allow_agent_lambda(lambda_name)
-    
-    return lambda_response
 
 
 def run_update_lambda_function(

@@ -547,6 +547,3 @@ if not CREDENTIAL_ENCRYPTION_KEY and not TESTING:
     CREDENTIAL_ENCRYPTION_KEY = Fernet.generate_key()
 
 BEDROCK_FILE_SIZE_LIMIT = env.int("BEDROCK_FILE_SIZE_LIMIT", 50)
-
-# Bedrock inline agents
-USE_BEDROCK_INLINE_AGENTS = env.bool("USE_BEDROCK_INLINE_AGENTS", True)  # Default to using inline agents
