@@ -237,43 +237,40 @@ def bedrock_send_link(link: str, user_email: str, content_base_link_uuid: str):
 @app.task
 def run_create_lambda_function(
     lambda_name: str,
-    agent_external_id: str,
     zip_content: bytes,
-    agent_version: str,
     skill_handler: str,
-    agent: Agent,
     function_schema: List[Dict] = [],
     file_database=BedrockFileDatabase,
 ):
+    """
+    Create a Lambda function for inline agent skills.
+    
+    Args:
+        lambda_name: Name of the Lambda function
+        zip_content: Function code as bytes
+        skill_handler: Lambda handler path
+        function_schema: Schema describing the function interface
+        file_database: The database client to use
+    """
     return file_database().create_lambda_function(
         lambda_name=lambda_name,
-        agent_external_id=agent_external_id,
-        agent_version=agent_version,
         source_code_file=zip_content,
-        function_schema=function_schema,
-        agent=agent,
         skill_handler=skill_handler
     )
 
 
 def run_update_lambda_function(
-    agent_external_id: str,
     lambda_name: str,
-    lambda_arn: str,
-    agent_version: str,
     zip_content: bytes,
-    function_schema: List[Dict],
+    function_schema: List[Dict] = None,
 ):
     """
     Updates an existing Lambda function's code.
 
     Args:
-        agent_external_id: External ID of the agent
         lambda_name: Name of the Lambda function
-        lambda_arn: ARN of the Lambda function
-        agent_version: Version of the agent
         zip_content: Function code in zip format
-        function_schema: Schema defining the function interface
+        function_schema: Optional schema defining the function interface
     """
     bedrock_client = BedrockFileDatabase()
 
