@@ -126,10 +126,6 @@ class BedrockFileDatabase(FileDataBase):
         if session_state:
             inline_session_state = session_state
         
-        # Add knowledge base if provided in parameters but not in session state
-        if knowledge_bases and "knowledgeBaseConfigurations" not in inline_session_state:
-            inline_session_state["knowledgeBaseConfigurations"] = knowledge_bases
-        
         # Add credentials to session attributes if provided
         if credentials and "sessionAttributes" not in inline_session_state:
             inline_session_state["sessionAttributes"] = {"credentials": json.dumps(credentials, default=str)}
@@ -148,6 +144,9 @@ class BedrockFileDatabase(FileDataBase):
         # Add optional parameters if provided
         if action_groups:
             params["actionGroups"] = action_groups
+            
+        if knowledge_bases:
+            params["knowledgeBases"] = knowledge_bases
             
         if guardrail_configuration:
             params["guardrailConfiguration"] = guardrail_configuration
@@ -219,7 +218,6 @@ class BedrockFileDatabase(FileDataBase):
 
         # Set up session state
         session_state = {
-            "knowledgeBaseConfigurations": knowledge_bases,
             "sessionAttributes": {"credentials": json.dumps(credentials, default=str)},
             "promptSessionAttributes": {
                 "contact_urn": message.contact_urn if message else "",
@@ -255,6 +253,7 @@ class BedrockFileDatabase(FileDataBase):
             foundationModel=foundation_model,
             enableTrace=enable_trace,
             actionGroups=default_action_groups,
+            knowledgeBases=knowledge_bases,
             inlineSessionState=session_state,
             stream=True
         )
