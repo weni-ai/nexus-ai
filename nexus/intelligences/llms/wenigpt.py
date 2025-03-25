@@ -1,5 +1,6 @@
 import json
 from typing import List, Dict, Tuple
+import uuid
 
 import requests
 import tiktoken
@@ -190,13 +191,31 @@ class WeniGPTClient(LLMClient):
 
             self.prompt = self.format_prompt(instructions, chunks, agent, question, last_messages)
 
-            bedrock = BedrockFileDatabase()
-            response = bedrock.invoke_model(self.prompt, config_data)
-
-            text_answers = json.loads(response['body'].read().decode('utf-8'))
-
-            if text_answers.get("outputs"):
-                text_answers = text_answers.get("outputs")[0].get("text")
+            # Create a unique session ID for this request if using inline agent
+            if getattr(settings, "USE_BEDROCK_INLINE_AGENTS", False):
+                # Create a random session ID for this one-shot request
+                session_id = f"wenigpt-session-{uuid.uuid4()}"
+                
+                # Use inline agent with simple instruction/prompt
+                bedrock = BedrockFileDatabase()
+                response = bedrock.invoke_inline_agent(
+                    session_id=session_id,
+                    input_text=self.prompt,
+                    instruction="You are a helpful AI assistant. Respond in a concise, accurate manner.",
+                    foundation_model=settings.ZEROSHOT_BEDROCK_MODEL_ID,
+                    end_session=True  # One-shot query
+                )
+                
+                # Extract text from inline agent response
+                text_answers = response.get('completion', {}).get('text', '')
+            else:
+                # Use traditional invoke_model
+                bedrock = BedrockFileDatabase()
+                response = bedrock.invoke_model(self.prompt, config_data)
+                text_answers = json.loads(response['body'].read().decode('utf-8'))
+                
+                if text_answers.get("outputs"):
+                    text_answers = text_answers.get("outputs")[0].get("text")
 
             return {
                 "answers": [

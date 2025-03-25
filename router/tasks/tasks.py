@@ -351,8 +351,8 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     )
 
     project = Project.objects.get(uuid=message.project_uuid)
-    supervisor = project.team
-    supervisor_version = supervisor.current_version
+    team = project.team
+    agent = team.team_agents.select_related('agent').first().agent if team.team_agents.exists() else None
 
     contentbase = get_default_content_base_by_project(message.project_uuid)
 
@@ -369,25 +369,24 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
             user_email=user_email,
             message_data={
                 "type": "status",
-                "content": "Starting multi-agent processing",
+                "content": "Starting agent processing",
                 "session_id": session_id
             }
         )
 
     try:
-        # Stream supervisor response
+        # Stream agent response
         broadcast, _ = get_action_clients(preview, multi_agents=True)
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
         full_chunks = []
         full_response = ""
         trace_events = []
 
-        for event in usecase.invoke_supervisor_stream(
+        for event in usecase.invoke_agent_stream(
             session_id=session_id,
-            supervisor_id=supervisor.external_id,
-            supervisor_alias_id=supervisor_version.alias_id,
-            message=message,
+            agent=agent or team,  # Use either agent or team as fallback
             content_base=contentbase,
+            message=message,
         ):
             if event['type'] == 'chunk':
                 chunk = event['content']
