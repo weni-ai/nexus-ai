@@ -53,6 +53,7 @@ class Agent(BaseModel):
             created_by=self.created_by,
         )
 
+
 class Credential(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="credentials")
     key = models.CharField(max_length=255, null=True)
@@ -103,10 +104,14 @@ class Credential(models.Model):
                 return self.value
         return self.value
 
+
 class Team(models.Model):
     external_id = models.CharField(max_length=255, help_text="Supervisor ID")
     project = models.OneToOneField(Project, on_delete=models.CASCADE)
     metadata = models.JSONField(default=dict)
+
+    human_support = models.BooleanField(default=False)
+    human_support_prompt = models.TextField(null=True, blank=True)
 
     def update_metadata(self, metadata: Dict[str, str]):
         self.metadata.update(metadata)
