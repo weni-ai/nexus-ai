@@ -151,11 +151,18 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
         # Get project_uuid from context if available
         project_uuid = self.context.get('project_uuid')
         if not project_uuid:
-            return None
+            # Try to get project_uuid from the content base's project
+            try:
+                project_uuid = str(obj.intelligence.project.uuid)
+            except AttributeError:
+                return None
 
         try:
             team = Team.objects.get(project__uuid=project_uuid)
-            return TeamHumanSupportSerializer(team).data
+            return {
+                'human_support': team.human_support,
+                'human_support_prompt': team.human_support_prompt
+            }
         except Team.DoesNotExist:
             return None
 
