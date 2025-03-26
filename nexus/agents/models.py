@@ -119,6 +119,9 @@ class Team(models.Model):
     project = models.OneToOneField(Project, on_delete=models.CASCADE)
     metadata = models.JSONField(default=dict)
 
+    human_support = models.BooleanField(default=False)
+    human_support_prompt = models.TextField(null=True, blank=True)
+
     def update_metadata(self, metadata: Dict[str, str]):
         self.metadata.update(metadata)
         self.save()

@@ -1132,6 +1132,12 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
     serializer_class = ContentBasePersonalizationSerializer
     authentication_classes = AUTHENTICATION_CLASSES
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if 'project_uuid' in self.kwargs:
+            context['project_uuid'] = self.kwargs['project_uuid']
+        return context
+
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
             return ContentBase.objects.none()  # pragma: no cover
