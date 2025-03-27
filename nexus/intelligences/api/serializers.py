@@ -174,6 +174,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
         # Handle team human support update if data and project_uuid are provided
         if team_data and project_uuid:
             try:
+                print("---- Update Team ----")
                 team = Team.objects.get(project__uuid=project_uuid)
                 old_team_data = model_to_dict(team, fields=['human_support', 'human_support_prompt'])
 
@@ -188,8 +189,10 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                     agent_usecase = AgentUsecase()
 
                     if team.human_support:
+                        print("---- Add Human Support to Team ----")
                         agent_usecase.add_human_support_to_team(team)
                     else:
+                        print("---- Rollback Human Support to Team ----")
                         agent_usecase.rollback_human_support_to_team(team)
 
             except Team.DoesNotExist:

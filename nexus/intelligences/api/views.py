@@ -1165,6 +1165,7 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
             }
 
             if 'team_data' in request.data:
+                print("---- Team data found ----")
                 request.data['team'] = request.data.pop('team_data')
 
             serializer = ContentBasePersonalizationSerializer(

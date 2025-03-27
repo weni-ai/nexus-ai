@@ -970,6 +970,7 @@ class AgentUsecase:
         """Main orchestrator method for adding human support to a team"""
         supervisor_id = team.external_id
         agent = Agent.objects.get(external_id=team.external_id)
+        print("Agent found: ", agent)
 
         # Step 1: Update supervisor instructions
         self._update_supervisor_instructions(supervisor_id)
@@ -1030,6 +1031,7 @@ class AgentUsecase:
         new_instructions: str
     ) -> None:
         """Updates agent with new instructions"""
+        print("---- Update Agent Instructions ----")
         self.external_agent_client.update_agent_instructions(
             agent_id=supervisor_id,
             instructions=new_instructions
@@ -1038,6 +1040,7 @@ class AgentUsecase:
 
     def _add_human_support_actions(self, supervisor_id: str, agent: Agent) -> None:
         """Adds human support action groups to the supervisor"""
+        print("---- Add Human Support Actions ----")
         human_support_agent_id = settings.HUMAN_SUPPORT_AGENT_ID
         action_groups = settings.HUMAN_SUPPORT_ACTION_GROUP
         created_action_groups = []
