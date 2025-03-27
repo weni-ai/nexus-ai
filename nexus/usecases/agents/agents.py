@@ -1088,15 +1088,11 @@ class AgentUsecase:
 
     def _get_action_group_data(self, agent_id: str, action_group_id: str) -> dict | None:
         """Gets action group data from Bedrock"""
-        try:
-            return self.external_agent_client.bedrock_agent.get_agent_action_group(
-                agent_id=agent_id,
-                action_group_id=action_group_id,
-                agent_version="DRAFT"
-            )
-        except Exception as e:
-            print(f"Failed to get action group data: {e}")
-            return None
+        return self.external_agent_client.get_agent_action_group(
+            agent_id=agent_id,
+            action_group_id=action_group_id,
+            agent_version="DRAFT"
+        )
 
     def _prepare_function_schema(self, action_data: dict) -> list:
         """Prepares function schema by sanitizing function names"""
@@ -1118,7 +1114,6 @@ class AgentUsecase:
             agent_external_id=agent_id,
             action_group_name=action_group_name,
             lambda_arn=lambda_arn,
-            agent_version="$LATEST",
             function_schema=function_schema,
             team=team
         )
