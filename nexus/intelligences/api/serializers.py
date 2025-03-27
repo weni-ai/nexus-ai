@@ -175,22 +175,22 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
         if team_data and project_uuid:
             try:
                 team = Team.objects.get(project__uuid=project_uuid)
-                old_team_data = model_to_dict(team, fields=['human_support', 'human_support_prompt'])
+                old_human_support = team.human_support
 
+                # Update team data
                 team.human_support = team_data.get('human_support', team.human_support)
                 team.human_support_prompt = team_data.get('human_support_prompt', team.human_support_prompt)
                 team.save()
 
-                new_team_data = model_to_dict(team, fields=['human_support', 'human_support_prompt'])
-
-                if old_team_data != new_team_data:
+                # Only trigger add/rollback if human_support boolean changed
+                if old_human_support != team.human_support:
                     from nexus.usecases.agents.agents import AgentUsecase
                     agent_usecase = AgentUsecase()
 
                     if team.human_support:
-                        agent_usecase.add_human_support_to_team(team)
+                        agent_usecase.add_human_support_to_team(team=team, user=self.context.get('request').user)
                     else:
-                        agent_usecase.rollback_human_support_to_team(team)
+                        agent_usecase.rollback_human_support_to_team(team=team, user=self.context.get('request').user)
 
             except Team.DoesNotExist:
                 pass
