@@ -942,6 +942,12 @@ class BedrockFileDatabase(FileDataBase):
             SourceArn=f"arn:aws:bedrock:{self.region_name}:{self.account_id}:agent/{agent_id}",
         )
 
+    def remove_agent_lambda(self, agent_id: str, lambda_function_name: str) -> None:
+        self.lambda_client.remove_permission(
+            FunctionName=lambda_function_name,
+            StatementId=f"allow_bedrock_{agent_id}",
+        )
+
     def wait_agent_status_update(self, agent_id):
         response = self.bedrock_agent.get_agent(agentId=agent_id)
         agent_status = response["agent"]["agentStatus"]
