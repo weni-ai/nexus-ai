@@ -35,6 +35,7 @@ from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
 from nexus.usecases.intelligences.create import create_base_brain_structure
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+from nexus.agents.models import Team
 
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import Permission
@@ -462,6 +463,13 @@ class TestContentBasePersonalizationViewSet(TestCase):
             project=self.project,
             created_by=self.user
         )
+        # Create a team with human support data
+        self.team = Team.objects.create(
+            project=self.project,
+            external_id="test-supervisor-id",
+            human_support=True,
+            human_support_prompt="Test human support prompt"
+        )
         self.url = f'{self.project.uuid}/customization'
 
     def test_get_personalization(self):
@@ -477,6 +485,39 @@ class TestContentBasePersonalizationViewSet(TestCase):
 
         self.assertEqual(response.status_code, 200)
 
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertIn('team', content)
+        team_data = content['team']
+        self.assertIsNotNone(team_data)
+        self.assertEqual(team_data['human_support'], True)
+        self.assertEqual(team_data['human_support_prompt'], "Test human support prompt")
+
+    def test_get_personalization_without_team(self):
+
+        # Delete existing team
+        Team.objects.all().delete()
+
+        url_retrieve = f'{self.url}/'
+        request = self.factory.get(url_retrieve)
+
+        force_authenticate(request, user=self.user)
+
+        response = ContentBasePersonalizationViewSet.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        response.render()
+        content = json.loads(response.content)
+
+        # Validate team data is null when no team exists
+        self.assertIn('team', content)
+        self.assertIsNone(content['team'])
+
     def test_get_personalization_external_token(self):
         url_retrieve = f'{self.url}/'
         headers = {"Authorization": f"Bearer {settings.WENIGPT_FLOWS_SEARCH_TOKEN}"}
@@ -487,6 +528,15 @@ class TestContentBasePersonalizationViewSet(TestCase):
             project_uuid=str(self.project.uuid),
         )
         self.assertEqual(response.status_code, 200)
+
+        # Validate team data in response
+        response.render()
+        content = json.loads(response.content)
+        self.assertIn('team', content)
+        team_data = content['team']
+        self.assertIsNotNone(team_data)
+        self.assertEqual(team_data['human_support'], True)
+        self.assertEqual(team_data['human_support_prompt'], "Test human support prompt")
 
     def test_update_personalization(self):
         url_update = f'{self.url}/'
