@@ -2,7 +2,6 @@ import uuid
 import json
 import time
 from typing import TYPE_CHECKING
-from datetime import datetime
 
 from io import BytesIO
 
@@ -22,8 +21,7 @@ from django.template.defaultfilters import slugify
 
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 
-from nexus.agents.models import Agent, Credential
-from nexus.agents.components import get_all_formats
+from nexus.agents.models import Agent, Credential, Team
 
 if TYPE_CHECKING:
     from router.entities import Message
@@ -91,7 +89,10 @@ class BedrockFileDatabase(FileDataBase):
         _agent_details = bedrock_agent.get("agent")
 
         updated_fields = []
-        required_fields = ["agentId", "agentName", "agentResourceRoleArn", "foundationModel"]
+        required_fields = ["agentId", "agentName", "agentResourceRoleArn", "foundationModel", "agentCollaboration"]
+
+        # Preserve existing agent collaboration
+        _agent_details["agentCollaboration"] = _agent_details.get("agentCollaboration", "DISABLED")
 
         if agent_dto.instructions:
             all_instructions = agent_dto.instructions
@@ -192,7 +193,7 @@ class BedrockFileDatabase(FileDataBase):
                 part_info = {'PartNumber': part_number, 'ETag': response['ETag']}
                 parts.append(part_info)
                 part_number += 1
-            
+
             response = s3_client.complete_multipart_upload(
                 Bucket=bucket_name,
                 Key=key,
@@ -274,7 +275,8 @@ class BedrockFileDatabase(FileDataBase):
         agent_version: str,
         function_schema: List[Dict],
         agent: Agent,
-    ):
+    ) -> Dict:
+        """Attaches a lambda function to an agent and returns the response"""
         action_group = self.bedrock_agent.create_agent_action_group(
             actionGroupExecutor={
                 'lambda': lambda_arn
@@ -297,6 +299,42 @@ class BedrockFileDatabase(FileDataBase):
 
         agent.metadata['action_group'] = data
         agent.save()
+
+        return action_group
+
+    def attach_supervisor_lambda_function(
+        self,
+        agent_external_id: str,
+        action_group_name: str,
+        lambda_arn: str,
+        function_schema: List[Dict],
+        team: Team,
+    ) -> Dict:
+        """Attaches a lambda function to supervisor team and returns the response"""
+        action_group = self.bedrock_agent.create_agent_action_group(
+            actionGroupExecutor={
+                'lambda': lambda_arn
+            },
+            actionGroupName=action_group_name,
+            agentId=agent_external_id,
+            agentVersion='DRAFT',
+            functionSchema={"functions": function_schema}
+        )
+
+        data = {
+            'actionGroupId': action_group['agentActionGroup']['actionGroupId'],
+            'actionGroupName': action_group['agentActionGroup']['actionGroupName'],
+            'actionGroupState': action_group['agentActionGroup']['actionGroupState'],
+            'agentVersion': action_group['agentActionGroup']['agentVersion'],
+            'functionSchema': action_group['agentActionGroup']['functionSchema'],
+            'createdAt': action_group['agentActionGroup']['createdAt'].isoformat(),
+            'updatedAt': action_group['agentActionGroup']['updatedAt'].isoformat(),
+        }
+
+        team.metadata['action_group'] = data
+        team.save()
+
+        return action_group
 
     def attach_agent_knowledge_base(
         self,
@@ -418,7 +456,7 @@ class BedrockFileDatabase(FileDataBase):
             function_schema=function_schema,
             agent=agent
         )
-        self._allow_agent_lambda(
+        self.allow_agent_lambda(
             agent_external_id,
             lambda_name
         )
@@ -505,6 +543,7 @@ class BedrockFileDatabase(FileDataBase):
         content_base_uuid = str(content_base.uuid)
         agent = content_base.agent
         instructions = content_base.instructions.all()
+        team = Team.objects.get(project__uuid=message.project_uuid)
 
         single_filter = {
             "equals": {
@@ -553,6 +592,14 @@ class BedrockFileDatabase(FileDataBase):
             })
         }
 
+        if team.human_support:
+            sessionState["promptSessionAttributes"] = {
+                "human_support": json.dumps({
+                    "project_id": message.project_uuid,
+                    "contact_id": message.contact_urn,
+                    "business_rules": team.human_support_prompt
+                })
+            }
         print("Session State: ", sessionState)
 
         response = self.bedrock_agent_runtime.invoke_agent(
@@ -859,13 +906,19 @@ class BedrockFileDatabase(FileDataBase):
             region_name=self.region_name
         )
 
-    def _allow_agent_lambda(self, agent_id: str, lambda_function_name: str) -> None:
+    def allow_agent_lambda(self, agent_id: str, lambda_function_name: str) -> None:
         self.lambda_client.add_permission(
             FunctionName=lambda_function_name,
             StatementId=f"allow_bedrock_{agent_id}",
             Action="lambda:InvokeFunction",
             Principal="bedrock.amazonaws.com",
             SourceArn=f"arn:aws:bedrock:{self.region_name}:{self.account_id}:agent/{agent_id}",
+        )
+
+    def remove_agent_lambda(self, agent_id: str, lambda_function_name: str) -> None:
+        self.lambda_client.remove_permission(
+            FunctionName=lambda_function_name,
+            StatementId=f"allow_bedrock_{agent_id}",
         )
 
     def wait_agent_status_update(self, agent_id):
@@ -953,7 +1006,8 @@ class BedrockFileDatabase(FileDataBase):
         lambda_arn: str,
         agent_version: str,
         action_group_id: str,
-        function_schema: List[Dict]
+        function_schema: List[Dict],
+        action_group_state: str = "ENABLED",
     ):
         """
         Updates an existing action group for an agent.
@@ -966,6 +1020,7 @@ class BedrockFileDatabase(FileDataBase):
             actionGroupName=action_group_name,
             agentId=agent_external_id,
             actionGroupId=action_group_id,
+            actionGroupState=action_group_state,
             agentVersion="DRAFT",
             functionSchema={"functions": function_schema}
         )
@@ -1018,3 +1073,67 @@ class BedrockFileDatabase(FileDataBase):
             return response['Body'].read().decode('utf-8')
         except self.s3_client.exceptions.NoSuchKey:
             return []
+
+    def get_function(self, function_name: str, version: str = '$LATEST') -> Dict:
+        response = self.lambda_client.get_function(
+            FunctionName=function_name,
+            Qualifier=version
+        )
+        return response
+
+    def update_agent_instructions(self, agent_id: str, instructions: str):
+        """Updates only the agent's instructions field"""
+        bedrock_agent = self.get_agent(agent_id)
+        agent_details = bedrock_agent.get("agent")
+
+        # Only include required fields and the new instructions
+        update_params = {
+            "agentId": agent_id,
+            "agentName": agent_details["agentName"],
+            "agentResourceRoleArn": agent_details["agentResourceRoleArn"],
+            "foundationModel": agent_details["foundationModel"],
+            "instruction": instructions
+        }
+
+        # Preserve existing agent collaboration if present
+        if "agentCollaboration" in agent_details:
+            update_params["agentCollaboration"] = agent_details["agentCollaboration"]
+
+        response = self.bedrock_agent.update_agent(**update_params)
+        time.sleep(3)
+        return response
+
+    def delete_agent_action_group(
+        self,
+        agent_id: str,
+        agent_version: str,
+        action_group_id: str
+    ) -> None:
+        """Deletes an action group from an agent"""
+        try:
+            self.bedrock_agent.delete_agent_action_group(
+                agentId=agent_id,
+                agentVersion=agent_version,
+                actionGroupId=action_group_id
+            )
+            print(f"Successfully deleted action group {action_group_id}")
+        except self.bedrock_agent.exceptions.ResourceNotFoundException:
+            print(f"Action group {action_group_id} not found")
+        except Exception as e:
+            print(f"Error deleting action group: {e}")
+            raise
+
+    def list_agent_action_groups(
+        self,
+        agent_id: str,
+        agent_version: str
+    ) -> Dict:
+        try:
+            response = self.bedrock_agent.list_agent_action_groups(
+                agentId=agent_id,
+                agentVersion=agent_version
+            )
+            return response
+        except Exception as e:
+            print(f"Error listing action groups: {e}")
+            raise

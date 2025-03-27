@@ -1158,8 +1158,9 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
                 user_email = request.user.email
 
             project_uuid = kwargs.get('project_uuid')
+
             content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, user_email, is_super_user)
-            data = ContentBasePersonalizationSerializer(content_base, context={"request": request}).data
+            data = ContentBasePersonalizationSerializer(content_base, context={"request": request, "project_uuid": project_uuid}).data
             return Response(data=data, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
@@ -1168,14 +1169,38 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
         try:
             project_uuid = kwargs.get('project_uuid')
             content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, request.user.email)
-            serializer = ContentBasePersonalizationSerializer(content_base, data=request.data, partial=True, context={"request": request})
+
+            context = {
+                "request": request,
+                "project_uuid": project_uuid
+            }
+
+            if 'team_data' in request.data:
+                request.data['team'] = request.data.pop('team_data')
+
+            serializer = ContentBasePersonalizationSerializer(
+                content_base,
+                data=request.data,
+                partial=True,
+                context=context
+            )
+
             if serializer.is_valid():
                 serializer.save()
                 data = serializer.data
                 return Response(data=data, status=status.HTTP_200_OK)
-            return Response(status=status.HTTP_400_BAD_REQUEST)
+            else:
+                print("Serializer errors:", serializer.errors)
+                return Response(data=serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            print(f"Error updating personalization: {str(e)}")
+            return Response(
+                data={"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def destroy(self, request, *args, **kwargs):
         try:

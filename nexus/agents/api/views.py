@@ -158,7 +158,7 @@ class PushAgents(APIView):
         self._update_agent_versions(agent, project_uuid, team, request)
 
         return agent, response_warnings
-    
+
     def _update_agent_versions(self, agent, project_uuid, team, request):
         """Update agent versions and supervisor if needed"""
         agents_usecase = AgentUsecase()
@@ -169,7 +169,6 @@ class PushAgents(APIView):
         if ActiveAgent.objects.filter(agent=agent, team=team).exists():
             agents_usecase.update_supervisor_collaborator(project_uuid, agent)
             agents_usecase.create_agent_version(agent.external_id, request.user, agent, team)
-
 
     def _handle_agent_creation(self, agent_dto, project_uuid, files, request):
         """Handle creating a new agent with rollback on failure"""

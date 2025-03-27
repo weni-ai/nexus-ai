@@ -12,6 +12,7 @@ from nexus.intelligences.models import (
     ContentBaseInstruction,
     ContentBaseAgent,
 )
+from nexus.agents.models import Team
 from nexus.task_managers.models import (
     ContentBaseFileTaskManager,
     ContentBaseLinkTaskManager,
@@ -120,13 +121,20 @@ class ContentBaseAgentSerializer(serializers.ModelSerializer):
         fields = ["name", "role", "personality", "goal"]
 
 
+class TeamHumanSupportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Team
+        fields = ['human_support', 'human_support_prompt']
+
+
 class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBase
-        fields = ["agent", "instructions"]
+        fields = ["agent", "instructions", "team"]
 
     agent = ContentBaseAgentSerializer()
     instructions = serializers.SerializerMethodField('get_instructions')
+    team = serializers.SerializerMethodField('get_team')
 
     def get_instructions(self, obj):
         instructions = []
@@ -137,13 +145,57 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                     "instruction": instruction.instruction,
                 }
             )
-
         return instructions
+
+    def get_team(self, obj):
+
+        project_uuid = self.context.get('project_uuid')
+        if not project_uuid:
+            try:
+                project_uuid = str(obj.intelligence.project.uuid)
+            except AttributeError:
+                return None
+
+        try:
+            team = Team.objects.get(project__uuid=project_uuid)
+            return {
+                'human_support': team.human_support,
+                'human_support_prompt': team.human_support_prompt
+            }
+        except Team.DoesNotExist:
+            return None
 
     def update(self, instance, validated_data):
         agent_data = validated_data.get("agent")
         instructions_data = self.context.get('request').data.get('instructions')
+        team_data = self.context.get('request').data.get('team')
+        project_uuid = self.context.get('project_uuid')
 
+        # Handle team human support update if data and project_uuid are provided
+        if team_data and project_uuid:
+            try:
+                team = Team.objects.get(project__uuid=project_uuid)
+                old_human_support = team.human_support
+
+                # Update team data
+                team.human_support = team_data.get('human_support', team.human_support)
+                team.human_support_prompt = team_data.get('human_support_prompt', team.human_support_prompt)
+                team.save()
+
+                # Only trigger add/rollback if human_support boolean changed
+                if old_human_support != team.human_support:
+                    from nexus.usecases.agents.agents import AgentUsecase
+                    agent_usecase = AgentUsecase()
+
+                    if team.human_support:
+                        agent_usecase.add_human_support_to_team(team=team, user=self.context.get('request').user)
+                    else:
+                        agent_usecase.rollback_human_support_to_team(team=team, user=self.context.get('request').user)
+
+            except Team.DoesNotExist:
+                pass
+
+        # Handle agent updates
         if agent_data:
             try:
                 agent = instance.agent
@@ -173,12 +225,12 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                     content_base=instance,
                 )
 
+        # Handle instructions updates
         if instructions_data:
             for instruction_data in instructions_data:
                 serializer = ContentBaseInstructionSerializer(data=instruction_data, partial=True)
                 if serializer.is_valid():
                     if instruction_data.get('id'):
-
                         instruction = instance.instructions.get(id=instruction_data.get('id'))
                         old_instruction_data = model_to_dict(instruction)
 
@@ -208,5 +260,6 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                             },
                             user=self.context.get('request').user
                         )
+
         instance.refresh_from_db()
         return instance
