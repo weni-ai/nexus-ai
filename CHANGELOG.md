@@ -1,3 +1,7 @@
+# 2.10.0
+## *Add*
+    - New human support feature
+
 # 2.8.10
 ## *Fix*
     - Default actions not working on preview
