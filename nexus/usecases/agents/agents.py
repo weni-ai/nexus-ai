@@ -95,7 +95,7 @@ class AgentUsecase:
 
             -Next use the contact_id, which will be defined in the 'contact_id' field within 'human_support' in your open-ticket action group
 
-            -Next, use the department and queue uuids selected above in the sector_id and queue_id in your open-ticket function. Along with that, use the project_id asbdiasb and the contact_id ansdasnjnd in that same function.
+            -Next, use the department and queue uuids selected above in the sector_id and queue_id in your open-ticket function. Along with that, use the project_id and the contact_id in that same function.
             </human support>
         """
 
