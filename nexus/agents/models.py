@@ -182,3 +182,22 @@ class ContactField(models.Model):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="contact_fields")
     key = models.CharField(max_length=255)
     value_type = models.CharField(max_length=255)
+
+
+class AgentMessage(models.Model):
+    TRACES_BASE_PATH = "traces"
+
+    uuid = models.UUIDField(default=uuid4, editable=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="agent_messages")
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="agent_messages")
+    user_text = models.TextField()
+    agent_response = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    contact_urn = models.CharField(max_length=255)
+    session_id = models.CharField(max_length=255)
+    metadata = models.JSONField(default=dict)
+    source = models.CharField(max_length=255)
+
+    @property
+    def trace_path(self):
+        return f"{self.TRACES_BASE_PATH}/{self.project.uuid}/{self.uuid}.jsonl"

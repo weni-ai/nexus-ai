@@ -1,4 +1,5 @@
 import uuid
+import json
 import time
 
 from typing import Dict, List, Tuple
@@ -29,6 +30,7 @@ from nexus.usecases.agents.exceptions import (
     SkillNameTooLong,
     AgentAttributeNotAllowed
 )
+from nexus.agents.models import AgentMessage
 
 
 @dataclass
@@ -94,7 +96,7 @@ class AgentUsecase:
 
             -Next use the contact_id, which will be defined in the 'contact_id' field within 'human_support' in your open-ticket action group
 
-            -Next, use the department and queue uuids selected above in the sector_id and queue_id in your open-ticket function. Along with that, use the project_id asbdiasb and the contact_id ansdasnjnd in that same function.
+            -Next, use the department and queue uuids selected above in the sector_id and queue_id in your open-ticket function. Along with that, use the project_id and the contact_id in that same function.
             </human support>
         """
 
@@ -892,6 +894,35 @@ class AgentUsecase:
                     skill_handler=skill_handler
                 )
 
+    def delete_agent_version(self, agent_id: str, version, team, user):
+        try:
+            project = team.project
+            project_uuid = str(project.uuid)
+            reasign_agent = False
+
+            if version.alias_id != "DRAFT":
+                agent = project.agent_set.get(external_id=agent_id)
+                active_agent_qs = team.team_agents.filter(agent=agent)
+
+                if active_agent_qs.exists():
+                    reasign_agent = True
+                    self.unassign_agent(str(agent.uuid), project_uuid)
+                    self.delete_supervisor_version(team.external_id, team.current_version)
+                    self.prepare_agent(agent_id)
+                    self.prepare_agent(team.external_id)
+                    self.external_agent_client.bedrock_agent.delete_agent_alias(
+                        agentId=agent_id,
+                        agentAliasId=version.alias_id
+                    )
+                if reasign_agent:
+                    self.assign_agent(str(agent.uuid), project_uuid, user)
+                    self.create_supervisor_version(project_uuid, user)
+
+            version.delete()
+            return
+        except Exception:
+            raise
+
     def create_supervisor_version(self, project_uuid, user):
         project = Project.objects.get(uuid=project_uuid)
         team = project.team
@@ -997,6 +1028,41 @@ class AgentUsecase:
         team.metadata["is_single_agent"] = not multi_agent
         team.save(update_fields=["metadata"])
         return
+
+    def get_agent_message_by_id(self, agent_message_id: str):
+        return AgentMessage.objects.get(id=agent_message_id)
+
+    def list_last_logs(
+        self,
+        log_id: int,
+        message_count: int = 5,
+    ):
+        log = AgentMessage.objects.get(id=log_id)
+        project = log.project
+        source = log.source
+        contact_urn = log.contact_urn
+        created_at = log.created_at
+
+        logs = AgentMessage.objects.filter(
+            project=project,
+            source=source,
+            contact_urn=contact_urn,
+            session_id=log.session_id,
+            created_at__lt=created_at
+        ).order_by("-created_at")[:message_count]
+
+        logs = list(logs)[::-1]
+
+        return logs
+
+    def get_traces(self, project_uuid: str, log_id: str):
+        log = AgentMessage.objects.get(id=log_id)
+        key = f"traces/{project_uuid}/{log.uuid}.jsonl"
+        traces_data = BedrockFileDatabase().get_trace_file(key)
+        if traces_data:
+            traces = [json.loads(line) for line in traces_data.splitlines() if line]
+            return traces
+        return []
 
     def add_human_support_to_team(self, team: Team, user: User):
         """Main orchestrator method for adding human support to a team"""

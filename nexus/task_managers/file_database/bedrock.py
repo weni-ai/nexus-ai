@@ -165,6 +165,7 @@ class BedrockFileDatabase(FileDataBase):
         bytes_stream = BytesIO(json.dumps(data).encode('utf-8'))
         self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
  
+
     def multipart_upload(self, file, content_base_uuid: str, file_uuid: str, part_size: int = 5 * 1024 * 1024):
         from io import BytesIO
         s3_client = self.s3_client
@@ -308,6 +309,42 @@ class BedrockFileDatabase(FileDataBase):
 
         agent.metadata['action_group'] = data
         agent.save()
+
+        return action_group
+
+    def attach_supervisor_lambda_function(
+        self,
+        agent_external_id: str,
+        action_group_name: str,
+        lambda_arn: str,
+        function_schema: List[Dict],
+        team: Team,
+    ) -> Dict:
+        """Attaches a lambda function to supervisor team and returns the response"""
+        action_group = self.bedrock_agent.create_agent_action_group(
+            actionGroupExecutor={
+                'lambda': lambda_arn
+            },
+            actionGroupName=action_group_name,
+            agentId=agent_external_id,
+            agentVersion='DRAFT',
+            functionSchema={"functions": function_schema}
+        )
+
+        data = {
+            'actionGroupId': action_group['agentActionGroup']['actionGroupId'],
+            'actionGroupName': action_group['agentActionGroup']['actionGroupName'],
+            'actionGroupState': action_group['agentActionGroup']['actionGroupState'],
+            'agentVersion': action_group['agentActionGroup']['agentVersion'],
+            'functionSchema': action_group['agentActionGroup']['functionSchema'],
+            'createdAt': action_group['agentActionGroup']['createdAt'].isoformat(),
+            'updatedAt': action_group['agentActionGroup']['updatedAt'].isoformat(),
+        }
+
+        team.metadata['action_group'] = data
+        team.save()
+
+        return action_group
 
         return action_group
 
@@ -615,6 +652,7 @@ class BedrockFileDatabase(FileDataBase):
                     "business_rules": team.human_support_prompt
                 })
             }
+        print("Session State: ", sessionState)
 
         try:
 
@@ -1060,6 +1098,7 @@ class BedrockFileDatabase(FileDataBase):
         print("================================================")
 
         response = self.bedrock_agent.update_agent_action_group(**kwargs)
+
         return response
 
     def _create_lambda_iam_role(
@@ -1098,6 +1137,17 @@ class BedrockFileDatabase(FileDataBase):
         )
 
         return _lambda_iam_role["Role"]["Arn"]
+
+    def upload_traces(self, data, key):
+        bytes_stream = BytesIO(data.encode('utf-8'))
+        self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
+
+    def get_trace_file(self, key):
+        try:
+            response = self.s3_client.get_object(Bucket=self.bucket_name, Key=key)
+            return response['Body'].read().decode('utf-8')
+        except self.s3_client.exceptions.NoSuchKey:
+            return []
 
     def get_function(self, function_name: str, version: str = '$LATEST') -> Dict:
         response = self.lambda_client.get_function(

@@ -3,7 +3,7 @@ import json
 import time
 import logging
 
-from typing import Dict
+from typing import Dict, List
 from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import OpenAI
 
@@ -39,6 +39,7 @@ from nexus.usecases.agents.agents import AgentUsecase
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
@@ -46,6 +47,8 @@ from router.dispatcher import dispatch
 
 from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
+from nexus.agents.models import AgentMessage
+
 
 client = OpenAI()
 logger = logging.getLogger(__name__)
@@ -537,6 +540,8 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         full_response = ""
         first_rationale_text = None
         is_first_rationale = True
+        trace_events = []
+
         for event in usecase.invoke_supervisor_stream(
             session_id=session_id,
             supervisor_id=supervisor.external_id,
@@ -662,7 +667,18 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                 "session_id": session_id
                             }
                         )
+                trace_events.append(event['content'])
 
+        save_trace_events.delay(
+            trace_events,
+            str(project.uuid),
+            str(project.team.id),
+            message.text,
+            message.contact_urn,
+            full_response,
+            preview,
+            session_id,
+        )
         if user_email:
             # Send completion status
             send_preview_message_to_websocket(
@@ -696,3 +712,44 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 }
             )
         raise
+
+
+def trace_events_to_json(trace_event):
+    return json.dumps(trace_event, default=str)
+
+
+
+@celery_app.task()
+def save_trace_events(
+    trace_events: List[Dict],
+    project_uuid: str,
+    team_id: str,
+    user_text: str,
+    contact_urn: str,
+    agent_response: str,
+    preview: bool,
+    session_id: str
+):
+    source = {
+        True: "preview",
+        False: "router"
+    }
+    data = ""
+    message = AgentMessage.objects.create(
+        project_id=project_uuid,
+        team_id=team_id,
+        user_text=user_text,
+        agent_response=agent_response,
+        contact_urn=contact_urn,
+        source=source.get(preview),
+        session_id=session_id
+    )
+
+    filename = f"{message.uuid}.jsonl"
+
+    for trace_event in trace_events:
+        trace_events_json = trace_events_to_json(trace_event)
+        data += trace_events_json + '\n'
+
+    key = f"traces/{project_uuid}/{filename}"
+    BedrockFileDatabase().upload_traces(data, key)
