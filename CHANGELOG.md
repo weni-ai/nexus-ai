@@ -1,3 +1,7 @@
+# 2.10.1
+## *Fix*
+    - Missing merge migration
+
 # 2.10.0
 ## *Add*
     - New human support feature
