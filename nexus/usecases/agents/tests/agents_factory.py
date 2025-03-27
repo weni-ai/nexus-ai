@@ -31,6 +31,7 @@ class AgentFactory(factory.django.DjangoModelFactory):
     model = 'gpt-4o-mini'
     is_official = False
     description = 'Agent factory test description'
+    external_id = factory.Sequence(lambda n: 'test%d' % n)
     metadata = {}  # fill this
 
 
@@ -102,6 +103,15 @@ class TeamFactory(factory.django.DjangoModelFactory):
     external_id = factory.Sequence(lambda n: 'test%d' % n)
     project = factory.SubFactory(ProjectFactory)
     metadata = {}  # fill this
+
+    @factory.post_generation
+    def create_supervisor_agent(self, create, extracted, **kwargs):
+        if not create:
+            return
+
+        AgentFactory(
+            external_id=self.external_id,
+        )
 
 
 class TeamVersionFactory(factory.django.DjangoModelFactory):

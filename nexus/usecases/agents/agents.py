@@ -1,5 +1,6 @@
 import uuid
 import json
+import time
 
 from typing import Dict, List, Tuple
 from dataclasses import dataclass, field
@@ -81,6 +82,21 @@ class AgentUsecase:
     ):
         self.external_agent_client = external_agent_client()
         self.flows_client = flows_client()
+
+        self.human_support_instructions = """
+            You must use bussiness_rules, which will be defined in the bussiness_rules field within 'human_support' to determine when a user must go to human suport, when this happens, follow the rules outlined in <human support></human support>, NEVER SEND THE USER FOR THE HUMAN SUPORT IN OTHER CASES.
+            <human support>
+            -First use the project_id, which will be defined in the 'project_id' field within 'human_support'  in your function to list departments and select the department and the queue within the department that best fits the user's message. ticketer is the name of the department and topics are the queues related to each department.
+
+            -Next, use the department and queue uuids selected above in the sector_id and queue_id in your open-ticket function.
+
+            -Next use the project_id, which will be defined in the 'project_id' field within 'human_support' in your open-ticket action group
+
+            -Next use the contact_id, which will be defined in the 'contact_id' field within 'human_support' in your open-ticket action group
+
+            -Next, use the department and queue uuids selected above in the sector_id and queue_id in your open-ticket function. Along with that, use the project_id asbdiasb and the contact_id ansdasnjnd in that same function.
+            </human support>
+        """
 
     def assign_agent(self, agent_uuid: str, project_uuid: str, created_by):
         agent: Agent = self.get_agent_object(uuid=agent_uuid)
@@ -886,35 +902,6 @@ class AgentUsecase:
         except Exception:
             raise
 
-    def delete_agent_version(self, agent_id: str, version, team, user):
-        try:
-            project = team.project
-            project_uuid = str(project.uuid)
-            reasign_agent = False
-
-            if version.alias_id != "DRAFT":
-                agent = project.agent_set.get(external_id=agent_id)
-                active_agent_qs = team.team_agents.filter(agent=agent)
-
-                if active_agent_qs.exists():
-                    reasign_agent = True
-                    self.unassign_agent(str(agent.uuid), project_uuid)
-                    self.delete_supervisor_version(team.external_id, team.current_version)
-                    self.prepare_agent(agent_id)
-                    self.prepare_agent(team.external_id)
-                    self.external_agent_client.bedrock_agent.delete_agent_alias(
-                        agentId=agent_id,
-                        agentAliasId=version.alias_id
-                    )
-                if reasign_agent:
-                    self.assign_agent(str(agent.uuid), project_uuid, user)
-                    self.create_supervisor_version(project_uuid, user)
-
-            version.delete()
-            return
-        except Exception:
-            raise
-
     # TODO: Make it assync
     def contact_field_handler(self, skill_object: AgentSkills):
         """
@@ -1013,3 +1000,253 @@ class AgentUsecase:
             return traces
         return []
         
+    def add_human_support_to_team(self, team: Team):
+        """Main orchestrator method for adding human support to a team"""
+        supervisor_id = team.external_id
+        agent = Agent.objects.get(external_id=team.external_id)
+
+        # Step 1: Update supervisor instructions
+        self._update_supervisor_instructions(supervisor_id)
+
+        # Step 2: Add human support action groups
+        self._add_human_support_actions(supervisor_id, agent)
+
+    def _update_supervisor_instructions(self, supervisor_id: str) -> None:
+        """Updates supervisor instructions with human support instructions"""
+
+        supervisor = self.external_agent_client.bedrock_agent.get_agent(agentId=supervisor_id)
+        print("--- Got supervisor agent ---- ")
+        current_instructions = supervisor['agent'].get('instruction', '')
+        new_instructions = self._insert_human_support_instructions(current_instructions)
+        if not new_instructions:
+            return
+
+        self._update_agent_instructions(
+            supervisor_id=supervisor_id,
+            new_instructions=new_instructions
+        )
+
+    def _insert_human_support_instructions(self, current_instructions: str) -> str | None:
+        """Inserts human support instructions after principles tag"""
+        principles_tag = "<principles></principles>"
+        principles_pos = current_instructions.find(principles_tag)
+
+        if principles_pos == -1:
+            print("Warning: Could not find principles tag in supervisor instructions")
+            return None
+
+        return (
+            current_instructions[:principles_pos + len(principles_tag)] + 
+            "\n" + self.human_support_instructions + 
+            current_instructions[principles_pos + len(principles_tag):]
+        )
+
+    def _remove_human_support_instructions(self, current_instructions: str) -> str | None:
+        """Removes human support instructions from the agent instructions"""
+        # Find the start and end of our instructions
+        start_pos = current_instructions.find(self.human_support_instructions.strip())
+
+        if start_pos == -1:
+            print("Warning: Could not find human support instructions to remove")
+            return None
+
+        end_pos = start_pos + len(self.human_support_instructions.strip())
+
+        # Remove the instructions and any extra whitespace
+        return (
+            current_instructions[:start_pos].rstrip() +
+            current_instructions[end_pos:].lstrip()
+        )
+
+    def _update_agent_instructions(
+        self,
+        supervisor_id: str,
+        new_instructions: str
+    ) -> None:
+        """Updates agent with new instructions"""
+        self.external_agent_client.update_agent_instructions(
+            agent_id=supervisor_id,
+            instructions=new_instructions
+        )
+        self.external_agent_client.wait_agent_status_update(supervisor_id)
+
+    def _add_human_support_actions(self, supervisor_id: str, agent: Agent) -> None:
+        """Adds human support action groups to the supervisor"""
+        human_support_agent_id = settings.HUMAN_SUPPORT_AGENT_ID
+        action_groups = settings.HUMAN_SUPPORT_ACTION_GROUP
+        created_action_groups = []
+
+        # Get team at the start to update metadata
+        team = Team.objects.get(external_id=supervisor_id)
+
+        # Handle single action group or list of action groups
+        if isinstance(action_groups, str):
+            action_groups = [action_groups]
+
+        print(f"Action groups to process: {action_groups}")
+
+        for action_group_id in action_groups:
+            print(f"Processing action group: {action_group_id}")
+            action_data = self._get_action_group_data(human_support_agent_id, action_group_id)
+            if not action_data:
+                print(f"Failed to get data for action group: {action_group_id}")
+                continue
+
+            function_schema = self._prepare_function_schema(action_data)
+            lambda_arn = action_data['agentActionGroup']['actionGroupExecutor']['lambda']
+            action_group_name = action_data['agentActionGroup']['actionGroupName']
+
+            response = self._attach_action_to_agent(
+                agent_id=supervisor_id,
+                action_group_name=action_group_name,
+                lambda_arn=lambda_arn,
+                function_schema=function_schema,
+                agent=agent
+            )
+
+            if response and 'agentActionGroup' in response:
+                created_action_group_id = response['agentActionGroup']['actionGroupId']
+                created_action_groups.append(created_action_group_id)
+                print(f"Created action group with ID: {created_action_group_id}")
+
+        # Update team metadata with created action groups
+        if created_action_groups:
+            print(f"Saving action groups to team metadata: {created_action_groups}")
+            if 'human_support_action_groups' in team.metadata:
+                team.metadata['human_support_action_groups'].extend(created_action_groups)
+            else:
+                team.metadata['human_support_action_groups'] = created_action_groups
+            team.save()
+
+    def _get_action_group_data(self, agent_id: str, action_group_id: str) -> dict | None:
+        """Gets action group data from Bedrock"""
+        try:
+            return self.external_agent_client.bedrock_agent.get_agent_action_group(
+                agent_id=agent_id,
+                action_group_id=action_group_id,
+                agent_version="DRAFT"
+            )
+        except Exception as e:
+            print(f"Failed to get action group data: {e}")
+            return None
+
+    def _prepare_function_schema(self, action_data: dict) -> list:
+        """Prepares function schema by sanitizing function names"""
+        function_schema = action_data['agentActionGroup']['functionSchema']['functions']
+        for function in function_schema:
+            function['name'] = ''.join(c for c in function['name'] if c.isalnum() or c in '_-')
+        return function_schema
+
+    def _attach_action_to_agent(
+        self,
+        agent_id: str,
+        action_group_name: str,
+        lambda_arn: str,
+        function_schema: list,
+        agent: Agent
+    ) -> dict:
+        """Attaches an action group to an agent and sets up necessary permissions"""
+        response = self.external_agent_client.attach_lambda_function(
+            agent_external_id=agent_id,
+            action_group_name=action_group_name,
+            lambda_arn=lambda_arn,
+            agent_version="$LATEST",
+            function_schema=function_schema,
+            agent=agent
+        )
+
+        self.external_agent_client.allow_agent_lambda(
+            agent_id=agent_id,
+            lambda_function_name=lambda_arn
+        )
+
+        self.create_skill_alias(
+            function_name=lambda_arn,
+            version='$LATEST',
+            alias_name='live'
+        )
+
+        return response
+
+    def rollback_human_support_to_team(self, team: Team):
+        """Removes human support instructions and actions from the team's supervisor"""
+        supervisor_id = team.external_id
+
+        # Step 1: Remove human support instructions
+        supervisor = self.external_agent_client.bedrock_agent.get_agent(agentId=supervisor_id)
+        current_instructions = supervisor['agent'].get('instruction', '')
+        new_instructions = self._remove_human_support_instructions(current_instructions)
+
+        if new_instructions:
+            self._update_agent_instructions(
+                supervisor_id=supervisor_id,
+                new_instructions=new_instructions
+            )
+
+        # Step 2: Remove human support action groups
+        self._remove_human_support_actions(supervisor_id)
+
+    def _remove_human_support_actions(self, supervisor_id: str) -> None:
+        """Removes human support action groups from the supervisor"""
+        team = Team.objects.get(external_id=supervisor_id)
+        action_groups = team.metadata.get('human_support_action_groups', [])
+
+        if not action_groups:
+            print("No human support action groups found to remove")
+            return
+
+        successfully_removed = []
+
+        for action_group_id in action_groups:
+            try:
+                print(f"Disabling action group: {action_group_id}")
+                # First get the action group details
+                action_group = self.external_agent_client.get_agent_action_group(
+                    agent_id=supervisor_id,
+                    action_group_id=action_group_id,
+                    agent_version="DRAFT"
+                )
+
+                # Extract just the functions list from the schema
+                function_schema = action_group['agentActionGroup']['functionSchema']['functions']
+                print(f"Function schema for update: {function_schema}")
+
+                # Disable the action group
+                self.external_agent_client.update_agent_action_group(
+                    agent_external_id=supervisor_id,
+                    lambda_arn=action_group['agentActionGroup']['actionGroupExecutor']['lambda'],
+                    agent_version="DRAFT",
+                    action_group_id=action_group_id,
+                    action_group_name=action_group['agentActionGroup']['actionGroupName'],
+                    action_group_state="DISABLED",
+                    function_schema=function_schema
+                )
+
+                # Wait a moment for the state change to take effect
+                time.sleep(2)
+
+                # Now delete the disabled action group
+                print(f"Deleting action group: {action_group_id}")
+                self.external_agent_client.delete_agent_action_group(
+                    agent_id=supervisor_id,
+                    agent_version="DRAFT",
+                    action_group_id=action_group_id
+                )
+
+                # Add to successfully removed list only if both disable and delete succeeded
+                successfully_removed.append(action_group_id)
+                print(f"Successfully removed action group: {action_group_id}")
+
+            except Exception as e:
+                print(f"Error removing action group {action_group_id}: {e}")
+                continue
+
+        # Update metadata to remove only the successfully deleted action groups
+        if successfully_removed:
+            remaining_groups = [ag_id for ag_id in action_groups if ag_id not in successfully_removed]
+            if remaining_groups:
+                team.metadata['human_support_action_groups'] = remaining_groups
+            else:
+                team.metadata.pop('human_support_action_groups', None)
+            team.save(update_fields=['metadata'])
+            print(f"Removed {len(successfully_removed)} action groups from metadata")
