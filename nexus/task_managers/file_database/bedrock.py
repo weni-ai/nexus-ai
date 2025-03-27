@@ -1043,6 +1043,7 @@ class BedrockFileDatabase(FileDataBase):
             "agentId": agent_external_id,
             "actionGroupId": action_group_id,
             "agentVersion": "DRAFT",
+            "actionGroupState": action_group_state
         }
 
         if function_schema:
