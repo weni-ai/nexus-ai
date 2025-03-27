@@ -891,6 +891,35 @@ class AgentUsecase:
                     skill_handler=skill_handler
                 )
 
+    def delete_agent_version(self, agent_id: str, version, team, user):
+        try:
+            project = team.project
+            project_uuid = str(project.uuid)
+            reasign_agent = False
+
+            if version.alias_id != "DRAFT":
+                agent = project.agent_set.get(external_id=agent_id)
+                active_agent_qs = team.team_agents.filter(agent=agent)
+
+                if active_agent_qs.exists():
+                    reasign_agent = True
+                    self.unassign_agent(str(agent.uuid), project_uuid)
+                    self.delete_supervisor_version(team.external_id, team.current_version)
+                    self.prepare_agent(agent_id)
+                    self.prepare_agent(team.external_id)
+                    self.external_agent_client.bedrock_agent.delete_agent_alias(
+                        agentId=agent_id,
+                        agentAliasId=version.alias_id
+                    )
+                if reasign_agent:
+                    self.assign_agent(str(agent.uuid), project_uuid, user)
+                    self.create_supervisor_version(project_uuid, user)
+
+            version.delete()
+            return
+        except Exception:
+            raise
+
     def create_supervisor_version(self, project_uuid, user):
         project = Project.objects.get(uuid=project_uuid)
         team = project.team
