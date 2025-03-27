@@ -1218,6 +1218,10 @@ class AgentUsecase:
                 # Wait a moment for the state change to take effect
                 time.sleep(2)
 
+                self.external_agent_client.remove_agent_lambda(
+                    agent_id=team.external_id,
+                    lambda_function_name=action_group['agentActionGroup']['actionGroupExecutor']['lambda']
+                )
                 # Now delete the disabled action group
                 print(f"Deleting action group: {action_group_id}")
                 self.external_agent_client.delete_agent_action_group(
