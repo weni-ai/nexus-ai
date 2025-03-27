@@ -17,7 +17,8 @@ from nexus.agents.models import (
     ContactField,
     Team,
     AgentVersion,
-    AgentSkillVersion
+    AgentSkillVersion,
+    TeamVersion
 )
 from nexus.projects.models import Project
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, BedrockSubAgent
@@ -301,6 +302,37 @@ class AgentUsecase:
             created_by=user,
         )
         return agent_version
+
+    def _update_supervisor_versions(self, team, user):
+        """Update agent versions and supervisor if needed"""
+
+        self.prepare_agent(team.external_id)
+        self.external_agent_client.wait_agent_status_update(team.external_id)
+        self.create_team_version(team.external_id, user, team)
+
+    def create_team_version(self, agent_external_id, user, team):
+        print("Creating a new team version ...")
+
+        if team.list_versions.count() >= 9:
+            oldest_version = team.list_versions.first()
+            self.delete_agent_version(agent_external_id, oldest_version, team, user)
+
+        random_uuid = str(uuid.uuid4())
+        alias_name = f"version-{random_uuid}"
+
+        agent_alias_id, agent_alias_arn, agent_alias_version = self.external_agent_client.create_agent_alias(
+            alias_name=alias_name, agent_id=agent_external_id
+        )
+        team_version: TeamVersion = team.versions.create(
+            alias_id=agent_alias_id,
+            alias_name=alias_name,
+            metadata={
+                "agent_alias": agent_alias_arn,
+                "agent_alias_version": agent_alias_version,
+            },
+            created_by=user,
+        )
+        return team_version
 
     def create_skill(
         self,
@@ -999,8 +1031,8 @@ class AgentUsecase:
             traces = [json.loads(line) for line in traces_data.splitlines() if line]
             return traces
         return []
-        
-    def add_human_support_to_team(self, team: Team):
+
+    def add_human_support_to_team(self, team: Team, user: User):
         """Main orchestrator method for adding human support to a team"""
         supervisor_id = team.external_id
 
@@ -1009,6 +1041,9 @@ class AgentUsecase:
 
         # Step 2: Add human support action groups
         self._add_human_support_actions(supervisor_id, team)
+
+        # Step 3 Prepare and update alias
+        self._update_supervisor_versions(team=team, user=user)
 
     def _update_supervisor_instructions(self, supervisor_id: str) -> None:
         """Updates supervisor instructions with human support instructions"""
@@ -1162,7 +1197,7 @@ class AgentUsecase:
 
         return response
 
-    def rollback_human_support_to_team(self, team: Team):
+    def rollback_human_support_to_team(self, team: Team, user: User):
         """Removes human support instructions and actions from the team's supervisor"""
         supervisor_id = team.external_id
 
@@ -1179,6 +1214,9 @@ class AgentUsecase:
 
         # Step 2: Remove human support action groups
         self._remove_human_support_actions(team=team)
+
+        # Step 3: Update supervisor versions
+        self._update_supervisor_versions(team=team, user=user)
 
     def _remove_human_support_actions(self, team: Team) -> None:
         """Removes human support action groups from the supervisor"""
