@@ -311,6 +311,40 @@ class BedrockFileDatabase(FileDataBase):
 
         return action_group
 
+    def attach_supervisor_lambda_function(
+        self,
+        agent_external_id: str,
+        action_group_name: str,
+        lambda_arn: str,
+        function_schema: List[Dict],
+        team: Team,
+    ) -> Dict:
+        """Attaches a lambda function to supervisor team and returns the response"""
+        action_group = self.bedrock_agent.create_agent_action_group(
+            actionGroupExecutor={
+                'lambda': lambda_arn
+            },
+            actionGroupName=action_group_name,
+            agentId=agent_external_id,
+            agentVersion='DRAFT',
+            functionSchema={"functions": function_schema}
+        )
+
+        data = {
+            'actionGroupId': action_group['agentActionGroup']['actionGroupId'],
+            'actionGroupName': action_group['agentActionGroup']['actionGroupName'],
+            'actionGroupState': action_group['agentActionGroup']['actionGroupState'],
+            'agentVersion': action_group['agentActionGroup']['agentVersion'],
+            'functionSchema': action_group['agentActionGroup']['functionSchema'],
+            'createdAt': action_group['agentActionGroup']['createdAt'].isoformat(),
+            'updatedAt': action_group['agentActionGroup']['updatedAt'].isoformat(),
+        }
+
+        team.metadata['action_group'] = data
+        team.save()
+
+        return action_group
+
     def attach_agent_knowledge_base(
         self,
         agent_id: str,

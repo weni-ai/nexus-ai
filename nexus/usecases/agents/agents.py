@@ -969,14 +969,13 @@ class AgentUsecase:
     def add_human_support_to_team(self, team: Team):
         """Main orchestrator method for adding human support to a team"""
         supervisor_id = team.external_id
-        agent = Agent.objects.get(external_id=team.external_id)
-        print("Agent found: ", agent)
 
+        print("---- Add Human Support to Team ----")
         # Step 1: Update supervisor instructions
         self._update_supervisor_instructions(supervisor_id)
 
         # Step 2: Add human support action groups
-        self._add_human_support_actions(supervisor_id, agent)
+        self._add_human_support_actions(supervisor_id, team)
 
     def _update_supervisor_instructions(self, supervisor_id: str) -> None:
         """Updates supervisor instructions with human support instructions"""
@@ -1038,7 +1037,7 @@ class AgentUsecase:
         )
         self.external_agent_client.wait_agent_status_update(supervisor_id)
 
-    def _add_human_support_actions(self, supervisor_id: str, agent: Agent) -> None:
+    def _add_human_support_actions(self, supervisor_id: str, team: Agent) -> None:
         """Adds human support action groups to the supervisor"""
         print("---- Add Human Support Actions ----")
         human_support_agent_id = settings.HUMAN_SUPPORT_AGENT_ID
@@ -1070,7 +1069,7 @@ class AgentUsecase:
                 action_group_name=action_group_name,
                 lambda_arn=lambda_arn,
                 function_schema=function_schema,
-                agent=agent
+                team=team
             )
 
             if response and 'agentActionGroup' in response:
@@ -1112,16 +1111,16 @@ class AgentUsecase:
         action_group_name: str,
         lambda_arn: str,
         function_schema: list,
-        agent: Agent
+        team: Team
     ) -> dict:
         """Attaches an action group to an agent and sets up necessary permissions"""
-        response = self.external_agent_client.attach_lambda_function(
+        response = self.external_agent_client.attach_supervisor_lambda_function(
             agent_external_id=agent_id,
             action_group_name=action_group_name,
             lambda_arn=lambda_arn,
             agent_version="$LATEST",
             function_schema=function_schema,
-            agent=agent
+            team=team
         )
 
         self.external_agent_client.allow_agent_lambda(
@@ -1153,11 +1152,10 @@ class AgentUsecase:
             )
 
         # Step 2: Remove human support action groups
-        self._remove_human_support_actions(supervisor_id)
+        self._remove_human_support_actions(team=team)
 
-    def _remove_human_support_actions(self, supervisor_id: str) -> None:
+    def _remove_human_support_actions(self, team: Team) -> None:
         """Removes human support action groups from the supervisor"""
-        team = Team.objects.get(external_id=supervisor_id)
         action_groups = team.metadata.get('human_support_action_groups', [])
 
         if not action_groups:
@@ -1171,7 +1169,7 @@ class AgentUsecase:
                 print(f"Disabling action group: {action_group_id}")
                 # First get the action group details
                 action_group = self.external_agent_client.get_agent_action_group(
-                    agent_id=supervisor_id,
+                    agent_id=team.external_id,
                     action_group_id=action_group_id,
                     agent_version="DRAFT"
                 )
@@ -1182,7 +1180,7 @@ class AgentUsecase:
 
                 # Disable the action group
                 self.external_agent_client.update_agent_action_group(
-                    agent_external_id=supervisor_id,
+                    agent_external_id=team.external_id,
                     lambda_arn=action_group['agentActionGroup']['actionGroupExecutor']['lambda'],
                     agent_version="DRAFT",
                     action_group_id=action_group_id,
@@ -1197,7 +1195,7 @@ class AgentUsecase:
                 # Now delete the disabled action group
                 print(f"Deleting action group: {action_group_id}")
                 self.external_agent_client.delete_agent_action_group(
-                    agent_id=supervisor_id,
+                    agent_id=team.external_id,
                     agent_version="DRAFT",
                     action_group_id=action_group_id
                 )
