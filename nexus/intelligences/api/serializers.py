@@ -148,10 +148,9 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
         return instructions
 
     def get_team(self, obj):
-        # Get project_uuid from context if available
+
         project_uuid = self.context.get('project_uuid')
         if not project_uuid:
-            # Try to get project_uuid from the content base's project
             try:
                 project_uuid = str(obj.intelligence.project.uuid)
             except AttributeError:

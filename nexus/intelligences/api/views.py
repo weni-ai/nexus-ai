@@ -1133,12 +1133,6 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
     serializer_class = ContentBasePersonalizationSerializer
     authentication_classes = AUTHENTICATION_CLASSES
 
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        if 'project_uuid' in self.kwargs:
-            context['project_uuid'] = self.kwargs['project_uuid']
-        return context
-
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
             return ContentBase.objects.none()  # pragma: no cover
@@ -1154,8 +1148,9 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
                 user_email = request.user.email
 
             project_uuid = kwargs.get('project_uuid')
+
             content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(project_uuid, user_email, is_super_user)
-            data = ContentBasePersonalizationSerializer(content_base, context={"request": request}).data
+            data = ContentBasePersonalizationSerializer(content_base, context={"request": request, "project_uuid": project_uuid}).data
             return Response(data=data, status=status.HTTP_200_OK)
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
