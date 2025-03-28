@@ -87,7 +87,7 @@ def get_trace_summary(language, trace):
         return "Processing your request now"
 
 
-def get_action_clients(preview: bool = False, multi_agents: bool = False):
+def get_action_clients(preview: bool = False, multi_agents: bool = False, project_use_components: bool = False):
     if preview:
         flow_start = SimulateFlowStart(
             os.environ.get(
@@ -108,7 +108,7 @@ def get_action_clients(preview: bool = False, multi_agents: bool = False):
         )
         return broadcast, flow_start
 
-    if multi_agents and settings.AGENT_USE_COMPONENTS:
+    if multi_agents and settings.AGENT_USE_COMPONENTS or project_use_components:
         broadcast = WhatsAppBroadcastHTTPClient(
             os.environ.get(
                 'FLOWS_REST_ENDPOINT'
@@ -337,7 +337,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             log_usecase.update_status("F", exception_text=e)
 
 
-@celery_app.task(bind=True, soft_time_limit=120, time_limit=125)
+@celery_app.task(bind=True, soft_time_limit=300, time_limit=360)
 def start_multi_agents(self, message: Dict, preview: bool = False, language: str = "en", user_email: str = '') -> bool:  # pragma: no cover
     # TODO: Logs
     message = message_factory(
@@ -374,9 +374,11 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
             }
         )
 
+    project_use_components = message.project_uuid in settings.PROJECT_COMPONENTS
+
     try:
         # Stream supervisor response
-        broadcast, _ = get_action_clients(preview, multi_agents=True)
+        broadcast, _ = get_action_clients(preview, multi_agents=True, project_use_components=project_use_components)
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
         full_chunks = []
         full_response = ""
