@@ -23,6 +23,8 @@ from nexus.task_managers.file_database.file_database import FileDataBase, FileRe
 
 from nexus.agents.models import Agent, Credential, Team
 
+from nexus.agents.components import get_all_formats, get_all_formats_list
+
 if TYPE_CHECKING:
     from router.entities import Message
     from nexus.intelligences.models import ContentBase
@@ -643,6 +645,11 @@ class BedrockFileDatabase(FileDataBase):
                 "instructions": list(instructions.values_list("instruction", flat=True))
             })
         }
+
+        if message.project_uuid in settings.PROJECT_COMPONENTS:
+            sessionState["promptSessionAttributes"].update({
+                "format_components": get_all_formats_list(),
+            })
 
         if team.human_support:
             sessionState["promptSessionAttributes"] = {
