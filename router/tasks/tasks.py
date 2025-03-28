@@ -339,7 +339,9 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
 @celery_app.task(bind=True, soft_time_limit=120, time_limit=125)
 def start_multi_agents(self, message: Dict, preview: bool = False, language: str = "en", user_email: str = '') -> bool:  # pragma: no cover
-    # TODO: Logs
+    # Initialize Redis client
+    redis_client = Redis.from_url(settings.REDIS_URL)
+
     message = message_factory(
         project_uuid=message.get("project_uuid"),
         text=message.get("text"),
@@ -361,6 +363,29 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     # Use the sanitized URN in the session ID
     session_id = f"project-{project.uuid}-session-{message.sanitized_urn}"
     session_id = slugify(session_id)
+
+    # Check for pending responses
+    pending_response_key = f"response:{message.contact_urn}"
+    pending_task_key = f"task:{message.contact_urn}"
+    pending_response = redis_client.get(pending_response_key)
+    pending_task_id = redis_client.get(pending_task_key)
+
+    if pending_response:
+        # Revoke the previous task if it exists
+        if pending_task_id:
+            celery_app.control.revoke(pending_task_id.decode('utf-8'), terminate=True)
+
+        # Concatenate the previous message with the new one
+        previous_message = pending_response.decode('utf-8')
+        concatenated_message = f"{previous_message}\n{message.text}"
+        message.text = concatenated_message
+        redis_client.delete(pending_response_key)
+    else:
+        # Store the current message in Redis
+        redis_client.set(pending_response_key, message.text)
+
+    # Store the current task ID in Redis
+    redis_client.set(pending_task_key, self.request.id)
 
     if user_email:
         # Send initial status through WebSocket
@@ -442,6 +467,10 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 }
             )
 
+        # Clean up Redis entries after successful processing
+        redis_client.delete(pending_response_key)
+        redis_client.delete(pending_task_key)
+
         return dispatch(
             llm_response=full_response,
             message=message,
@@ -451,6 +480,10 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         )
 
     except Exception as e:
+        # Clean up Redis entries in case of error
+        redis_client.delete(pending_response_key)
+        redis_client.delete(pending_task_key)
+
         if user_email:
             # Send error status through WebSocket
             send_preview_message_to_websocket(
