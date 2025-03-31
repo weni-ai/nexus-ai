@@ -23,7 +23,7 @@ class BackendsRegistry:
     def get_backend(cls, key: str) -> InlineAgentsBackend:
         backend = cls._options.get(key)
         if backend is None:
-            raise UnregisteredBackend("Backend with key: abc is not registered")
+            raise UnregisteredBackend(f"Backend with key: {key} is not registered")
 
         return backend
 
