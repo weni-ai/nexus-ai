@@ -1,3 +1,8 @@
+# 2.10.2
+## *Add*
+    - New multi message feature on start_multi_agent
+    - Agent related VtexApp communication api
+
 # 2.10.1
 ## *Fix*
     - Missing merge migration
