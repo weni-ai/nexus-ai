@@ -704,7 +704,7 @@ class AgentTracesView(
 
         if not log_id:
             return Response({"error": "log_id is required"}, status=400)
-            
+
         usecase = AgentUsecase()
         try:
             trace_data = usecase.get_traces(project_uuid, log_id)
@@ -807,3 +807,46 @@ class VtexAppProjectCredentialsView(APIView):
             "message": "Credentials created successfully",
             "created_credentials": created_credentials
         })
+
+
+class RationaleView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        print(f"GET - Project UUID: {project_uuid}")
+        try:
+            team = Team.objects.get(project__uuid=project_uuid)
+            rationale = team.metadata.get('rationale', False)
+            print(f"GET - Found team: {team.pk}, rationale: {rationale}")
+
+            return Response({
+                "rationale": rationale
+            })
+        except Team.DoesNotExist:
+            print(f"GET - Team not found for project: {project_uuid}")
+            return Response({"error": "Team not found"}, status=404)
+
+    def patch(self, request, project_uuid):
+        print(f"PATCH - Project UUID: {project_uuid}")
+        print(f"PATCH - Request data: {request.data}")
+
+        rationale = request.data.get('rationale')
+        if rationale is None:
+            print("PATCH - Missing rationale in request data")
+            return Response({"error": "rationale is required"}, status=400)
+
+        try:
+            team = Team.objects.get(project__uuid=project_uuid)
+            print(f"PATCH - Found team: {team.pk}, current metadata: {team.metadata}")
+
+            team.metadata['rationale'] = rationale
+            team.save(update_fields=['metadata'])
+
+            print(f"PATCH - Updated team metadata: {team.metadata}")
+            return Response({
+                "message": "Rationale updated successfully",
+                "rationale": rationale
+            })
+        except Team.DoesNotExist:
+            print(f"PATCH - Team not found for project: {project_uuid}")
+            return Response({"error": "Team not found"}, status=404)
