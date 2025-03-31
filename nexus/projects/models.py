@@ -1,10 +1,16 @@
-from django.db import models
+
 
 from enum import Enum
 
+from django.db import models
+
+from inline_agents.backends import BackendsRegistry
 from nexus.db.models import BaseModel, SoftDeleteModel
 from nexus.orgs.models import Org
 from nexus.users.models import User
+
+default_backend = BackendsRegistry.get_default_backend()
+default_backend_name = default_backend.name
 
 
 class TemplateType(models.Model):

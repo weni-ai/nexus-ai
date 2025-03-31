@@ -23,6 +23,7 @@ class TestBackendRegistry(TestCase):
         # Limpa o registro antes de cada teste
         BackendsRegistry._names = []
         BackendsRegistry._options = {}
+        BackendsRegistry._default_backend = None
 
     def test_register_backend(self):
         backend = MockBackend()
@@ -55,3 +56,13 @@ class TestBackendRegistry(TestCase):
         self.assertIn("AnotherMockBackend", BackendsRegistry._names)
         self.assertIn("MockBackend", BackendsRegistry._options)
         self.assertIn("AnotherMockBackend", BackendsRegistry._options)
+
+    def test_set_and_get_default_backend(self):
+        backend = MockBackend()
+        BackendsRegistry.register(backend, set_default=True)
+        default_backend = BackendsRegistry.get_default_backend()
+        self.assertEqual(default_backend, backend)
+
+    def test_get_default_backend_not_set(self):
+        with self.assertRaises(UnregisteredBackend):
+            BackendsRegistry.get_default_backend()
