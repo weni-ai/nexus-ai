@@ -1,11 +1,17 @@
 import json
 
-from django.test import TestCase
+from django.test import TestCase, RequestFactory
 from django.urls import reverse
+
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth.models import Permission
+
+from nexus.agents.api.views import InternalCommunicationPermission
 
 from rest_framework.test import APIRequestFactory, APIClient
 
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.users.tests.user_factory import UserFactory
 
 from nexus.agents.models import (
     Agent,
@@ -159,3 +165,29 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertEquals(content[0].get("name"), agent.display_name)
         self.assertEquals(content[0].get("skills"), [])
         self.assertFalse(content[0].get("is_official"))
+
+
+class TestCommunicateInternallyPermission(TestCase):
+    def setUp(self):
+        self.user = UserFactory()
+        content_type = ContentType.objects.get_for_model(self.user)
+        permission, created = Permission.objects.get_or_create(
+            codename="can_communicate_internally",
+            name="can communicate internally",
+            content_type=content_type,
+        )
+        self.user.user_permissions.add(permission)
+        self.factory = RequestFactory()
+
+    def test_permission_granted(self):
+        request = self.factory.get('/')
+        request.user = self.user
+        permission = InternalCommunicationPermission()
+        self.assertTrue(permission.has_permission(request, None))
+
+    def test_permission_denied(self):
+        user_without_permission = UserFactory()
+        request = self.factory.get('/')
+        request.user = user_without_permission
+        permission = InternalCommunicationPermission()
+        self.assertFalse(permission.has_permission(request, None))
