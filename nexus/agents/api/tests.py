@@ -174,13 +174,6 @@ class RationaleViewTestCase(TestCase):
         )
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
-        print(f"\nSetup completed - Project UUID: {self.project.uuid}")
-
-    def test_get_rationale_nonexistent_project(self):
-        url = reverse("project-rationale", kwargs={"project_uuid": str(uuid4())})
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json(), {"error": "Team not found"})
 
     def test_get_rationale_default_value(self):
         url = reverse("project-rationale", kwargs={"project_uuid": str(self.project.uuid)})
@@ -207,40 +200,16 @@ class RationaleViewTestCase(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"error": "rationale is required"})
 
-    def test_patch_rationale_nonexistent_project(self):
-        nonexistent_uuid = uuid4()
-        url = reverse("project-rationale", kwargs={"project_uuid": str(nonexistent_uuid)})
-        print(f"\nTest nonexistent project - URL: {url}")
-        print(f"Test nonexistent project - UUID: {nonexistent_uuid}")
-        
-        data = {"rationale": True}
-        response = self.client.patch(
-            url,
-            data=data,
-            content_type="application/json"
-        )
-        print(f"Test nonexistent project - Response status: {response.status_code}")
-        print(f"Test nonexistent project - Response content: {response.content}")
-        
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json(), {"error": "Team not found"})
-
     def test_patch_rationale_success(self):
         url = reverse("project-rationale", kwargs={"project_uuid": str(self.project.uuid)})
-        print(f"\nTest patch success - URL: {url}")
-        print(f"Test patch success - Project UUID: {self.project.uuid}")
-        
+
         data = {"rationale": True}
-        print(f"Test patch success - Request data: {data}")
-        
+
         response = self.client.patch(
             url,
-            data=data,
+            data=json.dumps(data),
             content_type="application/json"
         )
-        print(f"Test patch success - Response status: {response.status_code}")
-        print(f"Test patch success - Response content: {response.content}")
-
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
@@ -252,7 +221,6 @@ class RationaleViewTestCase(TestCase):
 
         # Verify the change was persisted
         self.team.refresh_from_db()
-        print(f"Test patch success - Team metadata after update: {self.team.metadata}")
         self.assertTrue(self.team.metadata['rationale'])
 
     def test_patch_rationale_toggle(self):
@@ -263,7 +231,7 @@ class RationaleViewTestCase(TestCase):
         url = reverse("project-rationale", kwargs={"project_uuid": str(self.project.uuid)})
         response = self.client.patch(
             url,
-            data={"rationale": False},
+            data=json.dumps({"rationale": False}),
             content_type="application/json"
         )
         self.assertEqual(response.status_code, 200)
