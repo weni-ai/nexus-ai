@@ -306,6 +306,10 @@ class PushAgents(APIView):
             # Validate and process request data
             files, agents_data, project_uuid = self._validate_request(request)
 
+            print("::::::::::::::::::::::::::::::::::::::::::::::::::")
+            print(request.data)
+            print("::::::::::::::::::::::::::::::::::::::::::::::::::")
+
             # Initialize usecase and get team
             agents_usecase = AgentUsecase()
             team = agents_usecase.get_team_object(project__uuid=project_uuid)
