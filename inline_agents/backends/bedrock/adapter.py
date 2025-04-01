@@ -1,10 +1,10 @@
 from inline_agents.adapter import TeamAdapter
-from inline_agents.team import Team
+from nexus.inline_agents.models import Team as ORMTeam
 
 
 class BedrockTeamAdapter(TeamAdapter):
     @classmethod
-    def to_external(self, team: Team) -> dict:
+    def to_external(self, team: ORMTeam) -> dict:
         external_team = {
             "actionGroups": self._get_action_groups(team),
             "instruction": self._get_instruction(team),
@@ -22,17 +22,17 @@ class BedrockTeamAdapter(TeamAdapter):
 
         return external_team
 
-    def _get_action_groups(self, team: Team) -> list:
+    def _get_action_groups(self, team: ORMTeam) -> list:
         pass
 
-    def _get_instruction(self, team: Team) -> str:
+    def _get_instruction(self, team: ORMTeam) -> str:
         pass
 
-    def _get_foundation_model(self, team: Team) -> str:
+    def _get_foundation_model(self, team: ORMTeam) -> str:
         pass
 
-    def _get_session_id(self, team: Team) -> str:
+    def _get_session_id(self, team: ORMTeam) -> str:
         pass
 
-    def _get_agent_collaboration(self, team: Team) -> str:
+    def _get_agent_collaboration(self, team: ORMTeam) -> str:
         pass
