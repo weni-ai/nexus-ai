@@ -54,7 +54,8 @@ client = OpenAI()
 def get_trace_summary(language, trace):
     try:
         # Add a small delay between API calls to respect rate limits
-        time.sleep(3)
+        if settings.TRACE_SUMMARY_DELAY:
+            time.sleep(3)
 
         prompt = f"""
           Generate a concise, one-line summary of the trace of the action, in {language}.
