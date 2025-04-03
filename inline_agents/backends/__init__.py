@@ -36,5 +36,9 @@ class BackendsRegistry:
 
         return backend
 
+    @classmethod
+    def get_backend_names(cls) -> list[str]:
+        return cls._names
+
 
 BackendsRegistry.register(BedrockBackend(), set_default=True)
