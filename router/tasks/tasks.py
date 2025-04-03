@@ -705,27 +705,28 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                 orchestration = inner_trace['orchestrationTrace']
                                 if 'rationale' in orchestration:
                                     rationale_text = orchestration['rationale'].get('text')
-                    if rationale_text:
-                        if is_first_rationale:
-                            first_rationale_text = rationale_text
-                            is_first_rationale = False
-                        else:
-                            # Commented code: Sending all the rationales to the user
 
-                            improved_text = improve_subsequent_rationale(
-                                rationale_text,
-                                rationale_history,
-                                message.text
-                            )
+                        if rationale_text:
+                            if is_first_rationale:
+                                first_rationale_text = rationale_text
+                                is_first_rationale = False
+                            else:
+                                # Commented code: Sending all the rationales to the user
 
-                            if improved_text.lower() != "invalid":
-                                rationale_history.append(improved_text)
-                                task_send_message_http_client.delay(
-                                    text=improved_text,
-                                    urns=[message.contact_urn],
-                                    project_uuid=str(message.project_uuid),
-                                    user=flows_user_email,
+                                improved_text = improve_subsequent_rationale(
+                                    rationale_text,
+                                    rationale_history,
+                                    message.text
                                 )
+
+                                if improved_text.lower() != "invalid":
+                                    rationale_history.append(improved_text)
+                                    task_send_message_http_client.delay(
+                                        text=improved_text,
+                                        urns=[message.contact_urn],
+                                        project_uuid=str(message.project_uuid),
+                                        user=flows_user_email,
+                                    )
 
                     # Get summary from Claude with specified language
                     event['content']['summary'] = get_trace_summary(language, event['content'])
