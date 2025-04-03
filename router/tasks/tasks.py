@@ -55,6 +55,7 @@ logger = logging.getLogger(__name__)
 
 def improve_rationale_text(rationale_text: str, previous_rationales: list = [], user_input: str = "", is_first_rationale: bool = False) -> str:
     try:
+        print("--------- start improve rationale text ----------")
         # Get the Bedrock runtime client
         bedrock_db = BedrockFileDatabase()
         bedrock_client = bedrock_db._BedrockFileDatabase__get_bedrock_runtime()
@@ -145,6 +146,7 @@ def improve_rationale_text(rationale_text: str, previous_rationales: list = [], 
 def improve_subsequent_rationale(rationale_text: str, previous_rationales: list = [], user_input: str = "") -> str:
 
     try:
+        print("--------- start improve subsequent rationale ----------")
         # Get the Bedrock runtime client
         bedrock_db = BedrockFileDatabase()
         bedrock_client = bedrock_db._BedrockFileDatabase__get_bedrock_runtime()
