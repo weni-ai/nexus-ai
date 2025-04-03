@@ -39,7 +39,6 @@ from nexus.usecases.agents.agents import AgentUsecase
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
-from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
@@ -65,84 +64,47 @@ def improve_rationale_text(rationale_text: str, previous_rationales: list = [], 
 
         # Prepare the complete instruction content for the user message
         instruction_content = """
-            RULES:
-                1. CRITICAL: When returning "invalid", return ONLY the word invalid with NO additional text, quotes, punctuation, or formatting.
-            """
+            You are an agent specialized in sending notifications to your user. They are waiting for a response to a request, but before receiving it, you need to notify them with precision about what you're doing, in a way that truly helps them. To do this, you will receive a thought and should rephrase it by following principles to make it fully useful to the user.
 
-        # Add first rationale-specific instructions
-        if is_first_rationale:
-            instruction_content += """
-                2. IMPORTANT: This is the FIRST rationale. NEVER mark first rationales as invalid. Always improve them.
-            """
+            The thought you will receive to rephrase will be between the <thought><thought> tags.
 
-        instruction_content += """
-            2. Mark as invalid if the rationale:
-            - Contains greetings, generic assistance, or simple acknowledgments
-            - Mentions internal components (e.g., "ProductConcierge") without adding value
-            - Describes communication actions with the user (e.g., "Vou informar ao usuário")
-            - Is vague, generic, or lacks specific actionable content
-            - Conveys essentially the same information as any previous rationale, even if worded differently
-            - Addresses the same topic or message as the immediately previous rationale
+            You can also use the user's message to base the rephrasing of the thought. The user's message will be between the <user_message></user_message> tags.
 
-            3. Transform all other rationales by:
-            - Keeping them concise and direct (max 15 words)
-            - Using active voice and present tense
-            - Removing conversation starters and technical jargon
-            - Clearly stating the current action or error condition
-            - Preserving essential details from the original rationale
-            - Returning ONLY the transformed text with NO additional explanation or formatting
+            For the rephrasing, you must follow principles. These will be between the <principles></principles> tags, and you should give them high priority.
 
-            EXAMPLES:
+            <principles>
+            - Keeping it concise and direct (max 15 words);
+            - The rephrasing should always be in the first person (you are the one thinking);
+            - Your output is always in the present tense;
+            - Removing conversation starters and technical jargon;
+            - Clearly stating the current action or error condition;
+            - Preserving essential details from the original rationale;
+            - Returning ONLY the transformed text with NO additional explanation or formatting;- Your output should ALWAYS be in the language of the user's message.
+            </principles>
 
-            Valid transformations:
-            "Consultando o ProductConcierge sobre sugestões de roupas formais" → Buscando roupas formais para você.
+            You can find examples of rephrasings within the tags <examples></examples>.
 
-            "O usuário está procurando voos de Maceió para São Paulo para uma pessoa, com datas específicas. Vou utilizar o agente de viagens para buscar essas informações." → Verificando voos de Maceió para São Paulo nas datas especificadas.
-
-            "Recebi um erro porque as datas fornecidas são no passado. Preciso informar ao usuário que é necessário fornecer datas futuras para a pesquisa." → Datas fornecidas estão no passado, necessário datas futuras.
-
-            Invalid examples:
-            "Dando as boas-vindas e oferecendo assistência ao usuário" → invalid
-
-            "Vou informar ao usuário sobre o resultado da busca" → invalid
-
-            "O agente de viagens informou que as datas fornecidas já passaram. Vou informar ao usuário e solicitar novas datas." → invalid
-
-            Redundancy examples (second rationale invalid):
-            1st: "Buscando um hotel em São Paulo com piscina e academia." → Localizando hotéis em São Paulo com piscina e academia.
-            2nd: "Procurando hotéis em São Paulo que tenham piscina e academia disponíveis." → invalid
-
-            1st: "Nenhum voo encontrado para as datas solicitadas." → Nenhum voo disponível nas datas solicitadas.
-            2nd: "Nenhum voo disponível para as datas solicitadas, oferecendo alternativas." → invalid
-
-            REMEMBER: Your output MUST be either the transformed rationale OR exactly the word invalid. Never add explanations, quotes, punctuation, or formatting.
+            <examples>
+            # EXAMPLE 1 
+            Tought: Consulting ProductConcierge for formal clothing suggestions.
+            Rephrasing: I'm looking for formal clothes for you!
+            # EXAMPLE 2
+            Tought: The user is looking for flights from Miami to New York for one person, with specific dates. I will use the travel agent to search for this information.
+            Rephrasing: Checking flights from Miami to New York on specified dates.
+            # EXAMPLE 3
+            Tought: I received an error because the provided dates are in the past. I need to inform the user that future dates are required for the search.
+            Rephrasing: Dates provided are in the past, future dates needed.</examples>
         """
 
-        # First rationale reminder
-        if is_first_rationale:
-            instruction_content += """
-                FINAL REMINDER: This is the FIRST rationale. You MUST improve it and NOT return "invalid". Transform it into a concise, clear message.
-            """
-
-        instruction_content += """
-            Analyze the following rationale text:
-        """
-
-        # Add user input context if available
         if user_input:
             instruction_content += f"""
-                User's current message: "{user_input}"
+                <user_message>{user_input}</user_message>
             """
 
-        # Add previous rationales if available
-        if previous_rationales:
-            instruction_content += f"""
-                Previous rationales:
-                {' '.join([f"- {r}" for r in previous_rationales])}
-            """
-
-        # Add the main instructions and few-shot examples within the instruction content
-        instruction_content += rationale_text
+        # Add the rationale text to analyze
+        instruction_content += f"""
+            <thought>{rationale_text}</thought>
+        """
 
         # Build conversation with just one user message and an expected assistant response
         conversation = [
@@ -177,6 +139,106 @@ def improve_rationale_text(rationale_text: str, previous_rationales: list = [], 
         return response_text.strip().strip('"\'')
     except Exception as e:
         logger.error(f"Error improving rationale text: {str(e)}")
+        return rationale_text  # Return original text if transformation fails
+
+
+def improve_subsequent_rationale(rationale_text: str, previous_rationales: list = [], user_input: str = "") -> str:
+
+    try:
+        # Get the Bedrock runtime client
+        bedrock_db = BedrockFileDatabase()
+        bedrock_client = bedrock_db._BedrockFileDatabase__get_bedrock_agent()
+
+        # Set the model ID for Amazon Nova Lite
+        model_id = settings.AWS_RATIONALE_MODEL
+
+        # Prepare the complete instruction content for the user message
+        instruction_content = """
+            You are a message analyst responsible for reviewing messages from an artificial agent that may or may not be sent to the end user.
+
+            You will receive the agent's main thought, and your first task is to determine whether this thought is invalid for sending to the end user. The main thought will be enclosed within the tags <main_thought></main_thought>.
+
+            To decide if a thought is valid, you must analyze a list of criteria that classify a thought as invalid, as well as review previous thoughts. These previous thoughts will be enclosed within the tags <previous_thought></previous_thought>. The list of criteria you must analyze to determine if a thought is invalid will be enclosed within the tags <invalid_thought></invalid_thought>. Another important piece of information for your analysis is the user's message, which will be enclosed within the tags <user_message></user_message>.
+
+            <invalid_thought>
+            - Contains greetings, generic assistance, or simple acknowledgments;
+            - Mentions internal components (for example, "ProductConcierge") without adding value;
+            - Essentially conveys the same information as any previous justification, even if written differently;
+            - Addresses the same topic or message as the immediately preceding justification. 
+            </invalid_thought>
+
+            If the thought is considered invalid, write only 'invalid'. Write NOTHING else besides 'invalid'.
+
+            If the thought is valid, you must REWRITE IT following the rewriting principles. These principles will be within the tags <principles></principles> and must be HIGHLY prioritized if the thought is considered valid.
+
+            <principles>
+                - Keeping it concise and direct (max 15 words);
+                - The rephrasing should always be in the first person (you are the one thinking);
+                - Your output is always in the present tense;
+                - Removing conversation starters and technical jargon;
+                - Clearly stating the current action or error condition;
+                - Preserving essential details from the original rationale;
+                - Returning ONLY the transformed text with NO additional explanation or formatting;- Your output should ALWAYS be in the language of the user's message.
+            </principles>
+
+            You can find examples of rephrasings within the tags <examples></examples>.
+
+            <examples>
+            # EXAMPLE 1 
+            Tought: Consulting ProductConcierge for formal clothing suggestions.
+            Rephrasing: I'm looking for formal clothes for you!
+            # EXAMPLE 2
+            Tought: The user is looking for flights from Miami to New York for one person, with specific dates. I will use the travel agent to search for this information.
+            Rephrasing: Checking flights from Miami to New York on specified dates.
+            # EXAMPLE 3
+            Tought: I received an error because the provided dates are in the past. I need to inform the user that future dates are required for the search.
+            Rephrasing: Dates provided are in the past, future dates needed.
+            </examples>
+        """
+
+        # Add user input context if available
+        if user_input:
+            instruction_content += f"<user_message>{user_input}</user_message>"
+
+        if previous_rationales:
+            instruction_content += f"""
+            <previous_thought>
+            {' '.join([f"- {r}" for r in previous_rationales])}
+            </previous_thought>
+            """
+
+        # Add the rationale text to analyze
+        instruction_content += f"<main_thought>{rationale_text}</main_thought>"
+
+        print("Full Prompt: ", instruction_content)
+
+        # Build conversation with just one user message and an expected assistant response
+        conversation = [
+            # Single user message with all instructions and the rationale to analyze
+            {
+                "role": "user",
+                "content": [{"text": instruction_content}]
+            }
+        ]
+
+        # Send the request to Amazon Bedrock
+        response = bedrock_client.converse(
+            modelId=model_id,
+            messages=conversation,
+            inferenceConfig={
+                "maxTokens": 150,
+                "temperature": 0
+            }
+        )
+
+        print(f"Subsequent Rationale Improvement Response: {response}")
+        # Extract the response text
+        response_text = response["output"]["message"]["content"][0]["text"]
+
+        # Remove any quotes from the response
+        return response_text.strip().strip('"\'')
+    except Exception as e:
+        logger.error(f"Error improving subsequent rationale text: {str(e)}")
         return rationale_text  # Return original text if transformation fails
 
 
@@ -678,8 +740,8 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                             is_first_rationale = False
                         else:
                             # Commented code: Sending all the rationales to the user
-                            """
-                            improved_text = improve_rationale_text(
+
+                            improved_text = improve_subsequent_rationale(
                                 rationale_text,
                                 rationale_history,
                                 message.text
@@ -693,14 +755,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                     project_uuid=str(message.project_uuid),
                                     user=flows_user_email,
                                 )
-                            """
-                            improved_text = improve_rationale_text(
-                                rationale_text,
-                                rationale_history,
-                                message.text
-                            )
-                            if improved_text.lower() != "invalid":
-                                rationale_history.append(improved_text)
 
                     # Get summary from Claude with specified language
                     event['content']['summary'] = get_trace_summary(language, event['content'])
