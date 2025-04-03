@@ -13,31 +13,12 @@ import os
 import sys
 from pathlib import Path
 
-import environ
-
-environ.Env.read_env(env_file=(environ.Path(__file__) - 2)(".env"))
+from .environment import env
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
 
-
-env = environ.Env(
-    SECRET_KEY=(str, "SK"),
-    DEBUG=(bool, False),
-    ALLOWED_HOSTS=(lambda v: [s.strip() for s in v.split(",")], list("*")),
-    CELERY_BROKER_URL=(str, "redis://localhost:6379/0"),
-    SENTENX_UPDATE_TASK_TOKEN=(str, ""),
-    MODELS_SUPERUSER_TOKEN=(str, ""),
-    RETAIL_SUPERUSER_TOKEN=(str, ""),
-    APM_DISABLE_SEND=(bool, False),
-    APM_SERVICE_DEBUG=(bool, False),
-    APM_SERVICE_NAME=(str, ""),
-    APM_SECRET_TOKEN=(str, ""),
-    APM_SERVER_URL=(str, ""),
-    FILTER_SENTRY_EVENTS=(list, []),
-    CREDENTIAL_ENCRYPTION_KEY=(str, None),
-)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -84,6 +65,7 @@ INSTALLED_APPS = [
     'nexus.sentry',
     'nexus.zeroshot',
     'nexus.agents',
+    'nexus.inline_agents',
 ]
 
 MIDDLEWARE = [

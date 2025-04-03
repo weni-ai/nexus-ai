@@ -1,10 +1,14 @@
-from django.db import models
-
 from enum import Enum
 
+from django.db import models
+
+from inline_agents.backends import BackendsRegistry
 from nexus.db.models import BaseModel, SoftDeleteModel
 from nexus.orgs.models import Org
 from nexus.users.models import User
+
+default_backend = BackendsRegistry.get_default_backend()
+backend_names = BackendsRegistry.get_backend_names()
 
 
 class TemplateType(models.Model):
@@ -25,6 +29,8 @@ class Project(BaseModel, SoftDeleteModel):
         (BEDROCK, "Bedrock"),
     )
 
+    AGENTS_BACKEND_CHOICES = tuple((name, name) for name in backend_names)
+
     name = models.CharField(max_length=255)
     org = models.ForeignKey(
         Org, on_delete=models.CASCADE, related_name='projects'
@@ -38,6 +44,7 @@ class Project(BaseModel, SoftDeleteModel):
     is_template = models.BooleanField(default=False)
     brain_on = models.BooleanField(default=False)
     indexer_database = models.CharField(max_length=15, choices=INDEXER_CHOICES, default=SENTENX)
+    agents_backend = models.CharField(max_length=100, choices=AGENTS_BACKEND_CHOICES, default=default_backend.name)
 
     def __str__(self):
         return f'{self.uuid} - Project: {self.name} - Org: {self.org.name}'
