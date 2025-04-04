@@ -660,6 +660,8 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
         first_rationale_text = None
         is_first_rationale = True
+        should_process_rationales = supervisor.metadata.get('rationale', False)
+
         for event in usecase.invoke_supervisor_stream(
             session_id=session_id,
             supervisor_id=supervisor.external_id,
@@ -699,57 +701,57 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 trace_events.append(event['content'])
                 trace_data = event['content']
                 try:
-                    # Handle first rationale for multi-agent scenarios
-                    if first_rationale_text and 'callerChain' in trace_data:
-                        caller_chain = trace_data['callerChain']
-                        if isinstance(caller_chain, list) and len(caller_chain) > 1:
-                            improved_text = improve_rationale_text(
-                                first_rationale_text,
-                                rationale_history,
-                                message.text,
-                                is_first_rationale=True
-                            )
-
-                            if improved_text.lower() != "invalid":
-                                rationale_history.append(improved_text)
-                                task_send_message_http_client.delay(
-                                    text=improved_text,
-                                    urns=[message.contact_urn],
-                                    project_uuid=str(message.project_uuid),
-                                    user=flows_user_email,
+                    if should_process_rationales:
+                        # Handle first rationale for multi-agent scenarios
+                        if first_rationale_text and 'callerChain' in trace_data:
+                            caller_chain = trace_data['callerChain']
+                            if isinstance(caller_chain, list) and len(caller_chain) > 1:
+                                improved_text = improve_rationale_text(
+                                    first_rationale_text,
+                                    rationale_history,
+                                    message.text,
+                                    is_first_rationale=True
                                 )
-                            first_rationale_text = None
 
-                    # Process orchestration trace rationale
-                    rationale_text = None
-                    if 'trace' in trace_data:
-                        inner_trace = trace_data['trace']
-                        if 'orchestrationTrace' in inner_trace:
-                            orchestration = inner_trace['orchestrationTrace']
-                            if 'rationale' in orchestration:
-                                rationale_text = orchestration['rationale'].get('text')
+                                if improved_text.lower() != "invalid":
+                                    rationale_history.append(improved_text)
+                                    task_send_message_http_client.delay(
+                                        text=improved_text,
+                                        urns=[message.contact_urn],
+                                        project_uuid=str(message.project_uuid),
+                                        user=flows_user_email,
+                                    )
+                                first_rationale_text = None
 
-                    if rationale_text:
-                        if is_first_rationale:
-                            first_rationale_text = rationale_text
-                            is_first_rationale = False
-                        else:
-                            # Commented code: Sending all the rationales to the user
+                        # Process orchestration trace rationale
+                        rationale_text = None
+                        if 'trace' in trace_data:
+                            inner_trace = trace_data['trace']
+                            if 'orchestrationTrace' in inner_trace:
+                                orchestration = inner_trace['orchestrationTrace']
+                                if 'rationale' in orchestration:
+                                    rationale_text = orchestration['rationale'].get('text')
 
-                            improved_text = improve_subsequent_rationale(
-                                rationale_text,
-                                rationale_history,
-                                message.text
-                            )
+                        if rationale_text:
+                            if is_first_rationale:
+                                first_rationale_text = rationale_text
+                                is_first_rationale = False
+                            else:
 
-                            if improved_text.lower() != "invalid":
-                                rationale_history.append(improved_text)
-                                task_send_message_http_client.delay(
-                                    text=improved_text,
-                                    urns=[message.contact_urn],
-                                    project_uuid=str(message.project_uuid),
-                                    user=flows_user_email,
+                                improved_text = improve_subsequent_rationale(
+                                    rationale_text,
+                                    rationale_history,
+                                    message.text
                                 )
+
+                                if improved_text.lower() != "invalid":
+                                    rationale_history.append(improved_text)
+                                    task_send_message_http_client.delay(
+                                        text=improved_text,
+                                        urns=[message.contact_urn],
+                                        project_uuid=str(message.project_uuid),
+                                        user=flows_user_email,
+                                    )
 
                     # Get summary from Claude with specified language
                     event['content']['summary'] = get_trace_summary(language, event['content'])
@@ -831,7 +833,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
 def trace_events_to_json(trace_event):
     return json.dumps(trace_event, default=str)
-
 
 
 @celery_app.task()
