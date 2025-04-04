@@ -596,7 +596,7 @@ class BedrockFileDatabase(FileDataBase):
 
         if message.project_uuid in settings.PROJECT_COMPONENTS:
             sessionState["promptSessionAttributes"].update({
-                "format_components": get_all_formats_list(),
+                "format_components": str(get_all_formats_list()),
             })
 
         if team.human_support:
@@ -607,6 +607,10 @@ class BedrockFileDatabase(FileDataBase):
                     "business_rules": team.human_support_prompt
                 })
             }
+
+        print("--------------------------------")
+        print("Session State: ", sessionState)
+        print("--------------------------------")
 
         try:
             response = self.bedrock_agent_runtime.invoke_agent(
