@@ -557,9 +557,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
 
-    print(f"[DEBUG] Starting multi_agents task with message: {message}")
-    print(f"[DEBUG] Preview mode: {preview}, Language: {language}, User email: {user_email}")
-
     # TODO: Logs
     message = message_factory(
         project_uuid=message.get("project_uuid"),
@@ -816,7 +813,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         print(f"[DEBUG] Error in start_multi_agents: {str(e)}")
         print(f"[DEBUG] Error type: {type(e)}")
         print(f"[DEBUG] Full exception details: {e.__dict__}")
-        
+
         if user_email:
             # Send error status through WebSocket
             send_preview_message_to_websocket(
