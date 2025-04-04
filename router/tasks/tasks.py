@@ -1,8 +1,9 @@
 import os
-import uuid
 import json
 import time
 from typing import Dict, List
+import logging
+
 from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import OpenAI
 
@@ -10,10 +11,12 @@ from django.conf import settings
 from django.template.defaultfilters import slugify
 from redis import Redis
 
+
 from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
 from nexus.usecases.logs.create import CreateLogUsecase
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 from router.route import route
 from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
@@ -36,7 +39,6 @@ from nexus.usecases.agents.agents import AgentUsecase
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
-from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
@@ -48,7 +50,219 @@ from nexus.agents.models import AgentMessage
 
 
 client = OpenAI()
+logger = logging.getLogger(__name__)
 
+
+def improve_rationale_text(rationale_text: str, previous_rationales: list = [], user_input: str = "", is_first_rationale: bool = False) -> str:
+    try:
+        # Get the Bedrock runtime client
+        bedrock_db = BedrockFileDatabase()
+        bedrock_client = bedrock_db._BedrockFileDatabase__get_bedrock_runtime()
+
+        # Set the model ID for Amazon Nova Lite
+        model_id = settings.AWS_RATIONALE_MODEL
+
+        # Prepare the complete instruction content for the user message
+        instruction_content = """
+            You are an agent specialized in sending notifications to your user. They are waiting for a response to a request, but before receiving it, you need to notify them with precision about what you're doing, in a way that truly helps them. To do this, you will receive a thought and should rephrase it by following principles to make it fully useful to the user.
+
+            The thought you will receive to rephrase will be between the <thought><thought> tags.
+
+            You can also use the user's message to base the rephrasing of the thought. The user's message will be between the <user_message></user_message> tags.
+
+            For the rephrasing, you must follow principles. These will be between the <principles></principles> tags, and you should give them high priority.
+
+            <principles>
+            - Keeping it concise and direct (max 15 words);
+            - The rephrasing should always be in the first person (you are the one thinking);
+            - Your output is always in the present tense;
+            - Removing conversation starters and technical jargon;
+            - Clearly stating the current action or error condition;
+            - Preserving essential details from the original rationale;
+            - Returning ONLY the transformed text with NO additional explanation or formatting;- Your output should ALWAYS be in the language of the user's message.
+            </principles>
+
+            You can find examples of rephrasings within the tags <examples></examples>.
+
+            <examples>
+            # EXAMPLE 1 
+            Tought: Consulting ProductConcierge for formal clothing suggestions.
+            Rephrasing: I'm looking for formal clothes for you!
+            # EXAMPLE 2
+            Tought: The user is looking for flights from Miami to New York for one person, with specific dates. I will use the travel agent to search for this information.
+            Rephrasing: Checking flights from Miami to New York on specified dates.
+            # EXAMPLE 3
+            Tought: I received an error because the provided dates are in the past. I need to inform the user that future dates are required for the search.
+            Rephrasing: Dates provided are in the past, future dates needed.</examples>
+        """
+
+        if user_input:
+            instruction_content += f"""
+                <user_message>{user_input}</user_message>
+            """
+
+        # Add the rationale text to analyze
+        instruction_content += f"""
+            <thought>{rationale_text}</thought>
+        """
+
+        # Build conversation with just one user message and an expected assistant response
+        conversation = [
+            # Single user message with all instructions and the rationale to analyze
+            {
+                "role": "user",
+                "content": [{"text": instruction_content}]
+            }
+        ]
+
+        # Send the request to Amazon Bedrock
+        response = bedrock_client.converse(
+            modelId=model_id,
+            messages=conversation,
+            inferenceConfig={
+                "maxTokens": 150,
+                "temperature": 0.5,
+                "topP": 0.9
+            }
+        )
+
+        print(f"Improvement Response: {response}")
+        # Extract the response text
+        response_text = response["output"]["message"]["content"][0]["text"]
+
+        # For first rationales, make sure they're never "invalid"
+        if is_first_rationale and response_text.strip().lower() == "invalid":
+            # If somehow still got "invalid", force a generic improvement
+            return "Processando sua solicitação agora."
+
+        # Remove any quotes from the response
+        return response_text.strip().strip('"\'')
+    except Exception as e:
+        logger.error(f"Error improving rationale text: {str(e)}")
+        return rationale_text  # Return original text if transformation fails
+
+
+def improve_subsequent_rationale(rationale_text: str, previous_rationales: list = [], user_input: str = "") -> str:
+
+    try:
+        # Get the Bedrock runtime client
+        bedrock_db = BedrockFileDatabase()
+        bedrock_client = bedrock_db._BedrockFileDatabase__get_bedrock_runtime()
+
+        # Set the model ID for Amazon Nova Lite
+        model_id = settings.AWS_RATIONALE_MODEL
+
+        # Prepare the complete instruction content for the user message
+        instruction_content = """
+            You are a message analyst responsible for reviewing messages from an artificial agent that may or may not be sent to the end user.
+
+            You will receive the agent's main thought, and your first task is to determine whether this thought is invalid for sending to the end user. The main thought will be enclosed within the tags <main_thought></main_thought>.
+
+            To decide if a thought is valid, you must analyze a list of criteria that classify a thought as invalid, as well as review previous thoughts. These previous thoughts will be enclosed within the tags <previous_thought></previous_thought>. The list of criteria you must analyze to determine if a thought is invalid will be enclosed within the tags <invalid_thought></invalid_thought>. Another important piece of information for your analysis is the user's message, which will be enclosed within the tags <user_message></user_message>.
+
+            <invalid_thought>
+            - Contains greetings, generic assistance, or simple acknowledgments;
+            - Mentions internal components (for example, "ProductConcierge") without adding value;
+            - Essentially conveys the same information as any previous justification, even if written differently;
+            - Addresses the same topic or message as the immediately preceding justification. 
+            </invalid_thought>
+
+            If the thought is considered invalid, write only 'invalid'. Write NOTHING else besides 'invalid'.
+
+            If the thought is valid, you must REWRITE IT following the rewriting principles. These principles will be within the tags <principles></principles> and must be HIGHLY prioritized if the thought is considered valid.
+
+            <principles>
+                - Keeping it concise and direct (max 15 words);
+                - The rephrasing should always be in the first person (you are the one thinking);
+                - Your output is always in the present tense;
+                - Removing conversation starters and technical jargon;
+                - Clearly stating the current action or error condition;
+                - Preserving essential details from the original rationale;
+                - Returning ONLY the transformed text with NO additional explanation or formatting;- Your output should ALWAYS be in the language of the user's message.
+            </principles>
+
+            You can find examples of rephrasings within the tags <examples></examples>.
+
+            <examples>
+            # EXAMPLE 1 
+            Tought: Consulting ProductConcierge for formal clothing suggestions.
+            Rephrasing: I'm looking for formal clothes for you!
+            # EXAMPLE 2
+            Tought: The user is looking for flights from Miami to New York for one person, with specific dates. I will use the travel agent to search for this information.
+            Rephrasing: Checking flights from Miami to New York on specified dates.
+            # EXAMPLE 3
+            Tought: I received an error because the provided dates are in the past. I need to inform the user that future dates are required for the search.
+            Rephrasing: Dates provided are in the past, future dates needed.
+            </examples>
+        """
+
+        # Add user input context if available
+        if user_input:
+            instruction_content += f"<user_message>{user_input}</user_message>"
+
+        if previous_rationales:
+            instruction_content += f"""
+            <previous_thought>
+            {' '.join([f"- {r}" for r in previous_rationales])}
+            </previous_thought>
+            """
+
+        # Add the rationale text to analyze
+        instruction_content += f"<main_thought>{rationale_text}</main_thought>"
+
+        # Build conversation with just one user message and an expected assistant response
+        conversation = [
+            # Single user message with all instructions and the rationale to analyze
+            {
+                "role": "user",
+                "content": [{"text": instruction_content}]
+            }
+        ]
+
+        # Send the request to Amazon Bedrock
+        response = bedrock_client.converse(
+            modelId=model_id,
+            messages=conversation,
+            inferenceConfig={
+                "maxTokens": 150,
+                "temperature": 0
+            }
+        )
+
+        # Extract the response text
+        response_text = response["output"]["message"]["content"][0]["text"]
+
+        # Remove any quotes from the response
+        return response_text.strip().strip('"\'')
+    except Exception as e:
+        logger.error(f"Error improving subsequent rationale text: {str(e)}")
+        return rationale_text  # Return original text if transformation fails
+
+
+@celery_app.task
+def task_send_message_http_client(
+    text: str,
+    urns: list,
+    project_uuid: str,
+    user: str,
+    full_chunks: list[Dict] = None
+) -> None:
+    broadcast = SendMessageHTTPClient(
+        os.environ.get(
+            'FLOWS_REST_ENDPOINT'
+        ),
+        os.environ.get(
+            'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
+        )
+    )
+
+    broadcast.send_direct_message(
+        text=text,
+        urns=urns,
+        project_uuid=project_uuid,
+        user=user,
+        full_chunks=full_chunks
+    )
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def get_trace_summary(language, trace):
@@ -343,6 +557,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
 
+    # TODO: Logs
     message = message_factory(
         project_uuid=message.get("project_uuid"),
         text=message.get("text"),
@@ -353,7 +568,34 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         contact_fields=message.get("contact_fields", {}),
     )
 
+    # Initialize Redis client
+    redis_client = Redis.from_url(settings.REDIS_URL)
+
+    # Check if there's a pending response for this user
+    pending_response_key = f"multi_response:{message.contact_urn}"
+    pending_task_key = f"multi_task:{message.contact_urn}"
+    pending_response = redis_client.get(pending_response_key)
+    pending_task_id = redis_client.get(pending_task_key)
+
+    if pending_response:
+        # Revoke the previous task
+        if pending_task_id:
+            celery_app.control.revoke(pending_task_id.decode('utf-8'), terminate=True)
+
+        # Concatenate the previous message with the new one
+        previous_message = pending_response.decode('utf-8')
+        concatenated_message = f"{previous_message}\n{message.text}"
+        message.text = concatenated_message
+        redis_client.delete(pending_response_key)  # Remove the pending response
+    else:
+        # Store the current message in Redis
+        redis_client.set(pending_response_key, message.text)
+
+    # Store the current task ID in Redis
+    redis_client.set(pending_task_key, self.request.id)
+
     project = Project.objects.get(uuid=message.project_uuid)
+
     supervisor = project.team
     supervisor_version = supervisor.current_version
 
@@ -405,10 +647,17 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     try:
         # Stream supervisor response
         broadcast, _ = get_action_clients(preview, multi_agents=True, project_use_components=project_use_components)
+        print("[+ Starting multi-agents +]")
+
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
         full_chunks = []
+        rationale_history = []
         full_response = ""
         trace_events = []
+
+        first_rationale_text = None
+        is_first_rationale = True
+        should_process_rationales = supervisor.metadata.get('rationale', False)
 
         for event in usecase.invoke_supervisor_stream(
             session_id=session_id,
@@ -447,6 +696,84 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                             }
                         )
                 trace_events.append(event['content'])
+                trace_data = event['content']
+                try:
+                    if should_process_rationales:
+                        # Handle first rationale for multi-agent scenarios
+                        if first_rationale_text and 'callerChain' in trace_data:
+                            caller_chain = trace_data['callerChain']
+                            if isinstance(caller_chain, list) and len(caller_chain) > 1:
+                                improved_text = improve_rationale_text(
+                                    first_rationale_text,
+                                    rationale_history,
+                                    message.text,
+                                    is_first_rationale=True
+                                )
+
+                                if improved_text.lower() != "invalid":
+                                    rationale_history.append(improved_text)
+                                    task_send_message_http_client.delay(
+                                        text=improved_text,
+                                        urns=[message.contact_urn],
+                                        project_uuid=str(message.project_uuid),
+                                        user=flows_user_email,
+                                    )
+                                first_rationale_text = None
+
+                        # Process orchestration trace rationale
+                        rationale_text = None
+                        if 'trace' in trace_data:
+                            inner_trace = trace_data['trace']
+                            if 'orchestrationTrace' in inner_trace:
+                                orchestration = inner_trace['orchestrationTrace']
+                                if 'rationale' in orchestration:
+                                    rationale_text = orchestration['rationale'].get('text')
+
+                        if rationale_text:
+                            if is_first_rationale:
+                                first_rationale_text = rationale_text
+                                is_first_rationale = False
+                            else:
+
+                                improved_text = improve_subsequent_rationale(
+                                    rationale_text,
+                                    rationale_history,
+                                    message.text
+                                )
+
+                                if improved_text.lower() != "invalid":
+                                    rationale_history.append(improved_text)
+                                    task_send_message_http_client.delay(
+                                        text=improved_text,
+                                        urns=[message.contact_urn],
+                                        project_uuid=str(message.project_uuid),
+                                        user=flows_user_email,
+                                    )
+
+                    # Get summary from Claude with specified language
+                    event['content']['summary'] = get_trace_summary(language, event['content'])
+                    if user_email:
+                        send_preview_message_to_websocket(
+                            project_uuid=str(message.project_uuid),
+                            user_email=user_email,
+                            message_data={
+                                "type": "trace_update",
+                                "trace": event['content'],
+                                "session_id": session_id
+                            }
+                        )
+                except Exception as e:
+                    logger.error(f"Error processing rationale: {str(e)}")
+                    if user_email:
+                        send_preview_message_to_websocket(
+                            project_uuid=str(message.project_uuid),
+                            user_email=user_email,
+                            message_data={
+                                "type": "error",
+                                "content": f"Error processing rationale: {str(e)}",
+                                "session_id": session_id
+                            }
+                        )
 
         save_trace_events.delay(
             trace_events,
@@ -487,6 +814,10 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         redis_client.delete(pending_response_key)
         redis_client.delete(pending_task_key)
 
+        print(f"[DEBUG] Error in start_multi_agents: {str(e)}")
+        print(f"[DEBUG] Error type: {type(e)}")
+        print(f"[DEBUG] Full exception details: {e.__dict__}")
+
         if user_email:
             # Send error status through WebSocket
             send_preview_message_to_websocket(
@@ -503,7 +834,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
 def trace_events_to_json(trace_event):
     return json.dumps(trace_event, default=str)
-
 
 
 @celery_app.task()

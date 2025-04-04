@@ -704,7 +704,7 @@ class AgentTracesView(
 
         if not log_id:
             return Response({"error": "log_id is required"}, status=400)
-            
+
         usecase = AgentUsecase()
         try:
             trace_data = usecase.get_traces(project_uuid, log_id)
@@ -807,3 +807,37 @@ class VtexAppProjectCredentialsView(APIView):
             "message": "Credentials created successfully",
             "created_credentials": created_credentials
         })
+
+
+class RationaleView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        try:
+            team = Team.objects.get(project__uuid=project_uuid)
+            rationale = team.metadata.get('rationale', False)
+
+            return Response({
+                "rationale": rationale
+            })
+        except Team.DoesNotExist:
+            return Response({"error": "Team not found"}, status=404)
+
+    def patch(self, request, project_uuid):
+
+        rationale = request.data.get('rationale')
+        if rationale is None:
+            return Response({"error": "rationale is required"}, status=400)
+
+        try:
+            team = Team.objects.get(project__uuid=project_uuid)
+
+            team.metadata['rationale'] = rationale
+            team.save(update_fields=['metadata'])
+
+            return Response({
+                "message": "Rationale updated successfully",
+                "rationale": rationale
+            })
+        except Team.DoesNotExist:
+            return Response({"error": "Team not found"}, status=404)
