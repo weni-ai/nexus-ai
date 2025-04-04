@@ -797,6 +797,10 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 }
             )
 
+        # Clean up Redis entries after successful processing
+        redis_client.delete(pending_response_key)
+        redis_client.delete(pending_task_key)
+
         return dispatch(
             llm_response=full_response,
             message=message,
