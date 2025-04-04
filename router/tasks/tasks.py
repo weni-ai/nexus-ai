@@ -127,9 +127,10 @@ def improve_rationale_text(rationale_text: str, previous_rationales: list = [], 
             }
         )
 
-        print(f"Improvement Response: {response}")
         # Extract the response text
         response_text = response["output"]["message"]["content"][0]["text"]
+        print(f"Improvement Response: {response_text}")
+        print('---------------------------------------------------')
 
         # For first rationales, make sure they're never "invalid"
         if is_first_rationale and response_text.strip().lower() == "invalid":
@@ -212,8 +213,6 @@ def improve_subsequent_rationale(rationale_text: str, previous_rationales: list 
         # Add the rationale text to analyze
         instruction_content += f"<main_thought>{rationale_text}</main_thought>"
 
-        print("Full Prompt: ", instruction_content)
-
         # Build conversation with just one user message and an expected assistant response
         conversation = [
             # Single user message with all instructions and the rationale to analyze
@@ -233,9 +232,10 @@ def improve_subsequent_rationale(rationale_text: str, previous_rationales: list 
             }
         )
 
-        print(f"Subsequent Rationale Improvement Response: {response}")
         # Extract the response text
         response_text = response["output"]["message"]["content"][0]["text"]
+        print(f"Subsequent Rationale Improvement Response: {response_text}")
+        print('---------------------------------------------------')
 
         # Remove any quotes from the response
         return response_text.strip().strip('"\'')
@@ -673,6 +673,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                 trace_events.append(event['content'])
                 print('==================')
                 print(f"[DEBUG] Received trace event: {event}")
+                print('==================')
                 trace_data = event['content']
                 try:
                     if should_process_rationales:
@@ -688,6 +689,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                 )
 
                                 if improved_text.lower() != "invalid":
+                                    print("Sending first rationale...")
                                     rationale_history.append(improved_text)
                                     task_send_message_http_client.delay(
                                         text=improved_text,
@@ -721,6 +723,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
                                 if improved_text.lower() != "invalid":
                                     rationale_history.append(improved_text)
+                                    print("Sending subsequent rationale...")
                                     task_send_message_http_client.delay(
                                         text=improved_text,
                                         urns=[message.contact_urn],
