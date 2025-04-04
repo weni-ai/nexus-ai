@@ -210,8 +210,6 @@ def improve_subsequent_rationale(rationale_text: str, previous_rationales: list 
         # Add the rationale text to analyze
         instruction_content += f"<main_thought>{rationale_text}</main_thought>"
 
-        print("Full Prompt: ", instruction_content)
-
         # Build conversation with just one user message and an expected assistant response
         conversation = [
             # Single user message with all instructions and the rationale to analyze
@@ -231,7 +229,6 @@ def improve_subsequent_rationale(rationale_text: str, previous_rationales: list 
             }
         )
 
-        print(f"Subsequent Rationale Improvement Response: {response}")
         # Extract the response text
         response_text = response["output"]["message"]["content"][0]["text"]
 
@@ -700,8 +697,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                             }
                         )
                 trace_events.append(event['content'])
-                print('==================')
-                print(f"[DEBUG] Received trace event: {event}")
                 trace_data = event['content']
                 try:
                     # Handle first rationale for multi-agent scenarios
