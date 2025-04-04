@@ -5,8 +5,8 @@ from .exceptions import BackendAlreadyRegistered, UnregisteredBackend
 
 class BackendsRegistry:
     _default_backend: InlineAgentsBackend | None = None
-    _names = []
-    _options = {}
+    _names: list[str] = []
+    _options: dict[str, InlineAgentsBackend] = {}
 
     @classmethod
     def register(cls, backend: InlineAgentsBackend, set_default: bool = False):
@@ -35,6 +35,10 @@ class BackendsRegistry:
             raise UnregisteredBackend(f"Backend with key: {key} is not registered")
 
         return backend
+
+    @classmethod
+    def get_backend_names(cls) -> list[str]:
+        return cls._names
 
 
 BackendsRegistry.register(BedrockBackend(), set_default=True)

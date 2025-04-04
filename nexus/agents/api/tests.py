@@ -1,11 +1,18 @@
 import json
+from uuid import uuid4
 
-from django.test import TestCase
+from django.test import TestCase, RequestFactory
 from django.urls import reverse
+
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth.models import Permission
+
+from nexus.agents.api.views import InternalCommunicationPermission
 
 from rest_framework.test import APIRequestFactory, APIClient
 
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.users.tests.user_factory import UserFactory
 
 from nexus.agents.models import (
     Agent,
@@ -159,3 +166,115 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertEquals(content[0].get("name"), agent.display_name)
         self.assertEquals(content[0].get("skills"), [])
         self.assertFalse(content[0].get("is_official"))
+
+
+class TestCommunicateInternallyPermission(TestCase):
+    def setUp(self):
+        self.user = UserFactory()
+        content_type = ContentType.objects.get_for_model(self.user)
+        permission, created = Permission.objects.get_or_create(
+            codename="can_communicate_internally",
+            name="can communicate internally",
+            content_type=content_type,
+        )
+        self.user.user_permissions.add(permission)
+        self.factory = RequestFactory()
+
+    def test_permission_granted(self):
+        request = self.factory.get('/')
+        request.user = self.user
+        permission = InternalCommunicationPermission()
+        self.assertTrue(permission.has_permission(request, None))
+
+    def test_permission_denied(self):
+        user_without_permission = UserFactory()
+        request = self.factory.get('/')
+        request.user = user_without_permission
+        permission = InternalCommunicationPermission()
+        self.assertFalse(permission.has_permission(request, None))
+
+
+class RationaleViewTestCase(TestCase):
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.team = Team.objects.create(
+            external_id="EXTERNALID",
+            project=self.project,
+            metadata={}
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_get_rationale_default_value(self):
+        url = reverse("project-rationale", kwargs={"project_uuid": str(self.project.uuid)})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"rationale": False})
+
+    def test_get_rationale_custom_value(self):
+        self.team.metadata['rationale'] = True
+        self.team.save()
+
+        url = reverse("project-rationale", kwargs={"project_uuid": str(self.project.uuid)})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"rationale": True})
+
+    def test_patch_rationale_without_value(self):
+        url = reverse("project-rationale", kwargs={"project_uuid": str(self.project.uuid)})
+        response = self.client.patch(
+            url,
+            data={},
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "rationale is required"})
+
+    def test_patch_rationale_success(self):
+        url = reverse("project-rationale", kwargs={"project_uuid": str(self.project.uuid)})
+
+        data = {"rationale": True}
+
+        response = self.client.patch(
+            url,
+            data=json.dumps(data),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "message": "Rationale updated successfully",
+                "rationale": True
+            }
+        )
+
+        # Verify the change was persisted
+        self.team.refresh_from_db()
+        self.assertTrue(self.team.metadata['rationale'])
+
+    def test_patch_rationale_toggle(self):
+        # Set initial value
+        self.team.metadata['rationale'] = True
+        self.team.save()
+
+        url = reverse("project-rationale", kwargs={"project_uuid": str(self.project.uuid)})
+        response = self.client.patch(
+            url,
+            data=json.dumps({"rationale": False}),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "message": "Rationale updated successfully",
+                "rationale": False
+            }
+        )
+
+        # Verify the change was persisted
+        self.team.refresh_from_db()
+        self.assertFalse(self.team.metadata['rationale'])
