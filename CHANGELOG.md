@@ -1,3 +1,7 @@
+# 3.10.4
+## *Add*
+    - Rationale, send simplified context while final message is processing on start multi agents
+
 # 2.10.2
 ## *Add*
     - New multi message feature on start_multi_agent
