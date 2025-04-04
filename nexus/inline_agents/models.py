@@ -13,11 +13,6 @@ class Guardrail(models.Model):
     current_version = models.BooleanField(default=True)
 
 
-class Team(models.Model):
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_teams")
-    project_uuid = models.UUIDField()
-
-
 class Agent(models.Model):
     uuid = models.UUIDField(default=uuid4)
     name = models.CharField(max_length=255)
@@ -31,15 +26,14 @@ class Agent(models.Model):
 
 class IntegratedAgent(models.Model):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
-    team = models.ForeignKey(Team, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="integrated_agents")
     created_on = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('agent', 'team')
+        unique_together = ('agent', 'project')
 
 
 class Version(models.Model):
-    version = models.PositiveIntegerField()
     skills = ArrayField(models.JSONField())
     display_skills = ArrayField(models.JSONField())
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="versions")
