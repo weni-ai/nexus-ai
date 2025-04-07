@@ -18,12 +18,12 @@ class BedrockTeamAdapter(TeamAdapter):
     ) -> dict:
 
         external_team = {
-            "promptOverrideConfiguration": supervisor["promptOverrideConfiguration"],
+            "promptOverrideConfiguration": supervisor["prompt_override_configuration"],
             "instruction": supervisor["instruction"],
-            "actionGroups": supervisor["actionGroups"],
-            "foundationModel": supervisor["foundationModel"],
-            "agentCollaboration": supervisor["agentCollaboration"],
-            "knowledgeBases": supervisor["knowledgeBases"],
+            "actionGroups": supervisor["action_groups"],
+            "foundationModel": supervisor["foundation_model"],
+            "agentCollaboration": supervisor["agent_collaboration"],
+            "knowledgeBases": supervisor["knowledge_bases"],
             "inlineSessionState": self._get_inline_session_state(),
             "enableTrace": self._get_enable_trace(),
             "sessionId": self._get_session_id(contact_urn, project_uuid),

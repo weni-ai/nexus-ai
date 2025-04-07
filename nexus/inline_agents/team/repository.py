@@ -12,18 +12,18 @@ class ORMTeamRepository(TeamRepository):
             orm_team = ORMIntegratedAgent.objects.filter(project_uuid=project_uuid)
             agents = []
 
-            for agent in orm_team:
+            for integrated_agent in orm_team:
+                agent = integrated_agent.agent
+
                 agent_dict = {
                     "agentName": agent.name,
                     "instruction": agent.instruction,
-                    "actionGroups": agent.versions.skills,
+                    "actionGroups": agent.current_version.skills,
                     "foundationModel": agent.foundation_model,
-                    "agentCollaboration": agent.agentCollaboration,
+                    "agentCollaboration": "DISABLED",
                     "collaborator_configurations": agent.collaborator_configurations,
                 }
                 agents.append(agent_dict)
-                agent['version'] = agent.current_version
-                agent['agentCollaboration'] = "DISABLED"
 
             return agents
         except ORMIntegratedAgent.DoesNotExist:
