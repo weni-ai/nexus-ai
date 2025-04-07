@@ -9,7 +9,7 @@ from .exceptions import TeamDoesNotExist
 class ORMTeamRepository(TeamRepository):
     def get_team(self, project_uuid: str) -> list[dict]:
         try:
-            orm_team = ORMIntegratedAgent.objects.filter(project_uuid=project_uuid)
+            orm_team = ORMIntegratedAgent.objects.filter(project__uuid=project_uuid)
             agents = []
 
             for integrated_agent in orm_team:
