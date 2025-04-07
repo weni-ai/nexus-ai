@@ -68,9 +68,7 @@ class SupervisorFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: 'test%d' % n)
     instruction = factory.Faker('text')
-    foundationModel = "nova-pro"
-    promptOverrideConfiguration = factory.Faker('json')
-    memoryConfiguration = factory.Faker('json')
-    actionGroups = factory.Faker('json')
-    knowledgeBases = factory.Faker('json')
-    agentCollaboration = "SUPERVISOR"
+    foundation_model = "nova-pro"
+    prompt_override_configuration = factory.Faker('json')
+    action_groups = factory.Faker('json')
+    knowledge_bases = factory.Faker('json')
