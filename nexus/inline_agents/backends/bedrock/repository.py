@@ -24,8 +24,11 @@ class BedrockSupervisorRepository():
         return supervisor_dict
 
     @classmethod
-    def _get_agent_collaboration(cls) -> str:
+    def _get_agent_collaboration(cls, project) -> str:
         # if there is agents in the team return "SUPERVISOR"
+        if project.integrated_agents.exists():
+            return "SUPERVISOR"
+
         return "DISABLED"
 
     @classmethod

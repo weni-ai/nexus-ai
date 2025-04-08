@@ -2,16 +2,18 @@ from django.test import TestCase
 
 from inline_agents.backends.tests.inline_factories import SupervisorFactory
 from nexus.inline_agents.backends.bedrock.repository import BedrockSupervisorRepository
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
 class TestBedrockSupervisorRepository(TestCase):
     def setUp(self):
+        self.project = ProjectFactory()
         self.repository = BedrockSupervisorRepository()
         self.supervisor = SupervisorFactory()
 
     def test_get_supervisor(self):
 
-        result = BedrockSupervisorRepository.get_supervisor()
+        result = BedrockSupervisorRepository.get_supervisor(project_uuid=self.project.uuid)
 
         # Assert
         self.assertEqual(result["prompt_override_configuration"], self.supervisor.prompt_override_configuration)

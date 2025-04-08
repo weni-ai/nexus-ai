@@ -3,7 +3,9 @@ import pendulum
 
 from inline_agents.adapter import TeamAdapter
 
-from django.conf import settings
+from django.utils.text import slugify
+
+from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
 
 class BedrockTeamAdapter(TeamAdapter):
@@ -24,7 +26,11 @@ class BedrockTeamAdapter(TeamAdapter):
             "foundationModel": supervisor["foundation_model"],
             "agentCollaboration": supervisor["agent_collaboration"],
             "knowledgeBases": supervisor["knowledge_bases"],
-            "inlineSessionState": self._get_inline_session_state(),
+            "inlineSessionState": self._get_inline_session_state(
+                contact_urn=contact_urn,
+                # contact_fields_as_json=contact_fields_as_json,
+                project_uuid=project_uuid,
+            ),
             "enableTrace": self._get_enable_trace(),
             "sessionId": self._get_session_id(contact_urn, project_uuid),
             "inputText": input_text,
@@ -48,19 +54,32 @@ class BedrockTeamAdapter(TeamAdapter):
     @classmethod
     def _get_inline_session_state(
         cls,
-        client_id: str = settings.BEDROCK_AGENT_INLINE_CLIENT_ID,
-        client_secret: str = settings.BEDROCK_AGENT_INLINE_CLIENT_SECRET
+        contact_urn: str,
+        # contact_fields_as_json: str,
+        project_uuid: str,
     ) -> str:
+
+        content_base = get_default_content_base_by_project(project_uuid)
+        instructions = content_base.instructions.all()
+        agent_data = content_base.agent
 
         sessionState = {
             "promptSessionAttributes": {
-                "date_time_now": pendulum.now("America/Sao_Paulo").add(years=3).isoformat(),
+                "date_time_now": pendulum.now("America/Sao_Paulo").isoformat(),
             }
         }
-        sessionState["sessionAttributes"] = {
-            'credentials': json.dumps({
-                'CLIENT_ID': client_id,
-                'CLIENT_SECRET': client_secret
+        sessionState["promptSessionAttributes"] = {
+            # "format_components": get_all_formats(),
+            "contact_urn": contact_urn,
+            # "contact_fields": contact_fields_as_json,
+            "date_time_now": pendulum.now("America/Sao_Paulo").isoformat(),
+            "project_id": project_uuid,
+            "specific_personality": json.dumps({
+                "occupation": agent_data.role,
+                "name": agent_data.name,
+                "goal": agent_data.goal,
+                "adjective": agent_data.personality,
+                "instructions": list(instructions.values_list("instruction", flat=True))
             })
         }
         return sessionState
@@ -89,5 +108,10 @@ class BedrockTeamAdapter(TeamAdapter):
     def _get_collaborator_configurations(cls, agents: list[dict]) -> list[dict]:
         collaboratorConfigurations = []
         for agent in agents:
-            collaboratorConfigurations += agent["collaborator_configurations"]
+            collaboratorConfigurations.append(
+                {
+                    "collaboratorInstruction": agent["collaborator_configurations"],
+                    "collaboratorName": slugify(agent["agentName"])
+                }
+            )
         return collaboratorConfigurations
