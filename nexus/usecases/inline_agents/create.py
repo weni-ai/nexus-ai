@@ -59,11 +59,11 @@ class CreateAgentUseCase:
         # TODO: Create contact field
         return parameter
 
-    def create_lambda_function(self, skill: Dict, skill_file, project_uuid: str) -> Dict[str, str]:
+    def create_lambda_function(self, skill: Dict, skill_file, project_uuid: str, skill_name: str) -> Dict[str, str]:
         zip_buffer = BytesIO(skill_file.read())
         lambda_role = settings.AGENT_RESOURCE_ROLE_ARN
         skill_handler = skill.get("source").get("entrypoint")
-        lambda_name = f'{skill.get("slug")}-{project_uuid}'
+        lambda_name = skill_name
 
         lambda_arn = self.bedrock_client.create_lambda_function(
             lambda_name=lambda_name,
@@ -93,8 +93,9 @@ class CreateAgentUseCase:
         for agent_skill in agent_skills:
 
             skill_file = files[f"{agent.slug}:{agent_skill['slug']}"]
+            skill_name = f'{agent_skill.get("slug")}-{project_uuid}'
 
-            action_group_executor: Dict[str, str] = self.create_lambda_function(agent_skill, skill_file, project_uuid)
+            action_group_executor: Dict[str, str] = self.create_lambda_function(agent_skill, skill_file, project_uuid, skill_name)
             parameters: List[Dict] = self.handle_parameters(agent_skill["parameters"])
 
             function = {
