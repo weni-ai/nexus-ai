@@ -21,7 +21,7 @@ class ORMTeamRepository(TeamRepository):
                     "actionGroups": agent.current_version.skills,
                     "foundationModel": agent.foundation_model,
                     "agentCollaboration": "DISABLED",
-                    "collaborator_configurations": agent.collaborator_configurations,
+                    "collaborator_configurations": agent.collaboration_instructions,
                 }
                 agents.append(agent_dict)
 
