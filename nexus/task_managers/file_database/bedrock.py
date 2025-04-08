@@ -23,6 +23,8 @@ from nexus.task_managers.file_database.file_database import FileDataBase, FileRe
 
 from nexus.agents.models import Agent, Credential, Team
 
+from nexus.agents.components import get_all_formats, get_all_formats_list
+
 if TYPE_CHECKING:
     from router.entities import Message
     from nexus.intelligences.models import ContentBase
@@ -573,9 +575,9 @@ class BedrockFileDatabase(FileDataBase):
             for credential in agent_credentials:
                 credentials[credential.key] = credential.decrypted_value
         except Exception as e:
-            print(f"Error fetching credentials: {str(e)}")
+            print(f"[DEBUG] Error fetching credentials: {str(e)}")
 
-        sessionState["sessionAttributes"] = { "credentials": json.dumps(credentials, default=str) }
+        sessionState["sessionAttributes"] = {"credentials": json.dumps(credentials, default=str)}
 
         sessionState["promptSessionAttributes"] = {
             # "format_components": get_all_formats(),
@@ -592,6 +594,11 @@ class BedrockFileDatabase(FileDataBase):
             })
         }
 
+        if message.project_uuid in settings.PROJECT_COMPONENTS:
+            sessionState["promptSessionAttributes"].update({
+                "format_components": get_all_formats_list(),
+            })
+
         if team.human_support:
             sessionState["promptSessionAttributes"] = {
                 "human_support": json.dumps({
@@ -600,36 +607,39 @@ class BedrockFileDatabase(FileDataBase):
                     "business_rules": team.human_support_prompt
                 })
             }
-        print("Session State: ", sessionState)
 
-        response = self.bedrock_agent_runtime.invoke_agent(
-            agentId=supervisor_id,
-            agentAliasId=supervisor_alias_id,
-            sessionId=session_id,
-            inputText=message.text,
-            enableTrace=True,
-            sessionState=sessionState,
-        )
+        try:
+            response = self.bedrock_agent_runtime.invoke_agent(
+                agentId=supervisor_id,
+                agentAliasId=supervisor_alias_id,
+                sessionId=session_id,
+                inputText=message.text,
+                enableTrace=True,
+                sessionState=sessionState,
+            )
 
-        for event in response['completion']:
-            if 'chunk' in event:
-                chunk = event['chunk']
-                yield {
-                    'type': 'chunk',
-                    'content': chunk['bytes'].decode()
-                }
-            elif 'trace' in event:
-                trace_data = event['trace']
-                print("Trace:", trace_data)
-                yield {
-                    'type': 'trace',
-                    'content': {
-                        'agentAliasId': supervisor_alias_id,
-                        'agentId': supervisor_id,
-                        'sessionId': session_id,
-                        'trace': trace_data
-                    }
-                }
+            for event in response['completion']:
+                if isinstance(event, dict):
+                    if 'chunk' in event:
+                        chunk = event['chunk']
+                        yield {
+                            'type': 'chunk',
+                            'content': chunk['bytes'].decode()
+                        }
+                    elif 'trace' in event:
+                        trace_data = event['trace']
+                        yield {
+                            'type': 'trace',
+                            'content': trace_data
+                        }
+                    else:
+                        print(f"[DEBUG] Unknown event structure: {event}")
+
+        except Exception as e:
+            print(f"[DEBUG] Error invoking supervisor stream: {str(e)}")
+            print(f"[DEBUG] Error type: {type(e)}")
+            print(f"[DEBUG] Error details: {e.__dict__ if hasattr(e, '__dict__') else 'No details available'}")
+            raise
 
     def start_bedrock_ingestion(self) -> str:
         print("[+ Bedrock: Starting ingestion job +]")

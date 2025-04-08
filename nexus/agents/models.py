@@ -15,6 +15,14 @@ from nexus.agents.exceptions import (
 
 
 class Agent(BaseModel):
+    VTEX_APP = "VTEX_APP"
+    PLATFORM = "PLATFORM"
+
+    AGENT_TYPE_CHOICES = (
+        (VTEX_APP, "VTEX App"),
+        (PLATFORM, "Platform"),
+    )
+
     external_id = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255)
     display_name = models.CharField(max_length=255)
@@ -23,6 +31,7 @@ class Agent(BaseModel):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     metadata = models.JSONField(default=dict)
     description = models.CharField(max_length=255, null=True)
+    source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
 
     @property
     def bedrock_agent_name(self):
