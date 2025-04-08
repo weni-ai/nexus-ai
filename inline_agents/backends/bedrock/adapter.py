@@ -5,7 +5,6 @@ from inline_agents.adapter import TeamAdapter
 
 from django.utils.text import slugify
 
-from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
 
 class BedrockTeamAdapter(TeamAdapter):
@@ -58,6 +57,7 @@ class BedrockTeamAdapter(TeamAdapter):
         # contact_fields_as_json: str,
         project_uuid: str,
     ) -> str:
+        from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
         content_base = get_default_content_base_by_project(project_uuid)
         instructions = content_base.instructions.all()

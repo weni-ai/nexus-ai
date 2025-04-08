@@ -14,10 +14,10 @@ from nexus.agents.api.views import (
     VtexAppProjectCredentialsView,
     RationaleView,
 )
-
+from nexus.inline_agents.api.views import PushAgents as PushInlineAgents
 
 urlpatterns = [
-    path('agents/push', PushAgents.as_view(), name="push-agents"),
+    path('agents/push', PushInlineAgents.as_view(), name="push-agents"),
     path('agents/teams/<project_uuid>', TeamView.as_view(), name="teams"),
     path('agents/app-teams/<project_uuid>', VTexAppTeamView.as_view(), name="vtex-teams"),
     path('agents/my-agents/<project_uuid>', AgentsView.as_view(), name="my-agents"),
