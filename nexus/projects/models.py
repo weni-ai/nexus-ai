@@ -46,6 +46,9 @@ class Project(BaseModel, SoftDeleteModel):
     indexer_database = models.CharField(max_length=15, choices=INDEXER_CHOICES, default=SENTENX)
     agents_backend = models.CharField(max_length=100, choices=AGENTS_BACKEND_CHOICES, default=default_backend.name)
 
+    human_support = models.BooleanField(default=False)
+    human_support_prompt = models.TextField(null=True, blank=True)
+
     def __str__(self):
         return f'{self.uuid} - Project: {self.name} - Org: {self.org.name}'
 
