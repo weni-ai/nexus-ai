@@ -9,3 +9,6 @@ class Supervisor(models.Model):
     prompt_override_configuration = models.JSONField()
     action_groups = models.JSONField()
     knowledge_bases = models.JSONField()
+
+    human_support_prompt = models.TextField(null=True, blank=True)
+    human_support_action_groups = models.JSONField(null=True, blank=True)

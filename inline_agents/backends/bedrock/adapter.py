@@ -18,7 +18,7 @@ class BedrockTeamAdapter(TeamAdapter):
     ) -> dict:
 
         external_team = {
-            "promptOverrideConfiguration": supervisor["prompt_override_configuration"],
+            # "promptOverrideConfiguration": supervisor["prompt_override_configuration"],
             "instruction": supervisor["instruction"],
             "actionGroups": supervisor["action_groups"],
             "foundationModel": supervisor["foundation_model"],

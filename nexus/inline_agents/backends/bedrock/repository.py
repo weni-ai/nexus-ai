@@ -1,4 +1,5 @@
 from nexus.inline_agents.backends import Supervisor
+from nexus.projects.models import Project
 
 
 class BedrockSupervisorRepository():
@@ -6,14 +7,15 @@ class BedrockSupervisorRepository():
     @classmethod
     def get_supervisor(
         cls,
+        project_uuid: str
     ) -> dict:
 
+        project = Project.objects.get(uuid=project_uuid)
         supervisor = Supervisor.objects.order_by('id').last()
-
         supervisor_dict = {
             "prompt_override_configuration": supervisor.prompt_override_configuration,
             "instruction": supervisor.instruction,
-            "action_groups": supervisor.action_groups,
+            "action_groups": cls._get_action_groups(project=project, supervisor=supervisor),
             "foundation_model": supervisor.foundation_model,
             "knowledge_bases": supervisor.knowledge_bases,
             "agent_collaboration": cls._get_agent_collaboration(),
@@ -25,3 +27,10 @@ class BedrockSupervisorRepository():
     def _get_agent_collaboration(cls) -> str:
         # if there is agents in the team return "SUPERVISOR"
         return "DISABLED"
+
+    @classmethod
+    def _get_action_groups(cls, project: Project, supervisor: Supervisor) -> list[dict]:
+        if not project.human_support:
+            return supervisor.action_groups
+
+        return supervisor.human_support_action_groups
