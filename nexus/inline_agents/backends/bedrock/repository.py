@@ -1,5 +1,4 @@
 from nexus.inline_agents.backends import Supervisor
-from nexus.projects.models import Project
 
 
 class BedrockSupervisorRepository():
@@ -9,6 +8,7 @@ class BedrockSupervisorRepository():
         cls,
         project_uuid: str
     ) -> dict:
+        from nexus.projects.models import Project
 
         project = Project.objects.get(uuid=project_uuid)
         supervisor = Supervisor.objects.order_by('id').last()
@@ -29,7 +29,7 @@ class BedrockSupervisorRepository():
         return "DISABLED"
 
     @classmethod
-    def _get_action_groups(cls, project: Project, supervisor: Supervisor) -> list[dict]:
+    def _get_action_groups(cls, project, supervisor) -> list[dict]:
         if not project.human_support:
             return supervisor.action_groups
 
