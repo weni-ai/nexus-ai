@@ -65,7 +65,7 @@ class CreateAgentUseCase:
         skill_handler = skill.get("source").get("entrypoint")
         lambda_name = skill_name
 
-        lambda_arn = self.bedrock_client.create_lambda_function(
+        lambda_arn = self.agent_backend_client.create_lambda_function(
             lambda_name=lambda_name,
             lambda_role=lambda_role,
             skill_handler=skill_handler,
@@ -99,14 +99,14 @@ class CreateAgentUseCase:
             parameters: List[Dict] = self.handle_parameters(agent_skill["parameters"])
 
             function = {
-                "name": agent_skill["name"],
+                "name": skill_name,
                 "parameters": parameters,
                 "requireConfirmation": "DISABLED"
             }
 
             skill = {
                 "actionGroupExecutor": action_group_executor,
-                "actionGroupName": agent_skill["name"],
+                "actionGroupName":skill_name,
                 "functionSchema": {
                     "functions": [function]
                 }
