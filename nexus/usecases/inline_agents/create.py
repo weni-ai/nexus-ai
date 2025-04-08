@@ -93,7 +93,7 @@ class CreateAgentUseCase:
         for agent_skill in agent_skills:
 
             skill_file = files[f"{agent.slug}:{agent_skill['slug']}"]
-            skill_name = f'{agent_skill.get("slug")}-{project_uuid}'
+            skill_name = f'{agent_skill.get("slug")}-{agent.id}'
 
             action_group_executor: Dict[str, str] = self.create_lambda_function(agent_skill, skill_file, project_uuid, skill_name)
             parameters: List[Dict] = self.handle_parameters(agent_skill["parameters"])
