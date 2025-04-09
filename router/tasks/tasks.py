@@ -161,10 +161,12 @@ def improve_subsequent_rationale(rationale_text: str, previous_rationales: list 
             To decide if a thought is valid, you must analyze a list of criteria that classify a thought as invalid, as well as review previous thoughts. These previous thoughts will be enclosed within the tags <previous_thought></previous_thought>. The list of criteria you must analyze to determine if a thought is invalid will be enclosed within the tags <invalid_thought></invalid_thought>. Another important piece of information for your analysis is the user's message, which will be enclosed within the tags <user_message></user_message>.
 
             <invalid_thought>
-            - Contains greetings, generic assistance, or simple acknowledgments;
-            - Mentions internal components (for example, "ProductConcierge") without adding value;
-            - Essentially conveys the same information as any previous justification, even if written differently;
-            - Addresses the same topic or message as the immediately preceding justification. 
+                - Contains greetings, generic assistance, or simple acknowledgments
+                - Mentions internal components (e.g., "ProductConcierge") without adding value
+                - Describes communication actions with the user (e.g., "I will inform the user")
+                - Is vague, generic, or lacks specific actionable content
+                - Conveys essentially the same information as any previous rationale, even if worded differently
+                - Addresses the same topic or message as the immediately previous rationale
             </invalid_thought>
 
             If the thought is considered invalid, write only 'invalid'. Write NOTHING else besides 'invalid'.
@@ -178,7 +180,8 @@ def improve_subsequent_rationale(rationale_text: str, previous_rationales: list 
                 - Removing conversation starters and technical jargon;
                 - Clearly stating the current action or error condition;
                 - Preserving essential details from the original rationale;
-                - Returning ONLY the transformed text with NO additional explanation or formatting;- Your output should ALWAYS be in the language of the user's message.
+                - Returning ONLY the transformed text with NO additional explanation or formatting;
+                - Your output should ALWAYS be in the language of the user's message.
             </principles>
 
             You can find examples of rephrasings within the tags <examples></examples>.
