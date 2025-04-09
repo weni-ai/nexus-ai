@@ -17,7 +17,7 @@ class BedrockBackend(InlineAgentsBackend):
         return boto3.client('bedrock-agent-runtime', region_name=self.REGION_NAME)
 
     def invoke_agents(self, team: dict, input_text: str, contact_urn: str, project_uuid: str):
-        supervisor = self.supervisor_repository.get_supervisor(project__uuid=project_uuid)
+        supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
         # Team repository
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
