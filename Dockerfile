@@ -75,7 +75,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 COPY --from=build-poetry /app/requirements.txt /tmp/dep/
 RUN --mount=type=cache,mode=0755,target=/pip_cache,id=pip pip install --cache-dir /pip_cache --prefix=/install -r /tmp/dep/requirements.txt
-
+RUN pip install html2text==2024.2.26
 FROM base
 
 ARG BUILD_DEPS
