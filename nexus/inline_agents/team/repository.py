@@ -38,6 +38,7 @@ class ORMTeamRepository(TeamRepository):
                     "collaborator_configurations": agent.collaboration_instructions,
                 }
                 agents.append(agent_dict)
+            return agents
         except ORMIntegratedAgent.DoesNotExist:
             raise TeamDoesNotExist(f"Team with project uuid: {project_uuid} does not exist")
 
