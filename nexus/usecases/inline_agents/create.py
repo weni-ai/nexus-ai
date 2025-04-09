@@ -36,7 +36,7 @@ class BedrockClient:
 
 
 class CreateAgentUseCase:
-    def __init__(self, agent_backend_client: BedrockClient):
+    def __init__(self, agent_backend_client = BedrockClient):
         self.agent_backend_client = agent_backend_client()
 
     def create_agent(self, agent: dict, project: Project, files: dict):
