@@ -18,7 +18,7 @@ class BedrockSupervisorRepository():
             "action_groups": cls._get_action_groups(project=project, supervisor=supervisor),
             "foundation_model": supervisor.foundation_model,
             "knowledge_bases": supervisor.knowledge_bases,
-            "agent_collaboration": cls._get_agent_collaboration(),
+            "agent_collaboration": cls._get_agent_collaboration(project=project),
         }
 
         return supervisor_dict
