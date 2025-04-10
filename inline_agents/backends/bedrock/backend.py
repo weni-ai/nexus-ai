@@ -37,6 +37,9 @@ class BedrockBackend(InlineAgentsBackend):
             contact_urn=contact_urn,
             project_uuid=project_uuid
         )
+        print("--------------------------------")
+        print(f"[DEBUG] External team: {external_team}")
+        print("--------------------------------")
         client = self._get_client()
 
         response = client.invoke_inline_agent(**external_team)
