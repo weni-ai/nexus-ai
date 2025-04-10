@@ -137,7 +137,8 @@ def start_inline_agents(self, message: Dict, preview: bool = False, language: st
         rep = ORMTeamRepository()
         team = rep.get_team(message.project_uuid)
 
-        response = backend.invoke_agents(team, "Quero falar com um atendente humano","82999999999", message.project_uuid)
+        response = backend.invoke_agents(team, message.text, message.contact_urn, message.project_uuid)
+        print(response)
 
     except Exception as e:
         # Clean up Redis entries in case of error
