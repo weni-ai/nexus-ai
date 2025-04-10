@@ -108,6 +108,7 @@ class RationaleObserver(EventObserver):
         self.rationale_history = []
         self.first_rationale_text = None
         self.is_first_rationale = True
+        self.flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
     def _get_bedrock_client(self):
         return self.bedrock_db._BedrockFileDatabase__get_bedrock_runtime()
@@ -118,9 +119,11 @@ class RationaleObserver(EventObserver):
         user_input: str = "",
         contact_urn: str = "",
         project_uuid: str = "",
-        flows_user_email: str = "",
-        send_message_callback: Optional[Callable] = None
+        send_message_callback: Optional[Callable] = None,
+        preview: bool = False
     ) -> None:
+        if preview:
+            return
 
         try:
             if not self._validate_traces(inline_traces):
@@ -146,10 +149,10 @@ class RationaleObserver(EventObserver):
                     if self._is_valid_rationale(improved_text):
                         self.rationale_history.append(improved_text)
                         self._send_rationale_message(
-                            improved_text, 
-                            contact_urn, 
-                            project_uuid, 
-                            flows_user_email, 
+                            improved_text,
+                            contact_urn,
+                            project_uuid,
+                            self.flows_user_email,
                             send_message_callback
                         )
 
@@ -165,10 +168,10 @@ class RationaleObserver(EventObserver):
                 if self._is_valid_rationale(improved_text):
                     self.rationale_history.append(improved_text)
                     self._send_rationale_message(
-                        improved_text, 
-                        contact_urn, 
-                        project_uuid, 
-                        flows_user_email, 
+                        improved_text,
+                        contact_urn,
+                        project_uuid,
+                        self.flows_user_email,
                         send_message_callback
                     )
                 self.first_rationale_text = None
@@ -211,7 +214,6 @@ class RationaleObserver(EventObserver):
         text: str,
         contact_urn: str,
         project_uuid: str,
-        flows_user_email: str,
         send_message_callback: Callable
     ) -> None:
         try:
@@ -219,7 +221,7 @@ class RationaleObserver(EventObserver):
                 text=text,
                 urns=[contact_urn],
                 project_uuid=project_uuid,
-                user=flows_user_email,
+                user=self.flows_user_email,
             )
         except Exception as e:
             logger.error(f"Error sending rationale message: {str(e)}", exc_info=True)
