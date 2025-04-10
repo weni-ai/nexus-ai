@@ -80,7 +80,7 @@ class CreateAgentUseCase:
         for parameter in parameters:
             field_name = list(parameter.keys())[0]
             parameter = parameter[field_name]
-            contact_field = parameter["contact_field"]
+            contact_field = parameter.get("contact_field")
             if contact_field:
                 self.create_contact_field(parameter)
             parameter.pop("contact_field", None)
