@@ -1,21 +1,17 @@
 
 import os
 from typing import List
-from fastapi import FastAPI, Request, HTTPException
-from django.conf import settings
-from nexus.event_driven.signals import message_started, message_finished
 
+from django.conf import settings
+from fastapi import FastAPI, HTTPException, Request
+
+from nexus.event_driven.signals import message_finished, message_started
+from nexus.projects.models import Project
 from router.entities import DBCon
+from router.tasks import start_route
+from router.tasks.invoke import start_inline_agents
 
 from .http_bodies import MessageHTTPBody
-
-from router.tasks import (
-    start_route,
-    start_multi_agents
-)
-
-from nexus.projects.models import Project
-
 
 app = FastAPI()
 
@@ -39,7 +35,7 @@ def healthcheck():
 def messages(request: Request, message: MessageHTTPBody):
     message_started.send(sender=DBCon)
 
-    authenticate(request.query_params.get("token"))
+    #authenticate(request.query_params.get("token"))
 
     try:
         project = Project.objects.get(uuid=message.project_uuid)
@@ -49,7 +45,7 @@ def messages(request: Request, message: MessageHTTPBody):
 
         if project.is_multi_agent:
             print("[+ Starting Agent Builder 2.0 +]")
-            start_multi_agents.delay(message.dict())
+            start_inline_agents.delay(message.dict())
         else:
             start_route.delay(message.dict())
 

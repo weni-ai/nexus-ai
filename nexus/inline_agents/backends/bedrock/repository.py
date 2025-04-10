@@ -12,6 +12,10 @@ class BedrockSupervisorRepository():
 
         project = Project.objects.get(uuid=project_uuid)
         supervisor = Supervisor.objects.order_by('id').last()
+
+        if not supervisor:
+            raise Supervisor.DoesNotExist()
+
         supervisor_dict = {
             "prompt_override_configuration": supervisor.prompt_override_configuration,
             "instruction": supervisor.instruction,

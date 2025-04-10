@@ -1,53 +1,57 @@
-import os
 import json
+import logging
+import os
 import time
 from typing import Dict, List
-import logging
-
-from tenacity import retry, stop_after_attempt, wait_exponential
-from openai import OpenAI
 
 from django.conf import settings
 from django.template.defaultfilters import slugify
+from openai import OpenAI
 from redis import Redis
+from tenacity import retry, stop_after_attempt, wait_exponential
 
-
+from nexus.agents.models import AgentMessage
 from nexus.celery import app as celery_app
 from nexus.intelligences.llms.client import LLMClient
-from nexus.usecases.intelligences.get_by_uuid import get_llm_by_project_uuid
-from nexus.usecases.logs.create import CreateLogUsecase
+from nexus.projects.models import Project
+from nexus.projects.websockets.consumers import (
+    send_preview_message_to_websocket,
+)
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
-
-from router.route import route
+from nexus.usecases.agents.agents import AgentUsecase
+from nexus.usecases.intelligences.get_by_uuid import (
+    get_default_content_base_by_project,
+    get_llm_by_project_uuid,
+)
+from nexus.usecases.intelligences.retrieve import get_file_info
+from nexus.usecases.logs.create import CreateLogUsecase
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from router.classifiers.chatgpt_function import ChatGPTFunctionClassifier
-
-from router.classifiers.pre_classification import PreClassification
 from router.classifiers.classification import Classification
+from router.classifiers.pre_classification import PreClassification
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
-from router.clients.flows.http.send_message import SendMessageHTTPClient, WhatsAppBroadcastHTTPClient
+from router.clients.flows.http.send_message import (
+    SendMessageHTTPClient,
+    WhatsAppBroadcastHTTPClient,
+)
+from router.clients.preview.simulator.broadcast import SimulateBroadcast
+from router.clients.preview.simulator.flow_start import SimulateFlowStart
+from router.dispatcher import dispatch
 from router.entities import (
-    message_factory, AgentDTO, ContentBaseDTO, LLMSetupDTO
+    AgentDTO,
+    ContentBaseDTO,
+    LLMSetupDTO,
+    message_factory,
 )
 from router.repositories.orm import (
     ContentBaseORMRepository,
     FlowsORMRepository,
-    MessageLogsRepository
+    MessageLogsRepository,
 )
-from nexus.usecases.projects.projects_use_case import ProjectsUseCase
-from nexus.usecases.intelligences.retrieve import get_file_info
-from nexus.usecases.agents.agents import AgentUsecase
-from nexus.usecases.intelligences.get_by_uuid import (
-    get_default_content_base_by_project,
-)
+from router.route import route
 
-from router.clients.preview.simulator.broadcast import SimulateBroadcast
-from router.clients.preview.simulator.flow_start import SimulateFlowStart
-from router.dispatcher import dispatch
-
-from nexus.projects.models import Project
-from nexus.projects.websockets.consumers import send_preview_message_to_websocket
-from nexus.agents.models import AgentMessage
-
+from .actions_client import get_action_clients
+from .invoke import start_inline_agents
 
 client = OpenAI()
 logger = logging.getLogger(__name__)
@@ -303,57 +307,6 @@ def get_trace_summary(language, trace):
     except Exception as e:
         print(f"Error getting trace summary: {str(e)}")
         return "Processing your request now"
-
-
-def get_action_clients(preview: bool = False, multi_agents: bool = False, project_use_components: bool = False):
-    if preview:
-        flow_start = SimulateFlowStart(
-            os.environ.get(
-                'FLOWS_REST_ENDPOINT'
-            ),
-            os.environ.get(
-                'FLOWS_INTERNAL_TOKEN'
-            )
-        )
-        broadcast = SimulateBroadcast(
-            os.environ.get(
-                'FLOWS_REST_ENDPOINT'
-            ),
-            os.environ.get(
-                'FLOWS_INTERNAL_TOKEN'
-            ),
-            get_file_info
-        )
-        return broadcast, flow_start
-
-    if multi_agents and settings.AGENT_USE_COMPONENTS or project_use_components:
-        broadcast = WhatsAppBroadcastHTTPClient(
-            os.environ.get(
-                'FLOWS_REST_ENDPOINT'
-            ),
-            os.environ.get(
-                'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
-            )
-        )
-    else:
-        broadcast = SendMessageHTTPClient(
-            os.environ.get(
-                'FLOWS_REST_ENDPOINT'
-            ),
-            os.environ.get(
-                'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
-            )
-        )
-
-    flow_start = FlowStartHTTPClient(
-        os.environ.get(
-            'FLOWS_REST_ENDPOINT'
-        ),
-        os.environ.get(
-            'FLOWS_INTERNAL_TOKEN'
-        )
-    )
-    return broadcast, flow_start
 
 
 @celery_app.task(bind=True)
