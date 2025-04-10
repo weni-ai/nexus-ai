@@ -124,7 +124,8 @@ class RationaleObserver(EventObserver):
         contact_urn: str = "",
         project_uuid: str = "",
         send_message_callback: Optional[Callable] = None,
-        preview: bool = False
+        preview: bool = False,
+        **kwargs
     ) -> None:
 
         if preview:
@@ -157,7 +158,6 @@ class RationaleObserver(EventObserver):
                             improved_text,
                             contact_urn,
                             project_uuid,
-                            self.flows_user_email,
                             send_message_callback
                         )
 
@@ -176,7 +176,6 @@ class RationaleObserver(EventObserver):
                         improved_text,
                         contact_urn,
                         project_uuid,
-                        self.flows_user_email,
                         send_message_callback
                     )
                 self.first_rationale_text = None

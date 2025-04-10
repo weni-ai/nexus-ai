@@ -7,5 +7,5 @@ class SummaryTracesObserver(EventObserver):
         - Generate a summary of the traces of the action.
         - Save the summary on the database
     """
-    def perform(self, inline_traces):
+    def perform(self, inline_traces, **kwargs):
         pass
