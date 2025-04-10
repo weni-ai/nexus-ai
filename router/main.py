@@ -1,8 +1,4 @@
-
 import os
-from typing import List
-
-from django.conf import settings
 from fastapi import FastAPI, HTTPException, Request
 
 from nexus.event_driven.signals import message_finished, message_started
@@ -35,7 +31,7 @@ def healthcheck():
 def messages(request: Request, message: MessageHTTPBody):
     message_started.send(sender=DBCon)
 
-    #authenticate(request.query_params.get("token"))
+    authenticate(request.query_params.get("token"))
 
     try:
         project = Project.objects.get(uuid=message.project_uuid)

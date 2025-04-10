@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List
+from typing import Dict
 
 from django.conf import settings
 from redis import Redis
@@ -11,13 +11,8 @@ from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
-from nexus.usecases.intelligences.get_by_uuid import (
-    get_default_content_base_by_project,
-)
+from router.dispatcher import dispatch
 from router.entities import (
-    AgentDTO,
-    ContentBaseDTO,
-    LLMSetupDTO,
     message_factory,
 )
 
@@ -25,7 +20,13 @@ from .actions_client import get_action_clients
 
 
 @celery_app.task(bind=True, soft_time_limit=300, time_limit=360)
-def start_inline_agents(self, message: Dict, preview: bool = False, language: str = "en", user_email: str = '') -> bool:  # pragma: no cover
+def start_inline_agents(
+    self,
+    message: Dict,
+    preview: bool = False,
+    user_email: str = ''
+) -> bool:  # pragma: no cover
+
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
 
@@ -68,17 +69,6 @@ def start_inline_agents(self, message: Dict, preview: bool = False, language: st
 
     project = Project.objects.get(uuid=message.project_uuid)
 
-    #supervisor = project.team
-    #supervisor_version = supervisor.current_version
-
-    #contentbase = get_default_content_base_by_project(message.project_uuid)
-
-    #usecase = AgentUsecase()
-
-    # Use the sanitized URN in the session ID
-    #session_id = f"project-{project.uuid}-session-{message.sanitized_urn}"
-    #session_id = slugify(session_id)
-
     # Check for pending responses
     pending_response_key = f"response:{message.contact_urn}"
     pending_task_key = f"task:{message.contact_urn}"
@@ -119,17 +109,8 @@ def start_inline_agents(self, message: Dict, preview: bool = False, language: st
     try:
         # Stream supervisor response
         broadcast, _ = get_action_clients(preview, multi_agents=True, project_use_components=project_use_components)
-        print("[+ Starting multi-agents +]")
 
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
-        full_chunks = []
-        rationale_history = []
-        full_response = ""
-        trace_events = []
-
-        first_rationale_text = None
-        is_first_rationale = True
-        # should_process_rationales = supervisor.metadata.get('rationale', False)
 
         agents_backend = project.agents_backend
         backend = BackendsRegistry.get_backend(agents_backend)
@@ -138,7 +119,16 @@ def start_inline_agents(self, message: Dict, preview: bool = False, language: st
         team = rep.get_team(message.project_uuid)
 
         response = backend.invoke_agents(team, message.text, message.contact_urn, message.project_uuid)
-        print(response)
+
+        redis_client.delete(pending_response_key)
+        redis_client.delete(pending_task_key)
+        return dispatch(
+            llm_response=response,
+            message=message,
+            direct_message=broadcast,
+            user_email=flows_user_email,
+            full_chunks=[],
+        )
 
     except Exception as e:
         # Clean up Redis entries in case of error
