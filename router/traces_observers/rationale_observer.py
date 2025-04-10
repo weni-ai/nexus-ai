@@ -1,10 +1,11 @@
 import logging
 import os
+import boto3
+from nexus.environment import env
 from typing import List, Dict, Optional, Callable
 
 from nexus.celery import app as celery_app
 from nexus.event_domain.event_observer import EventObserver
-from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 
 from django.conf import settings
@@ -102,7 +103,6 @@ class RationaleObserver(EventObserver):
             bedrock_client: Optional Bedrock client for testing
             model_id: Optional model ID for testing
         """
-        self.bedrock_db = BedrockFileDatabase()
         self.bedrock_client = bedrock_client or self._get_bedrock_client()
         self.model_id = model_id or settings.AWS_RATIONALE_MODEL
         self.rationale_history = []
@@ -111,7 +111,11 @@ class RationaleObserver(EventObserver):
         self.flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
     def _get_bedrock_client(self):
-        return self.bedrock_db._BedrockFileDatabase__get_bedrock_runtime()
+        region_name = env.str('AWS_BEDROCK_REGION_NAME')
+        return boto3.client(
+            "bedrock-runtime",
+            region_name=region_name
+        )
 
     def perform(
         self,
@@ -122,6 +126,7 @@ class RationaleObserver(EventObserver):
         send_message_callback: Optional[Callable] = None,
         preview: bool = False
     ) -> None:
+
         if preview:
             return
 
