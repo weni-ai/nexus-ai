@@ -23,6 +23,10 @@ class Agent(models.Model):
     collaboration_instructions = models.TextField()
     foundation_model = models.CharField(max_length=255)
 
+    @property
+    def current_version(self):
+        return self.versions.order_by('created_on').last()
+
 
 class IntegratedAgent(models.Model):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
