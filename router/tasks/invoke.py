@@ -118,6 +118,8 @@ def start_inline_agents(
         rep = ORMTeamRepository()
         team = rep.get_team(message.project_uuid)
 
+        print(f"[DEBUG] Team: {team}")
+
         response = backend.invoke_agents(team, message.text, message.contact_urn, message.project_uuid)
 
         redis_client.delete(pending_response_key)
@@ -135,7 +137,7 @@ def start_inline_agents(
         redis_client.delete(pending_response_key)
         redis_client.delete(pending_task_key)
 
-        print(f"[DEBUG] Error in start_multi_agents: {str(e)}")
+        print(f"[DEBUG] Error in start_inline_agents: {str(e)}")
         print(f"[DEBUG] Error type: {type(e)}")
         print(f"[DEBUG] Full exception details: {e.__dict__}")
 

@@ -56,5 +56,8 @@ class BedrockBackend(InlineAgentsBackend):
                     send_message_callback=None,
                     preview=preview
                 )
+            print("--------------------------------")
+            print(f"[DEBUG] Event: {event}")
+            print("--------------------------------")
 
         return full_response
