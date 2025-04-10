@@ -1,10 +1,13 @@
+import boto3
+
+from django.conf import settings
+from django.template.defaultfilters import slugify
+
+from io import BytesIO
+
 from nexus.inline_agents.models import Agent
 from nexus.projects.models import Project
-from django.template.defaultfilters import slugify
 from typing import Dict, List
-from io import BytesIO
-import boto3
-from django.conf import settings
 
 
 class BedrockClient:
@@ -50,7 +53,7 @@ class CreateAgentUseCase:
             collaboration_instructions=agent["description"],
             project=project,
             instruction=instructions,
-            foundation_model="",
+            foundation_model=settings.AWS_BEDROCK_AGENTS_MODEL_ID,
         )
         self.create_skills(agent_obj, project, agent["skills"], files, str(project.uuid))
         return agent
@@ -80,7 +83,7 @@ class CreateAgentUseCase:
         for parameter in parameters:
             field_name = list(parameter.keys())[0]
             parameter = parameter[field_name]
-            contact_field = parameter["contact_field"]
+            contact_field = parameter.get("contact_field")
             if contact_field:
                 self.create_contact_field(parameter)
             parameter.pop("contact_field", None)
@@ -93,7 +96,7 @@ class CreateAgentUseCase:
         for agent_skill in agent_skills:
 
             skill_file = files[f"{agent.slug}:{agent_skill['slug']}"]
-            skill_name = f'{agent_skill.get("slug")}-{agent.id}'
+            skill_name = f'{agent_skill.get("slug")}-{agent.id}-{slugify(project.name)}'
 
             action_group_executor: Dict[str, str] = self.create_lambda_function(agent_skill, skill_file, project_uuid, skill_name)
             parameters: List[Dict] = self.handle_parameters(agent_skill["parameters"])
@@ -116,6 +119,8 @@ class CreateAgentUseCase:
                 {
                     "icon": "",
                     "name": agent_skill["name"],
+                    "unique_name": skill_name,
+                    "agent": str(agent.uuid)
                 }
             )
 
