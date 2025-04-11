@@ -24,6 +24,7 @@ def start_inline_agents(
     self,
     message: Dict,
     preview: bool = False,
+    language: str = "en",
     user_email: str = ''
 ) -> bool:  # pragma: no cover
 
@@ -100,7 +101,7 @@ def start_inline_agents(
             message_data={
                 "type": "status",
                 "content": "Starting multi-agent processing",
-                #"session_id": session_id # TODO: add session_id
+                # "session_id": session_id # TODO: add session_id
             }
         )
 
@@ -126,7 +127,7 @@ def start_inline_agents(
             preview=preview,
             rationale_switch=project.rationale_switch,
             sanitized_urn=message.sanitized_urn,
-            language=message.language,
+            language=language,
             user_email=user_email
         )
 
@@ -145,7 +146,7 @@ def start_inline_agents(
         redis_client.delete(pending_response_key)
         redis_client.delete(pending_task_key)
 
-        print(f"[DEBUG] Error in start_multi_agents: {str(e)}")
+        print(f"[DEBUG] Error in start_inline_agents: {str(e)}")
         print(f"[DEBUG] Error type: {type(e)}")
         print(f"[DEBUG] Full exception details: {e.__dict__}")
 
