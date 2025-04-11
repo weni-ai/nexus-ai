@@ -33,6 +33,9 @@ class PushAgents(APIView):
         files = request.FILES
         validate_file_size(files)
 
+        import json
+        print(json.dumps(request.data, indent=4, default=str))
+
         agents = json.loads(request.data.get("agents"))
         project_uuid = request.data.get("project_uuid")
 
