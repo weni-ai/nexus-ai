@@ -92,8 +92,8 @@ event_manager.subscribe(
 event_manager.subscribe(
     event="inline_trace_observers",
     observer=[
-        SummaryTracesObserver(),
         RationaleObserver(),
-        SaveTracesObserver()
+        SaveTracesObserver(),
+        SummaryTracesObserver()
     ]
 )
