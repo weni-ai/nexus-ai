@@ -6,6 +6,7 @@ from nexus.environment import env
 from .adapter import BedrockTeamAdapter
 from nexus.inline_agents.backends.bedrock.repository import BedrockSupervisorRepository
 from nexus.events import event_manager
+from nexus.projects.models import ContentBase
 
 
 class BedrockBackend(InlineAgentsBackend):
@@ -26,6 +27,7 @@ class BedrockBackend(InlineAgentsBackend):
         input_text: str,
         contact_urn: str,
         project_uuid: str,
+        content_base: ContentBase,
         preview: bool = False
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
@@ -38,6 +40,8 @@ class BedrockBackend(InlineAgentsBackend):
             project_uuid=project_uuid
         )
         client = self._get_client()
+
+        external_team['content_base'] = content_base
 
         response = client.invoke_inline_agent(**external_team)
 
