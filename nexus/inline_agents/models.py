@@ -42,3 +42,20 @@ class Version(models.Model):
     display_skills = ArrayField(models.JSONField())
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="versions")
     created_on = models.DateTimeField(auto_now_add=True)
+
+
+class AgentCredential(models.Model):
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="inline_credentials")
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_credentials")
+    key = models.CharField(max_length=255)
+    label = models.CharField(max_length=255)
+    placeholder = models.CharField(max_length=255)
+    is_confidential = models.BooleanField(default=True)
+
+
+class ContactField(models.Model):
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="inline_contact_fields")
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_contact_fields")
+    key = models.CharField(max_length=255)
+    value_type = models.CharField(max_length=255)
+    
