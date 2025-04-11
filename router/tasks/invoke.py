@@ -125,6 +125,9 @@ def start_inline_agents(
             project_uuid=message.project_uuid,
             preview=preview,
             rationale_switch=project.rationale_switch,
+            sanitized_urn=message.sanitized_urn,
+            language=message.language,
+            user_email=user_email
         )
 
         redis_client.delete(pending_response_key)
