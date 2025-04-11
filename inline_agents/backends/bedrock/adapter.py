@@ -130,7 +130,7 @@ class BedrockTeamAdapter(TeamAdapter):
         single_filter = {
             "equals": {
                 "key": "contentBaseUuid",
-                "value": content_base_uuid
+                "value": str(content_base_uuid)
             }
         }
 
