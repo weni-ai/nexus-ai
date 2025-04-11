@@ -51,7 +51,7 @@ class PushAgents(APIView):
             project = Project.objects.get(uuid=project_uuid)
             for key in agents:
                 agent = agents[key]
-                agent_usecase.create_agent(agent, project, files)
+                agent_usecase.create_agent(key, agent, project, files)
 
         except Project.DoesNotExist:
             return Response({"error": "Project not found"}, status=404)

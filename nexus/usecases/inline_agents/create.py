@@ -42,20 +42,19 @@ class CreateAgentUseCase:
     def __init__(self, agent_backend_client = BedrockClient):
         self.agent_backend_client = agent_backend_client()
 
-    def create_agent(self, agent: dict, project: Project, files: dict):
-        print(agent)
-        # raise ZeroDivisionError
+    def create_agent(self, agent_key: str, agent: dict, project: Project, files: dict):
+        print(agent["tools"])
         instructions_guardrails = agent["instructions"] + agent["guardrails"]
         instructions = "\n".join(instructions_guardrails)
         agent_obj = Agent.objects.create(
             name=agent["name"],
-            slug=slugify(agent["name"]),
+            slug=agent_key,
             collaboration_instructions=agent["description"],
             project=project,
             instruction=instructions,
             foundation_model=settings.AWS_BEDROCK_AGENTS_MODEL_ID,
         )
-        self.create_skills(agent_obj, project, agent["skills"], files, str(project.uuid))
+        self.create_skills(agent_obj, project, agent["tools"], files, str(project.uuid))
         return agent
 
     def create_contact_field(self, parameter: Dict):
@@ -95,8 +94,8 @@ class CreateAgentUseCase:
 
         for agent_skill in agent_skills:
 
-            skill_file = files[f"{agent.slug}:{agent_skill['slug']}"]
-            skill_name = f'{agent_skill.get("slug")}-{agent.id}-{slugify(project.name)}'
+            skill_file = files[f"{agent.slug}:{agent_skill['key']}"]
+            skill_name = f'{agent_skill.get("key")}-{agent.id}-{slugify(project.name)}'
 
             action_group_executor: Dict[str, str] = self.create_lambda_function(agent_skill, skill_file, project_uuid, skill_name)
             parameters: List[Dict] = self.handle_parameters(agent_skill["parameters"])
