@@ -125,10 +125,11 @@ class RationaleObserver(EventObserver):
         project_uuid: str = "",
         send_message_callback: Optional[Callable] = None,
         preview: bool = False,
+        rationale_switch: bool = False,
         **kwargs
     ) -> None:
 
-        if preview:
+        if preview or not rationale_switch:
             return
 
         try:

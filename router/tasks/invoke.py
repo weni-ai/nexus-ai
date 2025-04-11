@@ -24,6 +24,7 @@ def start_inline_agents(
     self,
     message: Dict,
     preview: bool = False,
+    language: str = "en",
     user_email: str = ''
 ) -> bool:  # pragma: no cover
 
@@ -100,7 +101,7 @@ def start_inline_agents(
             message_data={
                 "type": "status",
                 "content": "Starting multi-agent processing",
-                #"session_id": session_id # TODO: add session_id
+                # "session_id": session_id # TODO: add session_id
             }
         )
 
@@ -118,9 +119,17 @@ def start_inline_agents(
         rep = ORMTeamRepository()
         team = rep.get_team(message.project_uuid)
 
-        print(f"[DEBUG] Team: {team}")
-
-        response = backend.invoke_agents(team, message.text, message.contact_urn, message.project_uuid)
+        response = backend.invoke_agents(
+            team=team,
+            input_text=message.text,
+            contact_urn=message.contact_urn,
+            project_uuid=message.project_uuid,
+            preview=preview,
+            rationale_switch=project.rationale_switch,
+            sanitized_urn=message.sanitized_urn,
+            language=language,
+            user_email=user_email
+        )
 
         redis_client.delete(pending_response_key)
         redis_client.delete(pending_task_key)

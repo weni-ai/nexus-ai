@@ -6,7 +6,6 @@ from inline_agents.adapter import TeamAdapter
 from django.utils.text import slugify
 
 
-
 class BedrockTeamAdapter(TeamAdapter):
     @classmethod
     def to_external(
@@ -17,6 +16,9 @@ class BedrockTeamAdapter(TeamAdapter):
         contact_urn: str,
         project_uuid: str
     ) -> dict:
+        from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+
+        content_base = get_default_content_base_by_project(project_uuid)
 
         external_team = {
             # "promptOverrideConfiguration": supervisor["prompt_override_configuration"],
@@ -24,11 +26,15 @@ class BedrockTeamAdapter(TeamAdapter):
             "actionGroups": supervisor["action_groups"],
             "foundationModel": supervisor["foundation_model"],
             "agentCollaboration": supervisor["agent_collaboration"],
-            "knowledgeBases": supervisor["knowledge_bases"],
+            "knowledgeBases": self._get_knowledge_bases(
+                supervisor=supervisor,
+                content_base_uuid=content_base.uuid
+            ),
             "inlineSessionState": self._get_inline_session_state(
                 contact_urn=contact_urn,
                 # contact_fields_as_json=contact_fields_as_json,
                 project_uuid=project_uuid,
+                content_base=content_base
             ),
             "enableTrace": self._get_enable_trace(),
             "sessionId": self._get_session_id(contact_urn, project_uuid),
@@ -56,6 +62,7 @@ class BedrockTeamAdapter(TeamAdapter):
         contact_urn: str,
         # contact_fields_as_json: str,
         project_uuid: str,
+        content_base
     ) -> str:
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
@@ -115,3 +122,31 @@ class BedrockTeamAdapter(TeamAdapter):
                 }
             )
         return collaboratorConfigurations
+
+    @classmethod
+    def _get_knowledge_bases(
+        cls,
+        supervisor: dict,
+        content_base_uuid: str
+    ) -> list[dict]:
+
+        single_filter = {
+            "equals": {
+                "key": "contentBaseUuid",
+                "value": content_base_uuid
+            }
+        }
+
+        retrieval_configuration = {
+            "vectorSearchConfiguration": {
+                "filter": single_filter
+            }
+        }
+
+        knowledge = supervisor.knowledge_bases[0]
+
+        knowledge.update(
+            {"retrievalConfiguration": retrieval_configuration}
+        )
+
+        return [knowledge]
