@@ -26,7 +26,8 @@ class BedrockBackend(InlineAgentsBackend):
         input_text: str,
         contact_urn: str,
         project_uuid: str,
-        preview: bool = False
+        preview: bool = False,
+        rationale_switch: bool = False,
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
 
@@ -54,7 +55,8 @@ class BedrockBackend(InlineAgentsBackend):
                     contact_urn=contact_urn,
                     project_uuid=project_uuid,
                     send_message_callback=None,
-                    preview=preview
+                    preview=preview,
+                    rationale_switch=rationale_switch
                 )
 
         return full_response

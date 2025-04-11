@@ -118,7 +118,14 @@ def start_inline_agents(
         rep = ORMTeamRepository()
         team = rep.get_team(message.project_uuid)
 
-        response = backend.invoke_agents(team, message.text, message.contact_urn, message.project_uuid)
+        response = backend.invoke_agents(
+            team=team,
+            input_text=message.text,
+            contact_urn=message.contact_urn,
+            project_uuid=message.project_uuid,
+            preview=preview,
+            rationale_switch=project.rationale_switch,
+        )
 
         redis_client.delete(pending_response_key)
         redis_client.delete(pending_task_key)
