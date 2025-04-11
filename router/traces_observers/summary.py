@@ -5,7 +5,6 @@ import logging
 from openai import OpenAI
 from django.conf import settings
 from nexus.event_domain.event_observer import EventObserver
-from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 
 
 class SummaryTracesObserver(EventObserver):
@@ -28,6 +27,9 @@ class SummaryTracesObserver(EventObserver):
         session_id=None,
         **kwargs
     ):
+        # TODO: Fix circular import
+        from nexus.projects.websockets.consumers import send_preview_message_to_websocket
+
         if not preview:
             return
 
