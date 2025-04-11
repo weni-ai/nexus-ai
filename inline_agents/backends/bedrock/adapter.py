@@ -140,7 +140,7 @@ class BedrockTeamAdapter(TeamAdapter):
             }
         }
 
-        knowledge = supervisor.knowledge_bases[0]
+        knowledge = supervisor["knowledge_bases"][0]
 
         knowledge.update(
             {"retrievalConfiguration": retrieval_configuration}
