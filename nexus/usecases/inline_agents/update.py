@@ -18,7 +18,7 @@ class UpdateAgentUseCase(ToolsUseCase):
         self.agent_backend_client = agent_backend_client()
 
     def update_agent(self, agent_obj: Agent, agent_data: dict, project: Project, files: dict):
-        instructions_guardrails = agent_data["instructions"] + agent_data["guardrails"]
+        instructions_guardrails = agent_data.get("instructions", []) + agent_data.get("guardrails", [])
         instructions = "\n".join(instructions_guardrails)
 
         agent_obj.name = agent_data["name"]
@@ -28,7 +28,7 @@ class UpdateAgentUseCase(ToolsUseCase):
         agent_obj.save()
 
         self.handle_tools(agent_obj, project, agent_data["tools"], files, str(project.uuid))
-        self.update_credentials(agent_obj, project, agent_data["credentials"])
+        self.update_credentials(agent_obj, project, agent_data.get("credentials", {}))
 
         return agent_data
 
