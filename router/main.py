@@ -39,8 +39,8 @@ def messages(request: Request, message: MessageHTTPBody):
         print(message)
         print("[+ ----------------- +]")
 
-        if project.is_multi_agent:
-            print("[+ Starting Agent Builder 2.0 +]")
+        if project.inline_agent_switch:
+            print("[+ Starting Inline Agent +]")
             start_inline_agents.delay(message.dict())
         else:
             start_route.delay(message.dict())
