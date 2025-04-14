@@ -73,7 +73,7 @@ class BedrockClient:
                 FunctionVersion=new_version
             )
         except self.lambda_client.exceptions.ResourceNotFoundException:
-            self.agent_backend_client.lambda_client.create_alias(
+            self.lambda_client.create_alias(
                 FunctionName=lambda_name,
                 Name='live',
                 FunctionVersion=new_version,

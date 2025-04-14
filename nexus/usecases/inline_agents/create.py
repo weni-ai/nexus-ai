@@ -15,7 +15,7 @@ class CreateAgentUseCase(ToolsUseCase):
 
     def create_agent(self, agent_key: str, agent: dict, project: Project, files: dict):
         print(f"[+ 🧠 Creating agent {agent_key} +]")
-        instructions_guardrails = agent["instructions"] + agent["guardrails"]
+        instructions_guardrails = agent.get("instructions", []) + agent.get("guardrails", [])
         instructions = "\n".join(instructions_guardrails)
         agent_obj = Agent.objects.create(
             name=agent["name"],
