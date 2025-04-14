@@ -20,6 +20,7 @@ from nexus.inline_agents.api.views import ActiveAgentsView as ActiveInlineAgents
 from nexus.inline_agents.api.views import TeamView as InlineTeamView
 from nexus.inline_agents.api.views import AgentsView as InlineAgentsView
 from nexus.inline_agents.api.views import OfficialAgentsView as InlineOfficialAgentsView
+from nexus.inline_agents.api.views import ProjectCredentialsView as InlineProjectCredentialsView
 
 
 urlpatterns = [
@@ -34,8 +35,8 @@ urlpatterns = [
     path('agents/app-official/<project_uuid>', VtexAppOfficialAgentsView.as_view(), name="vtex-official-agents"),
     path('project/<project_uuid>/assign/<str:agent_uuid>', ActiveInlineAgentsView.as_view(), name="assign-agents"),
     path('project/<project_uuid>/app-assign/<str:agent_uuid>', VtexAppActiveAgentsViewSet.as_view(), name="vtex-assign-agents"),
-    path('project/<project_uuid>/credentials', ProjectCredentialsView.as_view(), name="project-credentials"),
-    path('project/<project_uuid>/credentials/<str:agent_uuid>', ProjectCredentialsView.as_view(), name="project-credentials-update"),
+    path('project/<project_uuid>/credentials', InlineProjectCredentialsView.as_view(), name="project-credentials"),
+    path('project/<project_uuid>/credentials/<str:agent_uuid>', InlineProjectCredentialsView.as_view(), name="project-credentials-update"),
     path('project/<project_uuid>/app-credentials', VtexAppProjectCredentialsView.as_view(), name="vtex-project-credentials"),
     path('project/<project_uuid>/rationale', RationaleView.as_view(), name="project-rationale"),
 ]
