@@ -1,16 +1,14 @@
-import boto3
-
 from django.conf import settings
-from django.template.defaultfilters import slugify
 
-from io import BytesIO
+from nexus.agents.encryption import encrypt_value
+from nexus.inline_agents.models import Agent, AgentCredential
 
-from nexus.inline_agents.models import Agent, AgentCredential, ContactField
 from nexus.projects.models import Project
-from typing import Dict, List
-from nexus.internals.flows import FlowsRESTClient
+
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.tools import ToolsUseCase
+
+from typing import Dict
 
 
 class UpdateAgentUseCase(ToolsUseCase):
@@ -38,7 +36,7 @@ class UpdateAgentUseCase(ToolsUseCase):
             return
 
         existing_credentials = {
-            cred.key: cred for cred in agent.inline_credentials.filter(project=project)
+            cred.key: cred for cred in AgentCredential.objects.filter(project=project)
         }
 
         for key, credential in credentials.items():
@@ -51,18 +49,29 @@ class UpdateAgentUseCase(ToolsUseCase):
                 cred.placeholder = credential.get('placeholder', '')
                 cred.is_confidential = is_confidential
                 cred.save()
+                if agent not in cred.agents.all():
+                    cred.agents.add(agent)
                 del existing_credentials[key]
             else:
                 print(f"[+ 🧠 Creating credential {key} +]")
-                AgentCredential.objects.create(
-                    agent=agent,
+                cred = AgentCredential.objects.create(
                     project=project,
                     key=key,
                     label=credential.get('label', key),
                     placeholder=credential.get('placeholder', ''),
                     is_confidential=is_confidential
                 )
+                cred.agents.add(agent)
 
         for cred in existing_credentials.values():
             print(f"[+ 🧠 Deleting credential {cred.key} +]")
             cred.delete()
+
+    def update_credential_value(self, project_uuid: str, key: str, value: str) -> bool:
+        try:
+            credential = AgentCredential.objects.get(project__uuid=project_uuid, key=key)
+            credential.value = encrypt_value(value) if credential.is_confidential else value
+            credential.save()
+            return True
+        except AgentCredential.DoesNotExist:
+            return False

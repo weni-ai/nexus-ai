@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from nexus.inline_agents.models import Agent, IntegratedAgent
+from nexus.inline_agents.models import Agent, IntegratedAgent, AgentCredential
 
 
 class IntegratedAgentSerializer(serializers.ModelSerializer):
@@ -67,3 +67,34 @@ class AgentSerializer(serializers.ModelSerializer):
     def get_credentials(self, obj):
         # TODO: Implement credentials
         return []
+
+
+class ProjectCredentialsListSerializer(serializers.ModelSerializer):
+    agents_using = serializers.SerializerMethodField("get_agents_using")
+    name = serializers.CharField(source="key")
+    value = serializers.SerializerMethodField("get_value")
+
+    class Meta:
+        model = AgentCredential
+        fields = [
+            "name",
+            "label",
+            "placeholder",
+            "is_confidential",
+            "value",
+            "agents_using"
+        ]
+
+    def get_agents_using(self, obj):
+        return [
+            {
+                "uuid": agent.uuid,
+                "name": agent.name,
+            }
+            for agent in obj.agents.filter(project=obj.project)
+        ]
+    
+    def get_value(self, obj):
+        if obj.is_confidential:
+            return obj.value
+        return obj.decrypted_value

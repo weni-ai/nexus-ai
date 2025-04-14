@@ -13,9 +13,16 @@ from nexus.usecases.inline_agents.update import UpdateAgentUseCase
 
 from nexus.projects.models import Project
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
-from nexus.usecases.inline_agents.get import GetInlineAgentsUsecase
+from nexus.usecases.inline_agents.get import (
+    GetInlineAgentsUsecase,
+    GetInlineCredentialsUsecase
+)
 
-from nexus.inline_agents.api.serializers import IntegratedAgentSerializer, AgentSerializer
+from nexus.inline_agents.api.serializers import (
+    IntegratedAgentSerializer,
+    AgentSerializer,
+    ProjectCredentialsListSerializer
+)
 
 
 SKILL_FILE_SIZE_LIMIT = 10
@@ -144,3 +151,66 @@ class OfficialAgentsView(APIView):
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
+
+
+class ProjectCredentialsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_uuid):
+        usecase = GetInlineCredentialsUsecase()
+        official_credentials, custom_credentials = usecase.get_credentials_by_project(project_uuid)
+        return Response({
+            "official_agents_credentials": ProjectCredentialsListSerializer(official_credentials, many=True).data,
+            "my_agents_credentials": ProjectCredentialsListSerializer(custom_credentials, many=True).data
+        })
+
+    def patch(self, request, project_uuid):
+        credentials_data = request.data
+
+        updated_credentials = []
+        for key, value in credentials_data.items():
+            usecase = UpdateAgentUseCase()
+            updated = usecase.update_credential_value(project_uuid, key, value)
+            if updated:
+                updated_credentials.append(key)
+                
+        return Response({
+            "message": "Credentials updated successfully",
+            "updated_credentials": updated_credentials
+        })
+
+    def post(self, request, project_uuid):
+        credentials_data = request.data.get('credentials', [])
+        agent_uuid = request.data.get('agent_uuid')
+
+        if not agent_uuid or not credentials_data:
+            return Response(
+                {"error": "agent_uuid and credentials are required"},
+                status=400
+            )
+
+        try:
+            agent = Agent.objects.get(uuid=agent_uuid)
+        except Agent.DoesNotExist:
+            return Response(
+                {"error": "Agent not found"},
+                status=404
+            )
+
+        credentials = {}
+        for cred_item in credentials_data:
+            credentials.update({
+                cred_item.get('name'): {
+                    'label': cred_item.get('label'),
+                    'placeholder': cred_item.get('placeholder'),
+                    'is_confidential': cred_item.get('is_confidential', True),
+                    'value': cred_item.get('value')
+                },
+            })
+
+        created_credentials = CreateAgentUseCase().create_credentials(agent, Project.objects.get(uuid=project_uuid), credentials)
+
+        return Response({
+            "message": "Credentials created successfully",
+            "created_credentials": created_credentials
+        })
