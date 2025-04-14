@@ -100,9 +100,7 @@ class AgentsView(APIView):
         agents = Agent.objects.filter(project__uuid=project_uuid)
 
         if search:
-            query_filter = Q(display_name__icontains=search) | Q(
-                agent_skills__display_name__icontains=search
-            )
+            query_filter = Q(name__icontains=search)
             agents = agents.filter(query_filter).distinct('uuid')
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
