@@ -26,7 +26,7 @@ class CreateAgentUseCase(ToolsUseCase):
             foundation_model=settings.AWS_BEDROCK_AGENTS_MODEL_ID,
         )
         self.handle_tools(agent_obj, project, agent["tools"], files, str(project.uuid))
-        self.create_credentials(agent_obj, project, agent["credentials"])
+        self.create_credentials(agent_obj, project, agent.get("credentials", {}))
         print(f"[+ 🧠 Created agent {agent_key} +]")
         return agent_obj
 
