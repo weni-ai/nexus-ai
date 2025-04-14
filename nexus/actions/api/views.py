@@ -265,8 +265,8 @@ class MessagePreviewView(APIView):
                 attachments=data.get("attachments", []),
                 metadata=data.get("metadata", {})
             )
-            if project.is_multi_agent:
-                print("[+ Starting Agent Builder 2.0 +]")
+            if project.inline_agent_switch:
+                print("[+ Starting Inline Agent +]")
                 task = start_inline_agents.delay(message.dict(), preview=True, user_email=request.user.email)
                 response = task.wait()
             else:
