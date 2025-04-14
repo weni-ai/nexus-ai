@@ -9,6 +9,8 @@ from rest_framework.permissions import IsAuthenticated
 from nexus.inline_agents.models import Agent
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
+from nexus.usecases.inline_agents.update import UpdateAgentUseCase
+
 from nexus.projects.models import Project
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.get import GetInlineAgentsUsecase
@@ -38,17 +40,28 @@ class PushAgents(APIView):
 
         return files, agents, project_uuid
 
-
     def post(self, request, *args, **kwargs):
         agent_usecase = CreateAgentUseCase()
+        update_agent_usecase = UpdateAgentUseCase()
+
         files, agents, project_uuid = self._validate_request(request)
+
         agents = agents["agents"]
+
+        print(json.dumps(agents, indent=4, default=str))
+        print(files)
 
         try:
             project = Project.objects.get(uuid=project_uuid)
             for key in agents:
-                agent = agents[key]
-                agent_usecase.create_agent(key, agent, project, files)
+                agent_qs = Agent.objects.filter(slug=key, project=project)
+                existing_agent = agent_qs.exists()
+                if existing_agent:
+                    print(f"[+ Updating agent {key} +]")
+                    update_agent_usecase.update_agent(agent_qs.first(), agents[key], project, files)
+                else:
+                    print(f"[+ Creating agent {key} +]")
+                    agent_usecase.create_agent(key, agents[key], project, files)
 
         except Project.DoesNotExist:
             return Response({"error": "Project not found"}, status=404)
