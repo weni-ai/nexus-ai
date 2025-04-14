@@ -6,10 +6,15 @@ from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.test import TestCase
 from django.utils.datastructures import MultiValueDict
 
-from nexus.inline_agents.models import Agent
+from nexus.inline_agents.models import (
+    Agent,
+    IntegratedAgent,
+    AgentCredential
+)
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
 from nexus.usecases.inline_agents.update import UpdateAgentUseCase
+from nexus.usecases.inline_agents.get import GetInlineCredentialsUsecase
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
@@ -233,9 +238,9 @@ class TestPushAgents(TestCase):
                 agent_obj = agent_qs.first()
                 update_agent_usecase.update_agent(agent_obj, agents[key], self.project, files)
 
-                self.assertFalse(agent_obj.inline_credentials.filter(project=self.project).get(key="API_KEY").is_confidential)
-                self.assertTrue(agent_obj.inline_credentials.filter(project=self.project, key="NEW_KEY").exists())
-                self.assertFalse(agent_obj.inline_credentials.filter(project=self.project, key="API_SECRET").exists())
+                self.assertFalse(AgentCredential.objects.filter(project=self.project).get(key="API_KEY").is_confidential)
+                self.assertTrue(AgentCredential.objects.filter(project=self.project, key="NEW_KEY").exists())
+                self.assertFalse(AgentCredential.objects.filter(project=self.project, key="API_SECRET").exists())
 
                 self.assertEqual(len(agent_obj.current_version.display_skills), 2)
                 self.assertEqual(len(agent_obj.current_version.skills), 2)
@@ -251,3 +256,53 @@ class TestPushAgents(TestCase):
                 self.assertEqual(len(agent_obj.current_version.display_skills), 1)
                 self.assertEqual(len(agent_obj.current_version.skills), 1)
                 self.assertEqual(agent_obj.versions.count(), 3)
+
+
+class TestGetInlineCredentials(TestCase):
+    def setUp(self):
+        self.usecase = GetInlineCredentialsUsecase()
+        self.project = ProjectFactory(
+            name="Router",
+            brain_on=True,
+        )
+        self.user = self.project.created_by
+
+        self.agent = Agent.objects.create(
+            name="Test Agent",
+            slug="test-agent",
+            project=self.project,
+        )
+        self.another_agent = Agent.objects.create(
+            name="Another Agent",
+            slug="another-agent",
+            project=self.project,
+        )
+        credential = AgentCredential.objects.create(
+            key="API_KEY",
+            label="API Key",
+            placeholder="your-api-key-here",
+            is_confidential=True,
+            project=self.project,
+        )
+
+        credential.agents.add(self.agent)
+        credential.agents.add(self.another_agent)
+
+        IntegratedAgent.objects.create(
+            agent=self.agent,
+            project=self.project,
+        )
+        IntegratedAgent.objects.create(
+            agent=self.another_agent,
+            project=self.project,
+        )
+
+    def test_get_credentials_by_project(self):
+        official_credentials, custom_credentials = self.usecase.get_credentials_by_project(self.project.uuid)
+        self.assertEqual(len(official_credentials), 0)
+        self.assertEqual(len(custom_credentials), 1)
+        self.agent.is_official = True
+        self.agent.save()
+        official_credentials, custom_credentials = self.usecase.get_credentials_by_project(self.project.uuid)
+        self.assertEqual(len(official_credentials), 1)
+        self.assertEqual(len(custom_credentials), 0)

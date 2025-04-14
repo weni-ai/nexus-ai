@@ -2,6 +2,14 @@ from uuid import uuid4
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 
+from nexus.agents.encryption import decrypt_value
+from nexus.agents.exceptions import (
+    CredentialKeyInvalid,
+    CredentialLabelInvalid,
+    CredentialValueInvalid,
+    CredentialPlaceholderInvalid,
+    CredentialIsConfidentialInvalid,
+)
 from nexus.projects.models import Project
 
 
@@ -45,12 +53,55 @@ class Version(models.Model):
 
 
 class AgentCredential(models.Model):
-    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="inline_credentials")
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_credentials")
-    key = models.CharField(max_length=255)
+    key = models.CharField(max_length=255, null=True)
     label = models.CharField(max_length=255)
-    placeholder = models.CharField(max_length=255)
+    value = models.CharField(max_length=8192, default="")
+    placeholder = models.CharField(max_length=255, null=True)
     is_confidential = models.BooleanField(default=True)
+    metadata = models.JSONField(default=dict)
+    agents = models.ManyToManyField(Agent)
+
+    def clean(self):
+        if not isinstance(self.key, str):
+            raise CredentialKeyInvalid(field_name=self.key)
+        if self.key and len(self.key) > 255:
+            raise CredentialKeyInvalid.length_exceeded(field_name=self.key)
+
+        if not isinstance(self.label, str) or not self.label:
+            raise CredentialLabelInvalid(field_name=self.key)
+        if len(self.label) > 255:
+            raise CredentialLabelInvalid.length_exceeded(field_name=self.key)
+
+        if not isinstance(self.value, str):
+            raise CredentialValueInvalid(field_name=self.key)
+
+        if len(self.value) > 8192:
+            raise CredentialValueInvalid.length_exceeded(field_name=self.key)
+
+        if self.placeholder is not None:
+            if not isinstance(self.placeholder, str):
+                raise CredentialPlaceholderInvalid(field_name=self.key)
+            if len(self.placeholder) > 255:
+                raise CredentialPlaceholderInvalid.length_exceeded(field_name=self.key)
+
+        if not isinstance(self.is_confidential, bool):
+            raise CredentialIsConfidentialInvalid(field_name=str(self.key))
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def decrypted_value(self):
+        """Get the decrypted value of the credential"""
+        if self.value:
+            try:
+                decrypted = decrypt_value(self.value)
+                return decrypted
+            except Exception as e:
+                return self.value
+        return self.value
 
 
 class ContactField(models.Model):
@@ -58,4 +109,3 @@ class ContactField(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_contact_fields")
     key = models.CharField(max_length=255)
     value_type = models.CharField(max_length=255)
-    
