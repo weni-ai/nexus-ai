@@ -1,3 +1,7 @@
+# 2.10.6
+## *Update*
+    - Change datetime format on session attributes
+
 # 2.10.5
 ## *Fix*
     - Overriding session attributes
