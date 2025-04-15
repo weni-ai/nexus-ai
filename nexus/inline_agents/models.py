@@ -22,6 +22,14 @@ class Guardrail(models.Model):
 
 
 class Agent(models.Model):
+    VTEX_APP = "VTEX_APP"
+    PLATFORM = "PLATFORM"
+
+    AGENT_TYPE_CHOICES = (
+        (VTEX_APP, "VTEX App"),
+        (PLATFORM, "Platform"),
+    )
+
     uuid = models.UUIDField(default=uuid4)
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255)
@@ -30,6 +38,7 @@ class Agent(models.Model):
     instruction = models.TextField()
     collaboration_instructions = models.TextField()
     foundation_model = models.CharField(max_length=255)
+    source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
 
     @property
     def current_version(self):
