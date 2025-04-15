@@ -2,7 +2,6 @@ import uuid
 import json
 import time
 from typing import TYPE_CHECKING
-import datetime
 from io import BytesIO
 
 from dataclasses import dataclass
@@ -579,14 +578,14 @@ class BedrockFileDatabase(FileDataBase):
 
         sessionState["sessionAttributes"] = {"credentials": json.dumps(credentials, default=str)}
 
-        now = datetime.now()
-        date_time = now.strftime("%A, %B %d, %Y at %H:%M:%S")
+        time_now = pendulum.now("America/Sao_Paulo")
+        llm_formatted_time = time_now.format("dddd, MMMM D, YYYY [at] HH:mm:ss z")
 
         sessionState["promptSessionAttributes"] = {
             # "format_components": get_all_formats(),
             "contact_urn": message.contact_urn,
             "contact_fields": message.contact_fields_as_json,
-            "date_time_now": date_time,
+            "date_time_now": llm_formatted_time,
             "project_id": message.project_uuid,
             "specific_personality": json.dumps({
                 "occupation": agent.role,
