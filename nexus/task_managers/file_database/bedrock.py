@@ -600,13 +600,13 @@ class BedrockFileDatabase(FileDataBase):
             })
 
         if team.human_support:
-            sessionState["promptSessionAttributes"] = {
+            sessionState["promptSessionAttributes"].update({
                 "human_support": json.dumps({
                     "project_id": message.project_uuid,
                     "contact_id": message.contact_urn,
                     "business_rules": team.human_support_prompt
                 })
-            }
+            })
 
         try:
             response = self.bedrock_agent_runtime.invoke_agent(
