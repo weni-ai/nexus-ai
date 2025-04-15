@@ -142,8 +142,7 @@ class OfficialAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        # agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
-        agents = Agent.objects.filter(is_official=True)
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
 
         if search:
             query_filter = Q(name__icontains=search)
@@ -155,6 +154,151 @@ class OfficialAgentsView(APIView):
 
 class ProjectCredentialsView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_uuid):
+        usecase = GetInlineCredentialsUsecase()
+        official_credentials, custom_credentials = usecase.get_credentials_by_project(project_uuid)
+        return Response({
+            "official_agents_credentials": ProjectCredentialsListSerializer(official_credentials, many=True).data,
+            "my_agents_credentials": ProjectCredentialsListSerializer(custom_credentials, many=True).data
+        })
+
+    def patch(self, request, project_uuid):
+        credentials_data = request.data
+
+        updated_credentials = []
+        for key, value in credentials_data.items():
+            usecase = UpdateAgentUseCase()
+            updated = usecase.update_credential_value(project_uuid, key, value)
+            if updated:
+                updated_credentials.append(key)
+                
+        return Response({
+            "message": "Credentials updated successfully",
+            "updated_credentials": updated_credentials
+        })
+
+    def post(self, request, project_uuid):
+        credentials_data = request.data.get('credentials', [])
+        agent_uuid = request.data.get('agent_uuid')
+
+        if not agent_uuid or not credentials_data:
+            return Response(
+                {"error": "agent_uuid and credentials are required"},
+                status=400
+            )
+
+        try:
+            agent = Agent.objects.get(uuid=agent_uuid)
+        except Agent.DoesNotExist:
+            return Response(
+                {"error": "Agent not found"},
+                status=404
+            )
+
+        credentials = {}
+        for cred_item in credentials_data:
+            credentials.update({
+                cred_item.get('name'): {
+                    'label': cred_item.get('label'),
+                    'placeholder': cred_item.get('placeholder'),
+                    'is_confidential': cred_item.get('is_confidential', True),
+                    'value': cred_item.get('value')
+                },
+            })
+
+        created_credentials = CreateAgentUseCase().create_credentials(agent, Project.objects.get(uuid=project_uuid), credentials)
+
+        return Response({
+            "message": "Credentials created successfully",
+            "created_credentials": created_credentials
+        })
+
+from rest_framework.permissions import IsAuthenticated, BasePermission
+class InternalCommunicationPermission(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        return user.has_perm("users.can_communicate_internally")
+
+
+class VtexAppActiveAgentsView(APIView):
+    permission_classes = [InternalCommunicationPermission]
+
+    def patch(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        agent_uuid = kwargs.get("agent_uuid")
+        assign: bool = request.data.get("assigned")
+
+        usecase = AssignAgentsUsecase()
+
+        try:
+            if assign:
+                usecase.assign_agent(agent_uuid, project_uuid)
+                return Response({"assigned": True}, status=200)
+
+            usecase.unassign_agent(agent_uuid, project_uuid)
+            return Response({"assigned": False}, status=200)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=404)
+
+
+class VtexAppAgentsView(APIView):
+    permission_classes = [InternalCommunicationPermission]
+
+    def get(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        search = self.request.query_params.get("search")
+
+        agents = Agent.objects.filter(project__uuid=project_uuid)
+
+        if search:
+            query_filter = Q(name__icontains=search)
+            agents = agents.filter(query_filter).distinct('uuid')
+
+        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        return Response(serializer.data)
+
+
+class VtexAppOfficialAgentsView(APIView):
+    permission_classes = [InternalCommunicationPermission]
+
+    def get(self, request, *args, **kwargs):
+        # TODO: filter skills
+        project_uuid = kwargs.get("project_uuid")
+        search = self.request.query_params.get("search")
+
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+
+        if search:
+            query_filter = Q(name__icontains=search)
+            agents = agents.filter(query_filter).distinct('uuid')
+
+        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        return Response(serializer.data)
+
+
+class VTexAppTeamView(APIView):
+
+    permission_classes = [InternalCommunicationPermission]
+
+    def get(self, request, *args, **kwargs):
+
+        project_uuid = kwargs.get("project_uuid")
+        usecase = GetInlineAgentsUsecase()
+        agents = usecase.get_active_agents(project_uuid)
+        serializer = IntegratedAgentSerializer(agents, many=True)
+
+        data = {
+            "manager": {
+                "external_id": ""
+            },
+            "agents": serializer.data
+        }
+        return Response(data)
+
+
+class VtexAppProjectCredentialsView(APIView):
+    permission_classes = [InternalCommunicationPermission]
 
     def get(self, request, project_uuid):
         usecase = GetInlineCredentialsUsecase()
