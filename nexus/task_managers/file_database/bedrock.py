@@ -579,7 +579,7 @@ class BedrockFileDatabase(FileDataBase):
         sessionState["sessionAttributes"] = {"credentials": json.dumps(credentials, default=str)}
 
         time_now = pendulum.now("America/Sao_Paulo")
-        llm_formatted_time = time_now.format("dddd, MMMM D, YYYY [at] HH:mm:ss z")
+        llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
 
         sessionState["promptSessionAttributes"] = {
             # "format_components": get_all_formats(),
