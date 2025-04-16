@@ -42,6 +42,8 @@ def start_inline_agents(
         contact_fields=message.get("contact_fields", {}),
     )
 
+    print(f"[DEBUG] Message: {message}")
+
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
 
@@ -93,6 +95,7 @@ def start_inline_agents(
     # Store the current task ID in Redis
     redis_client.set(pending_task_key, self.request.id)
 
+    print(f"[DEBUG] Email sent: {user_email}")
     if user_email:
         # Send initial status through WebSocket
         send_preview_message_to_websocket(
