@@ -1,12 +1,14 @@
 import boto3
 
 from inline_agents.backend import InlineAgentsBackend
-from nexus.environment import env
-
 from .adapter import BedrockTeamAdapter
-from nexus.inline_agents.backends.bedrock.repository import BedrockSupervisorRepository
+
+from nexus.environment import env
 from nexus.events import event_manager
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
+from nexus.inline_agents.backends.bedrock.repository import BedrockSupervisorRepository
+
+from router.traces_observers.save_traces import save_inline_message_to_database
 
 from django.template.defaultfilters import slugify
 
@@ -49,6 +51,15 @@ class BedrockBackend(InlineAgentsBackend):
         # Generate a session ID for websocket communication
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         session_id = slugify(session_id)
+
+        save_inline_message_to_database(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            text=input_text,
+            preview=preview,
+            session_id=session_id,
+            source_type="user"
+        )
 
         # Send initial status message if in preview mode and user_email is provided
         if preview and user_email:
@@ -107,6 +118,19 @@ class BedrockBackend(InlineAgentsBackend):
             print("--------------------------------")
             print(f"[DEBUG] Event: {event}")
             print("--------------------------------")
+
+        # Saving traces on s3
+        self.event_manager_notify(
+            event='save_inline_trace_events',
+            trace_events=trace_events,
+            project_uuid=project_uuid,
+            user_input=input_text,
+            contact_urn=contact_urn,
+            agent_response=full_response,
+            preview=preview,
+            session_id=session_id,
+            source_type="agent"  # If user message, source_type="user"
+        )
 
         if preview and user_email:
             send_preview_message_to_websocket(
