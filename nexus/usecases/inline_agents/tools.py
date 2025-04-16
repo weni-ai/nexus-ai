@@ -76,7 +76,7 @@ class ToolsUseCase:
         response = self._format_tool_response(agent_tool, tool_name, parameters, action_group_executor, str(agent.uuid))
         return response
 
-    def create_contact_field(self, agent: Agent, project: Project, field_name: str, parameter: Dict):
+    def create_contact_field(self, agent: Agent, project: Project, field_name: str, parameter: Dict, external_create: bool = True):
         types = {
             "string": "text",
             "boolean": "text",
@@ -87,23 +87,20 @@ class ToolsUseCase:
 
         project_uuid = str(project.uuid)
 
+        
         ContactField.objects.create(
             agent=agent,
             project=project,
             key=field_name,
             value_type=types.get(parameter.get("type"), "text")
         )
-
-        flows_client = FlowsRESTClient()
-        flows_client.create_project_contact_field(
-            project_uuid=project_uuid,
-            key=field_name,
-            value_type=types.get(parameter.get("type"), "text")
-        )
-
-        # flows_client = FlowsRESTClient()
-        # flows_contact_fields = flows_client.list_project_contact_fields(project_uuid)
-        # print(f"Created: {field_name} : {flows_contact_fields}")
+        if external_create:
+            flows_client = FlowsRESTClient()
+            flows_client.create_project_contact_field(
+                project_uuid=project_uuid,
+                key=field_name,
+                value_type=types.get(parameter.get("type"), "text")
+            )
 
         return parameter
 
@@ -131,6 +128,7 @@ class ToolsUseCase:
     def handle_parameters(self, agent_obj: Agent, project: Project, parameters: List[Dict], project_uuid: str) -> Dict:
         flows_client = FlowsRESTClient()
         flows_contact_fields = flows_client.list_project_contact_fields(project_uuid)
+        db_existing_fields = ContactField.objects.filter(agent=agent_obj, project=project).values_list('key', flat=True)
 
         existing_field_keys = []
         if flows_contact_fields:
@@ -144,9 +142,12 @@ class ToolsUseCase:
 
             if contact_field:
                 fields_to_keep.append(field_name)
-                if field_name not in existing_field_keys:
+                if field_name not in existing_field_keys and field_name not in db_existing_fields:
                     print(f"[+ 🧠 Creating contact field: {field_name} +]")
-                    self.create_contact_field(agent_obj, project, field_name, parameter)
+                    self.create_contact_field(agent_obj, project, field_name, parameter, external_create=True)
+                elif field_name in existing_field_keys and field_name not in db_existing_fields:
+                    print(f"[+ 🧠 Creating contact field: {field_name} +]")
+                    self.create_contact_field(agent_obj, project, field_name, parameter, external_create=False)
 
             field_data.pop("contact_field", None)
 
