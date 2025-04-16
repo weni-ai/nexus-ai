@@ -25,7 +25,7 @@ class CreateAgentUseCase(ToolsUseCase):
             collaboration_instructions=agent["description"],
             project=project,
             instruction=instructions,
-            foundation_model=settings.AWS_BEDROCK_AGENTS_MODEL_ID,
+            foundation_model=settings.AWS_BEDROCK_AGENTS_MODEL_ID[0],
         )
         self.handle_tools(agent_obj, project, agent["tools"], files, str(project.uuid))
         self.create_credentials(agent_obj, project, agent.get("credentials", {}))
