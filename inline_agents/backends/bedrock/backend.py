@@ -35,7 +35,8 @@ class BedrockBackend(InlineAgentsBackend):
         preview: bool = False,
         rationale_switch: bool = False,
         language: str = "en",
-        user_email: str = None
+        user_email: str = None,
+        use_components: bool = False
     ):
         print("[DEBUG] Starting Bedrock backend invoke_agents")
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
@@ -46,7 +47,8 @@ class BedrockBackend(InlineAgentsBackend):
             agents=team,
             input_text=input_text,
             contact_urn=contact_urn,
-            project_uuid=project_uuid
+            project_uuid=project_uuid,
+            use_components=use_components
         )
         print(f"[DEBUG] External team: {external_team}")
         client = self._get_client()

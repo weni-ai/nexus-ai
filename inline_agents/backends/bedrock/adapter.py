@@ -4,6 +4,7 @@ import pendulum
 from inline_agents.adapter import TeamAdapter
 
 from django.utils.text import slugify
+from nexus.inline_agents.components import Components
 
 
 class BedrockTeamAdapter(TeamAdapter):
@@ -14,7 +15,8 @@ class BedrockTeamAdapter(TeamAdapter):
         agents: list[dict],
         input_text: str,
         contact_urn: str,
-        project_uuid: str
+        project_uuid: str,
+        use_components: bool = False
     ) -> dict:
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
@@ -34,7 +36,8 @@ class BedrockTeamAdapter(TeamAdapter):
                 contact_urn=contact_urn,
                 # contact_fields_as_json=contact_fields_as_json,
                 project_uuid=project_uuid,
-                content_base=content_base
+                content_base=content_base,
+                use_components=use_components
             ),
             "enableTrace": self._get_enable_trace(),
             "sessionId": self._get_session_id(contact_urn, project_uuid),
@@ -62,7 +65,8 @@ class BedrockTeamAdapter(TeamAdapter):
         contact_urn: str,
         # contact_fields_as_json: str,
         project_uuid: str,
-        content_base
+        content_base,
+        use_components: bool
     ) -> str:
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
@@ -89,6 +93,9 @@ class BedrockTeamAdapter(TeamAdapter):
                 "instructions": list(instructions.values_list("instruction", flat=True))
             })
         }
+        if use_components:
+            sessionState["promptSessionAttributes"]["format_components"] = Components.get_all_formats_string()
+
         return sessionState
 
     @classmethod
