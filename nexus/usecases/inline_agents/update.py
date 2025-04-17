@@ -7,17 +7,21 @@ from nexus.projects.models import Project
 
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.tools import ToolsUseCase
+from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 
 from typing import Dict
 
 
-class UpdateAgentUseCase(ToolsUseCase):
+class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
     def __init__(self, agent_backend_client = BedrockClient):
         self.agent_backend_client = agent_backend_client()
 
     def update_agent(self, agent_obj: Agent, agent_data: dict, project: Project, files: dict):
-        instructions_guardrails = agent_data.get("instructions", []) + agent_data.get("guardrails", [])
-        instructions = "\n".join(instructions_guardrails)
+        instructions: str = self.handle_instructions(
+            agent_data.get("instructions", []),
+            agent_data.get("guardrails", []),
+            agent_data.get("components", [])
+        )
 
         agent_obj.name = agent_data["name"]
         agent_obj.collaboration_instructions = agent_data["description"]
