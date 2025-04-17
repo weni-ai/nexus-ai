@@ -10,6 +10,7 @@ class InstructionsUseCase:
             extra_instruction = component.get("instructions")
 
             if extra_instruction:
+                extra_instruction = f"<additional_rules>{extra_instruction}</additional_rules>"
                 component_instructions.append(extra_instruction)
 
             instructions_guardrails += component_instructions
