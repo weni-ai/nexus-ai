@@ -28,7 +28,8 @@ from django.conf import settings
 from django.db.models import Count, Case, When, IntegerField
 from django.utils.dateparse import parse_date
 
-from nexus.logs.api.serializers import MessageDetailSerializer
+from nexus.paginations import CustomCursorPagination
+from nexus.logs.api.serializers import MessageDetailSerializer, InlineConversationSerializer
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.agents.models import AgentMessage, Team
 from nexus.agents.api.serializers import AgentMessageHistorySerializer, AgentMessageDetailSerializer
@@ -306,7 +307,6 @@ class RecentActivitiesViewset(
         return queryset
 
 from nexus.usecases.agents.agents import AgentUsecase
-from django.core.exceptions import ObjectDoesNotExist
 
 class MessageDetailViewSet(views.APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
@@ -392,3 +392,47 @@ class ConversationContextViewset(
             serializer = MessageDetailSerializer(messages, many=True)
 
             return Response(serializer.data)
+
+
+class InlineConversationsViewset(
+    ListModelMixin,
+    GenericViewSet
+):
+    serializer_class = InlineConversationSerializer
+    pagination_class = CustomCursorPagination
+
+    def get_paginator(self, *args, **kwargs):
+        paginator = super().get_paginator(*args, **kwargs)
+        paginator.page_size = 12
+        return paginator
+
+    def list(self, request, *args, **kwargs):
+        project_uuid = self.kwargs.get('project_uuid')
+
+        end = request.query_params.get('end')
+        start = request.query_params.get('start')
+        contact_urn = request.query_params.get('contact_urn')
+
+        if not all([end, start, contact_urn]):
+            return Response(
+                {
+                    "error": "Missing required parameters"
+                },
+                status=400
+            )
+
+        usecase = ListLogUsecase()
+        messages = usecase.list_last_inline_messages(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            start=start,
+            end=end
+        )
+
+        page = self.paginate_queryset(messages)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(messages, many=True)
+        return Response(serializer.data)
