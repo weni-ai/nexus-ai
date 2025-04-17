@@ -14,3 +14,4 @@ class Supervisor(models.Model):
     human_support_action_groups = models.JSONField(null=True, blank=True)
 
     components_prompt = models.TextField(null=True, blank=True)
+    components_human_support_prompt = models.TextField(null=True, blank=True)
