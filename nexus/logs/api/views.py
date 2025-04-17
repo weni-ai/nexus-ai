@@ -28,7 +28,7 @@ from django.conf import settings
 from django.db.models import Count, Case, When, IntegerField
 from django.utils.dateparse import parse_date
 
-from nexus.paginations import CustomCursorPagination
+from nexus.paginations import InlineConversationsCursorPagination
 from nexus.logs.api.serializers import MessageDetailSerializer, InlineConversationSerializer
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.agents.models import AgentMessage, Team
@@ -399,27 +399,29 @@ class InlineConversationsViewset(
     GenericViewSet
 ):
     serializer_class = InlineConversationSerializer
-    pagination_class = CustomCursorPagination
-
-    def get_paginator(self, *args, **kwargs):
-        paginator = super().get_paginator(*args, **kwargs)
-        paginator.page_size = 12
-        return paginator
+    pagination_class = InlineConversationsCursorPagination
+    permission_classes = [IsAuthenticated, ProjectPermission]
 
     def list(self, request, *args, **kwargs):
         project_uuid = self.kwargs.get('project_uuid')
 
-        end = request.query_params.get('end')
-        start = request.query_params.get('start')
+        end_date = request.query_params.get('end')
+        start_date = request.query_params.get('start')
         contact_urn = request.query_params.get('contact_urn')
 
-        if not all([end, start, contact_urn]):
+        if not all([end_date, start_date, contact_urn]):
             return Response(
                 {
                     "error": "Missing required parameters"
                 },
                 status=400
             )
+
+        try:
+            start = pendulum.from_format(start_date, 'DD-MM-YYYY').start_of('day')
+            end = pendulum.from_format(end_date, 'DD-MM-YYYY').end_of('day')
+        except ValueError:
+            return Response({"error": "Invalid date format. Use DD-MM-YYYY"}, status=400)
 
         usecase = ListLogUsecase()
         messages = usecase.list_last_inline_messages(
