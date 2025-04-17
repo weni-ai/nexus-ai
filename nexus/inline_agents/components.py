@@ -125,7 +125,12 @@ class Components:
 
 INSTRUCTIONS_SIMPLE_TEXT = []
 
-INSTRUCTIONS_QUICK_REPLIES = []
+INSTRUCTIONS_QUICK_REPLIES = [
+    "ALWAYS send the following sentence at the end of your response: USE THE '<components>QUICK_REPLIES</components>'",
+    "Use this component when you want to offer up to 3 quick reply options to the user.",
+    "Each quick reply option must have a maximum of 15 characters.",
+    "The main message must be a maximum of 1024 characters."
+]
 
 INSTRUCTIONS_CATALOG = [
    	"SEMPRE envie a seguinte frase ao final da sua resposta: '<components>CATALOG</components>'",
