@@ -94,7 +94,7 @@ class BedrockTeamAdapter(TeamAdapter):
             })
         }
         if use_components:
-            sessionState["promptSessionAttributes"]["format_components"] = Components.get_all_formats_string()
+            sessionState["promptSessionAttributes"]["format_components"] = Components().get_all_formats_string()
 
         return sessionState
 
