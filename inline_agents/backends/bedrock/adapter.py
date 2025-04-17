@@ -28,6 +28,7 @@ class BedrockTeamAdapter(TeamAdapter):
 
         project = Project.objects.get(uuid=project_uuid)
         business_rules = project.human_support_prompt
+        supervisor_instructions = list(instructions.values_list("instruction", flat=True))
 
         instruction = self._format_supervisor_instructions(
             instruction=supervisor["instruction"],
@@ -37,7 +38,7 @@ class BedrockTeamAdapter(TeamAdapter):
             supervisor_role=agent_data.role,
             supervisor_goal=agent_data.goal,
             supervisor_adjective=agent_data.personality,
-            supervisor_instructions=list(instructions.values_list("instruction", flat=True)),
+            supervisor_instructions=supervisor_instructions if supervisor_instructions else "",
             business_rules=business_rules if business_rules else "",
             project_id=project_uuid,
             contact_id=contact_urn
@@ -74,13 +75,6 @@ class BedrockTeamAdapter(TeamAdapter):
         for credential in agent_credentials:
             credentials[credential.key] = credential.decrypted_value
         return credentials
-
-    @classmethod
-    def _get_contact_fields(cls, project_uuid: str) -> str:
-        from nexus.projects.models import Project
-
-        project = Project.objects.get(uuid=project_uuid)
-        return project.contact_fields
 
     @classmethod
     def _get_session_id(cls, contact_urn: str, project_uuid: str) -> str:
@@ -181,6 +175,19 @@ class BedrockTeamAdapter(TeamAdapter):
         project_id: str,
         contact_id: str
     ) -> str:
+
+        instruction = instruction or ""
+        date_time_now = date_time_now or ""
+        contact_fields = contact_fields or ""
+        supervisor_name = supervisor_name or ""
+        supervisor_role = supervisor_role or ""
+        supervisor_goal = supervisor_goal or ""
+        supervisor_adjective = supervisor_adjective or ""
+        supervisor_instructions = supervisor_instructions or ""
+        business_rules = business_rules or ""
+        project_id = str(project_id) if project_id else ""
+        contact_id = str(contact_id) if contact_id else ""
+
         instruction = instruction.replace(
             "{{DATE_TIME_NOW}}", date_time_now
         ).replace(

@@ -91,6 +91,9 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         json_strings = marked_text.split('SPLIT_HERE')
         result = []
         for json_str in json_strings:
+            thought_text, json_str = self.get_json_strings_from_text(json_str)
+            if thought_text:
+                result.append(self.string_to_simple_text(thought_text))
             json_str = json_str.strip().strip('\n')
             json_str = self.fix_json_string(json_str)
             if json_str.startswith('{"msg":'):
@@ -117,3 +120,21 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
                 response.raise_for_status()
             except Exception as error:
                 raise exceptions.UnableToSendMessage(str(error))
+
+    def get_json_strings_from_text(self, text):
+        pattern = r'(.*?)\s*(\{[\s\S]*"msg"[\s\S]*\})'
+
+        match = re.search(pattern, text)
+        if match:
+            thought_text = match.group(1).strip()
+            json_text = match.group(2)
+            return thought_text, json_text
+        
+        return None, text
+
+    def string_to_simple_text(self, text):
+        return {
+            "msg": {
+                "text": text
+            }
+        }
