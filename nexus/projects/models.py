@@ -45,6 +45,7 @@ class Project(BaseModel, SoftDeleteModel):
     brain_on = models.BooleanField(default=False)
     indexer_database = models.CharField(max_length=15, choices=INDEXER_CHOICES, default=SENTENX)
     agents_backend = models.CharField(max_length=100, choices=AGENTS_BACKEND_CHOICES, default=default_backend.name)
+    use_components = models.BooleanField(default=False)
 
     def __str__(self):
         return f'{self.uuid} - Project: {self.name} - Org: {self.org.name}'

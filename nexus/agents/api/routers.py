@@ -26,6 +26,7 @@ from nexus.inline_agents.api.views import VtexAppAgentsView as VtexAppInlineAgen
 from nexus.inline_agents.api.views import VtexAppOfficialAgentsView as VtexAppOfficialInlineAgentsView
 from nexus.inline_agents.api.views import VTexAppTeamView as VtexAppInlineTeamView
 from nexus.inline_agents.api.views import VtexAppProjectCredentialsView as VtexAppInlineProjectCredentialsView
+from nexus.inline_agents.api.views import ProjectComponentsView as InlineProjectComponentsView
 
 
 urlpatterns = [
@@ -43,4 +44,5 @@ urlpatterns = [
     path('project/<project_uuid>/credentials/<str:agent_uuid>', InlineProjectCredentialsView.as_view(), name="project-credentials-update"),
     path('project/<project_uuid>/app-credentials', VtexAppInlineProjectCredentialsView.as_view(), name="vtex-project-credentials"),
     path('project/<project_uuid>/rationale', RationaleView.as_view(), name="project-rationale"),
+    path('project/<project_uuid>/components', InlineProjectComponentsView.as_view(), name="project-components"),
 ]
