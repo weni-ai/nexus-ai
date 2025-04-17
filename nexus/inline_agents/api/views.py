@@ -358,3 +358,30 @@ class VtexAppProjectCredentialsView(APIView):
             "message": "Credentials created successfully",
             "created_credentials": created_credentials
         })
+
+
+class ProjectComponentsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, project_uuid):
+        use_components = request.data.get('use_components')
+
+        if use_components is None:
+            return Response(
+                {"error": "use_components field is required"},
+                status=400
+            )
+
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+            project.use_components = use_components
+            project.save()
+            return Response({
+                "message": "Project updated successfully",
+                "use_components": use_components
+            })
+        except Project.DoesNotExist:
+            return Response(
+                {"error": "Project not found"},
+                status=404
+            )
