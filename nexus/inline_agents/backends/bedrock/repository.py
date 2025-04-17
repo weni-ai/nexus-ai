@@ -18,7 +18,7 @@ class BedrockSupervisorRepository():
 
         supervisor_dict = {
             "prompt_override_configuration": supervisor.prompt_override_configuration,
-            "instruction": supervisor.instruction,
+            "instruction": cls._get_supervisor_instructions(project=project, supervisor=supervisor),
             "action_groups": cls._get_action_groups(project=project, supervisor=supervisor),
             "foundation_model": supervisor.foundation_model,
             "knowledge_bases": supervisor.knowledge_bases,
@@ -41,3 +41,12 @@ class BedrockSupervisorRepository():
             return supervisor.action_groups
 
         return supervisor.human_support_action_groups
+
+    @classmethod
+    def _get_supervisor_instructions(cls, project, supervisor) -> str:
+        if project.use_components:
+            return supervisor.components_prompt
+        elif project.human_support:
+            return supervisor.human_support_prompt
+        else:
+            return supervisor.instruction

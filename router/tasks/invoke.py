@@ -108,7 +108,7 @@ def start_inline_agents(
             }
         )
 
-    project_use_components = message.project_uuid in settings.PROJECT_COMPONENTS
+    project_use_components = project.use_components
 
     try:
         # Stream supervisor response
@@ -132,7 +132,8 @@ def start_inline_agents(
             sanitized_urn=message.sanitized_urn,
             language=language,
             user_email=user_email,
-            use_components=project.use_components
+            use_components=project.use_components,
+            contact_fields=message.contact_fields_as_json
         )
 
         redis_client.delete(pending_response_key)
