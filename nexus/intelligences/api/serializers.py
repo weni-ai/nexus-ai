@@ -157,6 +157,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 return None
 
         try:
+            # TODO: Change to Project data after inline update.
             team = Team.objects.get(project__uuid=project_uuid)
             return {
                 'human_support': team.human_support,
@@ -175,12 +176,17 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
         if team_data and project_uuid:
             try:
                 team = Team.objects.get(project__uuid=project_uuid)
+                project = team.project
                 old_human_support = team.human_support
 
                 # Update team data
                 team.human_support = team_data.get('human_support', team.human_support)
                 team.human_support_prompt = team_data.get('human_support_prompt', team.human_support_prompt)
                 team.save()
+
+                project.human_support = team.human_support
+                project.human_support_prompt = team.human_support_prompt
+                project.save()
 
                 # Only trigger add/rollback if human_support boolean changed
                 if old_human_support != team.human_support:

@@ -28,6 +28,7 @@ from nexus.usecases.agents import (
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.permissions import has_project_permission
+from nexus.projects.models import Project
 
 
 class InternalCommunicationPermission(BasePermission):
@@ -821,7 +822,11 @@ class RationaleView(APIView):
                 "rationale": rationale
             })
         except Team.DoesNotExist:
-            return Response({"error": "Team not found"}, status=404)
+            project = Project.objects.get(uuid=project_uuid)
+            rationale = project.rationale_switch
+            return Response({
+                "rationale": rationale
+            })
 
     def patch(self, request, project_uuid):
 
@@ -834,6 +839,10 @@ class RationaleView(APIView):
 
             team.metadata['rationale'] = rationale
             team.save(update_fields=['metadata'])
+
+            project = Project.objects.get(uuid=project_uuid)
+            project.rationale_switch = rationale
+            project.save(update_fields=['rationale_switch'])
 
             return Response({
                 "message": "Rationale updated successfully",
