@@ -363,6 +363,18 @@ class VtexAppProjectCredentialsView(APIView):
 class ProjectComponentsView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def get(self, request, project_uuid):
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+            return Response({
+                "use_components": project.use_components
+            })
+        except Project.DoesNotExist:
+            return Response(
+                {"error": "Project not found"},
+                status=404
+            )
+
     def patch(self, request, project_uuid):
         use_components = request.data.get('use_components')
 
