@@ -32,7 +32,8 @@ class UpdateAgentUseCase(ToolsUseCase):
 
     def update_credentials(self, agent: Agent, project: Project, credentials: Dict):
         if not credentials:
-            agent.inline_credentials.all().delete()
+            if hasattr(agent, 'inline_credentials'):
+                agent.inline_credentials.all().delete()
             return
 
         existing_credentials = {
