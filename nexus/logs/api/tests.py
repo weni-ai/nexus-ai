@@ -18,6 +18,7 @@ from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.intelligences.create import create_base_brain_structure
 from nexus.usecases.users.tests.user_factory import UserFactory
+from nexus.usecases.inline_agents.tests.inline_factories import InlineAgentMessageFactory
 
 from nexus.logs.models import MessageLog, Message
 from nexus.logs.api.serializers import MessageLogSerializer
@@ -26,7 +27,8 @@ from nexus.logs.api.views import (
     LogsViewset,
     RecentActivitiesViewset,
     MessageHistoryViewset,
-    TagPercentageViewSet
+    TagPercentageViewSet,
+    InlineConversationsViewset
 )
 
 
@@ -574,3 +576,215 @@ class MessageDetailViewSetTestCase(TestCase):
         self.assertEquals(content.get("status"), "F")
         self.assertEquals(content.get("actions_uuid"), str(action.uuid))
         self.assertEquals(content.get("actions_type"), str(action.name))
+
+
+class InlineConversationsViewsetTestCase(TestCase):
+    def setUp(self) -> None:
+        self.factory = APIRequestFactory()
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+
+        # Create messages with different timestamps
+        with freeze_time(str(pendulum.now().subtract(days=2))):
+            self.message1 = InlineAgentMessageFactory(
+                project=self.project,
+                contact_urn="tel:123456",
+                source_type="user",
+                source="test"
+            )
+
+        with freeze_time(str(pendulum.now().subtract(days=1))):
+            self.message2 = InlineAgentMessageFactory(
+                project=self.project,
+                contact_urn="tel:123456",
+                source_type="agent",
+                source="test"
+            )
+
+        with freeze_time(str(pendulum.now())):
+            self.message3 = InlineAgentMessageFactory(
+                project=self.project,
+                contact_urn="tel:123456",
+                source_type="user",
+                source="test"
+            )
+
+        # Create a message with different contact_urn
+        self.message4 = InlineAgentMessageFactory(
+            project=self.project,
+            contact_urn="tel:654321",
+            source_type="user",
+            source="test"
+        )
+
+        # Create a message for a different project
+        self.other_project = ProjectFactory()
+        self.message5 = InlineAgentMessageFactory(
+            project=self.other_project,
+            contact_urn="tel:123456",
+            source_type="user",
+            source="test"
+        )
+
+        # Set date range for testing
+        self.start_date = pendulum.now().subtract(days=3).to_date_string()
+        self.end_date = pendulum.now().add(days=1).to_date_string()
+
+    def test_list_inline_conversations(self):
+        """Test that the view returns the correct inline messages for a contact"""
+        # Format dates as DD-MM-YYYY
+        start_date = pendulum.now().subtract(days=3).format('DD-MM-YYYY')
+        end_date = pendulum.now().add(days=1).format('DD-MM-YYYY')
+
+        request = self.factory.get(
+            f"api/{self.project.uuid}/inline_conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = InlineConversationsViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(content.get("results")), 3)  # Should return 3 messages for tel:123456
+
+        # Check that the messages are in the correct order (newest first)
+        results = content.get("results")
+        self.assertEqual(results[0].get("text"), self.message3.text)
+        self.assertEqual(results[1].get("text"), self.message2.text)
+        self.assertEqual(results[2].get("text"), self.message1.text)
+
+        # Check pagination
+        self.assertIn("next", content)
+        self.assertIn("previous", content)
+
+    def test_list_inline_conversations_with_different_contact(self):
+        """Test that the view returns the correct inline messages for a different contact"""
+        # Format dates as DD-MM-YYYY
+        start_date = pendulum.now().subtract(days=3).format('DD-MM-YYYY')
+        end_date = pendulum.now().add(days=1).format('DD-MM-YYYY')
+
+        request = self.factory.get(
+            f"api/{self.project.uuid}/inline_conversations/?contact_urn=tel:654321&start={start_date}&end={end_date}"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = InlineConversationsViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(content.get("results")), 1)  # Should return 1 message for tel:654321
+        self.assertEqual(content.get("results")[0].get("text"), self.message4.text)
+
+    def test_list_inline_conversations_missing_parameters(self):
+        """Test that the view returns an error when required parameters are missing"""
+        # Format dates as DD-MM-YYYY
+        start_date = pendulum.now().subtract(days=3).format('DD-MM-YYYY')
+        end_date = pendulum.now().add(days=1).format('DD-MM-YYYY')
+
+        # Missing contact_urn
+        request = self.factory.get(
+            f"api/{self.project.uuid}/conversations/?start={start_date}&end={end_date}"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = InlineConversationsViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(content.get("error"), "Missing required parameters")
+
+        # Missing start date
+        request = self.factory.get(
+            f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&end={end_date}"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = InlineConversationsViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(content.get("error"), "Missing required parameters")
+
+        # Missing end date
+        request = self.factory.get(
+            f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&start={start_date}"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = InlineConversationsViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(content.get("error"), "Missing required parameters")
+
+    def test_list_inline_conversations_unauthorized(self):
+        """Test that the view requires authentication"""
+        # Format dates as DD-MM-YYYY
+        start_date = pendulum.now().subtract(days=3).format('DD-MM-YYYY')
+        end_date = pendulum.now().add(days=1).format('DD-MM-YYYY')
+
+        request = self.factory.get(
+            f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
+        )
+
+        response = InlineConversationsViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+        self.assertEqual(response.status_code, 401)
+
+    def test_list_inline_conversations_wrong_project(self):
+        """Test that the view only returns messages for the specified project"""
+        # Format dates as DD-MM-YYYY
+        start_date = pendulum.now().subtract(days=3).format('DD-MM-YYYY')
+        end_date = pendulum.now().add(days=1).format('DD-MM-YYYY')
+
+        request = self.factory.get(
+            f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = InlineConversationsViewset.as_view({'get': 'list'})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+
+        response.render()
+        content = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+
+        # Check that we got the correct number of results (should be 3 for this project)
+        results = content.get("results")
+        self.assertEqual(len(results), 3)
+
+        # Verify message5 is not in the results
+        for result in results:
+            self.assertNotEqual(result.get("text"), self.message5.text)
