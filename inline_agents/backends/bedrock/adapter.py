@@ -102,8 +102,8 @@ class BedrockTeamAdapter(TeamAdapter):
         sessionState = {}
         if credentials:
             sessionState["sessionAttributes"] = {"credentials": json.dumps(credentials, default=str)}
-        if use_components:
-            sessionState["promptSessionAttributes"]["format_components"] = Components().get_all_formats_string()
+        # if use_components:
+        #     sessionState["promptSessionAttributes"]["format_components"] = Components().get_all_formats_string()
         return sessionState
 
     @classmethod
