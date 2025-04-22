@@ -29,6 +29,7 @@ class BedrockTeamAdapter(TeamAdapter):
         project = Project.objects.get(uuid=project_uuid)
         business_rules = project.human_support_prompt
         supervisor_instructions = list(instructions.values_list("instruction", flat=True))
+        supervisor_instructions = "\n".join(supervisor_instructions)
 
         instruction = self._format_supervisor_instructions(
             instruction=supervisor["instruction"],
