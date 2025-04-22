@@ -433,8 +433,12 @@ class InlineConversationsViewset(
 
         page = self.paginate_queryset(messages)
         if page is not None:
+            # Reordenar os resultados dentro da página
+            page = sorted(page, key=lambda x: x.created_at)
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
 
+        # Reordenar os resultados se não houver paginação
+        messages = sorted(messages, key=lambda x: x.created_at)
         serializer = self.get_serializer(messages, many=True)
         return Response(serializer.data)

@@ -10,6 +10,6 @@ class CustomCursorPagination(CursorPagination):
 
 class InlineConversationsCursorPagination(CursorPagination):
     page_size = 12
-    ordering = 'created_at'
+    ordering = '-created_at'
     page_size_query_param = 'page_size'
     cursor_query_param = 'cursor'
