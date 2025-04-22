@@ -708,7 +708,7 @@ class AgentTracesView(
 
         usecase = AgentUsecase()
         try:
-            trace_data = usecase.get_traces(project_uuid, log_id)
+            trace_data = usecase.get_inline_traces(project_uuid, log_id)
             return Response(trace_data)
         except Exception as e:
             return Response({"error": str(e)}, status=500)

@@ -57,6 +57,6 @@ class ListLogUsecase:
             project__uuid=project_uuid,
             contact_urn=contact_urn,
             created_at__range=(start, end)
-        ).order_by("-created_at")
+        ).order_by("created_at")
 
         return messages
