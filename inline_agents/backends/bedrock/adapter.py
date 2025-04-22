@@ -32,9 +32,12 @@ class BedrockTeamAdapter(TeamAdapter):
         supervisor_instructions = list(instructions.values_list("instruction", flat=True))
         supervisor_instructions = "\n".join(supervisor_instructions)
 
+        time_now = pendulum.now("America/Sao_Paulo")
+        llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
+
         instruction = self._format_supervisor_instructions(
             instruction=supervisor["instruction"],
-            date_time_now=pendulum.now("America/Sao_Paulo").isoformat(),
+            date_time_now=llm_formatted_time,
             contact_fields=contact_fields,
             supervisor_name=agent_data.name,
             supervisor_role=agent_data.role,
