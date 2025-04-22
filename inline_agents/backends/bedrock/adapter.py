@@ -5,7 +5,7 @@ from inline_agents.adapter import TeamAdapter
 
 from django.utils.text import slugify
 from nexus.inline_agents.components import Components
-from nexus.inline_agents.models import AgentCredential
+from nexus.inline_agents.models import AgentCredential, Guardrail
 
 
 class BedrockTeamAdapter(TeamAdapter):
@@ -20,6 +20,7 @@ class BedrockTeamAdapter(TeamAdapter):
         use_components: bool = False,
         contact_fields: str = ""
     ) -> dict:
+        # TODO: change self to cls
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
         from nexus.projects.models import Project
         content_base = get_default_content_base_by_project(project_uuid)
@@ -65,6 +66,7 @@ class BedrockTeamAdapter(TeamAdapter):
             "inputText": input_text,
             "collaborators": self._get_collaborators(agents),
             "collaboratorConfigurations": self._get_collaborator_configurations(agents),
+            "guardrailConfiguration": self._get_guardrails()
         }
 
         return external_team
@@ -211,3 +213,11 @@ class BedrockTeamAdapter(TeamAdapter):
             "{{CONTACT_ID}}", contact_id
         )
         return instruction
+
+    @classmethod
+    def _get_guardrails(cls) -> list[dict]:
+        guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
+        return {
+            'guardrailIdentifier': guardrails.identifier,
+            'guardrailVersion': str(guardrails.version)
+        }
