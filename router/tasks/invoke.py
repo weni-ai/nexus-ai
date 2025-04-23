@@ -145,7 +145,8 @@ def start_inline_agents(
             rationale_switch=project.rationale_switch,
             sanitized_urn=message.sanitized_urn,
             language=language,
-            user_email=user_email
+            user_email=user_email,
+            content_base=content_base
         )
 
         redis_client.delete(pending_response_key)
