@@ -112,7 +112,7 @@ class ToolsUseCase:
         }
         skill = {
             "actionGroupExecutor": action_group_executor,
-            "actionGroupName": "action_group",
+            "actionGroupName": tool_name,
             "functionSchema": {
                 "functions": [function]
             }
