@@ -159,11 +159,11 @@ class RationaleObserver(EventObserver):
                     if self._is_valid_rationale(improved_text):
                         self.rationale_history.append(improved_text)
                         self._send_rationale_message(
-                            improved_text,
-                            contact_urn,
-                            project_uuid,
-                            send_message_callback,
-                            session_id
+                            text=improved_text,
+                            contact_urn=contact_urn,
+                            project_uuid=project_uuid,
+                            session_id=session_id,
+                            send_message_callback=send_message_callback
                         )
 
             # Handle first rationale if it exists and we have caller chain info
@@ -178,11 +178,11 @@ class RationaleObserver(EventObserver):
                 if self._is_valid_rationale(improved_text):
                     self.rationale_history.append(improved_text)
                     self._send_rationale_message(
-                        improved_text,
-                        contact_urn,
-                        project_uuid,
-                        send_message_callback,
-                        session_id
+                        text=improved_text,
+                        contact_urn=contact_urn,
+                        project_uuid=project_uuid,
+                        session_id=session_id,
+                        send_message_callback=send_message_callback
                     )
                 self.first_rationale_text = None
 
