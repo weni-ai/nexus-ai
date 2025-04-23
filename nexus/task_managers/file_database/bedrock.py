@@ -3,7 +3,6 @@ import uuid
 import json
 import time
 from typing import TYPE_CHECKING
-
 from io import BytesIO
 
 from dataclasses import dataclass
@@ -24,7 +23,7 @@ from nexus.task_managers.file_database.file_database import FileDataBase, FileRe
 
 from nexus.agents.models import Agent, Credential, Team
 
-from nexus.agents.components import get_all_formats, get_all_formats_list
+from nexus.agents.components import get_all_formats_list
 
 if TYPE_CHECKING:
     from router.entities import Message
@@ -580,11 +579,14 @@ class BedrockFileDatabase(FileDataBase):
 
         sessionState["sessionAttributes"] = {"credentials": json.dumps(credentials, default=str)}
 
+        time_now = pendulum.now("America/Sao_Paulo")
+        llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
+
         sessionState["promptSessionAttributes"] = {
             # "format_components": get_all_formats(),
             "contact_urn": message.contact_urn,
             "contact_fields": message.contact_fields_as_json,
-            "date_time_now": pendulum.now("America/Sao_Paulo").isoformat(),
+            "date_time_now": llm_formatted_time,
             "project_id": message.project_uuid,
             "specific_personality": json.dumps({
                 "occupation": agent.role,
@@ -601,13 +603,13 @@ class BedrockFileDatabase(FileDataBase):
             })
 
         if team.human_support:
-            sessionState["promptSessionAttributes"] = {
+            sessionState["promptSessionAttributes"].update({
                 "human_support": json.dumps({
                     "project_id": message.project_uuid,
                     "contact_id": message.contact_urn,
                     "business_rules": team.human_support_prompt
                 })
-            }
+            })
 
         try:
             response = self.bedrock_agent_runtime.invoke_agent(
