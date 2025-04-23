@@ -28,7 +28,8 @@ from django.conf import settings
 from django.db.models import Count, Case, When, IntegerField
 from django.utils.dateparse import parse_date
 
-from nexus.logs.api.serializers import MessageDetailSerializer
+from nexus.paginations import InlineConversationsCursorPagination
+from nexus.logs.api.serializers import MessageDetailSerializer, InlineConversationSerializer
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.agents.models import AgentMessage, Team
 from nexus.agents.api.serializers import AgentMessageHistorySerializer, AgentMessageDetailSerializer
@@ -306,7 +307,6 @@ class RecentActivitiesViewset(
         return queryset
 
 from nexus.usecases.agents.agents import AgentUsecase
-from django.core.exceptions import ObjectDoesNotExist
 
 class MessageDetailViewSet(views.APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
@@ -392,3 +392,53 @@ class ConversationContextViewset(
             serializer = MessageDetailSerializer(messages, many=True)
 
             return Response(serializer.data)
+
+
+class InlineConversationsViewset(
+    ListModelMixin,
+    GenericViewSet
+):
+    serializer_class = InlineConversationSerializer
+    pagination_class = InlineConversationsCursorPagination
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def list(self, request, *args, **kwargs):
+        project_uuid = self.kwargs.get('project_uuid')
+
+        end_date = request.query_params.get('end')
+        start_date = request.query_params.get('start')
+        contact_urn = request.query_params.get('contact_urn')
+
+        if not all([end_date, start_date, contact_urn]):
+            return Response(
+                {
+                    "error": "Missing required parameters"
+                },
+                status=400
+            )
+
+        try:
+            start = pendulum.from_format(start_date, 'DD-MM-YYYY').start_of('day')
+            end = pendulum.from_format(end_date, 'DD-MM-YYYY').end_of('day')
+        except ValueError:
+            return Response({"error": "Invalid date format. Use DD-MM-YYYY"}, status=400)
+
+        usecase = ListLogUsecase()
+        messages = usecase.list_last_inline_messages(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            start=start,
+            end=end
+        )
+
+        page = self.paginate_queryset(messages)
+        if page is not None:
+            # Reordenar os resultados dentro da página
+            page = sorted(page, key=lambda x: x.created_at)
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        # Reordenar os resultados se não houver paginação
+        messages = sorted(messages, key=lambda x: x.created_at)
+        serializer = self.get_serializer(messages, many=True)
+        return Response(serializer.data)

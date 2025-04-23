@@ -6,13 +6,17 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = IntegratedAgent
-        fields = ['uuid', 'name', 'skills', 'is_official', 'description']
+        fields = ['uuid', 'id', 'name', 'skills', 'is_official', 'description']
 
     uuid = serializers.UUIDField(source='agent.uuid')
     name = serializers.SerializerMethodField('get_name')
+    id = serializers.SerializerMethodField('get_id')
     skills = serializers.SerializerMethodField("get_skills")
     description = serializers.SerializerMethodField("get_description")
     is_official = serializers.SerializerMethodField("get_is_official")
+
+    def get_id(self, obj):
+        return obj.agent.slug
 
     def get_name(self, obj):
         return obj.agent.name
@@ -63,10 +67,17 @@ class AgentSerializer(serializers.ModelSerializer):
         active_agent = IntegratedAgent.objects.filter(project_id=project_uuid, agent=obj)
         return active_agent.exists()
 
-
     def get_credentials(self, obj):
-        # TODO: Implement credentials
-        return []
+        credentials = obj.agentcredential_set.all().distinct("key")
+        return [
+            {
+                "name": credential.key,
+                "label": credential.label,
+                "placeholder": credential.placeholder,
+                "is_confidential": credential.is_confidential,
+            }
+            for credential in credentials
+        ]
 
 
 class ProjectCredentialsListSerializer(serializers.ModelSerializer):

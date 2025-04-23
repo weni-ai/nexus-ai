@@ -1,6 +1,10 @@
+from datetime import datetime
+
 from django.db.models import QuerySet
 from django.core.exceptions import FieldError
+
 from nexus.logs.models import MessageLog
+from nexus.inline_agents.models import InlineAgentMessage
 
 
 class ListLogUsecase:
@@ -41,3 +45,18 @@ class ListLogUsecase:
         logs = list(logs)[::-1]
 
         return logs
+
+    def list_last_inline_messages(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        start: datetime,
+        end: datetime,
+    ):
+        messages = InlineAgentMessage.objects.filter(
+            project__uuid=project_uuid,
+            contact_urn=contact_urn,
+            created_at__range=(start, end)
+        ).order_by("created_at")
+
+        return messages

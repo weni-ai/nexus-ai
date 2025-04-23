@@ -47,11 +47,11 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             existing_credential = AgentCredential.objects.filter(
                 project=project,
                 key=key
-            ).exists()
+            )
 
             credential_value = encrypt_value(credential.get('value')) if is_confidential else credential.get('value')
 
-            if existing_credential:
+            if existing_credential.exists():
                 existing_credential = existing_credential.first()
                 print(f"[+ 🧠 Updating existing credential {key} +]")
                 existing_credential.label = credential.get('label', key)
