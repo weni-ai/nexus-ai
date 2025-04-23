@@ -18,11 +18,9 @@ from nexus.logs.observers import (
 from nexus.actions.observers import ActionsObserver
 from nexus.projects.observer import ProjectObserver
 
-from router.tasks.observer import (
-    SummaryTracesObserver,
-    RationaleObserver,
-    SaveTracesObserver
-)
+from router.traces_observers.rationale_observer import RationaleObserver
+from router.traces_observers.summary import SummaryTracesObserver
+from router.traces_observers.save_traces import SaveTracesObserver
 
 event_manager = EventManager()
 
@@ -92,10 +90,16 @@ event_manager.subscribe(
 )
 
 event_manager.subscribe(
-    event="inline_observers",
+    event="inline_trace_observers",
     observer=[
-        SummaryTracesObserver(),
         RationaleObserver(),
+        # SummaryTracesObserver()
+    ]
+)
+
+event_manager.subscribe(
+    event="save_inline_trace_events",
+    observer=[
         SaveTracesObserver()
     ]
 )

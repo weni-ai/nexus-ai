@@ -155,23 +155,12 @@ class ProjectsUseCase:
                 consumer_msg=auth_consumer_msg
             )
 
-        supervisor_name = slugify(f"{project.name}-{project.uuid}-supervisor")
-        supervisor_description = f"Supervisor Agent for {project.name} {project.uuid}"
-
-        # TODO: Update deve atualizar esse dado
-        supervisor_instructions = settings.AWS_BEDROCK_SUPERVISOR_INSTRUCTIONS
-
         agent_valid_users = settings.AGENT_VALID_USERS
         agent_valid_orgs = settings.AGENT_VALID_ORGS
 
         if project.created_by.email in agent_valid_users or str(org.uuid) in agent_valid_orgs:
-            self.create_multi_agents_base(
-                str(project.uuid),
-                supervisor_name=supervisor_name,
-                supervisor_description=supervisor_description,
-                supervisor_instructions=supervisor_instructions,
-                user=user,
-            )
+            project.inline_agent_switch = True
+            project.save()
 
         return project
 

@@ -1,3 +1,4 @@
+import os
 import uuid
 import json
 import time
@@ -1074,6 +1075,11 @@ class BedrockFileDatabase(FileDataBase):
         )
 
         return _lambda_iam_role["Role"]["Arn"]
+
+    def upload_inline_traces(self, data, key):
+        custom_bucket = os.getenv('AWS_BEDROCK_INLINE_TRACES_BUCKET')
+        bytes_stream = BytesIO(data.encode('utf-8'))
+        self.s3_client.upload_fileobj(bytes_stream, custom_bucket, key)
 
     def upload_traces(self, data, key):
         bytes_stream = BytesIO(data.encode('utf-8'))

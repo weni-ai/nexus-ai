@@ -1,50 +1,54 @@
 from typing import Dict, List
 
 from celery.exceptions import TaskRevokedError
-
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
-
-from rest_framework.viewsets import ModelViewSet
-from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.viewsets import ModelViewSet
 
+from nexus.actions.api.serializers import (
+    FlowSerializer,
+    TemplateActionSerializer,
+)
 from nexus.actions.models import Flow, TemplateAction
-from nexus.actions.api.serializers import FlowSerializer, TemplateActionSerializer
-
+from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.orgs.permissions import is_super_user
+from nexus.projects.exceptions import ProjectAuthorizationDenied
+from nexus.projects.permissions import has_project_permission
 from nexus.usecases import projects
-from nexus.usecases.actions.list import ListFlowsUseCase, ListTemplateActionUseCase
 from nexus.usecases.actions.create import (
     CreateFlowDTO,
     CreateFlowsUseCase,
+    CreateTemplateActionUseCase,
     GenerateFlowNameUseCase,
-    CreateTemplateActionUseCase
 )
 from nexus.usecases.actions.delete import (
-    DeleteFlowsUseCase,
     DeleteFlowDTO,
-    delete_template_action
+    DeleteFlowsUseCase,
+    delete_template_action,
+)
+from nexus.usecases.actions.list import (
+    ListFlowsUseCase,
+    ListTemplateActionUseCase,
+)
+from nexus.usecases.actions.retrieve import (
+    FlowDoesNotExist,
+    RetrieveFlowsUseCase,
 )
 from nexus.usecases.actions.update import (
-    UpdateFlowsUseCase,
     UpdateActionFlowDTO,
+    UpdateFlowsUseCase,
     UpdateTemplateActionDTO,
-    UpdateTemplateActionUseCase
+    UpdateTemplateActionUseCase,
 )
-from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase, FlowDoesNotExist
-from nexus.usecases.intelligences.exceptions import IntelligencePermissionDenied
-
-from nexus.authentication import AUTHENTICATION_CLASSES
-from nexus.orgs.permissions import is_super_user
-from nexus.projects.permissions import has_project_permission
-from nexus.projects.exceptions import ProjectAuthorizationDenied
-
+from nexus.usecases.intelligences.exceptions import (
+    IntelligencePermissionDenied,
+)
 from router.entities import Message as UserMessage
-from router.tasks.tasks import (
-    start_route,
-    start_multi_agents
-)
+from router.tasks.invoke import start_inline_agents
+from router.tasks.tasks import start_route
 
 
 class SearchFlowView(APIView):
@@ -261,10 +265,9 @@ class MessagePreviewView(APIView):
                 attachments=data.get("attachments", []),
                 metadata=data.get("metadata", {})
             )
-            if project.is_multi_agent:
-                print("[+ Starting Agent Builder 2.0 +]")
-                language = data.get("language", "en")
-                task = start_multi_agents.delay(message.dict(), preview=True, language=language, user_email=request.user.email)
+            if project.inline_agent_switch:
+                print("[+ Starting Inline Agent +]")
+                task = start_inline_agents.delay(message.dict(), preview=True, user_email=request.user.email)
                 response = task.wait()
             else:
                 task = start_route.delay(message.__dict__, preview=True)

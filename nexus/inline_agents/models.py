@@ -61,6 +61,23 @@ class Version(models.Model):
     created_on = models.DateTimeField(auto_now_add=True)
 
 
+class InlineAgentMessage(models.Model):
+    TRACES_BASE_PATH = "traces"
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    uuid = models.UUIDField(default=uuid4, editable=True)
+    text = models.TextField()
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_agent_messages")
+    session_id = models.CharField(max_length=255)
+    contact_urn = models.CharField(max_length=255)
+    source_type = models.CharField(max_length=255)
+    source = models.CharField(max_length=255)
+
+    @property
+    def trace_path(self):
+        return f"{self.TRACES_BASE_PATH}/{self.project.uuid}/{self.uuid}.jsonl"
+
+
 class AgentCredential(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_credentials")
     key = models.CharField(max_length=255, null=True)
