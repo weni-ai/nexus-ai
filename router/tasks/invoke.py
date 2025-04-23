@@ -15,7 +15,6 @@ from router.dispatcher import dispatch
 from router.entities import (
     message_factory,
 )
-from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
 from .actions_client import get_action_clients
 
@@ -32,31 +31,18 @@ def start_inline_agents(
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
 
-    # Handle text and attachments properly
-    text = message.get("text", "")
-    attachments = message.get("attachments", [])
-
-    if attachments:
-        # If there's text, add a space before attachments
-        if text:
-            text = f"{text} {attachments}"
-        else:
-            # If there's no text, just use attachments as text
-            text = str(attachments)
-
-    # Update the message with the processed text
-    message['text'] = text
-
     # TODO: Logs
     message = message_factory(
         project_uuid=message.get("project_uuid"),
-        text=text,
+        text=message.get("text"),
         contact_urn=message.get("contact_urn"),
         metadata=message.get("metadata"),
-        attachments=attachments,
+        attachments=message.get("attachments"),
         msg_event=message.get("msg_event"),
         contact_fields=message.get("contact_fields", {}),
     )
+
+    print(f"[DEBUG] Message: {message}")
 
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
@@ -85,7 +71,6 @@ def start_inline_agents(
     redis_client.set(pending_task_key, self.request.id)
 
     project = Project.objects.get(uuid=message.project_uuid)
-    content_base = get_default_content_base_by_project(message.project_uuid)
 
     # Check for pending responses
     pending_response_key = f"response:{message.contact_urn}"
@@ -110,6 +95,7 @@ def start_inline_agents(
     # Store the current task ID in Redis
     redis_client.set(pending_task_key, self.request.id)
 
+    print(f"[DEBUG] Email sent: {user_email}")
     if user_email:
         # Send initial status through WebSocket
         send_preview_message_to_websocket(
@@ -122,7 +108,7 @@ def start_inline_agents(
             }
         )
 
-    project_use_components = message.project_uuid in settings.PROJECT_COMPONENTS
+    project_use_components = project.use_components
 
     try:
         # Stream supervisor response
@@ -146,7 +132,8 @@ def start_inline_agents(
             sanitized_urn=message.sanitized_urn,
             language=language,
             user_email=user_email,
-            content_base=content_base
+            use_components=project.use_components,
+            contact_fields=message.contact_fields_as_json
         )
 
         redis_client.delete(pending_response_key)

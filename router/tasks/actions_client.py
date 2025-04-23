@@ -8,7 +8,7 @@ from router.clients.flows.http.send_message import (
     SendMessageHTTPClient,
     WhatsAppBroadcastHTTPClient,
 )
-from router.clients.preview.simulator.broadcast import SimulateBroadcast
+from router.clients.preview.simulator.broadcast import SimulateBroadcast, SimulateWhatsAppBroadcastHTTPClient
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
 
 
@@ -22,15 +22,25 @@ def get_action_clients(preview: bool = False, multi_agents: bool = False, projec
                 'FLOWS_INTERNAL_TOKEN'
             )
         )
-        broadcast = SimulateBroadcast(
-            os.environ.get(
-                'FLOWS_REST_ENDPOINT'
-            ),
-            os.environ.get(
-                'FLOWS_INTERNAL_TOKEN'
-            ),
-            get_file_info
-        )
+        if project_use_components:
+            broadcast = SimulateWhatsAppBroadcastHTTPClient(
+                os.environ.get(
+                    'FLOWS_REST_ENDPOINT'
+                ),
+                os.environ.get(
+                    'FLOWS_INTERNAL_TOKEN'
+                )
+            )
+        else:
+            broadcast = SimulateBroadcast(
+                os.environ.get(
+                    'FLOWS_REST_ENDPOINT'
+                ),
+                os.environ.get(
+                    'FLOWS_INTERNAL_TOKEN'
+                ),
+                get_file_info
+            )
         return broadcast, flow_start
 
     if multi_agents and settings.AGENT_USE_COMPONENTS or project_use_components:
