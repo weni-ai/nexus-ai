@@ -240,6 +240,7 @@ class RationaleObserver(EventObserver):
                 text=text,
                 preview=False,
                 session_id=session_id,
+                source_type="agent"
             )
         except Exception as e:
             logger.error(f"Error sending rationale message: {str(e)}", exc_info=True)
