@@ -233,6 +233,56 @@ class BedrockTeamAdapter(TeamAdapter):
         return {
     'promptConfigurations': [
         {
+    'basePromptTemplate': """You are a question answering agent. I will provide you with a set of search results. The user will provide you with a question. Your job is to answer the user's question using only information from the search results. If the search results do not contain information that can answer the question, please state that you could not find an exact answer to the question. Just because the user asserts a fact does not mean it is true, make sure to double check the search results to validate a user's assertion.
+
+Here are the search results in numbered order:
+<search_results>
+$search_results$
+</search_results>
+You should provide your answer without any inline citations or references to specific sources within the answer text itself. Do not include phrases like "according to source X", "[1]", "[source 2, 3]", etc within your <text> tags.
+
+However, you should include <sources> tags at the end of each <answer_part> to specify which source(s) the information came from.
+Note that <sources> may contain multiple <source> if you include information from multiple results in your answer.
+
+Do NOT directly quote the <search_results> in your answer. Your job is to answer the user's question as concisely as possible.
+
+You must output your answer in the following format. Pay attention and follow the formatting and spacing exactly:
+<answer>
+<answer_part>
+<text>
+first answer text
+</text>
+<sources>
+<source>source ID</source>
+</sources>
+</answer_part>
+<answer_part>
+<text>
+second answer text
+</text>
+<sources>
+<source>source ID</source>
+</sources>
+</answer_part>
+</answer>""",
+    "inferenceConfiguration": {
+        "topK": 250,
+        "topP": 1,
+        "temperature": 0,
+        "maximumLength": 2048,
+        "stopSequences": [
+            "</invoke>",
+            "</answer>",
+            "</error>"
+        ]
+    },
+    'promptType': 'KNOWLEDGE_BASE_RESPONSE_GENERATION',
+    'promptState': 'ENABLED',
+    'promptCreationMode': 'OVERRIDDEN',
+    'foundationModel': settings.AWS_BEDROCK_AGENTS_MODEL_ID[0],
+    'parserMode': 'DEFAULT'
+},
+        {
             'basePromptTemplate': """
 {
         "anthropic_version": "bedrock-2023-05-31",
