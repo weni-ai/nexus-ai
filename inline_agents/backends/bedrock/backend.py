@@ -67,7 +67,6 @@ class BedrockBackend(InlineAgentsBackend):
             session_id=session_id,
             source_type="user"
         )
-        print(f"[DEBUG] Log: {log}")
 
         # Send initial status message if in preview mode and user_email is provided
         if preview and user_email:
@@ -123,9 +122,6 @@ class BedrockBackend(InlineAgentsBackend):
                     user_email=user_email,
                     session_id=session_id
                 )
-            print("--------------------------------")
-            print(f"[DEBUG] Event: {event}")
-            print("--------------------------------")
 
         # Saving traces on s3
         self.event_manager_notify(
