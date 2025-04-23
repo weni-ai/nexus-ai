@@ -31,13 +31,28 @@ def start_inline_agents(
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
 
+    # Handle text and attachments properly
+    text = message.get("text", "")
+    attachments = message.get("attachments", [])
+
+    if attachments:
+        # If there's text, add a space before attachments
+        if text:
+            text = f"{text} {attachments}"
+        else:
+            # If there's no text, just use attachments as text
+            text = str(attachments)
+
+    # Update the message with the processed text
+    message['text'] = text
+
     # TODO: Logs
     message = message_factory(
         project_uuid=message.get("project_uuid"),
-        text=message.get("text"),
+        text=text,
         contact_urn=message.get("contact_urn"),
         metadata=message.get("metadata"),
-        attachments=message.get("attachments"),
+        attachments=attachments,
         msg_event=message.get("msg_event"),
         contact_fields=message.get("contact_fields", {}),
     )
