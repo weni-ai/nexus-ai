@@ -40,8 +40,8 @@ class Project(BaseModel, SoftDeleteModel):
     is_template = models.BooleanField(default=False)
     brain_on = models.BooleanField(default=False)
     indexer_database = models.CharField(max_length=15, choices=INDEXER_CHOICES, default=SENTENX)
+    use_components = models.BooleanField(default=False)
     agents_backend = models.CharField(max_length=100, default=DEFAULT_BACKEND)
-
     human_support = models.BooleanField(default=False)
     human_support_prompt = models.TextField(null=True, blank=True)
     rationale_switch = models.BooleanField(default=False)

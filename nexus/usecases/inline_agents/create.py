@@ -1,24 +1,27 @@
-from typing import Dict
+from typing import Dict, List
 
 from django.conf import settings
 
 from nexus.agents.encryption import encrypt_value
 
 from nexus.inline_agents.models import Agent, AgentCredential
-from nexus.internals.flows import FlowsRESTClient
 from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.tools import ToolsUseCase
+from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 
 
-class CreateAgentUseCase(ToolsUseCase):
+class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
     def __init__(self, agent_backend_client = BedrockClient):
         self.agent_backend_client = agent_backend_client()
 
     def create_agent(self, agent_key: str, agent: dict, project: Project, files: dict):
         print(f"[+ 🧠 Creating agent {agent_key} +]")
-        instructions_guardrails = agent.get("instructions", []) + agent.get("guardrails", [])
-        instructions = "\n".join(instructions_guardrails)
+        instructions: str = self.handle_instructions(
+            agent.get("instructions", []),
+            agent.get("guardrails", []),
+            agent.get("components", [])
+        )
         agent_obj = Agent.objects.create(
             name=agent["name"],
             slug=agent_key,
