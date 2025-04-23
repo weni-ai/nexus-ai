@@ -15,6 +15,7 @@ from router.dispatcher import dispatch
 from router.entities import (
     message_factory,
 )
+from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
 from .actions_client import get_action_clients
 
@@ -84,6 +85,7 @@ def start_inline_agents(
     redis_client.set(pending_task_key, self.request.id)
 
     project = Project.objects.get(uuid=message.project_uuid)
+    content_base = get_default_content_base_by_project(message.project_uuid)
 
     # Check for pending responses
     pending_response_key = f"response:{message.contact_urn}"
@@ -143,7 +145,8 @@ def start_inline_agents(
             rationale_switch=project.rationale_switch,
             sanitized_urn=message.sanitized_urn,
             language=language,
-            user_email=user_email
+            user_email=user_email,
+            content_base=content_base
         )
 
         redis_client.delete(pending_response_key)
