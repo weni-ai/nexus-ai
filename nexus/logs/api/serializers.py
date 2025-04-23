@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from nexus.logs.models import MessageLog, RecentActivities, Message
-
+from nexus.inline_agents.models import InlineAgentMessage
 from nexus.usecases.actions.retrieve import FlowDoesNotExist
 
 from router.repositories.orm import FlowsORMRepository
@@ -203,3 +203,15 @@ class MessageDetailSerializer(serializers.ModelSerializer):
 
     def get_status(self, obj):
         return obj.response_status
+
+
+class InlineConversationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InlineAgentMessage
+        fields = [
+            "id",
+            "uuid",
+            "text",
+            "source_type",
+            "created_at",
+        ]

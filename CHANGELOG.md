@@ -1,4 +1,12 @@
-# 3.10.4
+# 2.10.6
+## *Update*
+    - Change datetime format on session attributes
+
+# 2.10.5
+## *Fix*
+    - Overriding session attributes
+
+# 2.10.4
 ## *Add*
     - Rationale, send simplified context while final message is processing on start multi agents
 

@@ -7,6 +7,7 @@ from typing import List, Dict, Optional, Callable
 from nexus.celery import app as celery_app
 from nexus.event_domain.event_observer import EventObserver
 from router.clients.flows.http.send_message import SendMessageHTTPClient
+from router.traces_observers.save_traces import save_inline_message_to_database
 
 from django.conf import settings
 
@@ -120,15 +121,17 @@ class RationaleObserver(EventObserver):
     def perform(
         self,
         inline_traces: Dict,
+        session_id: str,
         user_input: str = "",
         contact_urn: str = "",
         project_uuid: str = "",
         send_message_callback: Optional[Callable] = None,
         preview: bool = False,
+        rationale_switch: bool = False,
         **kwargs
     ) -> None:
 
-        if preview:
+        if preview or not rationale_switch:
             return
 
         try:
@@ -155,10 +158,11 @@ class RationaleObserver(EventObserver):
                     if self._is_valid_rationale(improved_text):
                         self.rationale_history.append(improved_text)
                         self._send_rationale_message(
-                            improved_text,
-                            contact_urn,
-                            project_uuid,
-                            send_message_callback
+                            text=improved_text,
+                            contact_urn=contact_urn,
+                            project_uuid=project_uuid,
+                            session_id=session_id,
+                            send_message_callback=send_message_callback
                         )
 
             # Handle first rationale if it exists and we have caller chain info
@@ -173,10 +177,11 @@ class RationaleObserver(EventObserver):
                 if self._is_valid_rationale(improved_text):
                     self.rationale_history.append(improved_text)
                     self._send_rationale_message(
-                        improved_text,
-                        contact_urn,
-                        project_uuid,
-                        send_message_callback
+                        text=improved_text,
+                        contact_urn=contact_urn,
+                        project_uuid=project_uuid,
+                        session_id=session_id,
+                        send_message_callback=send_message_callback
                     )
                 self.first_rationale_text = None
 
@@ -218,7 +223,8 @@ class RationaleObserver(EventObserver):
         text: str,
         contact_urn: str,
         project_uuid: str,
-        send_message_callback: Callable
+        session_id: str,
+        send_message_callback: Callable,
     ) -> None:
         try:
             send_message_callback(
@@ -226,6 +232,13 @@ class RationaleObserver(EventObserver):
                 urns=[contact_urn],
                 project_uuid=project_uuid,
                 user=self.flows_user_email,
+            )
+            save_inline_message_to_database(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                text=text,
+                preview=False,
+                session_id=session_id,
             )
         except Exception as e:
             logger.error(f"Error sending rationale message: {str(e)}", exc_info=True)
