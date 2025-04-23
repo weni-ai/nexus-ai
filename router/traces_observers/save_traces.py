@@ -64,7 +64,7 @@ def save_inline_trace_events(
 
     data = _prepare_trace_data(trace_events)
 
-    filename = f"{message.uuid}.json"
+    filename = f"{message.uuid}.jsonl"
     key = f"inline_traces/{project_uuid}/{filename}"
 
     upload_traces_to_s3(data, key)

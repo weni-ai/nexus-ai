@@ -209,6 +209,7 @@ class InlineConversationSerializer(serializers.ModelSerializer):
     class Meta:
         model = InlineAgentMessage
         fields = [
+            "id",
             "uuid",
             "text",
             "source_type",

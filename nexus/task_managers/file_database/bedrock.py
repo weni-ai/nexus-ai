@@ -1092,6 +1092,14 @@ class BedrockFileDatabase(FileDataBase):
         except self.s3_client.exceptions.NoSuchKey:
             return []
 
+    def get_inline_trace_file(self, key):
+        try:
+            custom_bucket = os.getenv('AWS_BEDROCK_INLINE_TRACES_BUCKET')
+            response = self.s3_client.get_object(Bucket=custom_bucket, Key=key)
+            return response['Body'].read().decode('utf-8')
+        except self.s3_client.exceptions.NoSuchKey:
+            return []
+
     def get_function(self, function_name: str, version: str = '$LATEST') -> Dict:
         response = self.lambda_client.get_function(
             FunctionName=function_name,
