@@ -45,7 +45,7 @@ class BedrockSupervisorRepository():
     @classmethod
     def _get_supervisor_instructions(cls, project, supervisor) -> str:
         if project.use_components and project.human_support:
-            return project.components_human_support_prompt
+            return supervisor.components_human_support_prompt
         elif project.use_components:
             return supervisor.components_prompt
         elif project.human_support:
