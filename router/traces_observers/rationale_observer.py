@@ -130,10 +130,11 @@ class RationaleObserver(EventObserver):
         rationale_switch: bool = False,
         **kwargs
     ) -> None:
-        print(f"[DEBUG] Rationale Observer")
 
         if preview or not rationale_switch:
             return
+
+        print("[DEBUG] Rationale Observer")
 
         try:
             if not self._validate_traces(inline_traces):

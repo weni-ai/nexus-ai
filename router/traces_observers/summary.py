@@ -27,12 +27,13 @@ class SummaryTracesObserver(EventObserver):
         session_id=None,
         **kwargs
     ):
-        print(f"[DEBUG] Summary Traces Observer")
         # TODO: Fix circular import
         from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 
         if not preview:
             return
+
+        print("[DEBUG] Summary Traces Observer")
 
         try:
             # Determine which trace data to use
