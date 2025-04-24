@@ -183,7 +183,12 @@ class ToolsUseCase:
         skills_to_update = []
         skills_to_delete = []
 
-        new_skill_names = [self.TOOL_NAME_FORMAT.format(tool_key=skill.get("key"), agent_id=agent.id) for skill in agent_tools]
+        new_skill_names = [
+            self.TOOL_NAME_FORMAT.format(
+                tool_key=skill.get("key"),
+                agent_id=agent.id,
+            ) for skill in agent_tools
+        ]
         skills_to_create = new_skill_names
 
         new_agent_tools = []
