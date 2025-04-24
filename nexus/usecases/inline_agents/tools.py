@@ -145,21 +145,22 @@ class ToolsUseCase:
             existing_field_keys = [field['key'] for field in flows_contact_fields.get('results', [])]
 
         fields_to_keep = []
-        for parameter in parameters:
-            field_name = list(parameter.keys())[0]
-            field_data = parameter[field_name]
-            contact_field = field_data.get("contact_field")
+        if parameters:
+            for parameter in parameters:
+                field_name = list(parameter.keys())[0]
+                field_data = parameter[field_name]
+                contact_field = field_data.get("contact_field")
 
-            if contact_field:
-                fields_to_keep.append(field_name)
-                if field_name not in existing_field_keys and field_name not in db_existing_fields:
-                    print(f"[+ 🧠 Creating contact field: {field_name} +]")
-                    self.create_contact_field(agent_obj, project, field_name, parameter, external_create=True)
-                elif field_name in existing_field_keys and field_name not in db_existing_fields:
-                    print(f"[+ 🧠 Creating contact field: {field_name} +]")
-                    self.create_contact_field(agent_obj, project, field_name, parameter, external_create=False)
+                if contact_field:
+                    fields_to_keep.append(field_name)
+                    if field_name not in existing_field_keys and field_name not in db_existing_fields:
+                        print(f"[+ 🧠 Creating contact field: {field_name} +]")
+                        self.create_contact_field(agent_obj, project, field_name, parameter, external_create=True)
+                    elif field_name in existing_field_keys and field_name not in db_existing_fields:
+                        print(f"[+ 🧠 Creating contact field: {field_name} +]")
+                        self.create_contact_field(agent_obj, project, field_name, parameter, external_create=False)
 
-            field_data.pop("contact_field", None)
+                field_data.pop("contact_field", None)
 
         self.delete_contact_fields(agent_obj, project, fields_to_keep, project_uuid)
         return parameters
