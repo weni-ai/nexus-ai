@@ -13,6 +13,7 @@ from nexus.intelligences.models import (
     ContentBaseAgent,
 )
 from nexus.agents.models import Team
+from nexus.projects.models import Project
 from nexus.task_managers.models import (
     ContentBaseFileTaskManager,
     ContentBaseLinkTaskManager,
@@ -164,7 +165,11 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 'human_support_prompt': team.human_support_prompt
             }
         except Team.DoesNotExist:
-            return None
+            project = Project.objects.get(uuid=project_uuid)
+            return {
+                'human_support': project.human_support,
+                'human_support_prompt': project.human_support_prompt
+            }
 
     def update(self, instance, validated_data):
         agent_data = validated_data.get("agent")
@@ -199,7 +204,10 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                         agent_usecase.rollback_human_support_to_team(team=team, user=self.context.get('request').user)
 
             except Team.DoesNotExist:
-                pass
+                project = Project.objects.get(uuid=project_uuid)
+                project.human_support = team_data.get('human_support', project.human_support)
+                project.human_support_prompt = team_data.get('human_support_prompt', project.human_support_prompt)
+                project.save()
 
         # Handle agent updates
         if agent_data:

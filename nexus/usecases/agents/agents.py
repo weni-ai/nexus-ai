@@ -1064,6 +1064,17 @@ class AgentUsecase:
             return traces
         return []
 
+    def get_inline_traces(self, project_uuid: str, log_id: str):
+        from nexus.inline_agents.models import InlineAgentMessage
+
+        log = InlineAgentMessage.objects.get(id=log_id)
+        key = f"inline_traces/{project_uuid}/{log.uuid}.jsonl"
+        traces_data = BedrockFileDatabase().get_inline_trace_file(key)
+        if traces_data:
+            traces = [json.loads(line) for line in traces_data.splitlines() if line]
+            return traces
+        return []
+
     def add_human_support_to_team(self, team: Team, user: User):
         """Main orchestrator method for adding human support to a team"""
         supervisor_id = team.external_id

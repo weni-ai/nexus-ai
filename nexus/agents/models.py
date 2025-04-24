@@ -185,7 +185,7 @@ class ContactField(models.Model):
 
 
 class AgentMessage(models.Model):
-    TRACES_BASE_PATH = "traces"
+    TRACES_BASE_PATH = "inline_traces"
 
     uuid = models.UUIDField(default=uuid4, editable=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="agent_messages")

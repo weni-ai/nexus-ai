@@ -1,3 +1,4 @@
+import os
 import uuid
 import json
 import time
@@ -1075,6 +1076,11 @@ class BedrockFileDatabase(FileDataBase):
 
         return _lambda_iam_role["Role"]["Arn"]
 
+    def upload_inline_traces(self, data, key):
+        custom_bucket = os.getenv('AWS_BEDROCK_INLINE_TRACES_BUCKET')
+        bytes_stream = BytesIO(data.encode('utf-8'))
+        self.s3_client.upload_fileobj(bytes_stream, custom_bucket, key)
+
     def upload_traces(self, data, key):
         bytes_stream = BytesIO(data.encode('utf-8'))
         self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
@@ -1082,6 +1088,14 @@ class BedrockFileDatabase(FileDataBase):
     def get_trace_file(self, key):
         try:
             response = self.s3_client.get_object(Bucket=self.bucket_name, Key=key)
+            return response['Body'].read().decode('utf-8')
+        except self.s3_client.exceptions.NoSuchKey:
+            return []
+
+    def get_inline_trace_file(self, key):
+        try:
+            custom_bucket = os.getenv('AWS_BEDROCK_INLINE_TRACES_BUCKET')
+            response = self.s3_client.get_object(Bucket=custom_bucket, Key=key)
             return response['Body'].read().decode('utf-8')
         except self.s3_client.exceptions.NoSuchKey:
             return []
