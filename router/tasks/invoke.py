@@ -31,13 +31,28 @@ def start_inline_agents(
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
 
+    # Handle text and attachments properly
+    text = message.get("text", "")
+    attachments = message.get("attachments", [])
+
+    if attachments:
+        # If there's text, add a space before attachments
+        if text:
+            text = f"{text} {attachments}"
+        else:
+            # If there's no text, just use attachments as text
+            text = str(attachments)
+
+    # Update the message with the processed text
+    message['text'] = text
+
     # TODO: Logs
     message = message_factory(
         project_uuid=message.get("project_uuid"),
-        text=message.get("text"),
+        text=text,
         contact_urn=message.get("contact_urn"),
         metadata=message.get("metadata"),
-        attachments=message.get("attachments"),
+        attachments=attachments,
         msg_event=message.get("msg_event"),
         contact_fields=message.get("contact_fields", {}),
     )
@@ -46,29 +61,6 @@ def start_inline_agents(
 
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
-
-    # Check if there's a pending response for this user
-    pending_response_key = f"multi_response:{message.contact_urn}"
-    pending_task_key = f"multi_task:{message.contact_urn}"
-    pending_response = redis_client.get(pending_response_key)
-    pending_task_id = redis_client.get(pending_task_key)
-
-    if pending_response:
-        # Revoke the previous task
-        if pending_task_id:
-            celery_app.control.revoke(pending_task_id.decode('utf-8'), terminate=True)
-
-        # Concatenate the previous message with the new one
-        previous_message = pending_response.decode('utf-8')
-        concatenated_message = f"{previous_message}\n{message.text}"
-        message.text = concatenated_message
-        redis_client.delete(pending_response_key)  # Remove the pending response
-    else:
-        # Store the current message in Redis
-        redis_client.set(pending_response_key, message.text)
-
-    # Store the current task ID in Redis
-    redis_client.set(pending_task_key, self.request.id)
 
     project = Project.objects.get(uuid=message.project_uuid)
 

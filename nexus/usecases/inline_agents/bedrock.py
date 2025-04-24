@@ -20,15 +20,19 @@ class BedrockClient:
         zip_buffer: BytesIO
     ) -> Dict[str, str]:
 
-        lambda_function = self.lambda_client.create_function(
-            FunctionName=lambda_name,
-            Runtime='python3.12',
-            Timeout=180,
-            Role=lambda_role,
-            Code={'ZipFile': zip_buffer.getvalue()},
-            Handler=skill_handler
-        )
-        lambda_arn = lambda_function.get("FunctionArn")
+        try:
+            lambda_function = self.lambda_client.create_function(
+                FunctionName=lambda_name,
+                Runtime='python3.12',
+                Timeout=180,
+                Role=lambda_role,
+                Code={'ZipFile': zip_buffer.getvalue()},
+                    Handler=skill_handler
+                )
+            lambda_arn = lambda_function.get("FunctionArn")
+        except self.lambda_client.exceptions.ResourceConflictException:
+            lambda_function = self.lambda_client.get_function(FunctionName=lambda_name)
+            lambda_arn = lambda_function.get("FunctionArn")
 
         return lambda_arn
 
@@ -39,8 +43,6 @@ class BedrockClient:
         for alias in aliases:
             self.lambda_client.delete_alias(FunctionName=function_name, Name=alias.get("Name"))
 
-        # list_versions_by_function = self.lambda_client.list_versions_by_function(FunctionName=function_name)
-        # list_versions_by_function["Versions"][0]["Version"]
         self.lambda_client.delete_function(FunctionName=function_name)
 
     def update_lambda_function(self, lambda_name: str, zip_buffer: BytesIO) -> Dict[str, str]:

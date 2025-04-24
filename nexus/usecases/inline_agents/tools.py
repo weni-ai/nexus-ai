@@ -12,8 +12,16 @@ from nexus.usecases.inline_agents.bedrock import BedrockClient
 
 class ToolsUseCase:
     # skills will be renamed to tools
+
+    TOOL_NAME_FORMAT = "{tool_key}-{agent_id}"
+
     def __init__(self, agent_backend_client = BedrockClient):
         self.agent_backend_client = agent_backend_client()
+    
+    def __format_action_group_name(self, action_group_name: str) -> str:
+         words = action_group_name.replace("_", "-").split('-')
+         pascal_case = ''.join(word.capitalize() for word in words)
+         return pascal_case
 
     def create_lambda_function(self, tool: Dict, tool_file, project_uuid: str, tool_name: str) -> Dict[str, str]:
         print(f"[+ 🧠 Creating lambda function: {tool_name} +]")
@@ -58,13 +66,13 @@ class ToolsUseCase:
 
         project_uuid = str(project.uuid)
         action_group_executor: Dict[str, str] = self.create_lambda_function(agent_tool, tool_file, project_uuid, tool_name)
-        parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool["parameters"], project_uuid)
+        parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool.get("parameters", []), project_uuid)
         response = self._format_tool_response(agent_tool, tool_name, parameters, action_group_executor, str(agent.uuid))
         return response
 
     def delete_tool(self, agent: Agent, project: Project, agent_tool: Dict, tool_file, tool_name: str) -> Tuple[Dict, Dict]:
         project_uuid = str(project.uuid)
-        self.handle_parameters(agent, project, agent_tool["parameters"], project_uuid)
+        self.handle_parameters(agent, project, agent_tool.get("parameters", []), project_uuid)
         self.delete_lambda_function(tool_name)
         return
 
@@ -72,7 +80,7 @@ class ToolsUseCase:
         
         project_uuid = str(project.uuid)
         action_group_executor = self.update_lambda_function(agent_tool, tool_file, project_uuid, tool_name)
-        parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool["parameters"], project_uuid)
+        parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool.get("parameters", []), project_uuid)
         response = self._format_tool_response(agent_tool, tool_name, parameters, action_group_executor, str(agent.uuid))
         return response
 
@@ -112,7 +120,7 @@ class ToolsUseCase:
         }
         skill = {
             "actionGroupExecutor": action_group_executor,
-            "actionGroupName": "action_group",
+            "actionGroupName": self.__format_action_group_name(agent_tool.get("slug")),
             "functionSchema": {
                 "functions": [function]
             }
@@ -135,21 +143,23 @@ class ToolsUseCase:
             existing_field_keys = [field['key'] for field in flows_contact_fields.get('results', [])]
 
         fields_to_keep = []
-        for parameter in parameters:
-            field_name = list(parameter.keys())[0]
-            field_data = parameter[field_name]
-            contact_field = field_data.get("contact_field")
 
-            if contact_field:
-                fields_to_keep.append(field_name)
-                if field_name not in existing_field_keys and field_name not in db_existing_fields:
-                    print(f"[+ 🧠 Creating contact field: {field_name} +]")
-                    self.create_contact_field(agent_obj, project, field_name, parameter, external_create=True)
-                elif field_name in existing_field_keys and field_name not in db_existing_fields:
-                    print(f"[+ 🧠 Creating contact field: {field_name} +]")
-                    self.create_contact_field(agent_obj, project, field_name, parameter, external_create=False)
+        if parameters:
+            for parameter in parameters:
+                field_name = list(parameter.keys())[0]
+                field_data = parameter[field_name]
+                contact_field = field_data.get("contact_field")
 
-            field_data.pop("contact_field", None)
+                if contact_field:
+                    fields_to_keep.append(field_name)
+                    if field_name not in existing_field_keys and field_name not in db_existing_fields:
+                        print(f"[+ 🧠 Creating contact field: {field_name} +]")
+                        self.create_contact_field(agent_obj, project, field_name, parameter, external_create=True)
+                    elif field_name in existing_field_keys and field_name not in db_existing_fields:
+                        print(f"[+ 🧠 Creating contact field: {field_name} +]")
+                        self.create_contact_field(agent_obj, project, field_name, parameter, external_create=False)
+
+                field_data.pop("contact_field", None)
 
         self.delete_contact_fields(agent_obj, project, fields_to_keep, project_uuid)
         return parameters
@@ -172,7 +182,7 @@ class ToolsUseCase:
         skills_to_update = []
         skills_to_delete = []
 
-        new_skill_names = [f'{skill.get("key")}-{agent.id}-{slugify(project.name)}' for skill in agent_tools]
+        new_skill_names = [self.TOOL_NAME_FORMAT.format(tool_key=skill.get("key"), agent_id=agent.id) for skill in agent_tools]
         skills_to_create = new_skill_names
 
         new_agent_tools = []
@@ -189,7 +199,7 @@ class ToolsUseCase:
             skills_to_update = [skill for skill in existing_skills if skill in new_skill_names]
 
         for agent_skill in agent_tools:
-            skill_name = f'{agent_skill.get("key")}-{agent.id}-{slugify(project.name)}'
+            skill_name = self.TOOL_NAME_FORMAT.format(tool_key=agent_skill.get("key"), agent_id=agent.id)
             skill_file = files[f"{agent.slug}:{agent_skill['key']}"]
 
             if skill_name in skills_to_create:
