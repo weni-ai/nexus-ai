@@ -17,7 +17,7 @@ class ORMTeamRepository(TeamRepository):
             for integrated_agent in orm_team:
                 agent = integrated_agent.agent
                 skills = []
-                
+
                 skills=agent.current_version.skills
                 for index, skill in enumerate(skills):
                     for function in skill["functionSchema"]["functions"]:
@@ -27,6 +27,8 @@ class ORMTeamRepository(TeamRepository):
                                 for key, value in param_dict.items():
                                     parametros_combinados[key] = value
                             function["parameters"] = parametros_combinados
+                        elif function.get("parameters") is None:
+                            function["parameters"] = {}
                     skills[index]["actionGroupName"] = slugify(skill["actionGroupName"])
 
                 agent_dict = {

@@ -104,8 +104,7 @@ class BedrockTeamAdapter(TeamAdapter):
         sessionState = {}
         if credentials:
             sessionState["sessionAttributes"] = {"credentials": json.dumps(credentials, default=str)}
-        # if use_components:
-        #     sessionState["promptSessionAttributes"]["format_components"] = Components().get_all_formats_string()
+
         return sessionState
 
     @classmethod
@@ -123,8 +122,6 @@ class BedrockTeamAdapter(TeamAdapter):
                     "actionGroups": agent["actionGroups"],
                     "foundationModel": agent["foundationModel"],
                     "agentCollaboration": agent["agentCollaboration"],
-                    # "promptOverrideConfiguration": cls.__get_collaborator_prompt_override_configuration(),
-                    # "idleSessionTTLInSeconds": agent.idle_session_ttl_in_seconds,
                 }
             )
         return collaborators
