@@ -20,15 +20,19 @@ class BedrockClient:
         zip_buffer: BytesIO
     ) -> Dict[str, str]:
 
-        lambda_function = self.lambda_client.create_function(
-            FunctionName=lambda_name,
-            Runtime='python3.12',
-            Timeout=180,
-            Role=lambda_role,
-            Code={'ZipFile': zip_buffer.getvalue()},
-            Handler=skill_handler
-        )
-        lambda_arn = lambda_function.get("FunctionArn")
+        try:
+            lambda_function = self.lambda_client.create_function(
+                FunctionName=lambda_name,
+                Runtime='python3.12',
+                Timeout=180,
+                Role=lambda_role,
+                Code={'ZipFile': zip_buffer.getvalue()},
+                    Handler=skill_handler
+                )
+            lambda_arn = lambda_function.get("FunctionArn")
+        except self.lambda_client.exceptions.ResourceConflictException:
+            lambda_function = self.lambda_client.get_function(FunctionName=lambda_name)
+            lambda_arn = lambda_function.get("FunctionArn")
 
         return lambda_arn
 

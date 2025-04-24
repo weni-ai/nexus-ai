@@ -58,13 +58,13 @@ class ToolsUseCase:
 
         project_uuid = str(project.uuid)
         action_group_executor: Dict[str, str] = self.create_lambda_function(agent_tool, tool_file, project_uuid, tool_name)
-        parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool["parameters"], project_uuid)
+        parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool.get("parameters", []), project_uuid)
         response = self._format_tool_response(agent_tool, tool_name, parameters, action_group_executor, str(agent.uuid))
         return response
 
     def delete_tool(self, agent: Agent, project: Project, agent_tool: Dict, tool_file, tool_name: str) -> Tuple[Dict, Dict]:
         project_uuid = str(project.uuid)
-        self.handle_parameters(agent, project, agent_tool["parameters"], project_uuid)
+        self.handle_parameters(agent, project, agent_tool.get("parameters", []), project_uuid)
         self.delete_lambda_function(tool_name)
         return
 
@@ -72,7 +72,7 @@ class ToolsUseCase:
         
         project_uuid = str(project.uuid)
         action_group_executor = self.update_lambda_function(agent_tool, tool_file, project_uuid, tool_name)
-        parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool["parameters"], project_uuid)
+        parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool.get("parameters", []), project_uuid)
         response = self._format_tool_response(agent_tool, tool_name, parameters, action_group_executor, str(agent.uuid))
         return response
 
