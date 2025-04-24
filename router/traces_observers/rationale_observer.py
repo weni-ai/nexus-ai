@@ -1,6 +1,7 @@
 import logging
 import os
 import boto3
+import unicodedata
 from nexus.environment import env
 from typing import List, Dict, Optional, Callable
 
@@ -217,8 +218,9 @@ class RationaleObserver(EventObserver):
             logger.error(f"Error checking caller chain: {str(e)}", exc_info=True)
             return False
 
-    def _is_valid_rationale(rationale_text: str) -> bool:
+    def _is_valid_rationale(self, rationale_text: str) -> bool:
         text = rationale_text.lower()
+        text = self._remove_accents(text)
         valid_rationale = not text.startswith("invalid")
         return valid_rationale
 
@@ -247,6 +249,15 @@ class RationaleObserver(EventObserver):
             )
         except Exception as e:
             logger.error(f"Error sending rationale message: {str(e)}", exc_info=True)
+
+    def _remove_accents(self, text: str) -> str:
+
+        return ''.join(
+            c for c in unicodedata.normalize(
+                'NFD', text
+            )
+            if unicodedata.category(c) != 'Mn'
+        )
 
     def _improve_rationale_text(
         self,
