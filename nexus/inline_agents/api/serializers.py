@@ -99,12 +99,12 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
     def get_agents_using(self, obj):
         return [
             {
-                "uuid": agent.uuid,
-                "name": agent.name,
+                "uuid": integrated_agent.agent.uuid,
+                "name": integrated_agent.agent.name,
             }
-            for agent in obj.agents.filter(project=obj.project)
+            for integrated_agent in IntegratedAgent.objects.filter(project=obj.project)
         ]
-    
+
     def get_value(self, obj):
         if obj.is_confidential:
             return obj.value

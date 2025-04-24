@@ -175,7 +175,7 @@ class ProjectCredentialsView(APIView):
             updated = usecase.update_credential_value(project_uuid, key, value)
             if updated:
                 updated_credentials.append(key)
-                
+
         return Response({
             "message": "Credentials updated successfully",
             "updated_credentials": updated_credentials
