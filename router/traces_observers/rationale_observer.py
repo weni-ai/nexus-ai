@@ -130,7 +130,7 @@ class RationaleObserver(EventObserver):
         rationale_switch: bool = False,
         **kwargs
     ) -> None:
-
+        print(f"[DEBUG] Rationale Observer")
         if preview or not rationale_switch:
             return
 

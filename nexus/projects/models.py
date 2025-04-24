@@ -46,6 +46,7 @@ class Project(BaseModel, SoftDeleteModel):
     human_support_prompt = models.TextField(null=True, blank=True)
     rationale_switch = models.BooleanField(default=False)
     inline_agent_switch = models.BooleanField(default=False)
+    use_components = models.BooleanField(default=False)
 
     def __str__(self):
         return f'{self.uuid} - Project: {self.name} - Org: {self.org.name}'

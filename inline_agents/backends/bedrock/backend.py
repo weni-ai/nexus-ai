@@ -11,7 +11,6 @@ from nexus.inline_agents.backends.bedrock.repository import BedrockSupervisorRep
 from router.traces_observers.save_traces import save_inline_message_to_database
 
 from django.template.defaultfilters import slugify
-from nexus.intelligences.models import ContentBase
 
 
 class BedrockBackend(InlineAgentsBackend):
@@ -33,29 +32,34 @@ class BedrockBackend(InlineAgentsBackend):
         contact_urn: str,
         project_uuid: str,
         sanitized_urn: str,
-        content_base: ContentBase,
         preview: bool = False,
         rationale_switch: bool = False,
         language: str = "en",
-        user_email: str = None
+        user_email: str = None,
+        use_components: bool = False,
+        contact_fields: str = ""
     ):
+        print("[DEBUG] Starting Bedrock backend invoke_agents")
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
+        print(f"[DEBUG] Supervisor: {supervisor}")
 
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
             agents=team,
             input_text=input_text,
             contact_urn=contact_urn,
-            project_uuid=project_uuid
+            project_uuid=project_uuid,
+            use_components=use_components,
+            contact_fields=contact_fields,
         )
+        print(f"[DEBUG] External team: {external_team}")
         client = self._get_client()
-        external_team['content_base'] = content_base
 
         # Generate a session ID for websocket communication
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         session_id = slugify(session_id)
-
-        save_inline_message_to_database(
+        print(f"[DEBUG] Session ID: {session_id}")
+        log = save_inline_message_to_database(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             text=input_text,

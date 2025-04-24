@@ -15,7 +15,6 @@ from router.dispatcher import dispatch
 from router.entities import (
     message_factory,
 )
-from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 
 from .actions_client import get_action_clients
 
@@ -58,34 +57,12 @@ def start_inline_agents(
         contact_fields=message.get("contact_fields", {}),
     )
 
+    print(f"[DEBUG] Message: {message}")
+
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
 
-    # Check if there's a pending response for this user
-    pending_response_key = f"multi_response:{message.contact_urn}"
-    pending_task_key = f"multi_task:{message.contact_urn}"
-    pending_response = redis_client.get(pending_response_key)
-    pending_task_id = redis_client.get(pending_task_key)
-
-    if pending_response:
-        # Revoke the previous task
-        if pending_task_id:
-            celery_app.control.revoke(pending_task_id.decode('utf-8'), terminate=True)
-
-        # Concatenate the previous message with the new one
-        previous_message = pending_response.decode('utf-8')
-        concatenated_message = f"{previous_message}\n{message.text}"
-        message.text = concatenated_message
-        redis_client.delete(pending_response_key)  # Remove the pending response
-    else:
-        # Store the current message in Redis
-        redis_client.set(pending_response_key, message.text)
-
-    # Store the current task ID in Redis
-    redis_client.set(pending_task_key, self.request.id)
-
     project = Project.objects.get(uuid=message.project_uuid)
-    content_base = get_default_content_base_by_project(message.project_uuid)
 
     # Check for pending responses
     pending_response_key = f"response:{message.contact_urn}"
@@ -110,6 +87,7 @@ def start_inline_agents(
     # Store the current task ID in Redis
     redis_client.set(pending_task_key, self.request.id)
 
+    print(f"[DEBUG] Email sent: {user_email}")
     if user_email:
         # Send initial status through WebSocket
         send_preview_message_to_websocket(
@@ -122,7 +100,7 @@ def start_inline_agents(
             }
         )
 
-    project_use_components = message.project_uuid in settings.PROJECT_COMPONENTS
+    project_use_components = project.use_components
 
     try:
         # Stream supervisor response
@@ -146,7 +124,8 @@ def start_inline_agents(
             sanitized_urn=message.sanitized_urn,
             language=language,
             user_email=user_email,
-            content_base=content_base
+            use_components=project.use_components,
+            contact_fields=message.contact_fields_as_json
         )
 
         redis_client.delete(pending_response_key)

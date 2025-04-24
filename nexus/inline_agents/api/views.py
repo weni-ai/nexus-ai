@@ -42,6 +42,9 @@ class PushAgents(APIView):
         files = request.FILES
         validate_file_size(files)
 
+        import json
+        print(json.dumps(request.data, indent=4, default=str))
+
         agents = json.loads(request.data.get("agents"))
         project_uuid = request.data.get("project_uuid")
 
@@ -362,18 +365,6 @@ class VtexAppProjectCredentialsView(APIView):
 
 class ProjectComponentsView(APIView):
     permission_classes = [IsAuthenticated]
-
-    def get(self, request, project_uuid):
-        try:
-            project = Project.objects.get(uuid=project_uuid)
-            return Response({
-                "use_components": project.use_components
-            })
-        except Project.DoesNotExist:
-            return Response(
-                {"error": "Project not found"},
-                status=404
-            )
 
     def patch(self, request, project_uuid):
         use_components = request.data.get('use_components')

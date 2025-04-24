@@ -53,7 +53,7 @@ class AgentSerializer(serializers.ModelSerializer):
     model = serializers.CharField(source='foundation_model')
     skills = serializers.SerializerMethodField("get_skills")
     assigned = serializers.SerializerMethodField("get_is_assigned")
-    
+
     credentials = serializers.SerializerMethodField("get_credentials")
 
     def get_skills(self, obj):
@@ -104,7 +104,7 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
             }
             for agent in obj.agents.filter(project=obj.project)
         ]
-    
+
     def get_value(self, obj):
         if obj.is_confidential:
             return obj.value

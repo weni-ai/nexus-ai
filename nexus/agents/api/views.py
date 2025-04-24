@@ -708,7 +708,7 @@ class AgentTracesView(
 
         usecase = AgentUsecase()
         try:
-            trace_data = usecase.get_inline_traces(project_uuid, log_id)
+            trace_data = usecase.get_traces(project_uuid, log_id)
             return Response(trace_data)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -849,4 +849,11 @@ class RationaleView(APIView):
                 "rationale": rationale
             })
         except Team.DoesNotExist:
-            return Response({"error": "Team not found"}, status=404)
+            project = Project.objects.get(uuid=project_uuid)
+            project.rationale_switch = rationale
+            project.save(update_fields=['rationale_switch'])
+
+            return Response({
+                "message": "Rationale updated successfully",
+                "rationale": rationale
+            })
