@@ -12,6 +12,9 @@ from nexus.usecases.inline_agents.bedrock import BedrockClient
 
 class ToolsUseCase:
     # skills will be renamed to tools
+
+    TOOL_NAME_FORMAT = "{tool_key}-{agent_id}"
+
     def __init__(self, agent_backend_client = BedrockClient):
         self.agent_backend_client = agent_backend_client()
 
@@ -103,8 +106,15 @@ class ToolsUseCase:
             )
 
         return parameter
+    
+    def __format_action_group_name(self, action_group_name: str) -> str:
+        words = action_group_name.replace("_", "-").split('-')
+        pascal_case = ''.join(word.capitalize() for word in words)
+        return pascal_case
 
     def _format_tool_response(self, agent_tool: Dict, tool_name: str, parameters: List[Dict], action_group_executor: Dict[str, str], agent_uuid: str) -> Tuple[Dict, Dict]:
+        print(f"[DEBUG] Formatting tool response: {tool_name}")
+        print(f"[DEBUG] Parameters: {agent_tool}")
         function = {
             "name": tool_name,
             "parameters": parameters,
@@ -112,7 +122,7 @@ class ToolsUseCase:
         }
         skill = {
             "actionGroupExecutor": action_group_executor,
-            "actionGroupName": tool_name,
+            "actionGroupName": self.__format_action_group_name(agent_tool.get("slug")),
             "functionSchema": {
                 "functions": [function]
             }
@@ -172,7 +182,7 @@ class ToolsUseCase:
         skills_to_update = []
         skills_to_delete = []
 
-        new_skill_names = [f'{skill.get("key")}-{agent.id}-{slugify(project.name)}' for skill in agent_tools]
+        new_skill_names = [self.TOOL_NAME_FORMAT.format(tool_key=skill.get("key"), agent_id=agent.id) for skill in agent_tools]
         skills_to_create = new_skill_names
 
         new_agent_tools = []
@@ -189,7 +199,7 @@ class ToolsUseCase:
             skills_to_update = [skill for skill in existing_skills if skill in new_skill_names]
 
         for agent_skill in agent_tools:
-            skill_name = f'{agent_skill.get("key")}-{agent.id}-{slugify(project.name)}'
+            skill_name = self.TOOL_NAME_FORMAT.format(tool_key=agent_skill.get("key"), agent_id=agent.id)
             skill_file = files[f"{agent.slug}:{agent_skill['key']}"]
 
             if skill_name in skills_to_create:
