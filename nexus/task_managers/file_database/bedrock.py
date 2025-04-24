@@ -1078,8 +1078,19 @@ class BedrockFileDatabase(FileDataBase):
 
     def upload_inline_traces(self, data, key):
         custom_bucket = os.getenv('AWS_BEDROCK_INLINE_TRACES_BUCKET')
+        custom_region = os.getenv('AWS_BEDROCK_INLINE_TRACES_REGION')
+
+        custom_s3_client = boto3.client(
+            "s3",
+            region_name=custom_region
+        )
+
         bytes_stream = BytesIO(data.encode('utf-8'))
-        self.s3_client.upload_fileobj(bytes_stream, custom_bucket, key)
+        custom_s3_client.upload_fileobj(
+            bytes_stream,
+            custom_bucket,
+            key,
+        )
 
     def upload_traces(self, data, key):
         bytes_stream = BytesIO(data.encode('utf-8'))
@@ -1095,9 +1106,18 @@ class BedrockFileDatabase(FileDataBase):
     def get_inline_trace_file(self, key):
         try:
             custom_bucket = os.getenv('AWS_BEDROCK_INLINE_TRACES_BUCKET')
-            response = self.s3_client.get_object(Bucket=custom_bucket, Key=key)
+            custom_region = os.getenv('AWS_BEDROCK_INLINE_TRACES_REGION')
+
+            custom_s3_client = boto3.client(
+                "s3",
+                region_name=custom_region
+            )
+            response = custom_s3_client.get_object(
+                Bucket=custom_bucket,
+                Key=key
+            )
             return response['Body'].read().decode('utf-8')
-        except self.s3_client.exceptions.NoSuchKey:
+        except custom_s3_client.exceptions.NoSuchKey:
             return []
 
     def get_function(self, function_name: str, version: str = '$LATEST') -> Dict:
