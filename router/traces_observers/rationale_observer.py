@@ -217,8 +217,10 @@ class RationaleObserver(EventObserver):
             logger.error(f"Error checking caller chain: {str(e)}", exc_info=True)
             return False
 
-    def _is_valid_rationale(self, rationale_text: str) -> bool:
-        return rationale_text.lower() != "invalid"
+    def _is_valid_rationale(rationale_text: str) -> bool:
+        text = rationale_text.lower()
+        valid_rationale = not text.startswith("invalid")
+        return valid_rationale
 
     def _send_rationale_message(
         self,
