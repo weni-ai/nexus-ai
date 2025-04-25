@@ -24,6 +24,7 @@ from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     ProjectCredentialsListSerializer
 )
+from nexus.projects.api.permissions import ProjectPermission
 
 
 SKILL_FILE_SIZE_LIMIT = 10
@@ -404,7 +405,7 @@ class ProjectComponentsView(APIView):
 
 
 class LogGroupView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, *args, **kwargs):
         project_uuid = request.query_params.get('project')
