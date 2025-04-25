@@ -15,7 +15,8 @@ from nexus.projects.models import Project
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.get import (
     GetInlineAgentsUsecase,
-    GetInlineCredentialsUsecase
+    GetInlineCredentialsUsecase,
+    GetLogGroupUsecase
 )
 
 from nexus.inline_agents.api.serializers import (
@@ -400,3 +401,17 @@ class ProjectComponentsView(APIView):
                 {"error": "Project not found"},
                 status=404
             )
+
+
+class LogGroupView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        project_uuid = request.query_params.get('project')
+        agent_key = request.query_params.get('agent_key')
+        tool_key = request.query_params.get('tool_key')
+
+        usecase = GetLogGroupUsecase()
+        log_group = usecase.get_log_group(project_uuid, agent_key, tool_key)
+
+        return Response({"log_group": log_group})

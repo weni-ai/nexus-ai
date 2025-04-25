@@ -27,6 +27,7 @@ from nexus.inline_agents.api.views import VtexAppOfficialAgentsView as VtexAppOf
 from nexus.inline_agents.api.views import VTexAppTeamView as VtexAppInlineTeamView
 from nexus.inline_agents.api.views import VtexAppProjectCredentialsView as VtexAppInlineProjectCredentialsView
 from nexus.inline_agents.api.views import ProjectComponentsView as InlineProjectComponentsView
+from nexus.inline_agents.api.views import LogGroupView
 
 
 urlpatterns = [
@@ -45,4 +46,5 @@ urlpatterns = [
     path('project/<project_uuid>/app-credentials', VtexAppInlineProjectCredentialsView.as_view(), name="vtex-project-credentials"),
     path('project/<project_uuid>/rationale', RationaleView.as_view(), name="project-rationale"),
     path('project/<project_uuid>/components', InlineProjectComponentsView.as_view(), name="project-components"),
+    path('agents/log-group', LogGroupView.as_view(), name="agents-log-group"),
 ]
