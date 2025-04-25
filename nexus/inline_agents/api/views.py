@@ -411,7 +411,18 @@ class LogGroupView(APIView):
         agent_key = request.query_params.get('agent_key')
         tool_key = request.query_params.get('tool_key')
 
-        usecase = GetLogGroupUsecase()
-        log_group = usecase.get_log_group(project_uuid, agent_key, tool_key)
+        if not project_uuid or not agent_key or not tool_key:
+            return Response(
+                {"error": "project, agent_key and tool_key are required"},
+                status=400
+            )
+        try:
+            usecase = GetLogGroupUsecase()
+            log_group = usecase.get_log_group(project_uuid, agent_key, tool_key)
+        except Agent.DoesNotExist:
+            return Response(
+                {"error": f"Agent {agent_key} not found in project {project_uuid}"},
+                status=404
+            )
 
         return Response({"log_group": log_group})
