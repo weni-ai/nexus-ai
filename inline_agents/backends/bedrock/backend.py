@@ -1,22 +1,23 @@
-import boto3
-
+import logging
 from typing import Dict, Optional
 
-from inline_agents.backend import InlineAgentsBackend
-from .adapter import BedrockTeamAdapter
+import boto3
+import pendulum
+import sentry_sdk
+from django.template.defaultfilters import slugify
 
+from inline_agents.backend import InlineAgentsBackend
 from nexus.environment import env
 from nexus.events import event_manager
-from nexus.projects.websockets.consumers import send_preview_message_to_websocket
-from nexus.inline_agents.backends.bedrock.repository import BedrockSupervisorRepository
-
+from nexus.inline_agents.backends.bedrock.repository import (
+    BedrockSupervisorRepository,
+)
+from nexus.projects.websockets.consumers import (
+    send_preview_message_to_websocket,
+)
 from router.traces_observers.save_traces import save_inline_message_to_database
 
-from django.template.defaultfilters import slugify
-import logging
-import sentry_sdk
-import pendulum
-
+from .adapter import BedrockTeamAdapter
 
 logger = logging.getLogger(__name__)
 
