@@ -1,5 +1,7 @@
 import boto3
 
+from typing import Dict, Optional
+
 from inline_agents.backend import InlineAgentsBackend
 from .adapter import BedrockTeamAdapter
 
@@ -11,6 +13,12 @@ from nexus.inline_agents.backends.bedrock.repository import BedrockSupervisorRep
 from router.traces_observers.save_traces import save_inline_message_to_database
 
 from django.template.defaultfilters import slugify
+import logging
+import sentry_sdk
+import pendulum
+
+
+logger = logging.getLogger(__name__)
 
 
 class BedrockBackend(InlineAgentsBackend):
@@ -151,4 +159,52 @@ class BedrockBackend(InlineAgentsBackend):
                 }
             )
 
+        rationale_text = self._extract_rationale_text(trace_events)
+        full_response = self._handle_rationale_in_response(
+            rationale_text=rationale_text,
+            full_response=full_response,
+            session_id=session_id,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            rationale_switch=rationale_switch
+        )
         return full_response
+
+    def _handle_rationale_in_response(self, rationale_text: Optional[str], full_response: str, session_id: str, project_uuid: str, contact_urn: str, rationale_switch: bool) -> str:
+        if not full_response:
+            return ""
+            
+        if rationale_text and rationale_text in full_response:
+            full_response = full_response.replace(rationale_text, "").strip()
+
+            try:
+                sentry_sdk.set_extra("rationale_text", rationale_text)
+                sentry_sdk.set_extra("session_id", session_id)
+                sentry_sdk.set_extra("project_uuid", project_uuid)
+                sentry_sdk.set_extra("contact_urn", contact_urn)
+                sentry_sdk.set_extra("rationale_switch", rationale_switch)
+                sentry_sdk.set_extra("datetime", pendulum.now().isoformat())
+
+                sentry_sdk.capture_message(
+                    f"Rationale text found in response: {rationale_text}",
+                    level="info"
+                )
+
+            except Exception as e:
+                logger.error(f"Error sending rationale text to Sentry: {str(e)}: Full response: {full_response}", exc_info=True)
+
+        return full_response
+
+    def _extract_rationale_text(self, inline_traces: Dict) -> Optional[str]:
+        try:
+            trace_data = inline_traces
+            if 'trace' in trace_data:
+                inner_trace = trace_data['trace']
+                if 'orchestrationTrace' in inner_trace:
+                    orchestration = inner_trace['orchestrationTrace']
+                    if 'rationale' in orchestration:
+                        return orchestration['rationale'].get('text')
+            return None
+        except Exception as e:
+            logger.error(f"Error extracting rationale text: {str(e)}", exc_info=True)
+            return None
