@@ -2,6 +2,8 @@ from django.test import TestCase
 
 from inline_agents.backends.bedrock.adapter import BedrockTeamAdapter
 from inline_agents.backends.tests.inline_factories import SupervisorFactory, VersionFactory
+from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
+from inline_agents.backends.bedrock.backend import BedrockBackend
 
 
 class TestBedrockAdapter(TestCase):
@@ -49,3 +51,26 @@ class TestBedrockAdapter(TestCase):
             self.project.uuid
         )
         print(external_team)
+
+    def test_handle_rationale_in_response(self):
+        rationale_text = "This is a rationale text"
+        full_response = "This is a rationale text This is a full response"
+        expected_result = "This is a full response"
+
+        session_id = "123"
+        project_uuid = "456"
+        contact_urn = "789"
+        rationale_switch = True
+
+        backend = BedrockBackend(mock_event_manager_notify)
+
+        result = backend._handle_rationale_in_response(
+            rationale_text=rationale_text,
+            full_response=full_response,
+            session_id=session_id,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            rationale_switch=rationale_switch
+        )
+
+        self.assertEqual(result, expected_result)
