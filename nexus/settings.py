@@ -542,3 +542,4 @@ PROJECT_COMPONENTS = env.list("PROJECT_COMPONENTS", [])
 
 # Rationale agents
 AWS_RATIONALE_MODEL = env.str("AWS_RATIONALE_MODEL", "amazon.nova-pro-v1:0")
+AWS_BEDROCK_LOG_GROUP = env.str("AWS_BEDROCK_LOG_GROUP", "/aws/lambda/bedrock-agent-logs")
