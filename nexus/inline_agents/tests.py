@@ -16,6 +16,7 @@ from nexus.usecases.inline_agents.create import CreateAgentUseCase
 from nexus.usecases.inline_agents.update import UpdateAgentUseCase
 from nexus.usecases.inline_agents.get import GetInlineCredentialsUsecase
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.inline_agents.get import GetLogGroupUsecase
 
 
 class TestAgentsUsecase(TestCase):
@@ -306,3 +307,31 @@ class TestGetInlineCredentials(TestCase):
         official_credentials, custom_credentials = self.usecase.get_credentials_by_project(self.project.uuid)
         self.assertEqual(len(official_credentials), 1)
         self.assertEqual(len(custom_credentials), 0)
+
+
+class MockBedrockClient:
+    def get_log_group(self, tool_name: str) -> dict:
+        return {
+            "tool_name": tool_name,
+            "log_group_name": f"/aws/lambda/{tool_name}",
+            "log_group_arn": f"arn:aws:logs:region:XXXXXXXXX:log-group:/aws/lambda/{tool_name}",
+        }
+
+
+class TestGetLogGroup(TestCase):
+    def setUp(self):
+        self.usecase = GetLogGroupUsecase(MockBedrockClient)
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+
+        self.agent = Agent.objects.create(
+            name="Test Agent",
+            slug="test-agent",
+            project=self.project,
+        )
+
+    def test_get_log_group(self):
+        tool_key = "test-tool"
+        log_group = self.usecase.get_log_group(self.project.uuid, self.agent.slug, tool_key)
+        print(log_group)
+        self.assertEqual(log_group.get("tool_name"), f"{tool_key}-{self.agent.id}")

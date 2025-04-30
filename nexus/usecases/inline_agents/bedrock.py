@@ -11,6 +11,10 @@ class BedrockClient:
             "lambda",
             region_name=settings.AWS_BEDROCK_REGION_NAME
         )
+        self.cloudwatch_client = boto3.client(
+            "logs",
+            region_name=settings.AWS_BEDROCK_REGION_NAME
+        )
 
     def create_lambda_function(
         self,
@@ -83,3 +87,20 @@ class BedrockClient:
                 FunctionVersion=new_version,
                 Description='Production alias for the skill'
             )
+
+    def get_log_group(self, tool_name: str) -> dict:
+        response = self.cloudwatch_client.describe_log_groups(
+            logGroupNamePrefix=f'/aws/lambda/{tool_name}',
+            limit=1
+        )
+
+        log_group = response.get('logGroups', {})
+
+        if log_group:
+            return {
+                "tool_name": tool_name,
+                "log_group_name": log_group[0].get('logGroupName'),
+                "log_group_arn": log_group[0].get('logGroupArn'),
+            }
+
+        return log_group
