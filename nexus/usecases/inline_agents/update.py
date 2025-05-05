@@ -69,6 +69,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 cred.agents.add(agent)
 
         for cred in existing_credentials.values():
+            cred.agents.remove(agent)
             if cred.agents.count() <= 1:
                 print(f"[+ 🧠 Deleting credential {cred.key} {project.uuid} +]")
                 cred.delete()
