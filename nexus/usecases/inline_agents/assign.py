@@ -1,7 +1,7 @@
-from nexus.users.models import User
-from typing import Tuple, Optional
+from typing import Optional, Tuple
+
+from nexus.inline_agents.models import Agent, AgentCredential, IntegratedAgent
 from nexus.projects.models import Project
-from nexus.inline_agents.models import Agent, IntegratedAgent
 
 
 class AssignAgentsUsecase:
@@ -30,6 +30,12 @@ class AssignAgentsUsecase:
                 )
                 deleted_agent = integrated_agent
                 integrated_agent.delete()
+
+                for cred in AgentCredential.objects.filter(agents=agent, project=project):
+                    cred.agents.remove(agent)
+                    if len(cred.agents.all()) == 0:
+                        cred.delete()
+
                 return True, deleted_agent
             except IntegratedAgent.DoesNotExist:
                 return False, None
