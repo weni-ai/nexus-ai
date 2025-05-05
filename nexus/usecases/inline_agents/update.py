@@ -41,7 +41,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             return
 
         existing_credentials = {
-            cred.key: cred for cred in AgentCredential.objects.filter(project=project)
+            cred.key: cred for cred in AgentCredential.objects.filter(project=project, agents__in=[agent])
         }
 
         for key, credential in credentials.items():
@@ -69,8 +69,9 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 cred.agents.add(agent)
 
         for cred in existing_credentials.values():
-            print(f"[+ 🧠 Deleting credential {cred.key} +]")
-            cred.delete()
+            if cred.agents.count() <= 1:
+                print(f"[+ 🧠 Deleting credential {cred.key} {project.uuid} +]")
+                cred.delete()
 
     def update_credential_value(self, project_uuid: str, key: str, value: str) -> bool:
         try:
