@@ -41,7 +41,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             return
 
         existing_credentials = {
-            cred.key: cred for cred in AgentCredential.objects.filter(project=project)
+            cred.key: cred for cred in AgentCredential.objects.filter(project=project, agents__in=[agent])
         }
 
         for key, credential in credentials.items():
