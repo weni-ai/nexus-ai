@@ -69,10 +69,16 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 cred.agents.add(agent)
 
         for cred in existing_credentials.values():
-            cred.agents.remove(agent)
-            if cred.agents.count() <= 1:
+            agents = list(cred.agents.all())
+            
+            if len(agents) <= 0:
+                print(f"[+ 🧠 Deleting empty credential {cred.key} {project.uuid} +]")
+                cred.delete()
+            elif len(agents) == 1 and agent in agents:
                 print(f"[+ 🧠 Deleting credential {cred.key} {project.uuid} +]")
                 cred.delete()
+            elif agent in agents:
+                cred.agents.remove(agent)
 
     def update_credential_value(self, project_uuid: str, key: str, value: str) -> bool:
         try:
