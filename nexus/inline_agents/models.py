@@ -71,6 +71,9 @@ class AgentCredential(models.Model):
     metadata = models.JSONField(default=dict)
     agents = models.ManyToManyField(Agent)
 
+    class Meta:
+        unique_together = ('project', 'key')
+
     def clean(self):
         if not isinstance(self.key, str):
             raise CredentialKeyInvalid(field_name=self.key)
