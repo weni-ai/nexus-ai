@@ -12,7 +12,9 @@ class ProjectPermission(permissions.BasePermission):
         uuids = {
             view.kwargs.get("project_uuid"),
             request.data.get("project"),
-            request.data.get("project_uuid")
+            request.data.get("project_uuid"),
+            request.query_params.get("project"),
+            request.query_params.get("project_uuid"),
         }
         uuids.discard(None)
 
