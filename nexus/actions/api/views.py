@@ -258,6 +258,7 @@ class MessagePreviewView(APIView):
             )
 
             data = request.data
+            language = data.get("language", "en")
             message = UserMessage(
                 project_uuid=project_uuid,
                 text=data.get("text"),
@@ -267,10 +268,15 @@ class MessagePreviewView(APIView):
             )
             if project.inline_agent_switch:
                 print("[+ Starting Inline Agent +]")
-                task = start_inline_agents.delay(message.dict(), preview=True, user_email=request.user.email)
+                task = start_inline_agents.delay(
+                    message=message.dict(),
+                    preview=True,
+                    user_email=request.user.email,
+                    language=language
+                )
                 response = task.wait()
             else:
-                task = start_route.delay(message.__dict__, preview=True)
+                task = start_route.delay(message=message.__dict__, preview=True)
                 response = task.wait()
 
             return Response(data=response)

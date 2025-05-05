@@ -48,24 +48,59 @@ class SummaryTracesObserver(EventObserver):
             if settings.TRACE_SUMMARY_DELAY:
                 time.sleep(3)
 
-            prompt = f"""
-            Generate a concise, one-line summary of the trace of the action, in {language}.
-            This summary must describe the orchestrator's action, referring to all actions as "skills."
+            prompt = f"""You are an expert summarizer.
 
-            Guidelines for your response:
-            - Use the following language for the summary: {language}.
-            - The text to be summarized is the trace of the action.
-            - Use a systematic style (e.g., "Cancel Order skill activated", "Forwarding request to Reporting skill").
-            - The summary must not exceed 10 words.
-            - Use varied gerunds (e.g., "Checking", "Cancelling", "Forwarding").
-            - Do not include technical details about models, architectures, language codes, or anything unrelated to summarizing the action.
+                Goal
+                -----
+                Create **one sentence (≤10 words)** that captures the orchestrator's current action.
 
-            Here is the trace of the action:
-            {json.dumps(trace_data, indent=2)}
-            """
+                Language
+                ---------
+                Write the sentence in **{language}**.
+                - If {language}.lower().startswith("pt"): use natural Brazilian Portuguese.
+                - Otherwise, write in English.
+
+                Phrase templates
+                -----------------
+                Follow these steps to find the correct action key and phrase:
+
+                1.  **Check for keys inside `trace.orchestrationTrace`:**
+                    *   Look inside the `trace.orchestrationTrace` object (if it exists).
+                    *   Find the *first* key in this object that matches one of the following specific keys:
+                        *   `modelInvocationInput` → {{ "pt": "Invocando modelo", "en": "Invoking model" }}
+                        *   `modelInvocationOutput` → {{ "pt": "Resposta do modelo recebida", "en": "Received model response" }}
+                        *   `observation` → {{ "pt": "Observando resultado da ação", "en": "Observing action result" }}
+                        *   `rationale` → {{ "pt": "Pensando sobre {{topic}}", "en": "Thinking about {{topic}}" }}
+                        *   `agentCollaboratorInvocationInput` → {{ "pt": "Delegando ao agente {{agent}}", "en": "Delegating to agent {{agent}}" }}
+                        *   `actionGroupInvocationInput` → {{ "pt": "Chamando tool {{func}}", "en": "Calling tool {{func}}" }}
+                        *   `actionGroupInvocationOutput` → {{ "pt": "Saída da tool {{func}} recebida", "en": "Received output of tool {{func}}" }}
+                        *   `agentCollaboratorInvocationOutput` / `finalResponse` → {{ "pt": "Resultado do agente {{agent}} recebido", "en": "Agent {{agent}} result received" }}
+                    *   If a match is found **here**, use its corresponding phrase and **stop**. Do not proceed to step 2.
+
+                2.  **If no match in step 1, check for keys inside `trace`:**
+                    *   Look directly inside the `trace` object.
+                    *   Find the *first* key in this object that matches the following specific key:
+                        *   `guardrailTrace` → {{ "pt": "Aplicando guardrails", "en": "Applying guardrails" }}
+                    *   If a match is found here, use its corresponding phrase.
+
+                For PT / EN translations, use the mapping shown next to each key.
+                Remember to replace placeholders like `{{topic}}`, `{{agent}}`, and `{{func}}` if applicable based on the trace content.
+
+                Rules
+                ------
+                1. Start with a suitable gerund/verb (e.g., Verificando / Checking).
+                2. Replace {{topic}}, {{agent}}, {{func}} with meaningful terms from the trace when they exist.
+                3. If none of the templates match, craft a generic gerund summary (≤ 10 words).
+                4. Do **not** expose technical details (model names, architectures, language codes, etc.).
+                5. The final sentence MUST NOT end with a period or any other punctuation mark.
+
+                JSON trace to summarize
+                ------------------------
+                {json.dumps(trace_data, indent=2)}"""
 
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4.1-nano",
+                temperature=0,
                 max_tokens=100,
                 messages=[{
                     "role": "user",
