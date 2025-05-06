@@ -272,7 +272,7 @@ class VtexAppOfficialAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.VTEX_APP)
 
         if search:
             query_filter = Q(name__icontains=search)
