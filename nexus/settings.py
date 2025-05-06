@@ -542,3 +542,6 @@ PROJECT_COMPONENTS = env.list("PROJECT_COMPONENTS", [])
 
 # Rationale agents
 AWS_RATIONALE_MODEL = env.str("AWS_RATIONALE_MODEL", "amazon.nova-pro-v1:0")
+
+# Project auth
+PROJECT_AUTH_API_BASE_URL = env.str("PROJECT_AUTH_API_BASE_URL", "")
