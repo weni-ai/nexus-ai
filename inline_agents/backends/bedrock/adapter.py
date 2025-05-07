@@ -276,6 +276,8 @@ class BedrockTeamAdapter(TeamAdapter):
                     'promptCreationMode': 'OVERRIDDEN'
                 }
             )
+        return prompt_override_configuration
+
     @classmethod
     def __get_collaborator_prompt_override_configuration(self) -> dict:
         return {
