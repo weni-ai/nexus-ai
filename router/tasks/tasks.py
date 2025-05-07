@@ -506,6 +506,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         print(f"[- START ROUTE - Error: {e} -]")
         if message.text:
             log_usecase.update_status("F", exception_text=e)
+        raise
 
 
 @celery_app.task(bind=True, soft_time_limit=300, time_limit=360)
