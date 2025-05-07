@@ -73,7 +73,7 @@ class BedrockTeamAdapter(TeamAdapter):
             "collaborators": self._get_collaborators(agents),
             "collaboratorConfigurations": self._get_collaborator_configurations(agents),
             "guardrailConfiguration": self._get_guardrails(),
-            "promptOverrideConfiguration": self.__get_prompt_override_configuration()
+            "promptOverrideConfiguration": self.__get_prompt_override_configuration(use_components=use_components)
         }
 
         return external_team
