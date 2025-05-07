@@ -1,8 +1,10 @@
 import json
 import pendulum
 from django.conf import settings
+import os
 
 from inline_agents.adapter import TeamAdapter
+from inline_agents.backends.bedrock.prompts import PROMPT_POS_PROCESSING
 
 from django.utils.text import slugify
 from nexus.inline_agents.components import Components
@@ -226,8 +228,8 @@ class BedrockTeamAdapter(TeamAdapter):
         }
 
     @classmethod
-    def __get_prompt_override_configuration(self) -> dict:
-        return {
+    def __get_prompt_override_configuration(self, use_components: bool) -> dict:
+        prompt_override_configuration = {
             'promptConfigurations': [
                 {
                     'promptType': 'KNOWLEDGE_BASE_RESPONSE_GENERATION',
@@ -250,6 +252,30 @@ class BedrockTeamAdapter(TeamAdapter):
             ]
         }
 
+        if use_components:
+            prompt_override_configuration.update(
+                {'overrideLambda': os.environ.get('AWS_COMPONENTS_FUNCTION_ARN')}
+            )
+            prompt_override_configuration["promptConfigurations"].append(
+                {
+                    'basePromptTemplate': PROMPT_POS_PROCESSING,
+                    'foundationModel': settings.AWS_BEDROCK_AGENTS_MODEL_ID[0],
+                    'inferenceConfiguration': {
+                        'maximumLength': 2048,
+                        'stopSequences': [
+                            'Human:',
+                        ],
+                        'temperature': 0, 
+                        'topK': 250,
+                        'topP': 1
+                    },
+                    
+                    'promptType': 'POST_PROCESSING',
+                    'promptState': 'ENABLED',
+                    'parserMode': 'OVERRIDDEN',
+                    'promptCreationMode': 'OVERRIDDEN'
+                }
+            )
     @classmethod
     def __get_collaborator_prompt_override_configuration(self) -> dict:
         return {
