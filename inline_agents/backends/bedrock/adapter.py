@@ -120,7 +120,7 @@ class BedrockTeamAdapter(TeamAdapter):
 
             instruction = agent["instruction"]
             if settings.COLLABORATORS_DEFAULT_INSTRUCTIONS:
-                instruction = instruction + "\n\n" + "\n".join(settings.COLLABORATORS_DEFAULT_INSTRUCTIONS)
+                instruction = instruction + "\n\n" + settings.COLLABORATORS_DEFAULT_INSTRUCTIONS
                 instruction = instruction.replace("{{DATE_TIME_NOW}}", date_time_now)
 
             collaborators.append(
