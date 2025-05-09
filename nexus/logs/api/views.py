@@ -56,10 +56,6 @@ class TagPercentageViewSet(
 ):
 
     def list(self, request, *args, **kwargs):
-        def count_status(logs, tag):
-            logs = [log for log in logs if log.message.response_status == tag]
-            return len(logs)
-
         user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
 
@@ -83,26 +79,34 @@ class TagPercentageViewSet(
             return Response([], status=200)
 
         source = request.query_params.get('source', 'router')
-        message_logs = MessageLog.objects.filter(
+
+        base_query = MessageLog.objects.select_related('message').filter(
             created_at__date__gte=started_day,
             created_at__date__lte=ended_day,
             reflection_data__tag__isnull=False,
             source=source,
             project__uuid=str(project_uuid)
-        )
-        message_logs = message_logs.exclude(message__status="F")
+        ).exclude(message__status="F")
 
-        if not message_logs.exists():
+        if not base_query.exists():
             return Response([], status=200)
 
-        tag_counts = message_logs.aggregate(action_count=Count(Case(When(reflection_data__tag='action_started', then=1), output_field=IntegerField())))
-
-        status_message_logs = message_logs.exclude(reflection_data__tag="action_started")
-
-        tag_counts.update({
-            "succeed_count": count_status(status_message_logs, "S"),
-            "failed_count": count_status(status_message_logs, "F"),
-        })
+        tag_counts = {}
+        
+        action_count = base_query.filter(
+            reflection_data__tag='action_started'
+        ).count()
+        tag_counts['action_count'] = action_count
+        
+        status_logs_base = base_query.exclude(reflection_data__tag="action_started")
+        
+        tag_counts['succeed_count'] = status_logs_base.filter(
+            message__response_status_cache="S"
+        ).count()
+        
+        tag_counts['failed_count'] = status_logs_base.filter(
+            message__response_status_cache="F"
+        ).count()
 
         total_logs = sum(tag_counts.values())
         if total_logs == 0:
