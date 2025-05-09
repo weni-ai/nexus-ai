@@ -70,7 +70,7 @@ class BedrockTeamAdapter(TeamAdapter):
             "enableTrace": self._get_enable_trace(),
             "sessionId": self._get_session_id(contact_urn, project_uuid),
             "inputText": input_text,
-            "collaborators": self._get_collaborators(agents),
+            "collaborators": self._get_collaborators(agents, llm_formatted_time),
             "collaboratorConfigurations": self._get_collaborator_configurations(agents),
             "guardrailConfiguration": self._get_guardrails(),
             "promptOverrideConfiguration": self.__get_prompt_override_configuration(use_components=use_components)
@@ -114,13 +114,19 @@ class BedrockTeamAdapter(TeamAdapter):
         return True
 
     @classmethod
-    def _get_collaborators(cls, agents: list[dict]) -> list:
+    def _get_collaborators(cls, agents: list[dict], date_time_now: str) -> list:
         collaborators = []
         for agent in agents:
+
+            instruction = agent["instruction"]
+            if settings.COLLABORATORS_DEFAULT_INSTRUCTIONS:
+                instruction = instruction + "\n\n" + settings.COLLABORATORS_DEFAULT_INSTRUCTIONS
+                instruction = instruction.replace("{{DATE_TIME_NOW}}", date_time_now)
+
             collaborators.append(
                 {
                     "agentName": agent["agentName"],
-                    "instruction": agent["instruction"],
+                    "instruction": instruction,
                     "actionGroups": agent["actionGroups"],
                     "foundationModel": agent["foundationModel"],
                     "agentCollaboration": agent["agentCollaboration"],
