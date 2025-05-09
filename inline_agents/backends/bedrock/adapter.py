@@ -117,10 +117,15 @@ class BedrockTeamAdapter(TeamAdapter):
     def _get_collaborators(cls, agents: list[dict]) -> list:
         collaborators = []
         for agent in agents:
+
+            instruction = agent["instruction"]
+            if settings.COLLABORATORS_DEFAULT_INSTRUCTIONS:
+                instruction = instruction + "\n\n" + "\n".join(settings.COLLABORATORS_DEFAULT_INSTRUCTIONS)
+
             collaborators.append(
                 {
                     "agentName": agent["agentName"],
-                    "instruction": agent["instruction"],
+                    "instruction": instruction,
                     "actionGroups": agent["actionGroups"],
                     "foundationModel": agent["foundationModel"],
                     "agentCollaboration": agent["agentCollaboration"],
