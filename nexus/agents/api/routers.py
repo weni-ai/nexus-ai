@@ -46,6 +46,6 @@ urlpatterns = [
     path('project/<project_uuid>/app-credentials', VtexAppInlineProjectCredentialsView.as_view(), name="vtex-project-credentials"),
     path('project/<project_uuid>/rationale', RationaleView.as_view(), name="project-rationale"),
     path('project/<project_uuid>/components', InlineProjectComponentsView.as_view(), name="project-components"),
-    path('project/<project_uuid>/multi-agent', MultiAgentView.as_view(), name="multi-agent"),
+    path('project/<project_uuid>/multi-agents', MultiAgentView.as_view(), name="multi-agents"),
     path('agents/log-group', LogGroupView.as_view(), name="agents-log-group"),
 ]
