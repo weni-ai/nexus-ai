@@ -179,14 +179,7 @@ class MessageHistoryViewset(
             if text_param:
                 params["user_text__icontains"] = text_param
 
-            logs = AgentMessage.objects.filter(
-                **params
-            ).order_by('-created_at')
-
-            if not logs:
-                return MessageLog.objects.none()
-
-            return logs
+            return AgentMessage.objects.filter(**params).order_by('-created_at')
 
         except:
             if tag_param and tag_param == "action_started":
@@ -194,28 +187,25 @@ class MessageHistoryViewset(
 
             if text_param:
                 params["message__text__icontains"] = text_param
-
-            logs = MessageLog.objects.filter(
-                **params
-            ).exclude(
+            
+            queryset = MessageLog.objects.filter(**params).exclude(
                 reflection_data__isnull=True
-            ).select_related(
-                'message'
-            ).order_by(
-                '-created_at'
             )
-
+            
             if tag_param and tag_param != "action_started":
                 status = {
                     "success": "S",
                     "failed": "F",
                 }
-                logs = [log for log in logs if log.message.response_status == status.get(tag_param) and log.reflection_data.get("tag") != "action_started"]
-
-            if not logs:
-                return MessageLog.objects.none()
-
-        return logs
+                status_value = status.get(tag_param)
+                if status_value:
+                    queryset = queryset.filter(
+                        message__response_status=status_value
+                    ).exclude(
+                        reflection_data__tag="action_started"
+                    )
+            
+            return queryset.select_related('message').order_by('-created_at')
 
     def get_serializer_class(self):
         queryset = self.get_queryset()
