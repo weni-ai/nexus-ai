@@ -431,7 +431,7 @@ class LogGroupView(APIView):
 class MultiAgentView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
 
-    def get(self, project_uuid):
+    def get(self, request, project_uuid):
         if not project_uuid:
             return Response(
                 {"error": "project is required"},
