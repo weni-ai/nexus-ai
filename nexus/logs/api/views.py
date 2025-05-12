@@ -413,11 +413,11 @@ class InlineConversationsViewset(
     def list(self, request, *args, **kwargs):
         project_uuid = self.kwargs.get('project_uuid')
 
-        end_date = request.query_params.get('end')
         start_date = request.query_params.get('start')
+        end_date = request.query_params.get('end')
         contact_urn = request.query_params.get('contact_urn')
 
-        if not all([end_date, start_date, contact_urn]):
+        if not all([start_date, contact_urn]):
             return Response(
                 {
                     "error": "Missing required parameters"
@@ -426,10 +426,16 @@ class InlineConversationsViewset(
             )
 
         try:
-            start = pendulum.from_format(start_date, 'DD-MM-YYYY').start_of('day')
-            end = pendulum.from_format(end_date, 'DD-MM-YYYY').end_of('day')
+            start = pendulum.parse(start_date)
+
+            if end_date:
+                end = pendulum.parse(end_date)
+            else:
+                # If no end_date provided, use start_date + 1 day
+                end = start.add(days=1)
+
         except ValueError:
-            return Response({"error": "Invalid date format. Use DD-MM-YYYY"}, status=400)
+            return Response({"error": "Invalid datetime format"}, status=400)
 
         usecase = ListLogUsecase()
         messages = usecase.list_last_inline_messages(
