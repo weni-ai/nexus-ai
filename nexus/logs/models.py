@@ -58,12 +58,13 @@ class Message(models.Model):
     )
     exception = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    groundedness_details_cache = models.JSONField(null=True, blank=True)
+    response_status_cache = models.CharField(max_length=1, choices=STATUS_CHOICES, null=True, blank=True)
 
     def __str__(self) -> str:
         return f"{self.status} - {self.contact_urn}"
 
-    @property
-    def groundedness_details(self):
+    def calculate_groundedness_details(self):
         messagelog_groundedness_details = self.messagelog.groundedness_details
 
         if not messagelog_groundedness_details:
@@ -107,17 +108,37 @@ class Message(models.Model):
             return
         return messagelog_groundedness_details
 
-    @property
-    def response_status(self):
+    def calculate_response_status(self):
         status = {
             True: "S",
             False: "F"
         }
-        groundedness_score: int = self.messagelog.groundedness_score
+        groundedness_score = self.messagelog.groundedness_score
 
         if groundedness_score or isinstance(groundedness_score, int):
             return status.get(groundedness_score >= settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD)
         return "F"
+
+    def update_cached_properties(self, save=True):
+        """Update all cached property fields"""
+        self.groundedness_details_cache = self.calculate_groundedness_details()
+        self.response_status_cache = self.calculate_response_status()
+        if save:
+            self.save(update_fields=['groundedness_details_cache', 'response_status_cache'])
+
+    @property
+    def groundedness_details(self):
+        """Legacy property that now returns the cached value or calculates it"""
+        if self.groundedness_details_cache is None:
+            return self.calculate_groundedness_details()
+        return self.groundedness_details_cache
+
+    @property
+    def response_status(self):
+        """Legacy property that now returns the cached value or calculates it"""
+        if self.response_status_cache is None:
+            return self.calculate_response_status()
+        return self.response_status_cache
 
 
 class MessageLog(models.Model):
