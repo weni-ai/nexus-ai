@@ -366,7 +366,7 @@ class VtexAppProjectCredentialsView(APIView):
 
 
 class ProjectComponentsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, project_uuid):
         try:
@@ -427,3 +427,49 @@ class LogGroupView(APIView):
             )
 
         return Response({"log_group": log_group})
+
+class MultiAgentView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, project_uuid):
+        if not project_uuid:
+            return Response(
+                {"error": "project is required"},
+                status=400
+            )
+        
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+            return Response({
+                "multi_agents": project.inline_agent_switch
+            })
+        except Project.DoesNotExist:
+            return Response(
+                {"error": "Project not found"},
+                status=404
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=500
+            )
+
+    def patch(self, request, project_uuid):
+        multi_agents = request.data.get('multi_agents')
+        if multi_agents is None:
+            return Response(
+                {"error": "multi_agents field is required"},
+                status=400
+            )
+        
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+            project.inline_agent_switch = multi_agents
+            project.save()
+            return Response(
+                {"message": "Project updated successfully", "multi_agents": multi_agents}, status=200)
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=500
+            )
