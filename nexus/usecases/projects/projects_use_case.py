@@ -155,12 +155,13 @@ class ProjectsUseCase:
                 consumer_msg=auth_consumer_msg
             )
 
-        agent_valid_users = settings.AGENT_VALID_USERS
-        agent_valid_orgs = settings.AGENT_VALID_ORGS
+        # TODO: Remove this because now we have a button to set the project as multi-agent for some users
+        # agent_valid_users = settings.AGENT_VALID_USERS
+        # agent_valid_orgs = settings.AGENT_VALID_ORGS
 
-        if project.created_by.email in agent_valid_users or str(org.uuid) in agent_valid_orgs:
-            project.inline_agent_switch = True
-            project.save()
+        # if project.created_by.email in agent_valid_users or str(org.uuid) in agent_valid_orgs:
+        #     project.inline_agent_switch = True
+        #     project.save()
 
         return project
 
