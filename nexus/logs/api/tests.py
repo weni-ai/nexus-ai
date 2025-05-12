@@ -642,7 +642,7 @@ class InlineConversationsViewsetTestCase(TestCase):
             end_date = self.now.add(days=1).to_iso8601_string()
 
             request = self.factory.get(
-                f"api/{self.project.uuid}/inline_conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
+                f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
             )
             force_authenticate(request, user=self.user)
 
@@ -676,7 +676,7 @@ class InlineConversationsViewsetTestCase(TestCase):
             start_date = self.now.subtract(days=2).subtract(hours=1).to_iso8601_string()
 
             request = self.factory.get(
-                f"api/{self.project.uuid}/inline_conversations/?contact_urn=tel:123456&start={start_date}"
+                f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&start={start_date}"
             )
             force_authenticate(request, user=self.user)
 
@@ -705,7 +705,7 @@ class InlineConversationsViewsetTestCase(TestCase):
         end_date = pendulum.now().add(days=1).to_iso8601_string()
 
         request = self.factory.get(
-            f"api/{self.project.uuid}/inline_conversations/?contact_urn=tel:654321&start={start_date}&end={end_date}"
+            f"api/{self.project.uuid}/conversations/?contact_urn=tel:654321&start={start_date}&end={end_date}"
         )
         force_authenticate(request, user=self.user)
 
@@ -729,7 +729,7 @@ class InlineConversationsViewsetTestCase(TestCase):
 
         # Missing contact_urn
         request = self.factory.get(
-            f"api/{self.project.uuid}/inline_conversations/?start={start_date}&end={end_date}"
+            f"api/{self.project.uuid}/conversations/?start={start_date}&end={end_date}"
         )
         force_authenticate(request, user=self.user)
 
@@ -746,7 +746,7 @@ class InlineConversationsViewsetTestCase(TestCase):
 
         # Missing start date
         request = self.factory.get(
-            f"api/{self.project.uuid}/inline_conversations/?contact_urn=tel:123456&end={end_date}"
+            f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&end={end_date}"
         )
         force_authenticate(request, user=self.user)
 
@@ -768,7 +768,7 @@ class InlineConversationsViewsetTestCase(TestCase):
         end_date = pendulum.now().add(days=1).to_iso8601_string()
 
         request = self.factory.get(
-            f"api/{self.project.uuid}/inline_conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
+            f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
         )
 
         response = InlineConversationsViewset.as_view({'get': 'list'})(
@@ -786,7 +786,7 @@ class InlineConversationsViewsetTestCase(TestCase):
         end_date = pendulum.now().add(days=1).to_iso8601_string()
 
         request = self.factory.get(
-            f"api/{self.project.uuid}/inline_conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
+            f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
         )
         force_authenticate(request, user=self.user)
 
