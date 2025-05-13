@@ -16,7 +16,7 @@ from .exceptions import (
     ContentBaseFileDoesNotExist,
     ContentBaseLinkDoesNotExist,
 )
-from nexus.projects.permissions import has_external_general_project_permission
+from nexus.projects.permissions import has_project_permission
 from nexus.intelligences.models import ContentBaseLink
 
 
@@ -65,7 +65,7 @@ class RetrieveContentBaseUseCase():
 
         if not is_superuser:
             user = users.get_by_email(user_email)
-            has_external_general_project_permission(
+            has_project_permission(
                 user=user,
                 project=project,
                 method='GET'
