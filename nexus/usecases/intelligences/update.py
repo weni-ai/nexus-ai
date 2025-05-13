@@ -7,7 +7,7 @@ from .get_by_uuid import (
     get_llm_by_project_uuid,
 )
 from nexus.usecases import orgs, users, projects
-from nexus.projects.permissions import has_external_general_project_permission
+from nexus.projects.permissions import has_project_permission
 from nexus.orgs import permissions
 from .exceptions import IntelligencePermissionDenied
 from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO, UpdateLLMDTO
@@ -244,7 +244,7 @@ class UpdateLLMUseCase():
         project = projects.get_project_by_uuid(update_llm_dto.project_uuid)
         user = users.get_by_email(update_llm_dto.user_email)
 
-        has_external_general_project_permission(
+        has_project_permission(
             user=user,
             project=project,
             method='PUT'

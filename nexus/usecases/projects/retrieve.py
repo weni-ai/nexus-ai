@@ -11,7 +11,7 @@ def get_project(
     project = get_project_by_uuid(project_uuid)
     user = users.get_by_email(user_email)
 
-    permissions.has_external_general_project_permission(user, project, "GET")
+    permissions.has_project_permission(user, project, "GET")
 
     return project
 
