@@ -23,8 +23,6 @@ from nexus.usecases.logs.list import ListLogUsecase
 from nexus.usecases.logs.retrieve import RetrieveMessageLogUseCase
 from nexus.usecases.logs.create import CreateLogUsecase
 
-from nexus.projects.permissions import has_project_permission
-
 from django.conf import settings
 from django.db.models import Count, Case, When, IntegerField
 from django.utils.dateparse import parse_date
@@ -32,7 +30,7 @@ from django.utils.dateparse import parse_date
 from nexus.paginations import InlineConversationsCursorPagination
 from nexus.logs.api.serializers import MessageDetailSerializer, InlineConversationSerializer
 from nexus.projects.api.permissions import ProjectPermission
-from nexus.agents.models import AgentMessage, Team
+from nexus.agents.models import AgentMessage
 from nexus.agents.api.serializers import AgentMessageHistorySerializer, AgentMessageDetailSerializer
 from nexus.projects.models import Project
 
@@ -54,12 +52,11 @@ class TagPercentageViewSet(
     ListModelMixin,
     GenericViewSet
 ):
+    permission_classes = [ProjectPermission]
 
     def list(self, request, *args, **kwargs):
-        user = self.request.user
-        project_uuid = self.kwargs.get('project_uuid')
 
-        has_project_permission(user, project_uuid, 'GET')
+        project_uuid = self.kwargs.get('project_uuid')
 
         started_day = self.request.query_params.get(
             'started_day',
@@ -132,13 +129,11 @@ class MessageHistoryViewset(
 ):
     pagination_class = CustomPageNumberPagination
     serializer_class = MessageHistorySerializer
+    permission_classes = [ProjectPermission]
 
     def get_queryset(self):
 
-        user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
-
-        has_project_permission(user, project_uuid, 'GET')
 
         params = {
             "project__uuid": project_uuid,
@@ -216,6 +211,7 @@ class MessageHistoryViewset(
         }
         return serializers_map.get(model, self.serializer_class)
 
+
 class LogsViewset(
     ReadOnlyModelViewSet
 ):
@@ -276,16 +272,14 @@ class RecentActivitiesViewset(
     GenericViewSet
 ):
     serializer_class = RecentActivitiesSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
     pagination_class = CustomPageNumberPagination
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return RecentActivities.objects.none()  # pragma: no cover
 
-        user = self.request.user
         project = self.kwargs.get('project_uuid')
-        has_project_permission(user, project, 'GET')
 
         filter_params = {
             'project': project
@@ -362,15 +356,13 @@ class ConversationContextViewset(
     GenericViewSet
 ):
 
+    permission_classes = [ProjectPermission]
     # serializer_class = MessageDetailSerializer
 
     def list(self, request, *args, **kwargs):
-        user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
         log_id = self.request.query_params.get('log_id')
         number_of_messages = self.request.query_params.get('number_of_messages', 5)
-
-        has_project_permission(user, project_uuid, 'GET')
 
         try:
             project = Project.objects.get(uuid=project_uuid)
@@ -407,11 +399,11 @@ class InlineConversationsViewset(
     def list(self, request, *args, **kwargs):
         project_uuid = self.kwargs.get('project_uuid')
 
-        end_date = request.query_params.get('end')
         start_date = request.query_params.get('start')
+        end_date = request.query_params.get('end')
         contact_urn = request.query_params.get('contact_urn')
 
-        if not all([end_date, start_date, contact_urn]):
+        if not all([start_date, contact_urn]):
             return Response(
                 {
                     "error": "Missing required parameters"
@@ -420,10 +412,16 @@ class InlineConversationsViewset(
             )
 
         try:
-            start = pendulum.from_format(start_date, 'DD-MM-YYYY').start_of('day')
-            end = pendulum.from_format(end_date, 'DD-MM-YYYY').end_of('day')
+            start = pendulum.parse(start_date)
+
+            if end_date:
+                end = pendulum.parse(end_date)
+            else:
+                # If no end_date provided, use start_date + 1 day
+                end = start.add(days=1)
+
         except ValueError:
-            return Response({"error": "Invalid date format. Use DD-MM-YYYY"}, status=400)
+            return Response({"error": "Invalid datetime format"}, status=400)
 
         usecase = ListLogUsecase()
         messages = usecase.list_last_inline_messages(

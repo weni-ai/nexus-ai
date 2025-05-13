@@ -106,12 +106,10 @@ class TestGetLLMConfig(TestCase):
     def setUp(self) -> None:
         self.llm = LLMFactory()
         self.project_uuid = self.llm.integrated_intelligence.project.uuid
-        self.created_by_email = self.llm.created_by.email
 
     def test_list_llm_config(self):
 
         llm_config = get_llm_config(
             project_uuid=self.project_uuid,
-            user_email=self.created_by_email
         )
         self.assertEqual(self.llm.setup.get('temperature'), llm_config.setup.get('temperature'))
