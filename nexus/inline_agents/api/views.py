@@ -437,11 +437,12 @@ class MultiAgentView(APIView):
                 {"error": "project is required"},
                 status=400
             )
-        
+
         try:
             project = Project.objects.get(uuid=project_uuid)
             return Response({
-                "multi_agents": project.inline_agent_switch
+                "multi_agents": project.inline_agent_switch,
+                "can_view": (("@weni.ai" in request.user.email) or ("@vtex.com" in request.user.email))
             })
         except Project.DoesNotExist:
             return Response(
