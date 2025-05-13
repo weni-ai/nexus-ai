@@ -20,7 +20,7 @@ from nexus.intelligences.models import (
 from nexus.orgs import permissions
 from nexus.paginations import CustomCursorPagination
 from nexus.projects.models import Project
-from nexus.projects.permissions import has_project_permission
+from nexus.projects.permissions import has_external_general_project_permission
 from nexus.storage import AttachmentPreviewStorage, validate_mime_type
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
@@ -1236,7 +1236,7 @@ class ContentBaseFilePreview(views.APIView):
             if not cb_org == project_org:
                 raise IntelligencePermissionDenied()
 
-            has_project_permission(
+            has_external_general_project_permission(
                 user=request.user,
                 project=project,
                 method="post"
@@ -1261,7 +1261,7 @@ class UploadFileView(views.APIView):
         user = request.user
 
         project = get_project_by_uuid(project_uuid)
-        has_project_permission(
+        has_external_general_project_permission(
             user=user,
             project=project,
             method="post"

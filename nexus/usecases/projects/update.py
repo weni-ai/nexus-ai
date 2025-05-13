@@ -5,7 +5,7 @@ from nexus.usecases.projects.dto import UpdateProjectDTO
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.retrieve import get_integrated_feature
 from nexus.projects.models import Project, IntegratedFeature
-from nexus.projects.permissions import has_project_permission
+from nexus.projects.permissions import has_external_general_project_permission
 from nexus.usecases import users
 from nexus.events import event_manager
 
@@ -52,7 +52,7 @@ class ProjectUpdateUseCase:
 
         old_project_data = copy.deepcopy(project)
 
-        has_project_permission(
+        has_external_general_project_permission(
             user=user,
             project=project,
             method="patch"

@@ -27,7 +27,7 @@ from nexus.usecases.agents import (
 )
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.projects.api.permissions import ProjectPermission
-from nexus.projects.permissions import has_project_permission
+from nexus.projects.permissions import has_external_general_project_permission
 from nexus.projects.models import Project
 
 
@@ -701,7 +701,7 @@ class AgentTracesView(
 
         print(project_uuid, log_id)
 
-        has_project_permission(user, project_uuid, 'GET')
+        has_external_general_project_permission(user, project_uuid, 'GET')
 
         if not log_id:
             return Response({"error": "log_id is required"}, status=400)

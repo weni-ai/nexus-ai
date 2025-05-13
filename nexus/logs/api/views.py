@@ -23,7 +23,7 @@ from nexus.usecases.logs.list import ListLogUsecase
 from nexus.usecases.logs.retrieve import RetrieveMessageLogUseCase
 from nexus.usecases.logs.create import CreateLogUsecase
 
-from nexus.projects.permissions import has_project_permission
+from nexus.projects.permissions import has_external_general_project_permission
 
 from django.conf import settings
 from django.db.models import Count, Case, When, IntegerField
@@ -59,7 +59,7 @@ class TagPercentageViewSet(
         user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
 
-        has_project_permission(user, project_uuid, 'GET')
+        has_external_general_project_permission(user, project_uuid, 'GET')
 
         started_day = self.request.query_params.get(
             'started_day',
@@ -139,7 +139,7 @@ class MessageHistoryViewset(
         user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
 
-        has_project_permission(user, project_uuid, 'GET')
+        has_external_general_project_permission(user, project_uuid, 'GET')
 
         params = {
             "project__uuid": project_uuid,
@@ -287,7 +287,7 @@ class RecentActivitiesViewset(
 
         user = self.request.user
         project = self.kwargs.get('project_uuid')
-        has_project_permission(user, project, 'GET')
+        has_external_general_project_permission(user, project, 'GET')
 
         filter_params = {
             'project': project
@@ -372,7 +372,7 @@ class ConversationContextViewset(
         log_id = self.request.query_params.get('log_id')
         number_of_messages = self.request.query_params.get('number_of_messages', 5)
 
-        has_project_permission(user, project_uuid, 'GET')
+        has_external_general_project_permission(user, project_uuid, 'GET')
 
         try:
             project = Project.objects.get(uuid=project_uuid)

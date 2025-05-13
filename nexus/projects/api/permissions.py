@@ -3,7 +3,7 @@ from rest_framework.exceptions import ValidationError
 
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
-from nexus.projects.permissions import has_project_permission
+from nexus.projects.permissions import has_external_general_project_permission
 from nexus.projects.models import ProjectAuth
 
 
@@ -24,7 +24,7 @@ class ProjectPermission(permissions.BasePermission):
             project_uuid = next(iter(uuids))
             project = ProjectsUseCase().get_by_uuid(project_uuid)
 
-            return has_project_permission(
+            return has_external_general_project_permission(
                 user=request.user,
                 project=project,
                 method=request.method

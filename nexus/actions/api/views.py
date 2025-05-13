@@ -16,7 +16,7 @@ from nexus.actions.models import Flow, TemplateAction
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.orgs.permissions import is_super_user
 from nexus.projects.exceptions import ProjectAuthorizationDenied
-from nexus.projects.permissions import has_project_permission
+from nexus.projects.permissions import has_external_general_project_permission
 from nexus.usecases import projects
 from nexus.usecases.actions.create import (
     CreateFlowDTO,
@@ -99,7 +99,7 @@ class FlowsViewset(
             project = projects.get_project_by_uuid(project_uuid)
             user = request.user
 
-            has_project_permission(
+            has_external_general_project_permission(
                 user=user,
                 project=project,
                 method="post"
@@ -158,7 +158,7 @@ class FlowsViewset(
             project = projects.get_project_by_uuid(project_uuid)
             user = request.user
 
-            has_project_permission(
+            has_external_general_project_permission(
                 user=user,
                 project=project,
                 method="get"
@@ -180,7 +180,7 @@ class FlowsViewset(
             project = projects.get_project_by_uuid(project_uuid)
             user = request.user
 
-            has_project_permission(
+            has_external_general_project_permission(
                 user=user,
                 project=project,
                 method="get"
@@ -204,7 +204,7 @@ class FlowsViewset(
         project = projects.get_project_by_uuid(project_uuid)
         user = request.user
 
-        has_project_permission(
+        has_external_general_project_permission(
             user=user,
             project=project,
             method="put"
@@ -226,7 +226,7 @@ class FlowsViewset(
             project = projects.get_project_by_uuid(project_uuid)
             user = request.user
 
-            has_project_permission(
+            has_external_general_project_permission(
                 user=user,
                 project=project,
                 method="delete"
@@ -251,7 +251,7 @@ class MessagePreviewView(APIView):
             project_uuid = kwargs.get("project_uuid")
             project = projects.get_project_by_uuid(project_uuid)
 
-            has_project_permission(
+            has_external_general_project_permission(
                 user=request.user,
                 project=project,
                 method="post"
@@ -291,7 +291,7 @@ class GenerateActionNameView(APIView):
         try:
             user = request.user
             project = projects.get_project_by_uuid(kwargs.get("project_uuid"))
-            has_project_permission(
+            has_external_general_project_permission(
                 method="post",
                 user=user,
                 project=project
@@ -334,7 +334,7 @@ class TemplateActionView(ModelViewSet):
 
             if not super_user:
                 user = request.user
-                has_project_permission(
+                has_external_general_project_permission(
                     method="get",
                     user=user,
                     project=project
