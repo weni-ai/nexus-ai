@@ -8,7 +8,7 @@ from nexus.intelligences.models import (
 )
 from nexus.usecases import orgs, users, projects
 from nexus.orgs import permissions
-from nexus.projects.permissions import has_project_permission
+from nexus.projects.permissions import has_external_general_project_permission
 from .exceptions import IntelligencePermissionDenied
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from .get_by_uuid import (
@@ -143,7 +143,7 @@ def get_llm_config(
     user = users.get_by_email(user_email)
     project = projects.get_project_by_uuid(project_uuid)
 
-    has_project_permission(
+    has_external_general_project_permission(
         user=user,
         project=project,
         method='GET'
