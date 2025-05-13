@@ -9,7 +9,7 @@ from channels.layers import get_channel_layer
 
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
-from nexus.projects.permissions import has_external_general_project_permission
+from nexus.projects.permissions import has_project_permission
 from nexus.projects.exceptions import ProjectDoesNotExist
 
 
@@ -67,7 +67,7 @@ class WebsocketMessageConsumer(WebsocketConsumer):
         if self.user.is_anonymous or close is True or self.project is None:
             self.close()
 
-        if not has_external_general_project_permission(
+        if not has_project_permission(
             self.user,
             self.project,
             "GET"
@@ -126,7 +126,7 @@ class PreviewConsumer(WebsocketConsumer):
             self.close()
             return
 
-        if not has_external_general_project_permission(
+        if not has_project_permission(
             self.user,
             self.project,
             "GET"
