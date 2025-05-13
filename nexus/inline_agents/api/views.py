@@ -462,7 +462,14 @@ class MultiAgentView(APIView):
                 {"error": "multi_agents field is required"},
                 status=400
             )
-        
+
+        can_access = (("@weni.ai" in request.user.email) or ("@vtex.com" in request.user.email))
+        if not can_access:
+            return Response(
+                {"error": "You are not authorized to access this resource"},
+                status=403
+            )
+
         try:
             project = Project.objects.get(uuid=project_uuid)
             project.inline_agent_switch = multi_agents
