@@ -27,7 +27,6 @@ from nexus.usecases.agents import (
 )
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.projects.api.permissions import ProjectPermission
-from nexus.projects.permissions import has_external_general_project_permission
 from nexus.projects.models import Project
 
 
@@ -693,15 +692,14 @@ class ProjectCredentialsView(APIView):
 class AgentTracesView(
     APIView
 ):
+    permission_classes = [ProjectPermission]
+
     def get(self, request):
-        user = self.request.user
 
         project_uuid = request.query_params.get('project_uuid')
         log_id = request.query_params.get('log_id')
 
         print(project_uuid, log_id)
-
-        has_external_general_project_permission(user, project_uuid, 'GET')
 
         if not log_id:
             return Response({"error": "log_id is required"}, status=400)
