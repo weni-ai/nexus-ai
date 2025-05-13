@@ -23,8 +23,6 @@ from nexus.usecases.logs.list import ListLogUsecase
 from nexus.usecases.logs.retrieve import RetrieveMessageLogUseCase
 from nexus.usecases.logs.create import CreateLogUsecase
 
-from nexus.projects.permissions import has_external_general_project_permission
-
 from django.conf import settings
 from django.db.models import Count, Case, When, IntegerField
 from django.utils.dateparse import parse_date
@@ -32,7 +30,7 @@ from django.utils.dateparse import parse_date
 from nexus.paginations import InlineConversationsCursorPagination
 from nexus.logs.api.serializers import MessageDetailSerializer, InlineConversationSerializer
 from nexus.projects.api.permissions import ProjectPermission
-from nexus.agents.models import AgentMessage, Team
+from nexus.agents.models import AgentMessage
 from nexus.agents.api.serializers import AgentMessageHistorySerializer, AgentMessageDetailSerializer
 from nexus.projects.models import Project
 
@@ -54,16 +52,14 @@ class TagPercentageViewSet(
     ListModelMixin,
     GenericViewSet
 ):
+    permission_classes = [ProjectPermission]
 
     def list(self, request, *args, **kwargs):
         def count_status(logs, tag):
             logs = [log for log in logs if log.message.response_status == tag]
             return len(logs)
 
-        user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
-
-        has_external_general_project_permission(user, project_uuid, 'GET')
 
         started_day = self.request.query_params.get(
             'started_day',
@@ -128,13 +124,11 @@ class MessageHistoryViewset(
 ):
     pagination_class = CustomPageNumberPagination
     serializer_class = MessageHistorySerializer
+    permission_classes = [ProjectPermission]
 
     def get_queryset(self):
 
-        user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
-
-        has_external_general_project_permission(user, project_uuid, 'GET')
 
         params = {
             "project__uuid": project_uuid,
@@ -222,6 +216,7 @@ class MessageHistoryViewset(
         }
         return serializers_map.get(model, self.serializer_class)
 
+
 class LogsViewset(
     ReadOnlyModelViewSet
 ):
@@ -282,16 +277,14 @@ class RecentActivitiesViewset(
     GenericViewSet
 ):
     serializer_class = RecentActivitiesSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
     pagination_class = CustomPageNumberPagination
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return RecentActivities.objects.none()  # pragma: no cover
 
-        user = self.request.user
         project = self.kwargs.get('project_uuid')
-        has_external_general_project_permission(user, project, 'GET')
 
         filter_params = {
             'project': project
@@ -368,15 +361,13 @@ class ConversationContextViewset(
     GenericViewSet
 ):
 
+    permission_classes = [ProjectPermission]
     # serializer_class = MessageDetailSerializer
 
     def list(self, request, *args, **kwargs):
-        user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
         log_id = self.request.query_params.get('log_id')
         number_of_messages = self.request.query_params.get('number_of_messages', 5)
-
-        has_external_general_project_permission(user, project_uuid, 'GET')
 
         try:
             project = Project.objects.get(uuid=project_uuid)

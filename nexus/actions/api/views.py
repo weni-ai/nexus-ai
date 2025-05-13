@@ -1,7 +1,6 @@
-from typing import Dict, List
+from typing import Dict
 
 from celery.exceptions import TaskRevokedError
-from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from rest_framework import status
 from rest_framework.response import Response
@@ -16,6 +15,7 @@ from nexus.actions.models import Flow, TemplateAction
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.orgs.permissions import is_super_user
 from nexus.projects.exceptions import ProjectAuthorizationDenied
+from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.permissions import has_external_general_project_permission
 from nexus.usecases import projects
 from nexus.usecases.actions.create import (
@@ -86,6 +86,7 @@ class FlowsViewset(
     ModelViewSet,
 ):
     serializer_class = FlowSerializer
+    permission_classes = [ProjectPermission]
     lookup_url_kwarg = 'flow_uuid'
 
     def get_queryset(self, *args, **kwargs):
@@ -98,12 +99,6 @@ class FlowsViewset(
             project_uuid = kwargs.get('project_uuid')
             project = projects.get_project_by_uuid(project_uuid)
             user = request.user
-
-            has_external_general_project_permission(
-                user=user,
-                project=project,
-                method="post"
-            )
 
             flow_uuid = request.data.get("uuid")
             fallback = request.data.get("fallback")
@@ -154,15 +149,6 @@ class FlowsViewset(
     def retrieve(self, request, *args, **kwargs):
         try:
             flow_uuid = kwargs.get('flow_uuid')
-            project_uuid = kwargs.get('project_uuid')
-            project = projects.get_project_by_uuid(project_uuid)
-            user = request.user
-
-            has_external_general_project_permission(
-                user=user,
-                project=project,
-                method="get"
-            )
 
             flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(uuid=flow_uuid)
             data = FlowSerializer(flow).data
@@ -177,14 +163,6 @@ class FlowsViewset(
     def list(self, request, *args, **kwargs):
         try:
             project_uuid = kwargs.get('project_uuid')
-            project = projects.get_project_by_uuid(project_uuid)
-            user = request.user
-
-            has_external_general_project_permission(
-                user=user,
-                project=project,
-                method="get"
-            )
 
             flows = ListFlowsUseCase().list_flows_by_project_uuid(project_uuid)
             data = FlowSerializer(flows, many=True).data
@@ -200,15 +178,7 @@ class FlowsViewset(
             name=request.data.get("name"),
             send_to_llm=request.data.get("send_to_llm", False),
         )
-        project_uuid = kwargs.get('project_uuid')
-        project = projects.get_project_by_uuid(project_uuid)
         user = request.user
-
-        has_external_general_project_permission(
-            user=user,
-            project=project,
-            method="put"
-        )
 
         flow = UpdateFlowsUseCase().update_flow(
             flow_dto=flow_dto,
@@ -226,12 +196,6 @@ class FlowsViewset(
             project = projects.get_project_by_uuid(project_uuid)
             user = request.user
 
-            has_external_general_project_permission(
-                user=user,
-                project=project,
-                method="delete"
-            )
-
             DeleteFlowsUseCase().hard_delete_flow(
                 flow_dto=flow_dto,
                 user=user,
@@ -245,17 +209,12 @@ class FlowsViewset(
 
 
 class MessagePreviewView(APIView):
+    permission_classes = [ProjectPermission]
 
     def post(self, request, *args, **kwargs):
         try:
             project_uuid = kwargs.get("project_uuid")
             project = projects.get_project_by_uuid(project_uuid)
-
-            has_external_general_project_permission(
-                user=request.user,
-                project=project,
-                method="post"
-            )
 
             data = request.data
             language = data.get("language", "en")
@@ -287,16 +246,10 @@ class MessagePreviewView(APIView):
 
 
 class GenerateActionNameView(APIView):
+    permission_classes = [ProjectPermission]
+
     def post(self, request, *args, **kwargs):
         try:
-            user = request.user
-            project = projects.get_project_by_uuid(kwargs.get("project_uuid"))
-            has_external_general_project_permission(
-                method="post",
-                user=user,
-                project=project
-            )
-
             data = request.data
             chatbot_goal = data.get("chatbot_goal")
             context = data.get("context")
@@ -325,7 +278,7 @@ class TemplateActionView(ModelViewSet):
     def list(self, request, *args, **kwargs):
         try:
             language = request.query_params.get("language", "pt-br")
-            project = projects.get_project_by_uuid(kwargs.get("project_uuid"))
+            project_uuid = kwargs.get("project_uuid")
 
             authorization_header = request.headers.get(
                 'Authorization', "Bearer unauthorized"
@@ -333,11 +286,10 @@ class TemplateActionView(ModelViewSet):
             super_user = is_super_user(authorization_header)
 
             if not super_user:
-                user = request.user
                 has_external_general_project_permission(
                     method="get",
-                    user=user,
-                    project=project
+                    request=request,
+                    project_uuid=project_uuid
                 )
 
             template_actions = ListTemplateActionUseCase().list_template_action(
