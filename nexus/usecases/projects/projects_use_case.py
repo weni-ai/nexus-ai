@@ -155,13 +155,6 @@ class ProjectsUseCase:
                 consumer_msg=auth_consumer_msg
             )
 
-        agent_valid_users = settings.AGENT_VALID_USERS
-        agent_valid_orgs = settings.AGENT_VALID_ORGS
-
-        if project.created_by.email in agent_valid_users or str(org.uuid) in agent_valid_orgs:
-            project.inline_agent_switch = True
-            project.save()
-
         return project
 
     def get_indexer_database_by_uuid(self, project_uuid: str):
