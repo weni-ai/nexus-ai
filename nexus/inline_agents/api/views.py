@@ -4,7 +4,7 @@ from django.db.models import Q
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, BasePermission
 
 from nexus.inline_agents.models import Agent
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
@@ -25,7 +25,6 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer
 )
 from nexus.projects.api.permissions import ProjectPermission
-
 
 SKILL_FILE_SIZE_LIMIT = 10
 # TODO: ProjectPermission
@@ -219,7 +218,7 @@ class ProjectCredentialsView(APIView):
             "created_credentials": created_credentials
         })
 
-from rest_framework.permissions import IsAuthenticated, BasePermission
+
 class InternalCommunicationPermission(BasePermission):
     def has_permission(self, request, view):
         user = request.user
@@ -322,7 +321,7 @@ class VtexAppProjectCredentialsView(APIView):
             updated = usecase.update_credential_value(project_uuid, key, value)
             if updated:
                 updated_credentials.append(key)
-                
+
         return Response({
             "message": "Credentials updated successfully",
             "updated_credentials": updated_credentials
@@ -428,6 +427,7 @@ class LogGroupView(APIView):
 
         return Response({"log_group": log_group})
 
+
 class MultiAgentView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
 
@@ -475,7 +475,8 @@ class MultiAgentView(APIView):
             project.inline_agent_switch = multi_agents
             project.save()
             return Response(
-                {"message": "Project updated successfully", "multi_agents": multi_agents}, status=200)
+                {"message": "Project updated successfully", "multi_agents": multi_agents}, status=200
+            )
         except Exception as e:
             return Response(
                 {"error": str(e)},
