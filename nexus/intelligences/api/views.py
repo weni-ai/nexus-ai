@@ -20,7 +20,7 @@ from nexus.intelligences.models import (
 from nexus.orgs import permissions
 from nexus.paginations import CustomCursorPagination
 from nexus.projects.models import Project
-from nexus.projects.permissions import has_project_permission
+from nexus.projects.api.permissions import ProjectPermission
 from nexus.storage import AttachmentPreviewStorage, validate_mime_type
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
@@ -907,12 +907,10 @@ class LogsViewSet(views.APIView):
 
 
 class RouterContentBaseViewSet(views.APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, project_uuid):
-        user_email = request.user.email
-        use_case = intelligences.RetrieveContentBaseUseCase()
-        content_base = use_case.get_default_by_project(project_uuid, user_email)
+        content_base = intelligences.get_by_uuid.get_default_content_base_by_project(project_uuid)
         return Response(data=RouterContentBaseSerializer(content_base).data, status=200)
 
 
@@ -1060,12 +1058,10 @@ class RouterRetailViewSet(views.APIView):
 
 
 class LLMViewset(views.APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, project_uuid):
-        user_email = request.user.email
         llm_config = intelligences.get_llm_config(
-            user_email=user_email,
             project_uuid=project_uuid
         )
         return Response(
@@ -1218,7 +1214,7 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
 
 
 class ContentBaseFilePreview(views.APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
 
     def post(self, request, *args, **kwargs):
         try:
@@ -1236,12 +1232,6 @@ class ContentBaseFilePreview(views.APIView):
             if not cb_org == project_org:
                 raise IntelligencePermissionDenied()
 
-            has_project_permission(
-                user=request.user,
-                project=project,
-                method="post"
-            )
-
             response = search_file_database.document_preview(
                 content_base_file_uuid=content_base_file_uuid,
                 content_base_uuid=content_base,
@@ -1256,16 +1246,9 @@ class ContentBaseFilePreview(views.APIView):
 
 
 class UploadFileView(views.APIView):
-    def post(self, request, *args, **kwargs):
-        project_uuid = kwargs.get("project_uuid")
-        user = request.user
+    permission_classes = [ProjectPermission]
 
-        project = get_project_by_uuid(project_uuid)
-        has_project_permission(
-            user=user,
-            project=project,
-            method="post"
-        )
+    def post(self, request, *args, **kwargs):
 
         file = request.FILES.get('file')
         if not file:

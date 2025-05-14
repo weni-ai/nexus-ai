@@ -1,4 +1,3 @@
-import os
 import pendulum
 
 from rest_framework import views
@@ -23,16 +22,13 @@ from nexus.usecases.logs.list import ListLogUsecase
 from nexus.usecases.logs.retrieve import RetrieveMessageLogUseCase
 from nexus.usecases.logs.create import CreateLogUsecase
 
-from nexus.projects.permissions import has_project_permission
-
 from django.conf import settings
-from django.db.models import Count, Case, When, IntegerField
 from django.utils.dateparse import parse_date
 
 from nexus.paginations import InlineConversationsCursorPagination
 from nexus.logs.api.serializers import MessageDetailSerializer, InlineConversationSerializer
 from nexus.projects.api.permissions import ProjectPermission
-from nexus.agents.models import AgentMessage, Team
+from nexus.agents.models import AgentMessage
 from nexus.agents.api.serializers import AgentMessageHistorySerializer, AgentMessageDetailSerializer
 from nexus.projects.models import Project
 
@@ -54,12 +50,10 @@ class TagPercentageViewSet(
     ListModelMixin,
     GenericViewSet
 ):
+    permission_classes = [ProjectPermission]
 
     def list(self, request, *args, **kwargs):
-        user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
-
-        has_project_permission(user, project_uuid, 'GET')
 
         started_day = self.request.query_params.get(
             'started_day',
@@ -93,18 +87,18 @@ class TagPercentageViewSet(
             return Response([], status=200)
 
         tag_counts = {}
-        
+
         action_count = base_query.filter(
             reflection_data__tag='action_started'
         ).count()
         tag_counts['action_count'] = action_count
-        
+
         status_logs_base = base_query.exclude(reflection_data__tag="action_started")
-        
+
         tag_counts['succeed_count'] = status_logs_base.filter(
             message__response_status_cache="S"
         ).count()
-        
+
         tag_counts['failed_count'] = status_logs_base.filter(
             message__response_status_cache="F"
         ).count()
@@ -133,13 +127,11 @@ class MessageHistoryViewset(
 ):
     pagination_class = CustomPageNumberPagination
     serializer_class = MessageHistorySerializer
+    permission_classes = [ProjectPermission]
 
     def get_queryset(self):
 
-        user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
-
-        has_project_permission(user, project_uuid, 'GET')
 
         params = {
             "project__uuid": project_uuid,
@@ -189,11 +181,11 @@ class MessageHistoryViewset(
 
             if text_param:
                 params["message__text__icontains"] = text_param
-            
+
             queryset = MessageLog.objects.filter(**params).exclude(
                 reflection_data__isnull=True
             )
-            
+
             if tag_param and tag_param != "action_started":
                 status = {
                     "success": "S",
@@ -206,7 +198,7 @@ class MessageHistoryViewset(
                     ).exclude(
                         reflection_data__tag="action_started"
                     )
-            
+
             return queryset.select_related('message').order_by('-created_at')
 
     def get_serializer_class(self):
@@ -217,6 +209,7 @@ class MessageHistoryViewset(
             AgentMessage: AgentMessageHistorySerializer
         }
         return serializers_map.get(model, self.serializer_class)
+
 
 class LogsViewset(
     ReadOnlyModelViewSet
@@ -278,16 +271,14 @@ class RecentActivitiesViewset(
     GenericViewSet
 ):
     serializer_class = RecentActivitiesSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
     pagination_class = CustomPageNumberPagination
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return RecentActivities.objects.none()  # pragma: no cover
 
-        user = self.request.user
         project = self.kwargs.get('project_uuid')
-        has_project_permission(user, project, 'GET')
 
         filter_params = {
             'project': project
@@ -364,15 +355,13 @@ class ConversationContextViewset(
     GenericViewSet
 ):
 
+    permission_classes = [ProjectPermission]
     # serializer_class = MessageDetailSerializer
 
     def list(self, request, *args, **kwargs):
-        user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
         log_id = self.request.query_params.get('log_id')
         number_of_messages = self.request.query_params.get('number_of_messages', 5)
-
-        has_project_permission(user, project_uuid, 'GET')
 
         try:
             project = Project.objects.get(uuid=project_uuid)

@@ -69,7 +69,15 @@ def has_external_general_project_permission(
 ) -> bool:
 
     token = request.headers.get('Authorization')
-    return _check_project_authorization(token, project_uuid, method)
+    try:
+        return _check_project_authorization(token, project_uuid, method)
+    except requests.RequestException:
+        # Only fall back to internal check if there was a request error
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+            return has_project_permission(request.user, project, method)
+        except Project.DoesNotExist:
+            return False
 
 
 def get_user_auth(
