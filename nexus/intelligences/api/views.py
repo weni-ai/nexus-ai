@@ -907,12 +907,10 @@ class LogsViewSet(views.APIView):
 
 
 class RouterContentBaseViewSet(views.APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, project_uuid):
-        user_email = request.user.email
-        use_case = intelligences.RetrieveContentBaseUseCase()
-        content_base = use_case.get_default_by_project(project_uuid, user_email)
+        content_base = intelligences.get_by_uuid.get_default_content_base_by_project(project_uuid)
         return Response(data=RouterContentBaseSerializer(content_base).data, status=200)
 
 

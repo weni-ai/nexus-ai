@@ -103,7 +103,7 @@ class ActiveAgentsView(APIView):
 
 
 class AgentsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
@@ -121,7 +121,7 @@ class AgentsView(APIView):
 
 class TeamView(APIView):
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, *args, **kwargs):
 
@@ -140,7 +140,7 @@ class TeamView(APIView):
 
 
 class OfficialAgentsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, *args, **kwargs):
         # TODO: filter skills
@@ -158,7 +158,7 @@ class OfficialAgentsView(APIView):
 
 
 class ProjectCredentialsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, project_uuid):
         usecase = GetInlineCredentialsUsecase()
@@ -322,7 +322,7 @@ class VtexAppProjectCredentialsView(APIView):
             updated = usecase.update_credential_value(project_uuid, key, value)
             if updated:
                 updated_credentials.append(key)
-                
+
         return Response({
             "message": "Credentials updated successfully",
             "updated_credentials": updated_credentials
