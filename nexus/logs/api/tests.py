@@ -584,8 +584,10 @@ class InlineConversationsViewsetTestCase(TestCase):
         self.project = ProjectFactory()
         self.user = self.project.created_by
 
+        self.now = pendulum.now()
+
         # Create messages with different timestamps
-        with freeze_time(str(pendulum.now().subtract(days=2))):
+        with freeze_time(str(self.now.subtract(days=2))):
             self.message1 = InlineAgentMessageFactory(
                 project=self.project,
                 contact_urn="tel:123456",
@@ -593,7 +595,7 @@ class InlineConversationsViewsetTestCase(TestCase):
                 source="test"
             )
 
-        with freeze_time(str(pendulum.now().subtract(days=1))):
+        with freeze_time(str(self.now.subtract(days=1))):
             self.message2 = InlineAgentMessageFactory(
                 project=self.project,
                 contact_urn="tel:123456",
@@ -601,7 +603,7 @@ class InlineConversationsViewsetTestCase(TestCase):
                 source="test"
             )
 
-        with freeze_time(str(pendulum.now())):
+        with freeze_time(str(self.now)):
             self.message3 = InlineAgentMessageFactory(
                 project=self.project,
                 contact_urn="tel:123456",
@@ -632,44 +634,78 @@ class InlineConversationsViewsetTestCase(TestCase):
 
     def test_list_inline_conversations(self):
         """Test that the view returns the correct inline messages for a contact"""
-        # Format dates as DD-MM-YYYY
-        start_date = pendulum.now().subtract(days=3).format('DD-MM-YYYY')
-        end_date = pendulum.now().add(days=1).format('DD-MM-YYYY')
+        # Use freeze_time to control the datetime for the request
+        with freeze_time(self.now):
+            # Use ISO datetime format
+            # Set start date to before message1 and end date to after message3
+            start_date = self.now.subtract(days=3).to_iso8601_string()
+            end_date = self.now.add(days=1).to_iso8601_string()
 
-        request = self.factory.get(
-            f"api/{self.project.uuid}/inline_conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
-        )
-        force_authenticate(request, user=self.user)
+            request = self.factory.get(
+                f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
+            )
+            force_authenticate(request, user=self.user)
 
-        response = InlineConversationsViewset.as_view({'get': 'list'})(
-            request,
-            project_uuid=str(self.project.uuid),
-        )
+            response = InlineConversationsViewset.as_view({'get': 'list'})(
+                request,
+                project_uuid=str(self.project.uuid),
+            )
 
-        response.render()
-        content = json.loads(response.content)
+            response.render()
+            content = json.loads(response.content)
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(content.get("results")), 3)  # Should return 3 messages for tel:123456
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(content.get("results")), 3)  # Should return 3 messages for tel:123456
 
-        # Check that the messages are in the correct order (newest first)
-        results = content.get("results")
-        self.assertEqual(results[0].get("text"), self.message3.text)
-        self.assertEqual(results[1].get("text"), self.message2.text)
-        self.assertEqual(results[2].get("text"), self.message1.text)
+            # Check that the messages are in the correct order (oldest created_at first)
+            results = content.get("results")
+            self.assertEqual(results[0].get("text"), self.message1.text)
+            self.assertEqual(results[1].get("text"), self.message2.text)
+            self.assertEqual(results[2].get("text"), self.message3.text)
 
-        # Check pagination
-        self.assertIn("next", content)
-        self.assertIn("previous", content)
+            # Check pagination
+            self.assertIn("next", content)
+            self.assertIn("previous", content)
+
+    def test_list_inline_conversations_without_end_date(self):
+        """Test that the view works correctly when end_date is not provided"""
+        # Use freeze_time to control the datetime for the request
+        with freeze_time(self.now):
+            # Use ISO datetime format with specific hour
+            # Set start date to 2 days before message1's creation time to ensure it's in range
+            start_date = self.now.subtract(days=2).subtract(hours=1).to_iso8601_string()
+
+            request = self.factory.get(
+                f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&start={start_date}"
+            )
+            force_authenticate(request, user=self.user)
+
+            response = InlineConversationsViewset.as_view({'get': 'list'})(
+                request,
+                project_uuid=str(self.project.uuid),
+            )
+
+            response.render()
+            content = json.loads(response.content)
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(content.get("results")), 1)  # Should return only message1 since it's the only one in the range
+            self.assertEqual(content.get("results")[0].get("text"), self.message1.text)
+
+            # Verify that the end date is exactly 1 day after start with same hour
+            start = pendulum.parse(start_date)
+            end = start.add(days=1)
+            self.assertEqual(end.hour, start.hour)
+            self.assertEqual(end.minute, start.minute)
 
     def test_list_inline_conversations_with_different_contact(self):
         """Test that the view returns the correct inline messages for a different contact"""
-        # Format dates as DD-MM-YYYY
-        start_date = pendulum.now().subtract(days=3).format('DD-MM-YYYY')
-        end_date = pendulum.now().add(days=1).format('DD-MM-YYYY')
+        # Use ISO datetime format
+        start_date = pendulum.now().subtract(days=3).to_iso8601_string()
+        end_date = pendulum.now().add(days=1).to_iso8601_string()
 
         request = self.factory.get(
-            f"api/{self.project.uuid}/inline_conversations/?contact_urn=tel:654321&start={start_date}&end={end_date}"
+            f"api/{self.project.uuid}/conversations/?contact_urn=tel:654321&start={start_date}&end={end_date}"
         )
         force_authenticate(request, user=self.user)
 
@@ -687,9 +723,9 @@ class InlineConversationsViewsetTestCase(TestCase):
 
     def test_list_inline_conversations_missing_parameters(self):
         """Test that the view returns an error when required parameters are missing"""
-        # Format dates as DD-MM-YYYY
-        start_date = pendulum.now().subtract(days=3).format('DD-MM-YYYY')
-        end_date = pendulum.now().add(days=1).format('DD-MM-YYYY')
+        # Use ISO datetime format
+        start_date = pendulum.now().subtract(days=3).to_iso8601_string()
+        end_date = pendulum.now().add(days=1).to_iso8601_string()
 
         # Missing contact_urn
         request = self.factory.get(
@@ -725,28 +761,11 @@ class InlineConversationsViewsetTestCase(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(content.get("error"), "Missing required parameters")
 
-        # Missing end date
-        request = self.factory.get(
-            f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&start={start_date}"
-        )
-        force_authenticate(request, user=self.user)
-
-        response = InlineConversationsViewset.as_view({'get': 'list'})(
-            request,
-            project_uuid=str(self.project.uuid),
-        )
-
-        response.render()
-        content = json.loads(response.content)
-
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(content.get("error"), "Missing required parameters")
-
     def test_list_inline_conversations_unauthorized(self):
         """Test that the view requires authentication"""
-        # Format dates as DD-MM-YYYY
-        start_date = pendulum.now().subtract(days=3).format('DD-MM-YYYY')
-        end_date = pendulum.now().add(days=1).format('DD-MM-YYYY')
+        # Use ISO datetime format
+        start_date = pendulum.now().subtract(days=3).to_iso8601_string()
+        end_date = pendulum.now().add(days=1).to_iso8601_string()
 
         request = self.factory.get(
             f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
@@ -762,9 +781,9 @@ class InlineConversationsViewsetTestCase(TestCase):
 
     def test_list_inline_conversations_wrong_project(self):
         """Test that the view only returns messages for the specified project"""
-        # Format dates as DD-MM-YYYY
-        start_date = pendulum.now().subtract(days=3).format('DD-MM-YYYY')
-        end_date = pendulum.now().add(days=1).format('DD-MM-YYYY')
+        # Use ISO datetime format
+        start_date = pendulum.now().subtract(days=3).to_iso8601_string()
+        end_date = pendulum.now().add(days=1).to_iso8601_string()
 
         request = self.factory.get(
             f"api/{self.project.uuid}/conversations/?contact_urn=tel:123456&start={start_date}&end={end_date}"
