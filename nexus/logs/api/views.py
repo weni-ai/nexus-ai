@@ -74,8 +74,9 @@ class TagPercentageViewSet(
         if not started_day or not ended_day:
             return Response({"error": "Invalid date format for started_day or ended_day"}, status=400)
 
-        service_available = os.getenv("SUPERVISOR_SERVICE_AVAILABLE")
-        if service_available:
+        service_available = settings.SUPERVISOR_SERVICE_AVAILABLE
+        service_available_projects = settings.SUPERVISOR_SERVICE_AVAILABLE_PROJECTS
+        if not service_available and project_uuid not in service_available_projects:
             return Response([], status=200)
 
         source = request.query_params.get('source', 'router')
@@ -158,8 +159,9 @@ class MessageHistoryViewset(
         if not started_day or not ended_day:
             return Response({"error": "Invalid date format for started_day or ended_day"}, status=400)
 
-        service_available = os.getenv("SUPERVISOR_SERVICE_AVAILABLE")
-        if service_available:
+        service_available = settings.SUPERVISOR_SERVICE_AVAILABLE
+        service_available_projects = settings.SUPERVISOR_SERVICE_AVAILABLE_PROJECTS
+        if not service_available and project_uuid not in service_available_projects:
             return Response([], status=200)
 
         params["created_at__date__gte"] = started_day
