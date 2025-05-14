@@ -56,10 +56,6 @@ class TagPercentageViewSet(
 ):
 
     def list(self, request, *args, **kwargs):
-        def count_status(logs, tag):
-            logs = [log for log in logs if log.message.response_status == tag]
-            return len(logs)
-
         user = self.request.user
         project_uuid = self.kwargs.get('project_uuid')
 
@@ -78,31 +74,40 @@ class TagPercentageViewSet(
         if not started_day or not ended_day:
             return Response({"error": "Invalid date format for started_day or ended_day"}, status=400)
 
-        service_available = os.getenv("SUPERVISOR_SERVICE_AVAILABLE")
-        if service_available:
+        service_available = settings.SUPERVISOR_SERVICE_AVAILABLE
+        service_available_projects = settings.SUPERVISOR_SERVICE_AVAILABLE_PROJECTS
+        if not service_available and project_uuid not in service_available_projects:
             return Response([], status=200)
 
         source = request.query_params.get('source', 'router')
-        message_logs = MessageLog.objects.filter(
+
+        base_query = MessageLog.objects.select_related('message').filter(
             created_at__date__gte=started_day,
             created_at__date__lte=ended_day,
             reflection_data__tag__isnull=False,
             source=source,
             project__uuid=str(project_uuid)
-        )
-        message_logs = message_logs.exclude(message__status="F")
+        ).exclude(message__status="F")
 
-        if not message_logs.exists():
+        if not base_query.exists():
             return Response([], status=200)
 
-        tag_counts = message_logs.aggregate(action_count=Count(Case(When(reflection_data__tag='action_started', then=1), output_field=IntegerField())))
-
-        status_message_logs = message_logs.exclude(reflection_data__tag="action_started")
-
-        tag_counts.update({
-            "succeed_count": count_status(status_message_logs, "S"),
-            "failed_count": count_status(status_message_logs, "F"),
-        })
+        tag_counts = {}
+        
+        action_count = base_query.filter(
+            reflection_data__tag='action_started'
+        ).count()
+        tag_counts['action_count'] = action_count
+        
+        status_logs_base = base_query.exclude(reflection_data__tag="action_started")
+        
+        tag_counts['succeed_count'] = status_logs_base.filter(
+            message__response_status_cache="S"
+        ).count()
+        
+        tag_counts['failed_count'] = status_logs_base.filter(
+            message__response_status_cache="F"
+        ).count()
 
         total_logs = sum(tag_counts.values())
         if total_logs == 0:
@@ -154,8 +159,9 @@ class MessageHistoryViewset(
         if not started_day or not ended_day:
             return Response({"error": "Invalid date format for started_day or ended_day"}, status=400)
 
-        service_available = os.getenv("SUPERVISOR_SERVICE_AVAILABLE")
-        if service_available:
+        service_available = settings.SUPERVISOR_SERVICE_AVAILABLE
+        service_available_projects = settings.SUPERVISOR_SERVICE_AVAILABLE_PROJECTS
+        if not service_available and project_uuid not in service_available_projects:
             return Response([], status=200)
 
         params["created_at__date__gte"] = started_day
@@ -175,14 +181,7 @@ class MessageHistoryViewset(
             if text_param:
                 params["user_text__icontains"] = text_param
 
-            logs = AgentMessage.objects.filter(
-                **params
-            ).order_by('-created_at')
-
-            if not logs:
-                return MessageLog.objects.none()
-
-            return logs
+            return AgentMessage.objects.filter(**params).order_by('-created_at')
 
         except:
             if tag_param and tag_param == "action_started":
@@ -190,28 +189,25 @@ class MessageHistoryViewset(
 
             if text_param:
                 params["message__text__icontains"] = text_param
-
-            logs = MessageLog.objects.filter(
-                **params
-            ).exclude(
+            
+            queryset = MessageLog.objects.filter(**params).exclude(
                 reflection_data__isnull=True
-            ).select_related(
-                'message'
-            ).order_by(
-                '-created_at'
             )
-
+            
             if tag_param and tag_param != "action_started":
                 status = {
                     "success": "S",
                     "failed": "F",
                 }
-                logs = [log for log in logs if log.message.response_status == status.get(tag_param) and log.reflection_data.get("tag") != "action_started"]
-
-            if not logs:
-                return MessageLog.objects.none()
-
-        return logs
+                status_value = status.get(tag_param)
+                if status_value:
+                    queryset = queryset.filter(
+                        message__response_status=status_value
+                    ).exclude(
+                        reflection_data__tag="action_started"
+                    )
+            
+            return queryset.select_related('message').order_by('-created_at')
 
     def get_serializer_class(self):
         queryset = self.get_queryset()
