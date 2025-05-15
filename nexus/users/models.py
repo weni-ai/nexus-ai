@@ -43,3 +43,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
 
     objects = UserManager()
+
+    @property
+    def is_staff(self):
+        return self.is_superuser

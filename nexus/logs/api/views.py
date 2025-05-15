@@ -1,4 +1,3 @@
-import os
 import pendulum
 
 from rest_framework import views
@@ -24,7 +23,6 @@ from nexus.usecases.logs.retrieve import RetrieveMessageLogUseCase
 from nexus.usecases.logs.create import CreateLogUsecase
 
 from django.conf import settings
-from django.db.models import Count, Case, When, IntegerField
 from django.utils.dateparse import parse_date
 
 from nexus.paginations import InlineConversationsCursorPagination
@@ -55,7 +53,6 @@ class TagPercentageViewSet(
     permission_classes = [ProjectPermission]
 
     def list(self, request, *args, **kwargs):
-
         project_uuid = self.kwargs.get('project_uuid')
 
         started_day = self.request.query_params.get(
@@ -71,8 +68,9 @@ class TagPercentageViewSet(
         if not started_day or not ended_day:
             return Response({"error": "Invalid date format for started_day or ended_day"}, status=400)
 
-        service_available = os.getenv("SUPERVISOR_SERVICE_AVAILABLE")
-        if service_available:
+        service_available = settings.SUPERVISOR_SERVICE_AVAILABLE
+        service_available_projects = settings.SUPERVISOR_SERVICE_AVAILABLE_PROJECTS
+        if not service_available and project_uuid not in service_available_projects:
             return Response([], status=200)
 
         source = request.query_params.get('source', 'router')
@@ -89,18 +87,18 @@ class TagPercentageViewSet(
             return Response([], status=200)
 
         tag_counts = {}
-        
+
         action_count = base_query.filter(
             reflection_data__tag='action_started'
         ).count()
         tag_counts['action_count'] = action_count
-        
+
         status_logs_base = base_query.exclude(reflection_data__tag="action_started")
-        
+
         tag_counts['succeed_count'] = status_logs_base.filter(
             message__response_status_cache="S"
         ).count()
-        
+
         tag_counts['failed_count'] = status_logs_base.filter(
             message__response_status_cache="F"
         ).count()
@@ -153,8 +151,9 @@ class MessageHistoryViewset(
         if not started_day or not ended_day:
             return Response({"error": "Invalid date format for started_day or ended_day"}, status=400)
 
-        service_available = os.getenv("SUPERVISOR_SERVICE_AVAILABLE")
-        if service_available:
+        service_available = settings.SUPERVISOR_SERVICE_AVAILABLE
+        service_available_projects = settings.SUPERVISOR_SERVICE_AVAILABLE_PROJECTS
+        if not service_available and project_uuid not in service_available_projects:
             return Response([], status=200)
 
         params["created_at__date__gte"] = started_day
@@ -182,11 +181,11 @@ class MessageHistoryViewset(
 
             if text_param:
                 params["message__text__icontains"] = text_param
-            
+
             queryset = MessageLog.objects.filter(**params).exclude(
                 reflection_data__isnull=True
             )
-            
+
             if tag_param and tag_param != "action_started":
                 status = {
                     "success": "S",
@@ -199,7 +198,7 @@ class MessageHistoryViewset(
                     ).exclude(
                         reflection_data__tag="action_started"
                     )
-            
+
             return queryset.select_related('message').order_by('-created_at')
 
     def get_serializer_class(self):
