@@ -34,6 +34,7 @@ def start_inline_agents(
     # Handle text and attachments properly
     text = message.get("text", "")
     attachments = message.get("attachments", [])
+    message_event = message.get("msg_event", {})
 
     if attachments:
         # If there's text, add a space before attachments
@@ -125,7 +126,8 @@ def start_inline_agents(
             language=language,
             user_email=user_email,
             use_components=project.use_components,
-            contact_fields=message.contact_fields_as_json
+            contact_fields=message.contact_fields_as_json,
+            msg_external_id=message_event.get("msg_external_id", "")
         )
 
         redis_client.delete(pending_response_key)
