@@ -1,28 +1,39 @@
+import logging
 import pickle
 from typing import Dict
 
+import redis
 from django.conf import settings
 
 from nexus.celery import app
-
-from nexus.storage import DeleteStorageFile
-from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-from nexus.task_managers.models import ContentBaseFileTaskManager
-from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
-
-from nexus.logs.healthcheck import HealthCheck, ClassificationHealthCheck
 from nexus.intelligences.models import (
-    ContentBaseText,
-    ContentBaseLogs,
     ContentBaseLink,
+    ContentBaseLogs,
+    ContentBaseText,
     UserQuestion,
 )
-
-from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
-from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
-from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
+from nexus.logs.healthcheck import ClassificationHealthCheck, HealthCheck
+from nexus.reports.flows_report.generate_output import main as get_flows_report
+from nexus.storage import DeleteStorageFile
+from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
+from nexus.task_managers.file_database.sentenx_file_database import (
+    SentenXFileDataBase,
+)
+from nexus.task_managers.models import ContentBaseFileTaskManager
 from nexus.usecases.intelligences.get_by_uuid import get_by_contentbase_uuid
+from nexus.usecases.intelligences.intelligences_dto import (
+    UpdateContentBaseFileDTO,
+)
+from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
 from nexus.usecases.logs.delete import DeleteLogUsecase
+from nexus.usecases.task_managers.celery_task_manager import (
+    CeleryTaskManagerUseCase,
+)
+
+logger = logging.getLogger(__name__)
+
+LOCK_TIMEOUT = 60 * 60
+REDIS_CLIENT = redis.Redis.from_url(settings.REDIS_URL)
 
 
 @app.task
@@ -205,3 +216,27 @@ def update_classification_healthcheck():
 def delete_file_task(file_name):
     deleter = DeleteStorageFile()
     deleter.delete_file(file_name)
+
+
+@app.task(
+    name='generate_flows_report',
+    soft_time_limit=3600,
+    time_limit=4200,
+)
+def generate_flows_report(auth_token: str):
+    alt_lock_key = "generate_flows_report_lock"
+    lock_id = f"task_lock:{alt_lock_key}"
+    
+    lock_acquired = REDIS_CLIENT.set(lock_id, "true", ex=LOCK_TIMEOUT, nx=True)
+    
+    if not lock_acquired:
+        logger.info("Task generate_flows_report is already running. Skipping this execution.")
+        return False
+    try:
+        logger.info("Starting generate_flows_report")
+        result = get_flows_report(auth_token)
+        logger.info("generate_flows_report completed successfully")
+        return result
+    finally:
+        REDIS_CLIENT.delete(lock_id)
+        logger.info("Lock released for generate_flows_report")

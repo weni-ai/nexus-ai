@@ -26,7 +26,7 @@ class BedrockBackend(InlineAgentsBackend):
     supervisor_repository = BedrockSupervisorRepository
     team_adapter = BedrockTeamAdapter
 
-    REGION_NAME = env.str('AWS_BEDROCK_REGION_NAME')
+    REGION_NAME = env.str('AWS_MODEL_BEDROCK_REGION_NAME')
 
     def __init__(self, event_manager_notify=event_manager.notify):
         self.event_manager_notify = event_manager_notify
