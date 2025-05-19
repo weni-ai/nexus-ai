@@ -554,7 +554,6 @@ SUPERVISOR_SERVICE_AVAILABLE_PROJECTS = env.list("SUPERVISOR_SERVICE_AVAILABLE_P
 
 REPORT_RECIPIENT_EMAILS = env.list("REPORT_RECIPIENT_EMAILS", [])
 
-
 envvar_EMAIL_HOST = env.str("EMAIL_HOST")
 SEND_EMAILS = env.bool("SEND_EMAILS")
 
@@ -567,3 +566,7 @@ if envvar_EMAIL_HOST:
     EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS")
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", [])
+
+MULTI_AGENTS_CAN_ACCESS = env.list("MULTI_AGENTS_CAN_ACCESS", [])

@@ -48,6 +48,7 @@ if [[ "start-wsgi" == "$1" ]]; then
       --log-config="${GUNICORN_LOG_CONF}" \
       -c "${GUNICORN_CONF}"
 elif [[ "start" == "$1" ]]; then
+    do_gosu "${APP_USER}:${APP_GROUP}" python manage.py collectstatic --noinput
     do_gosu "${APP_USER}:${APP_GROUP}" exec daphne -b 0.0.0.0 -p 8000 nexus.asgi:application
 elif [[ "celery-worker" == "$1" ]]; then
     celery_queue="celery"
