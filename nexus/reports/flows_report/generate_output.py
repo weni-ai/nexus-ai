@@ -12,6 +12,9 @@ import concurrent.futures
 from tqdm import tqdm
 from django.conf import settings
 import pendulum
+from django.core.mail import EmailMessage
+from django.conf import settings
+
 
 # Constants
 API_VERSION = "v2"
@@ -111,18 +114,11 @@ def get_paginated_data(url, headers):
     """Fetches all data from a paginated API endpoint."""
     results = []
     while url:
-        try:
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            results.extend(data.get('results', []))
-            url = data.get('next')
-        except requests.exceptions.RequestException as e:
-            print(f"Error during API request to {url}: {e}", file=sys.stderr)
-            return None
-        except json.JSONDecodeError as e:
-            print(f"Error decoding JSON response from {url}: {e}", file=sys.stderr)
-            return None
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        results.extend(data.get('results', []))
+        url = data.get('next')
     return results
 
 def get_contact_messages(contact_uuid, base_url, headers):
@@ -236,78 +232,81 @@ def process_contact(contact, base_url, headers, groups):
         "Data de fim": last_message_date_br
     }
 
+
 def main(auth_token: str, start_date: str = None, end_date: str = None):
-    if not auth_token:
-        error_message = "Error: flows_token not found in environment variables or .env file. Please ensure a .env file exists in the same directory as the script or the flows_token environment variable is set."
-        print(error_message, file=sys.stderr)
-        raise ValueError(error_message)
-
-    base_url = BASE_URL.rstrip('/')
-    headers = {"Authorization": f"Token {auth_token}"}
-
-    contacts_url = f"{base_url}/api/{API_VERSION}/{CONTACTS_ENDPOINT}"
-
-    if start_date and end_date:
-        contacts_url += f"?after={start_date}&before={end_date}"
-    else:
-        now = pendulum.now()
-        yesterday = now.subtract(days=1)
-        contacts_url += f"?after={yesterday.to_iso8601_string()}&before={now.to_iso8601_string()}"
-
-    print(f"Fetching contacts from {contacts_url}...")
-    all_contacts = get_paginated_data(contacts_url, headers)
-
-    if all_contacts is None:
-        error_message = "Failed to fetch contacts."
-        print(error_message)
-        raise RuntimeError(error_message)
-
-    print(f"Fetched {len(all_contacts)} contacts. Processing with multi-threading...")
-    
-    report_data = []
-    total_contacts = len(all_contacts)
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        future_to_contact = {
-            executor.submit(process_contact, contact, base_url, headers, groups): contact 
-            for contact in all_contacts
-        }
-        
-        for future in tqdm(concurrent.futures.as_completed(future_to_contact), total=total_contacts, desc="Processing contacts"):
-            contact = future_to_contact[future]
-            try:
-                result = future.result()
-                if result:
-                    report_data.append(result)
-            except Exception as exc:
-                contact_uuid = contact.get("uuid", "unknown")
-                print(f"Error processing contact {contact_uuid}: {exc}", file=sys.stderr)
-
-    if not report_data:
-        print("No data processed.")
-        return []
-
-    columns_order = [
-        "UUID", "Cliente", "Número do Cliente", "CPF",
-        "Assuntos da conversa", "Tabulação",
-        "Data da entrada", "Data de fim"
-    ]
-
-    filename = f"contacts_report-{pendulum.yesterday().format('DD-MM-YYYY')}.csv"
-    filepath = os.path.join('/tmp', filename)
-
-    print(f"\nGenerating CSV report: {filename}...")
-    df = pd.DataFrame(report_data, columns=columns_order)
     try:
+        if not auth_token:
+            error_message = "Error: flows_token not found in environment variables or .env file. Please ensure a .env file exists in the same directory as the script or the flows_token environment variable is set."
+            print(error_message, file=sys.stderr)
+            raise ValueError(error_message)
+
+        base_url = BASE_URL.rstrip('/')
+        headers = {"Authorization": f"Token {auth_token}"}
+
+        contacts_url = f"{base_url}/api/{API_VERSION}/{CONTACTS_ENDPOINT}"
+
+        if start_date and end_date:
+            start_date = pendulum.parse(start_date)
+            end_date = pendulum.parse(end_date)
+            contacts_url += f"?after={start_date.to_iso8601_string()}&before={end_date.to_iso8601_string()}"
+            email_body = f'The attached file contains the report from {start_date.format("DD/MM/YYYY HH:mm")} to {end_date.format("DD/MM/YYYY HH:mm")}.'
+        else:
+            now = pendulum.now()
+            yesterday = now.subtract(days=1)
+            contacts_url += f"?after={yesterday.to_iso8601_string()}&before={now.to_iso8601_string()}"
+            email_body = f'The attached file contains the report from the last 24 hours.'
+
+        print(f"Fetching contacts from {contacts_url}...")
+        all_contacts = get_paginated_data(contacts_url, headers)
+
+        if all_contacts is None:
+            error_message = "Failed to fetch contacts."
+            print(error_message)
+            raise RuntimeError(error_message)
+
+        print(f"Fetched {len(all_contacts)} contacts. Processing with multi-threading...")
+        
+        report_data = []
+        total_contacts = len(all_contacts)
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            future_to_contact = {
+                executor.submit(process_contact, contact, base_url, headers, groups): contact 
+                for contact in all_contacts
+            }
+            
+            for future in tqdm(concurrent.futures.as_completed(future_to_contact), total=total_contacts, desc="Processing contacts"):
+                contact = future_to_contact[future]
+                try:
+                    result = future.result()
+                    if result:
+                        report_data.append(result)
+                except Exception as exc:
+                    contact_uuid = contact.get("uuid", "unknown")
+                    print(f"Error processing contact {contact_uuid}: {exc}", file=sys.stderr)
+
+        if not report_data:
+            print("No data processed.")
+            return []
+
+        columns_order = [
+            "UUID", "Cliente", "Número do Cliente", "CPF",
+            "Assuntos da conversa", "Tabulação",
+            "Data da entrada", "Data de fim"
+        ]
+
+        filename = f"contacts_report-{pendulum.yesterday().format('DD-MM-YYYY')}.csv"
+        filepath = os.path.join('/tmp', filename)
+
+        print(f"\nGenerating CSV report: {filename}...")
+        df = pd.DataFrame(report_data, columns=columns_order)
+
         df.to_csv(filepath, index=False, encoding='utf-8')
         print(f"Successfully generated {filepath}")
 
-        from django.core.mail import EmailMessage
-        from django.conf import settings
-
         email = EmailMessage(
-            subject='Flows Report',
-            body='Please find attached the flows report.',
+            subject='Contacts Report',
+            body=email_body,
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=settings.REPORT_RECIPIENT_EMAILS,
         )
@@ -319,10 +318,31 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
         print(f"Successfully sent {filename} via email")
 
         return True
-    except IOError as e:
-        error_message = f"Error writing CSV file: {e}"
+
+    except Exception as e:
+        if "401 Client Error" in str(e):
+            body = f'An error occurred while generating or sending the contacts report: Invalid or expired authentication token. Please provide a valid token'
+        else:
+            body = f'An error occurred while generating or sending the contacts report.\n\nPlease try again or contact someone from Weni.'
+
+        error_message = f"Error processing or sending report: {e}"
         print(error_message, file=sys.stderr)
-        raise IOError(error_message)
+        try:
+            error_email = EmailMessage(
+                subject='Error in Contacts Report Generation',
+                body=body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=settings.REPORT_RECIPIENT_EMAILS,
+            )
+            error_email.extra_headers = {
+                'From': f'Nexus AI Reports {settings.DEFAULT_FROM_EMAIL}',
+            }
+            error_email.send()
+            print(f"Sent error notification email", file=sys.stderr)
+        except Exception as email_error:
+            print(f"Failed to send error notification email: {email_error}", file=sys.stderr)
+            
+        raise Exception(error_message)
 
 
 if __name__ == "__main__":

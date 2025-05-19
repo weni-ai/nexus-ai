@@ -14,6 +14,9 @@ class ReportView(views.APIView):
         })
 
     def post(self, request):
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+
         auth_token = request.data.get('auth_token')
-        generate_flows_report.delay(auth_token)
+        generate_flows_report.delay(auth_token, start_date, end_date)
         return Response({})
