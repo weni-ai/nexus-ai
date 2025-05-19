@@ -1,6 +1,7 @@
 import json
 
 from django.db.models import Q
+from django.conf import settings
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -439,6 +440,11 @@ class MultiAgentView(APIView):
             )
 
         try:
+            can_view = False
+            for can_view_email in settings.MULTI_AGENTS_CAN_ACCESS:
+                if can_view_email in request.user.email:
+                    can_view = True
+                    break
             project = Project.objects.get(uuid=project_uuid)
             return Response({
                 "multi_agents": project.inline_agent_switch,
@@ -463,7 +469,11 @@ class MultiAgentView(APIView):
                 status=400
             )
 
-        can_access = (("@weni.ai" in request.user.email) or ("@vtex.com" in request.user.email))
+        can_access = False
+        for can_access_email in settings.MULTI_AGENTS_CAN_ACCESS:
+            if can_access_email in request.user.email:
+                can_access = True
+                break
         if not can_access:
             return Response(
                 {"error": "You are not authorized to access this resource"},
