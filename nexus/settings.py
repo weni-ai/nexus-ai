@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'nexus.zeroshot',
     'nexus.agents',
     'nexus.inline_agents',
+    'nexus.reports',
 ]
 
 MIDDLEWARE = [
@@ -551,5 +552,18 @@ PROJECT_AUTH_API_BASE_URL = env.str("PROJECT_AUTH_API_BASE_URL", "")
 SUPERVISOR_SERVICE_AVAILABLE = env.bool("SUPERVISOR_SERVICE_AVAILABLE", False)
 SUPERVISOR_SERVICE_AVAILABLE_PROJECTS = env.list("SUPERVISOR_SERVICE_AVAILABLE_PROJECTS", [])
 
-
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", [])
+REPORT_RECIPIENT_EMAILS = env.list("REPORT_RECIPIENT_EMAILS", [])
+
+envvar_EMAIL_HOST = env.str("EMAIL_HOST")
+SEND_EMAILS = env.bool("SEND_EMAILS")
+
+if envvar_EMAIL_HOST:
+    EMAIL_HOST = envvar_EMAIL_HOST
+    EMAIL_PORT = env.int("EMAIL_PORT")
+    EMAIL_HOST_USER = env.str("EMAIL_HOST_USER")
+    EMAIL_HOST_PASSWORD = env.str("EMAIL_HOST_PASSWORD")
+    EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL")
+    EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS")
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
