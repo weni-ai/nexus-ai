@@ -30,6 +30,9 @@ from nexus.inline_agents.api.views import ProjectComponentsView as InlineProject
 from nexus.inline_agents.api.views import LogGroupView
 from nexus.inline_agents.api.views import MultiAgentView
 
+from nexus.reports.views import ReportView
+
+
 urlpatterns = [
     path('agents/push', PushInlineAgents.as_view(), name="push-agents"),
     path('agents/teams/<project_uuid>', InlineTeamView.as_view(), name="teams"),
@@ -48,4 +51,5 @@ urlpatterns = [
     path('project/<project_uuid>/components', InlineProjectComponentsView.as_view(), name="project-components"),
     path('project/<project_uuid>/multi-agents', MultiAgentView.as_view(), name="multi-agents"),
     path('agents/log-group', LogGroupView.as_view(), name="agents-log-group"),
+    path('reports', ReportView.as_view(), name="reports"),
 ]
