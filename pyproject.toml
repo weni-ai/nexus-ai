@@ -49,6 +49,10 @@ emoji = "^2.14.0"
 tiktoken = "^0.8.0"
 termcolor = "^2.5.0"
 rich = "^13.9.4"
+matplotlib = "^3.10.3"
+seaborn = "^0.13.2"
+scikit-learn = "^1.6.1"
+pandas = "^2.2.3"
 
 
 
