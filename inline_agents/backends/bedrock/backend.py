@@ -98,6 +98,8 @@ class BedrockBackend(InlineAgentsBackend):
         full_response = ""
         trace_events = []
 
+        typing_usecase = TypingUsecase()
+
         for event in completion:
             if 'chunk' in event:
                 chunk = event['chunk']['bytes'].decode()
@@ -123,7 +125,7 @@ class BedrockBackend(InlineAgentsBackend):
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
 
                 if "rationale" in orchestration_trace and msg_external_id:
-                    TypingUsecase().send_typing_message(contact_urn=contact_urn, msg_external_id=msg_external_id)
+                    typing_usecase.send_typing_message(contact_urn=contact_urn, msg_external_id=msg_external_id)
 
                 # Notify observers about the trace
                 self.event_manager_notify(
@@ -141,7 +143,7 @@ class BedrockBackend(InlineAgentsBackend):
                 )
 
                 if "rationale" in orchestration_trace and msg_external_id:
-                    TypingUsecase().send_typing_message(contact_urn=contact_urn, msg_external_id=msg_external_id)
+                    typing_usecase.send_typing_message(contact_urn=contact_urn, msg_external_id=msg_external_id)
 
             print("--------------------------------")
             print(f"[DEBUG] Event: {event}")
@@ -182,7 +184,7 @@ class BedrockBackend(InlineAgentsBackend):
         )
         
         if "rationale" in orchestration_trace and msg_external_id:
-            TypingUsecase().send_typing_message(contact_urn=contact_urn, msg_external_id=msg_external_id)
+            typing_usecase.send_typing_message(contact_urn=contact_urn, msg_external_id=msg_external_id)
 
         return full_response
 
