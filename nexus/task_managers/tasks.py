@@ -220,10 +220,10 @@ def delete_file_task(file_name):
 
 @app.task(
     name='generate_flows_report',
-    soft_time_limit=3600,
-    time_limit=4200,
+    soft_time_limit=7000,
+    time_limit=7200,
 )
-def generate_flows_report(auth_token: str):
+def generate_flows_report(auth_token: str, start_date: str = None, end_date: str = None):
     alt_lock_key = "generate_flows_report_lock"
     lock_id = f"task_lock:{alt_lock_key}"
     
@@ -234,7 +234,7 @@ def generate_flows_report(auth_token: str):
         return False
     try:
         logger.info("Starting generate_flows_report")
-        result = get_flows_report(auth_token)
+        result = get_flows_report(auth_token, start_date, end_date)
         logger.info("generate_flows_report completed successfully")
         return result
     finally:
