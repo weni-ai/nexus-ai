@@ -109,7 +109,7 @@ class Credential(models.Model):
             try:
                 decrypted = decrypt_value(self.value)
                 return decrypted
-            except Exception as e:
+            except Exception:
                 return self.value
         return self.value
 

@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict
 
 from django.conf import settings
 
@@ -12,7 +12,7 @@ from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 
 
 class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
-    def __init__(self, agent_backend_client = BedrockClient):
+    def __init__(self, agent_backend_client=BedrockClient):
         self.agent_backend_client = agent_backend_client()
 
     def create_agent(self, agent_key: str, agent: dict, project: Project, files: dict):

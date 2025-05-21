@@ -21,6 +21,7 @@ from nexus.logs.api.serializers import (
 from nexus.usecases.logs.list import ListLogUsecase
 from nexus.usecases.logs.retrieve import RetrieveMessageLogUseCase
 from nexus.usecases.logs.create import CreateLogUsecase
+from nexus.usecases.agents.agents import AgentUsecase
 
 from django.conf import settings
 from django.utils.dateparse import parse_date
@@ -174,8 +175,7 @@ class MessageHistoryViewset(
                 params["user_text__icontains"] = text_param
 
             return AgentMessage.objects.filter(**params).order_by('-created_at')
-
-        except:
+        except Exception:
             if tag_param and tag_param == "action_started":
                 params["reflection_data__tag"] = tag_param
 
@@ -301,7 +301,6 @@ class RecentActivitiesViewset(
 
         return queryset
 
-from nexus.usecases.agents.agents import AgentUsecase
 
 class MessageDetailViewSet(views.APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]

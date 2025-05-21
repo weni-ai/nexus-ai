@@ -9,7 +9,7 @@ from .exceptions import TeamDoesNotExist
 
 #  Montar dict e retornar para o bedrock, pegar o integrated do projeto
 class ORMTeamRepository(TeamRepository):
-    def get_team(self, project_uuid: str) -> list[dict]:        
+    def get_team(self, project_uuid: str) -> list[dict]:
         try:
             orm_team = ORMIntegratedAgent.objects.filter(project__uuid=project_uuid)
             agents = []
@@ -18,7 +18,7 @@ class ORMTeamRepository(TeamRepository):
                 agent = integrated_agent.agent
                 skills = []
 
-                skills=agent.current_version.skills
+                skills = agent.current_version.skills
                 for index, skill in enumerate(skills):
                     for function in skill["functionSchema"]["functions"]:
                         if "parameters" in function and isinstance(function["parameters"], list):
@@ -43,5 +43,3 @@ class ORMTeamRepository(TeamRepository):
             return agents
         except ORMIntegratedAgent.DoesNotExist:
             raise TeamDoesNotExist(f"Team with project uuid: {project_uuid} does not exist")
-
-

@@ -440,10 +440,8 @@ class MultiAgentView(APIView):
             )
 
         try:
-            can_view = False
             for can_view_email in settings.MULTI_AGENTS_CAN_ACCESS:
                 if can_view_email in request.user.email:
-                    can_view = True
                     break
             project = Project.objects.get(uuid=project_uuid)
             return Response({

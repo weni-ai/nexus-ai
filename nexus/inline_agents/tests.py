@@ -309,7 +309,7 @@ class TestGetInlineCredentials(TestCase):
         self.assertEqual(len(custom_credentials), 0)
 
 
-class MockBedrockClient:
+class MockLogGroupBedrockClient:
     def get_log_group(self, tool_name: str) -> dict:
         return {
             "tool_name": tool_name,
@@ -320,7 +320,7 @@ class MockBedrockClient:
 
 class TestGetLogGroup(TestCase):
     def setUp(self):
-        self.usecase = GetLogGroupUsecase(MockBedrockClient)
+        self.usecase = GetLogGroupUsecase(MockLogGroupBedrockClient)
         self.project = ProjectFactory()
         self.user = self.project.created_by
 
