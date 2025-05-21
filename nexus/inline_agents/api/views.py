@@ -468,7 +468,7 @@ class MultiAgentView(APIView):
                 {"error": "multi_agents field is required"},
                 status=400
             )
-        
+
         can_access = False
         for can_access_email in settings.MULTI_AGENTS_CAN_ACCESS:
             if can_access_email in request.user.email:
