@@ -13,7 +13,7 @@ class TypingUsecase:
             "urns": [contact_urn],
             "msg": {
                 "msg_external_id": msg_external_id,
-                "action_type": "msg/typing_indicator"
+                "action_type": "typing_indicator"
             }
         }
 
