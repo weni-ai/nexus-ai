@@ -1,8 +1,8 @@
 from typing import List
 
 from router.flow_start import FlowStart
-
 from router.entities import FlowDTO
+from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 
 
 class SimulateFlowStart(FlowStart):
@@ -29,4 +29,20 @@ class SimulateFlowStart(FlowStart):
         if attachments:
             params.update({"attachments": attachments})
 
-        return {"type": "flowstart", "uuid": flow.uuid, "name": flow.name, "msg_event": msg_event, "params": params}
+        response_data = {
+            "type": "flowstart",
+            "uuid": flow.uuid,
+            "name": flow.name,
+            "msg_event": msg_event,
+            "params": params
+        }
+
+        send_preview_message_to_websocket(
+            project_uuid=flow.project_uuid,
+            user_email=user,
+            message_data={
+                "type": "preview",
+                "content": response_data
+            }
+        )
+        return response_data
