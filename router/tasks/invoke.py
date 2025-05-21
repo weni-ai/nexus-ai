@@ -1,8 +1,5 @@
 import os
-from typing import Dict
-
-from django.conf import settings
-from redis import Redis
+from typing import Dict, Optional
 
 from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
@@ -15,8 +12,14 @@ from router.dispatcher import dispatch
 from router.entities import (
     message_factory,
 )
+from router.tasks.redis_task_manager import RedisTaskManager
 
 from .actions_client import get_action_clients
+
+
+def get_task_manager() -> RedisTaskManager:
+    """Get the default task manager instance."""
+    return RedisTaskManager()
 
 
 @celery_app.task(bind=True, soft_time_limit=300, time_limit=360)
@@ -25,11 +28,12 @@ def start_inline_agents(
     message: Dict,
     preview: bool = False,
     language: str = "en",
-    user_email: str = ''
+    user_email: str = '',
+    task_manager: Optional[RedisTaskManager] = None
 ) -> bool:  # pragma: no cover
 
-    # Initialize Redis client
-    redis_client = Redis.from_url(settings.REDIS_URL)
+    # Initialize Redis task manager
+    task_manager = task_manager or get_task_manager()
 
     # Handle text and attachments properly
     text = message.get("text", "")
@@ -59,33 +63,20 @@ def start_inline_agents(
 
     print(f"[DEBUG] Message: {message}")
 
-    # Initialize Redis client
-    redis_client = Redis.from_url(settings.REDIS_URL)
-
     project = Project.objects.get(uuid=message.project_uuid)
 
-    # Check for pending responses
-    pending_response_key = f"response:{message.contact_urn}"
-    pending_task_key = f"task:{message.contact_urn}"
-    pending_response = redis_client.get(pending_response_key)
-    pending_task_id = redis_client.get(pending_task_key)
-
-    if pending_response:
+    # Check for pending responses and handle them
+    pending_task_id = task_manager.get_pending_task_id(message.contact_urn)
+    if pending_task_id:
         # Revoke the previous task if it exists
-        if pending_task_id:
-            celery_app.control.revoke(pending_task_id.decode('utf-8'), terminate=True)
+        celery_app.control.revoke(pending_task_id, terminate=True)
 
-        # Concatenate the previous message with the new one
-        previous_message = pending_response.decode('utf-8')
-        concatenated_message = f"{previous_message}\n{message.text}"
-        message.text = concatenated_message
-        redis_client.delete(pending_response_key)
-    else:
-        # Store the current message in Redis
-        redis_client.set(pending_response_key, message.text)
+    # Handle pending response and get final message text
+    final_message_text = task_manager.handle_pending_response(message.contact_urn, message.text)
+    message.text = final_message_text
 
-    # Store the current task ID in Redis
-    redis_client.set(pending_task_key, self.request.id)
+    # Store the current task ID
+    task_manager.store_pending_task_id(message.contact_urn, self.request.id)
 
     print(f"[DEBUG] Email sent: {user_email}")
     if user_email:
@@ -128,8 +119,9 @@ def start_inline_agents(
             contact_fields=message.contact_fields_as_json
         )
 
-        redis_client.delete(pending_response_key)
-        redis_client.delete(pending_task_key)
+        # Clear pending tasks after successful processing
+        task_manager.clear_pending_tasks(message.contact_urn)
+
         return dispatch(
             llm_response=response,
             message=message,
@@ -140,8 +132,7 @@ def start_inline_agents(
 
     except Exception as e:
         # Clean up Redis entries in case of error
-        redis_client.delete(pending_response_key)
-        redis_client.delete(pending_task_key)
+        task_manager.clear_pending_tasks(message.contact_urn)
 
         print(f"[DEBUG] Error in start_inline_agents: {str(e)}")
         print(f"[DEBUG] Error type: {type(e)}")
