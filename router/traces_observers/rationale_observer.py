@@ -171,9 +171,8 @@ class RationaleObserver(EventObserver):
             # Handle first rationale if it exists and we have caller chain info
             if self.first_rationale_text and self._has_caller_chain(inline_traces):
                 improved_text = self._improve_rationale_text(
-                    self.first_rationale_text,
-                    self.rationale_history,
-                    user_input,
+                    rationale_text=self.first_rationale_text,
+                    user_input=user_input,
                     is_first_rationale=True
                 )
 
@@ -212,7 +211,7 @@ class RationaleObserver(EventObserver):
         try:
             if 'callerChain' in inline_traces:
                 caller_chain = inline_traces['callerChain']
-                return isinstance(caller_chain, list) and len(caller_chain) > 1
+                return isinstance(caller_chain, list) and len(caller_chain) >= 1
             return False
         except Exception as e:
             logger.error(f"Error checking caller chain: {str(e)}", exc_info=True)
