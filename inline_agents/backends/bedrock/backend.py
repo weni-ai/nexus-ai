@@ -143,7 +143,9 @@ class BedrockBackend(InlineAgentsBackend):
                 )
 
                 if "rationale" in orchestration_trace and msg_external_id:
+                    print("[ + Typing Indicator ] sending typing indicator")
                     typing_usecase.send_typing_message(contact_urn=contact_urn, msg_external_id=msg_external_id)
+                    print("--------------------------------")
 
             print("--------------------------------")
             print(f"[DEBUG] Event: {event}")
@@ -184,7 +186,9 @@ class BedrockBackend(InlineAgentsBackend):
         )
         
         if "rationale" in orchestration_trace and msg_external_id:
+            print("[ + Typing Indicator ] sending typing indicator")
             typing_usecase.send_typing_message(contact_urn=contact_urn, msg_external_id=msg_external_id)
+            print("--------------------------------")
 
         return full_response
 
