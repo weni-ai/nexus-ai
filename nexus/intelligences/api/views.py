@@ -1005,6 +1005,9 @@ class RouterRetailViewSet(views.APIView):
         if personalization_serializer.is_valid():
             personalization_serializer.save()
 
+        project.inline_agent_switch = True
+        project.save()
+
         response = {
             "personalization": personalization_serializer.data,
             "links": created_links
