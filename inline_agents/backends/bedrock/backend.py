@@ -15,6 +15,7 @@ from nexus.inline_agents.backends.bedrock.repository import (
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
+from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
 
 from .adapter import BedrockTeamAdapter
@@ -46,7 +47,8 @@ class BedrockBackend(InlineAgentsBackend):
         language: str = "en",
         user_email: str = None,
         use_components: bool = False,
-        contact_fields: str = ""
+        contact_fields: str = "",
+        msg_external_id: str = None
     ):
         print("[DEBUG] Starting Bedrock backend invoke_agents")
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
@@ -96,6 +98,8 @@ class BedrockBackend(InlineAgentsBackend):
         full_response = ""
         trace_events = []
 
+        typing_usecase = TypingUsecase()
+
         for event in completion:
             if 'chunk' in event:
                 chunk = event['chunk']['bytes'].decode()
@@ -118,6 +122,11 @@ class BedrockBackend(InlineAgentsBackend):
                 trace_data = event['trace']
                 trace_events.append(trace_data)
 
+                orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
+
+                if "rationale" in orchestration_trace and msg_external_id:
+                    typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
+
                 # Notify observers about the trace
                 self.event_manager_notify(
                     event="inline_trace_observers",
@@ -132,6 +141,12 @@ class BedrockBackend(InlineAgentsBackend):
                     user_email=user_email,
                     session_id=session_id
                 )
+
+                if "rationale" in orchestration_trace and msg_external_id:
+                    print("[ + Typing Indicator ] sending typing indicator")
+                    typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
+                    print("--------------------------------")
+
             print("--------------------------------")
             print(f"[DEBUG] Event: {event}")
             print("--------------------------------")
@@ -169,6 +184,12 @@ class BedrockBackend(InlineAgentsBackend):
             contact_urn=contact_urn,
             rationale_switch=rationale_switch
         )
+        
+        if "rationale" in orchestration_trace and msg_external_id:
+            print("[ + Typing Indicator ] sending typing indicator")
+            typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
+            print("--------------------------------")
+
         return full_response
 
     def _handle_rationale_in_response(self, rationale_text: Optional[str], full_response: str, session_id: str, project_uuid: str, contact_urn: str, rationale_switch: bool) -> str:
