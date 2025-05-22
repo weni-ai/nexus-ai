@@ -226,9 +226,9 @@ def delete_file_task(file_name):
 def generate_flows_report(auth_token: str, start_date: str = None, end_date: str = None):
     alt_lock_key = "generate_flows_report_lock"
     lock_id = f"task_lock:{alt_lock_key}"
-    
+
     lock_acquired = REDIS_CLIENT.set(lock_id, "true", ex=LOCK_TIMEOUT, nx=True)
-    
+
     if not lock_acquired:
         logger.info("Task generate_flows_report is already running. Skipping this execution.")
         return False

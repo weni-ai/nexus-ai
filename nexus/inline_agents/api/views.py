@@ -445,6 +445,7 @@ class MultiAgentView(APIView):
                 if can_view_email in request.user.email:
                     can_view = True
                     break
+
             project = Project.objects.get(uuid=project_uuid)
             return Response({
                 "multi_agents": project.inline_agent_switch,

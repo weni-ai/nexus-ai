@@ -1,5 +1,4 @@
 from django.conf import settings
-from django.template.defaultfilters import slugify
 
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO

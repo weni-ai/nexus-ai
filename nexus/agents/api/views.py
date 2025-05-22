@@ -242,8 +242,7 @@ class PushAgents(APIView):
             self._finalize_agent_creation(created_agent, external_id)
 
             return created_agent, response_warnings
-
-        except Exception as e:
+        except Exception:
             if created_agent and created_agent.pk:
                 self._rollback_agent_creation(created_agent, external_id)
             raise
@@ -367,17 +366,17 @@ class PushAgents(APIView):
         fields = []
 
         if isinstance(skill_parameters, list):
-                params = {}
-                for param in skill_parameters:
-                    for key, value in param.items():
-                        if value.get("contact_field"):
-                            fields.append({
-                                "key": key,
-                                "value_type": value.get("type")
-                            })
-                        param[key].pop("contact_field", None)
-                    params.update(param)
-                skill_parameters = params
+            params = {}
+            for param in skill_parameters:
+                for key, value in param.items():
+                    if value.get("contact_field"):
+                        fields.append({
+                            "key": key,
+                            "value_type": value.get("type")
+                        })
+                    param[key].pop("contact_field", None)
+                params.update(param)
+            skill_parameters = params
 
         agents_usecase = AgentUsecase()
         agents_usecase.create_contact_fields(project_uuid, fields, agent=agent)
@@ -399,7 +398,7 @@ class PushAgents(APIView):
         # Create initial version (v1)
         alias_name = "v1"
         sub_agent_alias_id, sub_agent_alias_arn, agent_alias_version = agents_usecase.create_external_agent_alias(
-            agent_id=external_id, 
+            agent_id=external_id,
             alias_name=alias_name
         )
 
