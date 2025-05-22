@@ -50,4 +50,4 @@ class CredentialPlaceholderInvalid(BaseCredentialException):
 
 class CredentialIsConfidentialInvalid(BaseCredentialException):
     default_detail = "Credential is_confidential must be a boolean value."
-    default_code = "credential_is_confidential_invalid" 
+    default_code = "credential_is_confidential_invalid"

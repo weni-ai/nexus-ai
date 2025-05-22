@@ -10,6 +10,7 @@ from nexus.agents.models import (
     AgentMessage,
 )
 
+
 class ActiveAgentSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -122,6 +123,7 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
     agents_using = serializers.SerializerMethodField("get_agents_using")
     name = serializers.SerializerMethodField("get_name")
     value = serializers.SerializerMethodField("get_value")
+
     class Meta:
         model = Credential
         fields = [
@@ -139,12 +141,12 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
                 "uuid": agent.uuid,
                 "name": agent.display_name,
             }
-            for agent in obj.agents.filter(active_agents__team = obj.project.team)
+            for agent in obj.agents.filter(active_agents__team=obj.project.team)
         ]
 
     def get_name(self, obj):
         return obj.key
-    
+
     def get_value(self, obj):
         if obj.is_confidential:
             return obj.value
@@ -162,7 +164,7 @@ class AgentMessageHistorySerializer(serializers.ModelSerializer):
             'tag',
             'classification',
         ]
-    
+
     message_text = serializers.SerializerMethodField()
     tag = serializers.SerializerMethodField()
     classification = serializers.SerializerMethodField()
@@ -172,7 +174,7 @@ class AgentMessageHistorySerializer(serializers.ModelSerializer):
 
     def get_tag(self, obj):
         return "S"
-    
+
     def get_classification(self, obj):
         return "other"
 

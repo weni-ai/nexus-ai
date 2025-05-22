@@ -8,6 +8,7 @@ from nexus.task_managers.tasks import generate_flows_report
 
 class ReportView(views.APIView):
     permission_classes = [ProjectPermission]
+
     def get(self, request):
         return Response({
             "emails": settings.REPORT_RECIPIENT_EMAILS
