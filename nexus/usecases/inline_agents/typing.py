@@ -6,16 +6,17 @@ from nexus.internals import InternalAuthentication
 
 class TypingUsecase:
 
-    def send_typing_message(self, contact_urn: str, msg_external_id: str):
-        url = f"{settings.FLOWS_REST_ENDPOINT}/api/v2/whatsapp_broadcasts.json"
+    def send_typing_message(self, contact_urn: str, msg_external_id: str, project_uuid: str):
+        url = f"{settings.FLOWS_REST_ENDPOINT}/api/v2/internals/whatsapp_broadcasts"
 
-        print(f"[ + Typing Indicator ] sending request to {url}")
+        print(f"[ + Typing Indicator + ] sending request to {url}")
 
         body = {
             "urns": [contact_urn],
+            "project": project_uuid,
             "msg": {
                 "action_external_id": msg_external_id,
-                "action_type": "typing_indicator"
+                "action_type": "msg/typing_indicator"
             }
         }
 

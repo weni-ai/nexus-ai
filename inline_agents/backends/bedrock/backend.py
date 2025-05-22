@@ -125,7 +125,7 @@ class BedrockBackend(InlineAgentsBackend):
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
 
                 if "rationale" in orchestration_trace and msg_external_id:
-                    typing_usecase.send_typing_message(contact_urn=contact_urn, msg_external_id=msg_external_id)
+                    typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
 
                 # Notify observers about the trace
                 self.event_manager_notify(
@@ -144,7 +144,7 @@ class BedrockBackend(InlineAgentsBackend):
 
                 if "rationale" in orchestration_trace and msg_external_id:
                     print("[ + Typing Indicator ] sending typing indicator")
-                    typing_usecase.send_typing_message(contact_urn=contact_urn, msg_external_id=msg_external_id)
+                    typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
                     print("--------------------------------")
 
             print("--------------------------------")
@@ -187,7 +187,7 @@ class BedrockBackend(InlineAgentsBackend):
         
         if "rationale" in orchestration_trace and msg_external_id:
             print("[ + Typing Indicator ] sending typing indicator")
-            typing_usecase.send_typing_message(contact_urn=contact_urn, msg_external_id=msg_external_id)
+            typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
             print("--------------------------------")
 
         return full_response
