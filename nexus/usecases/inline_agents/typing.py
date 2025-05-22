@@ -16,7 +16,7 @@ class TypingUsecase:
             "project": project_uuid,
             "msg": {
                 "action_external_id": msg_external_id,
-                "action_type": "msg/typing_indicator"
+                "action_type": "typing_indicator"
             }
         }
 
