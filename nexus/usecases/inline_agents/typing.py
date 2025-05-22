@@ -23,4 +23,4 @@ class TypingUsecase:
 
         internal_auth = InternalAuthentication()
         print(f"[DEBUG] Sending typing message to {contact_urn} with msg_external_id {msg_external_id}")
-
+        requests.post(url, json=body, headers=internal_auth.headers)
