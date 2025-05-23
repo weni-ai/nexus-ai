@@ -1,5 +1,6 @@
 from typing import List
 
+
 class Components:
     SIMPLE_TEXT = '''
     {
@@ -104,7 +105,7 @@ class Components:
                 "produto_id_D3#loja_id"
             ]
             }
-        ]  
+        ]
         }
     }
     }
@@ -118,7 +119,7 @@ class Components:
             self.CTA_URL,
             self.CATALOG
         ]
-    
+
     def get_all_formats_string(self) -> str:
         return "\n".join(self.get_all_formats())
 
@@ -133,23 +134,23 @@ INSTRUCTIONS_QUICK_REPLIES = [
 ]
 
 INSTRUCTIONS_CATALOG = [
-   	"SEMPRE envie a seguinte frase ao final da sua resposta: '<components>CATALOG</components>'",
-  	"NUNCA oculte ou omita QUALQUER informação do produto, especialmente: ProductID, SellerID,Especificações completas, Descrições completas, Valores, Códigos de barras, Dimensões e Qualquer outra informação disponível.",
-   	"NUNCA crie um sellerId, SEMPRE chame o action group responsável por buscar o sellerId.",
-   	"Destaque informações importantes como ProductID e SellerID.",
+    "SEMPRE envie a seguinte frase ao final da sua resposta: '<components>CATALOG</components>'",
+    "NUNCA oculte ou omita QUALQUER informação do produto, especialmente: ProductID, SellerID,Especificações completas, Descrições completas, Valores, Códigos de barras, Dimensões e Qualquer outra informação disponível.",
+    "NUNCA crie um sellerId, SEMPRE chame o action group responsável por buscar o sellerId.",
+    "Destaque informações importantes como ProductID e SellerID.",
     "Sempre apresente todas as informações de forma organizada e clara."
 ]
 
 INSTRUCTIONS_LIST_MESSAGE = [
-   "SEMPRE envie a seguinte frase ao final da sua resposta: '<components>LIST_MESSAGE</components>'",
-   "SEMPRE estruture sua resposta como um lista de mensagens, com título(MAXIMUM 20 CHARACTERS), descrição(MAXIMUM 60 CHARACTERS), link e uuid(ordem de exibição)(MAXIMUM 10 ITEMS)"
-   "Fique atento aos limites de caracteres para cada campo, não exceda os limites."
+    "SEMPRE envie a seguinte frase ao final da sua resposta: '<components>LIST_MESSAGE</components>'",
+    "SEMPRE estruture sua resposta como um lista de mensagens, com título(MAXIMUM 20 CHARACTERS), descrição(MAXIMUM 60 CHARACTERS), link e uuid(ordem de exibição)(MAXIMUM 10 ITEMS)"
+    "Fique atento aos limites de caracteres para cada campo, não exceda os limites."
 ]
 
 INSTRUCTIONS_CTA_URL = [
-   "SEMPRE envie a seguinte frase ao final da sua resposta: USE THE '<components>CTA_URL</components>'",
-   "SEMPRE que identificar ou receber links importantes, envie-os de forma clara e direta",
-   "Ao compartilhar links, apresente-os de maneira estruturada e legível para o usuário"
+    "SEMPRE envie a seguinte frase ao final da sua resposta: USE THE '<components>CTA_URL</components>'",
+    "SEMPRE que identificar ou receber links importantes, envie-os de forma clara e direta",
+    "Ao compartilhar links, apresente-os de maneira estruturada e legível para o usuário"
 ]
 
 INSTRUCTIONS = {

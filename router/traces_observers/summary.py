@@ -75,6 +75,24 @@ JSON trace to summarize:
     return prompt
 
 
+def _update_trace_summary(language: str, trace_data: dict):
+    prompt = _get_summary_prompt(language=language, trace_data=trace_data)
+    client = OpenAI()
+    if settings.TRACE_SUMMARY_DELAY:
+        time.sleep(3)
+
+    response = client.chat.completions.create(
+        model="gpt-4.1-nano",
+        temperature=0,
+        max_tokens=100,
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    summary = response.choices[0].message.content
+
+    return summary
+
+
 class SummaryTracesObserver(EventObserver):
     """
     This observer is responsible for:
@@ -101,8 +119,6 @@ class SummaryTracesObserver(EventObserver):
         if not preview:
             return
 
-        print("[DEBUG] Summary Traces Observer")
-
         try:
             # Determine which trace data to use
             trace_data = inline_traces if inline_traces is not None else event_content
@@ -111,26 +127,8 @@ class SummaryTracesObserver(EventObserver):
                 logging.warning("No trace data provided to SummaryTracesObserver")
                 return
 
-            client = OpenAI()
-            # Add a small delay between API calls to respect rate limits
-            if settings.TRACE_SUMMARY_DELAY:
-                time.sleep(3)
-
-            prompt = _get_summary_prompt(language, trace_data)
-
-            response = client.chat.completions.create(
-                model="gpt-4.1-nano",
-                temperature=0,
-                max_tokens=100,
-                messages=[{
-                    "role": "user",
-                    "content": prompt
-                }]
-            )
-
-            summary = response.choices[0].message.content
-
-            trace_data['summary'] = summary
+            # updated_summary = _update_trace_summary(language=language, trace_data=trace_data)
+            # trace_data['summary'] = updated_summary
 
             if user_email and project_uuid and session_id:
                 send_preview_message_to_websocket(
@@ -143,7 +141,7 @@ class SummaryTracesObserver(EventObserver):
                     }
                 )
 
-            return summary
+            return trace_data['summary']
         except Exception as e:
             logging.error(f"Error getting trace summary: {str(e)}")
             return "Processing your request now"

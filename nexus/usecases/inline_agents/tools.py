@@ -1,9 +1,8 @@
 from django.conf import settings
-from django.template.defaultfilters import slugify
 
 from io import BytesIO
 
-from nexus.inline_agents.models import Agent, AgentCredential, ContactField
+from nexus.inline_agents.models import Agent, ContactField
 from nexus.projects.models import Project
 from typing import Dict, List, Tuple
 from nexus.internals.flows import FlowsRESTClient
@@ -15,7 +14,7 @@ class ToolsUseCase:
 
     TOOL_NAME_FORMAT = "{tool_key}-{agent_id}"
 
-    def __init__(self, agent_backend_client = BedrockClient):
+    def __init__(self, agent_backend_client=BedrockClient):
         self.agent_backend_client = agent_backend_client()
 
     def create_lambda_function(self, tool: Dict, tool_file, project_uuid: str, tool_name: str) -> Dict[str, str]:
@@ -72,7 +71,7 @@ class ToolsUseCase:
         return
 
     def update_tool(self, agent: Agent, project: Project, agent_tool: Dict, tool_file, tool_name: str) -> Tuple[Dict, Dict]:
-        
+
         project_uuid = str(project.uuid)
         action_group_executor = self.update_lambda_function(agent_tool, tool_file, project_uuid, tool_name)
         parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool.get("parameters", []), project_uuid)
@@ -90,7 +89,6 @@ class ToolsUseCase:
 
         project_uuid = str(project.uuid)
 
-        
         ContactField.objects.create(
             agent=agent,
             project=project,
@@ -106,7 +104,7 @@ class ToolsUseCase:
             )
 
         return parameter
-    
+
     def __format_action_group_name(self, action_group_name: str) -> str:
         words = action_group_name.replace("_", "-").split('-')
         pascal_case = ''.join(word.capitalize() for word in words)
@@ -221,7 +219,7 @@ class ToolsUseCase:
                 tool, display_tool = self.update_tool(agent, project, agent_skill, skill_file, skill_name)
                 new_agent_tools.append(tool)
                 new_agent_display_tools.append(display_tool)
-            
+
         for skill_name in skills_to_delete:
             print(f"[+ 🧠 Deleting tool {skill_name} +]")
             self.delete_tool(agent, project, agent_skill, skill_file, skill_name)

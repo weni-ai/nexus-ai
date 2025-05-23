@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.db import models
-from django.forms import Widget, Textarea
-from django.utils.safestring import mark_safe
+from django.forms import Textarea
+
 import json
 from nexus.inline_agents.models import Guardrail
 from nexus.inline_agents.backends.bedrock.models import Supervisor
@@ -19,7 +19,7 @@ class PrettyJSONWidget(Textarea):
         elif value and not isinstance(value, str):
             # If it's already a dict or list, just format it
             value = json.dumps(value, indent=2)
-            
+
         # Call the parent class's render method with the formatted JSON
         return super().render(name, value, attrs, renderer)
 
@@ -31,7 +31,7 @@ class GuardrailAdmin(admin.ModelAdmin):
     search_fields = ('identifier', 'changelog')
     readonly_fields = ('created_on',)
     ordering = ('-created_on',)
-    
+
     fieldsets = (
         (None, {
             'fields': ('identifier', 'version', 'current_version')
@@ -53,11 +53,11 @@ class SupervisorAdmin(admin.ModelAdmin):
     search_fields = ('name', 'instruction')
     readonly_fields = ('created_on',)
     ordering = ('-created_on',)
-    
+
     formfield_overrides = {
         models.JSONField: {'widget': PrettyJSONWidget(attrs={'rows': 20, 'cols': 80, 'class': 'vLargeTextField'})},
     }
-    
+
     fieldsets = (
         (None, {
             'fields': ('name', 'foundation_model', 'instruction')

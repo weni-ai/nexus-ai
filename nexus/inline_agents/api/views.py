@@ -445,10 +445,11 @@ class MultiAgentView(APIView):
                 if can_view_email in request.user.email:
                     can_view = True
                     break
+
             project = Project.objects.get(uuid=project_uuid)
             return Response({
                 "multi_agents": project.inline_agent_switch,
-                "can_view": (("@weni.ai" in request.user.email) or ("@vtex.com" in request.user.email))
+                "can_view": can_view
             })
         except Project.DoesNotExist:
             return Response(

@@ -30,9 +30,11 @@ class BedrockClient:
                 Runtime='python3.12',
                 Timeout=180,
                 Role=lambda_role,
-                Code={'ZipFile': zip_buffer.getvalue()},
-                    Handler=skill_handler
-                )
+                Code={
+                    'ZipFile': zip_buffer.getvalue()
+                },
+                Handler=skill_handler
+            )
             lambda_arn = lambda_function.get("FunctionArn")
         except self.lambda_client.exceptions.ResourceConflictException:
             lambda_function = self.lambda_client.get_function(FunctionName=lambda_name)

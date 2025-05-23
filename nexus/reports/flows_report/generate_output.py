@@ -1,17 +1,16 @@
-import requests
-import pandas as pd
-import json
-from datetime import datetime
 import os
 import sys
-from dotenv import load_dotenv
 import re
+import pendulum
+import requests
+
+import pandas as pd
+import concurrent.futures
+from datetime import datetime
+from tqdm import tqdm
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-import concurrent.futures
-from tqdm import tqdm
-from django.conf import settings
-import pendulum
+
 from django.core.mail import EmailMessage
 from django.conf import settings
 
@@ -20,7 +19,7 @@ from django.conf import settings
 API_VERSION = "v2"
 CONTACTS_ENDPOINT = "contacts.json"
 MESSAGES_ENDPOINT = "messages.json"
-DATE_FORMAT_API = "%Y-%m-%dT%H:%M:%S.%f%z" # Assumes TZ info is present like 'Z' or +HH:MM
+DATE_FORMAT_API = "%Y-%m-%dT%H:%M:%S.%f%z"  # Assumes TZ info is present like 'Z' or +HH:MM
 DATE_FORMAT_API_FALLBACK = "%Y-%m-%dT%H:%M:%S"
 DATE_FORMAT_BR = "%d/%m/%Y %H:%M:%S"
 MAX_WORKERS = 10
@@ -91,6 +90,7 @@ groups = {
 }
 # --- End Classification Groups ---
 
+
 def format_datetime_br(datetime_str):
     """Formats an ISO 8601 string (with potential Z) to Brazilian format."""
     if not datetime_str:
@@ -106,9 +106,10 @@ def format_datetime_br(datetime_str):
             try:
                 dt_obj = datetime.strptime(datetime_str.replace('T', ' '), DATE_FORMAT_API_FALLBACK)
             except ValueError:
-                 print(f"Error: Could not parse date string: {datetime_str}", file=sys.stderr)
-                 return None
+                print(f"Error: Could not parse date string: {datetime_str}", file=sys.stderr)
+                return None
     return dt_obj.strftime(DATE_FORMAT_BR)
+
 
 def get_paginated_data(url, headers):
     """Fetches all data from a paginated API endpoint."""
@@ -121,10 +122,12 @@ def get_paginated_data(url, headers):
         url = data.get('next')
     return results
 
+
 def get_contact_messages(contact_uuid, base_url, headers):
     """Fetches all messages for a specific contact."""
     messages_url = f"{base_url}/api/{API_VERSION}/{MESSAGES_ENDPOINT}?contact={contact_uuid}&after=2025-05-15T00:00:00.000Z"
     return get_paginated_data(messages_url, headers)
+
 
 def classify_conversation(messages_list, groups_dict, similarity_threshold=0.1):
     """Classifies conversation based on TF-IDF cosine similarity to subgroup phrases."""
@@ -155,7 +158,7 @@ def classify_conversation(messages_list, groups_dict, similarity_threshold=0.1):
         cosine_similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:])
 
         if cosine_similarities.size == 0:
-             return "Não Classificado", "Erro no Cálculo de Similaridade"
+            return "Não Classificado", "Erro no Cálculo de Similaridade"
 
         best_match_index = cosine_similarities.argmax()
         max_similarity = cosine_similarities[0, best_match_index]
@@ -168,10 +171,11 @@ def classify_conversation(messages_list, groups_dict, similarity_threshold=0.1):
     except ValueError as e:
         print(f"Error during TF-IDF/Similarity calculation: {e}", file=sys.stderr)
         if "empty vocabulary" in str(e):
-             return "Não Classificado", "Texto Vazio ou Apenas Stopwords"
+            return "Não Classificado", "Texto Vazio ou Apenas Stopwords"
         return "Não Classificado", "Erro na Classificação"
 
     return "Não Classificado", "Erro Inesperado na Classificação"
+
 
 def process_contact(contact, base_url, headers, groups):
     """Process a single contact and return its report data."""
@@ -254,7 +258,7 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
             now = pendulum.now()
             yesterday = now.subtract(days=1)
             contacts_url += f"?after={yesterday.to_iso8601_string()}&before={now.to_iso8601_string()}"
-            email_body = f'The attached file contains the report from the last 24 hours.'
+            email_body = 'The attached file contains the report from the last 24 hours.'
 
         print(f"Fetching contacts from {contacts_url}...")
         all_contacts = get_paginated_data(contacts_url, headers)
@@ -265,16 +269,16 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
             raise RuntimeError(error_message)
 
         print(f"Fetched {len(all_contacts)} contacts. Processing with multi-threading...")
-        
+
         report_data = []
         total_contacts = len(all_contacts)
-        
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             future_to_contact = {
-                executor.submit(process_contact, contact, base_url, headers, groups): contact 
+                executor.submit(process_contact, contact, base_url, headers, groups): contact
                 for contact in all_contacts
             }
-            
+
             for future in tqdm(concurrent.futures.as_completed(future_to_contact), total=total_contacts, desc="Processing contacts"):
                 contact = future_to_contact[future]
                 try:
@@ -321,9 +325,9 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
 
     except Exception as e:
         if "401 Client Error" in str(e):
-            body = f'An error occurred while generating or sending the contacts report: Invalid or expired authentication token. Please provide a valid token'
+            body = 'An error occurred while generating or sending the contacts report: Invalid or expired authentication token. Please provide a valid token'
         else:
-            body = f'An error occurred while generating or sending the contacts report.\n\nPlease try again or contact someone from Weni.'
+            body = 'An error occurred while generating or sending the contacts report.\n\nPlease try again or contact someone from Weni.'
 
         error_message = f"Error processing or sending report: {e}"
         print(error_message, file=sys.stderr)
@@ -338,10 +342,10 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
                 'From': f'Nexus AI Reports {settings.DEFAULT_FROM_EMAIL}',
             }
             error_email.send()
-            print(f"Sent error notification email", file=sys.stderr)
+            print("Sent error notification email", file=sys.stderr)
         except Exception as email_error:
             print(f"Failed to send error notification email: {email_error}", file=sys.stderr)
-            
+
         raise Exception(error_message)
 
 

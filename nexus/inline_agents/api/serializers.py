@@ -31,6 +31,7 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
     def get_is_official(self, obj):
         return obj.agent.is_official
 
+
 class AgentSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -53,7 +54,7 @@ class AgentSerializer(serializers.ModelSerializer):
     model = serializers.CharField(source='foundation_model')
     skills = serializers.SerializerMethodField("get_skills")
     assigned = serializers.SerializerMethodField("get_is_assigned")
-    
+
     credentials = serializers.SerializerMethodField("get_credentials")
 
     def get_skills(self, obj):

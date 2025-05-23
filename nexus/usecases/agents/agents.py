@@ -194,7 +194,7 @@ class AgentUsecase:
                     value_type = types.get(contact_field.get('value_type'))
                 else:
                     value_type = contact_field.get('value_type')
-                    
+
                 print(f"Creating contact field: {contact_field.get('key')} {value_type}")
                 ContactField.objects.create(
                     project_id=project_uuid,
@@ -1113,9 +1113,9 @@ class AgentUsecase:
             return None
 
         return (
-            current_instructions[:principles_pos + len(principles_tag)] + 
-            "\n" + self.human_support_instructions + 
-            current_instructions[principles_pos + len(principles_tag):]
+            f"{current_instructions[:principles_pos + len(principles_tag)]}\n"
+            f"{self.human_support_instructions}"
+            f"{current_instructions[principles_pos + len(principles_tag):]}"
         )
 
     def _remove_human_support_instructions(self, current_instructions: str) -> str | None:
@@ -1131,8 +1131,8 @@ class AgentUsecase:
 
         # Remove the instructions and any extra whitespace
         return (
-            current_instructions[:start_pos].rstrip() +
-            current_instructions[end_pos:].lstrip()
+            f"{current_instructions[:start_pos].rstrip()}"
+            f"{current_instructions[end_pos:].lstrip()}"
         )
 
     def _update_agent_instructions(

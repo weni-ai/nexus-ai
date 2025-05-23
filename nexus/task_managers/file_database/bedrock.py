@@ -145,8 +145,6 @@ class BedrockFileDatabase(FileDataBase):
         return _update_agent_response
 
     def add_metadata_json_file(self, filename: str, content_base_uuid: str, file_uuid: str):
-        import os
-        import tempfile
         from io import BytesIO
         print("[+ BEDROCK: Adding metadata.json file +]")
 
@@ -168,7 +166,7 @@ class BedrockFileDatabase(FileDataBase):
         self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
 
     def multipart_upload(self, file, content_base_uuid: str, file_uuid: str, part_size: int = 5 * 1024 * 1024):
-        from io import BytesIO
+
         s3_client = self.s3_client
         bucket_name = self.bucket_name
         file_name = self.__create_unique_filename(basename(file.name))

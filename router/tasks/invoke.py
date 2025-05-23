@@ -11,6 +11,8 @@ from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
+from nexus.usecases.inline_agents.typing import TypingUsecase
+
 from router.dispatcher import dispatch
 from router.entities import (
     message_factory,
@@ -35,6 +37,14 @@ def start_inline_agents(
     text = message.get("text", "")
     attachments = message.get("attachments", [])
     product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
+    message_event = message.get("msg_event", {})
+
+    typing_usecase = TypingUsecase()
+    typing_usecase.send_typing_message(
+        contact_urn=message.get("contact_urn"),
+        msg_external_id=message_event.get("msg_external_id", ""),
+        project_uuid=message.get("project_uuid")
+    )
 
     if attachments:
         # If there's text, add a space before attachments
@@ -132,7 +142,8 @@ def start_inline_agents(
             language=language,
             user_email=user_email,
             use_components=project.use_components,
-            contact_fields=message.contact_fields_as_json
+            contact_fields=message.contact_fields_as_json,
+            msg_external_id=message_event.get("msg_external_id", "")
         )
 
         redis_client.delete(pending_response_key)

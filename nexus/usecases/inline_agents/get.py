@@ -27,7 +27,7 @@ class GetInlineCredentialsUsecase:
 
 
 class GetLogGroupUsecase:
-    def __init__(self, log_group_client = BedrockClient):
+    def __init__(self, log_group_client=BedrockClient):
         self.log_group_client = log_group_client()
 
     def get_log_group(self, project_uuid: str, agent_key: str, tool_key: str) -> str:
