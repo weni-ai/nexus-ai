@@ -77,6 +77,8 @@ class BedrockTeamAdapter(TeamAdapter):
             "promptOverrideConfiguration": self.__get_prompt_override_configuration(use_components=use_components)
         }
 
+        print(f"[ + DEBUG + ] external_team: {external_team}")
+
         return external_team
 
     @classmethod
