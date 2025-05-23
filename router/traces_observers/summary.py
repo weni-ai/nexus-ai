@@ -127,9 +127,6 @@ class SummaryTracesObserver(EventObserver):
                 logging.warning("No trace data provided to SummaryTracesObserver")
                 return
 
-            # updated_summary = _update_trace_summary(language=language, trace_data=trace_data)
-            # trace_data['summary'] = updated_summary
-
             if user_email and project_uuid and session_id:
                 send_preview_message_to_websocket(
                     project_uuid=str(project_uuid),
@@ -141,7 +138,6 @@ class SummaryTracesObserver(EventObserver):
                     }
                 )
 
-            return trace_data['summary']
         except Exception as e:
             logging.error(f"Error getting trace summary: {str(e)}")
             return "Processing your request now"
