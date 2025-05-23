@@ -4,6 +4,7 @@ from django.conf import settings
 
 from nexus.internals import InternalAuthentication
 
+
 class TypingUsecase:
 
     def send_typing_message(self, contact_urn: str, msg_external_id: str, project_uuid: str):

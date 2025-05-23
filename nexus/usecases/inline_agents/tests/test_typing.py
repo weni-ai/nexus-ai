@@ -27,13 +27,13 @@ class TestTypingUsecase(TestCase):
 
         # Verify if requests.post was called twice
         self.assertEqual(mock_post.call_count, 2)
-        
+
         # Get arguments from the second call (the main call)
         args, kwargs = mock_post.call_args_list[1]
 
         # Verify the URL
         self.assertEqual(args[0], f"{settings.FLOWS_REST_ENDPOINT}/api/v2/whatsapp_broadcasts.json")
-        
+
         # Verify the request body
         expected_body = {
             "urns": [self.contact_urn],
@@ -43,8 +43,8 @@ class TestTypingUsecase(TestCase):
             }
         }
         self.assertEqual(kwargs['json'], expected_body)
-        
+
         # Verify if headers were passed correctly
         self.assertIn('headers', kwargs)
         self.assertIn('Authorization', kwargs['headers'])
-        self.assertTrue(kwargs['headers']['Authorization'].startswith('Bearer ')) 
+        self.assertTrue(kwargs['headers']['Authorization'].startswith('Bearer '))

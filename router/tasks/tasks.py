@@ -32,7 +32,6 @@ from router.classifiers.pre_classification import PreClassification
 from router.clients.flows.http.flow_start import FlowStartHTTPClient
 from router.clients.flows.http.send_message import (
     SendMessageHTTPClient,
-    WhatsAppBroadcastHTTPClient,
 )
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
 from router.clients.preview.simulator.flow_start import SimulateFlowStart
@@ -51,7 +50,6 @@ from router.repositories.orm import (
 from router.route import route
 
 from .actions_client import get_action_clients
-from .invoke import start_inline_agents
 
 client = OpenAI()
 logger = logging.getLogger(__name__)
@@ -89,7 +87,7 @@ def improve_rationale_text(rationale_text: str, previous_rationales: list = [], 
             You can find examples of rephrasings within the tags <examples></examples>.
 
             <examples>
-            # EXAMPLE 1 
+            # EXAMPLE 1
             Tought: Consulting ProductConcierge for formal clothing suggestions.
             Rephrasing: I'm looking for formal clothes for you!
             # EXAMPLE 2
@@ -191,7 +189,7 @@ def improve_subsequent_rationale(rationale_text: str, previous_rationales: list 
             You can find examples of rephrasings within the tags <examples></examples>.
 
             <examples>
-            # EXAMPLE 1 
+            # EXAMPLE 1
             Tought: Consulting ProductConcierge for formal clothing suggestions.
             Rephrasing: I'm looking for formal clothes for you!
             # EXAMPLE 2
@@ -270,6 +268,7 @@ def task_send_message_http_client(
         user=user,
         full_chunks=full_chunks
     )
+
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def get_trace_summary(language, trace):
