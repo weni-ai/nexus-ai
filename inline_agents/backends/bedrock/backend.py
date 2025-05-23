@@ -54,6 +54,9 @@ class BedrockBackend(InlineAgentsBackend):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
         print(f"[DEBUG] Supervisor: {supervisor}")
 
+        typing_usecase = TypingUsecase()
+        typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
+
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
             agents=team,
