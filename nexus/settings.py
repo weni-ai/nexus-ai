@@ -570,3 +570,9 @@ if envvar_EMAIL_HOST:
     EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS")
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", [])
+
+MULTI_AGENTS_CAN_ACCESS = env.list("MULTI_AGENTS_CAN_ACCESS", [])
+
+INVOKE_AGENTS_RATE_LIMIT = env.str("INVOKE_AGENTS_RATE_LIMIT", "2500/m")
