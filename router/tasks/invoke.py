@@ -36,6 +36,7 @@ def start_inline_agents(
     # Handle text, attachments and product items properly
     text = message.get("text", "")
     attachments = message.get("attachments", [])
+    product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
     message_event = message.get("msg_event", {})
 
     typing_usecase = TypingUsecase()
@@ -44,7 +45,6 @@ def start_inline_agents(
         msg_external_id=message_event.get("msg_external_id", ""),
         project_uuid=message.get("project_uuid")
     )
-    product_items = message.get("metadata", {}).get("product_items", "")
 
     if attachments:
         # If there's text, add a space before attachments
@@ -56,9 +56,9 @@ def start_inline_agents(
 
     if product_items:
         if text:
-            text = f"{text} product items: {product_items}"
+            text = f"{text} product items: {str(product_items)}"
         else:
-            text = f"product items: {product_items}"
+            text = f"product items: {str(product_items)}"
 
     # Update the message with the processed text
     message['text'] = text
