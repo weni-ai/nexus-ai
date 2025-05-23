@@ -54,6 +54,13 @@ class BedrockBackend(InlineAgentsBackend):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
         print(f"[DEBUG] Supervisor: {supervisor}")
 
+        typing_usecase = TypingUsecase()
+        typing_usecase.send_typing_message(
+            contact_urn=contact_urn,
+            msg_external_id=msg_external_id,
+            project_uuid=project_uuid
+        )
+
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
             agents=team,
@@ -97,8 +104,6 @@ class BedrockBackend(InlineAgentsBackend):
         completion = response["completion"]
         full_response = ""
         trace_events = []
-
-        typing_usecase = TypingUsecase()
 
         for event in completion:
             if 'chunk' in event:
