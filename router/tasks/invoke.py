@@ -33,10 +33,11 @@ def start_inline_agents(
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
 
-    # Handle text and attachments properly
+    # Handle text, attachments and product items properly
     text = message.get("text", "")
     attachments = message.get("attachments", [])
     message_event = message.get("msg_event", {})
+    product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
 
     typing_usecase = TypingUsecase()
     typing_usecase.send_typing_message(
@@ -52,6 +53,12 @@ def start_inline_agents(
         else:
             # If there's no text, just use attachments as text
             text = str(attachments)
+
+    if product_items:
+        if text:
+            text = f"{text} product items: {str(product_items)}"
+        else:
+            text = f"product items: {str(product_items)}"
 
     # Update the message with the processed text
     message['text'] = text
