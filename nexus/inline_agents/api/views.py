@@ -27,8 +27,7 @@ from nexus.inline_agents.api.serializers import (
 )
 from nexus.projects.api.permissions import ProjectPermission
 
-SKILL_FILE_SIZE_LIMIT = 10
-# TODO: ProjectPermission
+SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
 
 
 class PushAgents(APIView):
