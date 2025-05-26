@@ -6,6 +6,7 @@ from typing import List, Dict, Callable
 
 from router.direct_message import DirectMessage
 
+
 class SimulateBroadcast(DirectMessage):
     def __init__(self, host: str, access_token: str, get_file_info: Callable) -> None:
         self.__host = host
@@ -51,20 +52,22 @@ class SimulateWhatsAppBroadcastHTTPClient(DirectMessage):
         # First, escape the quotes inside the text content
         # Look for patterns like: Notebook 15" and escape the quote
         json_str = re.sub(r'(\w+)(\s*)(\")(\s*\w+)', r'\1\2\\\"\4', json_str)
-        
+
         # Remove newlines and whitespace between JSON structural elements
         # This regex finds newlines and spaces between JSON structure parts
         json_str = re.sub(r'{\s*"', '{"', json_str)
         json_str = re.sub(r'",\s*"', '","', json_str)
         json_str = re.sub(r':\s*{', ':{', json_str)
         json_str = re.sub(r'}\s*}', '}}', json_str)
-        
+
         # Preserve newlines in text content by converting them to \\n
         # This will handle the actual text content newlines
-        json_str = re.sub(r'(text":\s*")([^"]*?)(")', 
-                        lambda m: m.group(1) + m.group(2).replace('\n', '\\n') + m.group(3),
-                        json_str)
-        
+        json_str = re.sub(
+            r'(text":\s*")([^"]*?)(")',
+            lambda m: m.group(1) + m.group(2).replace('\n', '\\n') + m.group(3),
+            json_str
+        )
+
         return json_str
 
     def parse_json_strings(self, json_str):
@@ -81,7 +84,7 @@ class SimulateWhatsAppBroadcastHTTPClient(DirectMessage):
                     # print(f"Error parsing JSON: {json_str}")
                     obj = ast.literal_eval(json_str)
                     return obj
-                except Exception as e:
+                except Exception:
                     try:
                         json_str_escaped = json_str.replace('\n', '\\n')
                         obj = ast.literal_eval(json_str_escaped)
@@ -103,7 +106,7 @@ class SimulateWhatsAppBroadcastHTTPClient(DirectMessage):
                     json_dict = self.parse_json_strings(json_str)
                     if json_dict:
                         result.append(json_dict)
-                except json.JSONDecodeError as e:
+                except json.JSONDecodeError:
                     pass
         return result
 
@@ -115,7 +118,7 @@ class SimulateWhatsAppBroadcastHTTPClient(DirectMessage):
             thought_text = match.group(1).strip()
             json_text = match.group(2)
             return thought_text, json_text
-        
+
         return None, text
 
     def string_to_simple_text(self, text):

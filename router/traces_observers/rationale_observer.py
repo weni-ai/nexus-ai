@@ -37,7 +37,7 @@ RATIONALE_IMPROVEMENT_INSTRUCTIONS = """
     You can find examples of rephrasings within the tags <examples></examples>.
 
     <examples>
-    # EXAMPLE 1 
+    # EXAMPLE 1
     Tought: Consulting ProductConcierge for formal clothing suggestions.
     Rephrasing: I'm looking for formal clothes for you!
     # EXAMPLE 2
