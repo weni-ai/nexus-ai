@@ -21,6 +21,14 @@ from router.entities import (
 from .actions_client import get_action_clients
 
 
+def handle_product_items(text: str, product_items: list) -> str:
+    if text:
+        text = f"{text} product items: {str(product_items)}"
+    else:
+        text = f"product items: {str(product_items)}"
+    return text
+
+
 @celery_app.task(bind=True, soft_time_limit=300, time_limit=360)
 def start_inline_agents(
     self,
@@ -54,11 +62,7 @@ def start_inline_agents(
             # If there's no text, just use attachments as text
             text = str(attachments)
 
-    if product_items:
-        if text:
-            text = f"{text} product items: {str(product_items)}"
-        else:
-            text = f"product items: {str(product_items)}"
+    text = handle_product_items(text, product_items)
 
     # Update the message with the processed text
     message['text'] = text
