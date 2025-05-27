@@ -16,7 +16,7 @@ rate_limit = settings.INVOKE_AGENTS_RATE_LIMIT
 
 
 app.conf.task_routes = {
-    'router.tasks.invoke.start_inline_agents': {'queue': 'inline_agents'},
+    'router.tasks.invoke.start_inline_agents': {'queue': 'inline-agents'},
 }
 
 app.conf.task_annotations = {
