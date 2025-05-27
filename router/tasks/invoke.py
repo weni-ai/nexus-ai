@@ -1,6 +1,7 @@
 import os
 from typing import Dict
 
+import botocore
 from django.conf import settings
 from redis import Redis
 
@@ -11,13 +12,20 @@ from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
+from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.dispatcher import dispatch
-from router.entities import (
-    message_factory,
-)
+from router.entities import message_factory
 
 from .actions_client import get_action_clients
-import botocore
+
+
+def handle_product_items(text: str, product_items: list) -> str:
+    if text:
+        text = f"{text} product items: {str(product_items)}"
+    else:
+        text = f"product items: {str(product_items)}"
+    return text
+
 
 @celery_app.task(
     bind=True, 
@@ -40,9 +48,18 @@ def start_inline_agents(
 
     redis_client = Redis.from_url(settings.REDIS_URL)
 
+    # Handle text, attachments and product items properly
     text = message.get("text", "")
     attachments = message.get("attachments", [])
     message_event = message.get("msg_event", {})
+    product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
+
+    typing_usecase = TypingUsecase()
+    typing_usecase.send_typing_message(
+        contact_urn=message.get("contact_urn"),
+        msg_external_id=message_event.get("msg_external_id", ""),
+        project_uuid=message.get("project_uuid")
+    )
 
     if attachments:
         if text:
@@ -50,6 +67,10 @@ def start_inline_agents(
         else:
             text = str(attachments)
 
+    if len(product_items) > 0:
+        text = handle_product_items(text, product_items)
+
+    # Update the message with the processed text
     message['text'] = text
 
     # TODO: Logs
