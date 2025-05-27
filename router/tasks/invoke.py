@@ -62,7 +62,8 @@ def start_inline_agents(
             # If there's no text, just use attachments as text
             text = str(attachments)
 
-    text = handle_product_items(text, product_items)
+    if len(product_items) > 0:
+        text = handle_product_items(text, product_items)
 
     # Update the message with the processed text
     message['text'] = text
