@@ -18,6 +18,8 @@ from router.entities import (
 from router.tasks.redis_task_manager import RedisTaskManager
 
 from .actions_client import get_action_clients
+
+
 import botocore
 
 
@@ -89,6 +91,7 @@ def start_inline_agents(
             attachments=attachments
         )
 
+    if len(product_items) > 0:
         text = handle_product_items(text, product_items)
 
         message['text'] = text
