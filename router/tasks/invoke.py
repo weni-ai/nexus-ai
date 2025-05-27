@@ -151,6 +151,8 @@ def start_inline_agents(
         rep = ORMTeamRepository()
         team = rep.get_team(message.project_uuid)
 
+        print(f"[ + DEBUG + ] invoke_agents")
+
         response = backend.invoke_agents(
             team=team,
             input_text=message.text,
@@ -165,6 +167,8 @@ def start_inline_agents(
             contact_fields=message.contact_fields_as_json,
             msg_external_id=message_event.get("msg_external_id", "")
         )
+
+        print(f"[ + DEBUG + ] invoke_agents response: {response}")
 
         task_manager.clear_pending_tasks(message.contact_urn)
 
