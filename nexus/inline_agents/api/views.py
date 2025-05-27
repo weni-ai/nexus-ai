@@ -27,8 +27,7 @@ from nexus.inline_agents.api.serializers import (
 )
 from nexus.projects.api.permissions import ProjectPermission
 
-SKILL_FILE_SIZE_LIMIT = 10
-# TODO: ProjectPermission
+SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
 
 
 class PushAgents(APIView):
@@ -445,6 +444,7 @@ class MultiAgentView(APIView):
                 if can_view_email in request.user.email:
                     can_view = True
                     break
+
             project = Project.objects.get(uuid=project_uuid)
             return Response({
                 "multi_agents": project.inline_agent_switch,

@@ -33,7 +33,7 @@ class FormatPrompt:
 
     def format_classes(self, all_classes):
         classes_formatted = '\n'.join([f"A{mclass['id']}: {mclass['class']} - {mclass['context']}" for index, mclass in enumerate(all_classes)])
-        classes_formatted += f"\nA{len(all_classes)+1}: none - if there is insufficient information or if the User message doesn't fit any class"
+        classes_formatted += f"\nA{len(all_classes) + 1}: none - if there is insufficient information or if the User message doesn't fit any class"
         return classes_formatted
 
     @staticmethod

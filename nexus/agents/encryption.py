@@ -29,7 +29,7 @@ def encrypt_value(value: str) -> str:
 
     if not value:
         return value
-        
+
     try:
         if not is_already_encrypted(value):
             f = Fernet(get_fernet_key())
@@ -48,7 +48,7 @@ def decrypt_value(encrypted_value: str) -> str:
     """Decrypt an encrypted string value using Fernet"""
     if not encrypted_value:
         return encrypted_value
-        
+
     try:
         f = Fernet(get_fernet_key())
         decoded = b64decode(encrypted_value)

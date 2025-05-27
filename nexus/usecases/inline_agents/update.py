@@ -13,7 +13,7 @@ from typing import Dict
 
 
 class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
-    def __init__(self, agent_backend_client = BedrockClient):
+    def __init__(self, agent_backend_client=BedrockClient):
         self.agent_backend_client = agent_backend_client()
 
     def update_agent(self, agent_obj: Agent, agent_data: dict, project: Project, files: dict):
@@ -46,7 +46,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
         for key, credential in credentials.items():
             is_confidential = credential.get('is_confidential', True)
-            
+
             if key in existing_credentials:
                 print(f"[+ 🧠 Updating credential {key} +]")
                 cred = existing_credentials[key]
@@ -70,7 +70,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
         for cred in existing_credentials.values():
             agents = list(cred.agents.all())
-            
+
             if len(agents) <= 0:
                 print(f"[+ 🧠 Deleting empty credential {cred.key} {project.uuid} +]")
                 cred.delete()

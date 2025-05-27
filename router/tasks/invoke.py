@@ -9,6 +9,8 @@ from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
+from nexus.usecases.inline_agents.typing import TypingUsecase
+
 from router.dispatcher import dispatch
 from router.entities import (
     message_factory,
@@ -33,6 +35,15 @@ def handle_attachments(
             text = f"{text} {attachments}"
         else:
             text = str(attachments)
+
+    return text
+
+
+def handle_product_items(text: str, product_items: list) -> str:
+    if text:
+        text = f"{text} product items: {str(product_items)}"
+    else:
+        text = f"product items: {str(product_items)}"
     return text
 
 
@@ -52,11 +63,22 @@ def start_inline_agents(
 
         text = message.get("text", "")
         attachments = message.get("attachments", [])
+        message_event = message.get("msg_event", {})
+        product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
+
+        typing_usecase = TypingUsecase()
+        typing_usecase.send_typing_message(
+            contact_urn=message.get("contact_urn"),
+            msg_external_id=message_event.get("msg_external_id", ""),
+            project_uuid=message.get("project_uuid")
+        )
 
         text = handle_attachments(
             text=text,
             attachments=attachments
         )
+
+        text = handle_product_items(text, product_items)
 
         message['text'] = text
 
@@ -126,7 +148,8 @@ def start_inline_agents(
             language=language,
             user_email=user_email,
             use_components=project.use_components,
-            contact_fields=message.contact_fields_as_json
+            contact_fields=message.contact_fields_as_json,
+            msg_external_id=message_event.get("msg_external_id", "")
         )
 
         task_manager.clear_pending_tasks(message.contact_urn)

@@ -1,17 +1,6 @@
 from django.urls import path
 from nexus.agents.api.views import (
-    ActiveAgentsViewSet,
     AgentTracesView,
-    AgentsView,
-    PushAgents,
-    TeamView,
-    OfficialAgentsView,
-    ProjectCredentialsView,
-    VtexAppActiveAgentsViewSet,
-    VtexAppAgentsView,
-    VtexAppOfficialAgentsView,
-    VTexAppTeamView,
-    VtexAppProjectCredentialsView,
     RationaleView,
 )
 

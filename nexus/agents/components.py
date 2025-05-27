@@ -12,18 +12,16 @@ CTA_MESSAGE = '<exemplo>{"msg": {"text": "Visit our online store!"(MAXIMUM 1024 
 # Catalog examples
 CATALOG = '<exemplo>{"msg":{"text":"Confira nossos produtos disponíveis para entrega no seu CEP:"(MAXIMUM 1024 CHARACTERS),"header":{"text":"Produtos disponíveis"(MAXIMUM 60 CHARACTERS),"type":"text"},"footer":"Entrega disponível para seu CEP"(MAXIMUM 60 CHARACTERS),"catalog_message":{"send_catalog":false,"action_button_text":"Ver detalhes"(MAXIMUM 15 CHARACTERS),"products"(CATEGORYS):[{"product":"Tipo de produto A","product_retailer_ids":["produto_id_A1#loja_id","produto_id_A2#loja_id","produto_id_A3#loja_id"]},{"product":"Tipo de produto B","product_retailer_ids":["produto_id_B1#loja_id","produto_id_B2#loja_id","produto_id_B3#loja_id"]},{"product":"Tipo de produto C","product_retailer_ids":["produto_id_C1#loja_id","produto_id_C2#loja_id","produto_id_C3#loja_id"]},{"product":"Tipo de produto D","product_retailer_ids":["produto_id_D1#loja_id","produto_id_D2#loja_id","produto_id_D3#loja_id"]}]}}}</exemplo>'
 
+
 def get_all_formats():
-    return (LIST_MESSAGE+ " " + 
-            QUICK_REPLIES + " " + 
-            SIMPLE_TEXT + " " + 
-            CTA_MESSAGE + " " + 
-            CATALOG)
+    return f"{LIST_MESSAGE} {QUICK_REPLIES} {SIMPLE_TEXT} {CTA_MESSAGE} {CATALOG}"
+
 
 def get_all_formats_list():
     return [
-        LIST_MESSAGE, 
-        QUICK_REPLIES, 
-        SIMPLE_TEXT, 
-        CTA_MESSAGE, 
+        LIST_MESSAGE,
+        QUICK_REPLIES,
+        SIMPLE_TEXT,
+        CTA_MESSAGE,
         CATALOG
     ]

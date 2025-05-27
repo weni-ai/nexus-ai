@@ -8,6 +8,7 @@ from router.direct_message import DirectMessage
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 
 
+
 class SimulateBroadcast(DirectMessage):
     def __init__(self, host: str, access_token: str, get_file_info: Callable) -> None:
         self.__host = host
