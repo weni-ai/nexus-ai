@@ -66,7 +66,8 @@ class BedrockTeamAdapter(TeamAdapter):
             "inlineSessionState": self._get_inline_session_state(
                 use_components=use_components,
                 credentials=credentials,
-                contacts={"urn": contact_urn}
+                contact={"urn": contact_urn},
+                project={"uuid": project_uuid}
             ),
             "enableTrace": self._get_enable_trace(),
             "sessionId": self._get_session_id(contact_urn, project_uuid),
@@ -105,7 +106,8 @@ class BedrockTeamAdapter(TeamAdapter):
         cls,
         use_components: bool,
         credentials: dict,
-        contacts: dict
+        contact: dict,
+        project: dict
     ) -> str:
         sessionState = {}
         session_attributes = {}
@@ -113,9 +115,12 @@ class BedrockTeamAdapter(TeamAdapter):
         if credentials:
             session_attributes['credentials'] = json.dumps(credentials, default=str)
 
-        if contacts:
-            session_attributes["contacts"] = json.dumps(contacts, default=str)
+        if contact:
+            session_attributes["contact"] = json.dumps(contact, default=str)
         
+        if project:
+            session_attributes["project"] = json.dumps(project, default=str)
+
         sessionState["sessionAttributes"] = session_attributes
 
         return sessionState
