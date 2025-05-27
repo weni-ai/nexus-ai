@@ -91,8 +91,8 @@ def start_inline_agents(
             attachments=attachments
         )
 
-    if len(product_items) > 0:
-        text = handle_product_items(text, product_items)
+        if len(product_items) > 0:
+            text = handle_product_items(text, product_items)
 
         message['text'] = text
 
