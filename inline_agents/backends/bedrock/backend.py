@@ -144,18 +144,6 @@ class BedrockBackend(InlineAgentsBackend):
                     user_email=user_email,
                     session_id=session_id
                 )
-<<<<<<< HEAD
-=======
-
-                if "rationale" in orchestration_trace and msg_external_id:
-                    print("[ + Typing Indicator ] sending typing indicator")
-                    typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
-                    print("--------------------------------")
-
-            print("--------------------------------")
-            print(f"[DEBUG] Event: {event}")
-            print("--------------------------------")
->>>>>>> main
 
         # Saving traces on s3
         self.event_manager_notify(
