@@ -50,9 +50,7 @@ class BedrockBackend(InlineAgentsBackend):
         contact_fields: str = "",
         msg_external_id: str = None
     ):
-        print("[DEBUG] Starting Bedrock backend invoke_agents")
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
-        print(f"[DEBUG] Supervisor: {supervisor}")
 
         typing_usecase = TypingUsecase()
         typing_usecase.send_typing_message(
@@ -70,13 +68,11 @@ class BedrockBackend(InlineAgentsBackend):
             use_components=use_components,
             contact_fields=contact_fields,
         )
-        print(f"[DEBUG] External team: {external_team}")
         client = self._get_client()
 
         # Generate a session ID for websocket communication
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         session_id = slugify(session_id)
-        print(f"[DEBUG] Session ID: {session_id}")
         log = save_inline_message_to_database(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
@@ -85,7 +81,9 @@ class BedrockBackend(InlineAgentsBackend):
             session_id=session_id,
             source_type="user"
         )
+        print(f"[DEBUG] Session ID: {session_id}")
         print(f"[DEBUG] Log: {log}")
+        print(f"[DEBUG] External team: {external_team}")
 
         # Send initial status message if in preview mode and user_email is provided
         if preview and user_email:
@@ -146,6 +144,8 @@ class BedrockBackend(InlineAgentsBackend):
                     user_email=user_email,
                     session_id=session_id
                 )
+<<<<<<< HEAD
+=======
 
                 if "rationale" in orchestration_trace and msg_external_id:
                     print("[ + Typing Indicator ] sending typing indicator")
@@ -155,6 +155,7 @@ class BedrockBackend(InlineAgentsBackend):
             print("--------------------------------")
             print(f"[DEBUG] Event: {event}")
             print("--------------------------------")
+>>>>>>> main
 
         # Saving traces on s3
         self.event_manager_notify(
@@ -200,7 +201,7 @@ class BedrockBackend(InlineAgentsBackend):
     def _handle_rationale_in_response(self, rationale_text: Optional[str], full_response: str, session_id: str, project_uuid: str, contact_urn: str, rationale_switch: bool) -> str:
         if not full_response:
             return ""
-            
+
         if rationale_text and rationale_text in full_response:
             full_response = full_response.replace(rationale_text, "").strip()
 
