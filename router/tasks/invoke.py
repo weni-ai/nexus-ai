@@ -21,6 +21,14 @@ from router.entities import (
 from .actions_client import get_action_clients
 
 
+def handle_product_items(text: str, product_items: list) -> str:
+    if text:
+        text = f"{text} product items: {str(product_items)}"
+    else:
+        text = f"product items: {str(product_items)}"
+    return text
+
+
 @celery_app.task(bind=True, soft_time_limit=300, time_limit=360)
 def start_inline_agents(
     self,
@@ -33,10 +41,11 @@ def start_inline_agents(
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
 
-    # Handle text and attachments properly
+    # Handle text, attachments and product items properly
     text = message.get("text", "")
     attachments = message.get("attachments", [])
     message_event = message.get("msg_event", {})
+    product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
 
     typing_usecase = TypingUsecase()
     typing_usecase.send_typing_message(
@@ -52,6 +61,8 @@ def start_inline_agents(
         else:
             # If there's no text, just use attachments as text
             text = str(attachments)
+
+    text = handle_product_items(text, product_items)
 
     # Update the message with the processed text
     message['text'] = text
