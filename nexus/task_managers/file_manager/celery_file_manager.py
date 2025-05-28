@@ -1,5 +1,3 @@
-import pickle
-
 from django.core.exceptions import ObjectDoesNotExist
 
 from nexus.task_managers import tasks
@@ -111,12 +109,14 @@ class CeleryFileManager:
         content_base_uuid: str,
         extension_file: str,
         user_email: str,
-        load_type: str = None
+        load_type: str = None,
+        filename: str = None
     ):
-        pickled_file = pickle.dumps(file)
+        bytes_file = file.read()
 
         content_base_file_dto = ContentBaseFileDTO(
             file=file,
+            file_name=filename,
             user_email=user_email,
             content_base_uuid=content_base_uuid,
             extension_file=extension_file,
@@ -131,18 +131,20 @@ class CeleryFileManager:
         if indexer_database == Project.BEDROCK:
             print("[+ 🦑 Using BEDROCK 🦑 +]")
             tasks_bedrock.bedrock_upload_file.delay(
-                pickled_file,
+                bytes_file,
                 content_base_uuid,
                 user_email,
                 str(content_base_file.uuid),
+                filename=filename
             )
             return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}
 
         tasks.upload_file.delay(
-            pickled_file,
+            bytes_file,
             content_base_uuid,
             extension_file,
             user_email, str(content_base_file.uuid),
-            load_type
+            load_type,
+            filename=filename
         )
         return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}
