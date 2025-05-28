@@ -88,8 +88,8 @@ def start_inline_agents(
     project = Project.objects.get(uuid=message.project_uuid)
 
     # Check for pending responses
-    pending_response_key = f"response:{message.contact_urn}"
-    pending_task_key = f"task:{message.contact_urn}"
+    pending_response_key = f"response:{message.project_uuid}:{message.contact_urn}"
+    pending_task_key = f"task:{message.project_uuid}:{message.contact_urn}"
     pending_response = redis_client.get(pending_response_key)
     pending_task_id = redis_client.get(pending_task_key)
 
