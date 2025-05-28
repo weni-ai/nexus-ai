@@ -5,8 +5,6 @@ import re
 from typing import List, Dict, Callable
 
 from router.direct_message import DirectMessage
-from nexus.projects.websockets.consumers import send_preview_message_to_websocket
-
 
 
 class SimulateBroadcast(DirectMessage):
@@ -39,14 +37,6 @@ class SimulateBroadcast(DirectMessage):
 
         response_data = {"type": "broadcast", "message": text, "fonts": sources}
 
-        send_preview_message_to_websocket(
-            project_uuid=project_uuid,
-            user_email=user,
-            message_data={
-                "type": "preview",
-                "content": response_data
-            }
-        )
         return response_data
 
 
@@ -148,12 +138,4 @@ class SimulateWhatsAppBroadcastHTTPClient(DirectMessage):
         msgs = self.get_json_strings(msg)
         response_data = {"type": "broadcast", "message": msgs, "fonts": []}
 
-        send_preview_message_to_websocket(
-            project_uuid=project_uuid,
-            user_email=user,
-            message_data={
-                "type": "preview",
-                "content": response_data
-            }
-        )
         return response_data

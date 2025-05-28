@@ -154,6 +154,24 @@ def start_inline_agents(
 
         task_manager.clear_pending_tasks(message.get("project_uuid"), message.get("contact_urn"))
 
+        if preview:
+            response_msg = dispatch(
+                llm_response=response,
+                message=message,
+                direct_message=broadcast,
+                user_email=flows_user_email,
+                full_chunks=[],
+            )
+            send_preview_message_to_websocket(
+                project_uuid=message.project_uuid,
+                user_email=user_email,
+                message_data={
+                    "type": "preview",
+                    "content": response_msg
+                }
+            )
+            return response_msg
+
         return dispatch(
             llm_response=response,
             message=message,
