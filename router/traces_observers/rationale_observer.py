@@ -7,6 +7,7 @@ from typing import List, Dict, Optional, Callable
 
 from nexus.celery import app as celery_app
 from nexus.event_domain.event_observer import EventObserver
+from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.traces_observers.save_traces import save_inline_message_to_database
 
@@ -49,6 +50,7 @@ class RationaleObserver(EventObserver):
         send_message_callback: Optional[Callable] = None,
         preview: bool = False,
         rationale_switch: bool = False,
+        message_external_id: str = "",
         **kwargs
     ) -> None:
 
@@ -56,13 +58,25 @@ class RationaleObserver(EventObserver):
             return
 
         print("[DEBUG] Rationale Observer")
-
+        typing_usecase = TypingUsecase()
         try:
             if not self._validate_traces(inline_traces):
                 return
 
             if send_message_callback is None:
+                if message_external_id:
+                    typing_usecase.send_typing_message(
+                        contact_urn=contact_urn,
+                        msg_external_id=message_external_id,
+                        project_uuid=project_uuid
+                    )
                 send_message_callback = self.task_send_rationale_message.delay
+            if message_external_id:
+                typing_usecase.send_typing_message(
+                    contact_urn=contact_urn,
+                    msg_external_id=message_external_id,
+                    project_uuid=project_uuid
+                )
 
             rationale_text = self._extract_rationale_text(inline_traces)
 
@@ -71,6 +85,12 @@ class RationaleObserver(EventObserver):
                 if self.is_first_rationale:
                     self.first_rationale_text = rationale_text
                     self.is_first_rationale = False
+                    if message_external_id:
+                        typing_usecase.send_typing_message(
+                            contact_urn=contact_urn,
+                            msg_external_id=message_external_id,
+                            project_uuid=project_uuid
+                        )
                 else:
                     improved_text = self._improve_subsequent_rationale(
                         rationale_text,
@@ -80,6 +100,12 @@ class RationaleObserver(EventObserver):
 
                     if self._is_valid_rationale(improved_text):
                         self.rationale_history.append(improved_text)
+                        if message_external_id:
+                            typing_usecase.send_typing_message(
+                                contact_urn=contact_urn,
+                                msg_external_id=message_external_id,
+                                project_uuid=project_uuid
+                            )
                         self._send_rationale_message(
                             text=improved_text,
                             contact_urn=contact_urn,
@@ -87,23 +113,59 @@ class RationaleObserver(EventObserver):
                             session_id=session_id,
                             send_message_callback=send_message_callback
                         )
+                        if message_external_id:
+                            typing_usecase.send_typing_message(
+                                contact_urn=contact_urn,
+                                msg_external_id=message_external_id,
+                                project_uuid=project_uuid
+                            )
 
             # Handle first rationale if it exists and we have caller chain info
             if self.first_rationale_text and self._has_caller_chain(inline_traces):
+                if message_external_id:
+                    typing_usecase.send_typing_message(
+                        contact_urn=contact_urn,
+                        msg_external_id=message_external_id,
+                        project_uuid=project_uuid
+                    )
                 improved_text = self._improve_rationale_text(
                     rationale_text=self.first_rationale_text,
                     user_input=user_input,
                     is_first_rationale=True
                 )
+                if message_external_id:
+                    typing_usecase.send_typing_message(
+                        contact_urn=contact_urn,
+                        msg_external_id=message_external_id,
+                        project_uuid=project_uuid
+                    )
 
                 if self._is_valid_rationale(improved_text):
                     self.rationale_history.append(improved_text)
+                    if message_external_id:
+                        typing_usecase.send_typing_message(
+                            contact_urn=contact_urn,
+                            msg_external_id=message_external_id,
+                            project_uuid=project_uuid
+                        )
                     self._send_rationale_message(
                         text=improved_text,
                         contact_urn=contact_urn,
                         project_uuid=project_uuid,
                         session_id=session_id,
                         send_message_callback=send_message_callback
+                    )
+                    if message_external_id:
+                        typing_usecase.send_typing_message(
+                            contact_urn=contact_urn,
+                            msg_external_id=message_external_id,
+                            project_uuid=project_uuid
+                        )
+                if message_external_id:
+                    typing_usecase.send_typing_message(
+                        contact_urn=contact_urn,
+                        msg_external_id=message_external_id,
+                        project_uuid=project_uuid
                     )
                 self.first_rationale_text = None
 

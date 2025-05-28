@@ -55,11 +55,12 @@ class BedrockBackend(InlineAgentsBackend):
         print(f"[DEBUG] Supervisor: {supervisor}")
 
         typing_usecase = TypingUsecase()
-        typing_usecase.send_typing_message(
-            contact_urn=contact_urn,
-            msg_external_id=msg_external_id,
-            project_uuid=project_uuid
-        )
+        if not preview:
+            typing_usecase.send_typing_message(
+                contact_urn=contact_urn,
+                msg_external_id=msg_external_id,
+                project_uuid=project_uuid
+            )
 
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
@@ -129,7 +130,7 @@ class BedrockBackend(InlineAgentsBackend):
 
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
 
-                if "rationale" in orchestration_trace and msg_external_id:
+                if "rationale" in orchestration_trace and msg_external_id and not preview:
                     typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
 
                 # Notify observers about the trace
@@ -144,10 +145,11 @@ class BedrockBackend(InlineAgentsBackend):
                     rationale_switch=rationale_switch,
                     language=language,
                     user_email=user_email,
-                    session_id=session_id
+                    session_id=session_id,
+                    msg_external_id=msg_external_id
                 )
 
-                if "rationale" in orchestration_trace and msg_external_id:
+                if "rationale" in orchestration_trace and msg_external_id and not preview:
                     print("[ + Typing Indicator ] sending typing indicator")
                     typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
                     print("--------------------------------")
@@ -190,7 +192,7 @@ class BedrockBackend(InlineAgentsBackend):
             rationale_switch=rationale_switch
         )
         
-        if "rationale" in orchestration_trace and msg_external_id:
+        if "rationale" in orchestration_trace and msg_external_id and not preview:
             print("[ + Typing Indicator ] sending typing indicator")
             typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
             print("--------------------------------")
