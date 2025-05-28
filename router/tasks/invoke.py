@@ -113,17 +113,17 @@ def start_inline_agents(
         project = Project.objects.get(uuid=message.project_uuid)
 
         # Check for pending responses and handle them
-        pending_task_id = task_manager.get_pending_task_id(message.contact_urn)
+        pending_task_id = task_manager.get_pending_task_id(message.project_uuid, message.contact_urn)
         if pending_task_id:
             # Revoke the previous task if it exists
             celery_app.control.revoke(pending_task_id, terminate=True)
 
         # Handle pending response and get final message text
-        final_message_text = task_manager.handle_pending_response(message.contact_urn, message.text)
+        final_message_text = task_manager.handle_pending_response(message.project_uuid, message.contact_urn, message.text)
         message.text = final_message_text
 
         # Store the current task ID
-        task_manager.store_pending_task_id(message.contact_urn, self.request.id)
+        task_manager.store_pending_task_id(message.project_uuid, message.contact_urn, self.request.id)
 
         if user_email:
             send_preview_message_to_websocket(
@@ -167,7 +167,25 @@ def start_inline_agents(
             msg_external_id=message_event.get("msg_external_id", "")
         )
 
-        task_manager.clear_pending_tasks(message.contact_urn)
+        task_manager.clear_pending_tasks(message.get("project_uuid"), message.get("contact_urn"))
+
+        if preview:
+            response_msg = dispatch(
+                llm_response=response,
+                message=message,
+                direct_message=broadcast,
+                user_email=flows_user_email,
+                full_chunks=[],
+            )
+            send_preview_message_to_websocket(
+                project_uuid=message.project_uuid,
+                user_email=user_email,
+                message_data={
+                    "type": "preview",
+                    "content": response_msg
+                }
+            )
+            return response_msg
 
         return dispatch(
             llm_response=response,
@@ -187,7 +205,7 @@ def start_inline_agents(
             "language": language,
             "user_email": user_email,
             "task_id": self.request.id,
-            "pending_task_id": task_manager.get_pending_task_id(message.get("contact_urn")) if task_manager else None,
+            "pending_task_id": task_manager.get_pending_task_id(message.get("project_uuid"), message.get("contact_urn")) if task_manager else None,
         })
 
         # Add tags for better filtering in Sentry
@@ -197,7 +215,7 @@ def start_inline_agents(
 
         # Clean up Redis entries in case of error
         if task_manager:
-            task_manager.clear_pending_tasks(message.get("contact_urn"))
+            task_manager.clear_pending_tasks(message.get("project_uuid"), message.get("contact_urn"))
 
         print(f"[DEBUG] Error in start_inline_agents: {str(e)}")
         print(f"[DEBUG] Error type: {type(e)}")

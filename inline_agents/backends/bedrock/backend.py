@@ -191,9 +191,10 @@ class BedrockBackend(InlineAgentsBackend):
         )
         
         if msg_external_id and not preview:
-            print("[ + Typing Indicator ] sending typing indicator")
-            typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
-            print("--------------------------------")
+            if "rationale" in orchestration_trace and msg_external_id:
+                print("[ + Typing Indicator ] sending typing indicator")
+                typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
+                print("--------------------------------")
 
         return full_response
 
