@@ -55,11 +55,12 @@ def start_inline_agents(
     product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
 
     typing_usecase = TypingUsecase()
-    typing_usecase.send_typing_message(
-        contact_urn=message.get("contact_urn"),
-        msg_external_id=message_event.get("msg_external_id", ""),
-        project_uuid=message.get("project_uuid")
-    )
+    if not preview:
+        typing_usecase.send_typing_message(
+            contact_urn=message.get("contact_urn"),
+            msg_external_id=message_event.get("msg_external_id", ""),
+            project_uuid=message.get("project_uuid")
+        )
 
     if attachments:
         if text:
@@ -90,8 +91,10 @@ def start_inline_agents(
 
     project = Project.objects.get(uuid=message.project_uuid)
 
-    pending_response_key = f"response:{message.contact_urn}"
-    pending_task_key = f"task:{message.contact_urn}"
+    # Check for pending responses
+    pending_response_key = f"response:{message.project_uuid}:{message.contact_urn}"
+    pending_task_key = f"task:{message.project_uuid}:{message.contact_urn}"
+
     pending_response = redis_client.get(pending_response_key)
     pending_task_id = redis_client.get(pending_task_key)
 
