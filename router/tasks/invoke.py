@@ -167,7 +167,7 @@ def start_inline_agents(
             msg_external_id=message_event.get("msg_external_id", "")
         )
 
-        task_manager.clear_pending_tasks(message.get("project_uuid"), message.get("contact_urn"))
+        task_manager.clear_pending_tasks(message.project_uuid, message.contact_urn)
 
         if preview:
             print("[DEBUG] Starting dispatch on preview")
