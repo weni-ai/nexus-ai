@@ -183,24 +183,24 @@ def start_inline_agents(
     except Exception as e:
         # Set Sentry context with relevant information
         sentry_sdk.set_context("message", {
-            "project_uuid": message.get("project_uuid"),
-            "contact_urn": message.get("contact_urn"),
-            "text": message.get("text"),
+            "project_uuid": message.project_uuid,
+            "contact_urn": message.contact_urn,
+            "text": message.text,
             "preview": preview,
             "language": language,
             "user_email": user_email,
             "task_id": self.request.id,
-            "pending_task_id": task_manager.get_pending_task_id(message.get("project_uuid"), message.get("contact_urn")) if task_manager else None,
+            "pending_task_id": task_manager.get_pending_task_id(message.project_uuid, message.contact_urn) if task_manager else None,
         })
 
         # Add tags for better filtering in Sentry
         sentry_sdk.set_tag("preview_mode", preview)
-        sentry_sdk.set_tag("project_uuid", message.get("project_uuid"))
+        sentry_sdk.set_tag("project_uuid", message.project_uuid)
         sentry_sdk.set_tag("task_id", self.request.id)
 
         # Clean up Redis entries in case of error
         if task_manager:
-            task_manager.clear_pending_tasks(message.get("project_uuid"), message.get("contact_urn"))
+            task_manager.clear_pending_tasks(message.project_uuid, message.contact_urn)
 
         print(f"[DEBUG] Error in start_inline_agents: {str(e)}")
         print(f"[DEBUG] Error type: {type(e)}")
@@ -209,7 +209,7 @@ def start_inline_agents(
         if user_email:
             send_preview_message_to_websocket(
                 user_email=user_email,
-                project_uuid=str(message.get("project_uuid")),
+                project_uuid=str(message.project_uuid),
                 message_data={
                     "type": "error",
                     "content": str(e),
