@@ -54,6 +54,9 @@ class RationaleObserver(EventObserver):
         from nexus.usecases.intelligences.retrieve import get_file_info
         from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 
+        if not full_chunks:
+            full_chunks = []
+
         broadcast = SimulateBroadcast(
             os.environ.get('FLOWS_REST_ENDPOINT'),
             os.environ.get('FLOWS_INTERNAL_TOKEN'),
