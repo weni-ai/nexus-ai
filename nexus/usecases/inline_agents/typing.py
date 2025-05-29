@@ -7,8 +7,8 @@ from nexus.internals import InternalAuthentication
 
 class TypingUsecase:
 
-    def send_typing_message(self, contact_urn: str, msg_external_id: str, project_uuid: str):
-        if contact_urn.startswith("whatsapp"):
+    def send_typing_message(self, contact_urn: str, msg_external_id: str, project_uuid: str, preview: bool = False):
+        if contact_urn.startswith("whatsapp") and not preview:
             url = f"{settings.FLOWS_REST_ENDPOINT}/api/v2/internals/whatsapp_broadcasts"
 
             print(f"[ + Typing Indicator + ] sending request to {url}")

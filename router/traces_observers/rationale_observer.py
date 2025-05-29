@@ -10,6 +10,9 @@ from nexus.event_domain.event_observer import EventObserver
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.traces_observers.save_traces import save_inline_message_to_database
+from router.clients.preview.simulator.broadcast import SimulateBroadcast
+from nexus.usecases.intelligences.retrieve import get_file_info
+from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 
 from django.conf import settings
 
@@ -40,6 +43,39 @@ class RationaleObserver(EventObserver):
             region_name=region_name
         )
 
+    def _handle_preview_message(
+        self,
+        text: str,
+        urns: list,
+        project_uuid: str,
+        user: str,
+        user_email: str,
+        full_chunks: list[Dict] = None
+    ) -> None:
+
+        broadcast = SimulateBroadcast(
+            os.environ.get('FLOWS_REST_ENDPOINT'),
+            os.environ.get('FLOWS_INTERNAL_TOKEN'),
+            get_file_info
+        )
+
+        preview_response = broadcast.send_direct_message(
+            text=text,
+            urns=urns,
+            project_uuid=project_uuid,
+            user=user,
+            full_chunks=full_chunks
+        )
+
+        send_preview_message_to_websocket(
+            project_uuid=str(project_uuid),
+            user_email=user_email,
+            message_data={
+                "type": "preview",
+                "content": preview_response
+            }
+        )
+
     def perform(
         self,
         inline_traces: Dict,
@@ -51,10 +87,11 @@ class RationaleObserver(EventObserver):
         preview: bool = False,
         rationale_switch: bool = False,
         message_external_id: str = "",
+        user_email: str = None,
         **kwargs
     ) -> None:
 
-        if preview or not rationale_switch:
+        if not rationale_switch:
             return
 
         print("[DEBUG] Rationale Observer")
@@ -68,14 +105,28 @@ class RationaleObserver(EventObserver):
                     typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
                         msg_external_id=message_external_id,
-                        project_uuid=project_uuid
+                        project_uuid=project_uuid,
+                        preview=preview
                     )
-                send_message_callback = self.task_send_rationale_message.delay
+
+                def send_message(text, urns, project_uuid, user, full_chunks=None):
+                    return self.task_send_rationale_message.delay(
+                        text=text,
+                        urns=urns,
+                        project_uuid=project_uuid,
+                        user=user,
+                        full_chunks=full_chunks,
+                        preview=preview,
+                        user_email=user_email
+                    )
+
+                send_message_callback = send_message
             if message_external_id:
                 typing_usecase.send_typing_message(
                     contact_urn=contact_urn,
                     msg_external_id=message_external_id,
-                    project_uuid=project_uuid
+                    project_uuid=project_uuid,
+                    preview=preview
                 )
 
             rationale_text = self._extract_rationale_text(inline_traces)
@@ -89,7 +140,8 @@ class RationaleObserver(EventObserver):
                         typing_usecase.send_typing_message(
                             contact_urn=contact_urn,
                             msg_external_id=message_external_id,
-                            project_uuid=project_uuid
+                            project_uuid=project_uuid,
+                            preview=preview
                         )
                 else:
                     improved_text = self._improve_subsequent_rationale(
@@ -104,7 +156,8 @@ class RationaleObserver(EventObserver):
                             typing_usecase.send_typing_message(
                                 contact_urn=contact_urn,
                                 msg_external_id=message_external_id,
-                                project_uuid=project_uuid
+                                project_uuid=project_uuid,
+                                preview=preview
                             )
                         self._send_rationale_message(
                             text=improved_text,
@@ -117,7 +170,8 @@ class RationaleObserver(EventObserver):
                             typing_usecase.send_typing_message(
                                 contact_urn=contact_urn,
                                 msg_external_id=message_external_id,
-                                project_uuid=project_uuid
+                                project_uuid=project_uuid,
+                                preview=preview
                             )
 
             # Handle first rationale if it exists and we have caller chain info
@@ -126,7 +180,8 @@ class RationaleObserver(EventObserver):
                     typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
                         msg_external_id=message_external_id,
-                        project_uuid=project_uuid
+                        project_uuid=project_uuid,
+                        preview=preview
                     )
                 improved_text = self._improve_rationale_text(
                     rationale_text=self.first_rationale_text,
@@ -137,7 +192,8 @@ class RationaleObserver(EventObserver):
                     typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
                         msg_external_id=message_external_id,
-                        project_uuid=project_uuid
+                        project_uuid=project_uuid,
+                        preview=preview
                     )
 
                 if self._is_valid_rationale(improved_text):
@@ -146,7 +202,8 @@ class RationaleObserver(EventObserver):
                         typing_usecase.send_typing_message(
                             contact_urn=contact_urn,
                             msg_external_id=message_external_id,
-                            project_uuid=project_uuid
+                            project_uuid=project_uuid,
+                            preview=preview
                         )
                     self._send_rationale_message(
                         text=improved_text,
@@ -159,13 +216,15 @@ class RationaleObserver(EventObserver):
                         typing_usecase.send_typing_message(
                             contact_urn=contact_urn,
                             msg_external_id=message_external_id,
-                            project_uuid=project_uuid
+                            project_uuid=project_uuid,
+                            preview=preview
                         )
                 if message_external_id:
                     typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
                         msg_external_id=message_external_id,
-                        project_uuid=project_uuid
+                        project_uuid=project_uuid,
+                        preview=preview
                     )
                 self.first_rationale_text = None
 
@@ -353,8 +412,23 @@ class RationaleObserver(EventObserver):
         urns: list,
         project_uuid: str,
         user: str,
-        full_chunks: list[Dict] = None
+        full_chunks: list[Dict] = None,
+        preview: bool = False,
+        user_email: str = None
     ) -> None:
+
+        if preview and user_email:
+            observer = RationaleObserver()
+            observer._handle_preview_message(
+                text=text,
+                urns=urns,
+                project_uuid=project_uuid,
+                user=user,
+                user_email=user_email,
+                full_chunks=full_chunks
+            )
+
+        # Always send the actual message
         broadcast = SendMessageHTTPClient(
             os.environ.get(
                 'FLOWS_REST_ENDPOINT'
