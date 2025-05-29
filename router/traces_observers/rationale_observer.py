@@ -369,6 +369,10 @@ class RationaleObserver(EventObserver):
                 }
             ]
 
+            print("------------------------------------------------")
+            print(f"[DEBUG] Instruction content FIRST RATIONALE: {instruction_content}")
+            print("------------------------------------------------")
+
             # Send the request to Amazon Bedrock
             response = self.bedrock_client.converse(
                 modelId=self.model_id,
@@ -378,10 +382,6 @@ class RationaleObserver(EventObserver):
                     "temperature": 0,
                 }
             )
-
-            print("------------------------------------------------")
-            print(f"[DEBUG] Response FIRST RATIONALE: {response}")
-            print("------------------------------------------------")
 
             logger.debug(f"Improvement Response: {response}")
             # Extract the response text
@@ -431,6 +431,10 @@ class RationaleObserver(EventObserver):
                 }
             ]
 
+            print("------------------------------------------------")
+            print(f"[DEBUG] Instruction content SUBSEQUENT RATIONALE: {instruction_content}")
+            print("------------------------------------------------")
+
             # Send the request to Amazon Bedrock
             response = self.bedrock_client.converse(
                 modelId=self.model_id,
@@ -440,10 +444,6 @@ class RationaleObserver(EventObserver):
                     "temperature": 0
                 }
             )
-
-            print("------------------------------------------------")
-            print(f"[DEBUG] Response SUBSEQUENT RATIONALE: {response}")
-            print("------------------------------------------------")
 
             # Extract the response text
             response_text = response["output"]["message"]["content"][0]["text"]
