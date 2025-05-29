@@ -152,10 +152,6 @@ class BedrockBackend(InlineAgentsBackend):
                     typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
                     print("--------------------------------")
 
-            print("--------------------------------")
-            print(f"[DEBUG] Event: {event}")
-            print("--------------------------------")
-
         # Saving traces on s3
         self.event_manager_notify(
             event='save_inline_trace_events',
@@ -190,11 +186,10 @@ class BedrockBackend(InlineAgentsBackend):
             rationale_switch=rationale_switch
         )
         
-        if msg_external_id and not preview:
-            if "rationale" in orchestration_trace and msg_external_id:
-                print("[ + Typing Indicator ] sending typing indicator")
-                typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
-                print("--------------------------------")
+        if "rationale" in orchestration_trace and msg_external_id and not preview:
+            print("[ + Typing Indicator ] sending typing indicator")
+            typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
+            print("--------------------------------")
 
         return full_response
 
