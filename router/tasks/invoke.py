@@ -20,6 +20,7 @@ from router.entities import (
 from router.tasks.redis_task_manager import RedisTaskManager
 
 from .actions_client import get_action_clients
+from django.conf import settings
 
 
 def get_task_manager() -> RedisTaskManager:
