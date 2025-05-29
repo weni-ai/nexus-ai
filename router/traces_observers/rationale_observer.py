@@ -12,11 +12,13 @@ from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.traces_observers.save_traces import save_inline_message_to_database
 
 from django.conf import settings
+from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
 
 class RationaleObserver(EventObserver):
+    CACHE_TIMEOUT = 300  # 5 minutes in seconds
 
     def __init__(self, bedrock_client=None, model_id=None):
         """
@@ -28,9 +30,6 @@ class RationaleObserver(EventObserver):
         """
         self.bedrock_client = bedrock_client or self._get_bedrock_client()
         self.model_id = model_id or settings.AWS_RATIONALE_MODEL
-        self.rationale_history = []
-        self.first_rationale_text = None
-        self.is_first_rationale = True
         self.flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
     def _get_bedrock_client(self):
@@ -39,6 +38,26 @@ class RationaleObserver(EventObserver):
             "bedrock-runtime",
             region_name=region_name
         )
+
+    def _get_session_data(self, session_id: str) -> dict:
+        """Get or create session data from cache."""
+        cache_key = f"rationale_session_{session_id}"
+        session_data = cache.get(cache_key)
+
+        if session_data is None:
+            session_data = {
+                'rationale_history': [],
+                'first_rationale_text': None,
+                'is_first_rationale': True
+            }
+            cache.set(cache_key, session_data, self.CACHE_TIMEOUT)
+
+        return session_data
+
+    def _save_session_data(self, session_id: str, session_data: dict) -> None:
+        """Save session data to cache."""
+        cache_key = f"rationale_session_{session_id}"
+        cache.set(cache_key, session_data, self.CACHE_TIMEOUT)
 
     def perform(
         self,
@@ -63,6 +82,9 @@ class RationaleObserver(EventObserver):
             if not self._validate_traces(inline_traces):
                 return
 
+            # Get session data
+            session_data = self._get_session_data(session_id)
+
             if send_message_callback is None:
                 if message_external_id:
                     typing_usecase.send_typing_message(
@@ -82,9 +104,10 @@ class RationaleObserver(EventObserver):
 
             # Process the rationale if found
             if rationale_text:
-                if self.is_first_rationale:
-                    self.first_rationale_text = rationale_text
-                    self.is_first_rationale = False
+                if session_data['is_first_rationale']:
+                    session_data['first_rationale_text'] = rationale_text
+                    session_data['is_first_rationale'] = False
+                    self._save_session_data(session_id, session_data)
                     if message_external_id:
                         typing_usecase.send_typing_message(
                             contact_urn=contact_urn,
@@ -93,13 +116,14 @@ class RationaleObserver(EventObserver):
                         )
                 else:
                     improved_text = self._improve_subsequent_rationale(
-                        rationale_text,
-                        self.rationale_history,
-                        user_input
+                        rationale_text=rationale_text,
+                        previous_rationales=session_data['rationale_history'],
+                        user_input=user_input
                     )
 
                     if self._is_valid_rationale(improved_text):
-                        self.rationale_history.append(improved_text)
+                        session_data['rationale_history'].append(improved_text)
+                        self._save_session_data(session_id, session_data)
                         if message_external_id:
                             typing_usecase.send_typing_message(
                                 contact_urn=contact_urn,
@@ -121,7 +145,7 @@ class RationaleObserver(EventObserver):
                             )
 
             # Handle first rationale if it exists and we have caller chain info
-            if self.first_rationale_text and self._has_caller_chain(inline_traces):
+            if session_data['first_rationale_text'] and self._has_caller_chain(inline_traces):
                 if message_external_id:
                     typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
@@ -129,7 +153,7 @@ class RationaleObserver(EventObserver):
                         project_uuid=project_uuid
                     )
                 improved_text = self._improve_rationale_text(
-                    rationale_text=self.first_rationale_text,
+                    rationale_text=session_data['first_rationale_text'],
                     user_input=user_input,
                     is_first_rationale=True
                 )
@@ -141,7 +165,8 @@ class RationaleObserver(EventObserver):
                     )
 
                 if self._is_valid_rationale(improved_text):
-                    self.rationale_history.append(improved_text)
+                    session_data['rationale_history'].append(improved_text)
+                    self._save_session_data(session_id, session_data)
                     if message_external_id:
                         typing_usecase.send_typing_message(
                             contact_urn=contact_urn,
@@ -167,7 +192,8 @@ class RationaleObserver(EventObserver):
                         msg_external_id=message_external_id,
                         project_uuid=project_uuid
                     )
-                self.first_rationale_text = None
+                session_data['first_rationale_text'] = None
+                self._save_session_data(session_id, session_data)
 
         except Exception as e:
             logger.error(f"Error processing rationale: {str(e)}", exc_info=True)
