@@ -19,6 +19,11 @@ from router.entities import message_factory
 from .actions_client import get_action_clients
 
 
+class ThrottlingException(Exception):
+    """Custom exception for AWS Bedrock throttling errors"""
+    pass
+
+
 def handle_product_items(text: str, product_items: list) -> str:
     if text:
         text = f"{text} product items: {str(product_items)}"
@@ -32,7 +37,7 @@ def handle_product_items(text: str, product_items: list) -> str:
     soft_time_limit=300, 
     time_limit=360,
     acks_late=settings.START_INLINE_AGENTS_ACK_LATE,
-    autoretry_for=(botocore.exceptions.EventStreamError,),
+    autoretry_for=(ThrottlingException,),
     retry_backoff=True,
     retry_backoff_max=600,
     retry_jitter=True,
@@ -168,6 +173,9 @@ def start_inline_agents(
         print(f"[DEBUG] Error in start_inline_agents: {str(e)}")
         print(f"[DEBUG] Error type: {type(e)}")
         print(f"[DEBUG] Full exception details: {e.__dict__}")
+
+        if isinstance(e, botocore.exceptions.ClientError) and 'throttlingException' in str(e):
+            raise ThrottlingException(str(e))
 
         if user_email:
             send_preview_message_to_websocket(
