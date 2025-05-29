@@ -31,7 +31,7 @@ def handle_product_items(text: str, product_items: list) -> str:
     bind=True, 
     soft_time_limit=300, 
     time_limit=360,
-    acks_late=True,
+    acks_late=settings.START_INLINE_AGENTS_ACK_LATE,
     autoretry_for=(botocore.exceptions.EventStreamError,),
     retry_backoff=True,
     retry_backoff_max=600,
