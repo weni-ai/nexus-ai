@@ -11,8 +11,6 @@ from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.traces_observers.save_traces import save_inline_message_to_database
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
-from nexus.usecases.intelligences.retrieve import get_file_info
-from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 
 from django.conf import settings
 from django.core.cache import cache
@@ -80,6 +78,8 @@ class RationaleObserver(EventObserver):
         user_email: str,
         full_chunks: list[Dict] = None
     ) -> None:
+        from nexus.usecases.intelligences.retrieve import get_file_info
+        from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 
         broadcast = SimulateBroadcast(
             os.environ.get('FLOWS_REST_ENDPOINT'),
