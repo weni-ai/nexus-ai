@@ -1,6 +1,10 @@
 import os
 from typing import Dict, Optional
 
+import botocore
+from django.conf import settings
+from redis import Redis
+
 import sentry_sdk
 from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
@@ -10,12 +14,10 @@ from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
 from nexus.usecases.inline_agents.typing import TypingUsecase
-
 from router.dispatcher import dispatch
-from router.entities import (
-    message_factory,
-)
+
 from router.tasks.redis_task_manager import RedisTaskManager
+from router.entities import message_factory
 
 from .actions_client import get_action_clients
 
@@ -47,7 +49,17 @@ def handle_product_items(text: str, product_items: list) -> str:
     return text
 
 
-@celery_app.task(bind=True, soft_time_limit=300, time_limit=360)
+@celery_app.task(
+    bind=True, 
+    soft_time_limit=300, 
+    time_limit=360,
+    acks_late=settings.START_INLINE_AGENTS_ACK_LATE,
+    autoretry_for=(botocore.exceptions.EventStreamError,),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+    max_retries=5
+)
 def start_inline_agents(
     self,
     message: Dict,
@@ -58,7 +70,7 @@ def start_inline_agents(
 ) -> bool:  # pragma: no cover
 
     try:
-        # Initialize Redis task manager
+
         task_manager = task_manager or get_task_manager()
 
         text = message.get("text", "")
@@ -79,7 +91,8 @@ def start_inline_agents(
             attachments=attachments
         )
 
-        text = handle_product_items(text, product_items)
+        if len(product_items) > 0:
+            text = handle_product_items(text, product_items)
 
         message['text'] = text
 
@@ -98,17 +111,13 @@ def start_inline_agents(
 
         project = Project.objects.get(uuid=message.project_uuid)
 
-        # Check for pending responses and handle them
         pending_task_id = task_manager.get_pending_task_id(message.project_uuid, message.contact_urn)
         if pending_task_id:
-            # Revoke the previous task if it exists
             celery_app.control.revoke(pending_task_id, terminate=True)
 
-        # Handle pending response and get final message text
         final_message_text = task_manager.handle_pending_response(message.project_uuid, message.contact_urn, message.text)
         message.text = final_message_text
 
-        # Store the current task ID
         task_manager.store_pending_task_id(message.project_uuid, message.contact_urn, self.request.id)
 
         if user_email:
