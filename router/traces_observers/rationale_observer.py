@@ -43,7 +43,11 @@ class RationaleObserver(EventObserver):
         """Get or create session data from cache."""
         cache_key = f"rationale_session_{session_id}"
         session_data = cache.get(cache_key)
-
+        
+        print(f"[DEBUG] Getting session data for {session_id}")
+        print(f"[DEBUG] Cache key: {cache_key}")
+        print(f"[DEBUG] Existing session data: {session_data}")
+        
         if session_data is None:
             session_data = {
                 'rationale_history': [],
@@ -51,13 +55,18 @@ class RationaleObserver(EventObserver):
                 'is_first_rationale': True
             }
             cache.set(cache_key, session_data, self.CACHE_TIMEOUT)
-
+            print(f"[DEBUG] Created new session data: {session_data}")
+        
         return session_data
 
     def _save_session_data(self, session_id: str, session_data: dict) -> None:
         """Save session data to cache."""
         cache_key = f"rationale_session_{session_id}"
         cache.set(cache_key, session_data, self.CACHE_TIMEOUT)
+        print(f"[DEBUG] Saving session data for {session_id}")
+        print(f"[DEBUG] Cache key: {cache_key}")
+        print(f"[DEBUG] Session data being saved: {session_data}")
+        print(f"[DEBUG] Current rationale history length: {len(session_data['rationale_history'])}")
 
     def perform(
         self,
