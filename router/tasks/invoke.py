@@ -1,5 +1,7 @@
 import os
-from typing import Dict, Optional
+from typing import Dict
+
+import botocore
 
 import sentry_sdk
 from inline_agents.backends import BackendsRegistry
@@ -10,7 +12,6 @@ from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
 from nexus.usecases.inline_agents.typing import TypingUsecase
-
 from router.dispatcher import dispatch
 from router.entities import (
     message_factory,
@@ -18,9 +19,6 @@ from router.entities import (
 from router.tasks.redis_task_manager import RedisTaskManager
 
 from .actions_client import get_action_clients
-
-
-import botocore
 
 
 def get_task_manager() -> RedisTaskManager:
@@ -51,8 +49,8 @@ def handle_product_items(text: str, product_items: list) -> str:
 
 
 @celery_app.task(
-    bind=True,
-    soft_time_limit=300,
+    bind=True, 
+    soft_time_limit=300, 
     time_limit=360,
     acks_late=True,
     autoretry_for=(botocore.exceptions.EventStreamError,),
