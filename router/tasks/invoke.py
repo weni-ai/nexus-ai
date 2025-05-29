@@ -8,6 +8,7 @@ from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
 from nexus.inline_agents.team.repository import ORMTeamRepository
 from nexus.projects.models import Project
+from typing import Optional
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
