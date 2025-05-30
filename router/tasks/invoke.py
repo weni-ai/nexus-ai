@@ -33,6 +33,10 @@ def handle_attachments(
 ) -> tuple[str, bool]:
     turn_off_rationale = False
 
+    print("---------- ATTACHMENT HANDLER-------------")
+    print(f"[DEBUG] Attachments: {attachments}")
+    print(f"[DEBUG] Text: {text}")
+
     if attachments:
         if text:
             text = f"{text} {attachments}"
@@ -40,6 +44,8 @@ def handle_attachments(
             turn_off_rationale = True
             text = str(attachments)
 
+    print("[DEBUG] Turn off rationale: ", turn_off_rationale)
+    print("------------------------------------------")
     return text, turn_off_rationale
 
 
