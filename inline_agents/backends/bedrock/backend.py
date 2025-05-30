@@ -49,7 +49,7 @@ class BedrockBackend(InlineAgentsBackend):
         use_components: bool = False,
         contact_fields: str = "",
         msg_external_id: str = None,
-        has_attachments: bool = False
+        turn_off_rationale: bool = False
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
 
@@ -146,7 +146,7 @@ class BedrockBackend(InlineAgentsBackend):
                     user_email=user_email,
                     session_id=session_id,
                     msg_external_id=msg_external_id,
-                    has_attachments=has_attachments
+                    turn_off_rationale=turn_off_rationale
                 )
 
                 if "rationale" in orchestration_trace and msg_external_id and not preview:
