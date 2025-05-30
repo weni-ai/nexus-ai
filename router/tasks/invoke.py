@@ -14,10 +14,9 @@ from nexus.projects.websockets.consumers import (
 )
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.dispatcher import dispatch
-from router.entities import (
-    message_factory,
-)
+
 from router.tasks.redis_task_manager import RedisTaskManager
+from router.entities import message_factory
 
 from .actions_client import get_action_clients
 from django.conf import settings
@@ -31,15 +30,19 @@ def get_task_manager() -> RedisTaskManager:
 def handle_attachments(
     text: str,
     attachments: list[str]
-) -> str:
+) -> tuple[str, bool]:
+    has_attachments = False
 
     if attachments:
+        has_attachments = True
+
+    if has_attachments:
         if text:
             text = f"{text} {attachments}"
         else:
             text = str(attachments)
 
-    return text
+    return text, has_attachments
 
 
 def handle_product_items(text: str, product_items: list) -> str:
@@ -71,7 +74,7 @@ def start_inline_agents(
 ) -> bool:  # pragma: no cover
 
     try:
-        # Initialize Redis task manager
+
         task_manager = task_manager or get_task_manager()
 
         text = message.get("text", "")
@@ -87,7 +90,7 @@ def start_inline_agents(
                 project_uuid=message.get("project_uuid")
             )
 
-        text = handle_attachments(
+        text, has_attachments = handle_attachments(
             text=text,
             attachments=attachments
         )
@@ -112,17 +115,13 @@ def start_inline_agents(
 
         project = Project.objects.get(uuid=message.project_uuid)
 
-        # Check for pending responses and handle them
         pending_task_id = task_manager.get_pending_task_id(message.project_uuid, message.contact_urn)
         if pending_task_id:
-            # Revoke the previous task if it exists
             celery_app.control.revoke(pending_task_id, terminate=True)
 
-        # Handle pending response and get final message text
         final_message_text = task_manager.handle_pending_response(message.project_uuid, message.contact_urn, message.text)
         message.text = final_message_text
 
-        # Store the current task ID
         task_manager.store_pending_task_id(message.project_uuid, message.contact_urn, self.request.id)
 
         if user_email:
@@ -164,7 +163,8 @@ def start_inline_agents(
             user_email=user_email,
             use_components=project.use_components,
             contact_fields=message.contact_fields_as_json,
-            msg_external_id=message_event.get("msg_external_id", "")
+            msg_external_id=message_event.get("msg_external_id", ""),
+            has_attachments=has_attachments
         )
 
         task_manager.clear_pending_tasks(message.project_uuid, message.contact_urn)

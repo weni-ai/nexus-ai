@@ -48,7 +48,8 @@ class BedrockBackend(InlineAgentsBackend):
         user_email: str = None,
         use_components: bool = False,
         contact_fields: str = "",
-        msg_external_id: str = None
+        msg_external_id: str = None,
+        has_attachments: bool = False
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
 
@@ -144,13 +145,18 @@ class BedrockBackend(InlineAgentsBackend):
                     language=language,
                     user_email=user_email,
                     session_id=session_id,
-                    msg_external_id=msg_external_id
+                    msg_external_id=msg_external_id,
+                    has_attachments=has_attachments
                 )
 
                 if "rationale" in orchestration_trace and msg_external_id and not preview:
                     print("[ + Typing Indicator ] sending typing indicator")
                     typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
                     print("--------------------------------")
+
+                print("------------------------------------------")
+                print("Event: ", event)
+                print("------------------------------------------")
 
         # Saving traces on s3
         self.event_manager_notify(
@@ -185,7 +191,7 @@ class BedrockBackend(InlineAgentsBackend):
             contact_urn=contact_urn,
             rationale_switch=rationale_switch
         )
-        
+
         if "rationale" in orchestration_trace and msg_external_id and not preview:
             print("[ + Typing Indicator ] sending typing indicator")
             typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)

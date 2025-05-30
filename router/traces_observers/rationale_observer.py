@@ -40,35 +40,6 @@ class RationaleObserver(EventObserver):
             region_name=region_name
         )
 
-    def _get_session_data(self, session_id: str) -> dict:
-        """Get or create session data from cache."""
-        cache_key = f"rationale_session_{session_id}"
-        session_data = cache.get(cache_key)
-
-        print(f"[DEBUG] Getting session data for {session_id}")
-        print(f"[DEBUG] Cache key: {cache_key}")
-        print(f"[DEBUG] Existing session data: {session_data}")
-
-        if session_data is None:
-            session_data = {
-                'rationale_history': [],
-                'first_rationale_text': None,
-                'is_first_rationale': True
-            }
-            cache.set(cache_key, session_data, self.CACHE_TIMEOUT)
-            print(f"[DEBUG] Created new session data: {session_data}")
-
-        return session_data
-
-    def _save_session_data(self, session_id: str, session_data: dict) -> None:
-        """Save session data to cache."""
-        cache_key = f"rationale_session_{session_id}"
-        cache.set(cache_key, session_data, self.CACHE_TIMEOUT)
-        print(f"[DEBUG] Saving session data for {session_id}")
-        print(f"[DEBUG] Cache key: {cache_key}")
-        print(f"[DEBUG] Session data being saved: {session_data}")
-        print(f"[DEBUG] Current rationale history length: {len(session_data['rationale_history'])}")
-
     def _handle_preview_message(
         self,
         text: str,
@@ -78,9 +49,6 @@ class RationaleObserver(EventObserver):
         user_email: str,
         full_chunks: list[Dict] = None
     ) -> None:
-        from nexus.usecases.intelligences.retrieve import get_file_info
-        from nexus.projects.websockets.consumers import send_preview_message_to_websocket
-
         from nexus.usecases.intelligences.retrieve import get_file_info
         from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 
@@ -110,6 +78,26 @@ class RationaleObserver(EventObserver):
             }
         )
 
+    def _get_session_data(self, session_id: str) -> dict:
+        """Get or create session data from cache."""
+        cache_key = f"rationale_session_{session_id}"
+        session_data = cache.get(cache_key)
+
+        if session_data is None:
+            session_data = {
+                'rationale_history': [],
+                'first_rationale_text': None,
+                'is_first_rationale': True
+            }
+            cache.set(cache_key, session_data, self.CACHE_TIMEOUT)
+
+        return session_data
+
+    def _save_session_data(self, session_id: str, session_data: dict) -> None:
+        """Save session data to cache."""
+        cache_key = f"rationale_session_{session_id}"
+        cache.set(cache_key, session_data, self.CACHE_TIMEOUT)
+
     def perform(
         self,
         inline_traces: Dict,
@@ -122,10 +110,11 @@ class RationaleObserver(EventObserver):
         rationale_switch: bool = False,
         message_external_id: str = "",
         user_email: str = None,
+        has_attachments: bool = False,
         **kwargs
     ) -> None:
 
-        if not rationale_switch:
+        if not rationale_switch or has_attachments:
             return
 
         print("[DEBUG] Rationale Observer")
