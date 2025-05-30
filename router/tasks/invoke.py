@@ -174,7 +174,7 @@ def start_inline_agents(
         print(f"[DEBUG] Error type: {type(e)}")
         print(f"[DEBUG] Full exception details: {e.__dict__}")
 
-        if isinstance(e, botocore.exceptions.ClientError) and 'throttlingException' in str(e):
+        if isinstance(e, botocore.exceptions.EventStreamError) and 'throttlingException' in str(e):
             raise ThrottlingException(str(e))
 
         if user_email:
