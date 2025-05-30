@@ -30,15 +30,17 @@ def get_task_manager() -> RedisTaskManager:
 def handle_attachments(
     text: str,
     attachments: list[str]
-) -> str:
+) -> tuple[str, bool]:
+    turn_off_rationale = False
 
     if attachments:
         if text:
             text = f"{text} {attachments}"
         else:
+            turn_off_rationale = True
             text = str(attachments)
 
-    return text
+    return text, turn_off_rationale
 
 
 def handle_product_items(text: str, product_items: list) -> str:
@@ -86,7 +88,7 @@ def start_inline_agents(
                 project_uuid=message.get("project_uuid")
             )
 
-        text = handle_attachments(
+        text, turn_off_rationale = handle_attachments(
             text=text,
             attachments=attachments
         )
@@ -159,7 +161,8 @@ def start_inline_agents(
             user_email=user_email,
             use_components=project.use_components,
             contact_fields=message.contact_fields_as_json,
-            msg_external_id=message_event.get("msg_external_id", "")
+            msg_external_id=message_event.get("msg_external_id", ""),
+            turn_off_rationale=turn_off_rationale
         )
 
         task_manager.clear_pending_tasks(message.project_uuid, message.contact_urn)

@@ -111,10 +111,11 @@ class RationaleObserver(EventObserver):
         rationale_switch: bool = False,
         message_external_id: str = "",
         user_email: str = None,
+        turn_off_rationale: bool = False,
         **kwargs
     ) -> None:
 
-        if not rationale_switch:
+        if not rationale_switch or turn_off_rationale:
             return
 
         print("[DEBUG] Rationale Observer")
