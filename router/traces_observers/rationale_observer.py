@@ -160,18 +160,8 @@ class RationaleObserver(EventObserver):
 
             # Process the rationale if found
             if rationale_text:
-                if session_data['is_first_rationale']:
-                    session_data['first_rationale_text'] = rationale_text
-                    session_data['is_first_rationale'] = False
-                    self._save_session_data(session_id, session_data)
-                    if message_external_id:
-                        typing_usecase.send_typing_message(
-                            contact_urn=contact_urn,
-                            msg_external_id=message_external_id,
-                            project_uuid=project_uuid,
-                            preview=preview
-                        )
-                else:
+                if not session_data['is_first_rationale']:
+
                     improved_text = self._improve_subsequent_rationale(
                         rationale_text=rationale_text,
                         previous_rationales=session_data['rationale_history'],
@@ -204,7 +194,8 @@ class RationaleObserver(EventObserver):
                             )
 
             # Handle first rationale if it exists and we have caller chain info
-            if session_data['first_rationale_text'] and self._has_caller_chain(inline_traces):
+            if session_data['is_first_rationale'] and self._has_caller_chain(inline_traces) and rationale_text:
+
                 if message_external_id:
                     typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
@@ -213,7 +204,7 @@ class RationaleObserver(EventObserver):
                         preview=preview
                     )
                 improved_text = self._improve_rationale_text(
-                    rationale_text=session_data['first_rationale_text'],
+                    rationale_text=rationale_text,
                     user_input=user_input,
                     is_first_rationale=True
                 )
@@ -242,6 +233,8 @@ class RationaleObserver(EventObserver):
                         session_id=session_id,
                         send_message_callback=send_message_callback
                     )
+                    session_data['is_first_rationale'] = False
+
                     if message_external_id:
                         typing_usecase.send_typing_message(
                             contact_urn=contact_urn,
