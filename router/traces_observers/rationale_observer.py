@@ -192,9 +192,12 @@ class RationaleObserver(EventObserver):
                                 project_uuid=project_uuid,
                                 preview=preview
                             )
+                else:
+                    session_data["first_rationale_text"] = rationale_text
+                    self._save_session_data(session_id, session_data)
 
             # Handle first rationale if it exists and we have caller chain info
-            if session_data['is_first_rationale'] and self._has_caller_chain(inline_traces) and rationale_text:
+            if session_data['is_first_rationale'] and self._has_caller_chain(inline_traces):
 
                 if message_external_id:
                     typing_usecase.send_typing_message(
@@ -204,7 +207,7 @@ class RationaleObserver(EventObserver):
                         preview=preview
                     )
                 improved_text = self._improve_rationale_text(
-                    rationale_text=rationale_text,
+                    rationale_text=session_data['first_rationale_text'],
                     user_input=user_input,
                     is_first_rationale=True
                 )
