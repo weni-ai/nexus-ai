@@ -111,10 +111,11 @@ class RationaleObserver(EventObserver):
         rationale_switch: bool = False,
         message_external_id: str = "",
         user_email: str = None,
+        has_attachments: bool = False,
         **kwargs
     ) -> None:
 
-        if not rationale_switch:
+        if not rationale_switch or has_attachments:
             return
 
         print("[DEBUG] Rationale Observer")
