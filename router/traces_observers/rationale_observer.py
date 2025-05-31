@@ -107,6 +107,10 @@ class RationaleObserver(EventObserver):
         **kwargs
     ) -> None:
 
+        print("[DEBUG] --------------------------------")
+        print("[DEBUG] Rationale observer perform invocation")
+        print("[DEBUG] Rationale observer received inline traces: ", inline_traces)
+
         if not rationale_switch or turn_off_rationale:
             return
 
@@ -154,6 +158,7 @@ class RationaleObserver(EventObserver):
             if rationale_text:
                 print("[DEBUG] Rationale text found")
                 if not session_data['is_first_rationale']:
+                    print("[DEBUG] Start improving subsequent rationales")
                     improved_text = self._improve_subsequent_rationale(
                         rationale_text=rationale_text,
                         previous_rationales=session_data['rationale_history'],
@@ -191,7 +196,7 @@ class RationaleObserver(EventObserver):
 
             # Handle first rationale if it exists and we have caller chain info
             if session_data['first_rationale_text'] and self._has_called_agent(inline_traces) and session_data['is_first_rationale']:
-                print("[DEBUG] Has called agent")
+                print("[DEBUG] Has called agent and is first rationale")
                 if message_external_id:
                     self.typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
@@ -204,7 +209,7 @@ class RationaleObserver(EventObserver):
                     user_input=user_input,
                     is_first_rationale=True
                 )
-                print("[DEBUG] Improved rationale text: ", improved_text)
+                print("[DEBUG] Improved first rationale text: ", improved_text)
                 if message_external_id:
                     self.typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
@@ -279,7 +284,7 @@ class RationaleObserver(EventObserver):
             return False
 
     def _has_called_agent(self, inline_traces: Dict) -> bool:
-        print("[DEBUG] Has called agent recieved inline traces: ", inline_traces)
+
         try:
             if 'trace' in inline_traces:
                 inner_trace = inline_traces['trace']
@@ -395,6 +400,13 @@ class RationaleObserver(EventObserver):
         user_input: str = ""
     ) -> str:
         try:
+            print("[DEBUG] --------------------------------")
+            print("[DEBUG] Improving subsequent rationale")
+            print("[DEBUG] Rationale text: ", rationale_text)
+            print("[DEBUG] Previous rationales: ", previous_rationales)
+            print("[DEBUG] User input: ", user_input)
+            print("[DEBUG] --------------------------------")
+
             # Prepare the complete instruction content for the user message
             instruction_content = settings.SUBSEQUENT_RATIONALE_INSTRUCTIONS
 

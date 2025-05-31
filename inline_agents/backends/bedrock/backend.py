@@ -154,9 +154,6 @@ class BedrockBackend(InlineAgentsBackend):
                     typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
                     print("--------------------------------")
 
-                print("------------------------------------------")
-                print("Event: ", event)
-                print("------------------------------------------")
 
         # Saving traces on s3
         self.event_manager_notify(
