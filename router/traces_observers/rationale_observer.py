@@ -11,7 +11,6 @@ from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.traces_observers.save_traces import save_inline_message_to_database
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
-from router.tasks.redis_task_manager import RedisTaskManager
 
 from django.conf import settings
 
@@ -26,7 +25,6 @@ class RationaleObserver(EventObserver):
         bedrock_client=None,
         model_id=None,
         typing_usecase=None,
-        redis_task_manager=None
     ):
         """
         Initialize the RationaleObserver.
@@ -41,7 +39,6 @@ class RationaleObserver(EventObserver):
         self.typing_usecase = typing_usecase or TypingUsecase()
         self.model_id = model_id or settings.AWS_RATIONALE_MODEL
         self.flows_user_email = os.environ.get("FLOW_USER_EMAIL")
-        self.redis_task_manager = redis_task_manager or RedisTaskManager()
 
     def _get_bedrock_client(self):
         region_name = env.str('AWS_BEDROCK_REGION_NAME')
@@ -49,6 +46,11 @@ class RationaleObserver(EventObserver):
             "bedrock-runtime",
             region_name=region_name
         )
+
+    def _get_redis_task_manager(self):
+        # TODO: Fix circular import
+        from router.tasks.redis_task_manager import RedisTaskManager
+        return RedisTaskManager()
 
     def _handle_preview_message(
         self,
@@ -107,6 +109,8 @@ class RationaleObserver(EventObserver):
 
         if not rationale_switch or turn_off_rationale:
             return
+
+        self.redis_task_manager = self._get_redis_task_manager()
 
         try:
             if not self._validate_traces(inline_traces):
