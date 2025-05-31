@@ -278,7 +278,7 @@ class RationaleObserver(EventObserver):
             logger.error(f"Error checking caller chain: {str(e)}", exc_info=True)
             return False
 
-    def _has_called_agent(inline_traces: Dict) -> bool:
+    def _has_called_agent(self, inline_traces: Dict) -> bool:
         print("[DEBUG] Has called agent recieved inline traces: ", inline_traces)
         try:
             if 'trace' in inline_traces:
