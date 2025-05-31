@@ -179,9 +179,9 @@ class RationaleObserver(EventObserver):
                                 project_uuid=project_uuid,
                                 preview=preview
                             )
-                    else:
-                        session_data['first_rationale_text'] = rationale_text
-                        self.redis_task_manager.save_rationale_session_data(session_id, session_data)
+                else:
+                    session_data['first_rationale_text'] = rationale_text
+                    self.redis_task_manager.save_rationale_session_data(session_id, session_data)
 
             # Handle first rationale if it exists and we have caller chain info
             if session_data['first_rationale_text'] and self._has_called_agent(inline_traces) and session_data['is_first_rationale']:
