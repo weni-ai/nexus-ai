@@ -11,9 +11,9 @@ from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.traces_observers.save_traces import save_inline_message_to_database
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
+from router.tasks.redis_task_manager import RedisTaskManager
 
 from django.conf import settings
-from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -21,17 +21,27 @@ logger = logging.getLogger(__name__)
 class RationaleObserver(EventObserver):
     CACHE_TIMEOUT = 300  # 5 minutes in seconds
 
-    def __init__(self, bedrock_client=None, model_id=None):
+    def __init__(
+        self,
+        bedrock_client=None,
+        model_id=None,
+        typing_usecase=None,
+        redis_task_manager=None
+    ):
         """
         Initialize the RationaleObserver.
 
         Args:
             bedrock_client: Optional Bedrock client for testing
             model_id: Optional model ID for testing
+            typing_usecase: Optional TypingUsecase instance
+            redis_task_manager: Optional RedisTaskManager instance
         """
         self.bedrock_client = bedrock_client or self._get_bedrock_client()
+        self.typing_usecase = typing_usecase or TypingUsecase()
         self.model_id = model_id or settings.AWS_RATIONALE_MODEL
         self.flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+        self.redis_task_manager = redis_task_manager or RedisTaskManager()
 
     def _get_bedrock_client(self):
         region_name = env.str('AWS_BEDROCK_REGION_NAME')
@@ -79,26 +89,6 @@ class RationaleObserver(EventObserver):
             }
         )
 
-    def _get_session_data(self, session_id: str) -> dict:
-        """Get or create session data from cache."""
-        cache_key = f"rationale_session_{session_id}"
-        session_data = cache.get(cache_key)
-
-        if session_data is None:
-            session_data = {
-                'rationale_history': [],
-                'first_rationale_text': None,
-                'is_first_rationale': True
-            }
-            cache.set(cache_key, session_data, self.CACHE_TIMEOUT)
-
-        return session_data
-
-    def _save_session_data(self, session_id: str, session_data: dict) -> None:
-        """Save session data to cache."""
-        cache_key = f"rationale_session_{session_id}"
-        cache.set(cache_key, session_data, self.CACHE_TIMEOUT)
-
     def perform(
         self,
         inline_traces: Dict,
@@ -118,18 +108,16 @@ class RationaleObserver(EventObserver):
         if not rationale_switch or turn_off_rationale:
             return
 
-        print("[DEBUG] Rationale Observer")
-        typing_usecase = TypingUsecase()
         try:
             if not self._validate_traces(inline_traces):
                 return
 
             # Get session data
-            session_data = self._get_session_data(session_id)
+            session_data = self.redis_task_manager.get_rationale_session_data(session_id)
 
             if send_message_callback is None:
                 if message_external_id:
-                    typing_usecase.send_typing_message(
+                    self.typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
                         msg_external_id=message_external_id,
                         project_uuid=project_uuid,
@@ -149,7 +137,7 @@ class RationaleObserver(EventObserver):
 
                 send_message_callback = send_message
             if message_external_id:
-                typing_usecase.send_typing_message(
+                self.typing_usecase.send_typing_message(
                     contact_urn=contact_urn,
                     msg_external_id=message_external_id,
                     project_uuid=project_uuid,
@@ -160,18 +148,7 @@ class RationaleObserver(EventObserver):
 
             # Process the rationale if found
             if rationale_text:
-                if session_data['is_first_rationale']:
-                    session_data['first_rationale_text'] = rationale_text
-                    session_data['is_first_rationale'] = False
-                    self._save_session_data(session_id, session_data)
-                    if message_external_id:
-                        typing_usecase.send_typing_message(
-                            contact_urn=contact_urn,
-                            msg_external_id=message_external_id,
-                            project_uuid=project_uuid,
-                            preview=preview
-                        )
-                else:
+                if not session_data['is_first_rationale']:
                     improved_text = self._improve_subsequent_rationale(
                         rationale_text=rationale_text,
                         previous_rationales=session_data['rationale_history'],
@@ -180,9 +157,9 @@ class RationaleObserver(EventObserver):
 
                     if self._is_valid_rationale(improved_text):
                         session_data['rationale_history'].append(improved_text)
-                        self._save_session_data(session_id, session_data)
+                        self.redis_task_manager.save_rationale_session_data(session_id, session_data)
                         if message_external_id:
-                            typing_usecase.send_typing_message(
+                            self.typing_usecase.send_typing_message(
                                 contact_urn=contact_urn,
                                 msg_external_id=message_external_id,
                                 project_uuid=project_uuid,
@@ -196,17 +173,20 @@ class RationaleObserver(EventObserver):
                             send_message_callback=send_message_callback
                         )
                         if message_external_id:
-                            typing_usecase.send_typing_message(
+                            self.typing_usecase.send_typing_message(
                                 contact_urn=contact_urn,
                                 msg_external_id=message_external_id,
                                 project_uuid=project_uuid,
                                 preview=preview
                             )
+                    else:
+                        session_data['first_rationale_text'] = rationale_text
+                        self.redis_task_manager.save_rationale_session_data(session_id, session_data)
 
             # Handle first rationale if it exists and we have caller chain info
-            if session_data['first_rationale_text'] and self._has_caller_chain(inline_traces):
+            if session_data['first_rationale_text'] and self._has_called_agent(inline_traces) and session_data['is_first_rationale']:
                 if message_external_id:
-                    typing_usecase.send_typing_message(
+                    self.typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
                         msg_external_id=message_external_id,
                         project_uuid=project_uuid,
@@ -218,7 +198,7 @@ class RationaleObserver(EventObserver):
                     is_first_rationale=True
                 )
                 if message_external_id:
-                    typing_usecase.send_typing_message(
+                    self.typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
                         msg_external_id=message_external_id,
                         project_uuid=project_uuid,
@@ -227,9 +207,8 @@ class RationaleObserver(EventObserver):
 
                 if self._is_valid_rationale(improved_text):
                     session_data['rationale_history'].append(improved_text)
-                    self._save_session_data(session_id, session_data)
                     if message_external_id:
-                        typing_usecase.send_typing_message(
+                        self.typing_usecase.send_typing_message(
                             contact_urn=contact_urn,
                             msg_external_id=message_external_id,
                             project_uuid=project_uuid,
@@ -243,21 +222,21 @@ class RationaleObserver(EventObserver):
                         send_message_callback=send_message_callback
                     )
                     if message_external_id:
-                        typing_usecase.send_typing_message(
+                        self.typing_usecase.send_typing_message(
                             contact_urn=contact_urn,
                             msg_external_id=message_external_id,
                             project_uuid=project_uuid,
                             preview=preview
                         )
                 if message_external_id:
-                    typing_usecase.send_typing_message(
+                    self.typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
                         msg_external_id=message_external_id,
                         project_uuid=project_uuid,
                         preview=preview
                     )
-                session_data['first_rationale_text'] = None
-                self._save_session_data(session_id, session_data)
+                session_data['is_first_rationale'] = False
+                self.redis_task_manager.save_rationale_session_data(session_id, session_data)
 
         except Exception as e:
             logger.error(f"Error processing rationale: {str(e)}", exc_info=True)
@@ -280,6 +259,7 @@ class RationaleObserver(EventObserver):
             return None
 
     def _has_caller_chain(self, inline_traces: Dict) -> bool:
+        # Depreced on inline_agents
         try:
             if 'callerChain' in inline_traces:
                 caller_chain = inline_traces['callerChain']
@@ -287,6 +267,15 @@ class RationaleObserver(EventObserver):
             return False
         except Exception as e:
             logger.error(f"Error checking caller chain: {str(e)}", exc_info=True)
+            return False
+
+    def _has_called_agent(self, inline_traces: Dict) -> bool:
+        try:
+            if 'agentCollaboratorInvocationInput' in inline_traces:
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error checking called agent: {str(e)}", exc_info=True)
             return False
 
     def _is_valid_rationale(self, rationale_text: str) -> bool:
