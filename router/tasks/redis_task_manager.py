@@ -39,6 +39,8 @@ class TaskManager(ABC):
 
 
 class RedisTaskManager(TaskManager):
+    CACHE_TIMEOUT = 300  # 5 minutes in seconds
+
     def __init__(self, redis_client: Optional[Redis] = None):
         self.redis_client = redis_client or Redis.from_url(settings.REDIS_URL)
 
@@ -89,3 +91,29 @@ class RedisTaskManager(TaskManager):
             self.store_pending_response(project_uuid, contact_urn, message_text)
 
         return final_message
+
+    def get_rationale_session_data(self, session_id: str) -> dict:
+        """Get or create rationale session data from cache."""
+        cache_key = f"rationale_session_{session_id}"
+        session_data = self.redis_client.get(cache_key)
+
+        if session_data is None:
+            session_data = {
+                'rationale_history': [],
+                'first_rationale_text': None,
+                'is_first_rationale': True
+            }
+            self.save_rationale_session_data(session_id, session_data)
+        else:
+            session_data = eval(session_data.decode('utf-8'))
+
+        return session_data
+
+    def save_rationale_session_data(self, session_id: str, session_data: dict) -> None:
+        """Save rationale session data to cache."""
+        cache_key = f"rationale_session_{session_id}"
+        self.redis_client.setex(
+            cache_key,
+            self.CACHE_TIMEOUT,
+            str(session_data)
+        )
