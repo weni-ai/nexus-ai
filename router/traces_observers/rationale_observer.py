@@ -148,13 +148,14 @@ class RationaleObserver(EventObserver):
 
             # Process the rationale if found
             if rationale_text:
+                print("[DEBUG] Rationale text found")
                 if not session_data['is_first_rationale']:
                     improved_text = self._improve_subsequent_rationale(
                         rationale_text=rationale_text,
                         previous_rationales=session_data['rationale_history'],
                         user_input=user_input
                     )
-
+                    print("[DEBUG] Improved subsequent rationales: ", improved_text)
                     if self._is_valid_rationale(improved_text):
                         session_data['rationale_history'].append(improved_text)
                         self.redis_task_manager.save_rationale_session_data(session_id, session_data)
@@ -180,11 +181,13 @@ class RationaleObserver(EventObserver):
                                 preview=preview
                             )
                 else:
+                    print("[DEBUG] First rationale text found")
                     session_data['first_rationale_text'] = rationale_text
                     self.redis_task_manager.save_rationale_session_data(session_id, session_data)
 
             # Handle first rationale if it exists and we have caller chain info
             if session_data['first_rationale_text'] and self._has_called_agent(inline_traces) and session_data['is_first_rationale']:
+                print("[DEBUG] Has called agent")
                 if message_external_id:
                     self.typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
@@ -197,6 +200,7 @@ class RationaleObserver(EventObserver):
                     user_input=user_input,
                     is_first_rationale=True
                 )
+                print("[DEBUG] Improved rationale text: ", improved_text)
                 if message_external_id:
                     self.typing_usecase.send_typing_message(
                         contact_urn=contact_urn,
@@ -221,6 +225,7 @@ class RationaleObserver(EventObserver):
                         session_id=session_id,
                         send_message_callback=send_message_callback
                     )
+                    print("[DEBUG] Improved rationale text sent")
                     if message_external_id:
                         self.typing_usecase.send_typing_message(
                             contact_urn=contact_urn,
@@ -270,6 +275,7 @@ class RationaleObserver(EventObserver):
             return False
 
     def _has_called_agent(inline_traces: Dict) -> bool:
+        print("[DEBUG] Has called agent recieved inline traces: ", inline_traces)
         try:
             if 'trace' in inline_traces:
                 inner_trace = inline_traces['trace']
