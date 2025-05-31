@@ -33,7 +33,6 @@ class RationaleObserver(EventObserver):
             bedrock_client: Optional Bedrock client for testing
             model_id: Optional model ID for testing
             typing_usecase: Optional TypingUsecase instance
-            redis_task_manager: Optional RedisTaskManager instance
         """
         self.bedrock_client = bedrock_client or self._get_bedrock_client()
         self.typing_usecase = typing_usecase or TypingUsecase()
@@ -48,7 +47,7 @@ class RationaleObserver(EventObserver):
         )
 
     def _get_redis_task_manager(self):
-        # TODO: Fix circular import
+
         from router.tasks.redis_task_manager import RedisTaskManager
         return RedisTaskManager()
 
@@ -116,7 +115,6 @@ class RationaleObserver(EventObserver):
             if not self._validate_traces(inline_traces):
                 return
 
-            # Get session data
             session_data = self.redis_task_manager.get_rationale_session_data(session_id)
 
             if send_message_callback is None:
@@ -150,7 +148,6 @@ class RationaleObserver(EventObserver):
 
             rationale_text = self._extract_rationale_text(inline_traces)
 
-            # Process the rationale if found
             if rationale_text:
                 if not session_data['is_first_rationale']:
                     improved_text = self._improve_subsequent_rationale(
@@ -187,7 +184,6 @@ class RationaleObserver(EventObserver):
                     session_data['first_rationale_text'] = rationale_text
                     self.redis_task_manager.save_rationale_session_data(session_id, session_data)
 
-            # Handle first rationale if it exists and we have caller chain info
             if session_data['first_rationale_text'] and self._has_called_agent(inline_traces) and session_data['is_first_rationale']:
                 if message_external_id:
                     self.typing_usecase.send_typing_message(
@@ -335,7 +331,6 @@ class RationaleObserver(EventObserver):
         is_first_rationale: bool = False
     ) -> str:
         try:
-            # Prepare the complete instruction content for the user message
             instruction_content = settings.RATIONALE_IMPROVEMENT_INSTRUCTIONS
 
             if user_input:
@@ -343,21 +338,17 @@ class RationaleObserver(EventObserver):
                     <user_message>{user_input}</user_message>
                 """
 
-            # Add the rationale text to analyze
             instruction_content += f"""
                 <thought>{rationale_text}</thought>
             """
 
-            # Build conversation with just one user message and an expected assistant response
             conversation = [
-                # Single user message with all instructions and the rationale to analyze
                 {
                     "role": "user",
                     "content": [{"text": instruction_content}]
                 }
             ]
 
-            # Send the request to Amazon Bedrock
             response = self.bedrock_client.converse(
                 modelId=self.model_id,
                 messages=conversation,
@@ -368,19 +359,15 @@ class RationaleObserver(EventObserver):
             )
 
             logger.debug(f"Improvement Response: {response}")
-            # Extract the response text
             response_text = response["output"]["message"]["content"][0]["text"]
 
-            # For first rationales, make sure they're never "invalid"
             if is_first_rationale and response_text.strip().lower() == "invalid":
-                # If somehow still got "invalid", force a generic improvement
                 return "Processando sua solicitação agora."
 
-            # Remove any quotes from the response
             return response_text.strip().strip('"\'')
         except Exception as e:
             logger.error(f"Error improving rationale text: {str(e)}", exc_info=True)
-            return rationale_text  # Return original text if transformation fails
+            return rationale_text
 
     def _improve_subsequent_rationale(
         self,
@@ -389,10 +376,8 @@ class RationaleObserver(EventObserver):
         user_input: str = ""
     ) -> str:
         try:
-            # Prepare the complete instruction content for the user message
             instruction_content = settings.SUBSEQUENT_RATIONALE_INSTRUCTIONS
 
-            # Add user input context if available
             if user_input:
                 instruction_content += f"<user_message>{user_input}</user_message>"
 
@@ -403,19 +388,15 @@ class RationaleObserver(EventObserver):
                 </previous_thought>
                 """
 
-            # Add the rationale text to analyze
             instruction_content += f"<main_thought>{rationale_text}</main_thought>"
 
-            # Build conversation with just one user message and an expected assistant response
             conversation = [
-                # Single user message with all instructions and the rationale to analyze
                 {
                     "role": "user",
                     "content": [{"text": instruction_content}]
                 }
             ]
 
-            # Send the request to Amazon Bedrock
             response = self.bedrock_client.converse(
                 modelId=self.model_id,
                 messages=conversation,
@@ -425,14 +406,12 @@ class RationaleObserver(EventObserver):
                 }
             )
 
-            # Extract the response text
             response_text = response["output"]["message"]["content"][0]["text"]
 
-            # Remove any quotes from the response
             return response_text.strip().strip('"\'')
         except Exception as e:
             logger.error(f"Error improving subsequent rationale text: {str(e)}", exc_info=True)
-            return rationale_text  # Return original text if transformation fails
+            return rationale_text
 
     @staticmethod
     @celery_app.task
@@ -457,7 +436,6 @@ class RationaleObserver(EventObserver):
                 full_chunks=full_chunks
             )
 
-        # Always send the actual message
         broadcast = SendMessageHTTPClient(
             os.environ.get(
                 'FLOWS_REST_ENDPOINT'
