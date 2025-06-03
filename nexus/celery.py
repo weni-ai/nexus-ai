@@ -19,9 +19,9 @@ app.conf.task_routes = {
     'router.tasks.invoke.start_inline_agents': {'queue': 'inline-agents'},
 }
 
-app.conf.task_annotations = {
-    'router.tasks.invoke.start_inline_agents': {'rate_limit': rate_limit}
-}
+# app.conf.task_annotations = {
+#     'router.tasks.invoke.start_inline_agents': {'rate_limit': rate_limit}
+# }
 
 app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
