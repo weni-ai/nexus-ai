@@ -15,9 +15,9 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 rate_limit = settings.INVOKE_AGENTS_RATE_LIMIT
 
 
-app.conf.task_routes = {
-    'router.tasks.invoke.start_inline_agents': {'queue': 'inline-agents'},
-}
+# app.conf.task_routes = {
+#     'router.tasks.invoke.start_inline_agents': {'queue': 'inline-agents'},
+# }
 
 # app.conf.task_annotations = {
 #     'router.tasks.invoke.start_inline_agents': {'rate_limit': rate_limit}
