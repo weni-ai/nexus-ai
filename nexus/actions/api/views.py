@@ -227,11 +227,14 @@ class MessagePreviewView(APIView):
             )
             if project.inline_agent_switch:
                 print("[+ Starting Inline Agent +]")
-                start_inline_agents.delay(
-                    message=message.dict(),
-                    preview=True,
-                    user_email=request.user.email,
-                    language=language
+                start_inline_agents.apply_async(
+                    kwargs={
+                        'message': message.dict(),
+                        'preview': True,
+                        'user_email': request.user.email,
+                        'language': language
+                    },
+                    queue='celery'
                 )
                 return Response(data={"type": "preview", "message": "Processing started", "fonts": []})
             else:
