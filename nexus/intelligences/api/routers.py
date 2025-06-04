@@ -19,7 +19,8 @@ from .views import (
     ContentBaseFilePreview,
     UploadFileView,
     RouterRetailViewSet,
-    CommerceHasAgentBuilder
+    CommerceHasAgentBuilder,
+    InlineContentBaseFileViewset
 )
 
 
@@ -55,6 +56,7 @@ urlpatterns = [
     path('<org_uuid>/intelligences/', include(org_router.urls)),
     path('<intelligence_uuid>/', include(intelligence_router.urls)),
     path('<content_base_uuid>/', include(content_base_router.urls)),
+    path('<project_uuid>/inline-content-base-file/', InlineContentBaseFileViewset.as_view(), name="inline-content-base-file"),
     path('<project_uuid>/router/', RouterContentBaseViewSet.as_view(), name="project-content-bases"),
     path('<project_uuid>/commerce-router/', RouterRetailViewSet.as_view(), name="project-commerce-router"),
     path('<project_uuid>/llm/', LLMViewset.as_view(), name='llm'),
