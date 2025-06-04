@@ -271,7 +271,10 @@ class BedrockTeamAdapter(TeamAdapter):
                     'promptCreationMode': 'DEFAULT',
                     'parserMode': 'DEFAULT'
                 }
-            ]
+            ],
+            'promptCachingState': {
+                'cachingState': 'ENABLED'
+            }
         }
 
         if use_components:
@@ -291,7 +294,7 @@ class BedrockTeamAdapter(TeamAdapter):
                         'topK': 250,
                         'topP': 1
                     },
-                    
+
                     'promptType': 'POST_PROCESSING',
                     'promptState': 'ENABLED',
                     'parserMode': 'OVERRIDDEN',
