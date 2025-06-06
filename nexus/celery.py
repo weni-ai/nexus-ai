@@ -6,19 +6,31 @@ from celery import Celery, schedules
 
 from django.conf import settings
 
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
 app = Celery("nexus")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
+rate_limit = settings.INVOKE_AGENTS_RATE_LIMIT
+
+
+app.conf.task_routes = {
+    'router.tasks.invoke.start_inline_agents': {'queue': 'inline-agents'},
+}
+
+app.conf.task_annotations = {
+    'router.tasks.invoke.start_inline_agents': {'rate_limit': rate_limit}
+}
+
 app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
 task_create_missing_queues = True
 
-app.conf.event_serializer = 'pickle'
-app.conf.task_serializer = 'pickle'
-app.conf.result_serializer = 'pickle'
-app.conf.accept_content = ['application/json', 'application/x-python-serialize']
+app.conf.event_serializer = 'json'
+app.conf.task_serializer = 'json'
+app.conf.result_serializer = 'json'
+app.conf.accept_content = ['application/json']
 
 app.conf.beat_schedule = {
     "log_cleanup_routine": {

@@ -661,7 +661,8 @@ class ContentBaseFileViewset(ModelViewSet):
                 content_base_uuid,
                 extension_file,
                 user_email,
-                load_type
+                load_type,
+                filename=file.name
             )
 
             return Response(

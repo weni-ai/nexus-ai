@@ -7,109 +7,36 @@ from typing import List, Dict, Optional, Callable
 
 from nexus.celery import app as celery_app
 from nexus.event_domain.event_observer import EventObserver
+from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.traces_observers.save_traces import save_inline_message_to_database
+from router.clients.preview.simulator.broadcast import SimulateBroadcast
 
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# Constants for instruction content
-RATIONALE_IMPROVEMENT_INSTRUCTIONS = """
-    You are an agent specialized in sending notifications to your user. They are waiting for a response to a request, but before receiving it, you need to notify them with precision about what you're doing, in a way that truly helps them. To do this, you will receive a thought and should rephrase it by following principles to make it fully useful to the user.
-
-    The thought you will receive to rephrase will be between the <thought><thought> tags.
-
-    You can also use the user's message to base the rephrasing of the thought. The user's message will be between the <user_message></user_message> tags.
-
-    For the rephrasing, you must follow principles. These will be between the <principles></principles> tags, and you should give them high priority.
-
-    <principles>
-    - Keeping it concise and direct (max 15 words);
-    - The rephrasing should always be in the first person (you are the one thinking);
-    - Your output is always in the present tense;
-    - Removing conversation starters and technical jargon;
-    - Clearly stating the current action or error condition;
-    - Preserving essential details from the original rationale;
-    - Returning ONLY the transformed text with NO additional explanation or formatting;- Your output should ALWAYS be in the language of the user's message.
-    </principles>
-
-    You can find examples of rephrasings within the tags <examples></examples>.
-
-    <examples>
-    # EXAMPLE 1
-    Tought: Consulting ProductConcierge for formal clothing suggestions.
-    Rephrasing: I'm looking for formal clothes for you!
-    # EXAMPLE 2
-    Tought: The user is looking for flights from Miami to New York for one person, with specific dates. I will use the travel agent to search for this information.
-    Rephrasing: Checking flights from Miami to New York on specified dates.
-    # EXAMPLE 3
-    Tought: I received an error because the provided dates are in the past. I need to inform the user that future dates are required for the search.
-    Rephrasing: Dates provided are in the past, future dates needed.</examples>
-"""
-
-SUBSEQUENT_RATIONALE_INSTRUCTIONS = """
-    You are a message analyst responsible for reviewing messages from an artificial agent that may or may not be sent to the end user.
-
-    You will receive the agent's main thought, and your first task is to determine whether this thought is invalid for sending to the end user. The main thought will be enclosed within the tags <main_thought></main_thought>.
-
-    To decide if a thought is valid, you must analyze a list of criteria that classify a thought as invalid, as well as review previous thoughts. These previous thoughts will be enclosed within the tags <previous_thought></previous_thought>. The list of criteria you must analyze to determine if a thought is invalid will be enclosed within the tags <invalid_thought></invalid_thought>. Another important piece of information for your analysis is the user's message, which will be enclosed within the tags <user_message></user_message>.
-
-    <invalid_thought>
-        - Contains greetings, generic assistance, or simple acknowledgments
-        - Mentions internal components (e.g., "ProductConcierge") without adding value
-        - Describes communication actions with the user (e.g., "I will inform the user")
-        - Is vague, generic, or lacks specific actionable content
-        - Conveys essentially the same information as any previous rationale, even if worded differently
-        - Addresses the same topic or message as the immediately previous rationale
-    </invalid_thought>
-
-    If the thought is considered invalid, write only 'invalid'. Write NOTHING else besides 'invalid'.
-
-    If the thought is valid, you must REWRITE IT following the rewriting principles. These principles will be within the tags <principles></principles> and must be HIGHLY prioritized if the thought is considered valid.
-
-    <principles>
-        - Keeping it concise and direct (max 15 words);
-        - The rephrasing should always be in the first person (you are the one thinking);
-        - Your output is always in the present tense;
-        - Removing conversation starters and technical jargon;
-        - Clearly stating the current action or error condition;
-        - Preserving essential details from the original rationale;
-        - Returning ONLY the transformed text with NO additional explanation or formatting;
-        - Your output should ALWAYS be in the language of the user's message.
-    </principles>
-
-    You can find examples of rephrasings within the tags <examples></examples>.
-
-    <examples>
-    # EXAMPLE 1
-    Tought: Consulting ProductConcierge for formal clothing suggestions.
-    Rephrasing: I'm looking for formal clothes for you!
-    # EXAMPLE 2
-    Tought: The user is looking for flights from Miami to New York for one person, with specific dates. I will use the travel agent to search for this information.
-    Rephrasing: Checking flights from Miami to New York on specified dates.
-    # EXAMPLE 3
-    Tought: I received an error because the provided dates are in the past. I need to inform the user that future dates are required for the search.
-    Rephrasing: Dates provided are in the past, future dates needed.
-    </examples>
-"""
-
 
 class RationaleObserver(EventObserver):
+    CACHE_TIMEOUT = 300  # 5 minutes in seconds
 
-    def __init__(self, bedrock_client=None, model_id=None):
+    def __init__(
+        self,
+        bedrock_client=None,
+        model_id=None,
+        typing_usecase=None,
+    ):
         """
         Initialize the RationaleObserver.
 
         Args:
             bedrock_client: Optional Bedrock client for testing
             model_id: Optional model ID for testing
+            typing_usecase: Optional TypingUsecase instance
         """
         self.bedrock_client = bedrock_client or self._get_bedrock_client()
+        self.typing_usecase = typing_usecase or TypingUsecase()
         self.model_id = model_id or settings.AWS_RATIONALE_MODEL
-        self.rationale_history = []
-        self.first_rationale_text = None
-        self.is_first_rationale = True
         self.flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
     def _get_bedrock_client(self):
@@ -117,6 +44,50 @@ class RationaleObserver(EventObserver):
         return boto3.client(
             "bedrock-runtime",
             region_name=region_name
+        )
+
+    def _get_redis_task_manager(self):
+
+        from router.tasks.redis_task_manager import RedisTaskManager
+        return RedisTaskManager()
+
+    def _handle_preview_message(
+        self,
+        text: str,
+        urns: list,
+        project_uuid: str,
+        user: str,
+        user_email: str,
+        full_chunks: list[Dict] = None
+    ) -> None:
+
+        from nexus.usecases.intelligences.retrieve import get_file_info
+        from nexus.projects.websockets.consumers import send_preview_message_to_websocket
+
+        if not full_chunks:
+            full_chunks = []
+
+        broadcast = SimulateBroadcast(
+            os.environ.get('FLOWS_REST_ENDPOINT'),
+            os.environ.get('FLOWS_INTERNAL_TOKEN'),
+            get_file_info
+        )
+
+        preview_response = broadcast.send_direct_message(
+            text=text,
+            urns=urns,
+            project_uuid=project_uuid,
+            user=user,
+            full_chunks=full_chunks
+        )
+
+        send_preview_message_to_websocket(
+            project_uuid=str(project_uuid),
+            user_email=user_email,
+            message_data={
+                "type": "preview",
+                "content": preview_response
+            }
         )
 
     def perform(
@@ -129,37 +100,72 @@ class RationaleObserver(EventObserver):
         send_message_callback: Optional[Callable] = None,
         preview: bool = False,
         rationale_switch: bool = False,
+        message_external_id: str = "",
+        user_email: str = None,
+        turn_off_rationale: bool = False,
         **kwargs
     ) -> None:
 
-        if preview or not rationale_switch:
+        if not rationale_switch or turn_off_rationale:
             return
 
-        print("[DEBUG] Rationale Observer")
+        self.redis_task_manager = self._get_redis_task_manager()
 
         try:
             if not self._validate_traces(inline_traces):
                 return
 
+            session_data = self.redis_task_manager.get_rationale_session_data(session_id)
+
             if send_message_callback is None:
-                send_message_callback = self.task_send_rationale_message.delay
+                if message_external_id:
+                    self.typing_usecase.send_typing_message(
+                        contact_urn=contact_urn,
+                        msg_external_id=message_external_id,
+                        project_uuid=project_uuid,
+                        preview=preview
+                    )
+
+                def send_message(text, urns, project_uuid, user, full_chunks=None):
+                    return self.task_send_rationale_message.delay(
+                        text=text,
+                        urns=urns,
+                        project_uuid=project_uuid,
+                        user=user,
+                        full_chunks=full_chunks,
+                        preview=preview,
+                        user_email=user_email
+                    )
+
+                send_message_callback = send_message
+            if message_external_id:
+                self.typing_usecase.send_typing_message(
+                    contact_urn=contact_urn,
+                    msg_external_id=message_external_id,
+                    project_uuid=project_uuid,
+                    preview=preview
+                )
 
             rationale_text = self._extract_rationale_text(inline_traces)
 
-            # Process the rationale if found
             if rationale_text:
-                if self.is_first_rationale:
-                    self.first_rationale_text = rationale_text
-                    self.is_first_rationale = False
-                else:
+                if not session_data['is_first_rationale']:
                     improved_text = self._improve_subsequent_rationale(
-                        rationale_text,
-                        self.rationale_history,
-                        user_input
+                        rationale_text=rationale_text,
+                        previous_rationales=session_data['rationale_history'],
+                        user_input=user_input
                     )
 
                     if self._is_valid_rationale(improved_text):
-                        self.rationale_history.append(improved_text)
+                        session_data['rationale_history'].append(improved_text)
+                        self.redis_task_manager.save_rationale_session_data(session_id, session_data)
+                        if message_external_id:
+                            self.typing_usecase.send_typing_message(
+                                contact_urn=contact_urn,
+                                msg_external_id=message_external_id,
+                                project_uuid=project_uuid,
+                                preview=preview
+                            )
                         self._send_rationale_message(
                             text=improved_text,
                             contact_urn=contact_urn,
@@ -167,17 +173,47 @@ class RationaleObserver(EventObserver):
                             session_id=session_id,
                             send_message_callback=send_message_callback
                         )
+                        if message_external_id:
+                            self.typing_usecase.send_typing_message(
+                                contact_urn=contact_urn,
+                                msg_external_id=message_external_id,
+                                project_uuid=project_uuid,
+                                preview=preview
+                            )
+                else:
+                    session_data['first_rationale_text'] = rationale_text
+                    self.redis_task_manager.save_rationale_session_data(session_id, session_data)
 
-            # Handle first rationale if it exists and we have caller chain info
-            if self.first_rationale_text and self._has_caller_chain(inline_traces):
+            if session_data['first_rationale_text'] and self._has_called_agent(inline_traces) and session_data['is_first_rationale']:
+                if message_external_id:
+                    self.typing_usecase.send_typing_message(
+                        contact_urn=contact_urn,
+                        msg_external_id=message_external_id,
+                        project_uuid=project_uuid,
+                        preview=preview
+                    )
                 improved_text = self._improve_rationale_text(
-                    rationale_text=self.first_rationale_text,
+                    rationale_text=session_data['first_rationale_text'],
                     user_input=user_input,
                     is_first_rationale=True
                 )
+                if message_external_id:
+                    self.typing_usecase.send_typing_message(
+                        contact_urn=contact_urn,
+                        msg_external_id=message_external_id,
+                        project_uuid=project_uuid,
+                        preview=preview
+                    )
 
                 if self._is_valid_rationale(improved_text):
-                    self.rationale_history.append(improved_text)
+                    session_data['rationale_history'].append(improved_text)
+                    if message_external_id:
+                        self.typing_usecase.send_typing_message(
+                            contact_urn=contact_urn,
+                            msg_external_id=message_external_id,
+                            project_uuid=project_uuid,
+                            preview=preview
+                        )
                     self._send_rationale_message(
                         text=improved_text,
                         contact_urn=contact_urn,
@@ -185,7 +221,22 @@ class RationaleObserver(EventObserver):
                         session_id=session_id,
                         send_message_callback=send_message_callback
                     )
-                self.first_rationale_text = None
+                    if message_external_id:
+                        self.typing_usecase.send_typing_message(
+                            contact_urn=contact_urn,
+                            msg_external_id=message_external_id,
+                            project_uuid=project_uuid,
+                            preview=preview
+                        )
+                if message_external_id:
+                    self.typing_usecase.send_typing_message(
+                        contact_urn=contact_urn,
+                        msg_external_id=message_external_id,
+                        project_uuid=project_uuid,
+                        preview=preview
+                    )
+                session_data['is_first_rationale'] = False
+                self.redis_task_manager.save_rationale_session_data(session_id, session_data)
 
         except Exception as e:
             logger.error(f"Error processing rationale: {str(e)}", exc_info=True)
@@ -208,6 +259,7 @@ class RationaleObserver(EventObserver):
             return None
 
     def _has_caller_chain(self, inline_traces: Dict) -> bool:
+        # Depreced on inline_agents
         try:
             if 'callerChain' in inline_traces:
                 caller_chain = inline_traces['callerChain']
@@ -215,6 +267,20 @@ class RationaleObserver(EventObserver):
             return False
         except Exception as e:
             logger.error(f"Error checking caller chain: {str(e)}", exc_info=True)
+            return False
+
+    def _has_called_agent(self, inline_traces: Dict) -> bool:
+        try:
+            if 'trace' in inline_traces:
+                inner_trace = inline_traces['trace']
+                if 'orchestrationTrace' in inner_trace:
+                    orchestration = inner_trace['orchestrationTrace']
+                    if 'invocationInput' in orchestration:
+                        invocation = orchestration['invocationInput']
+                        return 'agentCollaboratorInvocationInput' in invocation
+            return False
+        except Exception as e:
+            logger.error(f"Error checking called agent: {str(e)}", exc_info=True)
             return False
 
     def _is_valid_rationale(self, rationale_text: str) -> bool:
@@ -265,29 +331,24 @@ class RationaleObserver(EventObserver):
         is_first_rationale: bool = False
     ) -> str:
         try:
-            # Prepare the complete instruction content for the user message
-            instruction_content = RATIONALE_IMPROVEMENT_INSTRUCTIONS
+            instruction_content = settings.RATIONALE_IMPROVEMENT_INSTRUCTIONS
 
             if user_input:
                 instruction_content += f"""
                     <user_message>{user_input}</user_message>
                 """
 
-            # Add the rationale text to analyze
             instruction_content += f"""
                 <thought>{rationale_text}</thought>
             """
 
-            # Build conversation with just one user message and an expected assistant response
             conversation = [
-                # Single user message with all instructions and the rationale to analyze
                 {
                     "role": "user",
                     "content": [{"text": instruction_content}]
                 }
             ]
 
-            # Send the request to Amazon Bedrock
             response = self.bedrock_client.converse(
                 modelId=self.model_id,
                 messages=conversation,
@@ -298,19 +359,15 @@ class RationaleObserver(EventObserver):
             )
 
             logger.debug(f"Improvement Response: {response}")
-            # Extract the response text
             response_text = response["output"]["message"]["content"][0]["text"]
 
-            # For first rationales, make sure they're never "invalid"
             if is_first_rationale and response_text.strip().lower() == "invalid":
-                # If somehow still got "invalid", force a generic improvement
                 return "Processando sua solicitação agora."
 
-            # Remove any quotes from the response
             return response_text.strip().strip('"\'')
         except Exception as e:
             logger.error(f"Error improving rationale text: {str(e)}", exc_info=True)
-            return rationale_text  # Return original text if transformation fails
+            return rationale_text
 
     def _improve_subsequent_rationale(
         self,
@@ -319,10 +376,8 @@ class RationaleObserver(EventObserver):
         user_input: str = ""
     ) -> str:
         try:
-            # Prepare the complete instruction content for the user message
-            instruction_content = SUBSEQUENT_RATIONALE_INSTRUCTIONS
+            instruction_content = settings.SUBSEQUENT_RATIONALE_INSTRUCTIONS
 
-            # Add user input context if available
             if user_input:
                 instruction_content += f"<user_message>{user_input}</user_message>"
 
@@ -333,19 +388,15 @@ class RationaleObserver(EventObserver):
                 </previous_thought>
                 """
 
-            # Add the rationale text to analyze
             instruction_content += f"<main_thought>{rationale_text}</main_thought>"
 
-            # Build conversation with just one user message and an expected assistant response
             conversation = [
-                # Single user message with all instructions and the rationale to analyze
                 {
                     "role": "user",
                     "content": [{"text": instruction_content}]
                 }
             ]
 
-            # Send the request to Amazon Bedrock
             response = self.bedrock_client.converse(
                 modelId=self.model_id,
                 messages=conversation,
@@ -355,14 +406,12 @@ class RationaleObserver(EventObserver):
                 }
             )
 
-            # Extract the response text
             response_text = response["output"]["message"]["content"][0]["text"]
 
-            # Remove any quotes from the response
             return response_text.strip().strip('"\'')
         except Exception as e:
             logger.error(f"Error improving subsequent rationale text: {str(e)}", exc_info=True)
-            return rationale_text  # Return original text if transformation fails
+            return rationale_text
 
     @staticmethod
     @celery_app.task
@@ -371,8 +420,22 @@ class RationaleObserver(EventObserver):
         urns: list,
         project_uuid: str,
         user: str,
-        full_chunks: list[Dict] = None
+        full_chunks: list[Dict] = None,
+        preview: bool = False,
+        user_email: str = None
     ) -> None:
+
+        if preview and user_email:
+            observer = RationaleObserver()
+            observer._handle_preview_message(
+                text=text,
+                urns=urns,
+                project_uuid=project_uuid,
+                user=user,
+                user_email=user_email,
+                full_chunks=full_chunks
+            )
+
         broadcast = SendMessageHTTPClient(
             os.environ.get(
                 'FLOWS_REST_ENDPOINT'

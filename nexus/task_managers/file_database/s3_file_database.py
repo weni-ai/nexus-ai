@@ -1,5 +1,6 @@
 import uuid
 import boto3
+from io import BytesIO
 from os.path import basename
 from django.conf import settings
 
@@ -15,12 +16,13 @@ class s3FileDatabase(FileDataBase):
             region_name=settings.AWS_S3_REGION_NAME
         )
 
-    def add_file(self, file) -> FileResponseDTO:
-        file_name = basename(file.name)
+    def add_file(self, file, filename) -> FileResponseDTO:
+        file_name = basename(filename)
         name, extension = file_name.rsplit(".", 1)
         name = name.replace(".", "_")
         file_name = f"{name}-{uuid.uuid4()}.{extension}"
         response = FileResponseDTO()
+        file = BytesIO(file)
         try:
             self.s3_client.upload_fileobj(file, settings.AWS_S3_BUCKET_NAME, file_name)
             response.status = 0

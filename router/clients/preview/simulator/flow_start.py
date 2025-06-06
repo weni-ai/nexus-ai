@@ -1,7 +1,6 @@
 from typing import List
 
 from router.flow_start import FlowStart
-
 from router.entities import FlowDTO
 
 
@@ -29,4 +28,12 @@ class SimulateFlowStart(FlowStart):
         if attachments:
             params.update({"attachments": attachments})
 
-        return {"type": "flowstart", "uuid": flow.uuid, "name": flow.name, "msg_event": msg_event, "params": params}
+        response_data = {
+            "type": "flowstart",
+            "uuid": flow.uuid,
+            "name": flow.name,
+            "msg_event": msg_event,
+            "params": params
+        }
+
+        return response_data

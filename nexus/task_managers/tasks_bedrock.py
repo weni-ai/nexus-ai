@@ -1,4 +1,3 @@
-import pickle
 from time import sleep
 from typing import List, Dict
 
@@ -84,10 +83,9 @@ def bedrock_upload_file(
     content_base_uuid: str,
     user_email: str,
     content_base_file_uuid: str,
+    filename: str
 ):
     print("[+ 🦑 BEDROCK: Task to Upload File +]")
-
-    file = pickle.loads(file)
 
     file_database = BedrockFileDatabase()
     file_database_response = file_database.add_file(file, content_base_uuid, content_base_file_uuid)

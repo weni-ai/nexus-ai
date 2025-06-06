@@ -1,5 +1,4 @@
 import logging
-import pickle
 from typing import Dict
 
 import redis
@@ -75,10 +74,10 @@ def upload_file(
     extension_file: str,
     user_email: str,
     content_base_file_uuid: str,
-    load_type: str = None
+    load_type: str = None,
+    filename: str = None
 ):
-    file = pickle.loads(file)
-    file_database_response = s3FileDatabase().add_file(file)
+    file_database_response = s3FileDatabase().add_file(file, filename)
 
     if file_database_response.status != 0:
         return {

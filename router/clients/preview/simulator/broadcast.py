@@ -14,7 +14,6 @@ class SimulateBroadcast(DirectMessage):
         self.get_file_info = get_file_info
 
     def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> None:
-
         sources: List[Dict] = []
         seen_uuid: List[str] = []
 
@@ -36,11 +35,12 @@ class SimulateBroadcast(DirectMessage):
                     "extension_file": file_info.get("extension_file"),
                 })
 
-        return {"type": "broadcast", "message": text, "fonts": sources}
+        response_data = {"type": "broadcast", "message": text, "fonts": sources}
+
+        return response_data
 
 
 class SimulateWhatsAppBroadcastHTTPClient(DirectMessage):
-
     def __init__(self, host: str, access_token: str) -> None:
         self.__host = host
         self.__access_token = access_token
@@ -81,7 +81,6 @@ class SimulateWhatsAppBroadcastHTTPClient(DirectMessage):
                 return obj
             except json.JSONDecodeError:
                 try:
-                    # print(f"Error parsing JSON: {json_str}")
                     obj = ast.literal_eval(json_str)
                     return obj
                 except Exception:
@@ -137,5 +136,6 @@ class SimulateWhatsAppBroadcastHTTPClient(DirectMessage):
         full_chunks: List[Dict] = None
     ) -> None:
         msgs = self.get_json_strings(msg)
+        response_data = {"type": "broadcast", "message": msgs, "fonts": []}
 
-        return {"type": "broadcast", "message": msgs, "fonts": []}
+        return response_data
