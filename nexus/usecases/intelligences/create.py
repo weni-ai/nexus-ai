@@ -143,6 +143,22 @@ class CreateContentBaseTextUseCase():
         )
         return contentbasetext
 
+    def create_inline_contentbasetext(
+        self,
+        content_base_text_dto: ContentBaseTextDTO,
+        content_base: ContentBase,
+        user_email: str,
+    ) -> ContentBaseText:
+        user = users.get_by_email(user_email)
+
+        return ContentBaseText.objects.create(
+            text=content_base_text_dto.text,
+            content_base=content_base,
+            created_by=user,
+            file=content_base_text_dto.file,
+            file_name=content_base_text_dto.file_name
+        )
+
 
 class CreateContentBaseFileUseCase():
 

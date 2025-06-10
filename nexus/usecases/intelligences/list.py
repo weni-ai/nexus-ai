@@ -102,6 +102,9 @@ class ListContentBaseTextUseCase():
         contentbase = get_by_contentbase_uuid(contentbase_uuid)
         return ContentBaseText.objects.filter(content_base=contentbase)
 
+    def get_inline_contentbasetext(self, content_base: ContentBase):
+        return ContentBaseText.objects.filter(content_base=content_base)
+
 
 class ListContentBaseFileUseCase():
 
@@ -118,6 +121,9 @@ class ListContentBaseFileUseCase():
         content_base = get_by_contentbase_uuid(contentbase_uuid=contentbase_uuid)
         return ContentBaseFile.objects.filter(content_base=content_base)
 
+    def get_inline_contentbase_file(self, content_base: ContentBase):
+        return ContentBaseFile.objects.filter(content_base=content_base)
+
 
 class ListContentBaseLinkUseCase():
     def get_contentbase_link(self, contentbase_uuid: str, user_email: str):
@@ -131,6 +137,9 @@ class ListContentBaseLinkUseCase():
             raise IntelligencePermissionDenied()
 
         content_base = get_by_contentbase_uuid(contentbase_uuid=contentbase_uuid)
+        return ContentBaseLink.objects.filter(content_base=content_base)
+
+    def get_inline_contentbase_link(self, content_base: ContentBase):
         return ContentBaseLink.objects.filter(content_base=content_base)
 
 

@@ -132,6 +132,14 @@ class DeleteContentBaseTextUseCase():
         )
         return True
 
+    def delete_inline_contentbasetext(
+            self,
+            contentbasetext_uuid: str
+    ):
+        contentbasetext = get_by_contentbasetext_uuid(contentbasetext_uuid)
+        contentbasetext.delete()
+        return True
+
     def delete_content_base_text_from_index(self, contentbasetext_uuid: str, content_base_uuid: str, content_base_file_name: str):
         self.file_database.delete(
             content_base_uuid=content_base_uuid,
