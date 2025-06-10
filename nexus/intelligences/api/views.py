@@ -636,10 +636,9 @@ class InlineContentBaseTextViewset(
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def create(self, request, content_base_uuid: str):
+    def create(self, request, project_uuid: str):
         try:
             user_email = request.user.email
-            project_uuid = self.kwargs.get('project_uuid')
             content_base = get_default_content_base_by_project(project_uuid)
 
             serializer = self.get_serializer(data=request.data)
@@ -655,7 +654,7 @@ class InlineContentBaseTextViewset(
             )
             cbt_dto = intelligences.ContentBaseTextDTO(
                 text=text,
-                content_base_uuid=content_base_uuid,
+                content_base_uuid=content_base.uuid,
                 user_email=user_email
             )
             content_base_text = intelligences.CreateContentBaseTextUseCase().create_inline_contentbasetext(
@@ -664,7 +663,7 @@ class InlineContentBaseTextViewset(
                 content_base=content_base,
                 user_email=user_email
             )
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base.uuid)
             if project.indexer_database == Project.BEDROCK:
                 bedrock_upload_text_file.delay(
                     content_base_dto=cb_dto.__dict__,
