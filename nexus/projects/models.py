@@ -47,6 +47,7 @@ class Project(BaseModel, SoftDeleteModel):
     rationale_switch = models.BooleanField(default=False)
     inline_agent_switch = models.BooleanField(default=False)
     use_components = models.BooleanField(default=False)
+    default_supervisor_foundation_model = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return f'{self.uuid} - Project: {self.name} - Org: {self.org.name}'
