@@ -658,7 +658,6 @@ class InlineContentBaseTextViewset(
                 user_email=user_email
             )
             content_base_text = intelligences.CreateContentBaseTextUseCase().create_inline_contentbasetext(
-                content_base_dto=content_base,
                 content_base_text_dto=cbt_dto,
                 content_base=content_base,
                 user_email=user_email
@@ -1169,10 +1168,30 @@ class InlineContentBaseLinkViewset(ModelViewSet):
     permission_classes = [ProjectPermission]
 
     def get_queryset(self):
+        print("Get Queryset")
         use_case = intelligences.ListContentBaseLinkUseCase()
         project_uuid = self.kwargs.get('project_uuid')
+        print("ProjectUUID", project_uuid)
         content_base = get_default_content_base_by_project(project_uuid)
         return use_case.get_inline_contentbase_link(content_base=content_base)
+
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    def retrieve(self, request, *args, **kwargs):
+        try:
+            contentbaselink_uuid = kwargs.get('contentbaselink_uuid')
+            print("ContentBaseLinkUUID", contentbaselink_uuid)
+            use_case = intelligences.RetrieveContentBaseLinkUseCase()
+            content_base_link = use_case.get_inline_contentbaselink(
+                content_base_link_uuid=contentbaselink_uuid,
+            )
+            serializer = self.get_serializer(content_base_link)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ObjectDoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
 
     def create(self, request, project_uuid: str):
         try:
@@ -1223,9 +1242,12 @@ class InlineContentBaseLinkViewset(ModelViewSet):
             contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
             project_uuid: str = kwargs.get('project_uuid')
 
+            print("ContentBaseLinkUUID", contentbaselink_uuid)
+            print("ProjectUUID", project_uuid)
+
             use_case = intelligences.RetrieveContentBaseLinkUseCase()
-            content_base_link = use_case.get_contentbaselink(
-                contentbaselink_uuid=contentbaselink_uuid,
+            content_base_link = use_case.get_inline_contentbaselink(
+                content_base_link_uuid=contentbaselink_uuid,
             )
             project_use_case = ProjectsUseCase()
             project = project_use_case.get_by_uuid(project_uuid)
