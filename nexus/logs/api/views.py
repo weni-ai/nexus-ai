@@ -9,6 +9,7 @@ from rest_framework.mixins import ListModelMixin
 from rest_framework.viewsets import GenericViewSet
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 
 from nexus.logs.models import MessageLog, RecentActivities
 from nexus.logs.api.serializers import (
@@ -131,7 +132,6 @@ class MessageHistoryViewset(
     permission_classes = [ProjectPermission]
 
     def get_queryset(self):
-
         project_uuid = self.kwargs.get('project_uuid')
 
         params = {
@@ -150,12 +150,12 @@ class MessageHistoryViewset(
         started_day = parse_date(started_day)
         ended_day = parse_date(ended_day)
         if not started_day or not ended_day:
-            return Response({"error": "Invalid date format for started_day or ended_day"}, status=400)
+            raise ValidationError({"error": "Invalid date format for started_day or ended_day"})
 
         service_available = settings.SUPERVISOR_SERVICE_AVAILABLE
         service_available_projects = settings.SUPERVISOR_SERVICE_AVAILABLE_PROJECTS
         if not service_available and project_uuid not in service_available_projects:
-            return Response([], status=200)
+            return MessageLog.objects.none()
 
         params["created_at__date__gte"] = started_day
         params["created_at__date__lte"] = ended_day
