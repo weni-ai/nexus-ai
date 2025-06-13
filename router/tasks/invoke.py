@@ -112,7 +112,7 @@ def start_inline_agents(
             msg_event=message.get("msg_event"),
             contact_fields=message.get("contact_fields", {}),
         )
-        print(f"[ + DEBUG + ] start_inline_agents contact_fields: {message.get('contact_fields', [])}")
+        print(f"[ + DEBUG + ] start_inline_agents contact_fields: {message.contact_fields}")
 
         print(f"[ + DEBUG + ] Message: {message}")
 
