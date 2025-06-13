@@ -62,7 +62,7 @@ class TestBedrockAdapter(TestCase):
         contact_urn = "789"
         rationale_switch = True
 
-        backend = BedrockBackend(mock_event_manager_notify)
+        backend = BedrockBackend()
 
         result = backend._handle_rationale_in_response(
             rationale_text=rationale_text,
@@ -70,7 +70,8 @@ class TestBedrockAdapter(TestCase):
             session_id=session_id,
             project_uuid=project_uuid,
             contact_urn=contact_urn,
-            rationale_switch=rationale_switch
+            rationale_switch=rationale_switch,
+            event_manager_notify=mock_event_manager_notify
         )
 
         self.assertEqual(result, expected_result)
