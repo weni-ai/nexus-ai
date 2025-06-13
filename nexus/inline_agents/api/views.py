@@ -59,11 +59,13 @@ class PushAgents(APIView):
 
         agents = agents["agents"]
 
-        print(json.dumps(agents, indent=4, default=str))
-        print(files)
+        print(f"agents: {json.dumps(agents, indent=4, default=str)}")
+        print(f"project_uuid: {project_uuid}")
+        print(f"files: {files}")
 
         try:
             project = Project.objects.get(uuid=project_uuid)
+            print("get project")
             for key in agents:
                 agent_qs = Agent.objects.filter(slug=key, project=project)
                 existing_agent = agent_qs.exists()

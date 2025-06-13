@@ -22,6 +22,7 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             agent.get("guardrails", []),
             agent.get("components", [])
         )
+        print(f"instructions: {instructions}")
         agent_obj = Agent.objects.create(
             name=agent["name"],
             slug=agent_key,
@@ -31,6 +32,8 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             foundation_model=settings.AWS_BEDROCK_AGENTS_MODEL_ID[0],
         )
         self.handle_tools(agent_obj, project, agent["tools"], files, str(project.uuid))
+        print(f"[+ 🧠 Created agent {agent_key} +]")
+        print(f"[+ 🧠 Creating agent credentials {agent.get('credentials', {})} +]")
         self.create_credentials(agent_obj, project, agent.get("credentials", {}))
         print(f"[+ 🧠 Created agent {agent_key} +]")
         return agent_obj
@@ -39,6 +42,7 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         created_credentials = []
         if not credentials:
             return
+        print(f"[+ 🧠 Creating credentials {credentials} +]")
 
         for key, credential in credentials.items():
             print(f"[+ 🧠 Creating credential {key} +]")
@@ -48,8 +52,11 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 project=project,
                 key=key
             )
+            print(f"[+ 🧠 Existing credential {existing_credential} +]")
 
             credential_value = encrypt_value(credential.get('value')) if is_confidential else credential.get('value')
+
+            print(f"[+ 🧠 Credential value {credential_value} +]")
 
             if existing_credential.exists():
                 existing_credential = existing_credential.first()
@@ -57,11 +64,16 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 existing_credential.label = credential.get('label', key)
                 existing_credential.placeholder = credential.get('placeholder', '')
                 existing_credential.is_confidential = is_confidential
+                print(f"[+ 🧠 Updating existing credential label {existing_credential.label} +]")
+                print(f"[+ 🧠 Updating existing credential placeholder {existing_credential.placeholder} +]")
+                print(f"[+ 🧠 Updating existing credential is_confidential {existing_credential.is_confidential} +]")
 
                 if credential_value:
                     existing_credential.value = credential_value
+                    print(f"[+ 🧠 Updating existing credential value {existing_credential.value} +]")
 
                 existing_credential.save()
+                print(f"[+ 🧠 Saved existing credential {existing_credential} +]")
                 if agent not in existing_credential.agents.all():
                     existing_credential.agents.add(agent)
             else:
@@ -73,6 +85,7 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                     is_confidential=is_confidential,
                     value=credential_value if credential_value else "",
                 )
+                print(f"[+ 🧠 Created new credential {new_credential.__dict__} +]")
                 new_credential.agents.add(agent)
 
             created_credentials.append(key)
