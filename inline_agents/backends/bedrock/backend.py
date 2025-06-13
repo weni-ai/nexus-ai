@@ -52,7 +52,7 @@ class BedrockBackend(InlineAgentsBackend):
         turn_off_rationale: bool = False
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
-
+        print(f"[ + DEBUG + ] invoke_agents contact_fields: {contact_fields}")
         typing_usecase = TypingUsecase()
         if not preview:
             typing_usecase.send_typing_message(
