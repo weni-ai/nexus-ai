@@ -1,14 +1,21 @@
 import json
-import pendulum
-from django.conf import settings
+import logging
 import os
+from typing import Optional
 
-from inline_agents.adapter import TeamAdapter
-from inline_agents.backends.bedrock.prompts import PROMPT_POS_PROCESSING
-
+import pendulum
+import sentry_sdk
+from django.conf import settings
 from django.utils.text import slugify
-from nexus.inline_agents.components import Components
+from nexus.celery import app as celery_app
+from weni_datalake_sdk.clients.client import send_event_data
+from weni_datalake_sdk.paths.events_path import EventPath
+
+from inline_agents.adapter import TeamAdapter, DataLakeEventAdapter
+from inline_agents.backends.bedrock.prompts import PROMPT_POS_PROCESSING
 from nexus.inline_agents.models import AgentCredential, Guardrail
+
+logger = logging.getLogger(__name__)
 
 
 class BedrockTeamAdapter(TeamAdapter):
@@ -117,7 +124,7 @@ class BedrockTeamAdapter(TeamAdapter):
 
         if contact:
             session_attributes["contact"] = json.dumps(contact, default=str)
-        
+
         if project:
             session_attributes["project"] = json.dumps(project, default=str)
 
@@ -291,7 +298,7 @@ class BedrockTeamAdapter(TeamAdapter):
                         'topK': 250,
                         'topP': 1
                     },
-                    
+
                     'promptType': 'POST_PROCESSING',
                     'promptState': 'ENABLED',
                     'parserMode': 'OVERRIDDEN',
@@ -324,3 +331,151 @@ class BedrockTeamAdapter(TeamAdapter):
                 }
             ]
         }
+
+
+class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
+
+    def __init__(
+        self,
+        send_data_lake_event_task: callable = None
+    ):
+        self.send_data_lake_event_task = send_data_lake_event_task
+        if self.send_data_lake_event_task is None:
+            self.send_data_lake_event_task = self._get_send_data_lake_event_task()
+
+    def _get_send_data_lake_event_task(
+        self
+    ) -> callable:
+        return send_data_lake_event
+
+    def _has_called_agent(
+        self,
+        inline_traces: dict
+    ) -> bool:
+        try:
+            trace = inline_traces.get('trace', {})
+            orchestration = trace.get('orchestrationTrace', {})
+            invocation = orchestration.get('invocationInput', {})
+            agent_collaboration = invocation.get('agentCollaboratorInvocationInput', {})
+            if agent_collaboration:
+                return self.metadata_agent_collaboration(agent_collaboration)
+            return False
+        except (KeyError, AttributeError) as e:
+            logger.warning(f"Error checking agent call: {str(e)}")
+            sentry_sdk.set_tag("project_uuid", inline_traces.get('project_uuid', 'unknown'))
+            sentry_sdk.capture_exception(e)
+            return False
+
+    def _has_called_action_group(
+        self,
+        inline_traces: dict
+    ) -> bool:
+        try:
+            trace = inline_traces.get('trace', {})
+            orchestration = trace.get('orchestrationTrace', {})
+            invocation = orchestration.get('invocationInput', {})
+            action_group = invocation.get('actionGroupInvocationInput')
+            if action_group:
+                return self.metadata_action_group(action_group)
+            return False
+        except (KeyError, AttributeError) as e:
+            logger.warning(f"Error checking action group call: {str(e)}")
+            sentry_sdk.set_tag("project_uuid", inline_traces.get('project_uuid', 'unknown'))
+            sentry_sdk.capture_exception(e)
+            return False
+
+    def metadata_agent_collaboration(
+        self,
+        agent_collaboration_invocation_input: dict
+    ) -> dict:
+        try:
+            return {
+                "agent_name": agent_collaboration_invocation_input['agentCollaboratorName'],
+                "input_text": agent_collaboration_invocation_input['input']['text'],
+            }
+        except (KeyError, AttributeError) as e:
+            logger.error(f"Error extracting agent collaboration metadata: {str(e)}")
+            sentry_sdk.set_tag("project_uuid", agent_collaboration_invocation_input.get('project_uuid', 'unknown'))
+            sentry_sdk.capture_exception(e)
+            return {
+                "agent_name": "unknown",
+                "input_text": "unknown"
+            }
+
+    def metadata_action_group(
+        self,
+        action_group_invocation_input: dict
+    ) -> dict:
+        try:
+            return {
+                "action_group_name": action_group_invocation_input['actionGroupName'],
+                "function_name": action_group_invocation_input['function'],
+                "parameters": action_group_invocation_input['parameters']
+            }
+        except (KeyError, AttributeError) as e:
+            logger.error(f"Error extracting action group metadata: {str(e)}")
+            sentry_sdk.set_tag("project_uuid", action_group_invocation_input.get('project_uuid', 'unknown'))
+            sentry_sdk.capture_exception(e)
+            return {
+                "action_group_name": "unknown",
+                "function_name": "unknown",
+                "parameters": []
+            }
+
+    def to_data_lake_event(
+        self,
+        inline_trace: dict,
+        project_uuid: str,
+        contact_urn: str
+    ) -> Optional[dict]:
+        try:
+            has_agent = self._has_called_agent(inline_trace)
+            has_action_group = self._has_called_action_group(inline_trace)
+
+            if not (has_agent or has_action_group):
+                logger.debug("No agent or action group found in trace")
+                return None
+
+            event_data = {
+                "key": "trace",
+                "date": pendulum.now("America/Sao_Paulo").to_iso8601_string(),
+                "project": project_uuid,
+                "contact_urn": contact_urn,
+                "value_type": "string",
+                "value": "teste",
+                "metadata": {}
+            }
+
+            if has_action_group:
+                event_data["metadata"]["action_group"] = has_action_group
+                event_data["event_name"] = "action_group"
+                self.send_data_lake_event_task.delay(event_data)
+                return event_data
+
+            if has_agent:
+                event_data["metadata"]["agent_collaboration"] = has_agent
+                event_data["event_name"] = "agent_invocation"
+                self.send_data_lake_event_task.delay(event_data)
+                return event_data
+
+        except Exception as e:
+            logger.error(f"Error processing data lake event: {str(e)}")
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.capture_exception(e)
+            return None
+
+
+@celery_app.task
+def send_data_lake_event(
+    event_data: dict
+):
+    try:
+        response = send_event_data(EventPath, event_data)
+        logger.info(f"Successfully sent data lake event: {response}")
+        return response
+    except Exception as e:
+        logger.error(f"Failed to send data lake event: {str(e)}")
+        sentry_sdk.set_tag("project_uuid", event_data.get("project", "unknown"))
+        sentry_sdk.set_context("event_data", event_data)
+        sentry_sdk.capture_exception(e)
+        raise

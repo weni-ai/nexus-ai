@@ -5045,13 +5045,13 @@ files = [
 
 [[package]]
 name = "weni-datalake-sdk"
-version = "0.2.1"
+version = "0.2.2a0"
 description = "Lib to connect python/django modules to redshift"
 optional = false
 python-versions = "<4.0,>=3.9"
 files = [
-    {file = "weni_datalake_sdk-0.2.1-py3-none-any.whl", hash = "sha256:8eb6731c126a161436a44691ef352cb185d1608044c1b8f4cba5cac33957dfe8"},
-    {file = "weni_datalake_sdk-0.2.1.tar.gz", hash = "sha256:784ff2d61de37b82e096db3ffd14d273e109f4777973eb05b7f0e61b17d0834c"},
+    {file = "weni_datalake_sdk-0.2.2a0-py3-none-any.whl", hash = "sha256:286ea0a751c4a2348eb3a096bb13d1657da6874ab7befb711d17fcf1477edd2c"},
+    {file = "weni_datalake_sdk-0.2.2a0.tar.gz", hash = "sha256:e3ea82ff57d4f4ffe31e5d281c7b675c4fbe8a7b7937aeb3e603feca4db38d0e"},
 ]
 
 [package.dependencies]
@@ -5360,4 +5360,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "0d5d03168307f2d4b2fd7997fea6e762a36fd5da4a256a567f864a29865f2cff"
+content-hash = "50a5737ecab1a3e9ed1d36117132e9fd1cc9c89ecf355b342f4ca7d3e8a76fe5"
