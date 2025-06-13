@@ -24,6 +24,7 @@ class BedrockTeamAdapter(TeamAdapter):
         contact_fields: str = ""
     ) -> dict:
         # TODO: change self to cls
+        print(f"[ + DEBUG + ] adpter_to_external contact fields: {contact_fields}")
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
         from nexus.projects.models import Project
         content_base = get_default_content_base_by_project(project_uuid)
