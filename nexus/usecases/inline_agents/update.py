@@ -43,7 +43,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         existing_credentials = {
             cred.key: cred for cred in AgentCredential.objects.filter(project=project, agents__in=[agent])
         }
-
+        print(f"existing_credentials: {existing_credentials} on agent {agent.name} and project {project.uuid} - {project.name}")
         for key, credential in credentials.items():
             is_confidential = credential.get('is_confidential', True)
 
@@ -70,7 +70,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
         for cred in existing_credentials.values():
             agents = list(cred.agents.all())
-
+            print(f"agents: {agents}")
             if len(agents) <= 0:
                 print(f"[+ 🧠 Deleting empty credential {cred.key} {project.uuid} +]")
                 cred.delete()
@@ -78,6 +78,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 print(f"[+ 🧠 Deleting credential {cred.key} {project.uuid} +]")
                 cred.delete()
             elif agent in agents:
+                print(f"[+ 🧠 Removing agent {agent.name} from credential {cred.key} {project.uuid} +]")
                 cred.agents.remove(agent)
 
     def update_credential_value(self, project_uuid: str, key: str, value: str) -> bool:
