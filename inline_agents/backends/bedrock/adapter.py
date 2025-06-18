@@ -427,8 +427,13 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         self,
         inline_trace: dict,
         project_uuid: str,
-        contact_urn: str
+        contact_urn: str,
+        preview: bool = False
     ) -> Optional[dict]:
+
+        if preview:
+            return None
+
         try:
             has_agent = self._has_called_agent(inline_trace)
             has_action_group = self._has_called_action_group(inline_trace)
@@ -472,7 +477,7 @@ def send_data_lake_event(
     event_data: dict
 ):
     try:
-        print("Event data: ", event_data)
+        logger.info(f"Sending event data: {event_data}")
         response = send_event_data(EventPath, event_data)
         logger.info(f"Successfully sent data lake event: {response}")
         return response

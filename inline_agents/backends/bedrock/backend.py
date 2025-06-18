@@ -152,7 +152,8 @@ class BedrockBackend(InlineAgentsBackend):
                 self._data_lake_event_adapter.to_data_lake_event(
                     inline_trace=trace_data,
                     project_uuid=project_uuid,
-                    contact_urn=contact_urn
+                    contact_urn=contact_urn,
+                    preview=preview
                 )
 
                 if "rationale" in orchestration_trace and msg_external_id and not preview:
