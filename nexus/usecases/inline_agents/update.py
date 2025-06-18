@@ -39,16 +39,22 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             if hasattr(agent, 'inline_credentials'):
                 agent.inline_credentials.all().delete()
             return
+        print(f"[+ 🧠 Updating credentials for agent {agent.name} and project {project.uuid} - {project.name} +]")
+
+        agent_credentials = AgentCredential.objects.filter(project=project, agents__in=[agent])
 
         existing_credentials = {
-            cred.key: cred for cred in AgentCredential.objects.filter(project=project, agents__in=[agent])
+            cred.key: cred for cred in agent_credentials
         }
-        print(f"existing_credentials: {existing_credentials} on agent {agent.name} and project {project.uuid} - {project.name}")
+        print(f"existing_credentials: {existing_credentials}")
+        for cred in existing_credentials.values():
+            print(f"cred: {cred.key} {cred.label} {cred.value} {cred.placeholder} {cred.is_confidential} {cred.agents.all()}")
         for key, credential in credentials.items():
             is_confidential = credential.get('is_confidential', True)
-
+            print(f"is confidential: {is_confidential}")
+            print(f"{key} in {existing_credentials}: {key in existing_credentials}")
             if key in existing_credentials:
-                print(f"[+ 🧠 Updating credential {key} +]")
+                print(f"[+ 🧠 Updating credential {key} to {credential} +]")
                 cred = existing_credentials[key]
                 cred.label = credential.get('label', key)
                 cred.placeholder = credential.get('placeholder', '')
