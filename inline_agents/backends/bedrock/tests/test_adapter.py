@@ -32,14 +32,13 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             contact_urn=self.contact_urn
         )
 
-        self.assertEqual(event_data["event_name"], "action_group")
-        self.assertEqual(event_data["key"], "trace")
+        self.assertEqual(event_data["event_name"], "weni_nexus_data")
+        self.assertEqual(event_data["key"], "tool_call")
         self.assertEqual(event_data["project"], self.project_uuid)
         self.assertEqual(event_data["contact_urn"], self.contact_urn)
         self.assertEqual(event_data["value_type"], "string")
-        self.assertEqual(event_data["value"], "teste")
-        self.assertIn("action_group", event_data["metadata"])
-        self.assertTrue(event_data["metadata"]["action_group"])
+        self.assertEqual(event_data["value"], event_data["metadata"]["tool_call"]["tool_name"])
+        self.assertIn("tool_call", event_data["metadata"])
 
     def test_to_data_lake_event_with_agent_collaboration(self):
         agent_trace = AgentCollaborationTraceFactory()
@@ -50,14 +49,13 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             contact_urn=self.contact_urn
         )
 
-        self.assertEqual(event_data["event_name"], "agent_invocation")
-        self.assertEqual(event_data["key"], "trace")
+        self.assertEqual(event_data["event_name"], "weni_nexus_data")
+        self.assertEqual(event_data["key"], "agent_invocation")
         self.assertEqual(event_data["project"], self.project_uuid)
         self.assertEqual(event_data["contact_urn"], self.contact_urn)
         self.assertEqual(event_data["value_type"], "string")
-        self.assertEqual(event_data["value"], "teste")
+        self.assertEqual(event_data["value"], event_data["metadata"]["agent_collaboration"]["agent_name"])
         self.assertIn("agent_collaboration", event_data["metadata"])
-        self.assertTrue(event_data["metadata"]["agent_collaboration"])
 
     def test_metadata_action_group(self):
         action_group_input = {
@@ -74,7 +72,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
 
         metadata = self.adapter.metadata_action_group(action_group_input)
 
-        self.assertEqual(metadata["action_group_name"], "test_action_group")
+        self.assertEqual(metadata["tool_name"], "test_action_group")
         self.assertEqual(metadata["function_name"], "test_function")
         self.assertEqual(metadata["parameters"], action_group_input["parameters"])
 

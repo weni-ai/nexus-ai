@@ -409,7 +409,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
     ) -> dict:
         try:
             return {
-                "action_group_name": action_group_invocation_input['actionGroupName'],
+                "tool_name": action_group_invocation_input['actionGroupName'],
                 "function_name": action_group_invocation_input['function'],
                 "parameters": action_group_invocation_input['parameters']
             }
@@ -418,7 +418,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             sentry_sdk.set_tag("project_uuid", action_group_invocation_input.get('project_uuid', 'unknown'))
             sentry_sdk.capture_exception(e)
             return {
-                "action_group_name": "unknown",
+                "tool_name": "unknown",
                 "function_name": "unknown",
                 "parameters": []
             }
@@ -438,24 +438,25 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                 return None
 
             event_data = {
-                "key": "trace",
+                "event_name": "weni_nexus_data",
                 "date": pendulum.now("America/Sao_Paulo").to_iso8601_string(),
                 "project": project_uuid,
                 "contact_urn": contact_urn,
                 "value_type": "string",
-                "value": "teste",
                 "metadata": {}
             }
 
             if has_action_group:
-                event_data["metadata"]["action_group"] = has_action_group
-                event_data["event_name"] = "action_group"
-                self.send_data_lake_event_task.delay(event_data)
+                event_data["metadata"]["tool_call"] = has_action_group
+                event_data["key"] = "tool_call"
+                event_data["value"] = has_action_group["tool_name"]
+                self.send_data_lake_event_task(event_data)
                 return event_data
 
             if has_agent:
                 event_data["metadata"]["agent_collaboration"] = has_agent
-                event_data["event_name"] = "agent_invocation"
+                event_data["key"] = "agent_invocation"
+                event_data["value"] = has_agent["agent_name"]
                 self.send_data_lake_event_task.delay(event_data)
                 return event_data
 
@@ -471,6 +472,7 @@ def send_data_lake_event(
     event_data: dict
 ):
     try:
+        print("Event data: ", event_data)
         response = send_event_data(EventPath, event_data)
         logger.info(f"Successfully sent data lake event: {response}")
         return response
