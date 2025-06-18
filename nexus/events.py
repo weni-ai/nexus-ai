@@ -22,6 +22,8 @@ from router.traces_observers.rationale_observer import RationaleObserver
 from router.traces_observers.summary import SummaryTracesObserver
 from router.traces_observers.save_traces import SaveTracesObserver
 
+
+# TODO: Refactor to use a registration function to register observers and decorators to fix circular imports.
 event_manager = EventManager()
 
 event_manager.subscribe(

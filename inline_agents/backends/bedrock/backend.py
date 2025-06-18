@@ -8,7 +8,6 @@ from django.template.defaultfilters import slugify
 
 from inline_agents.backend import InlineAgentsBackend
 from nexus.environment import env
-from nexus.events import event_manager
 from nexus.inline_agents.backends.bedrock.repository import (
     BedrockSupervisorRepository,
 )
@@ -18,7 +17,8 @@ from nexus.projects.websockets.consumers import (
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
 
-from .adapter import BedrockTeamAdapter
+from .adapter import BedrockTeamAdapter, BedrockDataLakeEventAdapter
+from inline_agents.adapter import DataLakeEventAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +29,24 @@ class BedrockBackend(InlineAgentsBackend):
 
     REGION_NAME = env.str('AWS_BEDROCK_REGION_NAME')
 
-    def __init__(self, event_manager_notify=event_manager.notify):
-        self.event_manager_notify = event_manager_notify
+    def __init__(self):
+        super().__init__()
+        self._event_manager_notify = None
+        self._data_lake_event_adapter = None
 
     def _get_client(self):
         return boto3.client('bedrock-agent-runtime', region_name=self.REGION_NAME)
+
+    def _get_event_manager_notify(self):
+        if self._event_manager_notify is None:
+            from nexus.events import event_manager
+            self._event_manager_notify = event_manager.notify
+        return self._event_manager_notify
+
+    def _get_data_lake_event_adapter(self):
+        if self._data_lake_event_adapter is None:
+            self._data_lake_event_adapter = BedrockDataLakeEventAdapter()
+        return self._data_lake_event_adapter
 
     def invoke_agents(
         self,
@@ -49,17 +62,23 @@ class BedrockBackend(InlineAgentsBackend):
         use_components: bool = False,
         contact_fields: str = "",
         msg_external_id: str = None,
-        turn_off_rationale: bool = False
+        turn_off_rationale: bool = False,
+        event_manager_notify: callable = None,
+        data_lake_event_adapter: DataLakeEventAdapter = None
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
 
+        # Set dependencies
+        self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
+        self._data_lake_event_adapter = data_lake_event_adapter or self._get_data_lake_event_adapter()
+
         typing_usecase = TypingUsecase()
-        if not preview:
-            typing_usecase.send_typing_message(
-                contact_urn=contact_urn,
-                msg_external_id=msg_external_id,
-                project_uuid=project_uuid
-            )
+        typing_usecase.send_typing_message(
+            contact_urn=contact_urn,
+            msg_external_id=msg_external_id,
+            project_uuid=project_uuid,
+            preview=preview
+        )
 
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
@@ -129,11 +148,18 @@ class BedrockBackend(InlineAgentsBackend):
 
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
 
+                self._data_lake_event_adapter.to_data_lake_event(
+                    inline_trace=trace_data,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    preview=preview
+                )
+
                 if "rationale" in orchestration_trace and msg_external_id and not preview:
                     typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
 
                 # Notify observers about the trace
-                self.event_manager_notify(
+                self._event_manager_notify(
                     event="inline_trace_observers",
                     inline_traces=trace_data,
                     user_input=input_text,
@@ -159,7 +185,7 @@ class BedrockBackend(InlineAgentsBackend):
                 print("------------------------------------------")
 
         # Saving traces on s3
-        self.event_manager_notify(
+        self._event_manager_notify(
             event='save_inline_trace_events',
             trace_events=trace_events,
             project_uuid=project_uuid,
