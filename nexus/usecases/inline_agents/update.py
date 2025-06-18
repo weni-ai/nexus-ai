@@ -40,7 +40,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 agent.inline_credentials.all().delete()
             return
         print(f"[+ 🧠 Updating credentials for agent {agent.name} and project {project.uuid} - {project.name} +]")
-
+        print(f"agent: {agent.__dict__}")
         agent_credentials = AgentCredential.objects.filter(project=project, agents__in=[agent])
 
         existing_credentials = {
@@ -86,6 +86,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             elif agent in agents:
                 print(f"[+ 🧠 Removing agent {agent.name} from credential {cred.key} {project.uuid} +]")
                 cred.agents.remove(agent)
+        print(f"[+ 🧠 Done updating credentials for agent {agent.name} and project {project.uuid} - {project.name} +]")
 
     def update_credential_value(self, project_uuid: str, key: str, value: str) -> bool:
         try:
