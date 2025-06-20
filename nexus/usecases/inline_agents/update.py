@@ -41,14 +41,11 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             return
         print(f"[+ 🧠 Updating credentials for agent {agent.name} and project {project.uuid} - {project.name} +]")
         print(f"agent: {agent.__dict__}")
-        agent_credentials = AgentCredential.objects.filter(project=project, agents__in=[agent])
+        agent_credentials = AgentCredential.objects.filter(project=project)
 
         existing_credentials = {
             cred.key: cred for cred in agent_credentials
         }
-        print(f"existing_credentials: {existing_credentials}")
-        for cred in existing_credentials.values():
-            print(f"cred: {cred.key} {cred.label} {cred.value} {cred.placeholder} {cred.is_confidential} {cred.agents.all()}")
         for key, credential in credentials.items():
             is_confidential = credential.get('is_confidential', True)
             print(f"is confidential: {is_confidential}")
