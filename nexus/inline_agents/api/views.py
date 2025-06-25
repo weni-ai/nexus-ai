@@ -76,7 +76,7 @@ class PushAgents(APIView):
         print(f"project_uuid: {project_uuid}")
         print(f"files: {files}")
 
-        if not self._check_can_edit_official_agent(agents=agents, user_email=request.user.email)
+        if not self._check_can_edit_official_agent(agents=agents, user_email=request.user.email):
             return Response({"error": f"Permission Error: You are not authorized to edit this official AI Agent {key}"}, status=403)
 
         try:
