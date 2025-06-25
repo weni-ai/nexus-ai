@@ -61,8 +61,8 @@ class PushAgents(APIView):
                     can_edit = True
                     break
             if existing_official_agent and not can_edit:
-                return False
-        return True
+                return key
+        return None
 
     def post(self, request, *args, **kwargs):
         agent_usecase = CreateAgentUseCase()
@@ -72,12 +72,13 @@ class PushAgents(APIView):
 
         agents = agents["agents"]
 
-        print(f"agents: {json.dumps(agents, indent=4, default=str)}")
-        print(f"project_uuid: {project_uuid}")
-        print(f"files: {files}")
 
-        if not self._check_can_edit_official_agent(agents=agents, user_email=request.user.email):
-            return Response({"error": f"Permission Error: You are not authorized to edit this official AI Agent {key}"}, status=403)
+        print(json.dumps(agents, indent=4, default=str))
+        print(files)
+        official_agent_key = self._check_can_edit_official_agent(agents=agents, user_email=request.user.email)
+        if official_agent_key is not None:
+            return Response({"error": f"Permission Error: You are not authorized to edit an official AI Agent {official_agent_key}"}, status=403)
+
 
         try:
             project = Project.objects.get(uuid=project_uuid)
