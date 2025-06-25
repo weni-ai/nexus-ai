@@ -72,14 +72,17 @@ class PushAgents(APIView):
 
         agents = agents["agents"]
 
+
         print(json.dumps(agents, indent=4, default=str))
         print(files)
         official_agent_key = self._check_can_edit_official_agent(agents=agents, user_email=request.user.email)
         if official_agent_key is not None:
             return Response({"error": f"Permission Error: You are not authorized to edit an official AI Agent {official_agent_key}"}, status=403)
 
+
         try:
             project = Project.objects.get(uuid=project_uuid)
+            print("get project")
             for key in agents:
                 agent_qs = Agent.objects.filter(slug=key, project=project)
                 existing_agent = agent_qs.exists()

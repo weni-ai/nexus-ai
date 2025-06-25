@@ -67,6 +67,7 @@ class BedrockBackend(InlineAgentsBackend):
         data_lake_event_adapter: DataLakeEventAdapter = None
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
+        print(f"[ + DEBUG + ] invoke_agents contact_fields: {contact_fields}")
 
         # Set dependencies
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()

@@ -39,16 +39,19 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             if hasattr(agent, 'inline_credentials'):
                 agent.inline_credentials.all().delete()
             return
+        print(f"[+ 🧠 Updating credentials for agent {agent.name} and project {project.uuid} - {project.name} +]")
+        print(f"agent: {agent.__dict__}")
+        agent_credentials = AgentCredential.objects.filter(project=project)
 
         existing_credentials = {
-            cred.key: cred for cred in AgentCredential.objects.filter(project=project, agents__in=[agent])
+            cred.key: cred for cred in agent_credentials
         }
-
         for key, credential in credentials.items():
             is_confidential = credential.get('is_confidential', True)
-
+            print(f"is confidential: {is_confidential}")
+            print(f"{key} in {existing_credentials}: {key in existing_credentials}")
             if key in existing_credentials:
-                print(f"[+ 🧠 Updating credential {key} +]")
+                print(f"[+ 🧠 Updating credential {key} to {credential} +]")
                 cred = existing_credentials[key]
                 cred.label = credential.get('label', key)
                 cred.placeholder = credential.get('placeholder', '')
@@ -70,7 +73,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
         for cred in existing_credentials.values():
             agents = list(cred.agents.all())
-
+            print(f"agents: {agents}")
             if len(agents) <= 0:
                 print(f"[+ 🧠 Deleting empty credential {cred.key} {project.uuid} +]")
                 cred.delete()
@@ -78,7 +81,9 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 print(f"[+ 🧠 Deleting credential {cred.key} {project.uuid} +]")
                 cred.delete()
             elif agent in agents:
+                print(f"[+ 🧠 Removing agent {agent.name} from credential {cred.key} {project.uuid} +]")
                 cred.agents.remove(agent)
+        print(f"[+ 🧠 Done updating credentials for agent {agent.name} and project {project.uuid} - {project.name} +]")
 
     def update_credential_value(self, project_uuid: str, key: str, value: str) -> bool:
         try:

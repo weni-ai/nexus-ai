@@ -25,6 +25,8 @@ class BedrockSupervisorRepository():
             "agent_collaboration": cls._get_agent_collaboration(project=project),
         }
 
+        print("[DEBUG] Supervisor", supervisor_dict)
+
         return supervisor_dict
 
     @classmethod
