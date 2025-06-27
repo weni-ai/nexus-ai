@@ -111,6 +111,8 @@ def start_inline_agents(
             attachments=attachments,
             msg_event=message.get("msg_event"),
             contact_fields=message.get("contact_fields", {}),
+            contact_name=message.get("contact_name", ""),
+            channel_uuid=message.get("channel_uuid", ""),
         )
 
         print(f"[DEBUG] Message: {message}")
@@ -165,6 +167,8 @@ def start_inline_agents(
             user_email=user_email,
             use_components=project.use_components,
             contact_fields=message.contact_fields_as_json,
+            contact_name=message.contact_name,
+            channel_uuid=message.channel_uuid,
             msg_external_id=message_event.get("msg_external_id", ""),
             turn_off_rationale=turn_off_rationale
         )
