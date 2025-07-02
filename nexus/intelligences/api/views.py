@@ -10,12 +10,15 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.authentication.authentication import ExternalTokenAuthentication
 from nexus.events import event_manager
 from nexus.intelligences.models import (
     ContentBase,
     ContentBaseFile,
     ContentBaseText,
     Intelligence,
+    Topics,
+    SubTopics,
 )
 from nexus.orgs import permissions
 from nexus.paginations import CustomCursorPagination
@@ -70,6 +73,8 @@ from .serializers import (
     IntelligenceSerializer,
     LLMConfigSerializer,
     RouterContentBaseSerializer,
+    TopicsSerializer,
+    SubTopicsSerializer,
 )
 
 
@@ -1326,3 +1331,77 @@ class CommerceHasAgentBuilder(views.APIView):
                 },
                 status=status.HTTP_200_OK
             )
+
+
+class TopicsViewSet(ModelViewSet):
+    serializer_class = TopicsSerializer
+    permission_classes = [ExternalTokenAuthentication]
+    lookup_field = 'uuid'
+
+    def get_queryset(self, *args, **kwargs):
+        if getattr(self, "swagger_fake_view", False):
+            return Topics.objects.none()  # pragma: no cover
+
+        project_uuid = self.kwargs.get('project_uuid')
+        if project_uuid:
+            return Topics.objects.filter(project__uuid=project_uuid)
+        return Topics.objects.none()
+
+    def create(self, request, *args, **kwargs):
+        project_uuid = self.kwargs.get('project_uuid')
+        if not project_uuid:
+            return Response(
+                {"error": "project_uuid is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return Response(
+                {"error": "Project not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(project=project)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SubTopicsViewSet(ModelViewSet):
+    serializer_class = SubTopicsSerializer
+    permission_classes = [ExternalTokenAuthentication]
+    lookup_field = 'uuid'
+
+    def get_queryset(self, *args, **kwargs):
+        if getattr(self, "swagger_fake_view", False):
+            return SubTopics.objects.none()  # pragma: no cover
+
+        topic_uuid = self.kwargs.get('topic_uuid')
+        if topic_uuid:
+            return SubTopics.objects.filter(topic__uuid=topic_uuid)
+        return SubTopics.objects.none()
+
+    def create(self, request, *args, **kwargs):
+        topic_uuid = self.kwargs.get('topic_uuid')
+        if not topic_uuid:
+            return Response(
+                {"error": "topic_uuid is required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            topic = Topics.objects.get(uuid=topic_uuid)
+        except Topics.DoesNotExist:
+            return Response(
+                {"error": "Topic not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(topic=topic)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
