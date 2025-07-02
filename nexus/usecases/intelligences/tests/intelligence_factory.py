@@ -10,6 +10,8 @@ from nexus.intelligences.models import (
     LLM,
     ContentBaseAgent,
     ContentBaseInstruction,
+    Topics,
+    SubTopics,
 )
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -144,3 +146,19 @@ class ContentBaseInstructionFactory(factory.django.DjangoModelFactory):
 
     content_base = factory.SubFactory(ContentBaseFactory)
     instruction = factory.Sequence(lambda n: 'test%d' % n)
+
+
+class TopicsFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Topics
+
+    name = factory.Sequence(lambda n: 'test%d' % n)
+    project = factory.SubFactory(ProjectFactory)
+
+
+class SubTopicsFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = SubTopics
+
+    name = factory.Sequence(lambda n: 'test%d' % n)
+    topic = factory.SubFactory(TopicsFactory)
