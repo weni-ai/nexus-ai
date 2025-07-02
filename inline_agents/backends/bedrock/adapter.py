@@ -252,6 +252,10 @@ class BedrockTeamAdapter(TeamAdapter):
             "{{PROJECT_ID}}", project_id
         ).replace(
             "{{CONTACT_ID}}", contact_id
+        ).replace(
+            "{{CONTACT_NAME}}", contact_name
+        ).replace(
+            "{{CHANNEL_UUID}}", channel_uuid
         )
         return instruction
 
