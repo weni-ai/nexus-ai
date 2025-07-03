@@ -61,6 +61,8 @@ class BedrockBackend(InlineAgentsBackend):
         user_email: str = None,
         use_components: bool = False,
         contact_fields: str = "",
+        contact_name: str = "",
+        channel_uuid: str = "",
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
         event_manager_notify: callable = None,
@@ -88,6 +90,8 @@ class BedrockBackend(InlineAgentsBackend):
             project_uuid=project_uuid,
             use_components=use_components,
             contact_fields=contact_fields,
+            contact_name=contact_name,
+            channel_uuid=channel_uuid
         )
         client = self._get_client()
 
