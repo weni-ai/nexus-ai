@@ -17,6 +17,8 @@ class Message(BaseModel):
     attachments: Optional[List] = []
     msg_event: Optional[dict] = {}
     contact_fields: List[ContactField] = []
+    channel_uuid: Optional[str] = None
+    contact_name: Optional[str] = None
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}

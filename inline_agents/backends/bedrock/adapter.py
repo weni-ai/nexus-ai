@@ -28,7 +28,9 @@ class BedrockTeamAdapter(TeamAdapter):
         contact_urn: str,
         project_uuid: str,
         use_components: bool = False,
-        contact_fields: str = ""
+        contact_fields: str = "",
+        contact_name: str = "",
+        channel_uuid: str = ""
     ) -> dict:
         # TODO: change self to cls
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
@@ -56,7 +58,9 @@ class BedrockTeamAdapter(TeamAdapter):
             supervisor_instructions=supervisor_instructions if supervisor_instructions else "",
             business_rules=business_rules if business_rules else "",
             project_id=project_uuid,
-            contact_id=contact_urn
+            contact_id=contact_urn,
+            contact_name=contact_name,
+            channel_uuid=channel_uuid
         )
 
         credentials = self._get_credentials(project_uuid)
@@ -210,8 +214,11 @@ class BedrockTeamAdapter(TeamAdapter):
         supervisor_instructions: str,
         business_rules: str,
         project_id: str,
-        contact_id: str
+        contact_id: str,
+        contact_name: str = "",
+        channel_uuid: str = ""
     ) -> str:
+        # TODO: Update this to use contact_name and channel_uuid as well
 
         instruction = instruction or ""
         date_time_now = date_time_now or ""
@@ -245,6 +252,10 @@ class BedrockTeamAdapter(TeamAdapter):
             "{{PROJECT_ID}}", project_id
         ).replace(
             "{{CONTACT_ID}}", contact_id
+        ).replace(
+            "{{CONTACT_NAME}}", contact_name
+        ).replace(
+            "{{CHANNEL_UUID}}", channel_uuid
         )
         return instruction
 

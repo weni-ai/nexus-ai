@@ -6,6 +6,8 @@ class MessageHTTPBody(BaseModel):
     project_uuid: str
     text: str
     contact_urn: str
+    channel_uuid: Optional[str] = None
+    contact_name: Optional[str] = None
     metadata: Optional[Dict] = {}
     attachments: Optional[List] = []
     msg_event: Optional[dict] = {}
