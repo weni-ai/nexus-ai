@@ -28,6 +28,14 @@ def call_llm(
     last_messages: List[ContactMessageDTO]
 ) -> str:
 
+    print(f"chunks: {chunks}")
+    print(f"llm_model: {llm_model}")
+    print(f"message: {message}")
+    print(f"agent: {agent}")
+    print(f"instructions: {instructions}")
+    print(f"llm_config: {llm_config}")
+    print(f"last_messages: {last_messages}")
+
     try:
         print(f"\n\n[+ Message: {message.text} +]\n\n")
 

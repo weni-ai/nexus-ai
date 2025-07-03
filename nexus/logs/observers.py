@@ -1,10 +1,12 @@
 import os
 import json
 import requests
+from typing import List
 
 from prometheus_client import Gauge
 
 from nexus.event_domain.event_observer import EventObserver
+from router.llms.call import call_llm
 
 
 class ZeroShotClassificationHealthCheckObserver(EventObserver):  # pragma: no cover
@@ -82,3 +84,39 @@ class GolfinhoHealthCheckObserver(EventObserver):  # pragma: no cover
                     self.service_health.labels(service_name=self.service_name).set(0)
             except Exception:
                 self.service_health.labels(service_name=self.service_name).set(0)
+
+class SharkHealthCheckObserver(EventObserver):  # pragma: no cover
+
+    def __init__(self):
+        self.url = os.environ.get("HC_SHARK_URL")
+        self.token = os.environ.get("HC_WENI_TOKEN")
+        self.service_name = "wenigpt_shark"
+        self.service_health = Gauge('service_health_shark', 'Health status of services', ['service_name'])
+
+    def perform(self,
+        chunks: List[str],
+        llm_client: str,
+        message: str,
+        agent: str,
+        instructions: str,
+        llm_config: dict,
+        last_messages: List[str]
+    ):
+        if os.environ.get("ENVIRONMENT") == "production":
+            try:
+                llm_response: str = call_llm(
+                    chunks=chunks,
+                    llm_model=llm_client,
+                    message=message,
+                    agent=agent,
+                    instructions=instructions,
+                    llm_config=llm_config,
+                    last_messages=last_messages,
+                )
+                if llm_response:
+                    self.service_health.labels(service_name=self.service_name).set(1)
+                else:
+                    self.service_health.labels(service_name=self.service_name).set(0)
+            except Exception:
+                self.service_health.labels(service_name=self.service_name).set(0)
+        
