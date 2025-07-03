@@ -10,7 +10,6 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from nexus.authentication import AUTHENTICATION_CLASSES
-from nexus.authentication.authentication import ExternalTokenAuthentication
 from nexus.events import event_manager
 from nexus.intelligences.models import (
     ContentBase,
@@ -23,7 +22,7 @@ from nexus.intelligences.models import (
 from nexus.orgs import permissions
 from nexus.paginations import CustomCursorPagination
 from nexus.projects.models import Project
-from nexus.projects.api.permissions import ProjectPermission
+from nexus.projects.api.permissions import ProjectPermission, ExternalTokenPermission
 from nexus.storage import AttachmentPreviewStorage, validate_mime_type
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
@@ -1335,7 +1334,8 @@ class CommerceHasAgentBuilder(views.APIView):
 
 class TopicsViewSet(ModelViewSet):
     serializer_class = TopicsSerializer
-    permission_classes = [ExternalTokenAuthentication]
+    permission_classes = [ExternalTokenPermission]
+    authentication_classes = []  # Disable default authentication
     lookup_field = 'uuid'
 
     def get_queryset(self, *args, **kwargs):
@@ -1372,7 +1372,8 @@ class TopicsViewSet(ModelViewSet):
 
 class SubTopicsViewSet(ModelViewSet):
     serializer_class = SubTopicsSerializer
-    permission_classes = [ExternalTokenAuthentication]
+    permission_classes = [ExternalTokenPermission]
+    authentication_classes = []  # Disable default authentication
     lookup_field = 'uuid'
 
     def get_queryset(self, *args, **kwargs):
