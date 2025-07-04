@@ -1,12 +1,16 @@
+from enum import Enum
+from uuid import uuid4
+from typing import Optional
+
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 
 from nexus.db.models import BaseModel, SoftDeleteModel
 from nexus.orgs.models import Org
-from enum import Enum
-from uuid import uuid4
-from typing import Optional
+from nexus.projects.models import Project
+from nexus.inline_agents.models import InlineAgentMessage
+
 
 
 class Intelligence(BaseModel, SoftDeleteModel):
@@ -219,3 +223,32 @@ class SubTopics(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="subtopics")
+
+
+class Conversation(models.Model):
+    uuid = models.UUIDField(primary_key=True, default=uuid4)
+    created_at = models.DateTimeField(auto_now_add=True)
+    message = models.ForeignKey(InlineAgentMessage, on_delete=models.CASCADE, related_name="conversations")
+    csat = models.TextField(null=True, blank=True)
+    topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations")
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="conversations")
+
+    def get_message_data(self):
+        return {
+            "text": self.message.text,
+            "uuid": str(self.message.uuid),
+        }
+
+    def get_topic(self):
+        return self.topic.name
+
+    @property
+    def to_json(self):
+        return {
+            "uuid": str(self.uuid),
+            "created_at": self.created_at,
+            "message": self.get_message_data(),
+            "csat": self.csat,
+            "topic": self.get_topic(),
+            "project": str(self.project.uuid),
+        }
