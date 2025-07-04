@@ -203,3 +203,19 @@ class ContentBaseAgent(models.Model):
 class ContentBaseInstruction(models.Model):
     instruction = models.TextField()
     content_base = models.ForeignKey(ContentBase, related_name='instructions', on_delete=models.CASCADE)
+
+
+class Topics(models.Model):
+    uuid = models.UUIDField(primary_key=True, default=uuid4)
+    name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    project = models.ForeignKey('projects.Project', on_delete=models.CASCADE)
+
+
+class SubTopics(models.Model):
+    uuid = models.UUIDField(primary_key=True, default=uuid4)
+    name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="subtopics")
