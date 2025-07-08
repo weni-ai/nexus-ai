@@ -218,7 +218,6 @@ class BedrockTeamAdapter(TeamAdapter):
         contact_name: str = "",
         channel_uuid: str = ""
     ) -> str:
-        # TODO: Update this to use contact_name and channel_uuid as well
 
         instruction = instruction or ""
         date_time_now = date_time_now or ""
