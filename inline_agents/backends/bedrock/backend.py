@@ -149,6 +149,13 @@ class BedrockBackend(InlineAgentsBackend):
                 # Store the trace event for potential use
                 trace_data = event['trace']
                 trace_events.append(trace_data)
+                if 'events' in trace_data:
+                    for event_data in trace_data['events']:
+                        self._data_lake_event_adapter.to_data_lake_custom_event(
+                            event_data=event_data,
+                            project_uuid=project_uuid,
+                            contact_urn=contact_urn
+                        )
 
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
 

@@ -480,6 +480,23 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             sentry_sdk.capture_exception(e)
             return None
 
+    def to_data_lake_custom_event(
+        self,
+        event_data: dict,
+        project_uuid: str,
+        contact_urn: str
+    ) -> Optional[dict]:
+        try:
+            event_data["project"] = project_uuid
+            event_data["contact_urn"] = contact_urn
+            self.send_data_lake_event_task.delay(event_data)
+            return event_data
+        except Exception as e:
+            logger.error(f"Error processing custom data lake event: {str(e)}")
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.capture_exception(e)
+            return None
+        
 
 @celery_app.task
 def send_data_lake_event(
