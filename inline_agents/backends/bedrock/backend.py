@@ -149,6 +149,7 @@ class BedrockBackend(InlineAgentsBackend):
                 # Store the trace event for potential use
                 trace_data = event['trace']
                 trace_events.append(trace_data)
+                print(f"[ + DEBUG events + ] trace_data: {trace_data}")
                 if 'events' in trace_data:
                     for event_data in trace_data['events']:
                         self._data_lake_event_adapter.to_data_lake_custom_event(
