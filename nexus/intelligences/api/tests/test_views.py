@@ -20,7 +20,9 @@ from ..views import (
     ContentBaseLinkViewset,
     SentenxIndexerUpdateFile,
     ContentBasePersonalizationViewSet,
-    RouterRetailViewSet
+    RouterRetailViewSet,
+    TopicsViewSet,
+    SubTopicsViewSet
 )
 
 from nexus.usecases.intelligences.tests.intelligence_factory import (
@@ -29,6 +31,8 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
     ContentBaseTextFactory,
     ContentBaseLinkFactory,
+    TopicsFactory,
+    SubTopicsFactory,
 )
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -653,3 +657,404 @@ class TestRetailRouterViewset(APITestCase):
 
         self.assertEqual(len(instructions), 2)
         self.assertEqual(response_json.get('links'), None)
+
+
+class TestTopicsViewSet(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.view = TopicsViewSet.as_view({
+            'get': 'list',
+            'post': 'create',
+            'put': 'update',
+            'delete': 'destroy',
+        })
+
+        self.topic = TopicsFactory(project=self.project)
+        self.project = self.topic.project
+        self.user = self.project.created_by
+
+        self.external_token = "test-external-token"
+
+        self.url = f'{self.project.uuid}/topics'
+
+    def test_get_queryset_with_valid_project(self):
+        request = self.factory.get(self.url)
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid)
+            )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_get_queryset_with_invalid_project(self):
+        invalid_project_uuid = "00000000-0000-0000-0000-000000000000"
+        request = self.factory.get(f'{invalid_project_uuid}/topics')
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=invalid_project_uuid
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 0)
+
+    def test_list_topics(self):
+        request = self.factory.get(self.url)
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid)
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['name'], self.topic.name)
+        self.assertEqual(response.data[0]['uuid'], str(self.topic.uuid))
+
+    def test_retrieve_topic(self):
+        url_retrieve = f'{self.url}/{self.topic.uuid}/'
+        request = self.factory.get(url_retrieve)
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = TopicsViewSet.as_view({'get': 'retrieve'})(
+                request,
+                project_uuid=str(self.project.uuid),
+                uuid=str(self.topic.uuid)
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['name'], self.topic.name)
+        self.assertEqual(response.data['uuid'], str(self.topic.uuid))
+
+    def test_create_topic(self):
+        data = {
+            'name': 'New Test Topic',
+        }
+        request = self.factory.post(self.url, data, format='json')
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid)
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['name'], data['name'])
+        self.assertIn('uuid', response.data)
+        self.assertIn('created_at', response.data)
+
+    def test_create_topic_without_project_uuid(self):
+        data = {
+            'name': 'New Test Topic',
+        }
+        request = self.factory.post('/invalid/topics/', data, format='json')
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=None
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.data)
+
+    def test_create_topic_with_invalid_project(self):
+        data = {
+            'name': 'New Test Topic',
+        }
+        invalid_project_uuid = "00000000-0000-0000-0000-000000000000"
+        request = self.factory.post(f'{invalid_project_uuid}/topics/', data, format='json')
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=invalid_project_uuid
+            )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn('error', response.data)
+
+    def test_update_topic(self):
+        data = {
+            'name': 'Updated Topic Name',
+        }
+        url_put = f'{self.url}/{self.topic.uuid}/'
+        request = self.factory.put(
+            url_put,
+            json.dumps(data),
+            content_type='application/json'
+        )
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid),
+                uuid=str(self.topic.uuid)
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['name'], data['name'])
+
+    def test_delete_topic(self):
+        url_delete = f'{self.url}/{self.topic.uuid}/'
+        request = self.factory.delete(url_delete)
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid),
+                uuid=str(self.topic.uuid)
+            )
+
+        self.assertEqual(response.status_code, 204)
+
+    def test_authentication_required(self):
+        request = self.factory.get(self.url)
+
+        response = self.view(
+            request,
+            project_uuid=str(self.project.uuid)
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+
+class TestSubTopicsViewSet(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.view = SubTopicsViewSet.as_view({
+            'get': 'list',
+            'post': 'create',
+            'put': 'update',
+            'delete': 'destroy',
+        })
+
+        # Create test data
+        self.org = OrgFactory()
+        self.user = self.org.created_by
+        self.project = ProjectFactory(
+            name="Test Project",
+            org=self.org,
+            created_by=self.user
+        )
+        self.topic = TopicsFactory(project=self.project)
+        self.subtopic = SubTopicsFactory(topic=self.topic)
+
+        self.external_token = "test-external-token"
+
+        self.url = f'{self.project.uuid}/topics/{self.topic.uuid}/subtopics'
+
+    def test_get_queryset_with_valid_topic(self):
+        """Test that get_queryset returns subtopics for a valid topic"""
+        request = self.factory.get(self.url)
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid),
+                topic_uuid=str(self.topic.uuid)
+            )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_get_queryset_with_invalid_topic(self):
+        """Test that get_queryset returns empty for invalid topic"""
+        invalid_topic_uuid = "00000000-0000-0000-0000-000000000000"
+        request = self.factory.get(f'{self.project.uuid}/topics/{invalid_topic_uuid}/subtopics')
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid),
+                topic_uuid=invalid_topic_uuid
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 0)
+
+    def test_list_subtopics(self):
+        """Test listing subtopics for a topic"""
+        request = self.factory.get(self.url)
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid),
+                topic_uuid=str(self.topic.uuid)
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['name'], self.subtopic.name)
+        self.assertEqual(response.data[0]['uuid'], str(self.subtopic.uuid))
+
+    def test_retrieve_subtopic(self):
+        """Test retrieving a specific subtopic"""
+        url_retrieve = f'{self.url}/{self.subtopic.uuid}/'
+        request = self.factory.get(url_retrieve)
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = SubTopicsViewSet.as_view({'get': 'retrieve'})(
+                request,
+                project_uuid=str(self.project.uuid),
+                topic_uuid=str(self.topic.uuid),
+                uuid=str(self.subtopic.uuid)
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['name'], self.subtopic.name)
+        self.assertEqual(response.data['uuid'], str(self.subtopic.uuid))
+
+    def test_create_subtopic(self):
+        """Test creating a new subtopic"""
+        data = {
+            'name': 'New Test Subtopic',
+        }
+        request = self.factory.post(self.url, data, format='json')
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid),
+                topic_uuid=str(self.topic.uuid)
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['name'], data['name'])
+        self.assertIn('uuid', response.data)
+        self.assertIn('created_at', response.data)
+
+    def test_create_subtopic_without_topic_uuid(self):
+        """Test creating a subtopic without topic_uuid should fail"""
+        data = {
+            'name': 'New Test Subtopic',
+        }
+        request = self.factory.post('/invalid/subtopics/', data, format='json')
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid),
+                topic_uuid=None
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.data)
+
+    def test_create_subtopic_with_invalid_topic(self):
+        """Test creating a subtopic with invalid topic should fail"""
+        data = {
+            'name': 'New Test Subtopic',
+        }
+        invalid_topic_uuid = "00000000-0000-0000-0000-000000000000"
+        request = self.factory.post(f'{self.project.uuid}/topics/{invalid_topic_uuid}/subtopics/', data, format='json')
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid),
+                topic_uuid=invalid_topic_uuid
+            )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn('error', response.data)
+
+    def test_update_subtopic(self):
+        """Test updating a subtopic"""
+        data = {
+            'name': 'Updated Subtopic Name',
+        }
+        url_put = f'{self.url}/{self.subtopic.uuid}/'
+        request = self.factory.put(
+            url_put,
+            json.dumps(data),
+            content_type='application/json'
+        )
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid),
+                topic_uuid=str(self.topic.uuid),
+                uuid=str(self.subtopic.uuid)
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['name'], data['name'])
+
+    def test_delete_subtopic(self):
+        """Test deleting a subtopic"""
+        url_delete = f'{self.url}/{self.subtopic.uuid}/'
+        request = self.factory.delete(url_delete)
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid),
+                topic_uuid=str(self.topic.uuid),
+                uuid=str(self.subtopic.uuid)
+            )
+
+        self.assertEqual(response.status_code, 204)
+
+    def test_authentication_required(self):
+        """Test that authentication is required"""
+        request = self.factory.get(self.url)
+        # No Authorization header
+
+        response = self.view(
+            request,
+            project_uuid=str(self.project.uuid),
+            topic_uuid=str(self.topic.uuid)
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_subtopic_belongs_to_correct_topic(self):
+        """Test that subtopics are properly associated with their topic"""
+        # Create another topic
+        another_topic = TopicsFactory(project=self.project)
+
+        # Create a subtopic for the first topic
+        subtopic_data = {
+            'name': 'Subtopic for First Topic',
+        }
+        request = self.factory.post(self.url, subtopic_data, format='json')
+        request.headers = {"Authorization": f"Bearer {self.external_token}"}
+
+        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+            response = self.view(
+                request,
+                project_uuid=str(self.project.uuid),
+                topic_uuid=str(self.topic.uuid)
+            )
+
+        self.assertEqual(response.status_code, 201)
+
+        # Verify the subtopic belongs to the correct topic
+        from nexus.intelligences.models import SubTopics
+        created_subtopic = SubTopics.objects.get(uuid=response.data['uuid'])
+        self.assertEqual(created_subtopic.topic, self.topic)
+        self.assertNotEqual(created_subtopic.topic, another_topic)
