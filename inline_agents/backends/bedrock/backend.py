@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Dict, Optional
 
@@ -149,8 +150,19 @@ class BedrockBackend(InlineAgentsBackend):
                 # Store the trace event for potential use
                 trace_data = event['trace']
                 trace_events.append(trace_data)
-
+               
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
+                
+                action_group_data = orchestration_trace.get('observation', {}).get("actionGroupInvocationOutput", {})
+                if action_group_data.get('text'):
+                    event_data = json.loads(action_group_data.get('text')).get("events", [])
+                    print(f"[ + DEBUG event_data + ] event_data: {event_data}")
+                    for event_to_send in event_data:
+                        self._data_lake_event_adapter.to_data_lake_custom_event(
+                            event_data=event_to_send,
+                            project_uuid=project_uuid,
+                            contact_urn=contact_urn
+                        )
 
                 self._data_lake_event_adapter.to_data_lake_event(
                     inline_trace=trace_data,
