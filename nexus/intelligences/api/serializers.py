@@ -291,3 +291,7 @@ class SubTopicsSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubTopics
         fields = ['name', 'uuid', 'created_at']
+
+
+class SupervisorSerializer(serializers.ModelSerializer):
+    pass
