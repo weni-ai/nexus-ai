@@ -494,7 +494,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             return event_data
         except Exception as e:
             logger.error(f"Error processing custom data lake event: {str(e)}")
-            sentry_sdk.set_context("message", event_data)
+            sentry_sdk.set_context("message", {"event_data": event_data})
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.capture_exception(e)
             return None
