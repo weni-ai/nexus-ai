@@ -305,3 +305,7 @@ class SubTopicsSerializer(serializers.ModelSerializer):
 
     def get_topic_name(self, obj):
         return obj.topic.name
+
+
+class SupervisorSerializer(serializers.ModelSerializer):
+    pass

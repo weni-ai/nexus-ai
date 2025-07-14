@@ -229,6 +229,7 @@ class SubTopics(models.Model):
 
 class Conversation(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid4)
+    external_id = models.CharField(max_length=255) # implementation is in another branch
     created_at = models.DateTimeField(auto_now_add=True)
     csat = models.TextField(null=True, blank=True)
     topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
