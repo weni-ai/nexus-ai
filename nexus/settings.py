@@ -579,3 +579,11 @@ RATIONALE_IMPROVEMENT_INSTRUCTIONS = env.str("RATIONALE_IMPROVEMENT_INSTRUCTIONS
 SUBSEQUENT_RATIONALE_INSTRUCTIONS = env.str("SUBSEQUENT_RATIONALE_INSTRUCTIONS", "")
 
 START_INLINE_AGENTS_ACK_LATE = env.bool("START_INLINE_AGENTS_ACK_LATE", False)
+
+JWT_PUBLIC_KEY_PATH = BASE_DIR / "nexus" / "authentication" / "jwt_keys" / "public_key.pem"
+
+try:
+    with open(JWT_PUBLIC_KEY_PATH, "r") as f:
+        JWT_PUBLIC_KEY = f.read()
+except FileNotFoundError:
+    JWT_PUBLIC_KEY = None

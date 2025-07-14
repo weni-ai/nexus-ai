@@ -54,6 +54,8 @@ seaborn = "^0.13.2"
 scikit-learn = "^1.6.1"
 pandas = "^2.2.3"
 weni-datalake-sdk = "0.2.2"
+pyjwt = "^2.10.1"
+cryptography = "^45.0.5"
 
 
 
