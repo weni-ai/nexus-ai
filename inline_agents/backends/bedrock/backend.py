@@ -156,7 +156,11 @@ class BedrockBackend(InlineAgentsBackend):
                 action_group_data = orchestration_trace.get('observation', {}).get("actionGroupInvocationOutput", {})
                 print(f"[ + DEBUG action_group_data + ] action_group_data: {action_group_data}")
                 if action_group_data.get('text'):
-                    event_data = json.loads(action_group_data.get('text'))
+                    try:
+                        event_data = json.loads(action_group_data.get('text'))
+                    except Exception as e:
+                        print(f"[ + DEBUG error + ] error: {e}")
+                        event_data = {}
                     if isinstance(event_data, dict):
                         event_data = event_data.get("events", [])
                     else:
