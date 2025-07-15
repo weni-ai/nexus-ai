@@ -175,3 +175,34 @@ class ProjectsUseCase:
         intelligence = content_base.intelligence
         project = IntegratedIntelligence.objects.get(intelligence=intelligence).project
         return project
+
+    def set_project_prompt_creation_configurations(
+        self,
+        project_uuid: str,
+        use_prompt_creation_configurations: bool,
+        conversation_turns_to_include: int,
+        exclude_previous_thinking_steps: bool
+    ) -> dict:
+
+        project = self.get_by_uuid(project_uuid)
+        project.use_prompt_creation_configurations = use_prompt_creation_configurations
+        project.conversation_turns_to_include = conversation_turns_to_include
+        project.exclude_previous_thinking_steps = exclude_previous_thinking_steps
+        project.save()
+        project.refresh_from_db()
+        return {
+            "use_prompt_creation_configurations": project.use_prompt_creation_configurations,
+            "conversation_turns_to_include": project.conversation_turns_to_include,
+            "exclude_previous_thinking_steps": project.exclude_previous_thinking_steps
+        }
+
+    def get_project_prompt_creation_configurations(
+        self,
+        project_uuid: str
+    ) -> dict:
+        project = self.get_by_uuid(project_uuid)
+        return {
+            "use_prompt_creation_configurations": project.use_prompt_creation_configurations,
+            "conversation_turns_to_include": project.conversation_turns_to_include,
+            "exclude_previous_thinking_steps": project.exclude_previous_thinking_steps
+        }
