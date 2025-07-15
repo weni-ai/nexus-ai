@@ -153,6 +153,7 @@ class TopicsFactory(factory.django.DjangoModelFactory):
         model = Topics
 
     name = factory.Sequence(lambda n: 'test%d' % n)
+    description = factory.Sequence(lambda n: 'test%d' % n)
     project = factory.SubFactory(ProjectFactory)
 
 
@@ -161,4 +162,5 @@ class SubTopicsFactory(factory.django.DjangoModelFactory):
         model = SubTopics
 
     name = factory.Sequence(lambda n: 'test%d' % n)
+    description = factory.Sequence(lambda n: 'test%d' % n)
     topic = factory.SubFactory(TopicsFactory)
