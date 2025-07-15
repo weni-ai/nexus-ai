@@ -178,7 +178,10 @@ def start_inline_agents(
             contact_name=message_obj.contact_name,
             channel_uuid=message_obj.channel_uuid,
             msg_external_id=message_event.get("msg_external_id", ""),
-            turn_off_rationale=turn_off_rationale
+            turn_off_rationale=turn_off_rationale,
+            use_prompt_creation_configurations=project.use_prompt_creation_configurations,
+            conversation_turns_to_include=project.conversation_turns_to_include,
+            exclude_previous_thinking_steps=project.exclude_previous_thinking_steps
         )
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
