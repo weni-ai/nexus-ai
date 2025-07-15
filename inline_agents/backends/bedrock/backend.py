@@ -154,8 +154,13 @@ class BedrockBackend(InlineAgentsBackend):
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
                 
                 action_group_data = orchestration_trace.get('observation', {}).get("actionGroupInvocationOutput", {})
+                print(f"[ + DEBUG action_group_data + ] action_group_data: {action_group_data}")
                 if action_group_data.get('text'):
-                    event_data = json.loads(action_group_data.get('text')).get("events", [])
+                    event_data = json.loads(action_group_data.get('text'))
+                    if isinstance(event_data, dict):
+                        event_data = event_data.get("events", [])
+                    else:
+                        event_data = []
                     print(f"[ + DEBUG event_data + ] event_data: {event_data}")
                     for event_to_send in event_data:
                         self._data_lake_event_adapter.to_data_lake_custom_event(
