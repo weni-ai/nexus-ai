@@ -128,7 +128,9 @@ class SummaryTracesObserver(EventObserver):
                 logging.warning("No trace data provided to SummaryTracesObserver")
                 return
 
+            # serialize datetime objects to string and deserialize to dict
             trace_data_str = json.dumps(trace_data, default=str)
+            trace_data_str = json.loads(trace_data_str)
 
             if user_email and project_uuid and session_id:
                 send_preview_message_to_websocket(
