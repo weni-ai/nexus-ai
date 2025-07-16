@@ -1336,7 +1336,7 @@ class TopicsViewSet(ModelViewSet):
     serializer_class = TopicsSerializer
     permission_classes = [ExternalTokenPermission]
     authentication_classes = []  # Disable default authentication
-    lookup_field = 'topic_uuid'
+    lookup_field = 'uuid'
 
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
@@ -1374,7 +1374,7 @@ class SubTopicsViewSet(ModelViewSet):
     serializer_class = SubTopicsSerializer
     permission_classes = [ExternalTokenPermission]
     authentication_classes = []  # Disable default authentication
-    lookup_field = 'subtopic_uuid'
+    lookup_field = 'uuid'
 
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
