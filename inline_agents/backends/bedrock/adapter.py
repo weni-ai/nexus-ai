@@ -493,7 +493,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             event_data["project"] = project_uuid
             event_data["contact_urn"] = contact_urn
             event_data_str = json.dumps(event_data, default=str)
-            self.send_data_lake_event_task.delay(event_data_str)
+            self.send_data_lake_event_task.delay(event_data)
             print(f"[ + DEBUG + ] event_data: {event_data_str}")
             return event_data
         except Exception as e:
