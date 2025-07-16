@@ -67,7 +67,10 @@ class BedrockBackend(InlineAgentsBackend):
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
         event_manager_notify: callable = None,
-        data_lake_event_adapter: DataLakeEventAdapter = None
+        data_lake_event_adapter: DataLakeEventAdapter = None,
+        use_prompt_creation_configurations: bool = False,
+        conversation_turns_to_include: int = 10,
+        exclude_previous_thinking_steps: bool = True,
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
 
@@ -94,6 +97,13 @@ class BedrockBackend(InlineAgentsBackend):
             contact_name=contact_name,
             channel_uuid=channel_uuid
         )
+
+        if use_prompt_creation_configurations:
+            external_team["promptCreationConfigurations"] = { 
+                "excludePreviousThinkingSteps": exclude_previous_thinking_steps,
+                "previousConversationTurnsToInclude": conversation_turns_to_include,
+            }
+
         client = self._get_client()
 
         # Generate a session ID for websocket communication
