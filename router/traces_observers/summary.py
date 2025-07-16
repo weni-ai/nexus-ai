@@ -1,6 +1,7 @@
 import json
 import time
 import logging
+import sentry_sdk
 
 from openai import OpenAI
 from django.conf import settings
@@ -139,5 +140,18 @@ class SummaryTracesObserver(EventObserver):
                 )
 
         except Exception as e:
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_context(
+                "summary_traces_observer",
+                {
+                    "language": language,
+                    "inline_traces": inline_traces,
+                    "event_content": event_content,
+                    "preview": preview,
+                    "project_uuid": project_uuid,
+                    "user_email": user_email,
+                    "session_id": session_id
+                }
+            )
             logging.error(f"Error getting trace summary: {str(e)}")
             return "Processing your request now"
