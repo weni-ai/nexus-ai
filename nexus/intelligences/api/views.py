@@ -1359,7 +1359,7 @@ class TopicsViewSet(ModelViewSet):
             project = Project.objects.get(uuid=project_uuid)
         except Project.DoesNotExist:
             return Response(
-                {"error": "Project not found"}, 
+                {"error": "Project not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
 
