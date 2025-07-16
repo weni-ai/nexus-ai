@@ -17,6 +17,7 @@ from router.dispatcher import dispatch
 
 from router.tasks.redis_task_manager import RedisTaskManager
 from router.entities import message_factory
+from router.tasks.exceptions import EmptyTextException
 
 from .actions_client import get_action_clients
 
@@ -100,10 +101,17 @@ def start_inline_agents(
         if len(product_items) > 0:
             text = handle_product_items(text, product_items)
 
+        if not text.strip():
+            raise EmptyTextException(
+                f"Text is empty after processing. Original text: '{message.get('text', '')}', "
+                f"attachments: {attachments}, product_items: {product_items}"
+            )
+
+        # Update the original message dict with processed text
         message['text'] = text
 
         # TODO: Logs
-        message = message_factory(
+        message_obj = message_factory(
             project_uuid=message.get("project_uuid"),
             text=text,
             contact_urn=message.get("contact_urn"),
@@ -115,22 +123,22 @@ def start_inline_agents(
             channel_uuid=message.get("channel_uuid", ""),
         )
 
-        print(f"[DEBUG] Message: {message}")
+        print(f"[DEBUG] Message: {message_obj}")
 
-        project = Project.objects.get(uuid=message.project_uuid)
+        project = Project.objects.get(uuid=message_obj.project_uuid)
 
-        pending_task_id = task_manager.get_pending_task_id(message.project_uuid, message.contact_urn)
+        pending_task_id = task_manager.get_pending_task_id(message_obj.project_uuid, message_obj.contact_urn)
         if pending_task_id:
             celery_app.control.revoke(pending_task_id, terminate=True)
 
-        final_message_text = task_manager.handle_pending_response(message.project_uuid, message.contact_urn, message.text)
-        message.text = final_message_text
+        final_message_text = task_manager.handle_pending_response(message_obj.project_uuid, message_obj.contact_urn, message_obj.text)
+        message_obj.text = final_message_text
 
-        task_manager.store_pending_task_id(message.project_uuid, message.contact_urn, self.request.id)
+        task_manager.store_pending_task_id(message_obj.project_uuid, message_obj.contact_urn, self.request.id)
 
         if user_email:
             send_preview_message_to_websocket(
-                project_uuid=message.project_uuid,
+                project_uuid=message_obj.project_uuid,
                 user_email=user_email,
                 message_data={
                     "type": "status",
@@ -153,38 +161,41 @@ def start_inline_agents(
         backend = BackendsRegistry.get_backend(agents_backend)
 
         rep = ORMTeamRepository()
-        team = rep.get_team(message.project_uuid)
+        team = rep.get_team(message_obj.project_uuid)
 
         response = backend.invoke_agents(
             team=team,
-            input_text=message.text,
-            contact_urn=message.contact_urn,
-            project_uuid=message.project_uuid,
+            input_text=message_obj.text,
+            contact_urn=message_obj.contact_urn,
+            project_uuid=message_obj.project_uuid,
             preview=preview,
             rationale_switch=project.rationale_switch,
-            sanitized_urn=message.sanitized_urn,
+            sanitized_urn=message_obj.sanitized_urn,
             language=language,
             user_email=user_email,
             use_components=project.use_components,
-            contact_fields=message.contact_fields_as_json,
-            contact_name=message.contact_name,
-            channel_uuid=message.channel_uuid,
+            contact_fields=message_obj.contact_fields_as_json,
+            contact_name=message_obj.contact_name,
+            channel_uuid=message_obj.channel_uuid,
             msg_external_id=message_event.get("msg_external_id", ""),
-            turn_off_rationale=turn_off_rationale
+            turn_off_rationale=turn_off_rationale,
+            use_prompt_creation_configurations=project.use_prompt_creation_configurations,
+            conversation_turns_to_include=project.conversation_turns_to_include,
+            exclude_previous_thinking_steps=project.exclude_previous_thinking_steps
         )
 
-        task_manager.clear_pending_tasks(message.project_uuid, message.contact_urn)
+        task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
 
         if preview:
             response_msg = dispatch(
                 llm_response=response,
-                message=message,
+                message=message_obj,
                 direct_message=broadcast,
                 user_email=flows_user_email,
                 full_chunks=[],
             )
             send_preview_message_to_websocket(
-                project_uuid=message.project_uuid,
+                project_uuid=message_obj.project_uuid,
                 user_email=user_email,
                 message_data={
                     "type": "preview",
@@ -195,7 +206,7 @@ def start_inline_agents(
 
         return dispatch(
             llm_response=response,
-            message=message,
+            message=message_obj,
             direct_message=broadcast,
             user_email=flows_user_email,
             full_chunks=[],
@@ -204,24 +215,24 @@ def start_inline_agents(
     except Exception as e:
         # Set Sentry context with relevant information
         sentry_sdk.set_context("message", {
-            "project_uuid": message.project_uuid,
-            "contact_urn": message.contact_urn,
-            "text": message.text,
+            "project_uuid": message.get("project_uuid"),
+            "contact_urn": message.get("contact_urn"),
+            "text": message.get("text", ""),
             "preview": preview,
             "language": language,
             "user_email": user_email,
             "task_id": self.request.id,
-            "pending_task_id": task_manager.get_pending_task_id(message.project_uuid, message.contact_urn) if task_manager else None,
+            "pending_task_id": task_manager.get_pending_task_id(message.get("project_uuid"), message.get("contact_urn")) if task_manager else None,
         })
 
         # Add tags for better filtering in Sentry
         sentry_sdk.set_tag("preview_mode", preview)
-        sentry_sdk.set_tag("project_uuid", message.project_uuid)
+        sentry_sdk.set_tag("project_uuid", message.get("project_uuid"))
         sentry_sdk.set_tag("task_id", self.request.id)
 
         # Clean up Redis entries in case of error
         if task_manager:
-            task_manager.clear_pending_tasks(message.project_uuid, message.contact_urn)
+            task_manager.clear_pending_tasks(message.get("project_uuid"), message.get("contact_urn"))
 
         print(f"[DEBUG] Error in start_inline_agents: {str(e)}")
         print(f"[DEBUG] Error type: {type(e)}")
@@ -233,7 +244,7 @@ def start_inline_agents(
         if user_email:
             send_preview_message_to_websocket(
                 user_email=user_email,
-                project_uuid=str(message.project_uuid),
+                project_uuid=str(message.get("project_uuid")),
                 message_data={
                     "type": "error",
                     "content": str(e),

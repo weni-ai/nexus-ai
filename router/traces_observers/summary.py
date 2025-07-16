@@ -1,6 +1,7 @@
 import json
 import time
 import logging
+import sentry_sdk
 
 from openai import OpenAI
 from django.conf import settings
@@ -127,17 +128,34 @@ class SummaryTracesObserver(EventObserver):
                 logging.warning("No trace data provided to SummaryTracesObserver")
                 return
 
+            # serialize datetime objects to string and deserialize to dict
+            trace_data_str = json.dumps(trace_data, default=str)
+            trace_data_str = json.loads(trace_data_str)
+
             if user_email and project_uuid and session_id:
                 send_preview_message_to_websocket(
                     project_uuid=str(project_uuid),
                     user_email=user_email,
                     message_data={
                         "type": "trace_update",
-                        "trace": trace_data,
+                        "trace": trace_data_str,
                         "session_id": session_id
                     }
                 )
 
         except Exception as e:
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_context(
+                "summary_traces_observer",
+                {
+                    "language": language,
+                    "inline_traces": inline_traces,
+                    "event_content": event_content,
+                    "preview": preview,
+                    "project_uuid": project_uuid,
+                    "user_email": user_email,
+                    "session_id": session_id
+                }
+            )
             logging.error(f"Error getting trace summary: {str(e)}")
             return "Processing your request now"

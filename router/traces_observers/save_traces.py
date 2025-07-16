@@ -1,4 +1,5 @@
 import json
+import sentry_sdk
 from typing import List, Dict
 
 from nexus.celery import app as celery_app
@@ -53,21 +54,39 @@ def save_inline_trace_events(
     session_id: str,
     source_type: str
 ):
-    message = save_inline_message_to_database(
-        project_uuid=project_uuid,
-        contact_urn=contact_urn,
-        text=agent_response,
-        preview=preview,
-        session_id=session_id,
-        source_type=source_type
-    )
+    try:
+        message = save_inline_message_to_database(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            text=agent_response,
+            preview=preview,
+            session_id=session_id,
+            source_type=source_type
+        )
 
-    data = _prepare_trace_data(trace_events)
+        data = _prepare_trace_data(trace_events)
 
-    filename = f"{message.uuid}.jsonl"
-    key = f"inline_traces/{project_uuid}/{filename}"
+        filename = f"{message.uuid}.jsonl"
+        key = f"inline_traces/{project_uuid}/{filename}"
 
-    upload_traces_to_s3(data, key)
+        upload_traces_to_s3(data, key)
+    except Exception as e:
+        sentry_sdk.set_tag("project_uuid", project_uuid)
+        sentry_sdk.set_extra("trace_events", trace_events)
+        sentry_sdk.set_context(
+            "save_inline_trace_events",
+            {
+                "trace_events": trace_events,
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "agent_response": agent_response,
+                "preview": preview,
+                "session_id": session_id,
+                "source_type": source_type
+            }
+        )
+        sentry_sdk.capture_exception(e)
+        raise e
 
 
 def save_inline_message_to_database(

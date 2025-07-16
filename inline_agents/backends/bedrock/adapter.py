@@ -483,6 +483,26 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             sentry_sdk.capture_exception(e)
             return None
 
+    def to_data_lake_custom_event(
+        self,
+        event_data: dict,
+        project_uuid: str,
+        contact_urn: str
+    ) -> Optional[dict]:
+        try:
+            event_data["project"] = project_uuid
+            event_data["contact_urn"] = contact_urn
+            event_data_str = json.dumps(event_data, default=str)
+            self.send_data_lake_event_task.delay(event_data_str)
+            print(f"[ + DEBUG + ] event_data: {event_data_str}")
+            return event_data
+        except Exception as e:
+            logger.error(f"Error getting trace summary data lake event: {str(e)}")
+            sentry_sdk.set_context("custom event to data lake", {"event_data": event_data})
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.capture_exception(e)
+            return None
+        
 
 @celery_app.task
 def send_data_lake_event(

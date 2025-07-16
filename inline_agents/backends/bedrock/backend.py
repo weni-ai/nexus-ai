@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Dict, Optional
 
@@ -67,7 +68,10 @@ class BedrockBackend(InlineAgentsBackend):
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
         event_manager_notify: callable = None,
-        data_lake_event_adapter: DataLakeEventAdapter = None
+        data_lake_event_adapter: DataLakeEventAdapter = None,
+        use_prompt_creation_configurations: bool = False,
+        conversation_turns_to_include: int = 10,
+        exclude_previous_thinking_steps: bool = True,
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
 
@@ -98,6 +102,13 @@ class BedrockBackend(InlineAgentsBackend):
             channel_uuid=channel_uuid,
             auth_token=auth_token
         )
+
+        if use_prompt_creation_configurations:
+            external_team["promptCreationConfigurations"] = { 
+                "excludePreviousThinkingSteps": exclude_previous_thinking_steps,
+                "previousConversationTurnsToInclude": conversation_turns_to_include,
+            }
+
         client = self._get_client()
 
         # Generate a session ID for websocket communication
@@ -154,8 +165,28 @@ class BedrockBackend(InlineAgentsBackend):
                 # Store the trace event for potential use
                 trace_data = event['trace']
                 trace_events.append(trace_data)
-
+               
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
+                
+                action_group_data = orchestration_trace.get('observation', {}).get("actionGroupInvocationOutput", {})
+                print(f"[ + DEBUG action_group_data + ] action_group_data: {action_group_data}")
+                if action_group_data.get('text'):
+                    try:
+                        event_data = json.loads(action_group_data.get('text'))
+                    except Exception as e:
+                        print(f"[ + DEBUG error + ] error: {e}")
+                        event_data = {}
+                    if isinstance(event_data, dict):
+                        event_data = event_data.get("events", [])
+                    else:
+                        event_data = []
+                    print(f"[ + DEBUG event_data + ] event_data: {event_data}")
+                    for event_to_send in event_data:
+                        self._data_lake_event_adapter.to_data_lake_custom_event(
+                            event_data=event_to_send,
+                            project_uuid=project_uuid,
+                            contact_urn=contact_urn
+                        )
 
                 self._data_lake_event_adapter.to_data_lake_event(
                     inline_trace=trace_data,
