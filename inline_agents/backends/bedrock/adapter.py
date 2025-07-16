@@ -30,7 +30,8 @@ class BedrockTeamAdapter(TeamAdapter):
         use_components: bool = False,
         contact_fields: str = "",
         contact_name: str = "",
-        channel_uuid: str = ""
+        channel_uuid: str = "",
+        auth_token: str = ""
     ) -> dict:
         # TODO: change self to cls
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
@@ -60,8 +61,10 @@ class BedrockTeamAdapter(TeamAdapter):
             project_id=project_uuid,
             contact_id=contact_urn,
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid   
         )
+
+        print(f"[ + DEBUG + ] auth_token: {auth_token}")
 
         credentials = self._get_credentials(project_uuid)
 
@@ -78,7 +81,7 @@ class BedrockTeamAdapter(TeamAdapter):
                 use_components=use_components,
                 credentials=credentials,
                 contact={"urn": contact_urn},
-                project={"uuid": project_uuid}
+                project={"uuid": project_uuid, "auth_token": auth_token}
             ),
             "enableTrace": self._get_enable_trace(),
             "sessionId": self._get_session_id(contact_urn, project_uuid),
