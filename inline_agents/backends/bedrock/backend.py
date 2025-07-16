@@ -15,6 +15,7 @@ from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
 from nexus.usecases.inline_agents.typing import TypingUsecase
+from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
 
 from .adapter import BedrockTeamAdapter, BedrockDataLakeEventAdapter
@@ -82,6 +83,9 @@ class BedrockBackend(InlineAgentsBackend):
             preview=preview
         )
 
+        jwt_usecase = JWTUsecase()
+        auth_token = jwt_usecase.generate_jwt_token(project_uuid)
+
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
             agents=team,
@@ -91,7 +95,8 @@ class BedrockBackend(InlineAgentsBackend):
             use_components=use_components,
             contact_fields=contact_fields,
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
+            auth_token=auth_token
         )
         client = self._get_client()
 
