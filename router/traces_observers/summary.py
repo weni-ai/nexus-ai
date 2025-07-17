@@ -130,6 +130,7 @@ class SummaryTracesObserver(EventObserver):
             # serialize datetime objects to string and deserialize to dict
             trace_data_str = json.dumps(trace_data, default=str)
             trace_data_str = json.loads(trace_data_str)
+            trace_data_str.pop("callerChain", None)
 
             if user_email and project_uuid and session_id:
                 send_preview_message_to_websocket(
