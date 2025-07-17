@@ -231,7 +231,7 @@ class Conversation(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid4)
     created_at = models.DateTimeField(auto_now_add=True)
     csat = models.TextField(null=True, blank=True)
-    topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations")
+    topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="conversations")
     external_id = models.CharField(max_length=255, null=True, blank=True)
     has_chats_room = models.BooleanField(default=False)
