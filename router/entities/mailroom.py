@@ -1,5 +1,5 @@
 import json
-
+import re
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
 
@@ -34,8 +34,15 @@ class Message(BaseModel):
 
     @property
     def sanitized_urn(self):
+        urn_to_sanitize = self.contact_urn
+
+        pattern = r'(:[0-9]+)@.*'
+        match = re.search(pattern, urn_to_sanitize)
+        if match:
+            urn_to_sanitize = re.sub(pattern, r'\1', urn_to_sanitize)
+
         sanitized = ""
-        for char in self.contact_urn:
+        for char in urn_to_sanitize:
             if not char.isalnum() and char not in '-_.:':
                 sanitized += f"_{ord(char)}"
             else:

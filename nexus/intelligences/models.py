@@ -212,6 +212,7 @@ class ContentBaseInstruction(models.Model):
 class Topics(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid4)
     name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     project = models.ForeignKey('projects.Project', on_delete=models.CASCADE)
@@ -220,6 +221,7 @@ class Topics(models.Model):
 class SubTopics(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid4)
     name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="subtopics")

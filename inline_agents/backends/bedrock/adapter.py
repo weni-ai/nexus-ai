@@ -31,7 +31,8 @@ class BedrockTeamAdapter(TeamAdapter):
         contact_fields: str = "",
         contact_name: str = "",
         channel_uuid: str = "",
-        auth_token: str = ""
+        auth_token: str = "",
+        sanitized_urn: str = ""
     ) -> dict:
         # TODO: change self to cls
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
@@ -84,7 +85,7 @@ class BedrockTeamAdapter(TeamAdapter):
                 project={"uuid": project_uuid, "auth_token": auth_token}
             ),
             "enableTrace": self._get_enable_trace(),
-            "sessionId": self._get_session_id(contact_urn, project_uuid),
+            "sessionId": self._get_session_id(sanitized_urn, project_uuid),
             "inputText": input_text,
             "collaborators": self._get_collaborators(agents, llm_formatted_time),
             "collaboratorConfigurations": self._get_collaborator_configurations(agents),
@@ -493,10 +494,9 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             event_data["project"] = project_uuid
             event_data["contact_urn"] = contact_urn
             self.send_data_lake_event_task.delay(event_data)
-            print(f"[ + DEBUG + ] event_data: {event_data}")
             return event_data
         except Exception as e:
-            logger.error(f"Error processing custom data lake event: {str(e)}")
+            logger.error(f"Error getting trace summary data lake event: {str(e)}")
             sentry_sdk.set_context("custom event to data lake", {"event_data": event_data})
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.capture_exception(e)
