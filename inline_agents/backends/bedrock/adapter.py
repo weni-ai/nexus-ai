@@ -493,7 +493,6 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             event_data["project"] = project_uuid
             event_data["contact_urn"] = contact_urn
             self.send_data_lake_event_task.delay(event_data)
-            print(f"[ + DEBUG + ] event_data: {event_data}")
             return event_data
         except Exception as e:
             logger.error(f"Error getting trace summary data lake event: {str(e)}")
