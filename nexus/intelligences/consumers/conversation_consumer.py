@@ -23,7 +23,6 @@ class  ConversationConsumer(EDAConsumer):
                 has_chats_room=body.get("has_chats_room"),
             )
 
-            # TODO: call lambda functions to get the conversation resolution and the topics of the conversation
             lambda_use_case = LambdaUseCase()
             lambda_use_case.create_lambda_conversation(window_conversation_dto.dict())
 

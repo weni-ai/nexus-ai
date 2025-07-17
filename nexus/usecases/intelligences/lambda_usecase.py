@@ -154,7 +154,7 @@ class LambdaUseCase():
     def create_lambda_conversation(
         self, 
         payload: dict
-    ): # deixar esse metodo async
+    ): # TODO: leave this method async
         create_conversation_use_case = CreateConversationUseCase()
         conversation = create_conversation_use_case.create_conversation(payload)
 
