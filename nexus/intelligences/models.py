@@ -234,13 +234,8 @@ class Conversation(models.Model):
     external_id = models.CharField(max_length=255, null=True, blank=True)
     has_chats_room = models.BooleanField(default=False)
     contact_urn = models.CharField(max_length=255, null=True, blank=True)
-
-
-    def get_message_data(self):
-        return {
-            "text": self.message.text,
-            "uuid": str(self.message.uuid),
-        }
+    start_date = models.DateTimeField(null=True, blank=True)
+    end_date = models.DateTimeField(null=True, blank=True)
 
     def get_topic(self):
         return self.topic.name
@@ -250,7 +245,6 @@ class Conversation(models.Model):
         return {
             "uuid": str(self.uuid),
             "created_at": self.created_at,
-            "message": self.get_message_data(),
             "csat": self.csat,
             "topic": self.get_topic(),
             "project": str(self.project.uuid),
