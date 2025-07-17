@@ -4,4 +4,4 @@ from nexus.intelligences.consumers.conversation_consumer import ConversationCons
 
 
 def handle_consumers(channel: Channel) -> None:
-    channel.basic_consume("nexus.conversation", callback=ConversationConsumer().handle)
+    channel.basic_consume("nexus.conversations", callback=ConversationConsumer().handle)
