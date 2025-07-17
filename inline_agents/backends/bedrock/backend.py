@@ -100,7 +100,8 @@ class BedrockBackend(InlineAgentsBackend):
             contact_fields=contact_fields,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
-            auth_token=auth_token
+            auth_token=auth_token,
+            sanitized_urn=sanitized_urn
         )
 
         if use_prompt_creation_configurations:

@@ -31,7 +31,8 @@ class BedrockTeamAdapter(TeamAdapter):
         contact_fields: str = "",
         contact_name: str = "",
         channel_uuid: str = "",
-        auth_token: str = ""
+        auth_token: str = "",
+        sanitized_urn: str = ""
     ) -> dict:
         # TODO: change self to cls
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
@@ -84,7 +85,7 @@ class BedrockTeamAdapter(TeamAdapter):
                 project={"uuid": project_uuid, "auth_token": auth_token}
             ),
             "enableTrace": self._get_enable_trace(),
-            "sessionId": self._get_session_id(contact_urn, project_uuid),
+            "sessionId": self._get_session_id(sanitized_urn, project_uuid),
             "inputText": input_text,
             "collaborators": self._get_collaborators(agents, llm_formatted_time),
             "collaboratorConfigurations": self._get_collaborator_configurations(agents),
