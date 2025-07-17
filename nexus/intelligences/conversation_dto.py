@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from django.conf import settings
 
 
 @dataclass

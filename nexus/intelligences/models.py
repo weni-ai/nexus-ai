@@ -228,10 +228,13 @@ class SubTopics(models.Model):
 class Conversation(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid4)
     created_at = models.DateTimeField(auto_now_add=True)
-    message = models.ForeignKey(InlineAgentMessage, on_delete=models.CASCADE, related_name="conversations")
     csat = models.TextField(null=True, blank=True)
     topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations")
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="conversations")
+    external_id = models.CharField(max_length=255, null=True, blank=True)
+    has_chats_room = models.BooleanField(default=False)
+    contact_urn = models.CharField(max_length=255, null=True, blank=True)
+
 
     def get_message_data(self):
         return {
@@ -252,3 +255,8 @@ class Conversation(models.Model):
             "topic": self.get_topic(),
             "project": str(self.project.uuid),
         }
+
+
+class ConversationMessage(models.Model):
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
+    message = models.ManyToManyField(InlineAgentMessage, on_delete=models.CASCADE, related_name="conversations")

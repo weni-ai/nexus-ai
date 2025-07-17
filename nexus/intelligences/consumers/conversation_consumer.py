@@ -7,6 +7,7 @@ from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
 from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
 
+
 class  ConversationConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
         print(f"[ ConversationConsumer ] - Consuming a message. Body: {message.body}")
@@ -24,15 +25,7 @@ class  ConversationConsumer(EDAConsumer):
 
             # TODO: call lambda functions to get the conversation resolution and the topics of the conversation
             lambda_use_case = LambdaUseCase()
-            lambda_use_case.invoke_lambda(
-                lambda_name="conversation-resolution",
-                payload=window_conversation_dto.dict() # set conversation payload
-            )
-
-            lambda_use_case.invoke_lambda(
-                lambda_name="conversation-topics",
-                payload=window_conversation_dto.dict() # set topics payload
-            )
+            lambda_use_case.create_lambda_conversation(window_conversation_dto.dict())
 
             message.channel.basic_ack(message.delivery_tag)
             print(f"[ ConversationConsumer ] - get conversation: {window_conversation_dto.contact_urn} {window_conversation_dto.start_date} - {window_conversation_dto.end_date}")

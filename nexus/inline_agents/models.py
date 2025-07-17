@@ -11,7 +11,7 @@ from nexus.agents.exceptions import (
     CredentialIsConfidentialInvalid,
 )
 from nexus.projects.models import Project
-
+from nexus.intelligences.models import Conversation
 
 class Guardrail(models.Model):
     identifier = models.CharField(max_length=255)
