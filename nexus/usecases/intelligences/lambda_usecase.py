@@ -79,14 +79,15 @@ class LambdaUseCase():
         }
 
         conversation_resolution = self.invoke_lambda(
-            lambda_name="conversation-resolution",
+            lambda_name="conversation-resolution-metric",
             payload=payload_conversation
         )
+        conversation_resolution_response = conversation_resolution.get("body")
         event_data = {
             "event_name": "weni_nexus_data",
             "key": "conversation_classification",
             "value_type": "string",
-            "value": conversation_resolution.get("resolution"),
+            "value": conversation_resolution_response.get("result"),
             "metadata": {
                 "human_support": conversation.has_chats_room,
                 "conversation_id": conversation.uuid,
@@ -111,7 +112,7 @@ class LambdaUseCase():
         }
 
         conversation_topics = self.invoke_lambda(
-            lambda_name="conversation-topics",
+            lambda_name="topic_classifier_stg",
             payload=payload_topics
         )
 
