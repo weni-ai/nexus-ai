@@ -669,7 +669,7 @@ class TestTopicsViewSet(TestCase):
             'delete': 'destroy',
         })
 
-        self.topic = TopicsFactory(project=self.project)
+        self.topic = TopicsFactory()
         self.project = self.topic.project
         self.user = self.project.created_by
 
@@ -717,6 +717,8 @@ class TestTopicsViewSet(TestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]['name'], self.topic.name)
         self.assertEqual(response.data[0]['uuid'], str(self.topic.uuid))
+        self.assertEqual(response.data[0]['description'], self.topic.description)
+        self.assertIn('subtopic', response.data[0])
 
     def test_retrieve_topic(self):
         url_retrieve = f'{self.url}/{self.topic.uuid}/'
@@ -733,10 +735,13 @@ class TestTopicsViewSet(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['name'], self.topic.name)
         self.assertEqual(response.data['uuid'], str(self.topic.uuid))
+        self.assertEqual(response.data['description'], self.topic.description)
+        self.assertIn('subtopic', response.data)
 
     def test_create_topic(self):
         data = {
             'name': 'New Test Topic',
+            'description': 'Test topic description',
         }
         request = self.factory.post(self.url, data, format='json')
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
@@ -749,12 +754,14 @@ class TestTopicsViewSet(TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data['name'], data['name'])
+        self.assertEqual(response.data['description'], data['description'])
         self.assertIn('uuid', response.data)
         self.assertIn('created_at', response.data)
 
     def test_create_topic_without_project_uuid(self):
         data = {
             'name': 'New Test Topic',
+            'description': 'Test topic description',
         }
         request = self.factory.post('/invalid/topics/', data, format='json')
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
@@ -771,6 +778,7 @@ class TestTopicsViewSet(TestCase):
     def test_create_topic_with_invalid_project(self):
         data = {
             'name': 'New Test Topic',
+            'description': 'Test topic description',
         }
         invalid_project_uuid = "00000000-0000-0000-0000-000000000000"
         request = self.factory.post(f'{invalid_project_uuid}/topics/', data, format='json')
@@ -788,6 +796,7 @@ class TestTopicsViewSet(TestCase):
     def test_update_topic(self):
         data = {
             'name': 'Updated Topic Name',
+            'description': 'Updated topic description',
         }
         url_put = f'{self.url}/{self.topic.uuid}/'
         request = self.factory.put(
@@ -806,6 +815,7 @@ class TestTopicsViewSet(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['name'], data['name'])
+        self.assertEqual(response.data['description'], data['description'])
 
     def test_delete_topic(self):
         url_delete = f'{self.url}/{self.topic.uuid}/'
@@ -843,15 +853,9 @@ class TestSubTopicsViewSet(TestCase):
         })
 
         # Create test data
-        self.org = OrgFactory()
-        self.user = self.org.created_by
-        self.project = ProjectFactory(
-            name="Test Project",
-            org=self.org,
-            created_by=self.user
-        )
-        self.topic = TopicsFactory(project=self.project)
-        self.subtopic = SubTopicsFactory(topic=self.topic)
+        self.subtopic = SubTopicsFactory()
+        self.topic = self.subtopic.topic
+        self.project = self.topic.project
 
         self.external_token = "test-external-token"
 
@@ -903,6 +907,11 @@ class TestSubTopicsViewSet(TestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]['name'], self.subtopic.name)
         self.assertEqual(response.data[0]['uuid'], str(self.subtopic.uuid))
+        self.assertEqual(response.data[0]['description'], self.subtopic.description)
+        self.assertEqual(str(response.data[0]['topic_uuid']), str(self.topic.uuid))
+        self.assertEqual(response.data[0]['topic_name'], self.topic.name)
+        self.assertIn('topic_uuid', response.data[0])
+        self.assertIn('topic_name', response.data[0])
 
     def test_retrieve_subtopic(self):
         """Test retrieving a specific subtopic"""
@@ -921,11 +930,17 @@ class TestSubTopicsViewSet(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['name'], self.subtopic.name)
         self.assertEqual(response.data['uuid'], str(self.subtopic.uuid))
+        self.assertEqual(response.data['description'], self.subtopic.description)
+        self.assertEqual(str(response.data['topic_uuid']), str(self.topic.uuid))
+        self.assertEqual(response.data['topic_name'], self.topic.name)
+        self.assertIn('topic_uuid', response.data)
+        self.assertIn('topic_name', response.data)
 
     def test_create_subtopic(self):
         """Test creating a new subtopic"""
         data = {
             'name': 'New Test Subtopic',
+            'description': 'Test subtopic description',
         }
         request = self.factory.post(self.url, data, format='json')
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
@@ -939,6 +954,9 @@ class TestSubTopicsViewSet(TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data['name'], data['name'])
+        self.assertEqual(response.data['description'], data['description'])
+        self.assertEqual(str(response.data['topic_uuid']), str(self.topic.uuid))
+        self.assertEqual(response.data['topic_name'], self.topic.name)
         self.assertIn('uuid', response.data)
         self.assertIn('created_at', response.data)
 
@@ -946,6 +964,7 @@ class TestSubTopicsViewSet(TestCase):
         """Test creating a subtopic without topic_uuid should fail"""
         data = {
             'name': 'New Test Subtopic',
+            'description': 'Test subtopic description',
         }
         request = self.factory.post('/invalid/subtopics/', data, format='json')
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
@@ -964,6 +983,7 @@ class TestSubTopicsViewSet(TestCase):
         """Test creating a subtopic with invalid topic should fail"""
         data = {
             'name': 'New Test Subtopic',
+            'description': 'Test subtopic description',
         }
         invalid_topic_uuid = "00000000-0000-0000-0000-000000000000"
         request = self.factory.post(f'{self.project.uuid}/topics/{invalid_topic_uuid}/subtopics/', data, format='json')
@@ -983,6 +1003,7 @@ class TestSubTopicsViewSet(TestCase):
         """Test updating a subtopic"""
         data = {
             'name': 'Updated Subtopic Name',
+            'description': 'Updated subtopic description',
         }
         url_put = f'{self.url}/{self.subtopic.uuid}/'
         request = self.factory.put(
@@ -1002,6 +1023,7 @@ class TestSubTopicsViewSet(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['name'], data['name'])
+        self.assertEqual(response.data['description'], data['description'])
 
     def test_delete_subtopic(self):
         """Test deleting a subtopic"""
@@ -1040,6 +1062,7 @@ class TestSubTopicsViewSet(TestCase):
         # Create a subtopic for the first topic
         subtopic_data = {
             'name': 'Subtopic for First Topic',
+            'description': 'Test subtopic description',
         }
         request = self.factory.post(self.url, subtopic_data, format='json')
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
@@ -1052,6 +1075,9 @@ class TestSubTopicsViewSet(TestCase):
             )
 
         self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['description'], subtopic_data['description'])
+        self.assertEqual(str(response.data['topic_uuid']), str(self.topic.uuid))
+        self.assertEqual(response.data['topic_name'], self.topic.name)
 
         # Verify the subtopic belongs to the correct topic
         from nexus.intelligences.models import SubTopics
