@@ -259,4 +259,4 @@ class Conversation(models.Model):
 
 class ConversationMessage(models.Model):
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
-    message = models.ManyToManyField(InlineAgentMessage, on_delete=models.CASCADE, related_name="conversations")
+    message = models.ManyToManyField(InlineAgentMessage, related_name="conversations")

@@ -4,13 +4,19 @@ import json
 from django.conf import settings
 
 from nexus.usecases.inline_agents.create import CreateConversationUseCase
-from nexus.intelligences.models import Topics, Conversation, ConversationMessage
-
+from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 
 class LambdaUseCase():
 
     def __init__(self):
+        
         self.boto_client = boto3.client('lambda', region_name=settings.AWS_BEDROCK_REGION_NAME)
+        self.adapter = None
+
+    def _get_data_lake_event_adapter(self):
+        if self.adapter is None:
+            self.adapter = BedrockDataLakeEventAdapter()
+        return self.adapter
 
     def invoke_lambda(self, lambda_name: str, payload: dict):
         response = self.boto_client.invoke(
@@ -21,6 +27,7 @@ class LambdaUseCase():
         return response
 
     def get_lambda_topics(self, project):
+        from nexus.intelligences.models import Topics
         topics = Topics.objects.filter(project=project)
         topics_payload = []
 
@@ -42,6 +49,7 @@ class LambdaUseCase():
         return topics_payload
 
     def get_lambda_conversation(self, conversation):
+        from nexus.intelligences.models import ConversationMessage
         conversation_payload = {
             "conversation_id": conversation.uuid,
             "messages": []
@@ -56,18 +64,16 @@ class LambdaUseCase():
             })
         return conversation_payload
 
+    def send_datalake_event(self, event_data: dict, project_uuid: str, contact_urn: str):
+        adapter = self._get_data_lake_event_adapter()
+        adapter.to_data_lake_custom_event(
+            event_data=event_data,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn
+        )
 
-    def create_lambda_conversation(self, payload: dict):
-
-        create_conversation_use_case = CreateConversationUseCase()
-        conversation = create_conversation_use_case.create_conversation(payload)
-
-        lambda_topics = self.get_lambda_topics(conversation.project)
+    def lambda_conversation_resolution(self, conversation):
         lambda_conversation = self.get_lambda_conversation(conversation)
-
-        if not conversation:
-            return
-
         payload_conversation = {
             "conversation": lambda_conversation
         }
@@ -76,6 +82,28 @@ class LambdaUseCase():
             lambda_name="conversation-resolution",
             payload=payload_conversation
         )
+        event_data = {
+            "event_name": "weni_nexus_data",
+            "key": "conversation_classification",
+            "value_type": "string",
+            "value": conversation_resolution.get("resolution"),
+            "metadata": {
+                "human_support": conversation.has_chats_room,
+                "conversation_id": conversation.uuid,
+            }
+        }
+        self.send_datalake_event(
+            event_data=event_data,
+            project_uuid=conversation.project.uuid,
+            contact_urn=conversation.contact_urn
+        )
+
+
+
+    def lambda_conversation_topics(self, conversation):
+
+        lambda_topics = self.get_lambda_topics(conversation.project)
+        lambda_conversation = self.get_lambda_conversation(conversation)
 
         payload_topics = {
             "topics": lambda_topics,
@@ -87,6 +115,47 @@ class LambdaUseCase():
             payload=payload_topics
         )
 
-        # chamar o datalake
+        if conversation_topics.get("topic_uuid") is not "":
+            event_data = {
+                "event_name": "weni_nexus_data",
+                "key": "topics",
+                "value_type": "string",
+                "value": conversation_topics.get("topic_name"),
+                "metadata": {
+                    "topic_uuid": conversation_topics.get("topic_uuid"),
+                    "subtopic_uuid": conversation_topics.get("subtopic_uuid"),
+                    "subtopic": conversation_topics.get("subtopic_name"),
+                    "human_support": conversation.has_chats_room,
+                    "conversation_id": conversation.uuid,
+                }
+            }
+        else:
+            event_data = {
+                "event_name": "weni_nexus_data",
+                "key": "topics",
+                "value_type": "string",
+                "value": "bias",
+                "metadata": {
+                    "topic_uuid": "",
+                    "subtopic_uuid": "",
+                    "subtopic": "",
+                    "human_support": conversation.has_chats_room,
+                    "conversation_id": conversation.uuid,
+                }
+            }
 
+        self.send_datalake_event(
+            event_data=event_data,
+            project_uuid=conversation.project.uuid,
+            contact_urn=conversation.contact_urn
+        )
 
+    def create_lambda_conversation(
+        self, 
+        payload: dict
+    ): # deixar esse metodo async
+        create_conversation_use_case = CreateConversationUseCase()
+        conversation = create_conversation_use_case.create_conversation(payload)
+
+        self.lambda_conversation_resolution(conversation)
+        self.lambda_conversation_topics(conversation)
