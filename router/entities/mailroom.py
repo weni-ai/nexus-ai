@@ -1,5 +1,5 @@
 import json
-
+import re
 from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
 
@@ -35,12 +35,22 @@ class Message(BaseModel):
     @property
     def sanitized_urn(self):
         sanitized = ""
+        self.sanitize_webchat_urn()
         for char in self.contact_urn:
             if not char.isalnum() and char not in '-_.:':
                 sanitized += f"_{ord(char)}"
             else:
                 sanitized += char
         return sanitized
+    
+    def sanitize_webchat_urn(self):
+        pattern = r'(:[0-9]+)@'
+        match = re.search(pattern, self.contact_urn)
+        if match:
+            colon_number_end = match.end(1)
+            at_position = self.contact_urn.find('@', colon_number_end)
+            if at_position != -1:
+                self.contact_urn = self.contact_urn[:at_position]
 
 
 def message_factory(*args, contact_fields: dict = {}, metadata: dict = {}, **kwargs) -> Message:

@@ -60,3 +60,18 @@ class MailroomMessageTest(TestCase):
         message = message_factory(project_uuid="123", text="Hello", contact_urn="123")
 
         self.assertEqual(message.metadata, {})
+
+    def test_sanitize_webchat_urn(self):
+        contact_urn = "ext:1234567890@webchat.ai"
+        message = message_factory(project_uuid="123", text="Hello", contact_urn=contact_urn)
+        self.assertEqual(message.sanitized_urn, contact_urn.split("@")[0])
+
+    def test_sanitize_webchat_urn_with_multiple_ats(self):
+        contact_urn = "ext:1234567890@webchat.ai@webchat.ai"
+        message = message_factory(project_uuid="123", text="Hello", contact_urn=contact_urn)
+        self.assertEqual(message.sanitized_urn, contact_urn.split("@")[0])
+    
+    def test_sanitize_webchat_urn_no_ats(self):
+        contact_urn = "ext:1234567890"
+        message = message_factory(project_uuid="123", text="Hello", contact_urn=contact_urn)
+        self.assertEqual(message.sanitized_urn, contact_urn)
