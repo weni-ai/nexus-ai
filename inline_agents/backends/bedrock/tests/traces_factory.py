@@ -2,6 +2,7 @@ import factory
 import uuid
 import random
 from faker import Faker
+import pendulum
 
 faker = Faker()
 
@@ -75,6 +76,50 @@ class AgentCollaborationTraceFactory(factory.Factory):
                         },
                         "invocationType": "AGENT_COLLABORATOR",
                         "traceId": kwargs.get('trace_id', cls.trace_id)
+                    }
+                }
+            }
+        }
+
+
+class CustomEventTraceFactory(factory.Factory):
+    class Meta:
+        model = dict
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        return {
+            "collaboratorName": "cep_agent",
+            "eventTime": pendulum.now().to_iso8601_string(),
+            "sessionId": str(uuid.uuid4()),
+            "trace": {
+                "orchestrationTrace": {
+                    "observation": {
+                        "actionGroupInvocationOutput": {
+                            "metadata": {
+                                "clientRequestId": str(uuid.uuid4()),
+                                "endTime": pendulum.now().to_iso8601_string(),
+                                "startTime": pendulum.now().to_iso8601_string(),
+                                "totalTimeMs": random.randint(0, 10000)
+                            },
+                            "text": """{
+                                "events": [
+                                    {
+                                        "event_name": "weni_nexus_data",
+                                        "key": "csat",
+                                        "value_type": "string",
+                                        "value": "protocol_agent_csat",
+                                        "metadata": {
+                                            "agent_collaboration": {
+                                                "resposta": "5"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }"""
+                        },
+                        "traceId": str(uuid.uuid4()),
+                        "type": "ACTION_GROUP"
                     }
                 }
             }

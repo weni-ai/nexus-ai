@@ -4,7 +4,8 @@ from unittest.mock import Mock
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 from inline_agents.backends.bedrock.tests.traces_factory import (
     ActionGroupTraceFactory,
-    AgentCollaborationTraceFactory
+    AgentCollaborationTraceFactory,
+    CustomEventTraceFactory
 )
 
 
@@ -89,3 +90,98 @@ class TestBedrockDataLakeEventAdapter(TestCase):
 
         self.assertEqual(metadata["agent_name"], "test_agent")
         self.assertEqual(metadata["input_text"], "test input text")
+
+    def test_custom_event_data_with_valid_trace(self):
+        """Test custom_event_data method with a valid CustomEventTraceFactory trace"""
+        custom_trace = CustomEventTraceFactory()
+
+        # Call the method
+        self.adapter.custom_event_data(
+            inline_trace=custom_trace,
+            project_uuid=self.project_uuid,
+            contact_urn=self.contact_urn
+        )
+
+        # Verify the mock was called with the expected event data
+        self.mock_send_data_lake_event_task.delay.assert_called_once()
+
+        # Get the call arguments
+        call_args = self.mock_send_data_lake_event_task.delay.call_args[0][0]
+
+        # Verify the event data structure
+        self.assertEqual(call_args["event_name"], "weni_nexus_data")
+        self.assertEqual(call_args["key"], "csat")
+        self.assertEqual(call_args["value_type"], "string")
+        self.assertEqual(call_args["value"], "protocol_agent_csat")
+        self.assertEqual(call_args["project"], self.project_uuid)
+        self.assertEqual(call_args["contact_urn"], self.contact_urn)
+        self.assertIn("metadata", call_args)
+        self.assertIn("agent_collaboration", call_args["metadata"])
+        self.assertEqual(call_args["metadata"]["agent_collaboration"]["resposta"], "5")
+
+    def test_custom_event_data_with_invalid_json_text(self):
+        """Test custom_event_data method with invalid JSON in text field"""
+        custom_trace = CustomEventTraceFactory()
+
+        # Modify the trace to have invalid JSON
+        custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"]["text"] = "invalid json"
+
+        # Call the method
+        self.adapter.custom_event_data(
+            inline_trace=custom_trace,
+            project_uuid=self.project_uuid,
+            contact_urn=self.contact_urn
+        )
+
+        # Verify the mock was not called due to JSON parsing error
+        self.mock_send_data_lake_event_task.delay.assert_not_called()
+
+    def test_custom_event_data_with_missing_text_field(self):
+        """Test custom_event_data method with missing text field"""
+        custom_trace = CustomEventTraceFactory()
+
+        # Remove the text field
+        del custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"]["text"]
+
+        # Call the method
+        self.adapter.custom_event_data(
+            inline_trace=custom_trace,
+            project_uuid=self.project_uuid,
+            contact_urn=self.contact_urn
+        )
+
+        # Verify the mock was not called
+        self.mock_send_data_lake_event_task.delay.assert_not_called()
+
+    def test_custom_event_data_with_empty_events_list(self):
+        """Test custom_event_data method with empty events list"""
+        custom_trace = CustomEventTraceFactory()
+
+        # Modify the trace to have empty events list
+        custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"]["text"] = '{"events": []}'
+
+        # Call the method
+        self.adapter.custom_event_data(
+            inline_trace=custom_trace,
+            project_uuid=self.project_uuid,
+            contact_urn=self.contact_urn
+        )
+
+        # Verify the mock was not called
+        self.mock_send_data_lake_event_task.delay.assert_not_called()
+
+    def test_custom_event_data_with_preview_mode(self):
+        """Test custom_event_data method in preview mode"""
+        custom_trace = CustomEventTraceFactory()
+
+        # Call the method with preview=True
+        result = self.adapter.custom_event_data(
+            inline_trace=custom_trace,
+            project_uuid=self.project_uuid,
+            contact_urn=self.contact_urn,
+            preview=True
+        )
+
+        # Verify the mock was not called in preview mode
+        self.mock_send_data_lake_event_task.delay.assert_not_called()
+        self.assertIsNone(result)

@@ -166,9 +166,9 @@ class BedrockBackend(InlineAgentsBackend):
                 # Store the trace event for potential use
                 trace_data = event['trace']
                 trace_events.append(trace_data)
-               
+
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
-                
+
                 action_group_data = orchestration_trace.get('observation', {}).get("actionGroupInvocationOutput", {})
                 print(f"[ + DEBUG action_group_data + ] action_group_data: {action_group_data}")
                 if action_group_data.get('text'):
