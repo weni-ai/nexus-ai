@@ -147,7 +147,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
-            contact_urn=self.contact_urn
+            contaTestBedrockct_urn=self.contact_urn
         )
 
         # Verify the mock was not called

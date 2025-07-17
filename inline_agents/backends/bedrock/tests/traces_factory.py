@@ -102,7 +102,7 @@ class CustomEventTraceFactory(factory.Factory):
                                 "startTime": pendulum.now().to_iso8601_string(),
                                 "totalTimeMs": random.randint(0, 10000)
                             },
-                            "text": """{
+                            "text": """{"cep": "1234",
                                 "events": [
                                     {
                                         "event_name": "weni_nexus_data",
