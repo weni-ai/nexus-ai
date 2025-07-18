@@ -230,16 +230,14 @@ class SubTopics(models.Model):
 class Conversation(models.Model):
     uuid = models.UUIDField(primary_key=True, default=uuid4)
     created_at = models.DateTimeField(auto_now_add=True)
-    message = models.ForeignKey(InlineAgentMessage, on_delete=models.CASCADE, related_name="conversations")
     csat = models.TextField(null=True, blank=True)
-    topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations")
+    topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="conversations")
-
-    def get_message_data(self):
-        return {
-            "text": self.message.text,
-            "uuid": str(self.message.uuid),
-        }
+    external_id = models.CharField(max_length=255, null=True, blank=True)
+    has_chats_room = models.BooleanField(default=False)
+    contact_urn = models.CharField(max_length=255, null=True, blank=True)
+    start_date = models.DateTimeField(null=True, blank=True)
+    end_date = models.DateTimeField(null=True, blank=True)
 
     def get_topic(self):
         return self.topic.name
@@ -249,8 +247,12 @@ class Conversation(models.Model):
         return {
             "uuid": str(self.uuid),
             "created_at": self.created_at,
-            "message": self.get_message_data(),
             "csat": self.csat,
             "topic": self.get_topic(),
             "project": str(self.project.uuid),
         }
+
+
+class ConversationMessage(models.Model):
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
+    message = models.ManyToManyField(InlineAgentMessage, related_name="conversations")
