@@ -79,7 +79,7 @@ class LambdaUseCase():
         }
 
         conversation_resolution = self.invoke_lambda(
-            lambda_name="conversation-resolution-metric",
+            lambda_name=settings.CONVERSATION_RESOLUTION_NAME,
             payload=payload_conversation
         )
         conversation_resolution_response = conversation_resolution.get("body")
@@ -112,7 +112,7 @@ class LambdaUseCase():
         }
 
         conversation_topics = self.invoke_lambda(
-            lambda_name="topic_classifier_stg",
+            lambda_name=settings.CONVERSATION_TOPIC_CLASSIFIER_NAME,
             payload=payload_topics
         )
 
@@ -159,4 +159,4 @@ class LambdaUseCase():
         conversation = create_conversation_use_case.create_conversation(payload)
 
         # self.lambda_conversation_resolution(conversation)
-        # self.lambda_conversation_topics(conversation)
+        self.lambda_conversation_topics(conversation)
