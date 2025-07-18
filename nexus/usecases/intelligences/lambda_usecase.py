@@ -73,16 +73,19 @@ class LambdaUseCase():
         )
 
     def lambda_conversation_resolution(self, conversation):
+        print(f"[+ 🧠 Getting lambda conversation +]")
         lambda_conversation = self.get_lambda_conversation(conversation)
         payload_conversation = {
             "conversation": lambda_conversation
         }
-
+        print(f"[+ 🧠 Invoking lambda conversation resolution +]")
         conversation_resolution = self.invoke_lambda(
             lambda_name=settings.CONVERSATION_RESOLUTION_NAME,
             payload=payload_conversation
         )
+        print(f"[+ 🧠 Conversation resolution: {conversation_resolution} +]")
         conversation_resolution_response = conversation_resolution.get("body")
+        print(f"[+ 🧠 Conversation resolution response: {conversation_resolution_response} +]")
         event_data = {
             "event_name": "weni_nexus_data",
             "key": "conversation_classification",
@@ -93,29 +96,31 @@ class LambdaUseCase():
                 "conversation_id": conversation.uuid,
             }
         }
+        print(f"[+ 🧠 Sending datalake event +]")
         self.send_datalake_event(
             event_data=event_data,
             project_uuid=conversation.project.uuid,
             contact_urn=conversation.contact_urn
         )
-
+        print(f"[+ 🧠 Sent datalake event +]")
 
 
     def lambda_conversation_topics(self, conversation):
-
+        print(f"[+ 🧠 Getting lambda topics +]")
         lambda_topics = self.get_lambda_topics(conversation.project)
+        print(f"[+ 🧠 Getting lambda conversation +]")
         lambda_conversation = self.get_lambda_conversation(conversation)
 
         payload_topics = {
             "topics": lambda_topics,
             "conversation": lambda_conversation
         }
-
+        print(f"[+ 🧠 Invoking lambda topics +]")
         conversation_topics = self.invoke_lambda(
             lambda_name=settings.CONVERSATION_TOPIC_CLASSIFIER_NAME,
             payload=payload_topics
         )
-
+        print(f"[+ 🧠 Conversation topics: {conversation_topics} +]")
         if conversation_topics.get("topic_uuid") is not "":
             event_data = {
                 "event_name": "weni_nexus_data",
@@ -144,7 +149,7 @@ class LambdaUseCase():
                     "conversation_id": conversation.uuid,
                 }
             }
-
+        print(f"[+ 🧠 Sending datalake event +]")
         self.send_datalake_event(
             event_data=event_data,
             project_uuid=conversation.project.uuid,
@@ -158,5 +163,5 @@ class LambdaUseCase():
         create_conversation_use_case = CreateConversationUseCase()
         conversation = create_conversation_use_case.create_conversation(payload)
 
-        # self.lambda_conversation_resolution(conversation)
-        self.lambda_conversation_topics(conversation)
+        self.lambda_conversation_resolution(conversation)
+        # self.lambda_conversation_topics(conversation)
