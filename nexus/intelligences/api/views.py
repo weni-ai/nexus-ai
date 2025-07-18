@@ -737,6 +737,130 @@ class ContentBaseFileViewset(ModelViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class InlineContentBaseFileViewset(ModelViewSet):
+
+    serializer_class = ContentBaseFileSerializer
+    pagination_class = CustomCursorPagination
+    parser_classes = (parsers.MultiPartParser,)
+    permission_classes = [IsAuthenticated, ProjectPermission]
+    lookup_url_kwarg = "contentbase_file_uuid"
+
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def create(self, request, content_base_uuid=str):
+        from rest_framework import status as http_status
+
+        def validate_file_size(file):
+            # default 50 MiB
+            if file.size > (settings.BEDROCK_FILE_SIZE_LIMIT * (1024**2)):
+                return Response(data={"message": "File size is too large"}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        try:
+            self.get_queryset()
+
+            user: User = request.user
+            file: InMemoryUploadedFile = request.FILES['file']
+            validate_file_size(file)
+            user_email: str = user.email
+            extension_file: str = request.data.get("extension_file")
+            load_type = request.data.get("load_type")
+
+            file_manager = CeleryFileManager()
+
+            try:
+                project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+                indexer_database = project.indexer_database
+            except ObjectDoesNotExist:
+                indexer_database = Project.SENTENX
+
+            if indexer_database == Project.BEDROCK:
+                data, status = file_manager.upload_and_ingest_file(
+                    file,
+                    file.name,
+                    content_base_uuid,
+                    extension_file,
+                    user_email,
+                )
+                return Response(data=data, status=status)
+
+            # will be removed in the future
+            response = file_manager.upload_file(
+                file,
+                content_base_uuid,
+                extension_file,
+                user_email,
+                load_type,
+                filename=file.name
+            )
+
+            return Response(
+                response,
+                status=http_status.HTTP_201_CREATED
+            )
+
+        except MultiValueDictKeyError:
+            return Response(data={"message": "file is required"}, status=http_status.HTTP_400_BAD_REQUEST)
+        except IntelligencePermissionDenied:
+            return Response(status=http_status.HTTP_401_UNAUTHORIZED)
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return ContentBaseFile.objects.none()  # pragma: no cover
+        use_case = intelligences.ListContentBaseFileUseCase()
+        contentbase_uuid = self.kwargs.get('content_base_uuid')
+        return use_case.get_inline_contentbase_file(contentbase_uuid=contentbase_uuid)
+
+    def retrieve(self, request, *args, **kwargs):
+        try:
+            contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
+            use_case = intelligences.RetrieveContentBaseFileUseCase()
+            contentbasetext = use_case.get_inline_contentbase_file(
+                contentbasefile_uuid=contentbasefile_uuid
+            )
+            serializer = self.get_serializer(contentbasetext)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
+            content_base_uuid: str = kwargs.get('content_base_uuid')
+            use_case = intelligences.RetrieveContentBaseFileUseCase()
+            content_base_file = use_case.get_inline_contentbase_file(
+                contentbasefile_uuid=contentbasefile_uuid
+            )
+            project_use_case = ProjectsUseCase()
+            project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
+            indexer = project_use_case.get_indexer_database_by_project(project)
+            intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
+
+            if project.indexer_database == Project.BEDROCK:
+                start_ingestion_job.delay("", post_delete=True)
+
+            event_manager.notify(
+                event="contentbase_file_activity",
+                action_type="D",
+                content_base_file=content_base_file,
+                user=self.request.user
+            )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ObjectDoesNotExist:
+            indexer = SentenXFileDataBase
+            intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
+            event_manager.notify(
+                event="contentbase_file_activity",
+                action_type="D",
+                content_base_file=content_base_file,
+                user=self.request.user
+            )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class ContentBaseLinkViewset(ModelViewSet):
 
     serializer_class = ContentBaseLinkSerializer
