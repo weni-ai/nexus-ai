@@ -184,16 +184,26 @@ class BedrockTeamAdapter(TeamAdapter):
         content_base_uuid: str
     ) -> list[dict]:
 
-        single_filter = {
-            "equals": {
-                "key": "contentBaseUuid",
-                "value": str(content_base_uuid)
-            }
+        combined_filter = {
+            "andAll": [
+                {
+                    "equals": {
+                        "key": "contentBaseUuid",
+                        "value": str(content_base_uuid)
+                    }
+                },
+                {
+                    "equals": {
+                        "key": "x-amz-bedrock-kb-data-source-id",
+                        "value": settings.AWS_BEDROCK_DATASOURCE_ID
+                    }
+                }
+            ]
         }
 
         retrieval_configuration = {
             "vectorSearchConfiguration": {
-                "filter": single_filter
+                "filter": combined_filter
             }
         }
 
