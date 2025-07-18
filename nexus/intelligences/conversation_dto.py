@@ -19,6 +19,7 @@ class WindowConversationDTO:
     end_date: str
     contact_urn: str
     has_chats_room: bool
+    external_id: str
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
