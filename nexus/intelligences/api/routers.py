@@ -7,6 +7,7 @@ from .views import (
     ContentBaseTextViewset,
     ContentBaseFileViewset,
     ContentBaseLinkViewset,
+    InlineContentBaseFileViewset,
     SentenxIndexerUpdateFile,
     GenerativeIntelligenceQuestionAPIView,
     QuickTestAIAPIView,
@@ -51,6 +52,12 @@ content_base_router.register(
     r'content-bases-link',
     ContentBaseLinkViewset,
     basename='content-base-link'
+)
+
+content_base_router.register(
+    r'content-bases-file-inline',
+    InlineContentBaseFileViewset,
+    basename='content-base-file-inline'
 )
 
 urlpatterns = [
