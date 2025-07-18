@@ -821,14 +821,26 @@ class BedrockFileDatabase(FileDataBase):
         return
 
     def search_data(self, content_base_uuid: str, text: str, number_of_results: int = 5) -> Dict[str, Any]:
-        retrieval_config = {
-            "vectorSearchConfiguration": {
-                "filter": {
+        combined_filter = {
+            "andAll": [
+                {
                     "equals": {
                         "key": "contentBaseUuid",
                         "value": content_base_uuid
                     }
                 },
+                {
+                    "equals": {
+                        "key": "x-amz-bedrock-kb-data-source-id",
+                        "value": self.data_source_id
+                    }
+                }
+            ]
+        }
+
+        retrieval_config = {
+            "vectorSearchConfiguration": {
+                "filter": combined_filter,
                 "numberOfResults": number_of_results
             }
         }
