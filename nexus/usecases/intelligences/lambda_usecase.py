@@ -56,7 +56,7 @@ class LambdaUseCase():
         }
         conversation_messages = ConversationMessage.objects.get(conversation=conversation)
 
-        for message in conversation_messages:
+        for message in conversation_messages.message.all():
             conversation_payload["messages"].append({
                 "sender": message.message.source,
                 "timestamp": message.message.created_at,
