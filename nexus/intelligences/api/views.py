@@ -746,10 +746,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
     lookup_url_kwarg = "contentbase_file_uuid"
 
     def list(self, request, *args, **kwargs):
-        try:
-            return super().list(request, *args, **kwargs)
-        except IntelligencePermissionDenied:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        return super().list(request, *args, **kwargs)
 
     def create(self, request, content_base_uuid=str):
         from rest_framework import status as http_status
@@ -759,7 +756,6 @@ class InlineContentBaseFileViewset(ModelViewSet):
             if file.size > (settings.BEDROCK_FILE_SIZE_LIMIT * (1024**2)):
                 return Response(data={"message": "File size is too large"}, status=http_status.HTTP_400_BAD_REQUEST)
 
-        try:
             self.get_queryset()
 
             user: User = request.user
@@ -802,11 +798,6 @@ class InlineContentBaseFileViewset(ModelViewSet):
                 status=http_status.HTTP_201_CREATED
             )
 
-        except MultiValueDictKeyError:
-            return Response(data={"message": "file is required"}, status=http_status.HTTP_400_BAD_REQUEST)
-        except IntelligencePermissionDenied:
-            return Response(status=http_status.HTTP_401_UNAUTHORIZED)
-
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return ContentBaseFile.objects.none()  # pragma: no cover
@@ -815,16 +806,14 @@ class InlineContentBaseFileViewset(ModelViewSet):
         return use_case.get_inline_contentbase_file(contentbase_uuid=contentbase_uuid)
 
     def retrieve(self, request, *args, **kwargs):
-        try:
-            contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
-            use_case = intelligences.RetrieveContentBaseFileUseCase()
-            contentbasetext = use_case.get_inline_contentbase_file(
-                contentbasefile_uuid=contentbasefile_uuid
-            )
-            serializer = self.get_serializer(contentbasetext)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except IntelligencePermissionDenied:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+        contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
+        use_case = intelligences.RetrieveContentBaseFileUseCase()
+        contentbasetext = use_case.get_inline_contentbase_file(
+            contentbasefile_uuid=contentbasefile_uuid
+        )
+        serializer = self.get_serializer(contentbasetext)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         try:
