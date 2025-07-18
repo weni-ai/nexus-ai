@@ -21,6 +21,7 @@ class  ConversationConsumer(EDAConsumer):
                 end_date=body.get("end"),
                 contact_urn=body.get("contact_urn"),
                 has_chats_room=body.get("has_chats_room"),
+                external_id=body.get("id")
             )
 
             lambda_use_case = LambdaUseCase()
