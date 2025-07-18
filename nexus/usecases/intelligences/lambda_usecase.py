@@ -51,7 +51,7 @@ class LambdaUseCase():
     def get_lambda_conversation(self, conversation):
         from nexus.intelligences.models import ConversationMessage
         conversation_payload = {
-            "conversation_id": conversation.uuid,
+            "conversation_id": str(conversation.uuid),
             "messages": []
         }
         conversation_messages = ConversationMessage.objects.get(conversation=conversation)
@@ -59,7 +59,7 @@ class LambdaUseCase():
         for message in conversation_messages.message.all():
             conversation_payload["messages"].append({
                 "sender": message.source,
-                "timestamp": message.created_at,
+                "timestamp": str(message.created_at),
                 "content": message.text
             })
         return conversation_payload
@@ -80,7 +80,7 @@ class LambdaUseCase():
         }
         print(f"[+ 🧠 Invoking lambda conversation resolution +]")
         conversation_resolution = self.invoke_lambda(
-            lambda_name=settings.CONVERSATION_RESOLUTION_NAME,
+            lambda_name=str(settings.CONVERSATION_RESOLUTION_NAME),
             payload=payload_conversation
         )
         print(f"[+ 🧠 Conversation resolution: {conversation_resolution} +]")
