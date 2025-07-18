@@ -103,9 +103,9 @@ class CreateConversationUseCase():
             end_date=consumer_message.get("end_date")
         )
 
-        ConversationMessage.objects.create(
+        conversation_message = ConversationMessage.objects.create(
             conversation=conversation,
-            message=messages
         )
+        conversation_message.message.set(messages)
 
         return conversation
