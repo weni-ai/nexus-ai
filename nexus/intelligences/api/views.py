@@ -778,7 +778,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
                 indexer_database = Project.SENTENX
 
             if indexer_database == Project.BEDROCK:
-                data, status = file_manager.upload_and_ingest_file(
+                data, status = file_manager.upload_and_ingest_inline_file(
                     file,
                     file.name,
                     content_base_uuid,
@@ -788,7 +788,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
                 return Response(data=data, status=status)
 
             # will be removed in the future
-            response = file_manager.upload_file(
+            response = file_manager.upload_inline_file(
                 file,
                 content_base_uuid,
                 extension_file,
