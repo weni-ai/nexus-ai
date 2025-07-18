@@ -58,9 +58,9 @@ class LambdaUseCase():
 
         for message in conversation_messages.message.all():
             conversation_payload["messages"].append({
-                "sender": message.message.source,
-                "timestamp": message.message.created_at,
-                "content": message.message.text
+                "sender": message.source,
+                "timestamp": message.created_at,
+                "content": message.text
             })
         return conversation_payload
 
