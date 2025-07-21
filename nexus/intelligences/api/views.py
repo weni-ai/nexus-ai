@@ -748,7 +748,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 
-    def create(self, request):
+    def create(self, request, **kwargs):
         from rest_framework import status as http_status
 
         def validate_file_size(file):
