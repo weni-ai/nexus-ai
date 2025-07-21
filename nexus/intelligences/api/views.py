@@ -748,7 +748,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 
-    def create(self, request, content_base_uuid=str):
+    def create(self, request):
         from rest_framework import status as http_status
 
         print("STARTING INLINE CONTENT BASE FILE CREATE")
@@ -758,7 +758,13 @@ class InlineContentBaseFileViewset(ModelViewSet):
             if file.size > (settings.BEDROCK_FILE_SIZE_LIMIT * (1024**2)):
                 return Response(data={"message": "File size is too large"}, status=http_status.HTTP_400_BAD_REQUEST)
 
-        self.get_queryset()
+        # Get content_base from get_queryset
+        queryset = self.get_queryset()
+        if not queryset.exists():
+            return Response(data={"message": "No content base found for this project"}, status=http_status.HTTP_404_NOT_FOUND)
+
+        content_base = queryset.first().content_base
+        content_base_uuid = str(content_base.uuid)
 
         user: User = request.user
         file: InMemoryUploadedFile = request.FILES['file']
@@ -770,7 +776,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
         file_manager = CeleryFileManager()
 
         try:
-            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+            project = ProjectsUseCase().get_by_uuid(self.kwargs.get('project_uuid'))
             indexer_database = project.indexer_database
         except ObjectDoesNotExist:
             indexer_database = Project.SENTENX
@@ -804,8 +810,9 @@ class InlineContentBaseFileViewset(ModelViewSet):
         if getattr(self, "swagger_fake_view", False):
             return ContentBaseFile.objects.none()  # pragma: no cover
         use_case = intelligences.ListContentBaseFileUseCase()
-        contentbase_uuid = self.kwargs.get('content_base_uuid')
-        return use_case.get_inline_contentbase_file(contentbase_uuid=contentbase_uuid)
+        project_uuid = self.kwargs.get('project_uuid')
+        content_base = intelligences.get_by_uuid.get_default_content_base_by_project(project_uuid)
+        return use_case.get_inline_contentbase_file(contentbase_uuid=str(content_base.uuid))
 
     def retrieve(self, request, *args, **kwargs):
 
@@ -820,7 +827,15 @@ class InlineContentBaseFileViewset(ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         try:
             contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
-            content_base_uuid: str = kwargs.get('content_base_uuid')
+
+            # Get content_base from get_queryset
+            queryset = self.get_queryset()
+            if not queryset.exists():
+                return Response(data={"message": "No content base found for this project"}, status=status.HTTP_404_NOT_FOUND)
+
+            content_base = queryset.first().content_base
+            content_base_uuid = str(content_base.uuid)
+
             use_case = intelligences.RetrieveContentBaseFileUseCase()
             content_base_file = use_case.get_inline_contentbase_file(
                 contentbasefile_uuid=contentbasefile_uuid
