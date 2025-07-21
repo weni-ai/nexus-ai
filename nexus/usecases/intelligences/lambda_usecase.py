@@ -114,42 +114,43 @@ class LambdaUseCase():
             "conversation": lambda_conversation
         }
         print(f"[+ 🧠 Payload topics: {payload_topics} type: {type(payload_topics)} +]")
+        event_data = {
+            "event_name": "weni_nexus_data",
+            "key": "topics",
+            "value_type": "string",
+            "value": "bias",
+            "metadata": {
+                "topic_uuid": "",
+                "subtopic_uuid": "",
+                "subtopic": "",
+                "human_support": conversation.has_chats_room,
+                "conversation_id": str(conversation.uuid),
+            }
+        }
+        if len(lambda_topics) > 0:
+            print(f"[+ 🧠 Invoking lambda topics +]")
+            conversation_topics = self.invoke_lambda(
+                lambda_name=str(settings.CONVERSATION_TOPIC_CLASSIFIER_NAME),
+                payload=payload_topics
+            )
+            conversation_topics = json.loads(conversation_topics.get("Payload").read()).get("body")
+            conversation_topics = json.loads(conversation_topics)
+            print(f"[+ 🧠 Conversation topics: {conversation_topics} type: {type(conversation_topics)} +]")
+            if conversation_topics.get("topic_uuid") is not "":
+                event_data = {
+                    "event_name": "weni_nexus_data",
+                    "key": "topics",
+                    "value_type": "string",
+                    "value": conversation_topics.get("topic_name"),
+                    "metadata": {
+                        "topic_uuid": str(conversation_topics.get("topic_uuid")),
+                        "subtopic_uuid": str(conversation_topics.get("subtopic_uuid")),
+                        "subtopic": conversation_topics.get("subtopic_name"),
+                        "human_support": conversation.has_chats_room,
+                        "conversation_id": str(conversation.uuid),
+                    }
+                }
 
-        print(f"[+ 🧠 Invoking lambda topics +]")
-        conversation_topics = self.invoke_lambda(
-            lambda_name=str(settings.CONVERSATION_TOPIC_CLASSIFIER_NAME),
-            payload=payload_topics
-        )
-        conversation_topics = json.loads(conversation_topics.get("Payload").read()).get("body")
-        print(f"[+ 🧠 Conversation topics: {conversation_topics} type: {type(conversation_topics)} +]")
-        if conversation_topics.get("topic_uuid") is not "":
-            event_data = {
-                "event_name": "weni_nexus_data",
-                "key": "topics",
-                "value_type": "string",
-                "value": conversation_topics.get("topic_name"),
-                "metadata": {
-                    "topic_uuid": str(conversation_topics.get("topic_uuid")),
-                    "subtopic_uuid": str(conversation_topics.get("subtopic_uuid")),
-                    "subtopic": conversation_topics.get("subtopic_name"),
-                    "human_support": conversation.has_chats_room,
-                    "conversation_id": str(conversation.uuid),
-                }
-            }
-        else:
-            event_data = {
-                "event_name": "weni_nexus_data",
-                "key": "topics",
-                "value_type": "string",
-                "value": "bias",
-                "metadata": {
-                    "topic_uuid": "",
-                    "subtopic_uuid": "",
-                    "subtopic": "",
-                    "human_support": conversation.has_chats_room,
-                    "conversation_id": str(conversation.uuid),
-                }
-            }
         print(f"[+ 🧠 Sending datalake event +]")
         self.send_datalake_event(
             event_data=event_data,
