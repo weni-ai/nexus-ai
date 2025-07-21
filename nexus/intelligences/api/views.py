@@ -756,47 +756,47 @@ class InlineContentBaseFileViewset(ModelViewSet):
             if file.size > (settings.BEDROCK_FILE_SIZE_LIMIT * (1024**2)):
                 return Response(data={"message": "File size is too large"}, status=http_status.HTTP_400_BAD_REQUEST)
 
-            self.get_queryset()
+        self.get_queryset()
 
-            user: User = request.user
-            file: InMemoryUploadedFile = request.FILES['file']
-            validate_file_size(file)
-            user_email: str = user.email
-            extension_file: str = request.data.get("extension_file")
-            load_type = request.data.get("load_type")
+        user: User = request.user
+        file: InMemoryUploadedFile = request.FILES['file']
+        validate_file_size(file)
+        user_email: str = user.email
+        extension_file: str = request.data.get("extension_file")
+        load_type = request.data.get("load_type")
 
-            file_manager = CeleryFileManager()
+        file_manager = CeleryFileManager()
 
-            try:
-                project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-                indexer_database = project.indexer_database
-            except ObjectDoesNotExist:
-                indexer_database = Project.SENTENX
+        try:
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+            indexer_database = project.indexer_database
+        except ObjectDoesNotExist:
+            indexer_database = Project.SENTENX
 
-            if indexer_database == Project.BEDROCK:
-                data, status = file_manager.upload_and_ingest_inline_file(
-                    file,
-                    file.name,
-                    content_base_uuid,
-                    extension_file,
-                    user_email,
-                )
-                return Response(data=data, status=status)
-
-            # will be removed in the future
-            response = file_manager.upload_inline_file(
+        if indexer_database == Project.BEDROCK:
+            data, status = file_manager.upload_and_ingest_inline_file(
                 file,
+                file.name,
                 content_base_uuid,
                 extension_file,
                 user_email,
-                load_type,
-                filename=file.name
             )
+            return Response(data=data, status=status)
 
-            return Response(
-                response,
-                status=http_status.HTTP_201_CREATED
-            )
+        # will be removed in the future
+        response = file_manager.upload_inline_file(
+            file,
+            content_base_uuid,
+            extension_file,
+            user_email,
+            load_type,
+            filename=file.name
+        )
+
+        return Response(
+            response,
+            status=http_status.HTTP_201_CREATED
+        )
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):

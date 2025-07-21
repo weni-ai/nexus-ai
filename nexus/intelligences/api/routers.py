@@ -55,7 +55,7 @@ content_base_router.register(
 )
 
 content_base_router.register(
-    r'content-bases-file-inline',
+    r'inline-content-base-file',
     InlineContentBaseFileViewset,
     basename='content-base-file-inline'
 )
