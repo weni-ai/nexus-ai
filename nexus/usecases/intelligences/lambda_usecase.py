@@ -113,13 +113,15 @@ class LambdaUseCase():
             "topics": lambda_topics,
             "conversation": lambda_conversation
         }
+        print(f"[+ 🧠 Payload topics: {payload_topics} type: {type(payload_topics)} +]")
+
         print(f"[+ 🧠 Invoking lambda topics +]")
         conversation_topics = self.invoke_lambda(
             lambda_name=str(settings.CONVERSATION_TOPIC_CLASSIFIER_NAME),
             payload=payload_topics
         )
         conversation_topics = json.loads(conversation_topics.get("Payload").read()).get("body")
-        print(f"[+ 🧠 Conversation topics: {conversation_topics} +]")
+        print(f"[+ 🧠 Conversation topics: {conversation_topics} type: {type(conversation_topics)} +]")
         if conversation_topics.get("topic_uuid") is not "":
             event_data = {
                 "event_name": "weni_nexus_data",
