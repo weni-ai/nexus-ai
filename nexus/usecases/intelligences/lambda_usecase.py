@@ -35,12 +35,12 @@ class LambdaUseCase():
             subtopics_payload = []
             for subtopic in topic.subtopics.all():
                 subtopics_payload.append({
-                    "subtopic_uuid": subtopic.uuid,
+                    "subtopic_uuid": str(subtopic.uuid),
                     "name": subtopic.name,
                     "description": subtopic.description
                 })
             topics_payload.append({
-                "topic_uuid": topic.uuid,
+                "topic_uuid": str(topic.uuid),
                 "name": topic.name,
                 "description": topic.description,
                 "subtopics": subtopics_payload
@@ -83,10 +83,7 @@ class LambdaUseCase():
             lambda_name=str(settings.CONVERSATION_RESOLUTION_NAME),
             payload=payload_conversation
         )
-        print(f"[+ 🧠 Conversation resolution: {conversation_resolution} +]")
-        print(f"[+ 🧠 Conversation resolution payload: {conversation_resolution.get('Payload').__dict__} +]")
         conversation_resolution_response = json.loads(conversation_resolution.get("Payload").read()).get("body")
-        print(f"[+ 🧠 Conversation resolution response: {conversation_resolution_response} +]")
         event_data = {
             "event_name": "weni_nexus_data",
             "key": "conversation_classification",
@@ -94,7 +91,7 @@ class LambdaUseCase():
             "value": conversation_resolution_response.get("result"),
             "metadata": {
                 "human_support": conversation.has_chats_room,
-                "conversation_id": conversation.uuid,
+                "conversation_id": str(conversation.uuid),
             }
         }
         print(f"[+ 🧠 Sending datalake event +]")
@@ -118,9 +115,10 @@ class LambdaUseCase():
         }
         print(f"[+ 🧠 Invoking lambda topics +]")
         conversation_topics = self.invoke_lambda(
-            lambda_name=settings.CONVERSATION_TOPIC_CLASSIFIER_NAME,
+            lambda_name=str(settings.CONVERSATION_TOPIC_CLASSIFIER_NAME),
             payload=payload_topics
         )
+        conversation_topics = json.loads(conversation_topics.get("Payload").read()).get("body")
         print(f"[+ 🧠 Conversation topics: {conversation_topics} +]")
         if conversation_topics.get("topic_uuid") is not "":
             event_data = {
@@ -129,11 +127,11 @@ class LambdaUseCase():
                 "value_type": "string",
                 "value": conversation_topics.get("topic_name"),
                 "metadata": {
-                    "topic_uuid": conversation_topics.get("topic_uuid"),
-                    "subtopic_uuid": conversation_topics.get("subtopic_uuid"),
+                    "topic_uuid": str(conversation_topics.get("topic_uuid")),
+                    "subtopic_uuid": str(conversation_topics.get("subtopic_uuid")),
                     "subtopic": conversation_topics.get("subtopic_name"),
                     "human_support": conversation.has_chats_room,
-                    "conversation_id": conversation.uuid,
+                    "conversation_id": str(conversation.uuid),
                 }
             }
         else:
@@ -147,7 +145,7 @@ class LambdaUseCase():
                     "subtopic_uuid": "",
                     "subtopic": "",
                     "human_support": conversation.has_chats_room,
-                    "conversation_id": conversation.uuid,
+                    "conversation_id": str(conversation.uuid),
                 }
             }
         print(f"[+ 🧠 Sending datalake event +]")
@@ -165,4 +163,4 @@ class LambdaUseCase():
         conversation = create_conversation_use_case.create_conversation(payload)
 
         self.lambda_conversation_resolution(conversation)
-        # self.lambda_conversation_topics(conversation)
+        self.lambda_conversation_topics(conversation)
