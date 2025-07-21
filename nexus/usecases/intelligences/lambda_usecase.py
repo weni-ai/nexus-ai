@@ -84,7 +84,8 @@ class LambdaUseCase():
             payload=payload_conversation
         )
         print(f"[+ 🧠 Conversation resolution: {conversation_resolution} +]")
-        conversation_resolution_response = conversation_resolution.get("body")
+        print(f"[+ 🧠 Conversation resolution payload: {conversation_resolution.get('Payload').__dict__} +]")
+        conversation_resolution_response = json.loads(conversation_resolution.get("Payload").read()).get("body")
         print(f"[+ 🧠 Conversation resolution response: {conversation_resolution_response} +]")
         event_data = {
             "event_name": "weni_nexus_data",
