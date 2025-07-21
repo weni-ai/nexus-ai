@@ -756,12 +756,10 @@ class InlineContentBaseFileViewset(ModelViewSet):
             if file.size > (settings.BEDROCK_FILE_SIZE_LIMIT * (1024**2)):
                 return Response(data={"message": "File size is too large"}, status=http_status.HTTP_400_BAD_REQUEST)
 
-        # Get content_base from get_queryset
-        queryset = self.get_queryset()
-        if not queryset.exists():
+        content_base = self.get_queryset()
+        if not content_base:
             return Response(data={"message": "No content base found for this project"}, status=http_status.HTTP_404_NOT_FOUND)
 
-        content_base = queryset.first().content_base
         content_base_uuid = str(content_base.uuid)
 
         user: User = request.user
@@ -825,12 +823,10 @@ class InlineContentBaseFileViewset(ModelViewSet):
         try:
             contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
 
-            # Get content_base from get_queryset
-            queryset = self.get_queryset()
-            if not queryset.exists():
+            content_base = self.get_queryset()
+            if not content_base:
                 return Response(data={"message": "No content base found for this project"}, status=status.HTTP_404_NOT_FOUND)
 
-            content_base = queryset.first().content_base
             content_base_uuid = str(content_base.uuid)
 
             use_case = intelligences.RetrieveContentBaseFileUseCase()
