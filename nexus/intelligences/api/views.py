@@ -809,10 +809,9 @@ class InlineContentBaseFileViewset(ModelViewSet):
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
             return ContentBaseFile.objects.none()  # pragma: no cover
-        use_case = intelligences.ListContentBaseFileUseCase()
         project_uuid = self.kwargs.get('project_uuid')
         content_base = intelligences.get_by_uuid.get_default_content_base_by_project(project_uuid)
-        return use_case.get_inline_contentbase_file(contentbase_uuid=str(content_base.uuid))
+        return content_base
 
     def retrieve(self, request, *args, **kwargs):
 
