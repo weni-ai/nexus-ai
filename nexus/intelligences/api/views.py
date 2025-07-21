@@ -751,6 +751,8 @@ class InlineContentBaseFileViewset(ModelViewSet):
     def create(self, request, content_base_uuid=str):
         from rest_framework import status as http_status
 
+        print("STARTING INLINE CONTENT BASE FILE CREATE")
+
         def validate_file_size(file):
             # default 50 MiB
             if file.size > (settings.BEDROCK_FILE_SIZE_LIMIT * (1024**2)):

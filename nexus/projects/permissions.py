@@ -48,6 +48,7 @@ def _check_project_authorization(
             return True
 
         project_authorization = response.json().get('project_authorization')
+        print("PROJECT AUTHORIZATION CONNECT", project_authorization)
         if project_authorization == existing_roles.get('moderator'):
             return True
 

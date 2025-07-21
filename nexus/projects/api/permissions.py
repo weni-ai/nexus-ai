@@ -18,6 +18,8 @@ class ProjectPermission(permissions.BasePermission):
         }
         uuids.discard(None)
 
+        print("PROJECT PERMISSION", uuids)
+
         if not uuids:
             return False
         try:
