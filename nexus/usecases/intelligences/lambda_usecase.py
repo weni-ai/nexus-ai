@@ -97,7 +97,7 @@ class LambdaUseCase():
         print(f"[+ 🧠 Sending datalake event +]")
         self.send_datalake_event(
             event_data=event_data,
-            project_uuid=conversation.project.uuid,
+            project_uuid=str(conversation.project.uuid),
             contact_urn=conversation.contact_urn
         )
         print(f"[+ 🧠 Sent datalake event +]")
@@ -154,7 +154,7 @@ class LambdaUseCase():
         print(f"[+ 🧠 Sending datalake event +]")
         self.send_datalake_event(
             event_data=event_data,
-            project_uuid=conversation.project.uuid,
+            project_uuid=str(conversation.project.uuid),
             contact_urn=conversation.contact_urn
         )
 
