@@ -95,17 +95,14 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         """Test custom_event_data method with a valid CustomEventTraceFactory trace"""
         custom_trace = CustomEventTraceFactory()
 
-        # Call the method
         self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
             contact_urn=self.contact_urn
         )
 
-        # Verify the mock was called with the expected event data
         self.mock_send_data_lake_event_task.delay.assert_called_once()
 
-        # Get the call arguments
         call_args = self.mock_send_data_lake_event_task.delay.call_args[0][0]
 
         # Verify the event data structure
@@ -123,58 +120,48 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         """Test custom_event_data method with invalid JSON in text field"""
         custom_trace = CustomEventTraceFactory()
 
-        # Modify the trace to have invalid JSON
         custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"]["text"] = "invalid json"
 
-        # Call the method
         self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
             contact_urn=self.contact_urn
         )
 
-        # Verify the mock was not called due to JSON parsing error
         self.mock_send_data_lake_event_task.delay.assert_not_called()
 
     def test_custom_event_data_with_missing_text_field(self):
         """Test custom_event_data method with missing text field"""
         custom_trace = CustomEventTraceFactory()
 
-        # Remove the text field
         del custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"]["text"]
 
-        # Call the method
         self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
             contaTestBedrockct_urn=self.contact_urn
         )
 
-        # Verify the mock was not called
         self.mock_send_data_lake_event_task.delay.assert_not_called()
 
     def test_custom_event_data_with_empty_events_list(self):
         """Test custom_event_data method with empty events list"""
         custom_trace = CustomEventTraceFactory()
 
-        # Modify the trace to have empty events list
         custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"]["text"] = '{"events": []}'
 
-        # Call the method
         self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
             contact_urn=self.contact_urn
         )
 
-        # Verify the mock was not called
         self.mock_send_data_lake_event_task.delay.assert_not_called()
 
     def test_custom_event_data_with_preview_mode(self):
         """Test custom_event_data method in preview mode"""
         custom_trace = CustomEventTraceFactory()
 
-        # Call the method with preview=True
         result = self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
@@ -182,6 +169,5 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             preview=True
         )
 
-        # Verify the mock was not called in preview mode
         self.mock_send_data_lake_event_task.delay.assert_not_called()
         self.assertIsNone(result)

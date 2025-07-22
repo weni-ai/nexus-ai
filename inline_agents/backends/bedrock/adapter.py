@@ -497,7 +497,6 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         orchestration_trace = inline_trace.get("trace", {}).get("orchestrationTrace", {})
 
         action_group_data = orchestration_trace.get('observation', {}).get("actionGroupInvocationOutput", {})
-        print(f"[ + DEBUG action_group_data + ] action_group_data: {action_group_data}")
         if action_group_data.get('text'):
             try:
                 event_data = json.loads(action_group_data.get('text'))
@@ -508,7 +507,6 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                 event_data = event_data.get("events", [])
             else:
                 event_data = []
-            print(f"[ + DEBUG event_data + ] event_data: {event_data}")
             for event_to_send in event_data:
                 self.to_data_lake_custom_event(
                     event_data=event_to_send,
