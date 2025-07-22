@@ -484,6 +484,36 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             sentry_sdk.capture_exception(e)
             return None
 
+    def custom_event_data(
+        self,
+        inline_trace: dict,
+        project_uuid: str,
+        contact_urn: str,
+        preview: bool = False
+    ):
+        if preview:
+            return None
+
+        orchestration_trace = inline_trace.get("trace", {}).get("orchestrationTrace", {})
+
+        action_group_data = orchestration_trace.get('observation', {}).get("actionGroupInvocationOutput", {})
+        if action_group_data.get('text'):
+            try:
+                event_data = json.loads(action_group_data.get('text'))
+            except Exception as e:
+                print(f"[ + DEBUG error + ] error: {e}")
+                event_data = {}
+            if isinstance(event_data, dict):
+                event_data = event_data.get("events", [])
+            else:
+                event_data = []
+            for event_to_send in event_data:
+                self.to_data_lake_custom_event(
+                    event_data=event_to_send,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn
+                )
+
     def to_data_lake_custom_event(
         self,
         event_data: dict,
@@ -501,7 +531,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.capture_exception(e)
             return None
-        
+
 
 @celery_app.task
 def send_data_lake_event(
