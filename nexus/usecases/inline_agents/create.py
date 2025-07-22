@@ -9,7 +9,8 @@ from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.tools import ToolsUseCase
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
-
+from nexus.intelligences.models import Conversation, ConversationMessage, Topics
+from nexus.inline_agents.models import InlineAgentMessage
 
 class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
     def __init__(self, agent_backend_client=BedrockClient):
@@ -78,3 +79,33 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             created_credentials.append(key)
 
         return created_credentials
+
+
+class CreateConversationUseCase():
+
+    def create_conversation(self, consumer_message: dict):
+        messages = InlineAgentMessage.objects.filter(
+            created_at__gte=consumer_message.get("start_date"),
+            created_at__lte=consumer_message.get("end_date"),
+            contact_urn=consumer_message.get("contact_urn")
+        )
+
+        if not messages.exists():
+            return
+        project = Project.objects.get(uuid=consumer_message.get("project_uuid"))
+
+        conversation = Conversation.objects.create(
+            project=project,
+            external_id=consumer_message.get("external_id"),
+            has_chats_room=consumer_message.get("has_chats_room"),
+            contact_urn=consumer_message.get("contact_urn"),
+            start_date=consumer_message.get("start_date"),
+            end_date=consumer_message.get("end_date")
+        )
+
+        conversation_message = ConversationMessage.objects.create(
+            conversation=conversation,
+        )
+        conversation_message.message.set(messages)
+
+        return conversation

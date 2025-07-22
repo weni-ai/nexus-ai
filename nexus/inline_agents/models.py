@@ -12,7 +12,6 @@ from nexus.agents.exceptions import (
 )
 from nexus.projects.models import Project
 
-
 class Guardrail(models.Model):
     identifier = models.CharField(max_length=255)
     version = models.PositiveIntegerField()
