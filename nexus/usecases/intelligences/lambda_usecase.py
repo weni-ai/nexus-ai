@@ -164,6 +164,7 @@ def create_lambda_conversation(
 ):
     create_conversation_use_case = CreateConversationUseCase()
     conversation = create_conversation_use_case.create_conversation(payload)
-    lambda_usecase = LambdaUseCase()
-    lambda_usecase.lambda_conversation_resolution(conversation)
-    lambda_usecase.lambda_conversation_topics(conversation)
+    if conversation is not None:
+        lambda_usecase = LambdaUseCase()
+        lambda_usecase.lambda_conversation_resolution(conversation)
+        lambda_usecase.lambda_conversation_topics(conversation)
