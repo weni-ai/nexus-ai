@@ -1,4 +1,9 @@
 import logging
+import jwt
+
+from django.conf import settings
+
+from rest_framework.exceptions import AuthenticationFailed
 
 from urllib.parse import parse_qs
 from urllib.error import HTTPError as UrllibHTTPError
@@ -83,3 +88,40 @@ class TokenAuthMiddleware(BaseMiddleware):
 
         scope["user"] = AnonymousUser() if user is None else user
         return await super().__call__(scope, receive, send)
+
+
+class JWTAuthentication(authentication.BaseAuthentication):
+
+    def authenticate(self, request):
+
+        public_key = settings.JWT_PUBLIC_KEY
+
+        if not public_key:
+            raise AuthenticationFailed("JWT public key is not set, please set the JWT_PUBLIC_KEY environment variable")
+
+        auth_header = request.headers.get('Authorization', "")
+
+        if not isinstance(auth_header, str) or not auth_header.startswith("Bearer "):
+            raise AuthenticationFailed("Missing or invalid Authorization header.")
+
+        token = auth_header.split(" ")[1]
+
+        try:
+            payload = jwt.decode(
+                token,
+                public_key,
+                algorithms=["RS256"],
+                options={"verify_aud": False}
+            )
+        except jwt.ExpiredSignatureError:
+            raise AuthenticationFailed("Token has expired")
+        except jwt.InvalidTokenError:
+            raise AuthenticationFailed("Invalid token")
+        project_uuid = payload.get("project_uuid")
+        if not project_uuid:
+            raise AuthenticationFailed("Project UUID is required")
+
+        request.project_uuid = project_uuid
+        request.jwt_payload = payload
+
+        return (None, None)

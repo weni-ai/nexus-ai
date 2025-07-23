@@ -1,12 +1,16 @@
+from enum import Enum
+from uuid import uuid4
+from typing import Optional
+
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 
 from nexus.db.models import BaseModel, SoftDeleteModel
 from nexus.orgs.models import Org
-from enum import Enum
-from uuid import uuid4
-from typing import Optional
+from nexus.projects.models import Project
+from nexus.inline_agents.models import InlineAgentMessage
+
 
 
 class Intelligence(BaseModel, SoftDeleteModel):
@@ -203,3 +207,52 @@ class ContentBaseAgent(models.Model):
 class ContentBaseInstruction(models.Model):
     instruction = models.TextField()
     content_base = models.ForeignKey(ContentBase, related_name='instructions', on_delete=models.CASCADE)
+
+
+class Topics(models.Model):
+    uuid = models.UUIDField(primary_key=True, default=uuid4)
+    name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    project = models.ForeignKey('projects.Project', on_delete=models.CASCADE)
+
+
+class SubTopics(models.Model):
+    uuid = models.UUIDField(primary_key=True, default=uuid4)
+    name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="subtopics")
+
+
+class Conversation(models.Model):
+    uuid = models.UUIDField(primary_key=True, default=uuid4)
+    created_at = models.DateTimeField(auto_now_add=True)
+    csat = models.TextField(null=True, blank=True)
+    topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="conversations")
+    external_id = models.CharField(max_length=255, null=True, blank=True)
+    has_chats_room = models.BooleanField(default=False)
+    contact_urn = models.CharField(max_length=255, null=True, blank=True)
+    start_date = models.DateTimeField(null=True, blank=True)
+    end_date = models.DateTimeField(null=True, blank=True)
+
+    def get_topic(self):
+        return self.topic.name
+
+    @property
+    def to_json(self):
+        return {
+            "uuid": str(self.uuid),
+            "created_at": self.created_at,
+            "csat": self.csat,
+            "topic": self.get_topic(),
+            "project": str(self.project.uuid),
+        }
+
+
+class ConversationMessage(models.Model):
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
+    message = models.ManyToManyField(InlineAgentMessage, related_name="conversations")
