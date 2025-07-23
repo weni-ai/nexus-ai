@@ -133,6 +133,7 @@ class LambdaUseCase():
                 lambda_name=str(settings.CONVERSATION_TOPIC_CLASSIFIER_NAME),
                 payload=payload_topics
             )
+            print(f"[+ 🧠 Conversation topics after invoke: {conversation_topics} type: {type(conversation_topics)} +]")
             conversation_topics = json.loads(conversation_topics.get("Payload").read()).get("body")
             conversation_topics = json.loads(conversation_topics)
             print(f"[+ 🧠 Conversation topics: {conversation_topics} type: {type(conversation_topics)} +]")
@@ -166,4 +167,4 @@ class LambdaUseCase():
         conversation = create_conversation_use_case.create_conversation(payload)
 
         self.lambda_conversation_resolution(conversation)
-        self.lambda_conversation_topics(conversation)
+        # self.lambda_conversation_topics(conversation)
