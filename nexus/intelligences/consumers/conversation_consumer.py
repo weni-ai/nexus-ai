@@ -5,7 +5,7 @@ from nexus.intelligences.conversation_dto import WindowConversationDTO
 
 from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
-from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
+from nexus.usecases.intelligences.lambda_usecase import create_lambda_conversation
 
 
 class ConversationConsumer(EDAConsumer):
@@ -24,8 +24,7 @@ class ConversationConsumer(EDAConsumer):
                 external_id=body.get("id")
             )
 
-            lambda_use_case = LambdaUseCase()
-            lambda_use_case.create_lambda_conversation(window_conversation_dto.dict())
+            create_lambda_conversation.delay(window_conversation_dto.dict())
 
             message.channel.basic_ack(message.delivery_tag)
             print(f"[ ConversationConsumer ] - get conversation: {window_conversation_dto.contact_urn} {window_conversation_dto.start_date} - {window_conversation_dto.end_date}")

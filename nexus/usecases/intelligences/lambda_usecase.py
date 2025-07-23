@@ -3,6 +3,7 @@ import json
 
 from django.conf import settings
 
+from nexus.celery import app as celery_app
 from nexus.usecases.inline_agents.create import CreateConversationUseCase
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 
@@ -157,12 +158,12 @@ class LambdaUseCase():
             contact_urn=conversation.contact_urn
         )
 
-    def create_lambda_conversation(
-        self,
-        payload: dict
-    ):  # TODO: leave this method async
-        create_conversation_use_case = CreateConversationUseCase()
-        conversation = create_conversation_use_case.create_conversation(payload)
-
-        self.lambda_conversation_resolution(conversation)
-        self.lambda_conversation_topics(conversation)
+@celery_app.task
+def create_lambda_conversation(
+    payload: dict
+):
+    create_conversation_use_case = CreateConversationUseCase()
+    conversation = create_conversation_use_case.create_conversation(payload)
+    lambda_usecase = LambdaUseCase()
+    lambda_usecase.lambda_conversation_resolution(conversation)
+    lambda_usecase.lambda_conversation_topics(conversation)
