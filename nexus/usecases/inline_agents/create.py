@@ -9,8 +9,9 @@ from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.tools import ToolsUseCase
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
-from nexus.intelligences.models import Conversation, ConversationMessage, Topics
+from nexus.intelligences.models import Conversation, ConversationMessage
 from nexus.inline_agents.models import InlineAgentMessage
+
 
 class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
     def __init__(self, agent_backend_client=BedrockClient):
