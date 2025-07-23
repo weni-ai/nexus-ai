@@ -8,7 +8,7 @@ from nexus.event_driven.consumer.consumers import EDAConsumer
 from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
 
 
-class  ConversationConsumer(EDAConsumer):
+class ConversationConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
         print(f"[ ConversationConsumer ] - Consuming a message. Body: {message.body}")
         try:
