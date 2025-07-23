@@ -134,8 +134,10 @@ class LambdaUseCase():
                 payload=payload_topics
             )
             print(f"[+ 🧠 Conversation topics after invoke: {conversation_topics} type: {type(conversation_topics)} +]")
-            conversation_topics = json.loads(conversation_topics.get("Payload").read()).get("body")
-            conversation_topics = json.loads(conversation_topics)
+            conversation_topics = json.loads(conversation_topics.get("Payload").read())
+            print(f"[+ 🧠 Conversation topics after load: {conversation_topics} type: {type(conversation_topics)} +]")
+            conversation_topics = conversation_topics.get("body")
+            print(f"[+ 🧠 Conversation topics after body: {conversation_topics} type: {type(conversation_topics)} +]")
             print(f"[+ 🧠 Conversation topics: {conversation_topics} type: {type(conversation_topics)} +]")
             if conversation_topics.get("topic_uuid") is not "":
                 event_data = {
