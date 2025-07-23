@@ -199,6 +199,31 @@ class UpdateContentBaseFileUseCase():
 
         return content_base_file
 
+    def update_inline_content_base_file(
+            self,
+            content_base_file_uuid: str,
+            user_email: str,
+            update_content_base_file_dto: UpdateContentBaseFileDTO
+    ):
+        user = users.get_by_email(user_email)
+
+        content_base_file = get_by_content_base_file_uuid(content_base_file_uuid)
+
+        for attr, value in update_content_base_file_dto.dict().items():
+            setattr(content_base_file, attr, value)
+        content_base_file.modified_at = pendulum.now()
+        content_base_file.modified_by = user
+        content_base_file.save()
+
+        self.event_manager_notify(
+            event="contentbase_file_activity",
+            content_base_file=content_base_file,
+            action_type="C",
+            user=user,
+        )
+
+        return content_base_file
+
 
 class UpdateLLMUseCase():
 
