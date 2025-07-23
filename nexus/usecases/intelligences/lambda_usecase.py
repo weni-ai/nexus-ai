@@ -167,4 +167,4 @@ class LambdaUseCase():
         conversation = create_conversation_use_case.create_conversation(payload)
 
         self.lambda_conversation_resolution(conversation)
-        # self.lambda_conversation_topics(conversation)
+        self.lambda_conversation_topics(conversation)
