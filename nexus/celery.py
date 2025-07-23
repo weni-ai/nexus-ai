@@ -23,6 +23,10 @@ app.conf.task_annotations = {
     'router.tasks.invoke.start_inline_agents': {'rate_limit': rate_limit}
 }
 
+app.conf.task_routes = {
+    'nexus.usecases.intelligences.lambda_usecase.create_lambda_conversation': {'queue': 'celery'},
+}
+
 app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)
 
 task_create_missing_queues = True
