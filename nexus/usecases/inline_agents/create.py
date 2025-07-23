@@ -92,7 +92,7 @@ class CreateConversationUseCase():
         )
 
         if not messages.exists():
-            return
+            return None
         project = Project.objects.get(uuid=consumer_message.get("project_uuid"))
 
         conversation = Conversation.objects.create(
