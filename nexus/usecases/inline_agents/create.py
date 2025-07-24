@@ -83,7 +83,7 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
 class CreateConversationUseCase():
 
-    def create_conversation(self, consumer_message: dict):
+    def create_conversation(self, consumer_message: dict) -> Conversation:
         messages = InlineAgentMessage.objects.filter(
             created_at__gte=consumer_message.get("start_date"),
             created_at__lte=consumer_message.get("end_date"),

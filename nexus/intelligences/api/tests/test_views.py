@@ -8,7 +8,8 @@ from django.urls import reverse
 from rest_framework.test import (
     APIRequestFactory,
     APITestCase,
-    force_authenticate
+    force_authenticate,
+    APIClient
 )
 
 from nexus.task_managers.models import ContentBaseLinkTaskManager, TaskManager
@@ -33,7 +34,9 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseLinkFactory,
     TopicsFactory,
     SubTopicsFactory,
+    ConversationFactory
 )
+from nexus.intelligences.api.tests.mocks import MockBillingRESTClient, MockBillingRESTClientMultiPage
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
@@ -43,6 +46,11 @@ from nexus.agents.models import Team
 
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth.models import Permission
+from nexus.users.models import User
+
+from rest_framework import status
+from unittest.mock import patch
+from freezegun import freeze_time
 
 
 @skip("View Testing")
@@ -1084,3 +1092,549 @@ class TestSubTopicsViewSet(TestCase):
         created_subtopic = SubTopics.objects.get(uuid=response.data['uuid'])
         self.assertEqual(created_subtopic.topic, self.topic)
         self.assertNotEqual(created_subtopic.topic, another_topic)
+
+
+@freeze_time("2025-01-23 10:00:00")
+class TestSupervisorViewset(TestCase):
+
+    def setUp(self):
+        """Set up test data and client"""
+        # Create test user
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+
+        # Create test project
+        self.project = ProjectFactory(
+            created_by=self.user,
+        )
+
+        # Create test topics
+        self.topic1 = TopicsFactory(project=self.project, name="Customer Support")
+        self.topic2 = TopicsFactory(project=self.project, name="Technical Issue")
+
+        # Create test conversations
+        self.conversation1 = ConversationFactory(
+            project=self.project,
+            topic=self.topic1,
+            csat="1",  # Satisfied
+            has_chats_room=True,
+            contact_urn="whatsapp:5511999999999",
+            external_id="12345"
+        )
+
+        self.conversation2 = ConversationFactory(
+            project=self.project,
+            topic=self.topic2,
+            csat="3",  # Unsatisfied
+            has_chats_room=False,
+            contact_urn="whatsapp:5511888888888",
+            external_id="67890"
+        )
+
+        # Create API client
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+        # Mock billing client
+        self.mock_billing_client = MockBillingRESTClient()
+
+        # Base URL for supervisor endpoints
+        self.base_url = reverse('supervisor', kwargs={'project_uuid': self.project.uuid})
+
+    def _get_supervisor_list_url(self, **params):
+        """Helper method to get supervisor list URL with query parameters"""
+        url = self.base_url
+        if params:
+            query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+            url = f"{url}?{query_string}"
+        return url
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_list_supervisor_data_success(self, mock_billing_client_class):
+        """Test successful listing of supervisor data"""
+        # Configure mock
+        mock_billing_client_class.return_value = self.mock_billing_client
+
+        start_date = "2024-12-24"
+        end_date = "2025-01-24"
+
+        url = self._get_supervisor_list_url(
+            start_date=start_date,
+            end_date=end_date
+        )
+        response = self.client.get(url)
+
+        # Assertions
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Check pagination structure
+        self.assertIn('count', response.data)
+        self.assertIn('next', response.data)
+        self.assertIn('previous', response.data)
+        self.assertIn('results', response.data)
+        
+        # Get the actual data from results
+        results = response.data['results']
+        self.assertIsInstance(results, list)
+
+        conversation_data = [item for item in results if not item['is_billing_only']]
+        billing_data = [item for item in results if item['is_billing_only']]
+
+        self.assertEqual(len(conversation_data), 2)
+        self.assertGreater(len(billing_data), 0)
+
+        # Check if conversations are returned
+        conversation_urns = [item['urn'] for item in conversation_data]
+        self.assertIn(self.conversation1.contact_urn, conversation_urns)
+        self.assertIn(self.conversation2.contact_urn, conversation_urns)
+
+        # Check if billing data is returned
+        billing_urns = [item['urn'] for item in billing_data]
+        self.assertIn("whatsapp:5511999999999", billing_urns)
+
+        # Verify data format
+        for item in results:
+            # Check required fields
+            self.assertIn('created_on', item)
+            self.assertIn('urn', item)
+            self.assertIn('uuid', item)
+            self.assertIn('external_id', item)
+            self.assertIn('csat', item)
+            self.assertIn('topic', item)
+            self.assertIn('has_chats_room', item)
+            self.assertIn('start_date', item)
+            self.assertIn('end_date', item)
+            self.assertIn('resolution', item)
+            self.assertIn('is_billing_only', item)
+
+            # Check resolution format (should not be tuple string)
+            if item['resolution']:
+                self.assertFalse(
+                    item['resolution'].startswith('('), 
+                    f"Resolution should not be tuple string: {item['resolution']}"
+                )
+
+            # Check date format
+            self.assertIsInstance(item['created_on'], str)
+            self.assertIsInstance(item['start_date'], str)
+            self.assertIsInstance(item['end_date'], str)
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_list_supervisor_data_with_topic_filter(self, mock_billing_client_class):
+        """Test listing supervisor data with topic filter"""
+        # Configure mock
+        mock_billing_client_class.return_value = self.mock_billing_client
+
+        """Test listing supervisor data with topic filter"""
+        url = self._get_supervisor_list_url(topic="Customer")
+        response = self.client.get(url)
+
+
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(response.data['results'][0]['topic'], "Customer Support")
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_list_supervisor_data_with_csat_filter(self, mock_billing_client_class):
+        """Test listing supervisor data with csat filter"""
+        # Configure mock
+        mock_billing_client_class.return_value = self.mock_billing_client
+
+        """Test listing supervisor data with csat filter"""
+        url = self._get_supervisor_list_url(csat="1")
+        response = self.client.get(url)
+
+
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(response.data['results'][0]['csat'], "1")
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_list_supervisor_data_with_has_chats_room_filter(self, mock_billing_client_class):
+        """Test listing supervisor data with has_chats_room filter"""
+        # Configure mock
+        mock_billing_client_class.return_value = self.mock_billing_client
+
+        """Test listing supervisor data with has_chats_room filter"""
+        url = self._get_supervisor_list_url(has_chats_room="true")
+        response = self.client.get(url)
+
+
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Expect 2 results: 1 conversation + 1 billing record with has_chats_room=True
+        self.assertEqual(len(response.data['results']), 2)
+
+        # Verify all returned items have has_chats_room=True
+        for item in response.data['results']:
+            self.assertTrue(item['has_chats_room'])
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_list_supervisor_data_with_date_filters(self, mock_billing_client_class):
+        """Test listing supervisor data with date filters"""
+        # Configure mock
+        mock_billing_client_class.return_value = self.mock_billing_client
+
+        # Test with date filters - use fixed dates for deterministic testing
+        start_date = "2025-01-20"  # 3 days ago
+        end_date = "2025-01-23"    # today
+
+
+
+        url = self._get_supervisor_list_url(
+            start_date=start_date,
+            end_date=end_date
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(response.data['results'], list)
+
+        # Should return conversations since they were created during test setup
+        # which happens within the frozen time context
+        self.assertGreater(len(response.data['results']), 0)
+
+    def test_supervisor_data_unauthorized(self):
+        """Test supervisor endpoints without authentication"""
+        # Remove authentication
+        self.client.force_authenticate(user=None)
+
+        # Test list endpoint
+        url = self._get_supervisor_list_url()
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_supervisor_data_invalid_project_uuid(self, mock_billing_client_class):
+        """Test supervisor endpoints with invalid project UUID"""
+        # Configure mock
+        mock_billing_client_class.return_value = self.mock_billing_client
+
+        import uuid
+        fake_project_uuid = uuid.uuid4()
+
+        # Test list endpoint with fake project UUID
+        url = reverse('supervisor', kwargs={'project_uuid': fake_project_uuid})
+        response = self.client.get(url)
+
+        # Should return 404 for invalid project UUID
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn("error", response.data)
+        self.assertIn("not found", response.data["error"])
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_pagination_with_single_page_billing_data(self, mock_billing_client_class):
+        """Test pagination with single page billing data"""
+        # Configure mock
+        mock_billing_client_class.return_value = self.mock_billing_client
+
+        start_date = "2024-12-24"
+        end_date = "2025-01-24"
+
+        url = self._get_supervisor_list_url(
+            start_date=start_date,
+            end_date=end_date,
+            page_size=3
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Check pagination structure
+        self.assertIn('next', response.data)
+        self.assertIn('previous', response.data)
+        self.assertIn('results', response.data)
+        self.assertIn('count', response.data)
+
+        # Should have results (conversations + billing data)
+        self.assertGreater(len(response.data['results']), 0)
+
+        # Verify pagination links
+        if response.data['next']:
+            # Test next page
+            next_response = self.client.get(response.data['next'])
+            self.assertEqual(next_response.status_code, status.HTTP_200_OK)
+            self.assertIn('results', next_response.data)
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_pagination_with_multi_page_billing_data(self, mock_billing_client_class):
+        """Test pagination with multi-page billing data"""
+        # Configure mock with multi-page billing client
+        mock_multi_page_client = MockBillingRESTClientMultiPage(total_pages=3, items_per_page=5)
+        mock_billing_client_class.return_value = mock_multi_page_client
+
+        # Test with date filters to include billing data
+        start_date = "2024-12-24"
+        end_date = "2025-01-24"
+
+        url = self._get_supervisor_list_url(
+            start_date=start_date,
+            end_date=end_date,
+            page_size=5  # Request page size to test pagination
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Check pagination structure
+        self.assertIn('next', response.data)
+        self.assertIn('previous', response.data)
+        self.assertIn('results', response.data)
+        self.assertIn('count', response.data)
+
+        # Should have results (conversations + billing data from first page)
+        self.assertGreater(len(response.data['results']), 0)
+
+        # Test pagination through all pages
+        all_results = []
+        current_url = url
+
+        while current_url:
+            page_response = self.client.get(current_url)
+            self.assertEqual(page_response.status_code, status.HTTP_200_OK)
+
+            page_results = page_response.data['results']
+            all_results.extend(page_results)
+
+            # Move to next page
+            current_url = page_response.data.get('next')
+
+            # Safety check to prevent infinite loop
+            if len(all_results) > 50:
+                break
+
+        # Should have collected results from multiple pages
+        self.assertGreater(len(all_results), 5)  # More than one page worth
+
+        # Verify all results have required fields
+        for item in all_results:
+            self.assertIn('created_on', item)
+            self.assertIn('urn', item)
+            self.assertIn('uuid', item)
+            self.assertIn('external_id', item)
+            self.assertIn('csat', item)
+            self.assertIn('topic', item)
+            self.assertIn('has_chats_room', item)
+            self.assertIn('start_date', item)
+            self.assertIn('end_date', item)
+            self.assertIn('resolution', item)
+            self.assertIn('is_billing_only', item)
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_pagination_with_filters_and_multi_page_data(self, mock_billing_client_class):
+        """Test pagination with filters applied to multi-page billing data"""
+        # Configure mock with multi-page billing client
+        mock_multi_page_client = MockBillingRESTClientMultiPage(total_pages=3, items_per_page=5)
+        mock_billing_client_class.return_value = mock_multi_page_client
+
+        # Test with filters and date range
+        start_date = "2024-12-24"
+        end_date = "2025-01-24"
+
+        url = self._get_supervisor_list_url(
+            start_date=start_date,
+            end_date=end_date,
+            has_chats_room="true",  # Apply filter
+            page_size=3  # Small page size to test pagination
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Check pagination structure
+        self.assertIn('next', response.data)
+        self.assertIn('previous', response.data)
+        self.assertIn('results', response.data)
+        self.assertIn('count', response.data)
+
+        # Test pagination with filters
+        all_filtered_results = []
+        current_url = url
+
+        while current_url:
+            page_response = self.client.get(current_url)
+            self.assertEqual(page_response.status_code, status.HTTP_200_OK)
+
+            page_results = page_response.data['results']
+            all_filtered_results.extend(page_results)
+
+            # Move to next page
+            current_url = page_response.data.get('next')
+
+            # Safety check to prevent infinite loop
+            if len(all_filtered_results) > 30:
+                break
+
+        # Verify all results respect the filter
+        for item in all_filtered_results:
+            self.assertTrue(item['has_chats_room'])
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_pagination_cursor_consistency(self, mock_billing_client_class):
+        """Test that pagination cursors work correctly and maintain data consistency"""
+        # Configure mock with multi-page billing client
+        mock_multi_page_client = MockBillingRESTClientMultiPage(total_pages=2, items_per_page=3)
+        mock_billing_client_class.return_value = mock_multi_page_client
+
+        # Test with date filters
+        start_date = "2024-12-24"
+        end_date = "2025-01-24"
+
+        url = self._get_supervisor_list_url(
+            start_date=start_date,
+            end_date=end_date,
+            page_size=4  # Page size to test pagination
+        )
+
+        # Get first page
+        first_page_response = self.client.get(url)
+        self.assertEqual(first_page_response.status_code, status.HTTP_200_OK)
+
+        first_page_results = first_page_response.data['results']
+        first_page_next = first_page_response.data.get('next')
+
+        # Get second page using next cursor
+        if first_page_next:
+            second_page_response = self.client.get(first_page_next)
+            self.assertEqual(second_page_response.status_code, status.HTTP_200_OK)
+
+            second_page_results = second_page_response.data['results']
+            second_page_previous = second_page_response.data.get('previous')
+
+            # Verify no overlap between pages
+            first_page_ids = {item['external_id'] for item in first_page_results if item['external_id']}
+            second_page_ids = {item['external_id'] for item in second_page_results if item['external_id']}
+
+            # Should be no overlap in external_ids
+            self.assertEqual(len(first_page_ids.intersection(second_page_ids)), 0)
+
+            # Test previous cursor works
+            if second_page_previous:
+                previous_page_response = self.client.get(second_page_previous)
+                self.assertEqual(previous_page_response.status_code, status.HTTP_200_OK)
+
+                # Should get back to first page
+                previous_page_results = previous_page_response.data['results']
+                self.assertEqual(len(previous_page_results), len(first_page_results))
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_pagination_with_conversation_and_billing_data_mapping(self, mock_billing_client_class):
+        """Test pagination when billing data maps to existing conversations"""
+        # Configure mock with billing data that has some matching external_ids
+        mock_multi_page_client = MockBillingRESTClientMultiPage(total_pages=2, items_per_page=3)
+        mock_billing_client_class.return_value = mock_multi_page_client
+
+        # Create additional conversations with external_ids that might match billing data
+        conversation3 = ConversationFactory(
+            project=self.project,
+            topic=self.topic1,
+            csat="2",
+            has_chats_room=True,
+            contact_urn="whatsapp:551100000000",
+            external_id="0"  # This should match billing data ID 0
+        )
+
+        conversation4 = ConversationFactory(
+            project=self.project,
+            topic=self.topic2,
+            csat="4",
+            has_chats_room=False,
+            contact_urn="whatsapp:551100000001",
+            external_id="1"  # This should match billing data ID 1
+        )
+
+        # Test with date filters
+        start_date = "2024-12-24"
+        end_date = "2025-01-24"
+
+        url = self._get_supervisor_list_url(
+            start_date=start_date,
+            end_date=end_date,
+            page_size=3
+        )
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        results = response.data['results']
+
+        # Get the billing external_ids from the mock
+        billing_external_ids = {'0', '1', '2', '3', '4', '5'}
+        conversation_external_ids = {conv.external_id for conv in [conversation3, conversation4]}
+
+        for item in results:
+            if item['external_id'] in billing_external_ids:
+                # This is a billing item - check if it's enriched
+                if item['external_id'] in conversation_external_ids:
+                    # Should be enriched with conversation data
+                    self.assertFalse(item['is_billing_only'])
+                    self.assertIsNotNone(item['uuid'])
+                    self.assertIsNotNone(item['topic'])
+                else:
+                    # Should be billing-only data
+                    self.assertTrue(item['is_billing_only'])
+                    self.assertIsNone(item['uuid'])
+                    self.assertIsNone(item['topic'])
+            else:
+                # This is a conversation item (not from billing) - should always be enriched
+                self.assertFalse(item['is_billing_only'])
+                self.assertIsNotNone(item['uuid'])
+                self.assertIsNotNone(item['topic'])
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_pagination_edge_cases(self, mock_billing_client_class):
+        """Test pagination edge cases including empty results and large page sizes"""
+        # Configure mock with multi-page billing client
+        mock_multi_page_client = MockBillingRESTClientMultiPage(total_pages=1, items_per_page=2)
+        mock_billing_client_class.return_value = mock_multi_page_client
+
+        # Test with date filters that might result in no conversations
+        start_date = "2020-01-01"  # Very old date
+        end_date = "2020-01-02"    # Very old date
+
+        # Test with large page size
+        url = self._get_supervisor_list_url(
+            start_date=start_date,
+            end_date=end_date,
+            page_size=100  # Large page size
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Check pagination structure even with empty results
+        self.assertIn('next', response.data)
+        self.assertIn('previous', response.data)
+        self.assertIn('results', response.data)
+        self.assertIn('count', response.data)
+
+        # Should still have billing data even if no conversations match date range
+        self.assertGreater(len(response.data['results']), 0)
+
+        # Test with very small page size
+        url_small = self._get_supervisor_list_url(
+            start_date=start_date,
+            end_date=end_date,
+            page_size=1  # Very small page size
+        )
+        response_small = self.client.get(url_small)
+
+        self.assertEqual(response_small.status_code, status.HTTP_200_OK)
+        self.assertLessEqual(len(response_small.data['results']), 1)
+
+        # Test pagination with no date filters (should still work)
+        url_no_dates = self._get_supervisor_list_url(
+            page_size=3
+        )
+        response_no_dates = self.client.get(url_no_dates)
+
+        self.assertEqual(response_no_dates.status_code, status.HTTP_200_OK)
+        self.assertIn('results', response_no_dates.data)
+
+        # Should have conversation data even without date filters
+        self.assertGreater(len(response_no_dates.data['results']), 0)

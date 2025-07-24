@@ -1,9 +1,11 @@
 import os
-
+import pendulum
+import sentry_sdk
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.utils.datastructures import MultiValueDictKeyError
+from django.utils.dateparse import parse_date
 from rest_framework import parsers, status, views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -18,9 +20,10 @@ from nexus.intelligences.models import (
     Intelligence,
     Topics,
     SubTopics,
+    Conversation,
 )
 from nexus.orgs import permissions
-from nexus.paginations import CustomCursorPagination
+from nexus.paginations import CustomCursorPagination, SupervisorPagination
 from nexus.projects.models import Project
 from nexus.projects.api.permissions import ProjectPermission, ExternalTokenPermission
 from nexus.storage import AttachmentPreviewStorage, validate_mime_type
@@ -51,9 +54,11 @@ from nexus.usecases.intelligences.exceptions import (
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
+from nexus.usecases.intelligences.supervisor import Supervisor
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.usecases.task_managers.celery_task_manager import (
     CeleryTaskManagerUseCase,
 )
@@ -74,6 +79,7 @@ from .serializers import (
     RouterContentBaseSerializer,
     TopicsSerializer,
     SubTopicsSerializer,
+    SupervisorDataSerializer,
 )
 
 
@@ -1409,4 +1415,140 @@ class SubTopicsViewSet(ModelViewSet):
 
 
 class SupervisorViewset(ModelViewSet):
-    pass
+    serializer_class = SupervisorDataSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = SupervisorPagination
+    lookup_field = 'uuid'
+
+    def _parse_boolean_param(self, value: str) -> bool:
+        """Parse boolean parameter from string"""
+        return value.lower() in ['true', '1', 'yes']
+
+    def _apply_filters_to_data(self, data, request):
+        """Apply filters to unified data structure"""
+        csat = request.query_params.get('csat')
+        topic = request.query_params.get('topic')
+        has_chats_room = request.query_params.get('has_chats_room')
+
+        if csat:
+            data = [item for item in data if item.get('csat') == csat]
+
+        if topic:
+            data = [item for item in data if item.get('topic') and topic.lower() in item.get('topic').lower()]
+
+        if has_chats_room is not None:
+            has_chats_room_bool = self._parse_boolean_param(has_chats_room)
+            data = [item for item in data if item.get('has_chats_room') == has_chats_room_bool]
+
+        return data
+
+    def _convert_conversation_to_unified(self, conversation):
+
+        unified_object = {
+            "created_on": conversation.created_at,
+            "urn": conversation.contact_urn,
+            "uuid": conversation.uuid,
+            "external_id": conversation.external_id,
+            "csat": conversation.csat,
+            "topic": conversation.topic.name if conversation.topic else None,
+            "has_chats_room": conversation.has_chats_room,
+            "start_date": conversation.start_date or conversation.created_at,  # Use created_at as fallback
+            "end_date": conversation.end_date,  # Use created_at as fallback
+            "resolution": conversation.resolution,
+            "is_billing_only": False
+        }
+
+        return unified_object
+
+    def list(self, request, *args, **kwargs):
+        """Get all supervisor data combining both Conversation model data and billing data"""
+        project_uuid = kwargs.get('project_uuid')
+        if not project_uuid:
+            return Response(
+                {"error": "project_uuid is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            project = get_project_by_uuid(project_uuid)
+
+            start_date = request.query_params.get(
+                'start_date',
+                pendulum.now().subtract(days=30).to_date_string()
+            )
+            end_date = request.query_params.get(
+                'end_date',
+                pendulum.now().to_date_string()
+            )
+
+            start_datetime = parse_date(start_date)
+            end_datetime = parse_date(end_date)
+
+            # Get conversation data
+            conversation_queryset = Conversation.objects.filter(
+                project=project,
+                created_at__date__gte=start_datetime,
+                created_at__date__lte=end_datetime
+            ).select_related('topic', 'project').order_by('-created_at')
+
+            # Apply date filters to conversation data
+
+            conversation_data = list(conversation_queryset)
+
+            unified_conversation_data = [
+                self._convert_conversation_to_unified(conv) for conv in conversation_data
+            ]
+
+            # Get billing data that doesn't have corresponding conversations
+            if start_date and end_date:
+
+                supervisor = Supervisor()
+                billing_data = supervisor.get_supervisor_data_by_date(
+                    project_uuid=project_uuid,
+                    start_date=start_date,
+                    end_date=end_date,
+                    page=1,  # Get all data
+                    user_token=request.user.auth_token.key if hasattr(request.user, 'auth_token') else ""
+                )
+
+                # Filter out billing data that already has conversation data
+                conversation_external_ids = {
+                    conv.external_id for conv in conversation_data if conv.external_id
+                }
+
+                billing_only_data = [
+                    item for item in billing_data
+                    if item.get('external_id') not in conversation_external_ids
+                ]
+
+                # Combine both data sources
+                all_data = unified_conversation_data + billing_only_data
+            else:
+                all_data = unified_conversation_data
+
+            # Apply additional filters and sort
+            all_data = self._apply_filters_to_data(all_data, request)
+            all_data.sort(key=lambda x: x.get('created_on', ''), reverse=True)
+
+            # Apply pagination
+            page = self.paginate_queryset(all_data)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+
+            # Fallback if pagination is not configured
+            serializer = self.get_serializer(all_data, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except ProjectDoesNotExist:
+            return Response(
+                {"error": f"Project with UUID {project_uuid} not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.capture_exception(e)
+
+            return Response(
+                {"error": f"Error retrieving supervisor data: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

@@ -6,10 +6,10 @@ from django.conf import settings
 from nexus.usecases.inline_agents.create import CreateConversationUseCase
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 
+
 class LambdaUseCase():
 
     def __init__(self):
-        
         self.boto_client = boto3.client('lambda', region_name=settings.AWS_BEDROCK_REGION_NAME)
         self.adapter = None
 
@@ -73,12 +73,12 @@ class LambdaUseCase():
         )
 
     def lambda_conversation_resolution(self, conversation):
-        print(f"[+ 🧠 Getting lambda conversation +]")
+        print("[+ 🧠 Getting lambda conversation +]")
         lambda_conversation = self.get_lambda_conversation(conversation)
         payload_conversation = {
             "conversation": lambda_conversation
         }
-        print(f"[+ 🧠 Invoking lambda conversation resolution +]")
+        print("[+ 🧠 Invoking lambda conversation resolution +]")
         conversation_resolution = self.invoke_lambda(
             lambda_name=str(settings.CONVERSATION_RESOLUTION_NAME),
             payload=payload_conversation
@@ -94,19 +94,22 @@ class LambdaUseCase():
                 "conversation_id": str(conversation.uuid),
             }
         }
-        print(f"[+ 🧠 Sending datalake event +]")
+        print("[+ 🧠 Sending datalake event +]")
         self.send_datalake_event(
             event_data=event_data,
             project_uuid=str(conversation.project.uuid),
             contact_urn=conversation.contact_urn
         )
-        print(f"[+ 🧠 Sent datalake event +]")
-
+        print("[+ 🧠 Sent datalake event +]")
+        conversation.resolution = conversation_resolution_response.get("result")
+        conversation.save()
 
     def lambda_conversation_topics(self, conversation):
-        print(f"[+ 🧠 Getting lambda topics +]")
+        from nexus.intelligences.models import Topics
+
+        print("[+ 🧠 Getting lambda topics +]")
         lambda_topics = self.get_lambda_topics(conversation.project)
-        print(f"[+ 🧠 Getting lambda conversation +]")
+        print("[+ 🧠 Getting lambda conversation +]")
         lambda_conversation = self.get_lambda_conversation(conversation)
 
         payload_topics = {
@@ -157,11 +160,13 @@ class LambdaUseCase():
             project_uuid=str(conversation.project.uuid),
             contact_urn=conversation.contact_urn
         )
+        conversation.topic = Topics.objects.get(uuid=event_data.get("metadata").get("topic_uuid"))
+        conversation.save()
 
     def create_lambda_conversation(
-        self, 
+        self,
         payload: dict
-    ): # TODO: leave this method async
+    ):  # TODO: leave this method async
         create_conversation_use_case = CreateConversationUseCase()
         conversation = create_conversation_use_case.create_conversation(payload)
 
