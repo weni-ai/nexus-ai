@@ -1587,6 +1587,49 @@ class TestSupervisorViewset(TestCase):
                 self.assertIsNotNone(item['topic'])
 
     @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
+    def test_supervisor_data_billing_404_response(self, mock_billing_client_class):
+        """Test supervisor data when billing service returns 404"""
+        # Configure mock to simulate 404 response
+        from nexus.intelligences.api.tests.mocks import MockBillingRESTClient404
+        mock_billing_client_class.return_value = MockBillingRESTClient404()
+
+        start_date = "2024-12-24"
+        end_date = "2025-01-24"
+
+        url = self._get_supervisor_list_url(
+            start_date=start_date,
+            end_date=end_date
+        )
+        response = self.client.get(url)
+
+        # Should still return 200 OK even when billing service is unavailable
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Check pagination structure
+        self.assertIn('count', response.data)
+        self.assertIn('next', response.data)
+        self.assertIn('previous', response.data)
+        self.assertIn('results', response.data)
+
+        # Should only have conversation data (no billing data due to 404)
+        results = response.data['results']
+        self.assertIsInstance(results, list)
+
+        # Should have the 2 conversations we created in setUp
+        self.assertEqual(len(results), 2)
+
+        # All results should be conversation data (not billing-only)
+        for item in results:
+            self.assertFalse(item['is_billing_only'])
+            self.assertIsNotNone(item['uuid'])
+            self.assertIsNotNone(item['topic'])
+
+        # Verify conversation data is still returned correctly
+        conversation_urns = [item['urn'] for item in results]
+        self.assertIn(self.conversation1.contact_urn, conversation_urns)
+        self.assertIn(self.conversation2.contact_urn, conversation_urns)
+
+    @patch('nexus.usecases.intelligences.supervisor.BillingRESTClient')
     def test_pagination_edge_cases(self, mock_billing_client_class):
         """Test pagination edge cases including empty results and large page sizes"""
         # Configure mock with multi-page billing client
