@@ -27,6 +27,19 @@ class MockBillingRESTClient:
         }
 
 
+class MockBillingRESTClient404:
+    """Mock billing client that simulates a 404 response"""
+
+    def get_billing_active_contacts(self, project_uuid, start_date, end_date, page, user_token=None):
+        # Simulate 404 response by returning empty results
+        return {
+            "count": 0,
+            "next": None,
+            "previous": None,
+            "results": []
+        }
+
+
 class MockBillingRESTClientMultiPage:
     """Mock billing client that supports pagination with multiple pages"""
 
