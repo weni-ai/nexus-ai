@@ -305,3 +305,37 @@ class SubTopicsSerializer(serializers.ModelSerializer):
 
     def get_topic_name(self, obj):
         return obj.topic.name
+
+
+class SupervisorDataSerializer(serializers.Serializer):
+    """
+    Serializer for unified supervisor data that can handle both Conversation model data
+    and billing-only data from the Supervisor class
+    """
+    created_on = serializers.DateTimeField()
+    urn = serializers.CharField()
+    uuid = serializers.CharField(allow_null=True, allow_blank=True)
+    external_id = serializers.CharField(allow_null=True, allow_blank=True)
+    csat = serializers.CharField(allow_null=True, allow_blank=True)
+    topic = serializers.CharField(allow_null=True, allow_blank=True)
+    has_chats_room = serializers.BooleanField(default=False)
+    start_date = serializers.DateTimeField()
+    end_date = serializers.DateTimeField()
+    resolution = serializers.CharField(allow_null=True, allow_blank=True)
+
+    def to_representation(self, instance):
+        """Custom representation to handle resolution field properly"""
+        data = super().to_representation(instance)
+
+        # Handle resolution field - convert tuple string to actual value
+        if isinstance(data.get('resolution'), str) and data['resolution'].startswith('('):
+            # Extract the actual value from tuple string like "(0, 'In progress')"
+            try:
+                import ast
+                resolution_tuple = ast.literal_eval(data['resolution'])
+                data['resolution'] = str(resolution_tuple[0])  # Use the numeric value
+            except (ValueError, SyntaxError):
+                pass
+
+        return data
+    is_billing_only = serializers.BooleanField(default=False)
