@@ -39,7 +39,7 @@ intelligence_router.register(
     basename='content-bases'
 )
 content_base_router.register(
-    r'content-bases-text',
+    r'inline-content-base-text',
     ContentBaseTextViewset,
     basename='content-bases-text'
 )
