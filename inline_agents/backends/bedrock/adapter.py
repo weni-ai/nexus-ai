@@ -277,7 +277,8 @@ class BedrockTeamAdapter(TeamAdapter):
             "{{CONTACT_NAME}}", contact_name
         ).replace(
             "{{CHANNEL_UUID}}", channel_uuid
-        )
+        ).replace("\r\n", "\n")
+
         return instruction
 
     @classmethod
