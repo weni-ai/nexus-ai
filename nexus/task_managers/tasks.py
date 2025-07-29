@@ -161,7 +161,7 @@ def upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: 
         file.write(text)
 
     with open(f"/tmp/{file_name}", "rb") as file:
-        file_database_response = s3FileDatabase().add_file(file)
+        file_database_response = s3FileDatabase().add_file(file, file_name)
 
     content_base_text = ContentBaseText.objects.get(uuid=content_base_text_uuid)
     content_base_text.file = file_database_response.file_url

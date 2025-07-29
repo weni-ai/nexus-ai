@@ -22,7 +22,7 @@ class s3FileDatabase(FileDataBase):
         name = name.replace(".", "_")
         file_name = f"{name}-{uuid.uuid4()}.{extension}"
         response = FileResponseDTO()
-        file = BytesIO(file)
+        file = BytesIO(file.read())
         try:
             self.s3_client.upload_fileobj(file, settings.AWS_S3_BUCKET_NAME, file_name)
             response.status = 0
