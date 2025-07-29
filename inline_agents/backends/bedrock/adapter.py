@@ -81,7 +81,7 @@ class BedrockTeamAdapter(TeamAdapter):
             "inlineSessionState": self._get_inline_session_state(
                 use_components=use_components,
                 credentials=credentials,
-                contact={"urn": contact_urn},
+                contact={"urn": contact_urn, "name": contact_name},
                 project={"uuid": project_uuid, "auth_token": auth_token},
                 channel={"uuid": channel_uuid},
             ),
