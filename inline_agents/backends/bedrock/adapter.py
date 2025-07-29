@@ -475,6 +475,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                 event_data = event_data.get("events", [])
             else:
                 event_data = []
+            print(f"[ {project_uuid} - {contact_urn} ] processing event_data: {event_data}")
             for event_to_send in event_data:
                 self.to_data_lake_custom_event(
                     event_data=event_to_send,
@@ -491,6 +492,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         try:
             event_data["project"] = project_uuid
             event_data["contact_urn"] = contact_urn
+            print(f"[ {project_uuid} - {contact_urn} ] sending event data to data lake: {event_data}")
             self.send_data_lake_event_task.delay(event_data)
             return event_data
         except Exception as e:
