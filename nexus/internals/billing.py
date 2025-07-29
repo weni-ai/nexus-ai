@@ -36,14 +36,13 @@ class BillingRESTClient(RestClient):
         formatted_end_date = self._format_date_for_billing(end_date)
 
         response = requests.get(
-            f"{self.base_url}/{project_uuid}/conversations/?start={formatted_start_date}&end={formatted_end_date}&page={page}",
+            f"{self.base_url}/api/v1/{project_uuid}/conversations/?start={formatted_start_date}&end={formatted_end_date}&page={page}",
             headers={
                 "Content-Type": "application/json; charset=utf-8",
                 "Authorization": f"Bearer {user_token}",
             },
         )
 
-        # Only handle 404 responses gracefully, let other errors propagate
         if response.status_code == 404:
             return {
                 "count": 0,
@@ -52,6 +51,5 @@ class BillingRESTClient(RestClient):
                 "results": []
             }
 
-        # For all other responses, raise for status to let Sentry handle them
         response.raise_for_status()
         return response.json()
