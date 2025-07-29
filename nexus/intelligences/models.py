@@ -252,7 +252,7 @@ class Conversation(models.Model):
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
     has_chats_room = models.BooleanField(default=False)
-
+    contact_name = models.CharField(max_length=255, null=True, blank=True)
     topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
     subtopic = models.ForeignKey(SubTopics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
     nps = models.IntegerField(null=True, blank=True)

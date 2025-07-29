@@ -1424,21 +1424,9 @@ class SupervisorViewset(ModelViewSet):
         return value.lower() in ['true', '1', 'yes']
 
     def _apply_filters_to_data(self, data, request):
-        """Apply filters to unified data structure"""
-        csat = request.query_params.get('csat')
-        topic = request.query_params.get('topic')
-        has_chats_room = request.query_params.get('has_chats_room')
-
-        if csat:
-            data = [item for item in data if item.get('csat') == csat]
-
-        if topic:
-            data = [item for item in data if item.get('topic') and topic.lower() in item.get('topic').lower()]
-
-        if has_chats_room is not None:
-            has_chats_room_bool = self._parse_boolean_param(has_chats_room)
-            data = [item for item in data if item.get('has_chats_room') == has_chats_room_bool]
-
+        """Apply filters to unified data structure - only for billing data since conversations are filtered at DB level"""
+        # Note: csat, topic, has_chats_room filters are applied at database level for conversations
+        # This method is mainly for any future filters that might apply to both conversation and billing data
         return data
 
     def _convert_conversation_to_unified(self, conversation):
@@ -1454,11 +1442,46 @@ class SupervisorViewset(ModelViewSet):
             "start_date": conversation.start_date or conversation.created_at,  # Use created_at as fallback
             "end_date": conversation.end_date,  # Use created_at as fallback
             "resolution": conversation.resolution,
-            "name": None,  # Conversation model doesn't have contact_name field
+            "name": conversation.contact_name,
             "is_billing_only": False
         }
 
         return unified_object
+
+    def _build_conversation_filters(self, request):
+        """Build database filters for conversation query based on request parameters"""
+        filters = {}
+
+        # CSAT filter
+        csat = request.query_params.get('csat')
+        if csat:
+            if isinstance(csat, str):
+                csat_values = [value.strip() for value in csat.split(',')]
+            else:
+                csat_values = [csat]
+            filters['csat__in'] = csat_values
+
+        # Resolution filter
+        resolution = request.query_params.get('resolution')
+        if resolution:
+            if isinstance(resolution, str):
+                resolution_values = [value.strip() for value in resolution.split(',')]
+            else:
+                resolution_values = [resolution]
+            filters['resolution__in'] = resolution_values
+
+        # Topic filter
+        topic = request.query_params.get('topic')
+        if topic:
+            filters['topic__name__icontains'] = topic
+
+        # Has chats room filter
+        has_chats_room = request.query_params.get('has_chats_room')
+        if has_chats_room is not None:
+            has_chats_room_bool = self._parse_boolean_param(has_chats_room)
+            filters['has_chats_room'] = has_chats_room_bool
+
+        return filters
 
     def list(self, request, *args, **kwargs):
         """Get all supervisor data combining both Conversation model data and billing data"""
@@ -1493,14 +1516,14 @@ class SupervisorViewset(ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Get conversation data
+            # Get conversation data with database-level filtering
+            conversation_filters = self._build_conversation_filters(request)
             conversation_queryset = Conversation.objects.filter(
                 project=project,
                 created_at__date__gte=start_datetime,
-                created_at__date__lte=end_datetime
+                created_at__date__lte=end_datetime,
+                **conversation_filters
             ).select_related('topic', 'project').order_by('-created_at')
-
-            # Apply date filters to conversation data
 
             conversation_data = list(conversation_queryset)
 
@@ -1542,7 +1565,7 @@ class SupervisorViewset(ModelViewSet):
             else:
                 all_data = unified_conversation_data
 
-            # Apply additional filters and sort
+            # Apply any remaining filters and sort
             all_data = self._apply_filters_to_data(all_data, request)
             all_data.sort(key=lambda x: x.get('created_on', ''), reverse=True)
 
@@ -1565,7 +1588,6 @@ class SupervisorViewset(ModelViewSet):
             sentry_sdk.capture_exception(e)
 
             print(f"Error retrieving supervisor data: {str(e)}")
-
             return Response(
                 {"error": f"Error retrieving supervisor data: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

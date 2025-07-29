@@ -11,6 +11,7 @@ class ConversationCreationDTO:
     csat: str
     created_at: str 
 
+
 @dataclass
 class WindowConversationDTO:
     project_uuid: str
@@ -20,6 +21,7 @@ class WindowConversationDTO:
     contact_urn: str
     has_chats_room: bool
     external_id: str
+    name: str
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}
