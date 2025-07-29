@@ -50,6 +50,7 @@ class Supervisor:
             "start_date": billing_data.get("created_on"),
             "end_date": billing_data.get("end_on"),
             "resolution": None,
+            "name": billing_data.get("name"),  # Add name field from billing data
             "is_billing_only": True
         }
 
@@ -67,6 +68,7 @@ class Supervisor:
             "start_date": conversation.start_date or conversation.created_at,  # Use created_at as fallback
             "end_date": conversation.end_date,
             "resolution": conversation.resolution,
+            "name": None,  # Conversation model doesn't have contact_name field
             "is_billing_only": False
         })
         return billing_object
@@ -95,20 +97,10 @@ class Supervisor:
         # Extract results from the paginated response
         billing_data = billing_response.get('results', [])
 
-        # Parse dates for proper comparison with datetime fields
-        start_datetime = parse_date(start_date) if start_date else None
-        end_datetime = parse_date(end_date) if end_date else None
-
-        # Build conversation query
-        conversation_query = Conversation.objects.filter(project__uuid=project_uuid)
-
-        if start_datetime:
-            conversation_query = conversation_query.filter(created_at__date__gte=start_datetime)
-        if end_datetime:
-            conversation_query = conversation_query.filter(created_at__date__lte=end_datetime)
-
-        # Get conversation data with optimized query
-        conversations = conversation_query.select_related('topic').in_bulk(field_name='external_id')
+        # Get all conversations for this project (date filtering is handled by SupervisorViewset)
+        conversations = Conversation.objects.filter(
+            project__uuid=project_uuid
+        ).select_related('topic').in_bulk(field_name='external_id')
 
         # Process billing data with conversation enrichment
         supervisor_data = []
@@ -117,9 +109,20 @@ class Supervisor:
             unified_object = self._create_billing_object(billing_object)
 
             # Enrich with conversation data if available
-            if billing_id and billing_id in conversations:
+            conversation = None
+            if billing_id:
+                # Try exact match first
+                if billing_id in conversations:
+                    conversation = conversations[billing_id]
+                else:
+                    # Try string conversion if needed
+                    billing_id_str = str(billing_id)
+                    if billing_id_str in conversations:
+                        conversation = conversations[billing_id_str]
+
+            if conversation:
                 unified_object = self._enrich_with_conversation(
-                    unified_object, conversations[billing_id]
+                    unified_object, conversation
                 )
 
             supervisor_data.append(unified_object)

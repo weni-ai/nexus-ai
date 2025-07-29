@@ -322,6 +322,7 @@ class SupervisorDataSerializer(serializers.Serializer):
     start_date = serializers.DateTimeField()
     end_date = serializers.DateTimeField()
     resolution = serializers.CharField(allow_null=True, allow_blank=True)
+    name = serializers.CharField(allow_null=True, allow_blank=True)
 
     def to_representation(self, instance):
         """Custom representation to handle resolution field properly"""

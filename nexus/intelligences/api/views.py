@@ -5,7 +5,6 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.utils.datastructures import MultiValueDictKeyError
-from django.utils.dateparse import parse_date
 from rest_framework import parsers, status, views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -1455,6 +1454,7 @@ class SupervisorViewset(ModelViewSet):
             "start_date": conversation.start_date or conversation.created_at,  # Use created_at as fallback
             "end_date": conversation.end_date,  # Use created_at as fallback
             "resolution": conversation.resolution,
+            "name": None,  # Conversation model doesn't have contact_name field
             "is_billing_only": False
         }
 
@@ -1476,13 +1476,22 @@ class SupervisorViewset(ModelViewSet):
                 'start_date',
                 pendulum.now().subtract(days=30).to_date_string()
             )
-            end_date = request.query_params.get(
-                'end_date',
-                pendulum.now().to_date_string()
-            )
+            end_date = request.query_params.get('end_date') or request.query_params.get('end_date')
+            if not end_date:
+                end_date = pendulum.now().to_date_string()
 
-            start_datetime = parse_date(start_date)
-            end_datetime = parse_date(end_date)
+            # Convert DD-MM-YYYY to YYYY-MM-DD for Django date filtering
+            try:
+                from datetime import datetime
+                start_date_obj = datetime.strptime(start_date, '%d-%m-%Y')
+                end_date_obj = datetime.strptime(end_date, '%d-%m-%Y')
+                start_datetime = start_date_obj.date()
+                end_datetime = end_date_obj.date()
+            except ValueError:
+                return Response(
+                    {"error": "Invalid date format. Expected DD-MM-YYYY format"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             # Get conversation data
             conversation_queryset = Conversation.objects.filter(
@@ -1503,12 +1512,19 @@ class SupervisorViewset(ModelViewSet):
             if start_date and end_date:
 
                 supervisor = Supervisor()
+
+                # Extract Bearer token from Authorization header
+                auth_header = request.headers.get('Authorization', '')
+                user_token = ""
+                if auth_header.startswith('Bearer '):
+                    user_token = auth_header.split('Bearer ')[1]
+
                 billing_data = supervisor.get_supervisor_data_by_date(
                     project_uuid=project_uuid,
                     start_date=start_date,
                     end_date=end_date,
                     page=1,  # Get all data
-                    user_token=request.user.auth_token.key if hasattr(request.user, 'auth_token') else ""
+                    user_token=user_token
                 )
 
                 # Filter out billing data that already has conversation data
@@ -1547,6 +1563,8 @@ class SupervisorViewset(ModelViewSet):
         except Exception as e:
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.capture_exception(e)
+
+            print(f"Error retrieving supervisor data: {str(e)}")
 
             return Response(
                 {"error": f"Error retrieving supervisor data: {str(e)}"},
