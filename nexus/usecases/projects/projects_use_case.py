@@ -206,3 +206,23 @@ class ProjectsUseCase:
             "conversation_turns_to_include": project.conversation_turns_to_include,
             "exclude_previous_thinking_steps": project.exclude_previous_thinking_steps
         }
+
+    def get_agents_backend_by_project(self, project_uuid: str) -> str:
+        project = self.get_by_uuid(project_uuid)
+        return project.agents_backend
+    
+    def set_agents_backend_by_project(self, project_uuid: str, agents_backend: str) -> None:
+        backends = {
+            "openai": "OpenAIBackend",
+            "bedrock": "BedrockBackend"
+        }
+        agents_backend: str | None = backends.get(agents_backend.lower())
+
+        if not agents_backend:
+            raise Exception(f"[ ProjectsUseCase ] Invalid backend: {agents_backend}")
+
+        project = self.get_by_uuid(project_uuid)
+        project.agents_backend = agents_backend
+        project.save()
+
+        return project.agents_backend
