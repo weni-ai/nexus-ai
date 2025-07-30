@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Dict, Optional
 
@@ -15,6 +16,7 @@ from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
 from nexus.usecases.inline_agents.typing import TypingUsecase
+from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
 
 from .adapter import BedrockTeamAdapter, BedrockDataLakeEventAdapter
@@ -66,7 +68,10 @@ class BedrockBackend(InlineAgentsBackend):
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
         event_manager_notify: callable = None,
-        data_lake_event_adapter: DataLakeEventAdapter = None
+        data_lake_event_adapter: DataLakeEventAdapter = None,
+        use_prompt_creation_configurations: bool = False,
+        conversation_turns_to_include: int = 10,
+        exclude_previous_thinking_steps: bool = True,
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
 
@@ -82,6 +87,9 @@ class BedrockBackend(InlineAgentsBackend):
             preview=preview
         )
 
+        jwt_usecase = JWTUsecase()
+        auth_token = jwt_usecase.generate_jwt_token(project_uuid)
+
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
             agents=team,
@@ -91,8 +99,17 @@ class BedrockBackend(InlineAgentsBackend):
             use_components=use_components,
             contact_fields=contact_fields,
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
+            auth_token=auth_token,
+            sanitized_urn=sanitized_urn
         )
+
+        if use_prompt_creation_configurations:
+            external_team["promptCreationConfigurations"] = { 
+                "excludePreviousThinkingSteps": exclude_previous_thinking_steps,
+                "previousConversationTurnsToInclude": conversation_turns_to_include,
+            }
+
         client = self._get_client()
 
         # Generate a session ID for websocket communication
@@ -151,6 +168,13 @@ class BedrockBackend(InlineAgentsBackend):
                 trace_events.append(trace_data)
 
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
+
+                self._data_lake_event_adapter.custom_event_data(
+                    inline_trace=trace_data,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    preview=preview
+                )
 
                 self._data_lake_event_adapter.to_data_lake_event(
                     inline_trace=trace_data,

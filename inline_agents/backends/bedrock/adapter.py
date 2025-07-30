@@ -30,7 +30,9 @@ class BedrockTeamAdapter(TeamAdapter):
         use_components: bool = False,
         contact_fields: str = "",
         contact_name: str = "",
-        channel_uuid: str = ""
+        channel_uuid: str = "",
+        auth_token: str = "",
+        sanitized_urn: str = ""
     ) -> dict:
         # TODO: change self to cls
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
@@ -60,8 +62,10 @@ class BedrockTeamAdapter(TeamAdapter):
             project_id=project_uuid,
             contact_id=contact_urn,
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid   
         )
+
+        print(f"[ + DEBUG + ] auth_token: {auth_token}")
 
         credentials = self._get_credentials(project_uuid)
 
@@ -77,16 +81,19 @@ class BedrockTeamAdapter(TeamAdapter):
             "inlineSessionState": self._get_inline_session_state(
                 use_components=use_components,
                 credentials=credentials,
-                contact={"urn": contact_urn},
-                project={"uuid": project_uuid}
+                contact={"urn": contact_urn, "name": contact_name, "channel_uuid": channel_uuid},
+                project={"uuid": project_uuid, "auth_token": auth_token},
             ),
             "enableTrace": self._get_enable_trace(),
-            "sessionId": self._get_session_id(contact_urn, project_uuid),
+            "sessionId": self._get_session_id(sanitized_urn, project_uuid),
             "inputText": input_text,
             "collaborators": self._get_collaborators(agents, llm_formatted_time),
             "collaboratorConfigurations": self._get_collaborator_configurations(agents),
             "guardrailConfiguration": self._get_guardrails(),
-            "promptOverrideConfiguration": self.__get_prompt_override_configuration(use_components=use_components)
+            "promptOverrideConfiguration": self.__get_prompt_override_configuration(
+                use_components=use_components,
+                prompt_override_configuration=supervisor["prompt_override_configuration"],
+            )
         }
 
         print(f"[ + DEBUG + ] external_team: {external_team}")
@@ -118,7 +125,7 @@ class BedrockTeamAdapter(TeamAdapter):
         use_components: bool,
         credentials: dict,
         contact: dict,
-        project: dict
+        project: dict,
     ) -> str:
         sessionState = {}
         session_attributes = {}
@@ -180,16 +187,26 @@ class BedrockTeamAdapter(TeamAdapter):
         content_base_uuid: str
     ) -> list[dict]:
 
-        single_filter = {
-            "equals": {
-                "key": "contentBaseUuid",
-                "value": str(content_base_uuid)
-            }
+        combined_filter = {
+            "andAll": [
+                {
+                    "equals": {
+                        "key": "contentBaseUuid",
+                        "value": str(content_base_uuid)
+                    }
+                },
+                {
+                    "equals": {
+                        "key": "x-amz-bedrock-kb-data-source-id",
+                        "value": settings.AWS_BEDROCK_DATASOURCE_ID
+                    }
+                }
+            ]
         }
 
         retrieval_configuration = {
             "vectorSearchConfiguration": {
-                "filter": single_filter
+                "filter": combined_filter
             }
         }
 
@@ -255,7 +272,8 @@ class BedrockTeamAdapter(TeamAdapter):
             "{{CONTACT_NAME}}", contact_name
         ).replace(
             "{{CHANNEL_UUID}}", channel_uuid
-        )
+        ).replace("\r\n", "\n")
+
         return instruction
 
     @classmethod
@@ -267,55 +285,10 @@ class BedrockTeamAdapter(TeamAdapter):
         }
 
     @classmethod
-    def __get_prompt_override_configuration(self, use_components: bool) -> dict:
-        prompt_override_configuration = {
-            'promptConfigurations': [
-                {
-                    'promptType': 'KNOWLEDGE_BASE_RESPONSE_GENERATION',
-                    'promptState': 'DISABLED',
-                    'promptCreationMode': 'DEFAULT',
-                    'parserMode': 'DEFAULT'
-                },
-                {
-                    'promptType': 'PRE_PROCESSING',
-                    'promptState': 'DISABLED',
-                    'promptCreationMode': 'DEFAULT',
-                    'parserMode': 'DEFAULT'
-                },
-                {
-                    'promptType': 'POST_PROCESSING',
-                    'promptState': 'DISABLED',
-                    'promptCreationMode': 'DEFAULT',
-                    'parserMode': 'DEFAULT'
-                }
-            ]
-        }
-
+    def __get_prompt_override_configuration(self, prompt_override_configuration, use_components: bool) -> dict:
         if use_components:
-            prompt_override_configuration.update(
-                {'overrideLambda': os.environ.get('AWS_COMPONENTS_FUNCTION_ARN')}
-            )
-            prompt_override_configuration["promptConfigurations"].append(
-                {
-                    'basePromptTemplate': PROMPT_POS_PROCESSING,
-                    'foundationModel': settings.AWS_BEDROCK_AGENTS_MODEL_ID[0],
-                    'inferenceConfiguration': {
-                        'maximumLength': 2048,
-                        'stopSequences': [
-                            'Human:',
-                        ],
-                        'temperature': 0, 
-                        'topK': 250,
-                        'topP': 1
-                    },
-
-                    'promptType': 'POST_PROCESSING',
-                    'promptState': 'ENABLED',
-                    'parserMode': 'OVERRIDDEN',
-                    'promptCreationMode': 'OVERRIDDEN'
-                }
-            )
-        return prompt_override_configuration
+            return prompt_override_configuration.get("components")
+        return prompt_override_configuration.get("default")
 
     @classmethod
     def __get_collaborator_prompt_override_configuration(self) -> dict:
@@ -476,6 +449,54 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
 
         except Exception as e:
             logger.error(f"Error processing data lake event: {str(e)}")
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.capture_exception(e)
+            return None
+
+    def custom_event_data(
+        self,
+        inline_trace: dict,
+        project_uuid: str,
+        contact_urn: str,
+        preview: bool = False
+    ):
+        if preview:
+            return None
+
+        orchestration_trace = inline_trace.get("trace", {}).get("orchestrationTrace", {})
+
+        action_group_data = orchestration_trace.get('observation', {}).get("actionGroupInvocationOutput", {})
+        if action_group_data.get('text'):
+            try:
+                event_data = json.loads(action_group_data.get('text'))
+            except Exception as e:
+                print(f"[ + DEBUG error + ] error: {e}")
+                event_data = {}
+            if isinstance(event_data, dict):
+                event_data = event_data.get("events", [])
+            else:
+                event_data = []
+            for event_to_send in event_data:
+                self.to_data_lake_custom_event(
+                    event_data=event_to_send,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn
+                )
+
+    def to_data_lake_custom_event(
+        self,
+        event_data: dict,
+        project_uuid: str,
+        contact_urn: str
+    ) -> Optional[dict]:
+        try:
+            event_data["project"] = project_uuid
+            event_data["contact_urn"] = contact_urn
+            self.send_data_lake_event_task.delay(event_data)
+            return event_data
+        except Exception as e:
+            logger.error(f"Error getting trace summary data lake event: {str(e)}")
+            sentry_sdk.set_context("custom event to data lake", {"event_data": event_data})
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.capture_exception(e)
             return None

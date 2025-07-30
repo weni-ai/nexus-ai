@@ -11,6 +11,8 @@ from nexus.intelligences.models import (
     LLM,
     ContentBaseInstruction,
     ContentBaseAgent,
+    Topics,
+    SubTopics,
 )
 from nexus.agents.models import Team
 from nexus.projects.models import Project
@@ -277,3 +279,29 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
 
         instance.refresh_from_db()
         return instance
+
+
+class TopicsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Topics
+        fields = ['name', 'uuid', 'created_at', 'description', 'subtopic']
+
+    subtopic = serializers.SerializerMethodField()
+
+    def get_subtopic(self, obj):
+        return SubTopicsSerializer(obj.subtopics.all(), many=True).data
+
+
+class SubTopicsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubTopics
+        fields = ['name', 'uuid', 'created_at', 'description', 'topic_uuid', 'topic_name']
+
+    topic_uuid = serializers.SerializerMethodField()
+    topic_name = serializers.SerializerMethodField()
+
+    def get_topic_uuid(self, obj):
+        return obj.topic.uuid
+
+    def get_topic_name(self, obj):
+        return obj.topic.name
