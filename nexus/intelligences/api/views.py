@@ -1552,6 +1552,17 @@ class SupervisorViewset(ModelViewSet):
         """Apply filters to unified data structure - only for billing data since conversations are filtered at DB level"""
         # Note: csat, topic, has_chats_room filters are applied at database level for conversations
         # This method is mainly for any future filters that might apply to both conversation and billing data
+
+        # Apply search filter to billing data
+        search = request.query_params.get('search')
+        if search:
+            search_lower = search.lower()
+            data = [
+                item for item in data
+                if (str(item.get('name') or '').lower().find(search_lower) != -1 or
+                    str(item.get('urn') or '').lower().find(search_lower) != -1)
+            ]
+
         return data
 
     def _convert_conversation_to_unified(self, conversation):
@@ -1562,6 +1573,7 @@ class SupervisorViewset(ModelViewSet):
             "uuid": conversation.uuid,
             "external_id": conversation.external_id,
             "csat": conversation.csat,
+            "nps": conversation.nps,
             "topic": conversation.topic.name if conversation.topic else None,
             "has_chats_room": conversation.has_chats_room,
             "start_date": conversation.start_date or conversation.created_at,  # Use created_at as fallback
@@ -1595,9 +1607,10 @@ class SupervisorViewset(ModelViewSet):
         resolution = request.query_params.get('resolution')
         if resolution:
             if isinstance(resolution, str):
-                resolution_values = [value.strip() for value in resolution.split(',')]
+                # Use the exact string format stored in the database
+                resolution_values = [f"({value.strip()}, 'Resolved')" for value in resolution.split(',')]
             else:
-                resolution_values = [resolution]
+                resolution_values = [f"({resolution}, 'Resolved')"]
             filters['resolution__in'] = resolution_values
 
         # Topic filter
@@ -1610,6 +1623,15 @@ class SupervisorViewset(ModelViewSet):
         if has_chats_room is not None:
             has_chats_room_bool = self._parse_boolean_param(has_chats_room)
             filters['has_chats_room'] = has_chats_room_bool
+
+        search = request.query_params.get('search')
+        if search:
+            from django.db.models import Q
+            filters['Q'] = Q(contact_name__icontains=search) | Q(contact_urn__icontains=search)
+
+        nps = request.query_params.get('nps')
+        if nps:
+            filters['nps'] = nps
 
         return filters
 
@@ -1648,12 +1670,29 @@ class SupervisorViewset(ModelViewSet):
 
             # Get conversation data with database-level filtering
             conversation_filters = self._build_conversation_filters(request)
-            conversation_queryset = Conversation.objects.filter(
+
+            # Handle Q object for search filtering
+            q_object = conversation_filters.pop('Q', None)
+
+            # Debug: Check base query without filters
+            base_queryset = Conversation.objects.select_related('topic', 'project').filter(
+                project=project,
+                created_at__date__gte=start_datetime,
+                created_at__date__lte=end_datetime,
+            )
+
+            conversation_queryset = Conversation.objects.select_related('topic', 'project').filter(
                 project=project,
                 created_at__date__gte=start_datetime,
                 created_at__date__lte=end_datetime,
                 **conversation_filters
-            ).select_related('topic', 'project').order_by('-created_at')
+            )
+
+            # Apply Q object if search filter is used
+            if q_object:
+                conversation_queryset = conversation_queryset.filter(q_object)
+
+            conversation_queryset = conversation_queryset.order_by('-created_at')
 
             conversation_data = list(conversation_queryset)
 
@@ -1663,12 +1702,13 @@ class SupervisorViewset(ModelViewSet):
 
             # Check if conversation-specific filters are being used
             has_conversation_filters = self._has_conversation_specific_filters(request)
+            has_search = bool(request.query_params.get('search'))
 
-            if has_conversation_filters:
-                # If conversation-specific filters are used, only return conversation data
+            if has_conversation_filters and not has_search:
+                # If conversation-specific filters are used (without search), only return conversation data
                 all_data = unified_conversation_data
             else:
-                # Only fetch billing data if no conversation-specific filters are used
+                # Fetch billing data if no conversation-specific filters OR if search is used
                 if start_date and end_date:
                     supervisor = Supervisor()
 
@@ -1683,7 +1723,8 @@ class SupervisorViewset(ModelViewSet):
                         start_date=start_date,
                         end_date=end_date,
                         page=1,  # Get all data
-                        user_token=user_token
+                        user_token=user_token,
+                        search=request.query_params.get('search')
                     )
 
                     # Filter out billing data that already has conversation data

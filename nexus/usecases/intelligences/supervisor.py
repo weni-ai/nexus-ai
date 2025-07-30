@@ -80,6 +80,7 @@ class Supervisor:
         end_date: str,
         page: int,
         user_token: str = None,
+        search: str = None,
     ) -> List[Dict[str, Any]]:
         """Get supervisor data by date with conversation enrichment"""
 
@@ -91,7 +92,8 @@ class Supervisor:
             project_uuid=project_uuid,
             start_date=start_date,
             end_date=end_date,
-            page=page
+            page=page,
+            search=search,
         )
 
         # Extract results from the paginated response

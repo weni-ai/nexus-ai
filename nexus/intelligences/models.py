@@ -230,10 +230,8 @@ class SubTopics(models.Model):
 class Conversation(models.Model):
 
     RESOLUTION_CHOICES = [
-        (0, "In progress"),
-        (1, "Resolved"),
-        (2, "Unresolved"),
-        (3, "Unengaged"),
+        (0, "Resolved"),
+        (1, "Unresolved"),
     ]
 
     CSAT_CHOICES = [

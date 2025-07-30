@@ -165,6 +165,7 @@ class LambdaUseCase():
         conversation.topic = Topics.objects.get(uuid=event_data.get("metadata").get("topic_uuid"))
         conversation.save()
 
+
 @celery_app.task
 def create_lambda_conversation(
     payload: dict
@@ -175,10 +176,3 @@ def create_lambda_conversation(
         lambda_usecase = LambdaUseCase()
         lambda_usecase.lambda_conversation_resolution(conversation)
         lambda_usecase.lambda_conversation_topics(conversation)
-
-        create_conversation_use_case = CreateConversationUseCase()
-        conversation = create_conversation_use_case.create_conversation(payload)
-
-        # TODO: uncomment this when models team up to production the lambdas
-        # self.lambda_conversation_resolution(conversation)
-        # self.lambda_conversation_topics(conversation)
