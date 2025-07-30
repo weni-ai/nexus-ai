@@ -81,8 +81,8 @@ class BedrockTeamAdapter(TeamAdapter):
             "inlineSessionState": self._get_inline_session_state(
                 use_components=use_components,
                 credentials=credentials,
-                contact={"urn": contact_urn},
-                project={"uuid": project_uuid, "auth_token": auth_token}
+                contact={"urn": contact_urn, "name": contact_name, "channel_uuid": channel_uuid},
+                project={"uuid": project_uuid, "auth_token": auth_token},
             ),
             "enableTrace": self._get_enable_trace(),
             "sessionId": self._get_session_id(sanitized_urn, project_uuid),
@@ -90,7 +90,10 @@ class BedrockTeamAdapter(TeamAdapter):
             "collaborators": self._get_collaborators(agents, llm_formatted_time),
             "collaboratorConfigurations": self._get_collaborator_configurations(agents),
             "guardrailConfiguration": self._get_guardrails(),
-            "promptOverrideConfiguration": self.__get_prompt_override_configuration(use_components=use_components)
+            "promptOverrideConfiguration": self.__get_prompt_override_configuration(
+                use_components=use_components,
+                prompt_override_configuration=supervisor["prompt_override_configuration"],
+            )
         }
 
         print(f"[ + DEBUG + ] external_team: {external_team}")
@@ -122,7 +125,7 @@ class BedrockTeamAdapter(TeamAdapter):
         use_components: bool,
         credentials: dict,
         contact: dict,
-        project: dict
+        project: dict,
     ) -> str:
         sessionState = {}
         session_attributes = {}
@@ -269,7 +272,8 @@ class BedrockTeamAdapter(TeamAdapter):
             "{{CONTACT_NAME}}", contact_name
         ).replace(
             "{{CHANNEL_UUID}}", channel_uuid
-        )
+        ).replace("\r\n", "\n")
+
         return instruction
 
     @classmethod
@@ -281,55 +285,10 @@ class BedrockTeamAdapter(TeamAdapter):
         }
 
     @classmethod
-    def __get_prompt_override_configuration(self, use_components: bool) -> dict:
-        prompt_override_configuration = {
-            'promptConfigurations': [
-                {
-                    'promptType': 'KNOWLEDGE_BASE_RESPONSE_GENERATION',
-                    'promptState': 'DISABLED',
-                    'promptCreationMode': 'DEFAULT',
-                    'parserMode': 'DEFAULT'
-                },
-                {
-                    'promptType': 'PRE_PROCESSING',
-                    'promptState': 'DISABLED',
-                    'promptCreationMode': 'DEFAULT',
-                    'parserMode': 'DEFAULT'
-                },
-                {
-                    'promptType': 'POST_PROCESSING',
-                    'promptState': 'DISABLED',
-                    'promptCreationMode': 'DEFAULT',
-                    'parserMode': 'DEFAULT'
-                }
-            ]
-        }
-
+    def __get_prompt_override_configuration(self, prompt_override_configuration, use_components: bool) -> dict:
         if use_components:
-            prompt_override_configuration.update(
-                {'overrideLambda': os.environ.get('AWS_COMPONENTS_FUNCTION_ARN')}
-            )
-            prompt_override_configuration["promptConfigurations"].append(
-                {
-                    'basePromptTemplate': PROMPT_POS_PROCESSING,
-                    'foundationModel': settings.AWS_BEDROCK_AGENTS_MODEL_ID[0],
-                    'inferenceConfiguration': {
-                        'maximumLength': 2048,
-                        'stopSequences': [
-                            'Human:',
-                        ],
-                        'temperature': 0, 
-                        'topK': 250,
-                        'topP': 1
-                    },
-
-                    'promptType': 'POST_PROCESSING',
-                    'promptState': 'ENABLED',
-                    'parserMode': 'OVERRIDDEN',
-                    'promptCreationMode': 'OVERRIDDEN'
-                }
-            )
-        return prompt_override_configuration
+            return prompt_override_configuration.get("components")
+        return prompt_override_configuration.get("default")
 
     @classmethod
     def __get_collaborator_prompt_override_configuration(self) -> dict:
