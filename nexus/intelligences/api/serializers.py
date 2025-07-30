@@ -317,6 +317,7 @@ class SupervisorDataSerializer(serializers.Serializer):
     uuid = serializers.CharField(allow_null=True, allow_blank=True)
     external_id = serializers.CharField(allow_null=True, allow_blank=True)
     csat = serializers.CharField(allow_null=True, allow_blank=True)
+    nps = serializers.IntegerField(allow_null=True)
     topic = serializers.CharField(allow_null=True, allow_blank=True)
     has_chats_room = serializers.BooleanField(default=False)
     start_date = serializers.DateTimeField()
@@ -325,7 +326,7 @@ class SupervisorDataSerializer(serializers.Serializer):
     name = serializers.CharField(allow_null=True, allow_blank=True)
 
     def to_representation(self, instance):
-        """Custom representation to handle resolution field properly"""
+        """Custom representation to handle resolution and csat fields properly"""
         data = super().to_representation(instance)
 
         # Handle resolution field - convert tuple string to actual value
@@ -335,6 +336,16 @@ class SupervisorDataSerializer(serializers.Serializer):
                 import ast
                 resolution_tuple = ast.literal_eval(data['resolution'])
                 data['resolution'] = str(resolution_tuple[0])  # Use the numeric value
+            except (ValueError, SyntaxError):
+                pass
+
+        # Handle csat field - convert tuple string to actual value
+        if isinstance(data.get('csat'), str) and data['csat'].startswith('('):
+            # Extract the actual value from tuple string like "(4, 'Very unsatisfied')"
+            try:
+                import ast
+                csat_tuple = ast.literal_eval(data['csat'])
+                data['csat'] = str(csat_tuple[0])  # Use the numeric value
             except (ValueError, SyntaxError):
                 pass
 

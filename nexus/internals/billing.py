@@ -16,10 +16,25 @@ class BillingRESTClient(RestClient):
         start_date: str,
         end_date: str,
         page: int,
+        search: str = None,
     ):
 
+        # Build query parameters
+        params = {
+            "start": start_date,
+            "end": end_date,
+            "page": page,
+        }
+
+        # Add search parameter if provided
+        if search:
+            params["search"] = search
+
+        # Build query string
+        query_string = "&".join([f"{key}={value}" for key, value in params.items()])
+
         response = requests.get(
-            f"{self.base_url}/api/v1/{project_uuid}/conversations/?start={start_date}&end={end_date}&page={page}",
+            f"{self.base_url}/api/v1/{project_uuid}/conversations/?{query_string}",
             headers={
                 "Content-Type": "application/json; charset=utf-8",
                 "Authorization": f"Bearer {user_token}",
