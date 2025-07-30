@@ -24,7 +24,7 @@ from nexus.intelligences.models import (
 from nexus.orgs import permissions
 from nexus.paginations import CustomCursorPagination, SupervisorPagination
 from nexus.projects.models import Project
-from nexus.projects.api.permissions import ProjectPermission, ExternalTokenPermission
+from nexus.projects.api.permissions import ProjectPermission, CombinedExternalProjectPermission
 from nexus.storage import AttachmentPreviewStorage, validate_mime_type
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
@@ -1339,7 +1339,7 @@ class CommerceHasAgentBuilder(views.APIView):
 
 class TopicsViewSet(ModelViewSet):
     serializer_class = TopicsSerializer
-    permission_classes = [ExternalTokenPermission]
+    permission_classes = [CombinedExternalProjectPermission]
     authentication_classes = []  # Disable default authentication
     lookup_field = 'uuid'
 
@@ -1377,7 +1377,7 @@ class TopicsViewSet(ModelViewSet):
 
 class SubTopicsViewSet(ModelViewSet):
     serializer_class = SubTopicsSerializer
-    permission_classes = [ExternalTokenPermission]
+    permission_classes = [CombinedExternalProjectPermission]
     authentication_classes = []  # Disable default authentication
     lookup_field = 'uuid'
 
@@ -1415,7 +1415,7 @@ class SubTopicsViewSet(ModelViewSet):
 
 class SupervisorViewset(ModelViewSet):
     serializer_class = SupervisorDataSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [CombinedExternalProjectPermission]
     pagination_class = SupervisorPagination
     lookup_field = 'uuid'
 
@@ -1447,6 +1447,11 @@ class SupervisorViewset(ModelViewSet):
         }
 
         return unified_object
+
+    def _has_conversation_specific_filters(self, request):
+        """Check if any filters that only apply to conversation data are being used"""
+        conversation_specific_params = ['csat', 'topic', 'has_chats_room', 'resolution']
+        return any(request.query_params.get(param) for param in conversation_specific_params)
 
     def _build_conversation_filters(self, request):
         """Build database filters for conversation query based on request parameters"""
@@ -1531,39 +1536,45 @@ class SupervisorViewset(ModelViewSet):
                 self._convert_conversation_to_unified(conv) for conv in conversation_data
             ]
 
-            # Get billing data that doesn't have corresponding conversations
-            if start_date and end_date:
+            # Check if conversation-specific filters are being used
+            has_conversation_filters = self._has_conversation_specific_filters(request)
 
-                supervisor = Supervisor()
-
-                # Extract Bearer token from Authorization header
-                auth_header = request.headers.get('Authorization', '')
-                user_token = ""
-                if auth_header.startswith('Bearer '):
-                    user_token = auth_header.split('Bearer ')[1]
-
-                billing_data = supervisor.get_supervisor_data_by_date(
-                    project_uuid=project_uuid,
-                    start_date=start_date,
-                    end_date=end_date,
-                    page=1,  # Get all data
-                    user_token=user_token
-                )
-
-                # Filter out billing data that already has conversation data
-                conversation_external_ids = {
-                    conv.external_id for conv in conversation_data if conv.external_id
-                }
-
-                billing_only_data = [
-                    item for item in billing_data
-                    if item.get('external_id') not in conversation_external_ids
-                ]
-
-                # Combine both data sources
-                all_data = unified_conversation_data + billing_only_data
-            else:
+            if has_conversation_filters:
+                # If conversation-specific filters are used, only return conversation data
                 all_data = unified_conversation_data
+            else:
+                # Only fetch billing data if no conversation-specific filters are used
+                if start_date and end_date:
+                    supervisor = Supervisor()
+
+                    # Extract Bearer token from Authorization header
+                    auth_header = request.headers.get('Authorization', '')
+                    user_token = ""
+                    if auth_header.startswith('Bearer '):
+                        user_token = auth_header.split('Bearer ')[1]
+
+                    billing_data = supervisor.get_supervisor_data_by_date(
+                        project_uuid=project_uuid,
+                        start_date=start_date,
+                        end_date=end_date,
+                        page=1,  # Get all data
+                        user_token=user_token
+                    )
+
+                    # Filter out billing data that already has conversation data
+                    conversation_external_ids = {
+                        conv.external_id for conv in conversation_data if conv.external_id
+                    }
+
+                    billing_only_data = [
+                        item for item in billing_data
+                        if item.get('external_id') not in conversation_external_ids
+                    ]
+
+                    # Combine both data sources
+                    all_data = unified_conversation_data + billing_only_data
+                else:
+                    all_data = unified_conversation_data
 
             # Apply any remaining filters and sort
             all_data = self._apply_filters_to_data(all_data, request)
