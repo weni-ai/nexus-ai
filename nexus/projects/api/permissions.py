@@ -49,3 +49,18 @@ class ExternalTokenPermission(permissions.BasePermission):
             return False
 
         return True
+
+
+class CombinedExternalProjectPermission(permissions.BasePermission):
+    """
+    Permission class that allows access if either ExternalTokenPermission OR ProjectPermission passes.
+    """
+    def has_permission(self, request, view):
+        # Check ExternalTokenPermission first
+        external_token_permission = ExternalTokenPermission()
+        if external_token_permission.has_permission(request, view):
+            return True
+
+        # If ExternalTokenPermission fails, check ProjectPermission
+        project_permission = ProjectPermission()
+        return project_permission.has_permission(request, view)
