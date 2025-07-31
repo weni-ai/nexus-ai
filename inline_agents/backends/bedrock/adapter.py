@@ -477,6 +477,13 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             else:
                 event_data = []
             for event_to_send in event_data:
+                if "metadata" not in event_to_send:
+                    event_to_send["metadata"] = {}
+                if event_to_send.get("key") == "weni_csat":
+                    event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
+                if event_to_send.get("key") == "weni_nps":
+                    event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_NPS
+
                 self.to_data_lake_custom_event(
                     event_data=event_to_send,
                     project_uuid=project_uuid,
