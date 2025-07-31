@@ -56,23 +56,6 @@ class Supervisor:
 
         return billing_object
 
-    def _enrich_with_conversation(self, billing_object: Dict[str, Any], conversation) -> Dict[str, Any]:
-        """Enrich billing object with conversation data"""
-        billing_object.update({
-            "created_on": conversation.created_at,
-            "urn": conversation.contact_urn,
-            "uuid": conversation.uuid,
-            "csat": conversation.csat,
-            "topic": conversation.topic.name if conversation.topic else None,
-            "has_chats_room": conversation.has_chats_room,
-            "start_date": conversation.start_date or conversation.created_at,  # Use created_at as fallback
-            "end_date": conversation.end_date,
-            "resolution": conversation.resolution,
-            "name": None,  # Conversation model doesn't have contact_name field
-            "is_billing_only": False
-        })
-        return billing_object
-
     def get_supervisor_data_by_date(
         self,
         project_uuid: str,
@@ -104,29 +87,26 @@ class Supervisor:
             project__uuid=project_uuid
         ).select_related('topic').in_bulk(field_name='external_id')
 
-        # Process billing data with conversation enrichment
+        # Process billing data - only return billing objects that don't have conversation data
         supervisor_data = []
         for billing_object in billing_data:
             billing_id = billing_object.get("id")
-            unified_object = self._create_billing_object(billing_object)
 
-            # Enrich with conversation data if available
-            conversation = None
+            # Check if this billing object has corresponding conversation data
+            has_conversation = False
             if billing_id:
                 # Try exact match first
                 if billing_id in conversations:
-                    conversation = conversations[billing_id]
+                    has_conversation = True
                 else:
                     # Try string conversion if needed
                     billing_id_str = str(billing_id)
                     if billing_id_str in conversations:
-                        conversation = conversations[billing_id_str]
+                        has_conversation = True
 
-            if conversation:
-                unified_object = self._enrich_with_conversation(
-                    unified_object, conversation
-                )
-
-            supervisor_data.append(unified_object)
+            # Only include billing objects that don't have conversation data
+            if not has_conversation:
+                unified_object = self._create_billing_object(billing_object)
+                supervisor_data.append(unified_object)
 
         return supervisor_data

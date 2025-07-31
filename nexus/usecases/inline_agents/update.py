@@ -9,6 +9,9 @@ from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.tools import ToolsUseCase
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 
+from nexus.intelligences.models import Conversation, ConversationMessage
+from nexus.inline_agents.models import InlineAgentMessage
+
 from typing import Dict
 
 
@@ -88,6 +91,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             return True
         except AgentCredential.DoesNotExist:
             return False
+
 
 class UpdateConversationUseCase():
 
