@@ -1438,13 +1438,15 @@ class SupervisorViewset(ModelViewSet):
                     str(item.get('urn') or '').lower().find(search_lower) != -1)
             ]
 
-        # Apply resolution filter to combined data (for cases where billing data is included)
+        # Apply resolution filter only to billing data (conversation data is already filtered at DB level)
         resolution = request.query_params.get('resolution')
         if resolution:
             resolution_values = [value.strip() for value in resolution.split(',')]
             data = [
                 item for item in data
-                if str(item.get('resolution', '')) in resolution_values
+                if ((item.get('is_billing_only', False) and 
+                     str(item.get('resolution', '')) in resolution_values) or
+                    (not item.get('is_billing_only', False)))  # Keep conversation data as it's already filtered
             ]
 
         return data
