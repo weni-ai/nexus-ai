@@ -232,6 +232,7 @@ class Conversation(models.Model):
     RESOLUTION_CHOICES = [
         (0, "Resolved"),
         (1, "Unresolved"),
+        (3, "In Progress"),
     ]
 
     CSAT_CHOICES = [
@@ -263,7 +264,7 @@ class Conversation(models.Model):
     resolution = models.CharField(
         max_length=255,
         choices=RESOLUTION_CHOICES,
-        default=0
+        default=3
     )
 
     def get_topic(self):

@@ -1563,6 +1563,15 @@ class SupervisorViewset(ModelViewSet):
                     str(item.get('urn') or '').lower().find(search_lower) != -1)
             ]
 
+        # Apply resolution filter to combined data (for cases where billing data is included)
+        resolution = request.query_params.get('resolution')
+        if resolution:
+            resolution_values = [value.strip() for value in resolution.split(',')]
+            data = [
+                item for item in data
+                if str(item.get('resolution', '')) in resolution_values
+            ]
+
         return data
 
     def _convert_conversation_to_unified(self, conversation):
@@ -1607,10 +1616,10 @@ class SupervisorViewset(ModelViewSet):
         resolution = request.query_params.get('resolution')
         if resolution:
             if isinstance(resolution, str):
-                # Use the exact string format stored in the database
-                resolution_values = [f"({value.strip()}, 'Resolved')" for value in resolution.split(',')]
+                # Parse comma-separated resolution values
+                resolution_values = [value.strip() for value in resolution.split(',')]
             else:
-                resolution_values = [f"({resolution}, 'Resolved')"]
+                resolution_values = [str(resolution)]
             filters['resolution__in'] = resolution_values
 
         # Topic filter
@@ -1674,13 +1683,6 @@ class SupervisorViewset(ModelViewSet):
             # Handle Q object for search filtering
             q_object = conversation_filters.pop('Q', None)
 
-            # Debug: Check base query without filters
-            base_queryset = Conversation.objects.select_related('topic', 'project').filter(
-                project=project,
-                created_at__date__gte=start_datetime,
-                created_at__date__lte=end_datetime,
-            )
-
             conversation_queryset = Conversation.objects.select_related('topic', 'project').filter(
                 project=project,
                 created_at__date__gte=start_datetime,
@@ -1692,7 +1694,8 @@ class SupervisorViewset(ModelViewSet):
             if q_object:
                 conversation_queryset = conversation_queryset.filter(q_object)
 
-            conversation_queryset = conversation_queryset.order_by('-created_at')
+            # Add distinct to remove duplicates based on uuid
+            conversation_queryset = conversation_queryset.distinct('uuid').order_by('-created_at')
 
             conversation_data = list(conversation_queryset)
 
@@ -1700,15 +1703,16 @@ class SupervisorViewset(ModelViewSet):
                 self._convert_conversation_to_unified(conv) for conv in conversation_data
             ]
 
-            # Check if conversation-specific filters are being used
-            has_conversation_filters = self._has_conversation_specific_filters(request)
-            has_search = bool(request.query_params.get('search'))
+            # Check if there are conversation-only filters (excluding resolution)
+            conversation_only_params = ['csat', 'topic', 'has_chats_room']
+            has_conversation_only_filters = any(request.query_params.get(param) for param in conversation_only_params)
 
-            if has_conversation_filters and not has_search:
-                # If conversation-specific filters are used (without search), only return conversation data
+            if has_conversation_only_filters:
+                # If conversation-only filters are used, only return conversation data
+                # This applies even if resolution=3 is requested or search is used
                 all_data = unified_conversation_data
             else:
-                # Fetch billing data if no conversation-specific filters OR if search is used
+                # Fetch billing data if no conversation-specific filters OR if search is used OR if in_progress is requested
                 if start_date and end_date:
                     supervisor = Supervisor()
 
