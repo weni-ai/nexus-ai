@@ -49,7 +49,7 @@ class Supervisor:
             "has_chats_room": billing_data.get("human_support"),
             "start_date": billing_data.get("created_on"),
             "end_date": billing_data.get("end_on"),
-            "resolution": None,
+            "resolution": "3",  # Mark billing data as "in_progress"
             "name": billing_data.get("name"),  # Add name field from billing data
             "is_billing_only": True
         }

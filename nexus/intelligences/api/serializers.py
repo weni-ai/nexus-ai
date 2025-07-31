@@ -329,15 +329,28 @@ class SupervisorDataSerializer(serializers.Serializer):
         """Custom representation to handle resolution and csat fields properly"""
         data = super().to_representation(instance)
 
-        # Handle resolution field - convert tuple string to actual value
-        if isinstance(data.get('resolution'), str) and data['resolution'].startswith('('):
-            # Extract the actual value from tuple string like "(0, 'In progress')"
-            try:
-                import ast
-                resolution_tuple = ast.literal_eval(data['resolution'])
-                data['resolution'] = str(resolution_tuple[0])  # Use the numeric value
-            except (ValueError, SyntaxError):
-                pass
+        # Handle resolution field - convert tuple string to actual value or map string values
+        if isinstance(data.get('resolution'), str):
+            if data['resolution'].startswith('('):
+                # Extract the actual value from tuple string like "(0, 'Resolved')"
+                try:
+                    import ast
+                    resolution_tuple = ast.literal_eval(data['resolution'])
+                    data['resolution'] = str(resolution_tuple[0])  # Use the numeric value
+                except (ValueError, SyntaxError):
+                    pass
+            else:
+                # Handle plain string values by mapping them to numeric values
+                resolution_mapping = {
+                    'resolved': '0',
+                    'unresolved': '1',
+                    'abandoned': '1',  # Map abandoned to unresolved
+                    'in_progress': '3',
+                    'in progress': '3',
+                }
+                resolution_lower = data['resolution'].lower()
+                if resolution_lower in resolution_mapping:
+                    data['resolution'] = resolution_mapping[resolution_lower]
 
         # Handle csat field - convert tuple string to actual value
         if isinstance(data.get('csat'), str) and data['csat'].startswith('('):
