@@ -1487,7 +1487,7 @@ class SupervisorViewset(ModelViewSet):
                 csat_values = [csat]
             filters['csat__in'] = csat_values
 
-        # Resolution filter
+        # Resolution filter - always apply to conversation data at database level
         resolution = request.query_params.get('resolution')
         if resolution:
             if isinstance(resolution, str):
@@ -1495,6 +1495,9 @@ class SupervisorViewset(ModelViewSet):
                 resolution_values = [value.strip() for value in resolution.split(',')]
             else:
                 resolution_values = [str(resolution)]
+            
+            # Always apply database-level filtering for conversations
+            # Billing data will be filtered at application level
             filters['resolution__in'] = resolution_values
 
         # Topic filter
