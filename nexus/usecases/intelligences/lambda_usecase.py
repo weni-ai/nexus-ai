@@ -146,7 +146,7 @@ class LambdaUseCase():
                     "value": conversation_topics.get("topic_name"),
                     "metadata": {
                         "topic_uuid": str(conversation_topics.get("topic_uuid")),
-                        "subtopic_uuid": str(conversation_topics.gcreate_conversationet("subtopic_uuid")),
+                        "subtopic_uuid": str(conversation_topics.get("subtopic_uuid")),
                         "subtopic": conversation_topics.get("subtopic_name"),
                         "human_support": conversation.has_chats_room,
                         "conversation_id": str(conversation.uuid),
