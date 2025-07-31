@@ -2,32 +2,60 @@ import json
 from typing import Any
 
 import boto3
-from agents import (
-    Agent,
-    FunctionTool,
-    ItemHelpers,
-    RunContextWrapper,
-    Runner,
-    function_tool,
-)
+import pendulum
+from agents import Agent, FunctionTool, RunContextWrapper
 from pydantic import BaseModel, Field, create_model
 
 from inline_agents.adapter import TeamAdapter
-from inline_agents.team import Team
+from inline_agents.backends.openai.tools import search_in_knowledge_base
 
 
 class OpenAITeamAdapter(TeamAdapter):
     @classmethod
-    def to_external(cls, supervisor: dict, agents: list[dict], input_text: str) -> list[dict]:
+    def to_external(cls, supervisor: dict, agents: list[dict], input_text: str, project_uuid: str, contact_fields: str, contact_urn: str, contact_name: str, channel_uuid: str) -> list[dict]:
         handoffs = []
         print("AGENTS", agents)
+
+        from nexus.projects.models import Project
+        from nexus.usecases.intelligences.get_by_uuid import (
+            get_default_content_base_by_project,
+        )
+        content_base = get_default_content_base_by_project(project_uuid)
+        instructions = content_base.instructions.all()
+        agent_data = content_base.agent
+
+        project = Project.objects.get(uuid=project_uuid)
+        business_rules = project.human_support_prompt
+        supervisor_instructions = list(instructions.values_list("instruction", flat=True))
+        supervisor_instructions = "\n".join(supervisor_instructions)
+
+        time_now = pendulum.now("America/Sao_Paulo")
+        llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
+
+        instruction = cls._format_supervisor_instructions(
+            instruction=supervisor["instruction"],
+            date_time_now=llm_formatted_time,
+            contact_fields=contact_fields,
+            supervisor_name=agent_data.name,
+            supervisor_role=agent_data.role,
+            supervisor_goal=agent_data.goal,
+            supervisor_adjective=agent_data.personality,
+            supervisor_instructions=supervisor_instructions if supervisor_instructions else "",
+            business_rules=business_rules if business_rules else "",
+            project_id=project_uuid,
+            contact_id=contact_urn,
+            contact_name=contact_name,
+            channel_uuid=channel_uuid,
+            content_base_uuid=str(content_base.uuid),
+        )
+
         for agent in agents:
             openai_agent = Agent(
                 name=agent.get("agentName"),
-                instructions=agent.get("instruction"),
+                instructions=instruction,
                 tools=cls._get_tools(agent["actionGroups"]),
-                model="gpt-4o",
-                handoff_description=agent.get("collaborator_configurations", f"Especialista em {agent.get('agentName', 'assuntos específicos')}")
+                model=agent.get("foundationModel"),
+                handoff_description=agent.get("collaborator_configurations", f"Specialist in {agent.get('agentName', 'specific subjects')}")
             )
             handoffs.append(openai_agent)
 
@@ -35,7 +63,7 @@ class OpenAITeamAdapter(TeamAdapter):
             name="Supervisor Agent",
             instructions=supervisor.get("instruction"),
             handoffs=handoffs,
-            tools=cls._get_tools(supervisor["tools"])
+            tools=cls._get_supervisor_tools(supervisor["tools"])
         )
         return {
             "starting_agent": supervisor_agent,
@@ -60,6 +88,12 @@ class OpenAITeamAdapter(TeamAdapter):
             tools.append(tool)
 
         return tools
+
+    @classmethod
+    def _get_supervisor_tools(cls, tools: list[dict]) -> list:
+        supervisor_tools = cls._get_tools(tools)
+        supervisor_tools.append(search_in_knowledge_base)
+        return supervisor_tools
 
     def invoke_aws_lambda(cls, function_name: str, function_arn: str, payload: dict) -> str:
         try:
@@ -160,3 +194,63 @@ class OpenAITeamAdapter(TeamAdapter):
             if "properties" in schema and "required" in schema:
                 schema["required"] = list(schema["properties"].keys())
                 print(f"[DEBUG] Set all properties as required: {schema['required']}")
+
+    @classmethod
+    def _format_supervisor_instructions(
+        cls,
+        instruction: str,
+        date_time_now: str,
+        contact_fields: str,
+        supervisor_name: str,
+        supervisor_role: str,
+        supervisor_goal: str,
+        supervisor_adjective: str,
+        supervisor_instructions: str,
+        business_rules: str,
+        project_id: str,
+        contact_id: str,
+        contact_name: str = "",
+        channel_uuid: str = "",
+        content_base_uuid: str = ""
+    ) -> str:
+
+        instruction = instruction or ""
+        date_time_now = date_time_now or ""
+        contact_fields = contact_fields or ""
+        supervisor_name = supervisor_name or ""
+        supervisor_role = supervisor_role or ""
+        supervisor_goal = supervisor_goal or ""
+        supervisor_adjective = supervisor_adjective or ""
+        supervisor_instructions = supervisor_instructions or ""
+        business_rules = business_rules or ""
+        project_id = str(project_id) if project_id else ""
+        contact_id = str(contact_id) if contact_id else ""
+
+        instruction = instruction.replace(
+            "{{DATE_TIME_NOW}}", date_time_now
+        ).replace(
+            "{{CONTACT_FIELDS}}", contact_fields
+        ).replace(
+            "{{SUPERVISOR_NAME}}", supervisor_name
+        ).replace(
+            "{{SUPERVISOR_ROLE}}", supervisor_role
+        ).replace(
+            "{{SUPERVISOR_GOAL}}", supervisor_goal
+        ).replace(
+            "{{SUPERVISOR_ADJECTIVE}}", supervisor_adjective
+        ).replace(
+            "{{SUPERVISOR_INSTRUCTIONS}}", supervisor_instructions
+        ).replace(
+            "{{BUSINESS_RULES}}", business_rules
+        ).replace(
+            "{{PROJECT_ID}}", project_id
+        ).replace(
+            "{{CONTACT_ID}}", contact_id
+        ).replace(
+            "{{CONTACT_NAME}}", contact_name
+        ).replace(
+            "{{CHANNEL_UUID}}", channel_uuid
+        ).replace(
+            "{{CONTENT_BASE_UUID}}", content_base_uuid
+        )
+        return instruction

@@ -1,20 +1,13 @@
 import asyncio
 from typing import Any, Dict
 
-from agents import Agent, ItemHelpers, Runner, function_tool
+from agents import Agent, Runner
 from django.conf import settings
 from redis import Redis
 
-from inline_agents.adapter import TeamAdapter
 from inline_agents.backend import InlineAgentsBackend
-from inline_agents.backends.bedrock.adapter import (
-    BedrockDataLakeEventAdapter,
-    BedrockTeamAdapter,
-)
 from inline_agents.backends.openai.adapter import OpenAITeamAdapter
 from inline_agents.backends.openai.sessions import RedisSession
-from inline_agents.team import Team
-from nexus.environment import env
 from nexus.inline_agents.backends.openai.models import (
     OpenAISupervisor as Supervisor,
 )
@@ -71,10 +64,27 @@ class OpenAIBackend(InlineAgentsBackend):
         input_text: str,
         project_uuid: str,
         sanitized_urn: str,
+        contact_fields: str,
+        preview: bool = False,
+        language: str = "en",
+        contact_name: str = "",
+        contact_urn: str = "",
+        channel_uuid: str = "",
+        use_components: bool = False,
+        user_email: str = None,
         **kwargs
     ):
         supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project_uuid)
-        external_team = self.team_adapter.to_external(supervisor=supervisor, agents=team, input_text=input_text)
+        external_team = self.team_adapter.to_external(
+            supervisor=supervisor,
+            agents=team,
+            input_text=input_text,
+            project_uuid=project_uuid,
+            contact_fields=contact_fields,
+            contact_urn=sanitized_urn,
+            contact_name=contact_name,
+            channel_uuid=channel_uuid,
+        )
         client = self._get_client()
         session = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
         print("=========================EXTERNAL TEAM========================")
@@ -90,13 +100,10 @@ class OpenAIBackend(InlineAgentsBackend):
         
         async for event in result.stream_events():
             if event.type == "raw_response_event":
-                # Handle raw response events
                 if hasattr(event.data, 'delta'):
                     full_response += event.data.delta
             elif event.type == "run_item_stream_event":
-                # Handle run item events (tool calls, outputs, etc.)
                 if event.item.type == "message_output_item":
-                    # Extract text from message output
                     from agents import ItemHelpers
                     message_text = ItemHelpers.text_message_output(event.item)
                     if message_text:
