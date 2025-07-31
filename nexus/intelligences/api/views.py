@@ -1621,9 +1621,19 @@ class SupervisorViewset(ModelViewSet):
             else:
                 resolution_values = [str(resolution)]
 
+            # Convert string values to integers for database filtering
+            # Django stores the first value of choices (integer) in the database
+            resolution_int_values = []
+            for value in resolution_values:
+                try:
+                    resolution_int_values.append(int(value))
+                except ValueError:
+                    # If conversion fails, keep the original value
+                    resolution_int_values.append(value)
+
             # Always apply database-level filtering for conversations
             # Billing data will be filtered at application level
-            filters['resolution__in'] = resolution_values
+            filters['resolution__in'] = resolution_int_values
 
         # Topic filter
         topic = request.query_params.get('topic')
