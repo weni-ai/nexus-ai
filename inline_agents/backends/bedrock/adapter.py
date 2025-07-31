@@ -480,8 +480,24 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                 if "metadata" not in event_to_send:
                     event_to_send["metadata"] = {}
                 if event_to_send.get("key") == "weni_csat":
+                    conversation = Conversation.objects.filter(project__uuid=project_uuid, contact_urn=contact_urn).order_by("-created_on")
+                    if conversation.exists():
+                        conversation = conversation.first()
+                        value = event_to_send.get("value")
+                        if isinstance(value, str):
+                            value = int(value)
+                        conversation.csat = value
+                        conversation.save()
                     event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
                 if event_to_send.get("key") == "weni_nps":
+                    conversation = Conversation.objects.filter(project__uuid=project_uuid, contact_urn=contact_urn).order_by("-created_on")
+                    if conversation.exists():
+                        conversation = conversation.first()
+                        value = event_to_send.get("value")
+                        if isinstance(value, str):
+                            value = int(value)
+                        conversation.nps = value
+                        conversation.save()
                     event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_NPS
 
                 self.to_data_lake_custom_event(
