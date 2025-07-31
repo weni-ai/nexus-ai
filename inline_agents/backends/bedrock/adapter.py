@@ -14,6 +14,7 @@ from weni_datalake_sdk.paths.events_path import EventPath
 from inline_agents.adapter import TeamAdapter, DataLakeEventAdapter
 from inline_agents.backends.bedrock.prompts import PROMPT_POS_PROCESSING
 from nexus.inline_agents.models import AgentCredential, Guardrail
+from nexus.intelligences.models import Conversation
 
 logger = logging.getLogger(__name__)
 
