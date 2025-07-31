@@ -264,7 +264,7 @@ class Conversation(models.Model):
     resolution = models.CharField(
         max_length=255,
         choices=RESOLUTION_CHOICES,
-        default=3
+        default=2
     )
 
     def get_topic(self):

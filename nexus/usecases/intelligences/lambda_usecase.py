@@ -4,7 +4,7 @@ import json
 from django.conf import settings
 
 from nexus.celery import app as celery_app
-from nexus.usecases.inline_agents.create import CreateConversationUseCase
+from nexus.usecases.inline_agents.update import UpdateConversationUseCase
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 
 
@@ -86,11 +86,13 @@ class LambdaUseCase():
             payload=payload_conversation
         )
         conversation_resolution_response = json.loads(conversation_resolution.get("Payload").read()).get("body")
+        conversation.resolution = conversation_resolution_response.get("result")
+        conversation.save()
         event_data = {
             "event_name": "weni_nexus_data",
             "key": "conversation_classification",
             "value_type": "string",
-            "value": conversation_resolution_response.get("result"),
+            "value": conversation.resolution,
             "metadata": {
                 "human_support": conversation.has_chats_room,
                 "conversation_id": str(conversation.uuid),
@@ -103,9 +105,6 @@ class LambdaUseCase():
             contact_urn=conversation.contact_urn
         )
         print("[+ 🧠 Sent datalake event +]")
-
-        conversation.resolution = conversation_resolution_response.get("result")
-        conversation.save()
 
     def lambda_conversation_topics(self, conversation):
         from nexus.intelligences.models import Topics
@@ -170,8 +169,8 @@ class LambdaUseCase():
 def create_lambda_conversation(
     payload: dict
 ):
-    create_conversation_use_case = CreateConversationUseCase()
-    conversation = create_conversation_use_case.create_conversation(payload)
+    update_conversation_use_case = UpdateConversationUseCase()
+    conversation = update_conversation_use_case.update_conversation(payload)
     if conversation is not None:
         lambda_usecase = LambdaUseCase()
         lambda_usecase.lambda_conversation_resolution(conversation)

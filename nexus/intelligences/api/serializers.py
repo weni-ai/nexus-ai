@@ -345,8 +345,8 @@ class SupervisorDataSerializer(serializers.Serializer):
                     'resolved': '0',
                     'unresolved': '1',
                     'abandoned': '1',  # Map abandoned to unresolved
-                    'in_progress': '3',
-                    'in progress': '3',
+                    'in_progress': '2',
+                    'in progress': '2',
                 }
                 resolution_lower = data['resolution'].lower()
                 if resolution_lower in resolution_mapping:

@@ -1612,7 +1612,7 @@ class SupervisorViewset(ModelViewSet):
                 csat_values = [csat]
             filters['csat__in'] = csat_values
 
-        # Resolution filter
+        # Resolution filter - always apply to conversation data at database level
         resolution = request.query_params.get('resolution')
         if resolution:
             if isinstance(resolution, str):
@@ -1620,6 +1620,9 @@ class SupervisorViewset(ModelViewSet):
                 resolution_values = [value.strip() for value in resolution.split(',')]
             else:
                 resolution_values = [str(resolution)]
+
+            # Always apply database-level filtering for conversations
+            # Billing data will be filtered at application level
             filters['resolution__in'] = resolution_values
 
         # Topic filter
@@ -1731,18 +1734,9 @@ class SupervisorViewset(ModelViewSet):
                         search=request.query_params.get('search')
                     )
 
-                    # Filter out billing data that already has conversation data
-                    conversation_external_ids = {
-                        conv.external_id for conv in conversation_data if conv.external_id
-                    }
-
-                    billing_only_data = [
-                        item for item in billing_data
-                        if item.get('external_id') not in conversation_external_ids
-                    ]
-
-                    # Combine both data sources
-                    all_data = unified_conversation_data + billing_only_data
+                    # Supervisor class already filters out billing data that has conversation data
+                    # So we can directly combine both data sources
+                    all_data = unified_conversation_data + billing_data
                 else:
                     all_data = unified_conversation_data
 
