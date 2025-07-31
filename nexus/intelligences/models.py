@@ -232,7 +232,7 @@ class Conversation(models.Model):
     RESOLUTION_CHOICES = [
         (0, "Resolved"),
         (1, "Unresolved"),
-        (3, "In Progress"),
+        (2, "In Progress"),
     ]
 
     CSAT_CHOICES = [
