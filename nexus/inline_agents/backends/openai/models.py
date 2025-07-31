@@ -15,3 +15,7 @@ class OpenAISupervisor(models.Model):
 
     components_prompt = models.TextField(null=True, blank=True)
     components_human_support_prompt = models.TextField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "OpenAI Supervisor"
+        verbose_name_plural = "OpenAI Supervisors"
