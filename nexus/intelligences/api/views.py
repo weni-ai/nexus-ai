@@ -1638,7 +1638,11 @@ class SupervisorViewset(ModelViewSet):
         # Topic filter
         topic = request.query_params.get('topic')
         if topic:
-            filters['topic__name__icontains'] = topic
+            if isinstance(topic, str):
+                topic_values = [value.strip() for value in topic.split(',')]
+            else:
+                topic_values = [topic]
+            filters['topic__name__in'] = topic_values
 
         # Has chats room filter
         has_chats_room = request.query_params.get('has_chats_room')
