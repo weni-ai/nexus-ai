@@ -9,7 +9,7 @@ from agents import (
     RunContextWrapper,
 )
 from django.conf import settings
-from inline_agents.backends.openai.entities import Credentials
+from inline_agents.backends.openai.entities import Context
 
 
 class Supervisor(Agent):
@@ -37,7 +37,7 @@ class Supervisor(Agent):
         )
 
     @function_tool
-    def knowledge_base_bedrock(wrapper: RunContextWrapper[Credentials], question: str) -> str:
+    def knowledge_base_bedrock(wrapper: RunContextWrapper[Context], question: str) -> str:
         '''
         Function/tool to query the AWS Bedrock Knowledge Base.
 
@@ -52,9 +52,10 @@ class Supervisor(Agent):
             str: The most relevant answers found in the knowledge base, or a message indicating that an exact answer could not be found.
         '''
         client = boto3.client("bedrock-agent-runtime", region_name=settings.AWS_BEDROCK_REGION_NAME)
+        content_base_uuid: str | None = wrapper.context.content_base.get("uuid")
 
         retrieve_params = {
-            "knowledgeBaseId": wrapper.context.knowledge_base,
+            "knowledgeBaseId": settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID,
             "retrievalQuery": {"text": question}
         }
 
@@ -63,19 +64,19 @@ class Supervisor(Agent):
                 {
                     "equals": {
                         "key": "contentBaseUuid",
-                        "value": str(wrapper.context.content_base_uuid)
+                        "value": content_base_uuid
                     }
                 },
                 {
                     "equals": {
                         "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": settings.AWS_BEDROCK_DATA_SOURCE_ID
+                        "value": settings.AWS_BEDROCK_DATASOURCE_ID
                     }
                 }
             ]
         }
 
-        if wrapper.context.content_base_uuid:
+        if content_base_uuid:
             retrieve_params["retrievalConfiguration"] = {
                 "vectorSearchConfiguration": {
                     "filter": combined_filter,

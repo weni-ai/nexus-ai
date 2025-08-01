@@ -11,7 +11,7 @@ from inline_agents.backends.openai.hooks import HooksDefault
 from django.conf import settings
 from nexus.inline_agents.models import AgentCredential
 from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
-from inline_agents.backends.openai.entities import Credentials
+from inline_agents.backends.openai.entities import Context
 
 
 class OpenAITeamAdapter(TeamAdapter):
@@ -27,16 +27,17 @@ class OpenAITeamAdapter(TeamAdapter):
         contact_name: str,
         channel_uuid: str,
         hooks: HooksDefault,
+        auth_token: str = "",
         **kwargs
     ) -> list[dict]:
         agents_as_tools = []
-        print("AGENTS", agents)
 
         from nexus.projects.models import Project
         from nexus.usecases.intelligences.get_by_uuid import (
             get_default_content_base_by_project,
         )
         content_base = get_default_content_base_by_project(project_uuid)
+        content_base_uuid = str(content_base.uuid)
         instructions = content_base.instructions.all()
         agent_data = content_base.agent
 
@@ -62,11 +63,11 @@ class OpenAITeamAdapter(TeamAdapter):
             contact_id=contact_urn,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
-            content_base_uuid=str(content_base.uuid),
+            content_base_uuid=content_base_uuid,
         )
 
         for agent in agents:
-            openai_agent = Agent[Credentials](
+            openai_agent = Agent[Context](
                 name=agent.get("agentName"),
                 instructions=agent.get("instructions"),
                 tools=cls._get_tools(agent["actionGroups"]),
@@ -90,8 +91,40 @@ class OpenAITeamAdapter(TeamAdapter):
         )
         return {
             "starting_agent": supervisor_agent,
-            "input": input_text
+            "input": input_text,
+            "context": cls._get_context(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                auth_token=auth_token,
+                channel_uuid=channel_uuid,
+                contact_name=contact_name,
+                content_base_uuid=content_base_uuid,
+            )
         }
+
+    @classmethod
+    def _get_context(
+        cls,
+        project_uuid: str,
+        contact_urn: str,
+        auth_token: str,
+        channel_uuid: str,
+        contact_name: str, 
+        content_base_uuid: str,
+        globals_dict: dict = {}
+    ) -> Context:
+        credentials = cls._get_credentials(project_uuid)
+        contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name}
+        project = {"uuid": project_uuid, "auth_token": auth_token}
+        content_base = {"uuid": content_base_uuid}
+
+        return Context(
+            credentials=credentials,
+            globals=globals_dict,
+            contact=contact,
+            project=project,
+            content_base=content_base
+        )
 
     @classmethod
     def _get_credentials(cls, project_uuid: str) -> dict:
@@ -99,7 +132,7 @@ class OpenAITeamAdapter(TeamAdapter):
         credentials = {}
         for credential in agent_credentials:
             credentials[credential.key] = credential.decrypted_value
-        return Credentials(credentials=credentials)
+        return credentials
 
     @classmethod
     def _get_tools(cls, action_groups: list[dict]) -> list[dict]:
@@ -119,7 +152,16 @@ class OpenAITeamAdapter(TeamAdapter):
 
         return tools
 
-    def invoke_aws_lambda(cls, function_name: str, function_arn: str, payload: dict) -> str:
+    def invoke_aws_lambda(
+        cls,
+        function_name: str,
+        function_arn: str,
+        payload: dict,
+        credentials: dict,  
+        globals: dict,
+        contact: dict,
+        project: dict,
+    ) -> str:
         try:
             lambda_client = boto3.client("lambda", region_name="us-east-1")
             parameters = []
@@ -128,7 +170,24 @@ class OpenAITeamAdapter(TeamAdapter):
                     "name": key,
                     "value": value
                 })
-            payload_json = json.dumps({"parameters": parameters})
+
+            session_attributes = {
+                "credentials": json.dumps(credentials),
+                "globals": json.dumps(globals),
+                "contact": json.dumps(contact),
+                "project": json.dumps(project)
+            }
+
+            payload_json = {
+                "parameters": parameters,
+                "sessionAttributes": session_attributes,
+                "promptSessionAttributes": {"alwaysFormat": "<example>{'msg': {'text': 'Hello, how can I help you today?'}}</example>"}
+            }
+
+            payload_json = json.dumps(payload_json)
+
+            print(f"[DEBUG] Payload: {payload_json}")
+
             response = lambda_client.invoke(
                 FunctionName=function_arn,
                 InvocationType='RequestResponse',
@@ -174,10 +233,22 @@ class OpenAITeamAdapter(TeamAdapter):
         return create_model(model_name, **fields)
 
     def create_function_tool(cls, function_name: str, function_arn: str, function_description: str, json_schema: dict) -> FunctionTool:
-        async def invoke_specific_lambda(ctx: RunContextWrapper[Any], args: str) -> str:
+        async def invoke_specific_lambda(ctx: RunContextWrapper[Context], args: str) -> str:
+            print("------------------C-O-N-T-E-X-T--------------------")
+            print(ctx.context)
+            print("---------------------------------------------------")
             parsed = tool_function_args.model_validate_json(args)
             payload = parsed.model_dump()
-            return cls.invoke_aws_lambda(cls, function_name=function_name, function_arn=function_arn, payload=payload)
+            return cls.invoke_aws_lambda(
+                cls,
+                function_name=function_name,
+                function_arn=function_arn,
+                payload=payload,
+                credentials=ctx.context.credentials,
+                globals=ctx.context.globals,
+                contact=ctx.context.contact,
+                project=ctx.context.project
+            )
 
         tool_function_args = cls.create_function_args_class(cls, json_schema)
         payload_schema = tool_function_args.model_json_schema()
