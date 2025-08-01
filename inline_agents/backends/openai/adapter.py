@@ -1,19 +1,35 @@
 import json
 from typing import Any
-
+from dataclasses import dataclass
 import boto3
 import pendulum
 from agents import Agent, FunctionTool, RunContextWrapper
 from pydantic import BaseModel, Field, create_model
 
 from inline_agents.adapter import TeamAdapter
-from inline_agents.backends.openai.tools import search_in_knowledge_base
+from inline_agents.backends.openai.hooks import HooksDefault
+from django.conf import settings
+from nexus.inline_agents.models import AgentCredential
+from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
+from inline_agents.backends.openai.entities import Credentials
 
 
 class OpenAITeamAdapter(TeamAdapter):
     @classmethod
-    def to_external(cls, supervisor: dict, agents: list[dict], input_text: str, project_uuid: str, contact_fields: str, contact_urn: str, contact_name: str, channel_uuid: str) -> list[dict]:
-        handoffs = []
+    def to_external(
+        cls,
+        supervisor: dict,
+        agents: list[dict],
+        input_text: str,
+        project_uuid: str,
+        contact_fields: str,
+        contact_urn: str,
+        contact_name: str,
+        channel_uuid: str,
+        hooks: HooksDefault,
+        **kwargs
+    ) -> list[dict]:
+        agents_as_tools = []
         print("AGENTS", agents)
 
         from nexus.projects.models import Project
@@ -50,20 +66,27 @@ class OpenAITeamAdapter(TeamAdapter):
         )
 
         for agent in agents:
-            openai_agent = Agent(
+            openai_agent = Agent[Credentials](
                 name=agent.get("agentName"),
-                instructions=instruction,
+                instructions=agent.get("instructions"),
                 tools=cls._get_tools(agent["actionGroups"]),
-                model=agent.get("foundationModel"),
-                handoff_description=agent.get("collaborator_configurations", f"Specialist in {agent.get('agentName', 'specific subjects')}")
+                model=settings.OPENAI_AGENTS_FOUNDATION_MODEL,
+                hooks=hooks
             )
-            handoffs.append(openai_agent)
+            
+            agents_as_tools.append(
+                openai_agent.as_tool(
+                    tool_name=agent.get("agentName"),
+                    tool_description=agent.get("collaborator_configurations"),
+                )
+            )
 
-        supervisor_agent = Agent(
+        supervisor_agent = SupervisorAgent(
             name="Supervisor Agent",
-            instructions=supervisor.get("instruction"),
-            handoffs=handoffs,
-            tools=cls._get_supervisor_tools(supervisor["tools"])
+            instructions=instruction,
+            tools=agents_as_tools,
+            hooks=hooks,
+            model=supervisor["foundation_model"]
         )
         return {
             "starting_agent": supervisor_agent,
@@ -71,10 +94,17 @@ class OpenAITeamAdapter(TeamAdapter):
         }
 
     @classmethod
+    def _get_credentials(cls, project_uuid: str) -> dict:
+        agent_credentials = AgentCredential.objects.filter(project_id=project_uuid)
+        credentials = {}
+        for credential in agent_credentials:
+            credentials[credential.key] = credential.decrypted_value
+        return Credentials(credentials=credentials)
+
+    @classmethod
     def _get_tools(cls, action_groups: list[dict]) -> list[dict]:
         tools = []
         for action_group in action_groups:
-            print(f"[DEBUG] Action group: {action_group}")
             group_executor = action_group.get("actionGroupExecutor")
             if not group_executor:
                 continue
@@ -88,12 +118,6 @@ class OpenAITeamAdapter(TeamAdapter):
             tools.append(tool)
 
         return tools
-
-    @classmethod
-    def _get_supervisor_tools(cls, tools: list[dict]) -> list:
-        supervisor_tools = cls._get_tools(tools)
-        supervisor_tools.append(search_in_knowledge_base)
-        return supervisor_tools
 
     def invoke_aws_lambda(cls, function_name: str, function_arn: str, payload: dict) -> str:
         try:

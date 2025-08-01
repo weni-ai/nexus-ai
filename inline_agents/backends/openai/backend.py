@@ -11,6 +11,7 @@ from inline_agents.backends.openai.sessions import RedisSession
 from nexus.inline_agents.backends.openai.models import (
     OpenAISupervisor as Supervisor,
 )
+from inline_agents.backends.openai.hooks import HooksDefault
 
 
 class OpenAISupervisorRepository:
@@ -74,6 +75,7 @@ class OpenAIBackend(InlineAgentsBackend):
         user_email: str = None,
         **kwargs
     ):
+        hooks = HooksDefault()
         supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project_uuid)
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
@@ -84,14 +86,15 @@ class OpenAIBackend(InlineAgentsBackend):
             contact_urn=sanitized_urn,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
+            hooks=hooks
         )
         client = self._get_client()
         session = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
-        print("=========================EXTERNAL TEAM========================")
-        print(external_team)
-        print("=========================EXTERNAL TEAM========================")
-
-        return asyncio.run(self._invoke_agents_async(client, external_team, session))
+        result = asyncio.run(self._invoke_agents_async(client, external_team, session))
+        print("========================= HOOKS ========================")
+        print(hooks.list_tools_called)
+        print("========================================================")
+        return result
 
     async def _invoke_agents_async(self, client, external_team, session):
         """Async wrapper to handle the streaming response"""
@@ -103,12 +106,5 @@ class OpenAIBackend(InlineAgentsBackend):
                 if hasattr(event.data, 'delta'):
                     full_response += event.data.delta
             elif event.type == "run_item_stream_event":
-                if event.item.type == "message_output_item":
-                    from agents import ItemHelpers
-                    message_text = ItemHelpers.text_message_output(event.item)
-                    if message_text:
-                        full_response += message_text
-        print("=========================FULL RESPONSE========================")
-        print(full_response)
-        print("=========================FULL RESPONSE========================")
+                pass
         return full_response
