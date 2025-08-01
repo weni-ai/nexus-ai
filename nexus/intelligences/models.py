@@ -236,11 +236,11 @@ class Conversation(models.Model):
     ]
 
     CSAT_CHOICES = [
-        (0, "Very satisfied"),
-        (1, "Satisfied"),
-        (2, "Neutral"),
-        (3, "Unsatisfied"),
-        (4, "Very unsatisfied"),
+        (1, "Very unsatisfied"),
+        (2, "Unatisfied"),
+        (3, "Neutral"),
+        (4, "Satisfied"),
+        (5, "Very satisfied"),
     ]
 
     uuid = models.UUIDField(primary_key=True, default=uuid4)

@@ -4,7 +4,7 @@ import json
 from django.conf import settings
 
 from nexus.celery import app as celery_app
-from nexus.usecases.inline_agents.update import UpdateConversationUseCase
+from nexus.usecases.inline_agents.create import CreateConversationUseCase
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 
 
@@ -169,8 +169,8 @@ class LambdaUseCase():
 def create_lambda_conversation(
     payload: dict
 ):
-    update_conversation_use_case = UpdateConversationUseCase()
-    conversation = update_conversation_use_case.update_conversation(payload)
+    create_conversation_use_case = CreateConversationUseCase()
+    conversation = create_conversation_use_case.create_conversation(payload)
     if conversation is not None:
         lambda_usecase = LambdaUseCase()
         lambda_usecase.lambda_conversation_resolution(conversation)

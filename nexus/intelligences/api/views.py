@@ -1598,7 +1598,7 @@ class SupervisorViewset(ModelViewSet):
 
     def _has_conversation_specific_filters(self, request):
         """Check if any filters that only apply to conversation data are being used"""
-        conversation_specific_params = ['csat', 'topic', 'has_chats_room', 'resolution']
+        conversation_specific_params = ['csat', 'topics', 'has_chats_room', 'resolution']
         return any(request.query_params.get(param) for param in conversation_specific_params)
 
     def _build_conversation_filters(self, request):
