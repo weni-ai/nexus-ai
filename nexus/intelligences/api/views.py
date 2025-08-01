@@ -1638,7 +1638,7 @@ class SupervisorViewset(ModelViewSet):
             filters['resolution__in'] = resolution_int_values
 
         # Topic filter
-        topic = request.query_params.get('topic')
+        topic = request.query_params.get('topics')
         if topic:
             if isinstance(topic, str):
                 topic_values = [value.strip() for value in topic.split(',')]
