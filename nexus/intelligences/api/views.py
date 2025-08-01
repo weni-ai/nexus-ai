@@ -1597,8 +1597,14 @@ class SupervisorViewset(ModelViewSet):
                 self._convert_conversation_to_unified(conv) for conv in conversation_data
             ]
 
+            # Find the most recent conversation's external_id for billing data pagination
+            last_external_id = None
+            most_recent_conversation = conversation_queryset.order_by('-created_at').first()
+            if most_recent_conversation and most_recent_conversation.external_id:
+                last_external_id = str(most_recent_conversation.external_id)
+
             # Check if there are conversation-only filters (excluding resolution)
-            conversation_only_params = ['csat', 'topic', 'has_chats_room']
+            conversation_only_params = ['csat', 'topics', 'has_chats_room']
             has_conversation_only_filters = any(request.query_params.get(param) for param in conversation_only_params)
 
             if has_conversation_only_filters:
@@ -1620,9 +1626,10 @@ class SupervisorViewset(ModelViewSet):
                         project_uuid=project_uuid,
                         start_date=start_date,
                         end_date=end_date,
-                        page=1,  # Get all data
+                        page=1,  # Starting page, pagination handled internally
                         user_token=user_token,
-                        search=request.query_params.get('search')
+                        search=request.query_params.get('search'),
+                        last_external_id=last_external_id
                     )
 
                     # Supervisor class already filters out billing data that has conversation data

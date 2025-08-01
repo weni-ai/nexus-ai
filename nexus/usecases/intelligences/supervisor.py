@@ -64,49 +64,73 @@ class Supervisor:
         page: int,
         user_token: str = None,
         search: str = None,
+        last_external_id: str = None,
     ) -> List[Dict[str, Any]]:
         """Get supervisor data by date with conversation enrichment"""
 
         client = self._get_billing_client()
-
-        # Get billing data
-        billing_response = client.get_billing_active_contacts(
-            user_token=user_token or "",
-            project_uuid=project_uuid,
-            start_date=start_date,
-            end_date=end_date,
-            page=page,
-            search=search,
-        )
-
-        # Extract results from the paginated response
-        billing_data = billing_response.get('results', [])
 
         # Get all conversations for this project (date filtering is handled by SupervisorViewset)
         conversations = Conversation.objects.filter(
             project__uuid=project_uuid
         ).select_related('topic').in_bulk(field_name='external_id')
 
-        # Process billing data - only return billing objects that don't have conversation data
+        # Use the provided last_external_id as stopping point
+        stop_at_external_id = last_external_id
+
+        # Process billing data with pagination until we reach the stopping point
         supervisor_data = []
-        for billing_object in billing_data:
-            billing_id = billing_object.get("id")
+        current_page = 1
+        has_more_data = True
 
-            # Check if this billing object has corresponding conversation data
-            has_conversation = False
-            if billing_id:
-                # Try exact match first
-                if billing_id in conversations:
-                    has_conversation = True
-                else:
-                    # Try string conversion if needed
-                    billing_id_str = str(billing_id)
-                    if billing_id_str in conversations:
+        while has_more_data:
+            # Get billing data for current page
+            billing_response = client.get_billing_active_contacts(
+                user_token=user_token or "",
+                project_uuid=project_uuid,
+                start_date=start_date,
+                end_date=end_date,
+                page=current_page,
+                search=search,
+            )
+
+            # Extract results from the paginated response
+            billing_data = billing_response.get('results', [])
+
+            # If no results, we're done
+            if not billing_data:
+                break
+
+            # Process billing data - only return billing objects that don't have conversation data
+            for billing_object in billing_data:
+                billing_id = billing_object.get("id")
+
+                # Check if we've reached the stopping point
+                if stop_at_external_id and str(billing_id) == stop_at_external_id:
+                    has_more_data = False
+                    break
+
+                # Check if this billing object has corresponding conversation data
+                has_conversation = False
+                if billing_id:
+                    # Try exact match first
+                    if billing_id in conversations:
                         has_conversation = True
+                    else:
+                        # Try string conversion if needed
+                        billing_id_str = str(billing_id)
+                        if billing_id_str in conversations:
+                            has_conversation = True
 
-            # Only include billing objects that don't have conversation data
-            if not has_conversation:
-                unified_object = self._create_billing_object(billing_object)
-                supervisor_data.append(unified_object)
+                # Only include billing objects that don't have conversation data
+                if not has_conversation:
+                    unified_object = self._create_billing_object(billing_object)
+                    supervisor_data.append(unified_object)
+
+            # Check if there's a next page
+            if billing_response.get('next') is None:
+                has_more_data = False
+            else:
+                current_page += 1
 
         return supervisor_data
