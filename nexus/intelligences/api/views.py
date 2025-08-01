@@ -1582,14 +1582,11 @@ class SupervisorViewset(ModelViewSet):
                 created_at__date__gte=start_datetime,
                 created_at__date__lte=end_datetime,
                 **conversation_filters
-            )
+            ).order_by("-created_at")
 
             # Apply Q object if search filter is used
             if q_object:
                 conversation_queryset = conversation_queryset.filter(q_object)
-
-            # Add distinct to remove duplicates based on uuid
-            conversation_queryset = conversation_queryset.distinct('uuid').order_by('uuid', '-created_at')
 
             conversation_data = list(conversation_queryset)
 
