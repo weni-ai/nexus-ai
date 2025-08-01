@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import Dict, Optional
 
@@ -18,6 +17,8 @@ from nexus.projects.websockets.consumers import (
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
+from nexus.intelligences.models import Conversation
+from nexus.projects.models import Project
 
 from .adapter import BedrockTeamAdapter, BedrockDataLakeEventAdapter
 from inline_agents.adapter import DataLakeEventAdapter
@@ -79,6 +80,7 @@ class BedrockBackend(InlineAgentsBackend):
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
         self._data_lake_event_adapter = data_lake_event_adapter or self._get_data_lake_event_adapter()
 
+        # TODO: Change to use redis to store if conversation is already created or not.
         conversation = Conversation.objects.filter(project__uuid=project_uuid, contact_urn=contact_urn).order_by("-created_at")
         if conversation.exists():
             conversation = conversation.first()
@@ -90,9 +92,9 @@ class BedrockBackend(InlineAgentsBackend):
         else:
             project = Project.objects.get(uuid=project_uuid)
             Conversation.objects.create(
-                    project=project,
-                    contact_urn=contact_urn
-                )
+                project=project,
+                contact_urn=contact_urn
+            )
 
         typing_usecase = TypingUsecase()
         typing_usecase.send_typing_message(
