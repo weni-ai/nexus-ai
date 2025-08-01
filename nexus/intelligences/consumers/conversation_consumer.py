@@ -21,7 +21,8 @@ class ConversationConsumer(EDAConsumer):
                 end_date=body.get("end"),
                 contact_urn=body.get("contact_urn"),
                 has_chats_room=body.get("has_chats_room"),
-                external_id=body.get("id")
+                external_id=body.get("id"),
+                name=body.get("contact_name")
             )
 
             create_lambda_conversation.delay(window_conversation_dto.dict())

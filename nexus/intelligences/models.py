@@ -228,16 +228,44 @@ class SubTopics(models.Model):
 
 
 class Conversation(models.Model):
+
+    RESOLUTION_CHOICES = [
+        (0, "Resolved"),
+        (1, "Unresolved"),
+        (2, "In Progress"),
+    ]
+
+    CSAT_CHOICES = [
+        (1, "Very unsatisfied"),
+        (2, "Unatisfied"),
+        (3, "Neutral"),
+        (4, "Satisfied"),
+        (5, "Very satisfied"),
+    ]
+
     uuid = models.UUIDField(primary_key=True, default=uuid4)
     created_at = models.DateTimeField(auto_now_add=True)
-    csat = models.TextField(null=True, blank=True)
-    topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="conversations")
-    external_id = models.CharField(max_length=255, null=True, blank=True)
-    has_chats_room = models.BooleanField(default=False)
     contact_urn = models.CharField(max_length=255, null=True, blank=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="conversations")
+    external_id = models.CharField(max_length=255, null=True, blank=True, unique=True)
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
+    has_chats_room = models.BooleanField(default=False)
+    contact_name = models.CharField(max_length=255, null=True, blank=True)
+    topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
+    subtopic = models.ForeignKey(SubTopics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
+    nps = models.IntegerField(null=True, blank=True)
+    csat = models.CharField(
+        max_length=255,
+        choices=CSAT_CHOICES,
+        null=True,
+        blank=True
+    )
+    resolution = models.CharField(
+        max_length=255,
+        choices=RESOLUTION_CHOICES,
+        default=2
+    )
 
     def get_topic(self):
         return self.topic.name

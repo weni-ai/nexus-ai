@@ -1,4 +1,5 @@
 import factory
+import random
 
 from nexus.intelligences.models import (
     Intelligence,
@@ -12,6 +13,9 @@ from nexus.intelligences.models import (
     ContentBaseInstruction,
     Topics,
     SubTopics,
+    Conversation,
+    ConversationMessage,
+    InlineAgentMessage
 )
 
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -19,6 +23,7 @@ from nexus.usecases.users.tests.user_factory import UserFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 from django.conf import settings
+from django.utils import timezone
 
 
 class IntelligenceFactory(factory.django.DjangoModelFactory):
@@ -164,3 +169,41 @@ class SubTopicsFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: 'test%d' % n)
     description = factory.Sequence(lambda n: 'test%d' % n)
     topic = factory.SubFactory(TopicsFactory)
+
+
+class InlineAgentMessageFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = InlineAgentMessage
+
+    project = factory.SubFactory(ProjectFactory)
+    session_id = factory.Sequence(lambda n: 'test%d' % n)
+    contact_urn = factory.Sequence(lambda n: 'test%d' % n)
+    source_type = random.choice(['agent', 'user'])
+    source = random.choice(['router', 'preview'])
+    text = factory.Sequence(lambda n: 'test%d' % n)
+
+
+class ConversationFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Conversation
+
+    project = factory.SubFactory(ProjectFactory)
+    contact_urn = factory.Sequence(lambda n: 'test%d' % n)
+    start_date = factory.Faker('date_time_between', start_date='-30d', end_date='now', tzinfo=timezone.utc)
+    end_date = factory.Faker('date_time_between', start_date='-1d', end_date='now', tzinfo=timezone.utc)
+    has_chats_room = factory.Faker('boolean')
+    csat = factory.Faker('random_element', elements=Conversation.CSAT_CHOICES)
+    resolution = factory.Faker('random_element', elements=Conversation.RESOLUTION_CHOICES)
+    topic = factory.SubFactory(TopicsFactory)
+    subtopic = factory.SubFactory(
+        SubTopicsFactory,
+        topic=factory.SelfAttribute('..topic')
+    )
+
+
+class ConversationMessageFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ConversationMessage
+
+    conversation = factory.SubFactory(ConversationFactory)
+    message = factory.SubFactory(InlineAgentMessageFactory)
