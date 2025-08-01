@@ -1,4 +1,6 @@
 from rest_framework import views, status
+from rest_framework import views
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -36,6 +38,7 @@ class ProjectUpdateViewset(views.APIView):
             ProjectSerializer(updated_project).data
         )
 
+
 class ProjectPromptCreationConfigurationsViewset(views.APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
 
@@ -54,3 +57,35 @@ class ProjectPromptCreationConfigurationsViewset(views.APIView):
         )
 
         return Response(configurations)
+
+
+class AgentsBackendView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=400)
+        try:
+            agents_backend = ProjectsUseCase().get_agents_backend_by_project(project_uuid)
+            return Response({"backend": agents_backend})
+        except Exception as e:
+            return Response({"error": str(e)}, status=404)
+    
+    def post(self, request, *args, **kwargs):
+        backend = request.data.get("backend")
+        project_uuid = self.kwargs.get("project_uuid")
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=400)
+        if not backend:
+            return Response({"error": "backend is required"}, status=400)
+        try:
+            agents_backend = ProjectsUseCase().set_agents_backend_by_project(project_uuid, backend)
+            return Response({"backend": agents_backend})
+        except Exception as e:
+            msg = str(e)
+            if "Invalid backend" in msg:
+                return Response({"error": msg}, status=400)
+            if "does not exists" in msg or "not found" in msg:
+                return Response({"error": msg}, status=404)
+            return Response({"error": msg}, status=500)

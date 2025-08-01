@@ -5,6 +5,7 @@ from django.forms import Textarea
 import json
 from nexus.inline_agents.models import Guardrail
 from nexus.inline_agents.backends.bedrock.models import Supervisor
+from nexus.inline_agents.backends.openai.models import OpenAISupervisor
 
 
 class PrettyJSONWidget(Textarea):
@@ -48,6 +49,41 @@ class GuardrailAdmin(admin.ModelAdmin):
 
 @admin.register(Supervisor)
 class SupervisorAdmin(admin.ModelAdmin):
+    list_display = ('name', 'foundation_model', 'created_on')
+    list_filter = ('foundation_model',)
+    search_fields = ('name', 'instruction')
+    readonly_fields = ('created_on',)
+    ordering = ('-created_on',)
+
+    formfield_overrides = {
+        models.JSONField: {'widget': PrettyJSONWidget(attrs={'rows': 20, 'cols': 80, 'class': 'vLargeTextField'})},
+    }
+
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'foundation_model', 'instruction')
+        }),
+        ('Configuration', {
+            'fields': ('prompt_override_configuration', 'action_groups', 'knowledge_bases')
+        }),
+        ('Human Support', {
+            'fields': ('human_support_prompt', 'human_support_action_groups'),
+            'classes': ('collapse',)
+        }),
+        ('Components', {
+            'fields': ('components_prompt', 'components_human_support_prompt'),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('created_on',),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+
+@admin.register(OpenAISupervisor)
+class OpenAISupervisorAdmin(admin.ModelAdmin):
     list_display = ('name', 'foundation_model', 'created_on')
     list_filter = ('foundation_model',)
     search_fields = ('name', 'instruction')
