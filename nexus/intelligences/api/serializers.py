@@ -305,3 +305,67 @@ class SubTopicsSerializer(serializers.ModelSerializer):
 
     def get_topic_name(self, obj):
         return obj.topic.name
+
+
+class SupervisorDataSerializer(serializers.Serializer):
+    """
+    Serializer for unified supervisor data that can handle both Conversation model data
+    and billing-only data from the Supervisor class
+    """
+    created_on = serializers.DateTimeField()
+    urn = serializers.CharField()
+    uuid = serializers.CharField(allow_null=True, allow_blank=True)
+    external_id = serializers.CharField(allow_null=True, allow_blank=True)
+    csat = serializers.CharField(allow_null=True, allow_blank=True)
+    nps = serializers.IntegerField(allow_null=True)
+    topic = serializers.CharField(allow_null=True, allow_blank=True)
+    has_chats_room = serializers.BooleanField(default=False)
+    start_date = serializers.DateTimeField()
+    end_date = serializers.DateTimeField()
+    resolution = serializers.CharField(allow_null=True, allow_blank=True)
+    name = serializers.CharField(allow_null=True, allow_blank=True)
+
+    def to_representation(self, instance):
+        """Custom representation to handle resolution and csat fields properly"""
+        data = super().to_representation(instance)
+
+        # Handle resolution field - convert tuple string to actual value or map string values
+        resolution_value = data.get('resolution')
+        if resolution_value is not None:
+            if isinstance(resolution_value, str):
+                if resolution_value.startswith('('):
+                    # Extract the actual value from tuple string like "(0, 'Resolved')"
+                    try:
+                        import ast
+                        resolution_tuple = ast.literal_eval(resolution_value)
+                        data['resolution'] = str(resolution_tuple[0])  # Use the numeric value
+                    except (ValueError, SyntaxError):
+                        pass
+                else:
+                    # Handle plain string values by mapping them to numeric values
+                    resolution_mapping = {
+                        'resolved': '0',
+                        'unresolved': '1',
+                        'abandoned': '1',  # Map abandoned to unresolved
+                        'in_progress': '2',
+                        'in progress': '2',
+                    }
+                    resolution_lower = resolution_value.lower()
+                    if resolution_lower in resolution_mapping:
+                        data['resolution'] = resolution_mapping[resolution_lower]
+            elif isinstance(resolution_value, int):
+                # Convert integer to string (database stores integers)
+                data['resolution'] = str(resolution_value)
+
+        # Handle csat field - convert tuple string to actual value
+        if isinstance(data.get('csat'), str) and data['csat'].startswith('('):
+            # Extract the actual value from tuple string like "(4, 'Very unsatisfied')"
+            try:
+                import ast
+                csat_tuple = ast.literal_eval(data['csat'])
+                data['csat'] = str(csat_tuple[0])  # Use the numeric value
+            except (ValueError, SyntaxError):
+                pass
+
+        return data
+    is_billing_only = serializers.BooleanField(default=False)

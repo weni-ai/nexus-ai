@@ -1,4 +1,3 @@
-import json
 import logging
 from typing import Dict, Optional
 
@@ -18,6 +17,7 @@ from nexus.projects.websockets.consumers import (
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
+from nexus.projects.models import Project
 
 from .adapter import BedrockTeamAdapter, BedrockDataLakeEventAdapter
 from inline_agents.adapter import DataLakeEventAdapter
@@ -78,6 +78,7 @@ class BedrockBackend(InlineAgentsBackend):
         # Set dependencies
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
         self._data_lake_event_adapter = data_lake_event_adapter or self._get_data_lake_event_adapter()
+
 
         typing_usecase = TypingUsecase()
         typing_usecase.send_typing_message(

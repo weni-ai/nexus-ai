@@ -1,5 +1,6 @@
 import os
-
+import pendulum
+import sentry_sdk
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.core.files.uploadedfile import InMemoryUploadedFile
@@ -18,11 +19,12 @@ from nexus.intelligences.models import (
     Intelligence,
     Topics,
     SubTopics,
+    Conversation,
 )
 from nexus.orgs import permissions
-from nexus.paginations import CustomCursorPagination
+from nexus.paginations import CustomCursorPagination, SupervisorPagination
 from nexus.projects.models import Project
-from nexus.projects.api.permissions import ProjectPermission, ExternalTokenPermission
+from nexus.projects.api.permissions import ProjectPermission, CombinedExternalProjectPermission
 from nexus.storage import AttachmentPreviewStorage, validate_mime_type
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
@@ -51,9 +53,11 @@ from nexus.usecases.intelligences.exceptions import (
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
+from nexus.usecases.intelligences.supervisor import Supervisor
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.usecases.task_managers.celery_task_manager import (
     CeleryTaskManagerUseCase,
 )
@@ -74,6 +78,7 @@ from .serializers import (
     RouterContentBaseSerializer,
     TopicsSerializer,
     SubTopicsSerializer,
+    SupervisorDataSerializer,
 )
 
 
@@ -1334,7 +1339,7 @@ class CommerceHasAgentBuilder(views.APIView):
 
 class TopicsViewSet(ModelViewSet):
     serializer_class = TopicsSerializer
-    permission_classes = [ExternalTokenPermission]
+    permission_classes = [CombinedExternalProjectPermission]
     authentication_classes = []  # Disable default authentication
     lookup_field = 'uuid'
 
@@ -1372,7 +1377,7 @@ class TopicsViewSet(ModelViewSet):
 
 class SubTopicsViewSet(ModelViewSet):
     serializer_class = SubTopicsSerializer
-    permission_classes = [ExternalTokenPermission]
+    permission_classes = [CombinedExternalProjectPermission]
     authentication_classes = []  # Disable default authentication
     lookup_field = 'uuid'
 
@@ -1406,3 +1411,254 @@ class SubTopicsViewSet(ModelViewSet):
             serializer.save(topic=topic)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SupervisorViewset(ModelViewSet):
+    serializer_class = SupervisorDataSerializer
+    permission_classes = [CombinedExternalProjectPermission]
+    pagination_class = SupervisorPagination
+    lookup_field = 'uuid'
+
+    def _parse_boolean_param(self, value: str) -> bool:
+        """Parse boolean parameter from string"""
+        return value.lower() in ['true', '1', 'yes']
+
+    def _apply_filters_to_data(self, data, request):
+        """Apply filters to unified data structure - only for billing data since conversations are filtered at DB level"""
+        # Note: csat, topic, has_chats_room filters are applied at database level for conversations
+        # This method is mainly for any future filters that might apply to both conversation and billing data
+
+        # Apply search filter to billing data
+        search = request.query_params.get('search')
+        if search:
+            search_lower = search.lower()
+            data = [
+                item for item in data
+                if (str(item.get('name') or '').lower().find(search_lower) != -1 or
+                    str(item.get('urn') or '').lower().find(search_lower) != -1)
+            ]
+
+        # Apply resolution filter only to billing data (conversation data is already filtered at DB level)
+        resolution = request.query_params.get('resolution')
+        if resolution:
+            resolution_values = [value.strip() for value in resolution.split(',')]
+            data = [
+                item for item in data
+                if ((item.get('is_billing_only', False) and 
+                     str(item.get('resolution', '')) in resolution_values) or
+                    (not item.get('is_billing_only', False)))  # Keep conversation data as it's already filtered
+            ]
+
+        return data
+
+    def _convert_conversation_to_unified(self, conversation):
+
+        unified_object = {
+            "created_on": conversation.created_at,
+            "urn": conversation.contact_urn,
+            "uuid": conversation.uuid,
+            "external_id": conversation.external_id,
+            "csat": conversation.csat,
+            "nps": conversation.nps,
+            "topic": conversation.topic.name if conversation.topic else None,
+            "has_chats_room": conversation.has_chats_room,
+            "start_date": conversation.start_date or conversation.created_at,  # Use created_at as fallback
+            "end_date": conversation.end_date,  # Use created_at as fallback
+            "resolution": conversation.resolution,
+            "name": conversation.contact_name,
+            "is_billing_only": False
+        }
+
+        return unified_object
+
+    def _has_conversation_specific_filters(self, request):
+        """Check if any filters that only apply to conversation data are being used"""
+        conversation_specific_params = ['csat', 'topics', 'has_chats_room', 'resolution']
+        return any(request.query_params.get(param) for param in conversation_specific_params)
+
+    def _build_conversation_filters(self, request):
+        """Build database filters for conversation query based on request parameters"""
+        filters = {}
+
+        # CSAT filter
+        csat = request.query_params.get('csat')
+        if csat:
+            if isinstance(csat, str):
+                csat_values = [value.strip() for value in csat.split(',')]
+            else:
+                csat_values = [csat]
+            filters['csat__in'] = csat_values
+
+        # Resolution filter - always apply to conversation data at database level
+        resolution = request.query_params.get('resolution')
+        if resolution:
+            if isinstance(resolution, str):
+                # Parse comma-separated resolution values
+                resolution_values = [value.strip() for value in resolution.split(',')]
+            else:
+                resolution_values = [str(resolution)]
+
+            # Convert string values to integers for database filtering
+            # Django stores the first value of choices (integer) in the database
+            resolution_int_values = []
+            for value in resolution_values:
+                try:
+                    resolution_int_values.append(int(value))
+                except ValueError:
+                    # If conversion fails, keep the original value
+                    resolution_int_values.append(value)
+
+            # Always apply database-level filtering for conversations
+            # Billing data will be filtered at application level
+            filters['resolution__in'] = resolution_int_values
+
+        # Topic filter
+        topic = request.query_params.get('topics')
+        if topic:
+            if isinstance(topic, str):
+                topic_values = [value.strip() for value in topic.split(',')]
+            else:
+                topic_values = [topic]
+            filters['topic__name__in'] = topic_values
+
+        # Has chats room filter
+        has_chats_room = request.query_params.get('has_chats_room')
+        if has_chats_room is not None:
+            has_chats_room_bool = self._parse_boolean_param(has_chats_room)
+            filters['has_chats_room'] = has_chats_room_bool
+
+        search = request.query_params.get('search')
+        if search:
+            from django.db.models import Q
+            filters['Q'] = Q(contact_name__icontains=search) | Q(contact_urn__icontains=search)
+
+        nps = request.query_params.get('nps')
+        if nps:
+            filters['nps'] = nps
+
+        return filters
+
+    def list(self, request, *args, **kwargs):
+        """Get all supervisor data combining both Conversation model data and billing data"""
+        project_uuid = kwargs.get('project_uuid')
+        if not project_uuid:
+            return Response(
+                {"error": "project_uuid is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            project = get_project_by_uuid(project_uuid)
+
+            start_date = request.query_params.get(
+                'start_date',
+                pendulum.now().subtract(days=30).to_date_string()
+            )
+            end_date = request.query_params.get('end_date') or request.query_params.get('end_date')
+            if not end_date:
+                end_date = pendulum.now().to_date_string()
+
+            # Convert DD-MM-YYYY to YYYY-MM-DD for Django date filtering
+            try:
+                from datetime import datetime
+                start_date_obj = datetime.strptime(start_date, '%d-%m-%Y')
+                end_date_obj = datetime.strptime(end_date, '%d-%m-%Y')
+                start_datetime = start_date_obj.date()
+                end_datetime = end_date_obj.date()
+            except ValueError:
+                return Response(
+                    {"error": "Invalid date format. Expected DD-MM-YYYY format"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get conversation data with database-level filtering
+            conversation_filters = self._build_conversation_filters(request)
+
+            # Handle Q object for search filtering
+            q_object = conversation_filters.pop('Q', None)
+
+            conversation_queryset = Conversation.objects.select_related('topic', 'project').filter(
+                project=project,
+                created_at__date__gte=start_datetime,
+                created_at__date__lte=end_datetime,
+                **conversation_filters
+            ).order_by("-created_at")
+
+            # Apply Q object if search filter is used
+            if q_object:
+                conversation_queryset = conversation_queryset.filter(q_object)
+
+            conversation_data = list(conversation_queryset)
+
+            unified_conversation_data = [
+                self._convert_conversation_to_unified(conv) for conv in conversation_data
+            ]
+
+            # Find the most recent conversation's external_id for billing data pagination
+            last_external_id = None
+            most_recent_conversation = conversation_queryset.order_by('-created_at').first()
+            if most_recent_conversation and most_recent_conversation.external_id:
+                last_external_id = str(most_recent_conversation.external_id)
+
+            # Check if there are conversation-only filters (excluding resolution)
+            conversation_only_params = ['csat', 'topics', 'has_chats_room']
+            has_conversation_only_filters = any(request.query_params.get(param) for param in conversation_only_params)
+
+            if has_conversation_only_filters:
+                # If conversation-only filters are used, only return conversation data
+                # This applies even if resolution=3 is requested or search is used
+                all_data = unified_conversation_data
+            else:
+                # Fetch billing data if no conversation-specific filters OR if search is used OR if in_progress is requested
+                if start_date and end_date:
+                    supervisor = Supervisor()
+
+                    # Extract Bearer token from Authorization header
+                    auth_header = request.headers.get('Authorization', '')
+                    user_token = ""
+                    if auth_header.startswith('Bearer '):
+                        user_token = auth_header.split('Bearer ')[1]
+
+                    billing_data = supervisor.get_supervisor_data_by_date(
+                        project_uuid=project_uuid,
+                        start_date=start_date,
+                        end_date=end_date,
+                        page=1,  # Starting page, pagination handled internally
+                        user_token=user_token,
+                        search=request.query_params.get('search'),
+                        last_external_id=last_external_id
+                    )
+
+                    # Supervisor class already filters out billing data that has conversation data
+                    # So we can directly combine both data sources
+                    all_data = unified_conversation_data + billing_data
+                else:
+                    all_data = unified_conversation_data
+
+            # Apply any remaining filters and sort
+            all_data = self._apply_filters_to_data(all_data, request)
+            all_data.sort(key=lambda x: x.get('created_on', ''), reverse=True)
+
+            # Apply pagination
+            page = self.paginate_queryset(all_data)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+
+            # Fallback if pagination is not configured
+            serializer = self.get_serializer(all_data, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except ProjectDoesNotExist:
+            return Response(
+                {"error": f"Project with UUID {project_uuid} not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.capture_exception(e)
+
+            print(f"Error retrieving supervisor data: {str(e)}")
+            return Response(
+                {"error": f"Error retrieving supervisor data: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

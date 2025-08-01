@@ -9,6 +9,9 @@ from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.tools import ToolsUseCase
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 
+from nexus.intelligences.models import Conversation, ConversationMessage
+from nexus.inline_agents.models import InlineAgentMessage
+
 from typing import Dict
 
 
@@ -88,3 +91,32 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             return True
         except AgentCredential.DoesNotExist:
             return False
+
+
+class UpdateConversationUseCase():
+
+    def update_conversation(self, consumer_message: dict) -> Conversation:
+        messages = InlineAgentMessage.objects.filter(
+            created_at__gte=consumer_message.get("start_date"),
+            created_at__lte=consumer_message.get("end_date"),
+            contact_urn=consumer_message.get("contact_urn")
+        )
+
+        if not messages.exists():
+            return None
+        project = Project.objects.get(uuid=consumer_message.get("project_uuid"))
+
+        conversation = Conversation.objects.filter(project=project, contact_urn=consumer_message.get("contact_urn")).order_by("-created_at").first()
+        conversation.external_id = consumer_message.get("external_id")
+        conversation.has_chats_room = consumer_message.get("has_chats_room")
+        conversation.start_date = consumer_message.get("start_date")
+        conversation.end_date = consumer_message.get("end_date")
+        conversation.contact_name = consumer_message.get("name")
+        conversation.save()
+
+        conversation_message = ConversationMessage.objects.create(
+            conversation=conversation,
+        )
+        conversation_message.message.set(messages)
+
+        return conversation

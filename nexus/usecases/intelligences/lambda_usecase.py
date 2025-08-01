@@ -11,7 +11,6 @@ from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 class LambdaUseCase():
 
     def __init__(self):
-
         self.boto_client = boto3.client('lambda', region_name=settings.AWS_BEDROCK_REGION_NAME)
         self.adapter = None
 
@@ -86,11 +85,13 @@ class LambdaUseCase():
             payload=payload_conversation
         )
         conversation_resolution_response = json.loads(conversation_resolution.get("Payload").read()).get("body")
+        conversation.resolution = conversation_resolution_response.get("result")
+        conversation.save()
         event_data = {
             "event_name": "weni_nexus_data",
             "key": "conversation_classification",
             "value_type": "string",
-            "value": conversation_resolution_response.get("result"),
+            "value": conversation.resolution,
             "metadata": {
                 "human_support": conversation.has_chats_room,
                 "conversation_id": str(conversation.uuid),
@@ -105,6 +106,7 @@ class LambdaUseCase():
         print("[+ 🧠 Sent datalake event +]")
 
     def lambda_conversation_topics(self, conversation):
+        from nexus.intelligences.models import Topics
         print("[+ 🧠 Getting lambda topics +]")
         lambda_topics = self.get_lambda_topics(conversation.project)
         print("[+ 🧠 Getting lambda conversation +]")
@@ -157,6 +159,9 @@ class LambdaUseCase():
             project_uuid=str(conversation.project.uuid),
             contact_urn=conversation.contact_urn
         )
+        conversation.topic = Topics.objects.get(uuid=event_data.get("metadata").get("topic_uuid"))
+        conversation.save()
+
 
 @celery_app.task
 def create_lambda_conversation(
