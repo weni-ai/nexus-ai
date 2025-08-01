@@ -108,6 +108,9 @@ class RetrieveContentBaseFileUseCase():
             raise IntelligencePermissionDenied()
         return get_by_content_base_file_uuid(contentbasefile_uuid)
 
+    def get_inline_contentbase_file(self, contentbasefile_uuid: str):
+        return get_by_content_base_file_uuid(contentbasefile_uuid)
+
 
 class RetrieveContentBaseLinkUseCase():
 
