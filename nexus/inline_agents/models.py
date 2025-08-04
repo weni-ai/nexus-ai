@@ -37,7 +37,7 @@ class Agent(models.Model):
     instruction = models.TextField()
     collaboration_instructions = models.TextField()
     foundation_model = models.CharField(max_length=255)
-    foundation_models = models.JSONField(default=list, blank=True)  # List of possible foundation models
+    foundation_models = models.JSONField(default=dict, blank=True)  # List of possible foundation models
     source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
 
     def get_foundation_model(self, backend_type: str | None = None):
@@ -51,7 +51,12 @@ class Agent(models.Model):
 
     def _update_foundation_models(self, foundation_model):
         agents_backend: str = self.project.agents_backend
-        self.foundation_models[agents_backend]["model"] = foundation_model
+        if agents_backend in self.foundation_models and "model" in self.foundation_models.get(agents_backend):
+            self.foundation_models[agents_backend]["model"] = foundation_model
+        else:
+            self.foundation_models[agents_backend] = {
+                "model": foundation_model,
+            }
 
     def save(self, *args, **kwargs):
         if self.pk is not None:

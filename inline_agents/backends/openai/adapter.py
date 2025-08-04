@@ -71,7 +71,11 @@ class OpenAITeamAdapter(TeamAdapter):
                 name=agent.get("agentName"),
                 instructions=agent.get("instructions"),
                 tools=cls._get_tools(agent["actionGroups"]),
-                model=agent.get('foundationModel', {}).get("model", settings.OPENAI_AGENTS_FOUNDATION_MODEL),
+                model=(
+                    agent.get('foundationModel', {}).get("model")
+                    if isinstance(agent.get('foundationModel', {}), dict)
+                    else settings.OPENAI_AGENTS_FOUNDATION_MODEL
+                ) or settings.OPENAI_AGENTS_FOUNDATION_MODEL,
                 hooks=hooks
             )
 
