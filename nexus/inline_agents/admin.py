@@ -6,6 +6,7 @@ import json
 from nexus.inline_agents.models import Guardrail, Agent
 from nexus.inline_agents.backends.bedrock.models import Supervisor
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor
+from django.conf import settings
 
 
 class PrettyJSONWidget(Textarea):
@@ -126,6 +127,11 @@ class AgentAdmin(admin.ModelAdmin):
     }
 
     def get_foundation_model(self, obj):
-        return obj.get_foundation_model().get("model")
+        if isinstance(obj.get_foundation_model(), dict):
+            return obj.get_foundation_model().get("model")
+        if obj.project.agents_backend == "OpenAIBackend":
+            return settings.OPENAI_AGENTS_FOUNDATION_MODEL
+        if obj.project.agents_backend == "BedrockBackend":
+            return settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]
 
     get_foundation_model.short_description = 'Foundation Model'
