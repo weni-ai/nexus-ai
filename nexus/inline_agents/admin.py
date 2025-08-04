@@ -3,7 +3,7 @@ from django.db import models
 from django.forms import Textarea
 
 import json
-from nexus.inline_agents.models import Guardrail
+from nexus.inline_agents.models import Guardrail, Agent
 from nexus.inline_agents.backends.bedrock.models import Supervisor
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor
 
@@ -114,3 +114,18 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+@admin.register(Agent)
+class AgentAdmin(admin.ModelAdmin):
+    list_display = ('name', 'get_foundation_model', 'project', 'is_official')
+    list_filter = ('is_official', 'source_type')
+    search_fields = ('name', 'instruction')
+
+    formfield_overrides = {
+        models.JSONField: {'widget': PrettyJSONWidget(attrs={'rows': 20, 'cols': 80, 'class': 'vLargeTextField'})},
+    }
+
+    def get_foundation_model(self, obj):
+        return obj.get_foundation_model().get("model")
+
+    get_foundation_model.short_description = 'Foundation Model'

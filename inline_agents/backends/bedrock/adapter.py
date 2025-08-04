@@ -159,7 +159,7 @@ class BedrockTeamAdapter(TeamAdapter):
                     "agentName": agent["agentName"],
                     "instruction": instruction,
                     "actionGroups": agent["actionGroups"],
-                    "foundationModel": agent["foundationModel"],
+                    "foundationModel": agent.get("foundationModel", {}).get("model", settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]),
                     "agentCollaboration": agent["agentCollaboration"],
                 }
             )
