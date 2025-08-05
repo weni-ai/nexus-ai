@@ -3,9 +3,10 @@ from django.db import models
 from django.forms import Textarea
 
 import json
-from nexus.inline_agents.models import Guardrail
+from nexus.inline_agents.models import Guardrail, Agent
 from nexus.inline_agents.backends.bedrock.models import Supervisor
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor
+from django.conf import settings
 
 
 class PrettyJSONWidget(Textarea):
@@ -114,3 +115,23 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+@admin.register(Agent)
+class AgentAdmin(admin.ModelAdmin):
+    list_display = ('name', 'get_foundation_model', 'project', 'is_official')
+    list_filter = ('is_official', 'source_type')
+    search_fields = ('name', 'instruction')
+
+    formfield_overrides = {
+        models.JSONField: {'widget': PrettyJSONWidget(attrs={'rows': 20, 'cols': 80, 'class': 'vLargeTextField'})},
+    }
+
+    def get_foundation_model(self, obj):
+        if isinstance(obj.get_foundation_model(), dict):
+            return obj.get_foundation_model().get("model")
+        if obj.project.agents_backend == "OpenAIBackend":
+            return settings.OPENAI_AGENTS_FOUNDATION_MODEL
+        if obj.project.agents_backend == "BedrockBackend":
+            return settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]
+
+    get_foundation_model.short_description = 'Foundation Model'

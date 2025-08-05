@@ -37,11 +37,34 @@ class Agent(models.Model):
     instruction = models.TextField()
     collaboration_instructions = models.TextField()
     foundation_model = models.CharField(max_length=255)
+    foundation_models = models.JSONField(default=dict, blank=True)  # List of possible foundation models
     source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
+
+    def get_foundation_model(self, backend_type: str | None = None):
+        if backend_type:
+            return self.foundation_models.get(backend_type)
+        return self.foundation_models.get(self.project.agents_backend)
 
     @property
     def current_version(self):
         return self.versions.order_by('created_on').last()
+
+    def _update_foundation_models(self, foundation_model):
+        agents_backend: str = self.project.agents_backend
+        if agents_backend in self.foundation_models and "model" in self.foundation_models.get(agents_backend):
+            self.foundation_models[agents_backend]["model"] = foundation_model
+        else:
+            self.foundation_models[agents_backend] = {
+                "model": foundation_model,
+            }
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            old = Agent.objects.get(pk=self.pk)
+            if old.foundation_model != self.foundation_model and self.foundation_model:
+                self._update_foundation_models(self.foundation_model)
+
+        super().save(*args, **kwargs)
 
 
 class IntegratedAgent(models.Model):
