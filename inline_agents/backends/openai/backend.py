@@ -91,7 +91,7 @@ class OpenAIBackend(InlineAgentsBackend):
         client = self._get_client()
         session = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
         result = asyncio.run(self._invoke_agents_async(client, external_team, session))
-        print("========================= HOOKS ========================")
+        print("========================= Tools called ========================")
         print(hooks.list_tools_called)
         print("========================================================")
         return result
@@ -107,4 +107,4 @@ class OpenAIBackend(InlineAgentsBackend):
                     full_response += event.data.delta
             elif event.type == "run_item_stream_event":
                 pass
-        return full_response
+        return result.final_output
