@@ -1,3 +1,4 @@
+import os
 import boto3
 import json
 
@@ -167,6 +168,10 @@ class LambdaUseCase():
 def create_lambda_conversation(
     payload: dict
 ):
+    project_list = os.getenv("LAMBDA_CONVERSATION_PROJECTS", "").split(",")
+    if payload.get("project_uuid") not in project_list:
+        return
+
     create_conversation_use_case = CreateConversationUseCase()
     conversation = create_conversation_use_case.create_conversation(payload)
     if conversation is not None:
