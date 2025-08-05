@@ -79,7 +79,6 @@ class BedrockBackend(InlineAgentsBackend):
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
         self._data_lake_event_adapter = data_lake_event_adapter or self._get_data_lake_event_adapter()
 
-
         typing_usecase = TypingUsecase()
         typing_usecase.send_typing_message(
             contact_urn=contact_urn,
@@ -185,7 +184,12 @@ class BedrockBackend(InlineAgentsBackend):
                 )
 
                 if "rationale" in orchestration_trace and msg_external_id and not preview:
-                    typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
+                    typing_usecase.send_typing_message(
+                        contact_urn=contact_urn,
+                        project_uuid=project_uuid,
+                        msg_external_id=msg_external_id,
+                        preview=preview
+                    )
 
                 # Notify observers about the trace
                 self._event_manager_notify(
@@ -205,9 +209,12 @@ class BedrockBackend(InlineAgentsBackend):
                 )
 
                 if "rationale" in orchestration_trace and msg_external_id and not preview:
-                    print("[ + Typing Indicator ] sending typing indicator")
-                    typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
-                    print("--------------------------------")
+                    typing_usecase.send_typing_message(
+                        contact_urn=contact_urn,
+                        project_uuid=project_uuid,
+                        msg_external_id=msg_external_id,
+                        preview=preview
+                    )
 
                 print("------------------------------------------")
                 print("Event: ", event)
@@ -248,9 +255,12 @@ class BedrockBackend(InlineAgentsBackend):
         )
 
         if "rationale" in orchestration_trace and msg_external_id and not preview:
-            print("[ + Typing Indicator ] sending typing indicator")
-            typing_usecase.send_typing_message(contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id)
-            print("--------------------------------")
+            typing_usecase.send_typing_message(
+                contact_urn=contact_urn,
+                project_uuid=project_uuid,
+                msg_external_id=msg_external_id,
+                preview=preview
+            )
 
         return full_response
 
