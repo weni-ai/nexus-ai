@@ -86,12 +86,12 @@ def start_inline_agents(
         product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
 
         typing_usecase = TypingUsecase()
-        if not preview:
-            typing_usecase.send_typing_message(
-                contact_urn=message.get("contact_urn"),
-                msg_external_id=message_event.get("msg_external_id", ""),
-                project_uuid=message.get("project_uuid")
-            )
+        typing_usecase.send_typing_message(
+            contact_urn=message.get("contact_urn"),
+            msg_external_id=message_event.get("msg_external_id", ""),
+            project_uuid=message.get("project_uuid"),
+            preview=preview
+        )
 
         text, turn_off_rationale = handle_attachments(
             text=text,
