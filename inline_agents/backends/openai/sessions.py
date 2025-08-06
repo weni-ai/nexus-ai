@@ -10,7 +10,8 @@ class RedisSession(Session):
 
     async def get_items(self, limit=None):
         raw = self.r.lrange(self.key, 0, -(limit or 0) or -1)
-        return [json.loads(x) for x in raw[::-1]]
+        items = [json.loads(x) for x in raw]
+        return items
 
     async def add_items(self, items):
         pipe = self.r.pipeline()

@@ -197,9 +197,9 @@ class OpenAITeamAdapter(TeamAdapter):
 
             if 'FunctionError' in response:
                 error_details = json.loads(lambda_result)
-                print(f"Error on lambda '{function_name}': {error_details}")
+                print(f"FunctionError on lambda '{function_name}': {error_details}")
                 return json.dumps({
-                    "error": f"Error on lambda: {error_details.get('errorMessage', 'Unknown error')}"
+                    "error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"
                 })
 
             return lambda_result
