@@ -1,3 +1,5 @@
+import pendulum
+
 from abc import ABC, abstractmethod
 from typing import Optional
 from redis import Redis
@@ -117,3 +119,116 @@ class RedisTaskManager(TaskManager):
             self.CACHE_TIMEOUT,
             str(session_data)
         )
+
+    def create_message_to_cache(
+        self,
+        msg_text: str,
+        contact_urn: str,
+        contact_name: str,
+        project_uuid: str,
+        source: str,
+        channel_uuid: str = None
+    ) -> None:
+        from nexus.usecases.intelligences.create import ConversationUseCase
+        ttl = 172800  # 2 days
+
+        msg = [
+            {
+                "text": msg_text,
+                "source": source,
+                "created_at": pendulum.now().to_iso8601_string()
+            }
+        ]
+
+        cache_key = f"conversation:{project_uuid}:{contact_urn}"
+        self.redis_client.setex(
+            cache_key,
+            ttl,
+            msg
+        )
+
+        usecase = ConversationUseCase()
+        usecase.create_conversation_base_structure(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            contact_name=contact_name,
+            channel_uuid=channel_uuid
+        )
+
+    def get_cache_messages(
+        self,
+        project_uuid: str,
+        contact_urn: str
+    ) -> list:
+        """Get messages from cache"""
+        cache_key = f"conversation:{project_uuid}:{contact_urn}"
+        messages = self.redis_client.get(cache_key)
+        return messages.decode('utf-8') if messages else []
+
+    def add_message_to_cache(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        msg_text: str,
+        source: str
+    ) -> None:
+        cached_messages = self.get_cache_messages(project_uuid, contact_urn)
+        cached_messages.append({
+            "text": msg_text,
+            "source": source,
+            "created_at": pendulum.now().to_iso8601_string()
+        })
+        self.redis_client.set(f"conversation:{project_uuid}:{contact_urn}", cached_messages)
+
+    def handle_message_cache(
+        self,
+        contact_urn: str,
+        contact_name: str,
+        project_uuid: str,
+        msg_text: str,
+        source: str,
+        channel_uuid: str = None
+    ) -> None:
+        if project_uuid not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
+            return
+
+        cached_messages = self.get_cache_messages(project_uuid, contact_urn)
+        if cached_messages:
+            self.add_message_to_cache(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                msg_text=msg_text,
+                source=source
+            )
+        else:
+            self.create_message_to_cache(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                contact_name=contact_name,
+                msg_text=msg_text,
+                source=source,
+                channel_uuid=channel_uuid
+            )
+
+    def clear_message_cache(self, project_uuid: str, contact_urn: str) -> None:
+        """Clear message cache"""
+        self.redis_client.delete(f"conversation:{project_uuid}:{contact_urn}")
+
+    def rabbitmq_msg_batch_to_cache(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        messages: list,
+        key: str
+    ) -> None:
+        """
+        Store a batch of messages in cache.
+        """
+        cache_key = f"{key}:{project_uuid}:{contact_urn}"
+        existing_msgs = self.redis_client.get(cache_key)
+
+        if existing_msgs:
+            existing_msgs.extend(messages)
+            self.redis_client.set(cache_key, existing_msgs)
+        else:
+            self.redis_client.set(cache_key, messages)
