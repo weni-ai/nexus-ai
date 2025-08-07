@@ -209,7 +209,7 @@ class FlowsViewset(
 
 
 class MessagePreviewView(APIView):
-    permission_classes = [ProjectPermission]
+    # permission_classes = [ProjectPermission]
 
     def post(self, request, *args, **kwargs):
         try:
@@ -227,14 +227,19 @@ class MessagePreviewView(APIView):
             )
             if project.inline_agent_switch:
                 print("[+ Starting Inline Agent +]")
-                start_inline_agents.apply_async(
-                    kwargs={
-                        'message': message.dict(),
-                        'preview': True,
-                        'user_email': request.user.email,
-                        'language': language
-                    },
-                    queue='celery'
+                # start_inline_agents.apply_async(
+                #     kwargs={
+                #         'message': message.dict(),
+                #         'preview': True,
+                #         'user_email': request.user.email,
+                #         'language': language
+                #     },
+                #     queue='celery'
+                # )
+                start_inline_agents(message=message.dict(),
+                        preview=True,
+                        user_email=request.user.email,
+                        language=language
                 )
                 return Response(data={"type": "preview", "message": "Processing started", "fonts": []})
             else:
