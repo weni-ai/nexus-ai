@@ -499,6 +499,8 @@ class MultiAgentView(APIView):
         try:
             project = Project.objects.get(uuid=project_uuid)
             project.inline_agent_switch = multi_agents
+            if not project.use_prompt_creation_configurations:
+                project.use_prompt_creation_configurations = True
             project.save()
             return Response(
                 {"message": "Project updated successfully", "multi_agents": multi_agents}, status=200
