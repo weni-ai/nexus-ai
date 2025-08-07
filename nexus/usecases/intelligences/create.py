@@ -1,5 +1,6 @@
-from django.conf import settings
+import pendulum
 
+from django.conf import settings
 from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
@@ -9,6 +10,7 @@ from nexus.intelligences.models import (
     ContentBaseLink,
     LLM,
     ContentBaseAgent,
+    Conversation,
 )
 from nexus.usecases.intelligences.intelligences_dto import (
     ContentBaseFileDTO,
@@ -278,3 +280,30 @@ def create_base_brain_structure(
         advanced_options={}
     )
     return integrated_intelligence
+
+
+class ConversationUseCase():
+
+    def create_conversation_base_structure(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        contact_name: str = "",
+        channel_uuid: str = None,
+    ) -> Conversation:
+        msg_created_at = pendulum.now()
+
+        start_date = pendulum.instance(msg_created_at)
+        end_date = start_date.add(days=1)
+
+        conversation = Conversation.objects.create(
+            project__uuid=project_uuid,
+            contact_urn=contact_urn,
+            start_date=start_date,
+            end_date=end_date,
+            channel_uuid=channel_uuid
+        )
+        if contact_name:
+            conversation.contact_name = contact_name
+            conversation.save()
+        return conversation

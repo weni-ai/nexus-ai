@@ -17,7 +17,6 @@ from nexus.projects.websockets.consumers import (
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
-from nexus.projects.models import Project
 
 from .adapter import BedrockTeamAdapter, BedrockDataLakeEventAdapter
 from inline_agents.adapter import DataLakeEventAdapter
@@ -121,7 +120,9 @@ class BedrockBackend(InlineAgentsBackend):
             text=input_text,
             preview=preview,
             session_id=session_id,
-            source_type="user"
+            source_type="user",
+            contact_name=contact_name,
+            channel_uuid=channel_uuid
         )
         print(f"[DEBUG] Session ID: {session_id}")
         print(f"[DEBUG] Log: {log}")
@@ -205,7 +206,8 @@ class BedrockBackend(InlineAgentsBackend):
                     user_email=user_email,
                     session_id=session_id,
                     msg_external_id=msg_external_id,
-                    turn_off_rationale=turn_off_rationale
+                    turn_off_rationale=turn_off_rationale,
+                    channel_uuid=channel_uuid
                 )
 
                 if "rationale" in orchestration_trace and msg_external_id and not preview:
