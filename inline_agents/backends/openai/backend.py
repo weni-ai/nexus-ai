@@ -12,6 +12,9 @@ from nexus.inline_agents.backends.openai.models import (
     OpenAISupervisor as Supervisor,
 )
 from inline_agents.backends.openai.hooks import HooksDefault
+from nexus.projects.websockets.consumers import (
+    send_preview_message_to_websocket,
+)
 
 
 class OpenAISupervisorRepository:
@@ -56,9 +59,10 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_client(self):
         return Runner()
 
-    def _get_session(self, project_uuid: str, sanitized_urn: str):
+    def _get_session(self, project_uuid: str, sanitized_urn: str) -> tuple[RedisSession, str]:
         redis_client = Redis.from_url(settings.REDIS_URL)
-        return RedisSession(session_id=f"project-{project_uuid}-session-{sanitized_urn}", r=redis_client)
+        session_id = f"project-{project_uuid}-session-{sanitized_urn}"
+        return RedisSession(session_id=session_id, r=redis_client), session_id
 
     def invoke_agents(self,
         team: list[dict],
@@ -89,7 +93,19 @@ class OpenAIBackend(InlineAgentsBackend):
             hooks=hooks
         )
         client = self._get_client()
-        session = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
+        session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
+
+        if preview and user_email:
+            send_preview_message_to_websocket(
+                project_uuid=str(project_uuid),
+                user_email=user_email,
+                message_data={
+                    "type": "status",
+                    "content": "Starting OpenAI agent processing",
+                    "session_id": session_id
+                }
+            )
+
         result = asyncio.run(self._invoke_agents_async(client, external_team, session))
         print("========================= Tools called ========================")
         print(hooks.list_tools_called)
