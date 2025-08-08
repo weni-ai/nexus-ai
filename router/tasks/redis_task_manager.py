@@ -1,4 +1,5 @@
 import pendulum
+import json
 
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -144,7 +145,7 @@ class RedisTaskManager(TaskManager):
         self.redis_client.setex(
             cache_key,
             ttl,
-            msg
+            json.dumps(msg)
         )
 
         usecase = ConversationUseCase()
@@ -163,7 +164,9 @@ class RedisTaskManager(TaskManager):
         """Get messages from cache"""
         cache_key = f"conversation:{project_uuid}:{contact_urn}"
         messages = self.redis_client.get(cache_key)
-        return messages.decode('utf-8') if messages else []
+        if messages:
+            return json.loads(messages.decode('utf-8'))
+        return []
 
     def add_message_to_cache(
         self,
@@ -178,7 +181,7 @@ class RedisTaskManager(TaskManager):
             "source": source,
             "created_at": pendulum.now().to_iso8601_string()
         })
-        self.redis_client.set(f"conversation:{project_uuid}:{contact_urn}", cached_messages)
+        self.redis_client.set(f"conversation:{project_uuid}:{contact_urn}", json.dumps(cached_messages))
 
     def handle_message_cache(
         self,
@@ -228,7 +231,14 @@ class RedisTaskManager(TaskManager):
         existing_msgs = self.redis_client.get(cache_key)
 
         if existing_msgs:
-            existing_msgs.extend(messages)
-            self.redis_client.set(cache_key, existing_msgs)
+            try:
+                existing_msgs = json.loads(existing_msgs.decode('utf-8'))
+                if isinstance(existing_msgs, list):
+                    existing_msgs.extend(messages)
+                else:
+                    existing_msgs = messages
+            except (json.JSONDecodeError, AttributeError):
+                existing_msgs = messages
+            self.redis_client.set(cache_key, json.dumps(existing_msgs))
         else:
-            self.redis_client.set(cache_key, messages)
+            self.redis_client.set(cache_key, json.dumps(messages))

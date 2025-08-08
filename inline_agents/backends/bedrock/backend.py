@@ -232,7 +232,9 @@ class BedrockBackend(InlineAgentsBackend):
             agent_response=full_response,
             preview=preview,
             session_id=session_id,
-            source_type="agent"  # If user message, source_type="user"
+            source_type="agent",  # If user message, source_type="user"
+            contact_name=contact_name,
+            channel_uuid=channel_uuid
         )
 
         if preview and user_email:
