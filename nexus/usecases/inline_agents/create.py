@@ -1,3 +1,4 @@
+import sentry_sdk
 from typing import Dict
 
 from django.conf import settings
@@ -85,29 +86,40 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 class CreateConversationUseCase():
 
     def create_conversation(self, consumer_message: dict) -> Conversation:
-        messages = InlineAgentMessage.objects.filter(
-            created_at__gte=consumer_message.get("start_date"),
-            created_at__lte=consumer_message.get("end_date"),
-            contact_urn=consumer_message.get("contact_urn")
-        )
+        try:
+            project = Project.objects.get(uuid=consumer_message.get("project_uuid"))
 
-        if not messages.exists():
-            return None
-        project = Project.objects.get(uuid=consumer_message.get("project_uuid"))
+            messages = InlineAgentMessage.objects.filter(
+                created_at__gte=consumer_message.get("start_date"),
+                created_at__lte=consumer_message.get("end_date"),
+                contact_urn=consumer_message.get("contact_urn"),
+                project=project
+            )
 
-        conversation = Conversation.objects.create(
-            project=project,
-            external_id=consumer_message.get("external_id"),
-            has_chats_room=consumer_message.get("has_chats_room"),
-            contact_urn=consumer_message.get("contact_urn"),
-            start_date=consumer_message.get("start_date"),
-            end_date=consumer_message.get("end_date"),
-            contact_name=consumer_message.get("name")
-        )
+            if not messages.exists():
+                return None
 
-        conversation_message = ConversationMessage.objects.create(
-            conversation=conversation,
-        )
-        conversation_message.message.set(messages)
+            conversation = Conversation.objects.create(
+                project=project,
+                external_id=consumer_message.get("external_id"),
+                has_chats_room=consumer_message.get("has_chats_room"),
+                contact_urn=consumer_message.get("contact_urn"),
+                start_date=consumer_message.get("start_date"),
+                end_date=consumer_message.get("end_date"),
+                contact_name=consumer_message.get("name")
+            )
 
-        return conversation
+            conversation_message = ConversationMessage.objects.create(
+                conversation=conversation,
+            )
+            conversation_message.message.set(messages)
+
+            return conversation
+        except Exception as e:
+            sentry_sdk.set_context(
+                "conversation_context",
+                {
+                    "consumer_message": consumer_message
+                }
+            )
+            sentry_sdk.capture_exception(e)

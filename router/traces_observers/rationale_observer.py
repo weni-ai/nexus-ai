@@ -97,6 +97,8 @@ class RationaleObserver(EventObserver):
         user_input: str = "",
         contact_urn: str = "",
         project_uuid: str = "",
+        contact_name: str = "",
+        channel_uuid: str = None,
         send_message_callback: Optional[Callable] = None,
         preview: bool = False,
         rationale_switch: bool = False,
@@ -171,7 +173,9 @@ class RationaleObserver(EventObserver):
                             contact_urn=contact_urn,
                             project_uuid=project_uuid,
                             session_id=session_id,
-                            send_message_callback=send_message_callback
+                            contact_name=contact_name,
+                            send_message_callback=send_message_callback,
+                            channel_uuid=channel_uuid
                         )
                         if message_external_id:
                             self.typing_usecase.send_typing_message(
@@ -295,7 +299,9 @@ class RationaleObserver(EventObserver):
         contact_urn: str,
         project_uuid: str,
         session_id: str,
+        contact_name: str,
         send_message_callback: Callable,
+        channel_uuid: str = None
     ) -> None:
         try:
             send_message_callback(
@@ -310,7 +316,9 @@ class RationaleObserver(EventObserver):
                 text=text,
                 preview=False,
                 session_id=session_id,
-                source_type="agent"
+                source_type="agent",
+                contact_name=contact_name,
+                channel_uuid=channel_uuid
             )
         except Exception as e:
             logger.error(f"Error sending rationale message: {str(e)}", exc_info=True)

@@ -137,3 +137,8 @@ class InlineAgentMessage(models.Model):
     @property
     def trace_path(self):
         return f"{self.TRACES_BASE_PATH}/{self.project.uuid}/{self.uuid}.jsonl"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["project", "created_at", "contact_urn"]),
+        ]

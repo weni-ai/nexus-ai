@@ -18,6 +18,8 @@ class SaveTracesObserver(EventObserver):
         preview: bool,
         session_id: str,
         source_type: str,
+        contact_name: str,
+        channel_uuid: str,
         **kwargs
     ):
         print("Start SaveTracesObserver")
@@ -35,7 +37,9 @@ class SaveTracesObserver(EventObserver):
             agent_response=agent_response,
             preview=preview,
             session_id=session_id,
-            source_type=source_type
+            source_type=source_type,
+            contact_name=contact_name,
+            channel_uuid=channel_uuid
         )
 
 
@@ -51,7 +55,9 @@ def save_inline_trace_events(
     agent_response: str,
     preview: bool,
     session_id: str,
-    source_type: str
+    source_type: str,
+    contact_name: str,
+    channel_uuid: str
 ):
     message = save_inline_message_to_database(
         project_uuid=project_uuid,
@@ -59,7 +65,9 @@ def save_inline_trace_events(
         text=agent_response,
         preview=preview,
         session_id=session_id,
-        source_type=source_type
+        source_type=source_type,
+        contact_name=contact_name,
+        channel_uuid=channel_uuid
     )
 
     data = _prepare_trace_data(trace_events)
@@ -76,8 +84,21 @@ def save_inline_message_to_database(
     text: str,
     preview: bool,
     session_id: str,
-    source_type: str
+    source_type: str,
+    contact_name: str,
+    channel_uuid: str = None
 ) -> InlineAgentMessage:
+
+    from router.tasks.redis_task_manager import RedisTaskManager
+    task_manager = RedisTaskManager()
+    task_manager.handle_message_cache(
+        contact_urn=contact_urn,
+        contact_name=contact_name,
+        project_uuid=project_uuid,
+        msg_text=text,
+        source=source_type,
+        channel_uuid=channel_uuid
+    )
     source = {
         True: "preview",
         False: "router"
