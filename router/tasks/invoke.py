@@ -20,7 +20,9 @@ from router.entities import message_factory
 from router.tasks.exceptions import EmptyTextException
 
 from .actions_client import get_action_clients
-
+from nexus.usecases.intelligences.get_by_uuid import (
+    get_project_and_content_base_data,
+)
 
 def get_task_manager() -> RedisTaskManager:
     """Get the default task manager instance."""
@@ -125,7 +127,7 @@ def start_inline_agents(
 
         print(f"[DEBUG] Message: {message_obj}")
 
-        project = Project.objects.get(uuid=message_obj.project_uuid)
+        project, content_base = get_project_and_content_base_data(message_obj.project_uuid)
 
         pending_task_id = task_manager.get_pending_task_id(message_obj.project_uuid, message_obj.contact_urn)
         if pending_task_id:
@@ -181,7 +183,9 @@ def start_inline_agents(
             turn_off_rationale=turn_off_rationale,
             use_prompt_creation_configurations=project.use_prompt_creation_configurations,
             conversation_turns_to_include=project.conversation_turns_to_include,
-            exclude_previous_thinking_steps=project.exclude_previous_thinking_steps
+            exclude_previous_thinking_steps=project.exclude_previous_thinking_steps,
+            project=project,
+            content_base=content_base,
         )
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
