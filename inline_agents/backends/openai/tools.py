@@ -7,9 +7,11 @@ from agents import (
     Agent,
     AgentHooks,
     RunContextWrapper,
+    ModelSettings,
 )
 from django.conf import settings
 from inline_agents.backends.openai.entities import Context
+from openai.types.shared import Reasoning
 
 
 class Supervisor(Agent):
@@ -24,6 +26,7 @@ class Supervisor(Agent):
         tools: list[Agent],
         hooks: list[AgentHooks],
         handoffs: list[Agent] | None = None,
+        prompt_override_configuration: dict | None = None,
     ):
 
         tools.extend(self.function_tools())
@@ -33,7 +36,12 @@ class Supervisor(Agent):
             model=model,
             tools=tools,
             hooks=hooks,
-            # handoffs=handoffs
+            model_settings=ModelSettings(
+                reasoning=Reasoning(
+                    effort="medium",
+                    summary="auto"
+                ),
+            )
         )
 
     @function_tool

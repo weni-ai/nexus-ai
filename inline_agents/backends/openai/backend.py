@@ -33,6 +33,7 @@ class OpenAISupervisorRepository:
             "tools": supervisor.action_groups,
             "foundation_model": supervisor.foundation_model,
             "knowledge_bases": supervisor.knowledge_bases,
+            "prompt_override_configuration": supervisor.prompt_override_configuration,
         }
 
         return supervisor_dict
@@ -106,5 +107,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 if hasattr(event.data, 'delta'):
                     full_response += event.data.delta
             elif event.type == "run_item_stream_event":
-                pass
+                if event.name == "reasoning_item_created":
+                    print(f"\n[+] Reasoning: {event.item.raw_item.summary}\n")
+
         return result.final_output

@@ -87,7 +87,8 @@ class OpenAITeamAdapter(TeamAdapter):
             instructions=instruction,
             tools=agents_as_tools,
             hooks=hooks,
-            model=supervisor["foundation_model"]
+            model=supervisor["foundation_model"],
+            prompt_override_configuration=supervisor.get("prompt_override_configuration", {})
         )
         return {
             "starting_agent": supervisor_agent,
