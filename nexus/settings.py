@@ -585,6 +585,7 @@ START_INLINE_AGENTS_ACK_LATE = env.bool("START_INLINE_AGENTS_ACK_LATE", False)
 
 JWT_PUBLIC_KEY_PATH = BASE_DIR / "nexus" / "authentication" / "jwt_keys" / "public_key.pem"
 JWT_SECRET_KEY = env.str("JWT_SECRET_KEY")
+OPENAI_AGENTS_FOUNDATION_MODEL = env.str("OPENAI_AGENTS_FOUNDATION_MODEL", "gpt-4o-mini")
 
 try:
     with open(JWT_PUBLIC_KEY_PATH, "r") as f:
