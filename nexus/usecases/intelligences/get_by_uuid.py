@@ -139,6 +139,27 @@ def get_default_content_base_by_project(
         raise ValidationError(message='Invalid UUID')
 
 
+def get_project_and_content_base_data(
+    project_uuid: str
+) -> tuple[Project, ContentBase]:
+    try:
+        project = Project.objects.select_related('org').get(uuid=project_uuid)
+
+        integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
+
+        content_base = integrated_intelligence.intelligence.contentbases.select_related(
+            'agent'
+        ).prefetch_related(
+            'instructions'
+        ).get(is_router=True)
+
+        return project, content_base
+    except (Project.DoesNotExist, ContentBase.DoesNotExist):
+        raise ContentBaseDoesNotExist()
+    except ValidationError:
+        raise ValidationError(message='Invalid UUID')
+
+
 def get_llm_by_project_uuid(
     project_uuid: str
 ) -> LLM:
