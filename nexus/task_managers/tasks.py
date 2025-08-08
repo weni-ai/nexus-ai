@@ -109,6 +109,48 @@ def upload_file(
     }
     return response
 
+@app.task
+def upload_sentenx_inline_file(
+    file: bytes,
+    content_base_uuid: str,
+    extension_file: str,
+    user_email: str,
+    content_base_file_uuid: str,
+    load_type: str = None,
+    filename: str = None
+):
+    file_database_response = s3FileDatabase().add_file(file, filename)
+
+    if file_database_response.status != 0:
+        return {
+            "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
+            "error": file_database_response.err
+        }
+
+    content_base_file_dto = UpdateContentBaseFileDTO(
+        file_url=file_database_response.file_url,
+        file_name=file_database_response.file_name
+    )
+
+    content_base_file = UpdateContentBaseFileUseCase().update_inline_content_base_file(
+        content_base_file_uuid=content_base_file_uuid,
+        user_email=user_email,
+        update_content_base_file_dto=content_base_file_dto
+    )
+
+    task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
+
+    add_file.apply_async(args=[str(task_manager.uuid), "file", load_type])
+    response = {
+        "task_uuid": task_manager.uuid,
+        "task_status": task_manager.status,
+        "content_base": {
+            "uuid": content_base_file.uuid,
+            "extension_file": content_base_file.extension_file,
+        }
+    }
+    return response
+
 
 @app.task
 def upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: Dict):
