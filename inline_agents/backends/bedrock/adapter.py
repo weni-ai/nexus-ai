@@ -32,7 +32,8 @@ class BedrockTeamAdapter(TeamAdapter):
         contact_name: str = "",
         channel_uuid: str = "",
         auth_token: str = "",
-        sanitized_urn: str = ""
+        sanitized_urn: str = "",
+        **kwargs
     ) -> dict:
         # TODO: change self to cls
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
