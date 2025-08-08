@@ -297,7 +297,7 @@ class ConversationUseCase():
         end_date = start_date.add(days=1)
 
         conversation = Conversation.objects.create(
-            project__uuid=project_uuid,
+            project_id=project_uuid,
             contact_urn=contact_urn,
             start_date=start_date,
             end_date=end_date,
