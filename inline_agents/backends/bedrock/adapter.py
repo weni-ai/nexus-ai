@@ -33,6 +33,7 @@ class BedrockTeamAdapter(TeamAdapter):
         channel_uuid: str = "",
         auth_token: str = "",
         sanitized_urn: str = "",
+        classification_foundation_model: str = None,
         **kwargs
     ) -> dict:
         # TODO: change self to cls
@@ -70,10 +71,15 @@ class BedrockTeamAdapter(TeamAdapter):
 
         credentials = self._get_credentials(project_uuid)
 
+        if classification_foundation_model:
+            foundation_model = classification_foundation_model
+        else:
+            foundation_model = supervisor["foundation_model"]
+
         external_team = {
             "instruction": instruction,
             "actionGroups": supervisor["action_groups"],
-            "foundationModel": supervisor["foundation_model"],
+            "foundationModel": foundation_model,
             "agentCollaboration": supervisor["agent_collaboration"],
             "knowledgeBases": self._get_knowledge_bases(
                 supervisor=supervisor,

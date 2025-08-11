@@ -1,6 +1,7 @@
 import os
 from typing import Dict, Optional
-
+import boto3
+import json
 import botocore
 from django.conf import settings
 
@@ -58,6 +59,39 @@ def handle_product_items(text: str, product_items: list) -> str:
     return text
 
 
+def complexity_layer(input_text: str) -> str | None:
+    try:
+        payload = { "first_input": input_text }
+        response = boto3.client("lambda").invoke(
+            FunctionName=settings.COMPLEXITY_LAYER_LAMBDA,
+            InvocationType="RequestResponse",
+            Payload=json.dumps(payload).encode("utf-8"),
+        )
+        
+        if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
+            payload = json.loads(response['Payload'].read().decode('utf-8'))
+            classification = payload.get("body").get("classification")
+            print(f"[DEBUG] Message: {input_text} - Classification: {classification}")
+            return classification
+        else:
+            error_msg = f"Lambda invocation failed with status code: {response['ResponseMetadata']['HTTPStatusCode']}"
+            sentry_sdk.set_context("extra_data", {
+                "input_text": input_text,
+                "response": response,
+                "status_code": response["ResponseMetadata"]["HTTPStatusCode"]
+            })
+            sentry_sdk.capture_message(error_msg, level="error")
+            raise Exception(error_msg)
+            
+    except Exception as e:
+        sentry_sdk.set_context("extra_data", {
+            "input_text": input_text,
+            "response": response if 'response' in locals() else None,
+        })
+        sentry_sdk.capture_exception(e)
+        return None
+
+
 @celery_app.task(
     bind=True,
     soft_time_limit=300,
@@ -94,6 +128,8 @@ def start_inline_agents(
             project_uuid=message.get("project_uuid"),
             preview=preview
         )
+
+        foundation_model = complexity_layer(text)
 
         text, turn_off_rationale = handle_attachments(
             text=text,
@@ -186,6 +222,7 @@ def start_inline_agents(
             exclude_previous_thinking_steps=project.exclude_previous_thinking_steps,
             project=project,
             content_base=content_base,
+            foudation_model=foundation_model,
         )
 
         # task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
