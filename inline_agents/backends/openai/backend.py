@@ -16,16 +16,16 @@ from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
 
+from nexus.projects.models import Project
+from nexus.intelligences.models import ContentBase
 
 class OpenAISupervisorRepository:
     @classmethod
     def get_supervisor(
         cls,
-        project_uuid: str
+        project: Project,
     ) -> Agent:
-        from nexus.projects.models import Project
 
-        project = Project.objects.get(uuid=project_uuid)
         supervisor = Supervisor.objects.order_by('id').last()
 
         if not supervisor:
@@ -36,6 +36,7 @@ class OpenAISupervisorRepository:
             "tools": supervisor.action_groups,
             "foundation_model": supervisor.foundation_model,
             "knowledge_bases": supervisor.knowledge_bases,
+            "prompt_override_configuration": supervisor.prompt_override_configuration,
         }
 
         return supervisor_dict
@@ -70,6 +71,8 @@ class OpenAIBackend(InlineAgentsBackend):
         project_uuid: str,
         sanitized_urn: str,
         contact_fields: str,
+        project: Project,
+        content_base: ContentBase,
         preview: bool = False,
         language: str = "en",
         contact_name: str = "",
@@ -80,7 +83,7 @@ class OpenAIBackend(InlineAgentsBackend):
         **kwargs
     ):
         hooks = HooksDefault()
-        supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project_uuid)
+        supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
             agents=team,
@@ -90,7 +93,9 @@ class OpenAIBackend(InlineAgentsBackend):
             contact_urn=sanitized_urn,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
-            hooks=hooks
+            hooks=hooks,
+            project=project,
+            content_base=content_base,
         )
         client = self._get_client()
         session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
@@ -107,9 +112,6 @@ class OpenAIBackend(InlineAgentsBackend):
             )
 
         result = asyncio.run(self._invoke_agents_async(client, external_team, session))
-        print("========================= Tools called ========================")
-        print(hooks.list_tools_called)
-        print("========================================================")
         return result
 
     async def _invoke_agents_async(self, client, external_team, session):
@@ -122,5 +124,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 if hasattr(event.data, 'delta'):
                     full_response += event.data.delta
             elif event.type == "run_item_stream_event":
-                pass
+                if event.name == "reasoning_item_created":
+                    print(f"\n[+] Reasoning: {event.item.raw_item.summary}\n")
+
         return result.final_output

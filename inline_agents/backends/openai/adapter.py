@@ -12,6 +12,8 @@ from django.conf import settings
 from nexus.inline_agents.models import AgentCredential
 from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
 from inline_agents.backends.openai.entities import Context
+from nexus.projects.models import Project
+from nexus.intelligences.models import ContentBase
 
 
 class OpenAITeamAdapter(TeamAdapter):
@@ -27,22 +29,19 @@ class OpenAITeamAdapter(TeamAdapter):
         contact_name: str,
         channel_uuid: str,
         hooks: HooksDefault,
+        content_base: ContentBase,
+        project: Project,
         auth_token: str = "",
         **kwargs
     ) -> list[dict]:
         agents_as_tools = []
 
-        from nexus.projects.models import Project
-        from nexus.usecases.intelligences.get_by_uuid import (
-            get_default_content_base_by_project,
-        )
-        content_base = get_default_content_base_by_project(project_uuid)
         content_base_uuid = str(content_base.uuid)
+        business_rules = project.human_support_prompt
+
         instructions = content_base.instructions.all()
         agent_data = content_base.agent
 
-        project = Project.objects.get(uuid=project_uuid)
-        business_rules = project.human_support_prompt
         supervisor_instructions = list(instructions.values_list("instruction", flat=True))
         supervisor_instructions = "\n".join(supervisor_instructions)
 
@@ -87,7 +86,8 @@ class OpenAITeamAdapter(TeamAdapter):
             instructions=instruction,
             tools=agents_as_tools,
             hooks=hooks,
-            model=supervisor["foundation_model"]
+            model=supervisor["foundation_model"],
+            prompt_override_configuration=supervisor.get("prompt_override_configuration", {})
         )
         return {
             "starting_agent": supervisor_agent,
@@ -186,8 +186,6 @@ class OpenAITeamAdapter(TeamAdapter):
 
             payload_json = json.dumps(payload_json)
 
-            print(f"[DEBUG] Payload: {payload_json}")
-
             response = lambda_client.invoke(
                 FunctionName=function_arn,
                 InvocationType='RequestResponse',
@@ -234,9 +232,6 @@ class OpenAITeamAdapter(TeamAdapter):
 
     def create_function_tool(cls, function_name: str, function_arn: str, function_description: str, json_schema: dict) -> FunctionTool:
         async def invoke_specific_lambda(ctx: RunContextWrapper[Context], args: str) -> str:
-            print("------------------C-O-N-T-E-X-T--------------------")
-            print(ctx.context)
-            print("---------------------------------------------------")
             parsed = tool_function_args.model_validate_json(args)
             payload = parsed.model_dump()
             return cls.invoke_aws_lambda(
@@ -252,13 +247,9 @@ class OpenAITeamAdapter(TeamAdapter):
 
         tool_function_args = cls.create_function_args_class(cls, json_schema)
         payload_schema = tool_function_args.model_json_schema()
-        
-        print(f"[DEBUG] Original schema for {function_name}: {payload_schema}")
 
         cls._clean_schema(payload_schema)
         payload_schema.update({"additionalProperties": False})
-        
-        print(f"[DEBUG] Cleaned schema for {function_name}: {payload_schema}")
 
         return FunctionTool(
             name=function_name,
@@ -288,7 +279,6 @@ class OpenAITeamAdapter(TeamAdapter):
             
             if "properties" in schema and "required" in schema:
                 schema["required"] = list(schema["properties"].keys())
-                print(f"[DEBUG] Set all properties as required: {schema['required']}")
 
     @classmethod
     def _format_supervisor_instructions(
