@@ -252,6 +252,7 @@ class Conversation(models.Model):
     end_date = models.DateTimeField(null=True, blank=True)
     has_chats_room = models.BooleanField(default=False)
     contact_name = models.CharField(max_length=255, null=True, blank=True)
+    channel_uuid = models.UUIDField(null=True, blank=True)
     topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
     subtopic = models.ForeignKey(SubTopics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
     nps = models.IntegerField(null=True, blank=True)
@@ -279,6 +280,11 @@ class Conversation(models.Model):
             "topic": self.get_topic(),
             "project": str(self.project.uuid),
         }
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["project", "contact_urn", "start_date", "end_date", "channel_uuid"]),
+        ]
 
 
 class ConversationMessage(models.Model):

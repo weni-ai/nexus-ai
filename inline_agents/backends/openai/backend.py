@@ -15,6 +15,7 @@ from inline_agents.backends.openai.hooks import HooksDefault
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
+
 from nexus.projects.models import Project
 from nexus.intelligences.models import ContentBase
 

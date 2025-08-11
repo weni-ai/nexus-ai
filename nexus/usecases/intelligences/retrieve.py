@@ -1,4 +1,5 @@
 from typing import Dict
+import datetime
 
 from .get_by_uuid import (
     get_by_intelligence_uuid,
@@ -17,7 +18,8 @@ from .exceptions import (
     ContentBaseLinkDoesNotExist,
 )
 from nexus.projects.permissions import has_project_permission
-from nexus.intelligences.models import ContentBaseLink
+from nexus.intelligences.models import ContentBaseLink, Conversation
+from nexus.projects.models import Project
 
 
 class RetrieveIntelligenceUseCase():
@@ -162,3 +164,18 @@ def get_file_info(file_uuid: str) -> Dict:
                 }
             except ContentBaseLinkDoesNotExist:
                 return {}
+
+
+def get_conversation_object(
+    project_uuid: str,
+    contact_urn: str,
+    start_date: datetime,
+    end_date: datetime
+) -> Conversation:
+    project = Project.objects.get(uuid=project_uuid)
+    return Conversation.objects.get(
+        project=project,
+        contact_urn=contact_urn,
+        start_date__gte=start_date,
+        end_date__lte=end_date
+    )
