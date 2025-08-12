@@ -183,7 +183,12 @@ class OpenAITeamAdapter(TeamAdapter):
             payload_json = {
                 "parameters": parameters,
                 "sessionAttributes": session_attributes,
-                "promptSessionAttributes": {"alwaysFormat": "<example>{'msg': {'text': 'Hello, how can I help you today?'}}</example>"}
+                "promptSessionAttributes": {"alwaysFormat": "<example>{'msg': {'text': 'Hello, how can I help you today?'}}</example>"},
+                "agent": {
+                    "name": "INLINE_AGENT",
+                    "version": "INLINE_AGENT",
+                    "id": "INLINE_AGENT",
+                }
             }
 
             payload_json = json.dumps(payload_json)
