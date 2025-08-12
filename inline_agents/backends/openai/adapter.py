@@ -80,11 +80,13 @@ class OpenAITeamAdapter(TeamAdapter):
                 )
             )
 
+        supervisor_tools = cls._get_tools(supervisor["tools"])
+        supervisor_tools.extend(agents_as_tools)
 
         supervisor_agent = SupervisorAgent(
             name="Supervisor Agent",
             instructions=instruction,
-            tools=agents_as_tools,
+            tools=supervisor_tools,
             hooks=hooks,
             model=supervisor["foundation_model"],
             prompt_override_configuration=supervisor.get("prompt_override_configuration", {})

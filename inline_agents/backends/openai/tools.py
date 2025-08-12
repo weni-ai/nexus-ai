@@ -23,7 +23,7 @@ class Supervisor(Agent):
         name: str,
         instructions: str,
         model: str,
-        tools: list[Agent],
+        tools: list[Any],
         hooks: list[AgentHooks],
         handoffs: list[Agent] | None = None,
         prompt_override_configuration: dict | None = None,
