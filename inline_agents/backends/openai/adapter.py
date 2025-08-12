@@ -68,18 +68,18 @@ class OpenAITeamAdapter(TeamAdapter):
         for agent in agents:
             openai_agent = Agent[Context](
                 name=agent.get("agentName"),
-                instructions=agent.get("instructions"),
+                instructions=agent.get("instruction"),
                 tools=cls._get_tools(agent["actionGroups"]),
                 model=settings.OPENAI_AGENTS_FOUNDATION_MODEL,
                 hooks=hooks
             )
-            
             agents_as_tools.append(
                 openai_agent.as_tool(
                     tool_name=agent.get("agentName"),
                     tool_description=agent.get("collaborator_configurations"),
                 )
             )
+
 
         supervisor_agent = SupervisorAgent(
             name="Supervisor Agent",
