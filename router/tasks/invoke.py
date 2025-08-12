@@ -62,7 +62,7 @@ def handle_product_items(text: str, product_items: list) -> str:
 def complexity_layer(input_text: str) -> str | None:
     try:
         payload = { "first_input": input_text }
-        response = boto3.client("lambda").invoke(
+        response = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME).invoke(
             FunctionName=settings.COMPLEXITY_LAYER_LAMBDA,
             InvocationType="RequestResponse",
             Payload=json.dumps(payload).encode("utf-8"),
