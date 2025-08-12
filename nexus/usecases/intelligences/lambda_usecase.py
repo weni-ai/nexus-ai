@@ -14,6 +14,7 @@ class LambdaUseCase():
     def __init__(self):
         self.boto_client = boto3.client('lambda', region_name=settings.AWS_BEDROCK_REGION_NAME)
         self.adapter = None
+        self.task_manager = None
 
     def _get_data_lake_event_adapter(self):
         if self.adapter is None:
@@ -57,9 +58,9 @@ class LambdaUseCase():
 
         for message in messages:
             conversation_payload["messages"].append({
-                "sender": message.source,
-                "timestamp": str(message.created_at),
-                "content": message.text
+                "sender": message['source'],
+                "timestamp": str(message['created_at']),
+                "content": message['text']
             })
         return conversation_payload
 
@@ -189,8 +190,8 @@ def create_lambda_conversation(
         conversation_queryset = Conversation.objects.filter(
             project=project,
             contact_urn=payload.get("contact_urn"),
-            start_date__gte=payload.get("start_date"),
-            end_date__lte=payload.get("end_date"),
+            start_date__gte=payload.get("start"),
+            end_date__lte=payload.get("end"),
             channel_uuid=payload.get("channel_uuid")
         )
     except Conversation.DoesNotExist:
@@ -207,8 +208,8 @@ def create_lambda_conversation(
 
     conversation_queryset.update(
         {
-            "start_date": payload.get("start_date"),
-            "end_date": payload.get("end_date"),
+            "start_date": payload.get("start"),
+            "end_date": payload.get("end"),
             "has_chats_room": payload.get("has_chats_room"),
             "contact_name": payload.get("contact_name"),
             "contact_urn": payload.get("contact_urn"),
