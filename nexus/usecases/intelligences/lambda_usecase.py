@@ -4,6 +4,7 @@ import json
 from django.conf import settings
 
 from nexus.intelligences.models import Conversation
+from nexus.celery import celery_app
 from nexus.projects.models import Project
 from router.tasks.redis_task_manager import RedisTaskManager
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
@@ -141,6 +142,7 @@ class LambdaUseCase():
             )
             conversation_topics = json.loads(conversation_topics.get("Payload").read())
             conversation_topics = conversation_topics.get("body")
+            print("Conversation topic resuts: ", conversation_topics)
             if conversation_topics.get("topic_uuid") != "":
                 event_data = {
                     "event_name": "weni_nexus_data",
@@ -160,7 +162,10 @@ class LambdaUseCase():
             project_uuid=project_uuid,
             contact_urn=contact_urn
         )
-        topic = Topics.objects.get(uuid=event_data.get("metadata").get("topic_uuid"))
+
+        topic_uuid = event_data.get("metadata").get("topic_uuid")
+
+        topic = Topics.objects.get(uuid=topic_uuid)
         return topic
 
     def _get_task_manager(self):
@@ -169,6 +174,7 @@ class LambdaUseCase():
         return self.task_manager
 
 
+@celery_app.task
 def create_lambda_conversation(
     payload: dict,
 ):
@@ -204,20 +210,25 @@ def create_lambda_conversation(
         project_uuid=payload.get("project_uuid"),
         contact_urn=payload.get("contact_urn")
     )
-    topic = lambda_usecase.lambda_conversation_topics(formated_messages)
-
-    conversation_queryset.update(
-        {
-            "start_date": payload.get("start"),
-            "end_date": payload.get("end"),
-            "has_chats_room": payload.get("has_chats_room"),
-            "contact_name": payload.get("contact_name"),
-            "contact_urn": payload.get("contact_urn"),
-            "external_id": payload.get("external_id"),
-            "resolution": resolution,
-            "topic": topic
-        }
+    topic = lambda_usecase.lambda_conversation_topics(
+        messages=formated_messages,
+        has_chats_room=payload.get("has_chats_room"),
+        project_uuid=payload.get("project_uuid"),
+        contact_urn=payload.get("contact_urn")
     )
+
+    update_data = {
+        "start_date": payload.get("start"),
+        "end_date": payload.get("end"),
+        "has_chats_room": payload.get("has_chats_room"),
+        "contact_name": payload.get("contact_name"),
+        "contact_urn": payload.get("contact_urn"),
+        "external_id": payload.get("external_id"),
+        "resolution": resolution,
+        "topic": topic
+    }
+
+    conversation_queryset.update(**update_data)
 
     task_manager.clear_message_cache(
         project_uuid=payload.get("project_uuid"),
