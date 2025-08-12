@@ -72,6 +72,7 @@ class BedrockBackend(InlineAgentsBackend):
         use_prompt_creation_configurations: bool = False,
         conversation_turns_to_include: int = 10,
         exclude_previous_thinking_steps: bool = True,
+        foundation_model: str = None,
         **kwargs,
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
