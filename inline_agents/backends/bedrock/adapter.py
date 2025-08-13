@@ -285,8 +285,12 @@ class BedrockTeamAdapter(TeamAdapter):
         return instruction
 
     @classmethod
-    def _get_guardrails(cls) -> list[dict]:
-        guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
+    def _get_guardrails(cls, project_uuid: str) -> list[dict]:
+        try:
+            guardrails = Guardrail.objects.get(project__uuid=project_uuid)
+        except Guardrail.DoesNotExist:
+            guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
+
         return {
             'guardrailIdentifier': guardrails.identifier,
             'guardrailVersion': str(guardrails.version)
