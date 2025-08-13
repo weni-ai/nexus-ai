@@ -188,7 +188,9 @@ class OpenAITeamAdapter(TeamAdapter):
                     "name": "INLINE_AGENT",
                     "version": "INLINE_AGENT",
                     "id": "INLINE_AGENT",
-                }
+                },
+                "actionGroup": function_name,
+                "function": function_arn,
             }
 
             payload_json = json.dumps(payload_json)
