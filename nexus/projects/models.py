@@ -56,6 +56,7 @@ class Project(BaseModel, SoftDeleteModel):
         on_delete=models.SET_NULL,
         null=True,
         related_name='guardrail',
+        blank=True,
     )
 
     def __str__(self):
