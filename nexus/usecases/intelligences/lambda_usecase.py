@@ -142,7 +142,7 @@ class LambdaUseCase():
             )
             conversation_topics = json.loads(conversation_topics.get("Payload").read())
             conversation_topics = conversation_topics.get("body")
-            print("Conversation topic resuts: ", conversation_topics)
+
             if conversation_topics.get("topic_uuid") != "":
                 event_data = {
                     "event_name": "weni_nexus_data",

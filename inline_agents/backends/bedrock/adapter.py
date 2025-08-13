@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from typing import Optional
 
 import pendulum
@@ -12,7 +11,6 @@ from weni_datalake_sdk.clients.client import send_event_data
 from weni_datalake_sdk.paths.events_path import EventPath
 
 from inline_agents.adapter import TeamAdapter, DataLakeEventAdapter
-from inline_agents.backends.bedrock.prompts import PROMPT_POS_PROCESSING
 from nexus.inline_agents.models import AgentCredential, Guardrail
 
 logger = logging.getLogger(__name__)
@@ -466,8 +464,10 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         inline_trace: dict,
         project_uuid: str,
         contact_urn: str,
+        channel_uuid: str,
         preview: bool = False
     ):
+        from nexus.intelligences.models import Conversation
         if preview:
             return None
 
@@ -489,8 +489,14 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                     event_to_send["metadata"] = {}
                 if event_to_send.get("key") == "weni_csat":
                     event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
+                    conversation = Conversation.objects.get(project__uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid)
+                    conversation.csat = event_to_send.get("value")
+                    conversation.save()
                 if event_to_send.get("key") == "weni_nps":
                     event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_NPS
+                    conversation = Conversation.objects.get(project__uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid)
+                    conversation.nps = event_to_send.get("value")
+                    conversation.save()
 
                 self.to_data_lake_custom_event(
                     event_data=event_to_send,
