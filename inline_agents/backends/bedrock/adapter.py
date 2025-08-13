@@ -96,7 +96,7 @@ class BedrockTeamAdapter(TeamAdapter):
             "inputText": input_text,
             "collaborators": self._get_collaborators(agents, llm_formatted_time),
             "collaboratorConfigurations": self._get_collaborator_configurations(agents),
-            "guardrailConfiguration": self._get_guardrails(),
+            "guardrailConfiguration": self._get_guardrails(project_uuid=project_uuid),
             "promptOverrideConfiguration": self.__get_prompt_override_configuration(
                 use_components=use_components,
                 prompt_override_configuration=supervisor["prompt_override_configuration"],
