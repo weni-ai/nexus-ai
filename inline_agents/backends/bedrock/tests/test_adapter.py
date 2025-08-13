@@ -5,8 +5,11 @@ from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 from inline_agents.backends.bedrock.tests.traces_factory import (
     ActionGroupTraceFactory,
     AgentCollaborationTraceFactory,
-    CustomEventTraceFactory
+    CustomEventTraceFactory,
+    CSATEventTraceFactory,
+    NPSEventTraceFactory
 )
+from nexus.usecases.intelligences.tests.intelligence_factory import ConversationFactory
 
 
 def mock_send_data_lake_event_task(
@@ -21,8 +24,11 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         self.adapter = BedrockDataLakeEventAdapter(
             send_data_lake_event_task=self.mock_send_data_lake_event_task
         )
-        self.project_uuid = "test-project-uuid"
-        self.contact_urn = "tel:1234567890"
+        # Create conversation with null csat and nps for testing
+        self.conversation = ConversationFactory(csat=None, nps=None)
+        self.project_uuid = str(self.conversation.project.uuid)
+        self.contact_urn = self.conversation.contact_urn
+        self.channel_uuid = self.conversation.channel_uuid
 
     def test_to_data_lake_event_with_action_group(self):
         action_group_trace = ActionGroupTraceFactory()
@@ -98,7 +104,8 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
-            contact_urn=self.contact_urn
+            contact_urn=self.contact_urn,
+            channel_uuid=self.channel_uuid
         )
 
         self.mock_send_data_lake_event_task.delay.assert_called_once()
@@ -125,7 +132,8 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
-            contact_urn=self.contact_urn
+            contact_urn=self.contact_urn,
+            channel_uuid=self.channel_uuid
         )
 
         self.mock_send_data_lake_event_task.delay.assert_not_called()
@@ -139,7 +147,8 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
-            contaTestBedrockct_urn=self.contact_urn
+            contact_urn=self.contact_urn,
+            channel_uuid=self.channel_uuid
         )
 
         self.mock_send_data_lake_event_task.delay.assert_not_called()
@@ -153,7 +162,8 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
-            contact_urn=self.contact_urn
+            contact_urn=self.contact_urn,
+            channel_uuid=self.channel_uuid
         )
 
         self.mock_send_data_lake_event_task.delay.assert_not_called()
@@ -165,9 +175,128 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         result = self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
-            contact_urn=self.contact_urn,
+            contact_urn=self.contact_urn,   
+            channel_uuid=self.channel_uuid,
             preview=True
         )
+
+        self.mock_send_data_lake_event_task.delay.assert_not_called()
+        self.assertIsNone(result)
+
+    def test_custom_event_data_with_csat_event_updates_conversation(self):
+        """Test that CSAT event properly updates the Conversation model"""
+        csat_trace = CSATEventTraceFactory(csat_value="5")
+
+        self.assertIsNone(self.conversation.csat)
+
+        self.adapter.custom_event_data(
+            inline_trace=csat_trace,
+            project_uuid=self.project_uuid,
+            contact_urn=self.contact_urn,
+            channel_uuid=self.channel_uuid
+        )
+
+        self.conversation.refresh_from_db()
+
+        self.assertEqual(self.conversation.csat, "5")
+
+        self.mock_send_data_lake_event_task.delay.assert_called_once()
+        call_args = self.mock_send_data_lake_event_task.delay.call_args[0][0]
+        self.assertEqual(call_args["key"], "weni_csat")
+        self.assertEqual(call_args["value"], "5")
+
+    def test_custom_event_data_with_nps_event_updates_conversation(self):
+        """Test that NPS event properly updates the Conversation model"""
+        nps_trace = NPSEventTraceFactory(nps_value=8)
+
+        self.assertIsNone(self.conversation.nps)
+
+        self.adapter.custom_event_data(
+            inline_trace=nps_trace,
+            project_uuid=self.project_uuid,
+            contact_urn=self.contact_urn,
+            channel_uuid=self.channel_uuid
+        )
+
+        self.conversation.refresh_from_db()
+
+        self.assertEqual(self.conversation.nps, 8)
+
+        self.mock_send_data_lake_event_task.delay.assert_called_once()
+        call_args = self.mock_send_data_lake_event_task.delay.call_args[0][0]
+        self.assertEqual(call_args["key"], "weni_nps")
+        self.assertEqual(call_args["value"], 8)
+
+    def test_custom_event_data_with_both_csat_and_nps_events(self):
+        """Test that both CSAT and NPS events update the Conversation model correctly"""
+
+        conversation = ConversationFactory(csat=None, nps=None)
+
+        combined_trace = {
+            "collaboratorName": "combined_agent",
+            "eventTime": "2024-01-01T00:00:00Z",
+            "sessionId": "test-session",
+            "trace": {
+                "orchestrationTrace": {
+                    "observation": {
+                        "actionGroupInvocationOutput": {
+                            "metadata": {
+                                "clientRequestId": "test-request",
+                                "endTime": "2024-01-01T00:00:01Z",
+                                "startTime": "2024-01-01T00:00:00Z",
+                                "totalTimeMs": 1000
+                            },
+                            "text": '{"events": [{"event_name": "weni_nexus_data", "key": "weni_csat", "value_type": "string", "value": "4", "metadata": {}}, {"event_name": "weni_nexus_data", "key": "weni_nps", "value_type": "string", "value": 7, "metadata": {}}]}'
+                        },
+                        "traceId": "test-trace",
+                        "type": "ACTION_GROUP"
+                    }
+                }
+            }
+        }
+
+        self.assertIsNone(conversation.csat)
+        self.assertIsNone(conversation.nps)
+
+        self.adapter.custom_event_data(
+            inline_trace=combined_trace,
+            project_uuid=str(conversation.project.uuid),
+            contact_urn=conversation.contact_urn,
+            channel_uuid=conversation.channel_uuid
+        )
+
+        conversation.refresh_from_db()
+
+        self.assertEqual(conversation.csat, "4")
+        self.assertEqual(conversation.nps, 7)
+
+        self.assertEqual(self.mock_send_data_lake_event_task.delay.call_count, 2)
+
+        first_call = self.mock_send_data_lake_event_task.delay.call_args_list[0][0][0]
+        self.assertEqual(first_call["key"], "weni_csat")
+        self.assertEqual(first_call["value"], "4")
+
+        second_call = self.mock_send_data_lake_event_task.delay.call_args_list[1][0][0]
+        self.assertEqual(second_call["key"], "weni_nps")
+        self.assertEqual(second_call["value"], 7)
+
+    def test_custom_event_data_with_csat_event_in_preview_mode_does_not_update_conversation(self):
+        """Test that CSAT event in preview mode does not update the Conversation model"""
+        csat_trace = CSATEventTraceFactory(csat_value="3")
+
+        self.assertIsNone(self.conversation.csat)
+
+        result = self.adapter.custom_event_data(
+            inline_trace=csat_trace,
+            project_uuid=self.project_uuid,
+            contact_urn=self.contact_urn,
+            channel_uuid=self.channel_uuid,
+            preview=True
+        )
+
+        self.conversation.refresh_from_db()
+
+        self.assertIsNone(self.conversation.csat)
 
         self.mock_send_data_lake_event_task.delay.assert_not_called()
         self.assertIsNone(result)

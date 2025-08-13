@@ -7,6 +7,7 @@ from .views import (
     ContentBaseTextViewset,
     ContentBaseFileViewset,
     ContentBaseLinkViewset,
+    InlineContentBaseFileViewset,
     SentenxIndexerUpdateFile,
     GenerativeIntelligenceQuestionAPIView,
     QuickTestAIAPIView,
@@ -29,6 +30,7 @@ from .views import (
 org_router = DefaultRouter()
 intelligence_router = DefaultRouter()
 content_base_router = DefaultRouter()
+inline_content_base_router = DefaultRouter()
 
 org_router.register(r'', IntelligencesViewset, basename='intelligences')
 intelligence_router.register(
@@ -54,10 +56,17 @@ content_base_router.register(
     basename='content-base-link'
 )
 
+inline_content_base_router.register(
+    r'inline-content-base-file',
+    InlineContentBaseFileViewset,
+    basename='content-base-file-inline'
+)
+
 urlpatterns = [
     path('<org_uuid>/intelligences/', include(org_router.urls)),
     path('<intelligence_uuid>/', include(intelligence_router.urls)),
     path('<content_base_uuid>/', include(content_base_router.urls)),
+    path('<project_uuid>/', include(inline_content_base_router.urls)),
     path('<project_uuid>/router/', RouterContentBaseViewSet.as_view(), name="project-content-bases"),
     path('<project_uuid>/commerce-router/', RouterRetailViewSet.as_view(), name="project-commerce-router"),
     path('<project_uuid>/llm/', LLMViewset.as_view(), name='llm'),

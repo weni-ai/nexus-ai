@@ -176,6 +176,7 @@ class BedrockBackend(InlineAgentsBackend):
                     inline_trace=trace_data,
                     project_uuid=project_uuid,
                     contact_urn=contact_urn,
+                    channel_uuid=channel_uuid,
                     preview=preview
                 )
 

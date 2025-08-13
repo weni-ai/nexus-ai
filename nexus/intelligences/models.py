@@ -12,7 +12,6 @@ from nexus.projects.models import Project
 from nexus.inline_agents.models import InlineAgentMessage
 
 
-
 class Intelligence(BaseModel, SoftDeleteModel):
     name = models.CharField(max_length=255)
     content_bases_count = models.PositiveBigIntegerField(default=0)
