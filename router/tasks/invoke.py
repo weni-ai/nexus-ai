@@ -1,6 +1,7 @@
 import os
 from typing import Dict, Optional
-
+import boto3
+import json
 import botocore
 from django.conf import settings
 
@@ -20,7 +21,9 @@ from router.entities import message_factory
 from router.tasks.exceptions import EmptyTextException
 
 from .actions_client import get_action_clients
-
+from nexus.usecases.intelligences.get_by_uuid import (
+    get_project_and_content_base_data,
+)
 
 def get_task_manager() -> RedisTaskManager:
     """Get the default task manager instance."""
@@ -54,6 +57,39 @@ def handle_product_items(text: str, product_items: list) -> str:
     else:
         text = f"product items: {str(product_items)}"
     return text
+
+
+def complexity_layer(input_text: str) -> str | None:
+    try:
+        payload = { "first_input": input_text }
+        response = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME).invoke(
+            FunctionName=settings.COMPLEXITY_LAYER_LAMBDA,
+            InvocationType="RequestResponse",
+            Payload=json.dumps(payload).encode("utf-8"),
+        )
+        
+        if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
+            payload = json.loads(response['Payload'].read().decode('utf-8'))
+            classification = payload.get("body").get("classification")
+            print(f"[DEBUG] Message: {input_text} - Classification: {classification}")
+            return classification
+        else:
+            error_msg = f"Lambda invocation failed with status code: {response['ResponseMetadata']['HTTPStatusCode']}"
+            sentry_sdk.set_context("extra_data", {
+                "input_text": input_text,
+                "response": response,
+                "status_code": response["ResponseMetadata"]["HTTPStatusCode"]
+            })
+            sentry_sdk.capture_message(error_msg, level="error")
+            raise Exception(error_msg)
+            
+    except Exception as e:
+        sentry_sdk.set_context("extra_data", {
+            "input_text": input_text,
+            "response": response if 'response' in locals() else None,
+        })
+        sentry_sdk.capture_exception(e)
+        return None
 
 
 @celery_app.task(
@@ -93,6 +129,8 @@ def start_inline_agents(
             preview=preview
         )
 
+        foundation_model = complexity_layer(text)
+
         text, turn_off_rationale = handle_attachments(
             text=text,
             attachments=attachments
@@ -125,7 +163,7 @@ def start_inline_agents(
 
         print(f"[DEBUG] Message: {message_obj}")
 
-        project = Project.objects.get(uuid=message_obj.project_uuid)
+        project, content_base = get_project_and_content_base_data(message_obj.project_uuid)
 
         pending_task_id = task_manager.get_pending_task_id(message_obj.project_uuid, message_obj.contact_urn)
         if pending_task_id:
@@ -181,7 +219,10 @@ def start_inline_agents(
             turn_off_rationale=turn_off_rationale,
             use_prompt_creation_configurations=project.use_prompt_creation_configurations,
             conversation_turns_to_include=project.conversation_turns_to_include,
-            exclude_previous_thinking_steps=project.exclude_previous_thinking_steps
+            exclude_previous_thinking_steps=project.exclude_previous_thinking_steps,
+            project=project,
+            content_base=content_base,
+            foudation_model=foundation_model,
         )
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)

@@ -32,7 +32,9 @@ class BedrockTeamAdapter(TeamAdapter):
         contact_name: str = "",
         channel_uuid: str = "",
         auth_token: str = "",
-        sanitized_urn: str = ""
+        sanitized_urn: str = "",
+        classification_foundation_model: str = None,
+        **kwargs
     ) -> dict:
         # TODO: change self to cls
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
@@ -69,10 +71,15 @@ class BedrockTeamAdapter(TeamAdapter):
 
         credentials = self._get_credentials(project_uuid)
 
+        if classification_foundation_model:
+            foundation_model = classification_foundation_model
+        else:
+            foundation_model = supervisor["foundation_model"]
+
         external_team = {
             "instruction": instruction,
             "actionGroups": supervisor["action_groups"],
-            "foundationModel": supervisor["foundation_model"],
+            "foundationModel": foundation_model,
             "agentCollaboration": supervisor["agent_collaboration"],
             "knowledgeBases": self._get_knowledge_bases(
                 supervisor=supervisor,
@@ -93,7 +100,8 @@ class BedrockTeamAdapter(TeamAdapter):
             "promptOverrideConfiguration": self.__get_prompt_override_configuration(
                 use_components=use_components,
                 prompt_override_configuration=supervisor["prompt_override_configuration"],
-            )
+            ),
+            "idleSessionTTLInSeconds": settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS
         }
 
         print(f"[ + DEBUG + ] external_team: {external_team}")
