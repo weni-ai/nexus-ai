@@ -4,7 +4,7 @@ import json
 from django.conf import settings
 
 from nexus.intelligences.models import Conversation
-from nexus.celery import celery_app
+from nexus.celery import app as celery_app
 from nexus.projects.models import Project
 from router.tasks.redis_task_manager import RedisTaskManager
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
