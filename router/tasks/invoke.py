@@ -271,6 +271,7 @@ def start_inline_agents(
         sentry_sdk.set_tag("preview_mode", preview)
         sentry_sdk.set_tag("project_uuid", message.get("project_uuid"))
         sentry_sdk.set_tag("task_id", self.request.id)
+        sentry_sdk.set_tag("contact_urn", message.get("contact_urn"))
 
         # Clean up Redis entries in case of error
         if task_manager:

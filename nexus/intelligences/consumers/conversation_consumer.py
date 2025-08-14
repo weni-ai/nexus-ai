@@ -25,7 +25,7 @@ class ConversationConsumer(EDAConsumer):
                 name=body.get("contact_name")
             )
 
-            # create_lambda_conversation.delay(window_conversation_dto.dict())
+            create_lambda_conversation.delay(window_conversation_dto.dict())
 
             message.channel.basic_ack(message.delivery_tag)
             print(f"[ ConversationConsumer ] - get conversation: {window_conversation_dto.contact_urn} {window_conversation_dto.start_date} - {window_conversation_dto.end_date}")

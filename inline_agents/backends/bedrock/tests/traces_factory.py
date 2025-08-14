@@ -3,6 +3,7 @@ import uuid
 import random
 from faker import Faker
 import pendulum
+import json
 
 faker = Faker()
 
@@ -117,6 +118,90 @@ class CustomEventTraceFactory(factory.Factory):
                                     }
                                 ]
                             }"""
+                        },
+                        "traceId": str(uuid.uuid4()),
+                        "type": "ACTION_GROUP"
+                    }
+                }
+            }
+        }
+
+
+class CSATEventTraceFactory(factory.Factory):
+    class Meta:
+        model = dict
+
+    csat_value = factory.Iterator(['1', '2', '3', '4', '5'])
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        return {
+            "collaboratorName": "csat_agent",
+            "eventTime": pendulum.now().to_iso8601_string(),
+            "sessionId": str(uuid.uuid4()),
+            "trace": {
+                "orchestrationTrace": {
+                    "observation": {
+                        "actionGroupInvocationOutput": {
+                            "metadata": {
+                                "clientRequestId": str(uuid.uuid4()),
+                                "endTime": pendulum.now().to_iso8601_string(),
+                                "startTime": pendulum.now().to_iso8601_string(),
+                                "totalTimeMs": random.randint(0, 10000)
+                            },
+                            "text": json.dumps({
+                                "events": [
+                                    {
+                                        "event_name": "weni_nexus_data",
+                                        "key": "weni_csat",
+                                        "value_type": "string",
+                                        "value": kwargs.get('csat_value', cls.csat_value),
+                                        "metadata": {}
+                                    }
+                                ]
+                            })
+                        },
+                        "traceId": str(uuid.uuid4()),
+                        "type": "ACTION_GROUP"
+                    }
+                }
+            }
+        }
+
+
+class NPSEventTraceFactory(factory.Factory):
+    class Meta:
+        model = dict
+
+    nps_value = factory.Iterator([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        return {
+            "collaboratorName": "nps_agent",
+            "eventTime": pendulum.now().to_iso8601_string(),
+            "sessionId": str(uuid.uuid4()),
+            "trace": {
+                "orchestrationTrace": {
+                    "observation": {
+                        "actionGroupInvocationOutput": {
+                            "metadata": {
+                                "clientRequestId": str(uuid.uuid4()),
+                                "endTime": pendulum.now().to_iso8601_string(),
+                                "startTime": pendulum.now().to_iso8601_string(),
+                                "totalTimeMs": random.randint(0, 10000)
+                            },
+                            "text": json.dumps({
+                                "events": [
+                                    {
+                                        "event_name": "weni_nexus_data",
+                                        "key": "weni_nps",
+                                        "value_type": "string",
+                                        "value": kwargs.get('nps_value', cls.nps_value),
+                                        "metadata": {}
+                                    }
+                                ]
+                            })
                         },
                         "traceId": str(uuid.uuid4()),
                         "type": "ACTION_GROUP"

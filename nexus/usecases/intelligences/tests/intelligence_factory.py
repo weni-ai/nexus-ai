@@ -192,6 +192,7 @@ class ConversationFactory(factory.django.DjangoModelFactory):
     start_date = factory.Faker('date_time_between', start_date='-30d', end_date='now', tzinfo=timezone.utc)
     end_date = factory.Faker('date_time_between', start_date='-1d', end_date='now', tzinfo=timezone.utc)
     has_chats_room = factory.Faker('boolean')
+    channel_uuid = factory.Faker('uuid4')
     csat = factory.Faker('random_element', elements=Conversation.CSAT_CHOICES)
     resolution = factory.Faker('random_element', elements=Conversation.RESOLUTION_CHOICES)
     topic = factory.SubFactory(TopicsFactory)
