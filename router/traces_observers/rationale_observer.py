@@ -223,7 +223,9 @@ class RationaleObserver(EventObserver):
                         contact_urn=contact_urn,
                         project_uuid=project_uuid,
                         session_id=session_id,
-                        send_message_callback=send_message_callback
+                        send_message_callback=send_message_callback,
+                        contact_name=contact_name,
+                        channel_uuid=channel_uuid
                     )
                     if message_external_id:
                         self.typing_usecase.send_typing_message(
