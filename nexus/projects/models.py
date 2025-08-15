@@ -51,6 +51,13 @@ class Project(BaseModel, SoftDeleteModel):
     use_prompt_creation_configurations = models.BooleanField(default=True)
     conversation_turns_to_include = models.IntegerField(default=10)
     exclude_previous_thinking_steps = models.BooleanField(default=True)
+    guardrail = models.ForeignKey(
+        "inline_agents.Guardrail",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='project',
+        blank=True,
+    )
 
     def __str__(self):
         return f'{self.uuid} - Project: {self.name} - Org: {self.org.name}'

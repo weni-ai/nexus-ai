@@ -60,36 +60,37 @@ def handle_product_items(text: str, product_items: list) -> str:
 
 
 def complexity_layer(input_text: str) -> str | None:
-    try:
-        payload = { "first_input": input_text }
-        response = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME).invoke(
-            FunctionName=settings.COMPLEXITY_LAYER_LAMBDA,
-            InvocationType="RequestResponse",
-            Payload=json.dumps(payload).encode("utf-8"),
-        )
-        
-        if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
-            payload = json.loads(response['Payload'].read().decode('utf-8'))
-            classification = payload.get("body").get("classification")
-            print(f"[DEBUG] Message: {input_text} - Classification: {classification}")
-            return classification
-        else:
-            error_msg = f"Lambda invocation failed with status code: {response['ResponseMetadata']['HTTPStatusCode']}"
+    if input_text:
+        try:
+            payload = { "first_input": input_text }
+            response = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME).invoke(
+                FunctionName=settings.COMPLEXITY_LAYER_LAMBDA,
+                InvocationType="RequestResponse",
+                Payload=json.dumps(payload).encode("utf-8"),
+            )
+            
+            if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
+                payload = json.loads(response['Payload'].read().decode('utf-8'))
+                classification = payload.get("body").get("classification")
+                print(f"[DEBUG] Message: {input_text} - Classification: {classification}")
+                return classification
+            else:
+                error_msg = f"Lambda invocation failed with status code: {response['ResponseMetadata']['HTTPStatusCode']}"
+                sentry_sdk.set_context("extra_data", {
+                    "input_text": input_text,
+                    "response": response,
+                    "status_code": response["ResponseMetadata"]["HTTPStatusCode"]
+                })
+                sentry_sdk.capture_message(error_msg, level="error")
+                raise Exception(error_msg)
+                
+        except Exception as e:
             sentry_sdk.set_context("extra_data", {
                 "input_text": input_text,
-                "response": response,
-                "status_code": response["ResponseMetadata"]["HTTPStatusCode"]
+                "response": response if 'response' in locals() else None,
             })
-            sentry_sdk.capture_message(error_msg, level="error")
-            raise Exception(error_msg)
-            
-    except Exception as e:
-        sentry_sdk.set_context("extra_data", {
-            "input_text": input_text,
-            "response": response if 'response' in locals() else None,
-        })
-        sentry_sdk.capture_exception(e)
-        return None
+            sentry_sdk.capture_exception(e)
+            return None
 
 
 @celery_app.task(
