@@ -55,7 +55,7 @@ class Project(BaseModel, SoftDeleteModel):
         "inline_agents.Guardrail",
         on_delete=models.SET_NULL,
         null=True,
-        related_name='guardrail',
+        related_name='project',
         blank=True,
     )
 
