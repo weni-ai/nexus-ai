@@ -94,7 +94,7 @@ class BedrockTeamAdapter(TeamAdapter):
             "inputText": input_text,
             "collaborators": self._get_collaborators(agents, llm_formatted_time),
             "collaboratorConfigurations": self._get_collaborator_configurations(agents),
-            "guardrailConfiguration": self._get_guardrails(),
+            "guardrailConfiguration": self._get_guardrails(project_uuid=project_uuid),
             "promptOverrideConfiguration": self.__get_prompt_override_configuration(
                 use_components=use_components,
                 prompt_override_configuration=supervisor["prompt_override_configuration"],
@@ -283,8 +283,12 @@ class BedrockTeamAdapter(TeamAdapter):
         return instruction
 
     @classmethod
-    def _get_guardrails(cls) -> list[dict]:
-        guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
+    def _get_guardrails(cls, project_uuid: str) -> list[dict]:
+        try:
+            guardrails = Guardrail.objects.get(project__uuid=project_uuid)
+        except Guardrail.DoesNotExist:
+            guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
+
         return {
             'guardrailIdentifier': guardrails.identifier,
             'guardrailVersion': str(guardrails.version)

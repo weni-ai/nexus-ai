@@ -12,12 +12,16 @@ from nexus.agents.exceptions import (
 )
 from nexus.projects.models import Project
 
+
 class Guardrail(models.Model):
     identifier = models.CharField(max_length=255)
     version = models.PositiveIntegerField()
     created_on = models.DateTimeField(auto_now_add=True)
     changelog = models.TextField()
     current_version = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.identifier} - {self.version}"
 
 
 class Agent(models.Model):
