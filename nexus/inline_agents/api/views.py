@@ -510,3 +510,31 @@ class MultiAgentView(APIView):
                 {"error": str(e)},
                 status=500
             )
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from inline_agents.backends import BackendsRegistry
+from router.entities import message_factory
+
+class AgentEndSessionView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def post(self, request, project_uuid):
+        contact_urn = request.data.get('contact_urn')
+        if not contact_urn:
+            return Response(
+                {"error": "contact_urn is required"},
+                status=400
+            )
+
+        message_obj = message_factory(
+            text="",
+            project_uuid=project_uuid,
+            contact_urn=contact_urn
+        )
+    
+        projects_use_case = ProjectsUseCase()
+        agents_backend = projects_use_case.get_agents_backend_by_project(project_uuid)
+        backend = BackendsRegistry.get_backend(agents_backend)
+        backend.end_session(message_obj.project_uuid, message_obj.sanitized_urn)
+        return Response({
+            "message": "Agent session ended successfully"
+        })

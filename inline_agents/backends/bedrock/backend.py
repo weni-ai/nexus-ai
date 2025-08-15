@@ -75,6 +75,8 @@ class BedrockBackend(InlineAgentsBackend):
         **kwargs,
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
+        if foundation_model:    
+            supervisor["foundation_model"] = foundation_model
 
         # Set dependencies
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
@@ -309,3 +311,24 @@ class BedrockBackend(InlineAgentsBackend):
         except Exception as e:
             logger.error(f"Error extracting rationale text: {str(e)}", exc_info=True)
             return None
+
+    def end_session(self, project_uuid: str, sanitized_urn: str):
+        supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
+        session_id = f"project-{project_uuid}-session-{sanitized_urn}"
+        session_id = slugify(session_id)
+        client = self._get_client()
+        response = client.invoke_inline_agent(
+            inputText="end session",
+            instruction=supervisor["instruction"],
+            foundationModel=supervisor["foundation_model"],
+            endSession=True,
+            sessionId=session_id
+        )
+
+        full_response = ""
+        for event in response["completion"]:
+            if 'chunk' in event:
+                chunk = event['chunk']['bytes'].decode()
+                full_response += chunk
+
+        return full_response
