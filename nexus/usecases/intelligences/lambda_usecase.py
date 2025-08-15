@@ -165,8 +165,14 @@ class LambdaUseCase():
 
         topic_uuid = event_data.get("metadata").get("topic_uuid")
 
-        topic = Topics.objects.get(uuid=topic_uuid)
-        return topic
+        # Only try to get the topic if topic_uuid is not empty
+        if topic_uuid and topic_uuid != "":
+            try:
+                topic = Topics.objects.get(uuid=topic_uuid)
+                return topic
+            except Topics.DoesNotExist:
+                return None
+        return None
 
     def _get_task_manager(self):
         if self.task_manager is None:
@@ -234,4 +240,3 @@ def create_lambda_conversation(
         project_uuid=payload.get("project_uuid"),
         contact_urn=payload.get("contact_urn")
     )
-
