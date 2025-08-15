@@ -197,7 +197,7 @@ def create_lambda_conversation(
             project=project,
             contact_urn=payload.get("contact_urn"),
             start_date__gte=payload.get("start_date"),
-            end_date__lte=payload.get("end_date"),
+            start_date__lte=payload.get("end_date"),
             channel_uuid=payload.get("channel_uuid")
         )
     except Conversation.DoesNotExist:
@@ -234,3 +234,4 @@ def create_lambda_conversation(
         project_uuid=payload.get("project_uuid"),
         contact_urn=payload.get("contact_urn")
     )
+
