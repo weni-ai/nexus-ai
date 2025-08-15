@@ -223,7 +223,7 @@ def start_inline_agents(
             exclude_previous_thinking_steps=project.exclude_previous_thinking_steps,
             project=project,
             content_base=content_base,
-            foudation_model=foundation_model,
+            foundation_model=foundation_model,
         )
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)

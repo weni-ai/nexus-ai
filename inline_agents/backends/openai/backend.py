@@ -63,6 +63,10 @@ class OpenAIBackend(InlineAgentsBackend):
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         return RedisSession(session_id=session_id, r=redis_client), session_id
+    
+    def end_session(self, project_uuid: str, sanitized_urn: str):
+        session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
+        session.clear_session()
 
     def invoke_agents(self,
         team: list[dict],
