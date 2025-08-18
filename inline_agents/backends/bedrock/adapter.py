@@ -472,8 +472,8 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         collaborator_name: str = "",
         preview: bool = False
     ):
-        from nexus.intelligences.models import Conversation
         from nexus.inline_agents.models import IntegratedAgent
+        from nexus.usecases.inline_agents.update import update_conversation_data
         if preview:
             return None
 
@@ -502,14 +502,22 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                     }
                 if event_to_send.get("key") == "weni_csat":
                     event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
-                    conversation = Conversation.objects.get(project__uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid)
-                    conversation.csat = event_to_send.get("value")
-                    conversation.save()
+                    to_update = {'csat': event_to_send.get("value")}
+                    update_conversation_data(
+                        to_update=to_update,
+                        project_uuid=project_uuid,
+                        contact_urn=contact_urn,
+                        channel_uuid=channel_uuid
+                    )
                 if event_to_send.get("key") == "weni_nps":
                     event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_NPS
-                    conversation = Conversation.objects.get(project__uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid)
-                    conversation.nps = event_to_send.get("value")
-                    conversation.save()
+                    to_update = {'nps': event_to_send.get("value")}
+                    update_conversation_data(
+                        to_update=to_update,
+                        project_uuid=project_uuid,
+                        contact_urn=contact_urn,
+                        channel_uuid=channel_uuid
+                    )
 
                 self.to_data_lake_custom_event(
                     event_data=event_to_send,
