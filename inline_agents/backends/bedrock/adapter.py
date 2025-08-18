@@ -474,8 +474,8 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
     ):
         from nexus.intelligences.models import Conversation
         from nexus.inline_agents.models import IntegratedAgent
-        if preview:
-            return None
+        # if preview:
+        #     return None
 
         orchestration_trace = inline_trace.get("trace", {}).get("orchestrationTrace", {})
 
@@ -491,6 +491,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             else:
                 event_data = []
             for event_to_send in event_data:
+                print(f"[ + DEBUG event_to_send + ] event_to_send base: {event_to_send}")
                 if "metadata" not in event_to_send or event_to_send.get("metadata") is None:
                     team_agent = IntegratedAgent.objects.get(
                         agent__slug=collaborator_name,
@@ -510,6 +511,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                     conversation = Conversation.objects.get(project__uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid)
                     conversation.nps = event_to_send.get("value")
                     conversation.save()
+                print(f"[ + DEBUG event_to_send + ] event_to_send final: {event_to_send}")
 
                 self.to_data_lake_custom_event(
                     event_data=event_to_send,
