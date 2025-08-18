@@ -168,6 +168,7 @@ class BedrockBackend(InlineAgentsBackend):
             if 'trace' in event:
                 # Store the trace event for potential use
                 trace_data = event['trace']
+                collaborator_name = event.get("collaboratorName", "")
                 trace_events.append(trace_data)
 
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
@@ -177,7 +178,8 @@ class BedrockBackend(InlineAgentsBackend):
                     project_uuid=project_uuid,
                     contact_urn=contact_urn,
                     channel_uuid=channel_uuid,
-                    preview=preview
+                    preview=preview,
+                    collaborator_name=collaborator_name
                 )
 
                 self._data_lake_event_adapter.to_data_lake_event(
