@@ -30,19 +30,30 @@ class Supervisor(Agent):
     ):
 
         tools.extend(self.function_tools())
+        if model in settings.MODELS_WITH_REASONING:
+            super().__init__(
+                name=name,
+                instructions=instructions,
+                model=model,
+                tools=tools,
+                hooks=hooks,
+                model_settings=ModelSettings(
+                    reasoning=Reasoning(
+                        effort="medium",
+                        summary="auto"
+                    ),
+                )
+            )
+            return
+
         super().__init__(
             name=name,
             instructions=instructions,
             model=model,
             tools=tools,
             hooks=hooks,
-            model_settings=ModelSettings(
-                reasoning=Reasoning(
-                    effort="medium",
-                    summary="auto"
-                ),
-            )
         )
+        return
 
     @function_tool
     def knowledge_base_bedrock(wrapper: RunContextWrapper[Context], question: str) -> str:
