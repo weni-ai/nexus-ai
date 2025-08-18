@@ -474,8 +474,8 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
     ):
         from nexus.inline_agents.models import IntegratedAgent
         from nexus.usecases.inline_agents.update import update_conversation_data
-        # if preview:
-        #     return None
+        if preview:
+            return None
 
         orchestration_trace = inline_trace.get("trace", {}).get("orchestrationTrace", {})
 

@@ -129,17 +129,19 @@ def update_conversation_data(
     channel_uuid: str
 ):
     from nexus.intelligences.models import Conversation
-
+    print(f"Starting update_conversation_data")
     if project_uuid not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
         return
-
+    print(f"To update: {to_update}")
     conversation = Conversation.objects.filter(
         project__uuid=project_uuid,
         contact_urn=contact_urn,
         channel_uuid=channel_uuid
     ).order_by("-created_at").first()
+    print(f"Conversation: {conversation}")
     if not conversation:
         return
     for field, value in to_update.items():
         setattr(conversation, field, value)
     conversation.save()
+    print(f"Conversation saved")
