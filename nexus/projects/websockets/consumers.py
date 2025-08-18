@@ -177,3 +177,20 @@ def send_preview_message_to_websocket(project_uuid, message_data, user_email):
             "message_type": "preview",
         }
     )
+
+
+async def send_preview_message_to_websocket_async(project_uuid, message_data, user_email):
+    """
+    Async version of send_preview_message_to_websocket
+    """
+    channel_layer = get_channel_layer()
+    room_name = f"preview_{project_uuid}_{sanitize_user_email(user_email)}"
+
+    await channel_layer.group_send(
+        room_name,
+        {
+            "type": "preview_message",
+            "message": message_data,
+            "message_type": "preview",
+        }
+    )

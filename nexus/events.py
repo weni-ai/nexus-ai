@@ -1,4 +1,4 @@
-from nexus.event_domain.event_manager import EventManager
+from nexus.event_domain.event_manager import EventManager, AsyncEventManager
 
 from nexus.intelligences.observer import (
     IntelligenceCreateObserver,
@@ -19,12 +19,13 @@ from nexus.actions.observers import ActionsObserver
 from nexus.projects.observer import ProjectObserver
 
 from router.traces_observers.rationale_observer import RationaleObserver
-from router.traces_observers.summary import SummaryTracesObserver
+from router.traces_observers.summary import SummaryTracesObserver, AsyncSummaryTracesObserver
 from router.traces_observers.save_traces import SaveTracesObserver
 
 
 # TODO: Refactor to use a registration function to register observers and decorators to fix circular imports.
 event_manager = EventManager()
+async_event_manager = AsyncEventManager()
 
 event_manager.subscribe(
     event="intelligence_create_activity",
@@ -103,5 +104,12 @@ event_manager.subscribe(
     event="save_inline_trace_events",
     observer=[
         SaveTracesObserver()
+    ]
+)
+
+async_event_manager.subscribe(
+    event="inline_trace_observers_async",
+    observer=[
+        AsyncSummaryTracesObserver()
     ]
 )
