@@ -196,8 +196,8 @@ def create_lambda_conversation(
         conversation_queryset = Conversation.objects.filter(
             project=project,
             contact_urn=payload.get("contact_urn"),
-            start_date__gte=payload.get("start"),
-            end_date__lte=payload.get("end"),
+            start_date__gte=payload.get("start_date"),
+            start_date__lte=payload.get("end_date"),
             channel_uuid=payload.get("channel_uuid")
         )
     except Conversation.DoesNotExist:
@@ -218,10 +218,10 @@ def create_lambda_conversation(
     )
 
     update_data = {
-        "start_date": payload.get("start"),
-        "end_date": payload.get("end"),
+        "start_date": payload.get("start_date"),
+        "end_date": payload.get("end_date"),
         "has_chats_room": payload.get("has_chats_room"),
-        "contact_name": payload.get("contact_name"),
+        "contact_name": payload.get("name"),
         "contact_urn": payload.get("contact_urn"),
         "external_id": payload.get("external_id"),
         "resolution": resolution,
@@ -234,3 +234,4 @@ def create_lambda_conversation(
         project_uuid=payload.get("project_uuid"),
         contact_urn=payload.get("contact_urn")
     )
+

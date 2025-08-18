@@ -68,12 +68,11 @@ class OpenAITeamAdapter(TeamAdapter):
         for agent in agents:
             openai_agent = Agent[Context](
                 name=agent.get("agentName"),
-                instructions=agent.get("instructions"),
+                instructions=agent.get("instruction"),
                 tools=cls._get_tools(agent["actionGroups"]),
                 model=settings.OPENAI_AGENTS_FOUNDATION_MODEL,
                 hooks=hooks
             )
-            
             agents_as_tools.append(
                 openai_agent.as_tool(
                     tool_name=agent.get("agentName"),
@@ -81,10 +80,13 @@ class OpenAITeamAdapter(TeamAdapter):
                 )
             )
 
+        supervisor_tools = cls._get_tools(supervisor["tools"])
+        supervisor_tools.extend(agents_as_tools)
+
         supervisor_agent = SupervisorAgent(
             name="Supervisor Agent",
             instructions=instruction,
-            tools=agents_as_tools,
+            tools=supervisor_tools,
             hooks=hooks,
             model=supervisor["foundation_model"],
             prompt_override_configuration=supervisor.get("prompt_override_configuration", {})
@@ -181,7 +183,14 @@ class OpenAITeamAdapter(TeamAdapter):
             payload_json = {
                 "parameters": parameters,
                 "sessionAttributes": session_attributes,
-                "promptSessionAttributes": {"alwaysFormat": "<example>{'msg': {'text': 'Hello, how can I help you today?'}}</example>"}
+                "promptSessionAttributes": {"alwaysFormat": "<example>{'msg': {'text': 'Hello, how can I help you today?'}}</example>"},
+                "agent": {
+                    "name": "INLINE_AGENT",
+                    "version": "INLINE_AGENT",
+                    "id": "INLINE_AGENT",
+                },
+                "actionGroup": function_name,
+                "function": function_arn,
             }
 
             payload_json = json.dumps(payload_json)
@@ -192,6 +201,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 Payload=payload_json
             )
             lambda_result = response['Payload'].read().decode('utf-8')
+            result = json.loads(lambda_result)
 
             if 'FunctionError' in response:
                 error_details = json.loads(lambda_result)
@@ -200,7 +210,7 @@ class OpenAITeamAdapter(TeamAdapter):
                     "error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"
                 })
 
-            return lambda_result
+            return result["response"]["functionResponse"]["responseBody"]["TEXT"]["body"]
         except Exception as e:
             print(f"Error on lambda '{function_name}': {e}")
             return json.dumps({"error": f"Error on lambda: {str(e)}"})
