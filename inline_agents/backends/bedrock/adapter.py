@@ -469,9 +469,11 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         project_uuid: str,
         contact_urn: str,
         channel_uuid: str,
+        collaborator_name: str = "",
         preview: bool = False
     ):
         from nexus.intelligences.models import Conversation
+        from nexus.inline_agents.models import IntegratedAgent
         if preview:
             return None
 
@@ -489,8 +491,15 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             else:
                 event_data = []
             for event_to_send in event_data:
-                if "metadata" not in event_to_send:
-                    event_to_send["metadata"] = {}
+                if "metadata" not in event_to_send or event_to_send.get("metadata") is None:
+                    team_agent = IntegratedAgent.objects.get(
+                        agent__slug=collaborator_name,
+                        project__uuid=project_uuid
+                    )
+                    agent_uuid = team_agent.agent.uuid
+                    event_to_send["metadata"] = {
+                        "agent_uuid": agent_uuid
+                    }
                 if event_to_send.get("key") == "weni_csat":
                     event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
                     conversation = Conversation.objects.get(project__uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid)
