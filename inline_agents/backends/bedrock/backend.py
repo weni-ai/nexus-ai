@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 import boto3
 import pendulum
@@ -149,6 +149,7 @@ class BedrockBackend(InlineAgentsBackend):
         completion = response["completion"]
         full_response = ""
         trace_events = []
+        rationale_traces = []
 
         for event in completion:
             if 'chunk' in event:
@@ -166,6 +167,10 @@ class BedrockBackend(InlineAgentsBackend):
                             "session_id": session_id
                         }
                     )
+
+                print("------------------------------------------")
+                print("Chunk: ", event)
+                print("------------------------------------------")
 
             if 'trace' in event:
                 # Store the trace event for potential use
@@ -188,6 +193,9 @@ class BedrockBackend(InlineAgentsBackend):
                     contact_urn=contact_urn,
                     preview=preview
                 )
+
+                if "rationale" in orchestration_trace:
+                    rationale_traces.append(trace_data)
 
                 if "rationale" in orchestration_trace and msg_external_id and not preview:
                     typing_usecase.send_typing_message(
@@ -253,14 +261,10 @@ class BedrockBackend(InlineAgentsBackend):
                 }
             )
 
-        rationale_text = self._extract_rationale_text(trace_events)
+        rationale_texts = self._extract_rationale_text(rationale_traces)
         full_response = self._handle_rationale_in_response(
-            rationale_text=rationale_text,
+            rationale_texts=rationale_texts,
             full_response=full_response,
-            session_id=session_id,
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            rationale_switch=rationale_switch
         )
 
         if "rationale" in orchestration_trace and msg_external_id and not preview:
@@ -273,44 +277,30 @@ class BedrockBackend(InlineAgentsBackend):
 
         return full_response
 
-    def _handle_rationale_in_response(self, rationale_text: Optional[str], full_response: str, session_id: str, project_uuid: str, contact_urn: str, rationale_switch: bool) -> str:
+    def _handle_rationale_in_response(self, rationale_texts: Optional[List[str]], full_response: str) -> str:
         if not full_response:
             return ""
 
-        if rationale_text and rationale_text in full_response:
-            full_response = full_response.replace(rationale_text, "").strip()
-
-            try:
-                sentry_sdk.set_extra("rationale_text", rationale_text)
-                sentry_sdk.set_extra("session_id", session_id)
-                sentry_sdk.set_extra("project_uuid", project_uuid)
-                sentry_sdk.set_extra("contact_urn", contact_urn)
-                sentry_sdk.set_extra("rationale_switch", rationale_switch)
-                sentry_sdk.set_extra("datetime", pendulum.now().isoformat())
-
-                sentry_sdk.capture_message(
-                    f"Rationale text found in response: {rationale_text}",
-                    level="info"
-                )
-
-            except Exception as e:
-                logger.error(f"Error sending rationale text to Sentry: {str(e)}: Full response: {full_response}", exc_info=True)
+        for rationale_text in rationale_texts:
+            if rationale_text in full_response:
+                full_response = full_response.replace(rationale_text, "").strip()
 
         return full_response
 
-    def _extract_rationale_text(self, inline_traces: Dict) -> Optional[str]:
+    def _extract_rationale_text(self, rationale_traces: List[Dict]) -> Optional[List[str]]:
+        rationale_texts = []
         try:
-            trace_data = inline_traces
-            if 'trace' in trace_data:
-                inner_trace = trace_data['trace']
-                if 'orchestrationTrace' in inner_trace:
-                    orchestration = inner_trace['orchestrationTrace']
-                    if 'rationale' in orchestration:
-                        return orchestration['rationale'].get('text')
-            return None
+            for trace_data in rationale_traces:
+                if 'trace' in trace_data:
+                    inner_trace = trace_data['trace']
+                    if 'orchestrationTrace' in inner_trace:
+                        orchestration = inner_trace['orchestrationTrace']
+                        if 'rationale' in orchestration:
+                            rationale_texts.append(orchestration['rationale'].get('text'))
+            return rationale_texts
         except Exception as e:
             logger.error(f"Error extracting rationale text: {str(e)}", exc_info=True)
-            return None
+            return []
 
     def end_session(self, project_uuid: str, sanitized_urn: str):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
