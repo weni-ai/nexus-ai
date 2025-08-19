@@ -120,3 +120,26 @@ class UpdateConversationUseCase():
         conversation_message.message.set(messages)
 
         return conversation
+
+
+def update_conversation_data(
+    to_update: dict,
+    project_uuid: str,
+    contact_urn: str,
+    channel_uuid: str
+):
+    from nexus.intelligences.models import Conversation
+
+    if project_uuid not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
+        return
+
+    conversation = Conversation.objects.filter(
+        project__uuid=project_uuid,
+        contact_urn=contact_urn,
+        channel_uuid=channel_uuid
+    ).order_by("-created_at").first()
+    if not conversation:
+        return
+    for field, value in to_update.items():
+        setattr(conversation, field, value)
+    conversation.save()
