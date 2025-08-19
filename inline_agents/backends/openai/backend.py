@@ -26,7 +26,6 @@ import pendulum
 
 @dataclass
 class StreamEventCapture:
-    """Classe para capturar e armazenar stream events"""
     timestamp: str
     event_type: str
     event_data: Dict[str, Any]
@@ -34,16 +33,12 @@ class StreamEventCapture:
 
 
 class StreamEventLogger:
-    """Classe para capturar e armazenar stream events em JSON"""
-
     def __init__(self, output_file: str = "stream_events.json"):
         self.output_file = output_file
         self.events: List[StreamEventCapture] = []
 
     def convert_event(self, event, agent_name: str = ""):
-        """Adiciona um evento à lista"""
         try:
-            # Converter evento para dict
             event_data = {}
 
             if hasattr(event, 'type'):
@@ -70,10 +65,9 @@ class StreamEventLogger:
             return captured_event
 
         except Exception as e:
-            print(f"❌ Erro ao capturar evento: {e}")
+            print(f"❌ Error capturing event: {e}")
 
     def _serialize_data(self, data) -> Any:
-        """Serializa dados para JSON"""
         try:
             if hasattr(data, '__dict__'):
                 return {k: self._serialize_data(v) for k, v in data.__dict__.items()}
@@ -87,30 +81,26 @@ class StreamEventLogger:
             return str(data)
 
     def save_to_json(self, directory:str = 'events') -> str:
-        """Salva todos os eventos em arquivo JSON em uma pasta"""
         try:
             events_data = []
             for event in self.events:
                 events_data.append(asdict(event))
 
-            # Cria o diretório 'events' se não existir
             os.makedirs(directory, exist_ok=True)
             
-            # Adiciona o caminho da pasta ao nome do arquivo
             output_path = os.path.join(directory, os.path.basename(self.output_file))
 
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(events_data, f, indent=2, ensure_ascii=False)
 
-            print(f"✅ Eventos salvos em: {output_path}")
+            print(f"✅ Events saved at: {output_path}")
             return output_path
 
         except Exception as e:
-            print(f"❌ Erro ao salvar eventos: {e}")
+            print(f"❌ Error saving events: {e}")
             return ""
 
     def get_events_summary(self) -> Dict[str, Any]:
-        """Retorna um resumo dos eventos capturados"""
         event_types = {}
         for event in self.events:
             event_type = event.event_type
