@@ -179,6 +179,15 @@ class LambdaUseCase():
             self.task_manager = RedisTaskManager()
         return self.task_manager
 
+    def _convert_resolution_to_choice_value(self, resolution_string: str) -> str:
+
+        resolution_mapping = {
+            "resolved": "0",
+            "unresolved": "1",
+            "in progress": "2"
+        }
+        return resolution_mapping.get(resolution_string.lower(), "2")  # Default to "2" (In Progress)
+
 
 @celery_app.task
 def create_lambda_conversation(
@@ -223,6 +232,8 @@ def create_lambda_conversation(
         contact_urn=payload.get("contact_urn")
     )
 
+    resolution_choice_value = lambda_usecase._convert_resolution_to_choice_value(resolution)
+
     update_data = {
         "start_date": payload.get("start_date"),
         "end_date": payload.get("end_date"),
@@ -230,7 +241,7 @@ def create_lambda_conversation(
         "contact_name": payload.get("name"),
         "contact_urn": payload.get("contact_urn"),
         "external_id": payload.get("external_id"),
-        "resolution": resolution,
+        "resolution": resolution_choice_value,
         "topic": topic
     }
 

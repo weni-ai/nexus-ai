@@ -259,6 +259,8 @@ def start_inline_agents(
         sentry_sdk.set_context("message", {
             "project_uuid": message.get("project_uuid"),
             "contact_urn": message.get("contact_urn"),
+            "channel_uuid": message.get("channel_uuid"),
+            "contact_name": message.get("contact_name"),
             "text": message.get("text", ""),
             "preview": preview,
             "language": language,
