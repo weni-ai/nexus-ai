@@ -77,11 +77,7 @@ def save_inline_trace_events(
         filename = f"{message.uuid}.jsonl"
         key = f"inline_traces/{project_uuid}/{filename}"
 
-        with open(filename, 'w') as f:
-            print(f"Saving trace events to {key}")
-            f.write(data)
-
-        # upload_traces_to_s3(data, key)
+        upload_traces_to_s3(data, key)
 
     except Exception as e:
         print(f"Error saving inline trace events: {e}")
