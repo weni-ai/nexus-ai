@@ -281,9 +281,10 @@ class BedrockBackend(InlineAgentsBackend):
         if not full_response:
             return ""
 
-        for rationale_text in rationale_texts:
-            if rationale_text in full_response:
-                full_response = full_response.replace(rationale_text, "").strip()
+        if rationale_texts:
+            for rationale_text in rationale_texts:
+                if rationale_text in full_response:
+                    full_response = full_response.replace(rationale_text, "").strip()
 
         return full_response
 
