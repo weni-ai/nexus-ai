@@ -1,31 +1,31 @@
 import json
 
-from django.db.models import Q
 from django.conf import settings
-
-from rest_framework.views import APIView
+from django.db.models import Q
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, BasePermission
+from rest_framework.views import APIView
 
+from inline_agents.backends import BackendsRegistry
+from nexus.inline_agents.api.serializers import (
+    AgentSerializer,
+    IntegratedAgentSerializer,
+    ProjectCredentialsListSerializer,
+)
 from nexus.inline_agents.models import Agent
-from nexus.usecases.agents.exceptions import SkillFileTooLarge
-from nexus.usecases.inline_agents.create import CreateAgentUseCase
-from nexus.usecases.inline_agents.update import UpdateAgentUseCase
-
+from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.models import Project
+from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
+from nexus.usecases.inline_agents.create import CreateAgentUseCase
 from nexus.usecases.inline_agents.get import (
     GetInlineAgentsUsecase,
     GetInlineCredentialsUsecase,
-    GetLogGroupUsecase
+    GetLogGroupUsecase,
 )
-
-from nexus.inline_agents.api.serializers import (
-    IntegratedAgentSerializer,
-    AgentSerializer,
-    ProjectCredentialsListSerializer
-)
-from nexus.projects.api.permissions import ProjectPermission
+from nexus.usecases.inline_agents.update import UpdateAgentUseCase
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from router.entities import message_factory
 
 SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
 
@@ -510,9 +510,7 @@ class MultiAgentView(APIView):
                 {"error": str(e)},
                 status=500
             )
-from nexus.usecases.projects.projects_use_case import ProjectsUseCase
-from inline_agents.backends import BackendsRegistry
-from router.entities import message_factory
+
 
 class AgentEndSessionView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]

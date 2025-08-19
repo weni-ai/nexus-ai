@@ -66,8 +66,11 @@ class OpenAITeamAdapter(TeamAdapter):
         )
 
         for agent in agents:
+            agent_name = agent.get("agentName")
+            if not "_agent" in agent_name:
+                agent_name = f"{agent_name}_agent"
             openai_agent = Agent[Context](
-                name=agent.get("agentName"),
+                name=agent_name,
                 instructions=agent.get("instruction"),
                 tools=cls._get_tools(agent["actionGroups"]),
                 model=settings.OPENAI_AGENTS_FOUNDATION_MODEL,
@@ -349,3 +352,58 @@ class OpenAITeamAdapter(TeamAdapter):
             "{{CONTENT_BASE_UUID}}", content_base_uuid
         )
         return instruction
+
+
+def create_standardized_event(agent_name, type, tool_name="", original_trace=None):
+    return {
+        "type": "trace_update",
+        "trace": {
+            "config": {
+                "agentName": agent_name,
+                "toolName": tool_name,
+                "type": type,
+            },
+            "trace": original_trace if original_trace is not None else {}
+        }
+    }
+
+
+def process_openai_trace(event):
+    standardized_event = {}
+
+    event_type = event.get("event_type")
+
+    if event_type != "run_item_stream_event":
+        return []
+
+    agent_name = event.get("agent_name", "Unknown")
+    item = event.get("event_data", {}).get("item", {})
+    item_type = item.get("type")
+
+    simplified_event_data = {
+        "type": event["event_data"]["type"],
+        "item": { "type": item_type }
+    }
+    original_trace = {
+        "timestamp": event["timestamp"],
+        "event_type": event["event_type"],
+        "event_data": simplified_event_data,
+        "agent_name": agent_name
+    }
+
+    if item_type == "reasoning_item":
+        standardized_event = create_standardized_event(agent_name, "thinking", original_trace=original_trace)
+    elif item_type == "tool_call_item":
+        tool_name = item.get("raw_item", {}).get("name", "")
+
+        event_class = "delegating_to_agent" if "agent" in tool_name else "executing_tool"
+        original_trace["event_data"]["item"]["raw_item"] = {"arguments": item["raw_item"]["arguments"], "name": tool_name, "type": item["raw_item"]["type"]}
+        standardized_event = create_standardized_event(tool_name, event_class, tool_name, original_trace)
+    elif item_type == "tool_call_output_item":
+        original_trace["event_data"]["item"]["output"] = item["output"]
+        standardized_event = create_standardized_event(agent_name, "tool_result_received", "", original_trace)
+    elif item_type == "message_output_item":
+        original_trace["event_data"]["item"]["raw_item"] = {"content": item["raw_item"]["content"], "role": item["raw_item"]["role"], "status": item["raw_item"]["status"], "type": item["raw_item"]["type"]}
+        standardized_event = create_standardized_event(agent_name, "sending_response", original_trace=original_trace)
+        
+    return standardized_event

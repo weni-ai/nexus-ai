@@ -146,3 +146,51 @@ class SummaryTracesObserver(EventObserver):
         except Exception as e:
             logging.error(f"Error getting trace summary: {str(e)}")
             return "Processing your request now"
+
+
+class AsyncSummaryTracesObserver(EventObserver):
+    """
+    Async version of SummaryTracesObserver for async contexts.
+    """
+    async def perform(
+        self,
+        language="en",
+        event_content=None,
+        inline_traces=None,
+        preview=False,
+        project_uuid=None,
+        user_email=None,
+        session_id=None,
+        **kwargs
+    ):
+        # TODO: Fix circular import
+        from nexus.projects.websockets.consumers import send_preview_message_to_websocket_async
+
+        if not preview:
+            return
+
+        try:
+            trace_data = inline_traces if inline_traces is not None else event_content
+
+            if not trace_data:
+                logging.warning("No trace data provided to AsyncSummaryTracesObserver")
+                return
+
+            trace_data_str = json.dumps(trace_data, default=str)
+            trace_data_str = json.loads(trace_data_str)
+            trace_data_str.pop("callerChain", None)
+
+            if user_email and project_uuid and session_id:
+                await send_preview_message_to_websocket_async(
+                    project_uuid=str(project_uuid),
+                    user_email=user_email,
+                    message_data={
+                        "type": "trace_update",
+                        "trace": trace_data_str,
+                        "session_id": session_id
+                    }
+                )
+
+        except Exception as e:
+            logging.error(f"Error getting trace summary: {str(e)}")
+            return "Processing your request now"
