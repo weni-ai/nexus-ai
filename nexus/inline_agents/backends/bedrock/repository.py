@@ -1,12 +1,13 @@
 from nexus.inline_agents.backends import Supervisor
-
+from django.conf import settings
 
 class BedrockSupervisorRepository():
 
     @classmethod
     def get_supervisor(
         cls,
-        project_uuid: str
+        project_uuid: str,
+        foundation_model: str = None,
     ) -> dict:
         from nexus.projects.models import Project
 
@@ -20,7 +21,7 @@ class BedrockSupervisorRepository():
             "prompt_override_configuration": supervisor.prompt_override_configuration,
             "instruction": cls._get_supervisor_instructions(project=project, supervisor=supervisor),
             "action_groups": cls._get_action_groups(project=project, supervisor=supervisor),
-            "foundation_model": cls.get_foundation_model(project_uuid=project_uuid, supervisor=supervisor),
+            "foundation_model": cls.get_foundation_model(project=project, supervisor=supervisor, foundation_model=foundation_model),
             "knowledge_bases": supervisor.knowledge_bases,
             "agent_collaboration": cls._get_agent_collaboration(project=project),
         }
@@ -28,15 +29,19 @@ class BedrockSupervisorRepository():
         return supervisor_dict
 
     @classmethod
-    def get_foundation_model(cls, project_uuid: str, supervisor: Supervisor) -> str:
-        from nexus.projects.models import Project
+    def get_foundation_model(cls, project, supervisor: Supervisor, foundation_model: str = None) -> str:
+        if foundation_model in settings.LOCKED_FOUNDATION_MODELS:
+            return foundation_model
 
-        project = Project.objects.get(uuid=project_uuid)
-        supervisor_default_model = supervisor.foundation_model
         custom_project_model = project.default_supervisor_foundation_model
-
         if custom_project_model:
             return custom_project_model
+
+
+        supervisor_default_model = supervisor.foundation_model
+
+        if foundation_model:
+            supervisor_default_model = foundation_model
 
         return supervisor_default_model
 
