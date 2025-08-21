@@ -188,6 +188,24 @@ class LambdaUseCase():
         }
         return resolution_mapping.get(resolution_string.lower(), "2")  # Default to "2" (In Progress)
 
+    def lambda_component_parser(
+        self,
+        final_response: str,
+        use_components: bool
+    ):
+        if not use_components:
+            return final_response
+
+        prompt_type = "POST_PROCESSING"
+        data = {
+            "invokeModelRawResponse": f"<final_response>{final_response}</final_response>",
+            "promptType": prompt_type,
+        }
+        response = self.invoke_lambda(
+            lambda_name=str(settings.COMPONENT_PARSER_NAME),
+            payload=data
+        )
+        return response
 
 @celery_app.task
 def create_lambda_conversation(
