@@ -202,7 +202,7 @@ class LambdaUseCase():
             "promptType": prompt_type,
         }
         response = self.invoke_lambda(
-            lambda_name=str(settings.COMPONENT_PARSER_NAME),
+            lambda_name=str(settings.AWS_COMPONENTS_FUNCTION_ARN),
             payload=data
         )
         return response
