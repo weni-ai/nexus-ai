@@ -24,6 +24,7 @@ import json
 from typing import List
 import pendulum
 
+
 @dataclass
 class StreamEventCapture:
     timestamp: str
@@ -80,14 +81,14 @@ class StreamEventLogger:
         except:
             return str(data)
 
-    def save_to_json(self, directory:str = 'events') -> str:
+    def save_to_json(self, directory: str = 'events') -> str:
         try:
             events_data = []
             for event in self.events:
                 events_data.append(asdict(event))
 
             os.makedirs(directory, exist_ok=True)
-            
+
             output_path = os.path.join(directory, os.path.basename(self.output_file))
 
             with open(output_path, 'w', encoding='utf-8') as f:
@@ -129,14 +130,14 @@ class OpenAISupervisorRepository:
 
         supervisor_dict = {
             "instruction": cls._get_supervisor_instructions(project=project, supervisor=supervisor),
-            "tools": supervisor.action_groups,
+            "tools": cls._get_supervisor_tools(project=project, supervisor=supervisor),
             "foundation_model": supervisor.foundation_model,
             "knowledge_bases": supervisor.knowledge_bases,
             "prompt_override_configuration": supervisor.prompt_override_configuration,
         }
 
         return supervisor_dict
-    
+
     @classmethod
     def _get_supervisor_instructions(cls, project, supervisor) -> str:
         if project.use_components and project.human_support:
@@ -147,6 +148,12 @@ class OpenAISupervisorRepository:
             return supervisor.human_support_prompt
         else:
             return supervisor.instruction
+
+    @classmethod
+    def _get_supervisor_tools(cls, project, supervisor) -> list[dict]:
+        if project.human_support:
+            return supervisor.human_support_action_groups
+        return supervisor.action_groups
 
 
 class OpenAIBackend(InlineAgentsBackend):
@@ -165,18 +172,19 @@ class OpenAIBackend(InlineAgentsBackend):
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         return RedisSession(session_id=session_id, r=redis_client), session_id
-    
+
     def end_session(self, project_uuid: str, sanitized_urn: str):
         session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
         session.clear_session()
-    
+
     def _get_event_manager_notify(self):
         if self._event_manager_notify is None:
             from nexus.events import async_event_manager
             self._event_manager_notify = async_event_manager.notify
         return self._event_manager_notify
 
-    def invoke_agents(self,
+    def invoke_agents(
+        self,
         team: list[dict],
         input_text: str,
         project_uuid: str,
@@ -257,9 +265,9 @@ class OpenAIBackend(InlineAgentsBackend):
         event_logger = StreamEventLogger(f"{session_id}{pendulum.now()}.json")
 
         full_response = ""
-            
+
         result = client.run_streamed(**external_team, session=session)
-        
+
         async for event in result.stream_events():
             if event.type == "raw_response_event":
                 if hasattr(event.data, 'delta'):
@@ -293,4 +301,3 @@ class OpenAIBackend(InlineAgentsBackend):
                 standardized_event = process_openai_trace(asdict(converted_event))
 
         return result.final_output
-            
