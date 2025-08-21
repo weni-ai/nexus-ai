@@ -192,7 +192,7 @@ class LambdaUseCase():
         self,
         final_response: str,
         use_components: bool
-    ):
+    ) -> str:
         if not use_components:
             return final_response
 
@@ -205,6 +205,9 @@ class LambdaUseCase():
             lambda_name=str(settings.AWS_COMPONENTS_FUNCTION_ARN),
             payload=data
         )
+        response = json.loads(response.get("Payload").read())
+        response = response.get("body")
+        response = response.get("result")
         return response
 
 @celery_app.task
