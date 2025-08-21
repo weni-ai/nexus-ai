@@ -85,7 +85,7 @@ class LambdaUseCase():
             "conversation": lambda_conversation
         }
         conversation_resolution = self.invoke_lambda(
-            lambda_name=str(settings.CONVERSATION_RESOLUTION_NAME),
+            lambda_name=str(settings.AWS_COMPONENTS_FUNCTION_ARN),
             payload=payload_conversation
         )
         conversation_resolution_response = json.loads(conversation_resolution.get("Payload").read()).get("body")
