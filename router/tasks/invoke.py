@@ -9,7 +9,6 @@ import sentry_sdk
 from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
 from nexus.inline_agents.team.repository import ORMTeamRepository
-from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
@@ -24,6 +23,7 @@ from .actions_client import get_action_clients
 from nexus.usecases.intelligences.get_by_uuid import (
     get_project_and_content_base_data,
 )
+
 
 def get_task_manager() -> RedisTaskManager:
     """Get the default task manager instance."""
@@ -68,7 +68,7 @@ def complexity_layer(input_text: str) -> str | None:
                 InvocationType="RequestResponse",
                 Payload=json.dumps(payload).encode("utf-8"),
             )
-            
+
             if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
                 payload = json.loads(response['Payload'].read().decode('utf-8'))
                 classification = payload.get("body").get("classification")
@@ -83,7 +83,7 @@ def complexity_layer(input_text: str) -> str | None:
                 })
                 sentry_sdk.capture_message(error_msg, level="error")
                 raise Exception(error_msg)
-                
+
         except Exception as e:
             sentry_sdk.set_context("extra_data", {
                 "input_text": input_text,

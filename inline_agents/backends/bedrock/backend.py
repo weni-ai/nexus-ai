@@ -12,7 +12,6 @@ from nexus.inline_agents.backends.bedrock.repository import (
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
-from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
@@ -21,6 +20,11 @@ from .adapter import BedrockTeamAdapter, BedrockDataLakeEventAdapter
 from inline_agents.adapter import DataLakeEventAdapter
 
 logger = logging.getLogger(__name__)
+
+
+def _get_lambda_usecase():
+    from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
+    return LambdaUseCase()
 
 
 class BedrockBackend(InlineAgentsBackend):
@@ -74,7 +78,7 @@ class BedrockBackend(InlineAgentsBackend):
         **kwargs,
     ):
         supervisor = self.supervisor_repository.get_supervisor(project_uuid=project_uuid)
-        if foundation_model:    
+        if foundation_model:
             supervisor["foundation_model"] = foundation_model
 
         # Set dependencies
@@ -276,7 +280,7 @@ class BedrockBackend(InlineAgentsBackend):
                 preview=preview
             )
 
-        component_parser_usecase = LambdaUseCase()
+        component_parser_usecase = _get_lambda_usecase()
         full_response = component_parser_usecase.lambda_component_parser(
             final_response=full_response,
             use_components=use_components
