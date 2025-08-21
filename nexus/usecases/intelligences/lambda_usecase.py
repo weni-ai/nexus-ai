@@ -206,9 +206,8 @@ class LambdaUseCase():
             payload=data
         )
         response = json.loads(response.get("Payload").read())
-        response = response.get("body")
-        response = response.get("result")
-        return response
+        parsed_final_response = response.get("postProcessingParsedResponse").get("responseText")
+        return parsed_final_response
 
 @celery_app.task
 def create_lambda_conversation(
