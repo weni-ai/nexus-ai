@@ -85,7 +85,7 @@ class LambdaUseCase():
             "conversation": lambda_conversation
         }
         conversation_resolution = self.invoke_lambda(
-            lambda_name=str(settings.CONVERSATION_RESOLUTION_NAME),
+            lambda_name=str(settings.AWS_COMPONENTS_FUNCTION_ARN),
             payload=payload_conversation
         )
         conversation_resolution_response = json.loads(conversation_resolution.get("Payload").read()).get("body")
@@ -187,6 +187,29 @@ class LambdaUseCase():
             "in progress": "2"
         }
         return resolution_mapping.get(resolution_string.lower(), "2")  # Default to "2" (In Progress)
+
+    def lambda_component_parser(
+        self,
+        final_response: str,
+        use_components: bool
+    ) -> str:
+        if not use_components:
+            return final_response
+
+        prompt_type = "POST_PROCESSING"
+        data = {
+            "invokeModelRawResponse": f"<final_response>{final_response}</final_response>",
+            "promptType": prompt_type,
+        }
+        response = self.invoke_lambda(
+            lambda_name=str(settings.AWS_COMPONENTS_FUNCTION_ARN),
+            payload=data
+        )
+        response = json.loads(response.get("Payload").read())
+        parsed_final_response = response.get("postProcessingParsedResponse").get("responseText")
+        parsed_final_response = json.loads(parsed_final_response)
+        parsed_final_response = parsed_final_response.get("msg").get("text")
+        return parsed_final_response
 
 
 @celery_app.task

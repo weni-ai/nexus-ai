@@ -2,8 +2,6 @@ import logging
 from typing import Dict, Optional, List
 
 import boto3
-import pendulum
-import sentry_sdk
 from django.template.defaultfilters import slugify
 
 from inline_agents.backend import InlineAgentsBackend
@@ -14,6 +12,7 @@ from nexus.inline_agents.backends.bedrock.repository import (
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
+from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
@@ -274,6 +273,12 @@ class BedrockBackend(InlineAgentsBackend):
                 msg_external_id=msg_external_id,
                 preview=preview
             )
+
+        component_parser_usecase = LambdaUseCase()
+        full_response = component_parser_usecase.lambda_component_parser(
+            final_response=full_response,
+            use_components=use_components
+        )
 
         return full_response
 
