@@ -277,7 +277,7 @@ class BedrockBackend(InlineAgentsBackend):
             )
 
         component_parser_usecase = LambdaUseCase()
-        full_response = component_parser_usecase.component_parser(
+        full_response = component_parser_usecase.lambda_component_parser(
             final_response=full_response,
             use_components=use_components
         )
