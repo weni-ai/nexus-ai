@@ -192,10 +192,11 @@ class LambdaUseCase():
         self,
         final_response: str,
         use_components: bool
-    ):
+    ) -> str:
         print("=" * 10, "COMPONENT_PARSER_START", "=" * 10)
         print(f"Final Response: {final_response}")
         print(f"Use Components: {use_components}")
+
         if not use_components:
             return final_response
 
@@ -210,6 +211,12 @@ class LambdaUseCase():
             payload=data
         )
         print(f"Response: {response}")
+        response = json.loads(response.get("Payload").read())
+        print(f"Response Payload: {response}")
+        response = response.get("body")
+        print(f"Response Body: {response}")
+        response = response.get("result")
+        print(f"Response Result: {response}")
         print("=" * 10, "COMPONENT_PARSER_END", "=" * 10)
         return response
 
