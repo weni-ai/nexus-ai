@@ -207,8 +207,6 @@ class LambdaUseCase():
         )
         response = json.loads(response.get("Payload").read())
         parsed_final_response = response.get("postProcessingParsedResponse").get("responseText")
-        parsed_final_response = json.loads(parsed_final_response)
-        parsed_final_response = parsed_final_response.get("msg").get("text")
         return parsed_final_response
 
 
