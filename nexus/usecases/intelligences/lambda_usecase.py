@@ -193,6 +193,9 @@ class LambdaUseCase():
         final_response: str,
         use_components: bool
     ):
+        print("=" * 10, "COMPONENT_PARSER_START", "=" * 10)
+        print(f"Final Response: {final_response}")
+        print(f"Use Components: {use_components}")
         if not use_components:
             return final_response
 
@@ -201,10 +204,13 @@ class LambdaUseCase():
             "invokeModelRawResponse": f"<final_response>{final_response}</final_response>",
             "promptType": prompt_type,
         }
+        print(f"Data: {data}")
         response = self.invoke_lambda(
             lambda_name=str(settings.COMPONENT_PARSER_NAME),
             payload=data
         )
+        print(f"Response: {response}")
+        print("=" * 10, "COMPONENT_PARSER_END", "=" * 10)
         return response
 
 @celery_app.task
