@@ -213,10 +213,11 @@ class LambdaUseCase():
         print(f"Response: {response}")
         response = json.loads(response.get("Payload").read())
         print(f"Response Payload: {response}")
-        parsed_final_response = response.get("postProcessingParsedResponse").get("responseText")
+        parsed_final_response = response.get("postProcessingParsedResponse").get("responseText").get("msg").get("text")
         print(f"Parsed Final Response: {parsed_final_response}")
         print("=" * 10, "COMPONENT_PARSER_END", "=" * 10)
         return parsed_final_response
+
 
 @celery_app.task
 def create_lambda_conversation(
