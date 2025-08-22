@@ -29,7 +29,6 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         agent_obj.name = agent_data["name"]
         agent_obj.collaboration_instructions = agent_data["description"]
         agent_obj.instruction = instructions
-        agent_obj.foundation_model = settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]
         agent_obj.save()
 
         self.handle_tools(agent_obj, project, agent_data["tools"], files, str(project.uuid))
