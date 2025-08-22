@@ -194,6 +194,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 },
                 "actionGroup": function_name,
                 "function": function_arn,
+                "messageVersion": "1.0",
             }
 
             payload_json = json.dumps(payload_json)
