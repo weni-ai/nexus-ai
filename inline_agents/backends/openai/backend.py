@@ -214,7 +214,7 @@ class OpenAIBackend(InlineAgentsBackend):
             input_text=input_text,
             project_uuid=project_uuid,
             contact_fields=contact_fields,
-            contact_urn=sanitized_urn,
+            contact_urn=contact_urn,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
             hooks=hooks,
