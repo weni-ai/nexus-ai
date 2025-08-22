@@ -1,19 +1,19 @@
 import json
-from typing import Any
-from dataclasses import dataclass
+from typing import Optional
+
 import boto3
 import pendulum
 from agents import Agent, FunctionTool, RunContextWrapper
+from django.conf import settings
 from pydantic import BaseModel, Field, create_model
 
 from inline_agents.adapter import TeamAdapter
-from inline_agents.backends.openai.hooks import HooksDefault
-from django.conf import settings
-from nexus.inline_agents.models import AgentCredential
-from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
 from inline_agents.backends.openai.entities import Context
-from nexus.projects.models import Project
+from inline_agents.backends.openai.hooks import HooksDefault
+from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
+from nexus.inline_agents.models import AgentCredential
 from nexus.intelligences.models import ContentBase
+from nexus.projects.models import Project
 
 
 class OpenAITeamAdapter(TeamAdapter):
@@ -67,7 +67,7 @@ class OpenAITeamAdapter(TeamAdapter):
 
         for agent in agents:
             agent_name = agent.get("agentName")
-            if not "_agent" in agent_name:
+            if "_agent" not in agent_name:
                 agent_name = f"{agent_name}_agent"
             openai_agent = Agent[Context](
                 name=agent_name,
@@ -114,7 +114,7 @@ class OpenAITeamAdapter(TeamAdapter):
         contact_urn: str,
         auth_token: str,
         channel_uuid: str,
-        contact_name: str, 
+        contact_name: str,
         content_base_uuid: str,
         globals_dict: dict = {}
     ) -> Context:
@@ -162,7 +162,7 @@ class OpenAITeamAdapter(TeamAdapter):
         function_name: str,
         function_arn: str,
         payload: dict,
-        credentials: dict,  
+        credentials: dict,
         globals: dict,
         contact: dict,
         project: dict,
@@ -218,6 +218,7 @@ class OpenAITeamAdapter(TeamAdapter):
             print(f"Error on lambda '{function_name}': {e}")
             return json.dumps({"error": f"Error on lambda: {str(e)}"})
 
+    @classmethod
     def create_function_args_class(cls, json_schema: dict) -> type[BaseModel]:
         parameters = json_schema.get("parameters", {})
         fields = {}
@@ -234,11 +235,19 @@ class OpenAITeamAdapter(TeamAdapter):
                 "object": dict
             }.get(field_type, str)
 
+            default_value = {
+                "string": "",
+                "integer": 0,
+                "number": 0.0,
+                "boolean": False,
+                "array": [],
+                "object": {}
+            }.get(field_type, str)
+
             if required:
                 fields[field_name] = (python_type, Field(description=description))
             else:
-                from typing import Optional
-                fields[field_name] = (Optional[python_type], Field(description=description, default=None))
+                fields[field_name] = (Optional[python_type], Field(description=description, default=default_value))
 
         model_name = json_schema.get("name", "DynamicFunctionArgs")
         return create_model(model_name, **fields)
@@ -258,7 +267,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 project=ctx.context.project
             )
 
-        tool_function_args = cls.create_function_args_class(cls, json_schema)
+        tool_function_args = cls.create_function_args_class(json_schema)
         payload_schema = tool_function_args.model_json_schema()
 
         cls._clean_schema(payload_schema)
@@ -282,14 +291,14 @@ class OpenAITeamAdapter(TeamAdapter):
                             prop_schema["type"] = "array"
                         else:
                             prop_schema["type"] = "string"
-                    
+
                     cls._clean_schema(prop_schema)
-            
+
             if "items" in schema:
                 if not schema["items"] or ("type" not in schema["items"] and isinstance(schema["items"], dict)):
                     schema["items"] = {"type": "string"}
                 cls._clean_schema(schema["items"])
-            
+
             if "properties" in schema and "required" in schema:
                 schema["required"] = list(schema["properties"].keys())
 
@@ -382,7 +391,7 @@ def process_openai_trace(event):
 
     simplified_event_data = {
         "type": event["event_data"]["type"],
-        "item": { "type": item_type }
+        "item": {"type": item_type}
     }
     original_trace = {
         "timestamp": event["timestamp"],
@@ -395,7 +404,6 @@ def process_openai_trace(event):
         standardized_event = create_standardized_event(agent_name, "thinking", original_trace=original_trace)
     elif item_type == "tool_call_item":
         tool_name = item.get("raw_item", {}).get("name", "")
-
         event_class = "delegating_to_agent" if "agent" in tool_name else "executing_tool"
         original_trace["event_data"]["item"]["raw_item"] = {"arguments": item["raw_item"]["arguments"], "name": tool_name, "type": item["raw_item"]["type"]}
         standardized_event = create_standardized_event(tool_name, event_class, tool_name, original_trace)
@@ -405,5 +413,4 @@ def process_openai_trace(event):
     elif item_type == "message_output_item":
         original_trace["event_data"]["item"]["raw_item"] = {"content": item["raw_item"]["content"], "role": item["raw_item"]["role"], "status": item["raw_item"]["status"], "type": item["raw_item"]["type"]}
         standardized_event = create_standardized_event(agent_name, "sending_response", original_trace=original_trace)
-        
     return standardized_event
