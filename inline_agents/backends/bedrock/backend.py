@@ -2,8 +2,6 @@ import logging
 from typing import Dict, Optional, List
 
 import boto3
-import pendulum
-import sentry_sdk
 from django.template.defaultfilters import slugify
 
 from inline_agents.backend import InlineAgentsBackend
@@ -22,6 +20,11 @@ from .adapter import BedrockTeamAdapter, BedrockDataLakeEventAdapter
 from inline_agents.adapter import DataLakeEventAdapter
 
 logger = logging.getLogger(__name__)
+
+
+def _get_lambda_usecase():
+    from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
+    return LambdaUseCase()
 
 
 class BedrockBackend(InlineAgentsBackend):
@@ -274,6 +277,12 @@ class BedrockBackend(InlineAgentsBackend):
                 msg_external_id=msg_external_id,
                 preview=preview
             )
+
+        component_parser_usecase = _get_lambda_usecase()
+        full_response = component_parser_usecase.lambda_component_parser(
+            final_response=full_response,
+            use_components=use_components
+        )
 
         return full_response
 
