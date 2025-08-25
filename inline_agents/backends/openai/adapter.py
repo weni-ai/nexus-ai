@@ -11,7 +11,7 @@ from inline_agents.adapter import TeamAdapter
 from inline_agents.backends.openai.entities import Context
 from inline_agents.backends.openai.hooks import HooksDefault
 from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
-from nexus.inline_agents.models import AgentCredential
+from nexus.inline_agents.models import AgentCredential, InlineAgentsConfiguration
 from nexus.intelligences.models import ContentBase
 from nexus.projects.models import Project
 
@@ -32,6 +32,7 @@ class OpenAITeamAdapter(TeamAdapter):
         content_base: ContentBase,
         project: Project,
         auth_token: str = "",
+        inline_agent_configuration: InlineAgentsConfiguration | None = None,
         **kwargs
     ) -> list[dict]:
         agents_as_tools = []
@@ -66,12 +67,18 @@ class OpenAITeamAdapter(TeamAdapter):
         )
 
         for agent in agents:
+            agent_instructions = agent.get("instruction")
+
+            if isinstance(inline_agent_configuration, InlineAgentsConfiguration):
+                default_instructions_for_collaborators = inline_agent_configuration.default_instructions_for_collaborators
+                agent_instructions += f"\n{default_instructions_for_collaborators}"
+
             agent_name = agent.get("agentName")
             if "_agent" not in agent_name:
                 agent_name = f"{agent_name}_agent"
             openai_agent = Agent[Context](
                 name=agent_name,
-                instructions=agent.get("instruction"),
+                instructions=agent_instructions,
                 tools=cls._get_tools(agent["actionGroups"]),
                 model=settings.OPENAI_AGENTS_FOUNDATION_MODEL,
                 hooks=hooks

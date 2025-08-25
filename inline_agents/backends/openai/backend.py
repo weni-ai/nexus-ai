@@ -12,6 +12,7 @@ from nexus.inline_agents.backends.openai.models import (
     OpenAISupervisor as Supervisor,
 )
 from inline_agents.backends.openai.hooks import HooksDefault
+from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
@@ -203,6 +204,7 @@ class OpenAIBackend(InlineAgentsBackend):
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
         event_manager_notify: callable = None,
+        inline_agent_configuration: InlineAgentsConfiguration | None = None,
         **kwargs
     ):
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
@@ -220,6 +222,7 @@ class OpenAIBackend(InlineAgentsBackend):
             hooks=hooks,
             project=project,
             content_base=content_base,
+            inline_agent_configuration=inline_agent_configuration,
         )
         client = self._get_client()
         session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)

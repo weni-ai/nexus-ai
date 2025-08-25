@@ -164,7 +164,7 @@ def start_inline_agents(
 
         print(f"[DEBUG] Message: {message_obj}")
 
-        project, content_base = get_project_and_content_base_data(message_obj.project_uuid)
+        project, content_base, inline_agent_configuration = get_project_and_content_base_data(message_obj.project_uuid)
 
         pending_task_id = task_manager.get_pending_task_id(message_obj.project_uuid, message_obj.contact_urn)
         if pending_task_id:
@@ -224,6 +224,7 @@ def start_inline_agents(
             project=project,
             content_base=content_base,
             foundation_model=foundation_model,
+            inline_agent_configuration=inline_agent_configuration,
         )
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)

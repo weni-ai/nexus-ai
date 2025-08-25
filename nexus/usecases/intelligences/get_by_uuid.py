@@ -20,6 +20,7 @@ from nexus.intelligences.models import (
     LLM
 )
 from nexus.projects.models import Project
+from nexus.inline_agents.models import InlineAgentsConfiguration
 from .create import create_base_brain_structure
 
 
@@ -141,8 +142,10 @@ def get_default_content_base_by_project(
 
 def get_project_and_content_base_data(
     project_uuid: str
-) -> tuple[Project, ContentBase]:
+) -> tuple[Project, ContentBase, InlineAgentsConfiguration | None]:
+    # TODO: optimize queries to avoid N+1
     try:
+        inline_agent_configuration = None
         project = Project.objects.select_related('org').get(uuid=project_uuid)
 
         integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
@@ -153,7 +156,14 @@ def get_project_and_content_base_data(
             'instructions'
         ).get(is_router=True)
 
-        return project, content_base
+        if project.agents_backend == "OpenAIBackend":
+            # for now we only check for OpenAIBackend
+            try:
+                inline_agent_configuration = project.inline_agent_configurations.get(agents_backend="OpenAIBackend")
+            except InlineAgentsConfiguration.DoesNotExist:
+                inline_agent_configuration = None
+
+        return project, content_base, inline_agent_configuration
     except (Project.DoesNotExist, ContentBase.DoesNotExist):
         raise ContentBaseDoesNotExist()
     except ValidationError:
