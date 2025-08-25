@@ -146,3 +146,18 @@ class InlineAgentMessage(models.Model):
         indexes = [
             models.Index(fields=["project", "created_at", "contact_urn"]),
         ]
+
+
+class InlineAgentsConfiguration(models.Model):
+    # TODO: Move inline agents configuration from project model to this model
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_agent_configurations")
+    agents_backend = models.CharField(max_length=100)
+    default_instructions_for_collaborators = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Project: {self.project.name} - Agents backend: {self.agents_backend}"
+
+    class Meta:
+        verbose_name = "Inline agents configurations for a project"
+        verbose_name_plural = "Inline agents configurations for a project"
+        unique_together = ('project', 'agents_backend')

@@ -3,7 +3,7 @@ from django.db import models
 from django.forms import Textarea
 
 import json
-from nexus.inline_agents.models import Guardrail
+from nexus.inline_agents.models import Guardrail, InlineAgentsConfiguration
 from nexus.inline_agents.backends.bedrock.models import Supervisor
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor
 
@@ -112,5 +112,20 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
         ('Metadata', {
             'fields': ('created_on',),
             'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(InlineAgentsConfiguration)
+class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
+    list_display = ('project', 'agents_backend', 'default_instructions_for_collaborators')
+    list_filter = ('agents_backend',)
+    search_fields = ('project__name', 'project__uuid', 'agents_backend')
+    ordering = ('project__name',)
+    autocomplete_fields = ['project']
+
+    fieldsets = (
+        (None, {
+            'fields': ('project', 'agents_backend', 'default_instructions_for_collaborators')
         }),
     )
