@@ -1,7 +1,7 @@
 from django.test import TestCase
 from unittest.mock import Mock
 
-from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
+from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter, BedrockTeamAdapter
 from inline_agents.backends.bedrock.tests.traces_factory import (
     ActionGroupTraceFactory,
     AgentCollaborationTraceFactory,
@@ -300,3 +300,21 @@ class TestBedrockDataLakeEventAdapter(TestCase):
 
         self.mock_send_data_lake_event_task.delay.assert_not_called()
         self.assertIsNone(result)
+
+class TestBedrockTeamAdapter(TestCase):
+    def setUp(self):
+        self.conversation = ConversationFactory()
+        self.project_uuid = str(self.conversation.project.uuid)
+        self.contact_urn = self.conversation.contact_urn
+
+        self.adapter = BedrockTeamAdapter()
+
+    def test_get_session_id_with_long_session_id(self):
+        """Test that session ID is truncated if it's too long"""
+        session_id = self.adapter._get_session_id(100*"a", self.project_uuid)
+        self.assertLessEqual(len(session_id), 100)
+
+    def test_get_session_id_with_short_session_id(self):
+        """Test that session ID is not truncated if it's not too long"""
+        session_id = self.adapter._get_session_id(self.contact_urn, self.project_uuid)
+        self.assertLessEqual(len(session_id), 100)
