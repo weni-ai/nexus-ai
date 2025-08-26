@@ -6,11 +6,11 @@ import pendulum
 import sentry_sdk
 from django.conf import settings
 from django.utils.text import slugify
-from nexus.celery import app as celery_app
 from weni_datalake_sdk.clients.client import send_event_data
 from weni_datalake_sdk.paths.events_path import EventPath
 
-from inline_agents.adapter import TeamAdapter, DataLakeEventAdapter
+from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
+from nexus.celery import app as celery_app
 from nexus.inline_agents.models import AgentCredential, Guardrail
 
 logger = logging.getLogger(__name__)
@@ -35,8 +35,10 @@ class BedrockTeamAdapter(TeamAdapter):
         **kwargs
     ) -> dict:
         # TODO: change self to cls
-        from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
         from nexus.projects.models import Project
+        from nexus.usecases.intelligences.get_by_uuid import (
+            get_default_content_base_by_project,
+        )
         content_base = get_default_content_base_by_project(project_uuid)
         instructions = content_base.instructions.all()
         agent_data = content_base.agent
@@ -62,7 +64,7 @@ class BedrockTeamAdapter(TeamAdapter):
             project_id=project_uuid,
             contact_id=contact_urn,
             contact_name=contact_name,
-            channel_uuid=channel_uuid   
+            channel_uuid=channel_uuid
         )
 
         print(f"[ + DEBUG + ] auth_token: {auth_token}")
@@ -122,8 +124,13 @@ class BedrockTeamAdapter(TeamAdapter):
                 sanitized += f"_{ord(char)}"
             else:
                 sanitized += char
-
-        return f"project-{project_uuid}-session-{sanitized}"
+        session_id = f"project-{project_uuid}-session-{sanitized}"
+        session_id_length = len(session_id)
+        if session_id_length > 100:
+            session_id = session_id[:100]
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.capture_message(f"Session ID is too long: {session_id} - {session_id_length}", level="warning")
+        return session_id
 
     @classmethod
     def _get_inline_session_state(
@@ -473,7 +480,9 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         preview: bool = False
     ):
         from nexus.inline_agents.models import IntegratedAgent
-        from nexus.usecases.inline_agents.update import update_conversation_data
+        from nexus.usecases.inline_agents.update import (
+            update_conversation_data,
+        )
         if preview:
             return None
 
