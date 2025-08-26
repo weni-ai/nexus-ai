@@ -124,12 +124,21 @@ class BedrockTeamAdapter(TeamAdapter):
                 sanitized += f"_{ord(char)}"
             else:
                 sanitized += char
+
         session_id = f"project-{project_uuid}-session-{sanitized}"
         session_id_length = len(session_id)
+
         if session_id_length > 100:
-            session_id = session_id[:100]
+            session_length = 100 - (len(session_id)-len(sanitized))
+
+            if project_uuid in settings.PROJECTS_WITH_SPECIAL_SESSION_ID:    
+                session_id = f"project-{project_uuid}-session-{sanitized[-session_length:]}"
+            else:
+                session_id = session_id[:100]
+
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.capture_message(f"Session ID is too long: {session_id} - {session_id_length}", level="warning")
+
         return session_id
 
     @classmethod
