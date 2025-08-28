@@ -7,7 +7,7 @@ from redis import Redis
 
 from inline_agents.backend import InlineAgentsBackend
 from inline_agents.backends.openai.adapter import OpenAITeamAdapter, process_openai_trace
-from inline_agents.backends.openai.sessions import RedisSession
+from inline_agents.backends.openai.sessions import RedisSession, make_session_factory
 from nexus.inline_agents.backends.openai.models import (
     OpenAISupervisor as Supervisor,
 )
@@ -174,6 +174,11 @@ class OpenAIBackend(InlineAgentsBackend):
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         return RedisSession(session_id=session_id, r=redis_client), session_id
 
+    def _get_session_factory(self, project_uuid: str, sanitized_urn: str):
+        redis_client = Redis.from_url(settings.REDIS_URL)
+        session_id = f"project-{project_uuid}-session-{sanitized_urn}"
+        return make_session_factory(redis=redis_client, base_id=session_id)
+
     def end_session(self, project_uuid: str, sanitized_urn: str):
         session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
         session.clear_session()
@@ -208,7 +213,20 @@ class OpenAIBackend(InlineAgentsBackend):
         **kwargs
     ):
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
-        hooks = HooksDefault()
+        session_factory = self._get_session_factory(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
+        session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
+
+        hooks = HooksDefault(
+            supervisor_name="manager",
+            preview=preview,
+            rationale_switch=rationale_switch,
+            language=language,
+            user_email=user_email,
+            session_id=session_id,
+            msg_external_id=msg_external_id,
+            turn_off_rationale=turn_off_rationale,
+            event_manager_notify=self._event_manager_notify
+        )
         supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
@@ -223,9 +241,11 @@ class OpenAIBackend(InlineAgentsBackend):
             project=project,
             content_base=content_base,
             inline_agent_configuration=inline_agent_configuration,
+            session_factory=session_factory,
+            session=session,
         )
+
         client = self._get_client()
-        session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
 
         if preview and user_email:
             send_preview_message_to_websocket(
