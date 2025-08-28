@@ -277,9 +277,9 @@ def create_lambda_conversation(
     )
 
     resolution_dto = ResolutionDTO(
-        resolution=resolution,
+        resolution=resolution_choice_value,
         project_uuid=payload.get("project_uuid"),
         contact_urn=payload.get("contact_urn"),
-        external_id=payload.get("external_id")
+        external_id=payload.get("id")
     )
     resolution_message(resolution_dto)
