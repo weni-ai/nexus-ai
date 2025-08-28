@@ -1569,8 +1569,6 @@ class SupervisorViewset(ModelViewSet):
             )
 
         try:
-            get_project_by_uuid(project_uuid)
-
             queryset = self.filter_queryset(self.get_queryset())
 
             page = self.paginate_queryset(queryset)
