@@ -1,9 +1,9 @@
 import json
-from typing import Optional
+from typing import Callable, Optional
 
 import boto3
 import pendulum
-from agents import Agent, FunctionTool, RunContextWrapper
+from agents import Agent, FunctionTool, RunContextWrapper, Runner, function_tool, Session
 from django.conf import settings
 from pydantic import BaseModel, Field, create_model
 
@@ -14,6 +14,43 @@ from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
 from nexus.inline_agents.models import AgentCredential, InlineAgentsConfiguration
 from nexus.intelligences.models import ContentBase
 from nexus.projects.models import Project
+from inline_agents.backends.openai.sessions import only_turns, get_watermark, set_watermark
+
+
+def make_agent_proxy_tool(
+    agent: Agent[Context],
+    tool_name: str,
+    tool_description: str,
+    session_factory: Callable
+):
+    @function_tool
+    async def _proxy(ctx: RunContextWrapper[Context], question: str) -> str:
+        supervisor_session = ctx.context.session
+        agent_session = session_factory(agent.name)
+
+        supervisor_items = await supervisor_session.get_items()
+        supervisor_turns = await only_turns(supervisor_items)
+
+        # TODO: get default value using project and contact_urn from ctx.context
+        namespace = getattr(supervisor_session, "key",)
+        cursor = await get_watermark(agent_session, namespace)
+
+        delta = supervisor_turns[cursor:]
+        if delta:
+            await agent_session.add_items(delta)
+            await set_watermark(agent_session, namespace, len(supervisor_turns))
+
+        result = await Runner.run(
+            starting_agent=agent,
+            input=question,
+            context=ctx.context,
+            session=agent_session,
+        )
+        return result.final_output
+
+    _proxy.name = tool_name
+    _proxy.description = tool_description
+    return _proxy
 
 
 class OpenAITeamAdapter(TeamAdapter):
@@ -33,6 +70,8 @@ class OpenAITeamAdapter(TeamAdapter):
         project: Project,
         auth_token: str = "",
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
+        session_factory: Callable = None,
+        session: Session = None,
         **kwargs
     ) -> list[dict]:
         agents_as_tools = []
@@ -84,9 +123,11 @@ class OpenAITeamAdapter(TeamAdapter):
                 hooks=hooks
             )
             agents_as_tools.append(
-                openai_agent.as_tool(
+                make_agent_proxy_tool(
+                    agent=openai_agent,
                     tool_name=agent.get("agentName"),
                     tool_description=agent.get("collaborator_configurations"),
+                    session_factory=session_factory
                 )
             )
 
@@ -94,7 +135,7 @@ class OpenAITeamAdapter(TeamAdapter):
         supervisor_tools.extend(agents_as_tools)
 
         supervisor_agent = SupervisorAgent(
-            name="Supervisor Agent",
+            name="manager",
             instructions=instruction,
             tools=supervisor_tools,
             hooks=hooks,
@@ -111,6 +152,8 @@ class OpenAITeamAdapter(TeamAdapter):
                 channel_uuid=channel_uuid,
                 contact_name=contact_name,
                 content_base_uuid=content_base_uuid,
+                session=session,
+                input_text=input_text,
             )
         }
 
@@ -123,7 +166,9 @@ class OpenAITeamAdapter(TeamAdapter):
         channel_uuid: str,
         contact_name: str,
         content_base_uuid: str,
-        globals_dict: dict = {}
+        globals_dict: dict = {},
+        session: Session = None,
+        input_text: str = "",
     ) -> Context:
         credentials = cls._get_credentials(project_uuid)
         contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name}
@@ -135,7 +180,9 @@ class OpenAITeamAdapter(TeamAdapter):
             globals=globals_dict,
             contact=contact,
             project=project,
-            content_base=content_base
+            content_base=content_base,
+            session=session,
+            input_text=input_text,
         )
 
     @classmethod
