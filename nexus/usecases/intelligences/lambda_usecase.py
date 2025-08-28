@@ -6,7 +6,10 @@ from django.conf import settings
 from nexus.intelligences.models import Conversation
 from nexus.celery import app as celery_app
 from nexus.projects.models import Project
+from nexus.intelligences.producer.resolution_producer import ResolutionDTO, resolution_message
+
 from router.tasks.redis_task_manager import RedisTaskManager
+
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 
 
@@ -279,3 +282,11 @@ def create_lambda_conversation(
         project_uuid=payload.get("project_uuid"),
         contact_urn=payload.get("contact_urn")
     )
+
+    resolution_dto = ResolutionDTO(
+        resolution=resolution,
+        project_uuid=payload.get("project_uuid"),
+        contact_urn=payload.get("contact_urn"),
+        external_id=payload.get("external_id")
+    )
+    resolution_message(resolution_dto)
