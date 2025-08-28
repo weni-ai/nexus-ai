@@ -1,11 +1,13 @@
 from __future__ import absolute_import, unicode_literals
+
 import os
 import sys
 
+import logfire
+import nest_asyncio
 from celery import Celery, schedules
-
 from django.conf import settings
-
+from langfuse import get_client
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
@@ -64,3 +66,21 @@ if "test" in sys.argv or getattr(settings, "CELERY_ALWAYS_EAGER", False):
         return task.apply(args, kwargs, **opts)
 
     current_app.send_task = send_task
+
+
+
+
+nest_asyncio.apply()
+
+logfire.configure(
+    service_name='openai-agents',
+    send_to_logfire=False,
+)
+
+logfire.instrument_openai_agents() 
+langfuse = get_client()
+
+if langfuse.auth_check():
+    print("Langfuse client is authenticated and ready!")
+else:
+    print("Authentication failed. Please check your credentials and host.")
