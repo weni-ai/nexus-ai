@@ -20,6 +20,7 @@ from nexus.task_managers.models import (
     ContentBaseFileTaskManager,
     ContentBaseLinkTaskManager,
 )
+from nexus.intelligences.models import Conversation
 
 from django.forms.models import model_to_dict
 
@@ -307,65 +308,66 @@ class SubTopicsSerializer(serializers.ModelSerializer):
         return obj.topic.name
 
 
-class SupervisorDataSerializer(serializers.Serializer):
+class SupervisorDataSerializer(serializers.ModelSerializer):
     """
-    Serializer for unified supervisor data that can handle both Conversation model data
-    and billing-only data from the Supervisor class
+    Serializer for supervisor data from Conversation model
     """
-    created_on = serializers.DateTimeField()
-    urn = serializers.CharField()
-    uuid = serializers.CharField(allow_null=True, allow_blank=True)
-    external_id = serializers.CharField(allow_null=True, allow_blank=True)
-    csat = serializers.CharField(allow_null=True, allow_blank=True)
-    nps = serializers.IntegerField(allow_null=True)
-    topic = serializers.CharField(allow_null=True, allow_blank=True)
-    has_chats_room = serializers.BooleanField(default=False)
+    created_on = serializers.DateTimeField(source='created_at')
+    urn = serializers.CharField(source='contact_urn')
+    topic = serializers.CharField(source='topic.name', allow_null=True, allow_blank=True)
+    name = serializers.CharField(source='contact_name', allow_null=True, allow_blank=True)
     start_date = serializers.DateTimeField()
     end_date = serializers.DateTimeField()
-    resolution = serializers.CharField(allow_null=True, allow_blank=True)
-    name = serializers.CharField(allow_null=True, allow_blank=True)
+
+    class Meta:
+        model = Conversation
+        fields = [
+            'created_on',
+            'urn',
+            'uuid',
+            'external_id',
+            'csat',
+            'nps',
+            'topic',
+            'has_chats_room',
+            'start_date',
+            'end_date',
+            'resolution',
+            'name',
+        ]
 
     def to_representation(self, instance):
         """Custom representation to handle resolution and csat fields properly"""
         data = super().to_representation(instance)
 
-        # Handle resolution field - convert tuple string to actual value or map string values
+        # Handle resolution field - convert tuple string to actual value
         resolution_value = data.get('resolution')
         if resolution_value is not None:
-            if isinstance(resolution_value, str):
-                if resolution_value.startswith('('):
-                    # Extract the actual value from tuple string like "(0, 'Resolved')"
-                    try:
-                        import ast
-                        resolution_tuple = ast.literal_eval(resolution_value)
-                        data['resolution'] = str(resolution_tuple[0])  # Use the numeric value
-                    except (ValueError, SyntaxError):
-                        pass
-                else:
-                    # Handle plain string values by mapping them to numeric values
-                    resolution_mapping = {
-                        'resolved': '0',
-                        'unresolved': '1',
-                        'abandoned': '1',  # Map abandoned to unresolved
-                        'in_progress': '2',
-                        'in progress': '2',
-                    }
-                    resolution_lower = resolution_value.lower()
-                    if resolution_lower in resolution_mapping:
-                        data['resolution'] = resolution_mapping[resolution_lower]
+            if isinstance(resolution_value, str) and resolution_value.startswith('('):
+                # Extract the actual value from tuple string like "(0, 'Resolved')"
+                try:
+                    import ast
+                    resolution_tuple = ast.literal_eval(resolution_value)
+                    data['resolution'] = str(resolution_tuple[0])  # Use the numeric value
+                except (ValueError, SyntaxError):
+                    pass
             elif isinstance(resolution_value, int):
                 # Convert integer to string (database stores integers)
                 data['resolution'] = str(resolution_value)
 
-        # Handle csat field - convert tuple string to actual value
-        if isinstance(data.get('csat'), str) and data['csat'].startswith('('):
-            # Extract the actual value from tuple string like "(4, 'Very unsatisfied')"
-            try:
-                import ast
-                csat_tuple = ast.literal_eval(data['csat'])
-                data['csat'] = str(csat_tuple[0])  # Use the numeric value
-            except (ValueError, SyntaxError):
-                pass
+        # Handle csat field - convert tuple string to actual value and ensure it's a string
+        csat_value = data.get('csat')
+        if csat_value:
+            if isinstance(csat_value, str) and csat_value.startswith('('):
+                # Extract the actual value from tuple string like "(4, 'Very unsatisfied')"
+                try:
+                    import ast
+                    csat_tuple = ast.literal_eval(csat_value)
+                    data['csat'] = str(csat_tuple[0])  # Use the numeric value
+                except (ValueError, SyntaxError):
+                    pass
+            elif isinstance(csat_value, int):
+                # Convert integer to string
+                data['csat'] = str(csat_value)
 
         return data
-    is_billing_only = serializers.BooleanField(default=False)

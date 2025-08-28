@@ -309,12 +309,52 @@ class TestBedrockTeamAdapter(TestCase):
 
         self.adapter = BedrockTeamAdapter()
 
-    def test_get_session_id_with_long_session_id(self):
-        """Test that session ID is truncated if it's too long"""
-        session_id = self.adapter._get_session_id(100*"a", self.project_uuid)
-        self.assertLessEqual(len(session_id), 100)
-
     def test_get_session_id_with_short_session_id(self):
         """Test that session ID is not truncated if it's not too long"""
         session_id = self.adapter._get_session_id(self.contact_urn, self.project_uuid)
         self.assertLessEqual(len(session_id), 100)
+        # Should contain the full project_uuid and contact_urn
+        self.assertIn(self.project_uuid, session_id)
+        self.assertIn(self.contact_urn, session_id)
+
+    def test_get_session_id_with_long_session_id_normal_project(self):
+        """Test that session ID is truncated for normal projects when too long"""
+        # Create a very long contact_urn that will exceed 100 characters
+        long_contact_urn = "whatsapp:+5511999999999@c.us.very.long.contact.identifier.that.exceeds.limits.by.a.lot.and.makes.the.session.id.too.long"
+        session_id = self.adapter._get_session_id(long_contact_urn, self.project_uuid)
+        # Should be exactly 100 characters for normal projects
+        self.assertEqual(len(session_id), 100)
+        self.assertTrue(session_id.startswith(f"project-{self.project_uuid}-session-"))
+
+    def test_get_session_id_with_long_session_id_special_project(self):
+        """Test that session ID preserves full project_uuid for special projects when too long"""
+        from django.conf import settings
+        
+        # Mock settings to include our project as special
+        original_setting = getattr(settings, 'PROJECTS_WITH_SPECIAL_SESSION_ID', [])
+        settings.PROJECTS_WITH_SPECIAL_SESSION_ID = [self.project_uuid]
+        
+        try:
+            # Create a very long contact_urn that will exceed 100 characters
+            long_contact_urn = "whatsapp:+5511999999999@c.us.very.long.contact.identifier.that.exceeds.limits.by.a.lot.and.makes.the.session.id.too.long"
+            
+            session_id = self.adapter._get_session_id(long_contact_urn, self.project_uuid)
+            
+            self.assertEqual(len(session_id), 100)
+            self.assertIn(self.project_uuid, session_id)
+            self.assertTrue(session_id.endswith("session.id.too.long"))
+            self.assertIn("session-", session_id)
+            
+        finally:
+            # Restore original setting
+            settings.PROJECTS_WITH_SPECIAL_SESSION_ID = original_setting
+
+    def test_get_session_id_sanitization(self):
+        """Test that special characters in contact_urn are properly sanitized"""
+        contact_urn_with_special_chars = "whatsapp:+55(11)99999-9999@c.us"
+        
+        session_id = self.adapter._get_session_id(contact_urn_with_special_chars, self.project_uuid)
+        # Should contain the sanitized contact_urn
+        self.assertIn("whatsapp:_43", session_id) # + becomes _43
+        self.assertIn("_40", session_id)  # ( becomes _40
+        self.assertIn("_41", session_id)  # ) becomes _41
