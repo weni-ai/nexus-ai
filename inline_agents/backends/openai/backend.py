@@ -245,13 +245,6 @@ class OpenAIBackend(InlineAgentsBackend):
             session=session,
         )
 
-        supervisor = external_team["starting_agent"]
-
-        for index, tool in enumerate(supervisor.tools):
-            print("--------------------------------")
-            print(f"{index} - {tool.name}: {tool.description}")
-            print("--------------------------------")
-
         client = self._get_client()
 
         if preview and user_email:
