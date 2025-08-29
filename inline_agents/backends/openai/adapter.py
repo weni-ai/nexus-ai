@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, create_model
 
 from inline_agents.adapter import TeamAdapter
 from inline_agents.backends.openai.entities import Context
-from inline_agents.backends.openai.hooks import HooksDefault
+from inline_agents.backends.openai.hooks import SupervisorHooks, RunnerHooks
 from inline_agents.backends.openai.sessions import (
     get_watermark,
     only_turns,
@@ -79,7 +79,8 @@ class OpenAITeamAdapter(TeamAdapter):
         contact_urn: str,
         contact_name: str,
         channel_uuid: str,
-        hooks: HooksDefault,
+        supervisor_hooks: SupervisorHooks,
+        runner_hooks: RunnerHooks,
         content_base: ContentBase,
         project: Project,
         auth_token: str = "",
@@ -134,7 +135,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 instructions=agent_instructions,
                 tools=cls._get_tools(agent["actionGroups"]),
                 model=settings.OPENAI_AGENTS_FOUNDATION_MODEL,
-                # hooks=hooks
+                hooks=supervisor_hooks
             )
             agents_as_tools.append(
                 make_agent_proxy_tool(
@@ -152,12 +153,12 @@ class OpenAITeamAdapter(TeamAdapter):
             name="manager",
             instructions=instruction,
             tools=supervisor_tools,
-            # hooks=hooks,
+            hooks=supervisor_hooks,
             model=supervisor["foundation_model"],
             prompt_override_configuration=supervisor.get("prompt_override_configuration", {})
         )
 
-        hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
+        supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
 
         return {
             "starting_agent": supervisor_agent,

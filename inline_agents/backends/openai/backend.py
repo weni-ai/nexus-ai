@@ -15,7 +15,7 @@ from inline_agents.backends.openai.adapter import (
     OpenAITeamAdapter,
     process_openai_trace,
 )
-from inline_agents.backends.openai.hooks import HooksDefault
+from inline_agents.backends.openai.hooks import SupervisorHooks, RunnerHooks
 from inline_agents.backends.openai.sessions import (
     RedisSession,
     make_session_factory,
@@ -222,7 +222,19 @@ class OpenAIBackend(InlineAgentsBackend):
         session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
 
         supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
-        hooks = HooksDefault(
+        supervisor_hooks = SupervisorHooks(
+            supervisor_name="manager",
+            preview=preview,
+            rationale_switch=rationale_switch,
+            language=language,
+            user_email=user_email,
+            session_id=session_id,
+            msg_external_id=msg_external_id,
+            turn_off_rationale=turn_off_rationale,
+            event_manager_notify=self._event_manager_notify,
+            agents=team,
+        )
+        runner_hooks = RunnerHooks(
             supervisor_name="manager",
             preview=preview,
             rationale_switch=rationale_switch,
@@ -243,7 +255,8 @@ class OpenAIBackend(InlineAgentsBackend):
             contact_urn=contact_urn,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
-            hooks=hooks,
+            supervisor_hooks=supervisor_hooks,
+            runner_hooks=runner_hooks,
             project=project,
             content_base=content_base,
             inline_agent_configuration=inline_agent_configuration,
@@ -268,7 +281,7 @@ class OpenAIBackend(InlineAgentsBackend):
             client, external_team, session, session_id,
             input_text, contact_urn, project_uuid, channel_uuid,
             user_email, preview, rationale_switch, language,
-            turn_off_rationale, msg_external_id, hooks
+            turn_off_rationale, msg_external_id, runner_hooks
         ))
         return result
 
@@ -288,13 +301,13 @@ class OpenAIBackend(InlineAgentsBackend):
         language,
         turn_off_rationale,
         msg_external_id,
-        hooks,
+        runner_hooks,
     ):
         """Async wrapper to handle the streaming response"""
 
         event_logger = StreamEventLogger(f"{session_id}{pendulum.now()}.json")
 
-        result = client.run_streamed(**external_team, session=session, hooks=hooks)
+        result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
 
         async for event in result.stream_events():
             if event.type == "run_item_stream_event":
