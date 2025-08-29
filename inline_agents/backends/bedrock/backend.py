@@ -278,11 +278,11 @@ class BedrockBackend(InlineAgentsBackend):
                 preview=preview
             )
 
-        component_parser_usecase = _get_lambda_usecase()
-        full_response = component_parser_usecase.lambda_component_parser(
-            final_response=full_response,
-            use_components=use_components
-        )
+        # component_parser_usecase = _get_lambda_usecase()
+        # full_response = component_parser_usecase.lambda_component_parser(
+        #    final_response=full_response,
+        #    use_components=use_components
+        # )
 
         return full_response
 
