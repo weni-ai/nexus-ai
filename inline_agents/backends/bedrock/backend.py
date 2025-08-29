@@ -278,12 +278,6 @@ class BedrockBackend(InlineAgentsBackend):
                 preview=preview
             )
 
-        component_parser_usecase = _get_lambda_usecase()
-        full_response = component_parser_usecase.lambda_component_parser(
-            final_response=full_response,
-            use_components=use_components
-        )
-
         return full_response
 
     def _handle_rationale_in_response(self, rationale_texts: Optional[List[str]], full_response: str) -> str:

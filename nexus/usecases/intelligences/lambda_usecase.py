@@ -278,15 +278,15 @@ def create_lambda_conversation(
 
     conversation_queryset.update(**update_data)
 
-    task_manager.clear_message_cache(
-        project_uuid=payload.get("project_uuid"),
-        contact_urn=payload.get("contact_urn")
-    )
-
     resolution_dto = ResolutionDTO(
         resolution=resolution_choice_value,
         project_uuid=payload.get("project_uuid"),
         contact_urn=payload.get("contact_urn"),
-        external_id=payload.get("id")
+        external_id=payload.get("external_id")
     )
     resolution_message(resolution_dto)
+
+    task_manager.clear_message_cache(
+        project_uuid=payload.get("project_uuid"),
+        contact_urn=payload.get("contact_urn")
+    )
