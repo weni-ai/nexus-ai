@@ -1,9 +1,64 @@
 import pendulum
-from agents import RunHooks
+from agents import RunHooks, AgentHooks
 from django.conf import settings
 
 
-class HooksDefault(RunHooks):
+
+class RunnerHooks(RunHooks):
+    def __init__(
+        self,
+        supervisor_name: str,
+        preview: bool,
+        rationale_switch: bool,
+        language: str,
+        user_email: str,
+        session_id: str,
+        msg_external_id: str,
+        turn_off_rationale: bool,
+        event_manager_notify: callable,
+        agents: list,
+    ):
+        self.agents = agents
+        self.supervisor_name = supervisor_name
+        self.rationale_switch = rationale_switch
+        self.language = language
+        self.user_email = user_email
+        self.session_id = session_id
+        self.msg_external_id = msg_external_id
+        self.turn_off_rationale = turn_off_rationale
+        self.preview = preview
+        self.list_tools_called = []
+        self.list_handoffs_requested = []
+        self.event_manager_notify = event_manager_notify
+        self.agents_names = []
+        self.knowledge_base_tool = None
+        self.current_agent = None
+
+        for agent in self.agents:
+            self.agents_names.append(agent.get("agentName"))
+
+        super().__init__()
+
+    async def on_llm_start(self, context, agent, system_prompt, input_items, **kwargs):
+        print("---------------------ON LLM START---------------------")
+        print(f"Context: {context}")
+        print(f"Agent: {agent}")
+        print(f"System Prompt: {system_prompt}")
+        print(f"Input Items: {input_items}")
+        print(f"Kwargs: {kwargs}")
+        print("--------------------------------")
+
+    async def on_llm_end(self, context, agent, response, **kwargs):
+        print("---------------------ON LLM ENDS---------------------")
+        print(f"Response: {context}")
+        print(f"Response: {agent}")
+        print(f"Response: {response}")
+        print(f"Kwargs: {kwargs}")
+        agent_name = self.current_agent if self.current_agent else agent.name
+        await self.send_trace(context, agent_name, "model_response_received", response)
+        print("--------------------------------")
+
+class SupervisorHooks(AgentHooks):
     def __init__(
         self,
         supervisor_name: str,
@@ -185,25 +240,6 @@ class HooksDefault(RunHooks):
                 }
             }
             await self.send_trace(context_data, agent.name, "tool_result_received", trace_data)
-
-    async def on_llm_start(self, context, agent, system_prompt, input_items, **kwargs):
-        print("---------------------ON LLM START---------------------")
-        print(f"Context: {context}")
-        print(f"Agent: {agent}")
-        print(f"System Prompt: {system_prompt}")
-        print(f"Input Items: {input_items}")
-        print(f"Kwargs: {kwargs}")
-        print("--------------------------------")
-
-    async def on_llm_end(self, context, agent, response, **kwargs):
-        print("---------------------ON LLM ENDS---------------------")
-        print(f"Response: {context}")
-        print(f"Response: {agent}")
-        print(f"Response: {response}")
-        print(f"Kwargs: {kwargs}")
-        agent_name = self.current_agent if self.current_agent else agent.name
-        await self.send_trace(context, agent_name, "model_response_received", response)
-        print("--------------------------------")
 
     async def on_end(self, context, agent, output):
         context_data = context.context
