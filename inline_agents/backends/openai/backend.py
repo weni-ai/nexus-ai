@@ -225,7 +225,8 @@ class OpenAIBackend(InlineAgentsBackend):
             session_id=session_id,
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
-            event_manager_notify=self._event_manager_notify
+            event_manager_notify=self._event_manager_notify,
+            agents=team
         )
         supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
         external_team = self.team_adapter.to_external(
@@ -299,22 +300,22 @@ class OpenAIBackend(InlineAgentsBackend):
                 converted_event = event_logger.convert_event(event, agent_name="Supervisor")
                 standardized_event = process_openai_trace(asdict(converted_event))
 
-                await self._event_manager_notify(
-                    event="inline_trace_observers_async",
-                    inline_traces=standardized_event,
-                    user_input=input_text,
-                    contact_urn=contact_urn,
-                    project_uuid=project_uuid,
-                    send_message_callback=None,
-                    preview=preview,
-                    rationale_switch=rationale_switch,
-                    language=language,
-                    user_email=user_email,
-                    session_id=session_id,
-                    msg_external_id=msg_external_id,
-                    turn_off_rationale=turn_off_rationale,
-                    channel_uuid=channel_uuid
-                )
+                # await self._event_manager_notify(
+                #     event="inline_trace_observers_async",
+                #     inline_traces=standardized_event,
+                #     user_input=input_text,
+                #     contact_urn=contact_urn,
+                #     project_uuid=project_uuid,
+                #     send_message_callback=None,
+                #     preview=preview,
+                #     rationale_switch=rationale_switch,
+                #     language=language,
+                #     user_email=user_email,
+                #     session_id=session_id,
+                #     msg_external_id=msg_external_id,
+                #     turn_off_rationale=turn_off_rationale,
+                #     channel_uuid=channel_uuid
+                # )
 
                 if event.name == "reasoning_item_created":
                     print(f"\n[+] Reasoning: {event.item.raw_item.summary}\n")

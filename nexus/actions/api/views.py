@@ -209,7 +209,7 @@ class FlowsViewset(
 
 
 class MessagePreviewView(APIView):
-    permission_classes = [ProjectPermission]
+    # permission_classes = [ProjectPermission]
 
     def post(self, request, *args, **kwargs):
         try:
