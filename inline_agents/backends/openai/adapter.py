@@ -3,18 +3,32 @@ from typing import Callable, Optional
 
 import boto3
 import pendulum
-from agents import Agent, FunctionTool, RunContextWrapper, Runner, function_tool, Session
+from agents import (
+    Agent,
+    FunctionTool,
+    RunContextWrapper,
+    Runner,
+    Session,
+    function_tool,
+)
 from django.conf import settings
 from pydantic import BaseModel, Field, create_model
 
 from inline_agents.adapter import TeamAdapter
 from inline_agents.backends.openai.entities import Context
 from inline_agents.backends.openai.hooks import HooksDefault
+from inline_agents.backends.openai.sessions import (
+    get_watermark,
+    only_turns,
+    set_watermark,
+)
 from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
-from nexus.inline_agents.models import AgentCredential, InlineAgentsConfiguration
+from nexus.inline_agents.models import (
+    AgentCredential,
+    InlineAgentsConfiguration,
+)
 from nexus.intelligences.models import ContentBase
 from nexus.projects.models import Project
-from inline_agents.backends.openai.sessions import only_turns, get_watermark, set_watermark
 
 
 def make_agent_proxy_tool(
@@ -120,7 +134,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 instructions=agent_instructions,
                 tools=cls._get_tools(agent["actionGroups"]),
                 model=settings.OPENAI_AGENTS_FOUNDATION_MODEL,
-                hooks=hooks
+                # hooks=hooks
             )
             agents_as_tools.append(
                 make_agent_proxy_tool(
@@ -138,10 +152,13 @@ class OpenAITeamAdapter(TeamAdapter):
             name="manager",
             instructions=instruction,
             tools=supervisor_tools,
-            hooks=hooks,
+            # hooks=hooks,
             model=supervisor["foundation_model"],
             prompt_override_configuration=supervisor.get("prompt_override_configuration", {})
         )
+
+        hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
+
         return {
             "starting_agent": supervisor_agent,
             "input": input_text,

@@ -1,7 +1,9 @@
-from agents import AgentHooks
+import pendulum
+from agents import RunHooks
+from django.conf import settings
 
 
-class HooksDefault(AgentHooks):
+class HooksDefault(RunHooks):
     def __init__(
         self,
         supervisor_name: str,
@@ -28,13 +30,25 @@ class HooksDefault(AgentHooks):
         self.list_handoffs_requested = []
         self.event_manager_notify = event_manager_notify
         self.agents_names = []
+        self.knowledge_base_tool = None
+        self.current_agent = None
 
         for agent in self.agents:
             self.agents_names.append(agent.get("agentName"))
 
         super().__init__()
 
-    async def send_trace(self, context_data, standardized_event):
+    def set_knowledge_base_tool(self, knowledge_base_tool):
+        self.knowledge_base_tool = knowledge_base_tool
+
+    async def send_trace(self, context_data, agent_name, trace_type, trace_data={}):
+        standardized_event = {
+            "config": {
+                "agentName": agent_name,
+                "type": trace_type,
+            },
+            "trace": trace_data,
+        }
         await self.event_manager_notify(
             event="inline_trace_observers_async",
             inline_traces=standardized_event,
@@ -54,79 +68,158 @@ class HooksDefault(AgentHooks):
 
     async def on_start(self, context, agent):
         context_data = context.context
-        standardized_event = {
-            "config": {
-                "agentName": agent.name,
-                "type": "invoking_model",
-            },
-            "trace": {},
-        }
-        await self.send_trace(context_data, standardized_event)
+        await self.send_trace(context_data, agent.name, "invoking_model")
         print(f"\033[34m[HOOK] Agente '{agent.name}' iniciado.\033[0m")
-
-    async def on_end(self, context, agent, output):
-        # print("=====================on_end===========================")
-        print(f"\033[32m[HOOK] Agente '{agent.name}' finalizou.\033[0m")
-        # print(f"\033[36m[HOOK] Context: {context}\033[0m")
-        # print(f"\033[36m[HOOK] Output: {output}\033[0m")
-        # print("================================================")
-
-    async def on_handoff(self, context, agent, source):
-        # print("=====================on_handoff===========================")
-        print(
-            f"\033[35m[HOOK] Handoff recebido pelo agente '{agent.name}' do agente '{source.name}'.\033[0m"
-        )
-        self.list_handoffs_requested.append(source.name)
-        # print(f"\033[36m[HOOK] Context: {context}\033[0m")
-        # print(f"\033[36m[HOOK] Agent: {agent}\033[0m")
-        # print(f"\033[36m[HOOK] Source: {source}\033[0m")
-        # print("================================================")
 
     async def on_tool_start(self, context, agent, tool):
         context_data = context.context
         self.list_tools_called.append(tool.name)
+
+        if tool.name == self.knowledge_base_tool:
+            print(f"\033[33m[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.\033[0m")
+            trace_data = {
+                "eventTime": pendulum.now().to_iso8601_string(),
+                "sessionId": context_data.session.get_session_id(),
+                "trace": {
+                    "orchestrationTrace": {
+                        "invocationInput": {
+                            "invocationType": "KNOWLEDGE_BASE",
+                            "knowledgeBaseLookupInput": {
+                                "knowledgeBaseId": settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID,
+                                "text": context_data.input_text
+                            },
+                        }
+                    }
+                }
+            }
+            await self.send_trace(context_data, agent.name, "searching_knowledge_base", trace_data)
+
         if tool.name in self.agents_names:
-            standardized_event = {
-                "config": {
-                    "agentName": agent.name,
-                    "type": "delegating_to_agent",
-                },
-                "trace": {},
-            }
-            await self.send_trace(context_data, standardized_event)
+            print(f"\033[33m[HOOK] Agente '{agent.name}' vai usar o agente '{tool.name}'.\033[0m")
+            self.current_agent = tool.name
+            await self.send_trace(context_data, agent.name, "delegating_to_agent")
+
         else:
-            standardized_event = {
-                "config": {
-                    "agentName": agent.name,
-                    "type": "executing_tool",
-                },
-                "trace": {},
+            print(f"\033[33m[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.\033[0m")
+            trace_data = {
+                "collaboratorName": self.current_agent if self.current_agent else agent.name,
+                "eventTime": pendulum.now().to_iso8601_string(),
+                "sessionId": context_data.session.get_session_id(),
+                "trace": {
+                    "orchestrationTrace": {
+                        "invocationInput": {
+                            "actionGroupInvocationInput": {
+                                "actionGroupName": tool.name,
+                                "executionType": "LAMBDA",
+                                "function": tool.name,
+                                "parameters": tool.params_json_schema
+                            },
+                        }
+                    }
+                }
             }
-        print(
-            f"\033[33m[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.\033[0m"
-        )
+            await self.send_trace(context_data, agent.name, "executing_tool", trace_data)
 
     async def on_tool_end(self, context, agent, tool, result):
-        if tool.name in self.agents_names:
-            pass
-        else:
-            standardized_event = {
-                "type": "trace_update",
+        context_data = context.context
+        if tool.name == self.knowledge_base_tool:
+            print(f"\033[33m[HOOK] Agente '{agent.name}' terminou de usar a ferramenta '{tool.name}'.\033[0m")
+            trace_data = {
+                "eventTime": pendulum.now().to_iso8601_string(),
+                "sessionId": context_data.session.get_session_id(),
                 "trace": {
-                    "config": {
-                        "agentName": agent.name,
-                        "type": "tool_result_received",
-                    },
-                    "trace": {},
-                },
+                    "orchestrationTrace": {
+                        "observation": {
+                            "knowledgeBaseLookupOutput": {
+                                "retrievedReferences": result
+                            },
+                        }
+                    }
+                }
             }
+            await self.send_trace(context_data, agent.name, "search_result_received", trace_data)
 
-        # sprint("======================on_tool_end==========================")
-        print(
-            f"\033[31m[HOOK] Agente '{agent.name}' terminou de usar a ferramenta '{tool.name}'.\033[0m"
-        )
-        print(f"\033[31m[HOOK] Resultado: {result}\033[0m")
-        # print(f"\033[36m[HOOK] Context: {context}\033[0m")
-        # print(f"\033[36m[HOOK] Agent: {agent}\033[0m")
-        # print(f"\033[36m[HOOK] Tool: {tool}\033[0m")
-        # print("================================================")
+        if tool.name in self.agents_names:
+            print(f"\033[33m[HOOK] Agente '{agent.name}' terminou de usar o agente '{tool.name}'.\033[0m")
+            trace_data = {
+                "eventTime": pendulum.now().to_iso8601_string(),
+                "sessionId": context_data.session.get_session_id(),
+                "trace": {
+                    "orchestrationTrace": {
+                        "observation": {
+                            "agentCollaboratorInvocationOutput": {
+                                "agentCollaboratorName": self.current_agent,
+                                "metadata": {
+                                    "result": result
+                                },
+                                "output": {
+                                    "text": result,
+                                    "type": "TEXT"
+                                }
+                            },
+                            "type": "AGENT_COLLABORATOR"
+                        }
+                    }
+                }
+            }
+            await self.send_trace(context_data, self.current_agent, "forwarding_to_manager", trace_data)
+            self.current_agent = None
+
+        else:
+            print(f"\033[31m[HOOK] Agente '{agent.name}' terminou de usar a ferramenta '{tool.name}'.\033[0m")
+            trace_data = {
+                "collaboratorName": agent.name,
+                "eventTime": pendulum.now().to_iso8601_string(),
+                "sessionId": context_data.session.get_session_id(),
+                "trace": {
+                    "orchestrationTrace": {
+                        "observation": {
+                            "actionGroupInvocationOutput": {
+                                "metadata": {
+                                    "result": result
+                                },
+                                "text": result,
+                            },
+                        }
+                    }
+                }
+            }
+            await self.send_trace(context_data, agent.name, "tool_result_received", trace_data)
+
+    async def on_llm_start(self, context, agent, system_prompt, input_items, **kwargs):
+        print("---------------------ON LLM START---------------------")
+        print(f"Context: {context}")
+        print(f"Agent: {agent}")
+        print(f"System Prompt: {system_prompt}")
+        print(f"Input Items: {input_items}")
+        print(f"Kwargs: {kwargs}")
+        print("--------------------------------")
+
+    async def on_llm_end(self, context, agent, response, **kwargs):
+        print("---------------------ON LLM ENDS---------------------")
+        print(f"Response: {context}")
+        print(f"Response: {agent}")
+        print(f"Response: {response}")
+        print(f"Kwargs: {kwargs}")
+        agent_name = self.current_agent if self.current_agent else agent.name
+        await self.send_trace(context, agent_name, "model_response_received", response)
+        print("--------------------------------")
+
+    async def on_end(self, context, agent, output):
+        context_data = context.context
+        print(f"\033[32m[HOOK] Agente '{agent.name}' finalizou.\033[0m")
+        trace_data = {
+            "eventTime": pendulum.now().to_iso8601_string(),
+            "sessionId": context_data.session.get_session_id(),
+            "trace": {
+                "orchestrationTrace": {
+                    "observation": {
+                        "finalResponse": {
+                            "text": output
+                        },
+                        "type": "FINISH"
+                    }
+                }
+            }
+        }
+        await self.send_trace(context_data, agent.name, "sending_response", trace_data)

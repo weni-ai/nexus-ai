@@ -1,17 +1,17 @@
+from typing import Any
+
 import boto3
-from typing import Dict, Any
-from agents import function_tool
-from click.core import F
-from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from agents import (
     Agent,
     AgentHooks,
-    RunContextWrapper,
     ModelSettings,
+    RunContextWrapper,
+    function_tool,
 )
 from django.conf import settings
-from inline_agents.backends.openai.entities import Context
 from openai.types.shared import Reasoning
+
+from inline_agents.backends.openai.entities import Context
 
 
 class Supervisor(Agent):
@@ -24,7 +24,7 @@ class Supervisor(Agent):
         instructions: str,
         model: str,
         tools: list[Any],
-        hooks: list[AgentHooks],
+        hooks: list[AgentHooks] | None = None,
         handoffs: list[Agent] | None = None,
         prompt_override_configuration: dict | None = None,
     ):

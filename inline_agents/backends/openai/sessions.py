@@ -1,6 +1,8 @@
-import redis, json
+import json
+from typing import Any, Dict, List
+
+import redis
 from agents.memory import Session
-from typing import Dict, Any, List
 
 TURN_ROLES = {"user", "assistant"}
 TURN_TYPES = {"message_input_item", "message_output_item"}
@@ -37,30 +39,32 @@ async def set_watermark(session, ns: str, cursor: int):
     }])
 
 
-
 class RedisSession(Session):
     def __init__(self, session_id: str, r: redis.Redis):
         print(f"[DEBUG] RedisSession: {session_id}")
-        self.key = session_id
+        self._key = session_id
         self.r = r
 
+    def get_session_id(self):
+        return self._key
+
     async def get_items(self, limit=None):
-        raw = self.r.lrange(self.key, 0, -(limit or 0) or -1)
+        raw = self.r.lrange(self._key, 0, -(limit or 0) or -1)
         items = [json.loads(x) for x in raw]
         return items
 
     async def add_items(self, items):
         pipe = self.r.pipeline()
         for item in items:
-            pipe.rpush(self.key, json.dumps(item))
+            pipe.rpush(self._key, json.dumps(item))
         pipe.execute()
 
     async def pop_item(self):
-        raw = self.r.rpop(self.key)
+        raw = self.r.rpop(self._key)
         return json.loads(raw) if raw else None
 
     async def clear_session(self):
-        self.r.delete(self.key)
+        self.r.delete(self._key)
 
 
 def make_session_factory(redis: redis.Redis, base_id: str):
