@@ -13,7 +13,7 @@ class HooksDefault(AgentHooks):
         msg_external_id: str,
         turn_off_rationale: bool,
         event_manager_notify: callable,
-        agents: list
+        agents: list,
     ):
         self.agents = agents
         self.supervisor_name = supervisor_name
@@ -30,10 +30,10 @@ class HooksDefault(AgentHooks):
         self.agents_names = []
 
         for agent in self.agents:
-            self.agents_names.append(agent.get('agentName'))   
+            self.agents_names.append(agent.get("agentName"))
 
         super().__init__()
-    
+
     async def send_trace(self, context_data, standardized_event):
         await self.event_manager_notify(
             event="inline_trace_observers_async",
@@ -49,20 +49,17 @@ class HooksDefault(AgentHooks):
             session_id=self.session_id,
             msg_external_id=self.msg_external_id,
             turn_off_rationale=self.turn_off_rationale,
-            channel_uuid=context_data.contact.get("channel_uuid")
+            channel_uuid=context_data.contact.get("channel_uuid"),
         )
 
     async def on_start(self, context, agent):
         context_data = context.context
         standardized_event = {
-            "type": "trace_update",
-            "trace": {
-                "config": {
-                    "agentName": agent.name,
-                    "type": "invoking_model",
-                },
-                "trace": {}
-            }
+            "config": {
+                "agentName": agent.name,
+                "type": "invoking_model",
+            },
+            "trace": {},
         }
         await self.send_trace(context_data, standardized_event)
         print(f"\033[34m[HOOK] Agente '{agent.name}' iniciado.\033[0m")
@@ -76,7 +73,9 @@ class HooksDefault(AgentHooks):
 
     async def on_handoff(self, context, agent, source):
         # print("=====================on_handoff===========================")
-        print(f"\033[35m[HOOK] Handoff recebido pelo agente '{agent.name}' do agente '{source.name}'.\033[0m")
+        print(
+            f"\033[35m[HOOK] Handoff recebido pelo agente '{agent.name}' do agente '{source.name}'.\033[0m"
+        )
         self.list_handoffs_requested.append(source.name)
         # print(f"\033[36m[HOOK] Context: {context}\033[0m")
         # print(f"\033[36m[HOOK] Agent: {agent}\033[0m")
@@ -88,28 +87,24 @@ class HooksDefault(AgentHooks):
         self.list_tools_called.append(tool.name)
         if tool.name in self.agents_names:
             standardized_event = {
-                "type": "trace_update",
-                "trace": {
-                    "config": {
-                        "agentName": agent.name,
-                        "type": "delegating_to_agent",
-                    },
-                    "trace": {}
-                }
+                "config": {
+                    "agentName": agent.name,
+                    "type": "delegating_to_agent",
+                },
+                "trace": {},
             }
             await self.send_trace(context_data, standardized_event)
         else:
             standardized_event = {
-                "type": "trace_update",
-                "trace": {
-                    "config": {
-                        "agentName": agent.name,
-                        "type": "executing_tool",
-                    },
-                    "trace": {}
-                }
+                "config": {
+                    "agentName": agent.name,
+                    "type": "executing_tool",
+                },
+                "trace": {},
             }
-        print(f"\033[33m[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.\033[0m")
+        print(
+            f"\033[33m[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.\033[0m"
+        )
 
     async def on_tool_end(self, context, agent, tool, result):
         if tool.name in self.agents_names:
@@ -122,12 +117,14 @@ class HooksDefault(AgentHooks):
                         "agentName": agent.name,
                         "type": "tool_result_received",
                     },
-                    "trace": {}
-                }
+                    "trace": {},
+                },
             }
-        
+
         # sprint("======================on_tool_end==========================")
-        print(f"\033[31m[HOOK] Agente '{agent.name}' terminou de usar a ferramenta '{tool.name}'.\033[0m")
+        print(
+            f"\033[31m[HOOK] Agente '{agent.name}' terminou de usar a ferramenta '{tool.name}'.\033[0m"
+        )
         print(f"\033[31m[HOOK] Resultado: {result}\033[0m")
         # print(f"\033[36m[HOOK] Context: {context}\033[0m")
         # print(f"\033[36m[HOOK] Agent: {agent}\033[0m")
