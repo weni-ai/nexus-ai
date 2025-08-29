@@ -1,29 +1,34 @@
 import asyncio
-from typing import Any, Dict
+import json
+import os
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from typing import Any, Dict, List
 
+import pendulum
 from agents import Agent, Runner
 from django.conf import settings
 from redis import Redis
 
 from inline_agents.backend import InlineAgentsBackend
-from inline_agents.backends.openai.adapter import OpenAITeamAdapter, process_openai_trace
-from inline_agents.backends.openai.sessions import RedisSession, make_session_factory
+from inline_agents.backends.openai.adapter import (
+    OpenAITeamAdapter,
+    process_openai_trace,
+)
+from inline_agents.backends.openai.hooks import HooksDefault
+from inline_agents.backends.openai.sessions import (
+    RedisSession,
+    make_session_factory,
+)
 from nexus.inline_agents.backends.openai.models import (
     OpenAISupervisor as Supervisor,
 )
-from inline_agents.backends.openai.hooks import HooksDefault
 from nexus.inline_agents.models import InlineAgentsConfiguration
+from nexus.intelligences.models import ContentBase
+from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
-from nexus.projects.models import Project
-from nexus.intelligences.models import ContentBase
-from dataclasses import dataclass, asdict
-from datetime import datetime
-import os
-import json
-from typing import List
-import pendulum
 
 
 @dataclass
@@ -216,6 +221,7 @@ class OpenAIBackend(InlineAgentsBackend):
         session_factory = self._get_session_factory(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
         session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
 
+        supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
         hooks = HooksDefault(
             supervisor_name="manager",
             preview=preview,
@@ -226,9 +232,8 @@ class OpenAIBackend(InlineAgentsBackend):
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
             event_manager_notify=self._event_manager_notify,
-            agents=team
+            agents=team,
         )
-        supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
             agents=team,
@@ -263,7 +268,7 @@ class OpenAIBackend(InlineAgentsBackend):
             client, external_team, session, session_id,
             input_text, contact_urn, project_uuid, channel_uuid,
             user_email, preview, rationale_switch, language,
-            turn_off_rationale, msg_external_id
+            turn_off_rationale, msg_external_id, hooks
         ))
         return result
 
@@ -283,45 +288,63 @@ class OpenAIBackend(InlineAgentsBackend):
         language,
         turn_off_rationale,
         msg_external_id,
+        hooks,
     ):
         """Async wrapper to handle the streaming response"""
 
         event_logger = StreamEventLogger(f"{session_id}{pendulum.now()}.json")
 
-        full_response = ""
-
-        result = client.run_streamed(**external_team, session=session)
+        result = client.run_streamed(**external_team, session=session, hooks=hooks)
 
         async for event in result.stream_events():
-            if event.type == "raw_response_event":
-                if hasattr(event.data, 'delta'):
-                    full_response += event.data.delta
-            elif event.type == "run_item_stream_event":
+            if event.type == "run_item_stream_event":
                 converted_event = event_logger.convert_event(event, agent_name="Supervisor")
                 standardized_event = process_openai_trace(asdict(converted_event))
-
-                # await self._event_manager_notify(
-                #     event="inline_trace_observers_async",
-                #     inline_traces=standardized_event,
-                #     user_input=input_text,
-                #     contact_urn=contact_urn,
-                #     project_uuid=project_uuid,
-                #     send_message_callback=None,
-                #     preview=preview,
-                #     rationale_switch=rationale_switch,
-                #     language=language,
-                #     user_email=user_email,
-                #     session_id=session_id,
-                #     msg_external_id=msg_external_id,
-                #     turn_off_rationale=turn_off_rationale,
-                #     channel_uuid=channel_uuid
-                # )
 
                 if event.name == "reasoning_item_created":
-                    print(f"\n[+] Reasoning: {event.item.raw_item.summary}\n")
+                    summaries = event.item.raw_item.summary
+                    if summaries:
+                        for summary in summaries:
+                            trace_data = {
+                                "collaboratorName": "",
+                                "eventTime": pendulum.now().to_iso8601_string(),
+                                "trace": {
+                                    "orchestrationTrace": {
+                                        "rationale": {
+                                            "text": summary.text,
+                                            "reasoningId": event.item.raw_item.id
+                                        }
+                                    }
+                                }
+                            }
+                            standardized_event = {
+                                "config": {
+                                    "agentName": "",
+                                    "type": "thinking",
+                                },
+                                "trace": trace_data,
+                            }
+                            await self._event_manager_notify(
+                                event="inline_trace_observers_async",
+                                inline_traces=standardized_event,
+                                user_input=input_text,
+                                contact_urn=contact_urn,
+                                project_uuid=project_uuid,
+                                send_message_callback=None,
+                                preview=preview,
+                                rationale_switch=rationale_switch,
+                                language=language,
+                                user_email=user_email,
+                                session_id=session_id,
+                                msg_external_id=msg_external_id,
+                                turn_off_rationale=turn_off_rationale,
+                                channel_uuid=channel_uuid
+                            )
+                            print(f"\n[+] Reasoning: {summary.text}\n")
 
             elif event.type == "agent_updated_stream_event":
-                converted_event = event_logger.convert_event(event, agent_name="Supervisor")
-                standardized_event = process_openai_trace(asdict(converted_event))
+                pass
+                # converted_event = event_logger.convert_event(event, agent_name="Supervisor")
+                # standardized_event = process_openai_trace(asdict(converted_event))
 
         return result.final_output
