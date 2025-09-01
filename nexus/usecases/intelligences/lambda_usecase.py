@@ -269,8 +269,6 @@ def create_lambda_conversation(
         "start_date": payload.get("start_date"),
         "end_date": payload.get("end_date"),
         "has_chats_room": payload.get("has_chats_room"),
-        "contact_name": payload.get("name"),
-        "contact_urn": payload.get("contact_urn"),
         "external_id": payload.get("external_id"),
         "resolution": resolution_choice_value,
         "topic": topic
