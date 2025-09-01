@@ -355,9 +355,4 @@ class OpenAIBackend(InlineAgentsBackend):
                             )
                             print(f"\n[+] Reasoning: {summary.text}\n")
 
-            elif event.type == "agent_updated_stream_event":
-                pass
-                # converted_event = event_logger.convert_event(event, agent_name="Supervisor")
-                # standardized_event = process_openai_trace(asdict(converted_event))
-
         return result.final_output
