@@ -45,8 +45,8 @@ def make_agent_proxy_tool(
         supervisor_items = await supervisor_session.get_items()
         supervisor_turns = await only_turns(supervisor_items)
 
-        # TODO: get default value using project and contact_urn from ctx.context
-        namespace = getattr(supervisor_session, "key",)
+        namespace = supervisor_session.get_session_id()
+
         cursor = await get_watermark(agent_session, namespace)
 
         delta = supervisor_turns[cursor:]
