@@ -13,7 +13,7 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer,
 )
 from nexus.inline_agents.models import Agent
-from nexus.projects.api.permissions import ProjectPermission
+from nexus.projects.api.permissions import ProjectPermission, CombinedExternalProjectPermission
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
@@ -445,7 +445,7 @@ class LogGroupView(APIView):
 
 
 class MultiAgentView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
+    permission_classes = [CombinedExternalProjectPermission]
 
     def get(self, request, project_uuid):
         if not project_uuid:
