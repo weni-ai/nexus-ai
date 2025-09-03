@@ -22,6 +22,7 @@ from django.template.defaultfilters import slugify
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 
 from nexus.agents.models import Agent, Credential, Team
+from nexus.utils import get_datasource_id
 
 from nexus.agents.components import get_all_formats_list
 
@@ -46,7 +47,7 @@ class BedrockFileDatabase(FileDataBase):
         supervisor_foundation_model: List = settings.AWS_BEDROCK_SUPERVISOR_MODEL_ID,
         project_uuid: str | None = None,
     ) -> None:
-        self.data_source_id = settings.get_datasource_id(project_uuid)
+        self.data_source_id = get_datasource_id(project_uuid)
         self.knowledge_base_id = settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID
         self.region_name = settings.AWS_BEDROCK_REGION_NAME
         self.bucket_name = settings.AWS_BEDROCK_BUCKET_NAME
