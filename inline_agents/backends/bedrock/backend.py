@@ -83,7 +83,7 @@ class BedrockBackend(InlineAgentsBackend):
         **kwargs,
     ):
         supervisor = self.supervisor_repository.get_supervisor(
-            project_uuid=project_uuid, foundation_model=foundation_model
+            project=project, foundation_model=foundation_model
         )
 
         # Set dependencies
