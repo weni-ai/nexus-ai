@@ -82,7 +82,9 @@ class BedrockBackend(InlineAgentsBackend):
         project: Project = None,
         **kwargs,
     ):
-        supervisor = self.supervisor_repository.get_supervisor(project=project, foundation_model=foundation_model)
+        supervisor = self.supervisor_repository.get_supervisor(
+            project=project, foundation_model=foundation_model
+        )
 
         # Set dependencies
         self._event_manager_notify = (

@@ -2,7 +2,7 @@ import asyncio
 
 from typing import List, Dict, Union
 
-from nexus.celery import app as celery_app
+from celery import shared_task
 from nexus.event_domain.event_observer import EventObserver
 
 
@@ -56,7 +56,7 @@ class AsyncEventManager:
                 observer.perform(**kwargs)
 
 
-@celery_app.task()
+@shared_task()
 def process_event_observers(event: str, **kwargs):
     from nexus.events import event_manager
 
