@@ -12,7 +12,7 @@ from django.conf import settings
 from openai.types.shared import Reasoning
 
 from inline_agents.backends.openai.entities import Context
-
+from nexus.utils import get_datasource_id
 
 class Supervisor(Agent):
     def function_tools(self) -> list:
@@ -83,7 +83,7 @@ class Supervisor(Agent):
                 {
                     "equals": {
                         "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": settings.get_datasource_id(wrapper.context.project.get("uuid"))
+                        "value": get_datasource_id(wrapper.context.project.get("uuid"))
                     }
                 }
             ]

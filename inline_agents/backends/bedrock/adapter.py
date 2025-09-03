@@ -12,6 +12,7 @@ from weni_datalake_sdk.paths.events_path import EventPath
 from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from nexus.celery import app as celery_app
 from nexus.inline_agents.models import AgentCredential, Guardrail
+from nexus.utils import get_datasource_id
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +223,7 @@ class BedrockTeamAdapter(TeamAdapter):
                 {
                     "equals": {
                         "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": settings.get_datasource_id(project_uuid)
+                        "value": get_datasource_id(project_uuid)
                     }
                 }
             ]
