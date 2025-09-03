@@ -20,6 +20,10 @@ from nexus.events import event_manager
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
 from nexus.intelligences.models import ContentBase, IntegratedIntelligence
+from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+from nexus.inline_agents.models import ContactField
+import pendulum
+import json
 
 
 class ProjectsUseCase:
@@ -226,3 +230,101 @@ class ProjectsUseCase:
         project.save()
 
         return project.agents_backend
+
+    def get_agent_builder_project_details(self, project_uuid: str) -> dict:
+        # TODO: Organize code, remove instruction formatting from this class
+        from inline_agents.backends import BackendsRegistry  # to avoid circular import
+        try:
+            project = self._get_project_with_optimized_queries(project_uuid)
+            
+            if not project.inline_agent_switch:
+                return {
+                    "indexed_database": project.indexer_database,
+                }
+
+            content_base = get_default_content_base_by_project(project_uuid)
+            backend = BackendsRegistry.get_backend(project.agents_backend)
+            
+            supervisor_data = self._get_supervisor_data(project, backend)
+            contact_fields_json = self._build_contact_fields_json(project)
+            integrated_agents_data = self._get_integrated_agents_data(project)
+            formatted_instruction = self._format_supervisor_instruction(
+                backend, supervisor_data, content_base, contact_fields_json, project_uuid
+            )
+
+            return {
+                "agents_backend": project.agents_backend,
+                "manager_foundation_model": supervisor_data["foundation_model"],
+                "integrated_agents": integrated_agents_data,
+                "instruction_character_count": len(formatted_instruction),
+            }
+            
+        except Exception as e:
+            raise Exception(f"Error getting agent builder project details: {str(e)}")
+
+    def _get_project_with_optimized_queries(self, project_uuid: str) -> Project:
+        return Project.objects.select_related().prefetch_related(
+            'integrated_agents__agent'
+        ).get(uuid=project_uuid)
+
+    def _get_supervisor_data(self, project: Project, backend) -> dict:
+        foundation_model = project.default_supervisor_foundation_model
+        return backend.supervisor_repository.get_supervisor(project, foundation_model)
+
+    def _build_contact_fields_json(self, project: Project) -> str:
+        contact_fields = ContactField.objects.filter(project=project).values('key', 'value_type')
+        
+        contact_fields_dict = {
+            field['key']: {
+                "type": field['value_type'],
+                "value": None
+            }
+            for field in contact_fields
+        }
+        
+        return json.dumps(contact_fields_dict)
+
+    def _get_integrated_agents_data(self, project: Project) -> list[dict]:
+        integrated_agents = project.integrated_agents.select_related('agent').all()
+        
+        return [
+            {
+                "name": integrated_agent.agent.name,
+                "slug": integrated_agent.agent.slug,
+                "foundation_model": integrated_agent.agent.foundation_model,
+            }
+            for integrated_agent in integrated_agents
+        ]
+
+    def _format_supervisor_instruction(
+        self, 
+        backend, 
+        supervisor_data: dict, 
+        content_base: ContentBase, 
+        contact_fields_json: str, 
+        project_uuid: str
+    ) -> str:
+        time_now = pendulum.now("America/Sao_Paulo")
+        llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
+        
+        supervisor_instructions = content_base.instructions.values_list("instruction", flat=True)
+        supervisor_instructions_text = "\n".join(supervisor_instructions)
+        
+        agent_data = content_base.agent
+        project = self.get_by_uuid(project_uuid)
+        
+        return backend.team_adapter._format_supervisor_instructions(
+            instruction=supervisor_data["instruction"],
+            date_time_now=llm_formatted_time,
+            contact_fields=contact_fields_json,
+            supervisor_name=agent_data.name,
+            supervisor_role=agent_data.role,
+            supervisor_goal=agent_data.goal,
+            supervisor_adjective=agent_data.personality,
+            supervisor_instructions=supervisor_instructions_text or "",
+            business_rules=project.human_support_prompt or "",
+            project_id=project_uuid,
+            contact_id="",
+            contact_name="",
+            channel_uuid=""
+        )

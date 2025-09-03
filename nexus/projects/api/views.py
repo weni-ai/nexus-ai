@@ -89,3 +89,13 @@ class AgentsBackendView(APIView):
             if "does not exists" in msg or "not found" in msg:
                 return Response({"error": msg}, status=404)
             return Response({"error": msg}, status=500)
+
+
+class AgentBuilderProjectDetailsView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        usecase = ProjectsUseCase()
+        details = usecase.get_agent_builder_project_details(project_uuid)
+        return Response(details)

@@ -18,6 +18,8 @@ from router.traces_observers.save_traces import save_inline_message_to_database
 
 from .adapter import BedrockTeamAdapter, BedrockDataLakeEventAdapter
 from inline_agents.adapter import DataLakeEventAdapter
+from nexus.projects.models import Project
+
 
 logger = logging.getLogger(__name__)
 
@@ -77,11 +79,10 @@ class BedrockBackend(InlineAgentsBackend):
         conversation_turns_to_include: int = 10,
         exclude_previous_thinking_steps: bool = True,
         foundation_model: str = None,
+        project: Project = None,
         **kwargs,
     ):
-        supervisor = self.supervisor_repository.get_supervisor(
-            project_uuid=project_uuid, foundation_model=foundation_model
-        )
+        supervisor = self.supervisor_repository.get_supervisor(project=project, foundation_model=foundation_model)
 
         # Set dependencies
         self._event_manager_notify = (
