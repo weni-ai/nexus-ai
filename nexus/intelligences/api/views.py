@@ -723,7 +723,7 @@ class ContentBaseFileViewset(ModelViewSet):
             intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True)
+                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
 
             event_manager.notify(
                 event="contentbase_file_activity",
@@ -846,7 +846,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
             intelligences.DeleteContentBaseFileUseCase(indexer).delete_by_object(content_base_file)
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True)
+                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
 
             event_manager.notify(
                 event="contentbase_file_activity",
@@ -950,7 +950,7 @@ class ContentBaseLinkViewset(ModelViewSet):
             )
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True)
+                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
 
             event_manager.notify(
                 event="contentbase_link_activity",
@@ -1183,7 +1183,7 @@ class RouterRetailViewSet(views.APIView):
             )
 
             if project.indexer_database == Project.BEDROCK:
-                start_ingestion_job.delay("", post_delete=True)
+                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
 
             event_manager.notify(
                 event="contentbase_link_activity",

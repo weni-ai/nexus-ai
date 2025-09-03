@@ -7,7 +7,6 @@ from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.usecases.agents import AgentUsecase
 from nexus.usecases.intelligences.intelligences_dto import LLMDTO
 from nexus.usecases.users.get_by_email import get_by_email
-from nexus.usecases.template_type.template_type_usecase import TemplateTypeUseCase
 from nexus.usecases.intelligences.create import (
     CreateIntelligencesUseCase,
     CreateContentBaseUseCase,
@@ -128,6 +127,7 @@ class ProjectsUseCase:
         org = orgs.get_by_uuid(org_uuid=project_dto.org_uuid)
         template_type = None
         if project_dto.is_template:
+            from nexus.usecases.template_type.template_type_usecase import TemplateTypeUseCase
             template_type = TemplateTypeUseCase().get_by_uuid(project_dto.template_type_uuid)
         project = Project.objects.create(
             uuid=project_dto.uuid,
