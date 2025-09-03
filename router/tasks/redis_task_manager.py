@@ -190,9 +190,13 @@ class RedisTaskManager(TaskManager):
         project_uuid: str,
         msg_text: str,
         source: str,
-        channel_uuid: str = None
+        channel_uuid: str = None,
+        preview: bool = False
     ) -> None:
         if project_uuid not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
+            return
+
+        if preview:
             return
 
         cached_messages = self.get_cache_messages(project_uuid, contact_urn)
