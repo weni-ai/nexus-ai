@@ -127,6 +127,7 @@ class OpenAISupervisorRepository:
     def get_supervisor(
         cls,
         project: Project,
+        foundation_model: str = None,
     ) -> Agent:
 
         supervisor = Supervisor.objects.order_by('id').last()
