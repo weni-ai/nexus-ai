@@ -113,6 +113,9 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         full_chunks: List[Dict] = None
     ) -> None:
         msgs = self.get_json_strings(msg)
+        if not msgs:
+            msgs = [{"msg": {"text": str(msg)}}]
+
         for msg in msgs:
             response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid)
             try:

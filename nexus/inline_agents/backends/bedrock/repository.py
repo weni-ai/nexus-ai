@@ -1,17 +1,16 @@
 from nexus.inline_agents.backends import Supervisor
 from django.conf import settings
+from nexus.projects.models import Project
 
 class BedrockSupervisorRepository():
 
     @classmethod
     def get_supervisor(
         cls,
-        project_uuid: str,
+        project: Project,
         foundation_model: str = None,
     ) -> dict:
-        from nexus.projects.models import Project
 
-        project = Project.objects.get(uuid=project_uuid)
         supervisor = Supervisor.objects.order_by('id').last()
 
         if not supervisor:
