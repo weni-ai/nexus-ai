@@ -119,7 +119,8 @@ def save_inline_message_to_database(
         project_uuid=project_uuid,
         msg_text=text,
         source=source_type,
-        channel_uuid=channel_uuid
+        channel_uuid=channel_uuid,
+        preview=preview
     )
     source = {
         True: "preview",
