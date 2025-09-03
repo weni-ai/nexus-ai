@@ -83,7 +83,7 @@ class Supervisor(Agent):
                 {
                     "equals": {
                         "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": settings.AWS_BEDROCK_DATASOURCE_ID
+                        "value": settings.get_datasource_id(wrapper.context.project.get("uuid"))
                     }
                 }
             ]

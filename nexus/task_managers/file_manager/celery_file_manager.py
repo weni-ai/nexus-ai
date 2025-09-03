@@ -100,7 +100,14 @@ class CeleryFileManager:
         task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(
             content_base_file=content_base_file
         )
-        start_ingestion_job(str(task_manager.uuid))
+
+        try:
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+            project_uuid = str(project.uuid)
+        except Exception:
+            project_uuid = None
+
+        start_ingestion_job(str(task_manager.uuid), project_uuid=project_uuid)
         return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}, http_status.HTTP_201_CREATED
 
     def upload_and_ingest_inline_file(
@@ -137,7 +144,13 @@ class CeleryFileManager:
         task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(
             content_base_file=content_base_file
         )
-        start_ingestion_job(str(task_manager.uuid))
+        try:
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+            project_uuid = str(project.uuid)
+        except Exception:
+            project_uuid = None
+
+        start_ingestion_job(str(task_manager.uuid), project_uuid=project_uuid)
         return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}, http_status.HTTP_201_CREATED
 
     def upload_file(

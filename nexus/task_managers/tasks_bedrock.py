@@ -44,16 +44,16 @@ def check_ingestion_job_status(celery_task_manager_uuid: str, ingestion_job_id: 
 
 
 @app.task
-def start_ingestion_job(celery_task_manager_uuid: str, file_type: str = "file", post_delete: bool = False):
+def start_ingestion_job(celery_task_manager_uuid: str, file_type: str = "file", post_delete: bool = False, project_uuid: str | None = None):
     try:
         print("[+ 🦑 BEDROCK: Starting Ingestion Job +]")
 
-        file_database = BedrockFileDatabase()
+        file_database = BedrockFileDatabase(project_uuid=project_uuid)
         in_progress_ingestion_jobs: List = file_database.list_bedrock_ingestion()
 
         if in_progress_ingestion_jobs:
             sleep(5)
-            return start_ingestion_job.delay(celery_task_manager_uuid, file_type=file_type)
+            return start_ingestion_job.delay(celery_task_manager_uuid, file_type=file_type, project_uuid=project_uuid)
 
         ingestion_job_id: str = file_database.start_bedrock_ingestion()
 
@@ -74,7 +74,7 @@ def start_ingestion_job(celery_task_manager_uuid: str, file_type: str = "file", 
         if e.response["Error"]["Code"] == "ConflictException":
             print("[+ 🦑 BEDROCK: Filter didn't catch in progress Ingestion Job. \n Waiting to start new IngestionJob ... +]")
             sleep(15)
-            return start_ingestion_job.delay(celery_task_manager_uuid, file_type=file_type)
+            return start_ingestion_job.delay(celery_task_manager_uuid, file_type=file_type, project_uuid=project_uuid)
 
 
 @app.task
@@ -85,9 +85,11 @@ def bedrock_upload_file(
     content_base_file_uuid: str,
     filename: str
 ):
+    from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+    project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
     print("[+ 🦑 BEDROCK: Task to Upload File +]")
 
-    file_database = BedrockFileDatabase()
+    file_database = BedrockFileDatabase(project_uuid=str(project.uuid))
     file_database_response = file_database.add_file(file, content_base_uuid, content_base_file_uuid)
 
     if file_database_response.status != 0:
@@ -112,7 +114,7 @@ def bedrock_upload_file(
         content_base_file=content_base_file
     )
 
-    start_ingestion_job(str(task_manager.uuid))
+    start_ingestion_job(str(task_manager.uuid), project_uuid=str(project.uuid))
 
     response = {
         "task_uuid": task_manager.uuid,
@@ -133,9 +135,11 @@ def bedrock_upload_inline_file(
     content_base_file_uuid: str,
     filename: str
 ):
+    from nexus.usecases.projects.projects_use_case import ProjectsUseCase
     print("[+ 🦑 BEDROCK: Task to Upload Inline File +]")
 
-    file_database = BedrockFileDatabase()
+    project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+    file_database = BedrockFileDatabase(project_uuid=str(project.uuid))
     file_database_response = file_database.add_file(file, content_base_uuid, content_base_file_uuid)
 
     if file_database_response.status != 0:
@@ -160,7 +164,7 @@ def bedrock_upload_inline_file(
         content_base_file=content_base_file
     )
 
-    start_ingestion_job(str(task_manager.uuid))
+    start_ingestion_job(str(task_manager.uuid), project_uuid=str(project.uuid))
 
     response = {
         "task_uuid": task_manager.uuid,
@@ -183,10 +187,11 @@ def create_txt_from_text(text, content_base_dto) -> str:
 
 @app.task
 def bedrock_upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: Dict):
-    print(content_base_dto)
+    from nexus.usecases.projects.projects_use_case import ProjectsUseCase
     file_name = create_txt_from_text(text, content_base_dto)
     content_base_uuid = str(content_base_dto.get("uuid"))
-    file_database = BedrockFileDatabase()
+    project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
+    file_database = BedrockFileDatabase(project_uuid=str(project.uuid))
 
     with open(f"/tmp/{file_name}", "rb") as file:
         file_database_response = file_database.add_file(file, content_base_uuid, content_base_text_uuid)
@@ -207,7 +212,7 @@ def bedrock_upload_text_file(text: str, content_base_dto: Dict, content_base_tex
     print("[+ 🦑 BEDROCK: Text File was added +}")
 
     task_manager = CeleryTaskManagerUseCase().create_celery_text_file_manager(content_base_text=content_base_text)
-    start_ingestion_job(str(task_manager.uuid), "text")
+    start_ingestion_job(str(task_manager.uuid), "text", project_uuid=str(project.uuid))
 
     response = {
         "task_uuid": task_manager.uuid,
@@ -241,14 +246,16 @@ def url_to_markdown(link: str, link_uuid: str) -> str:
 
 @app.task
 def bedrock_send_link(link: str, user_email: str, content_base_link_uuid: str):
+    from nexus.usecases.projects.projects_use_case import ProjectsUseCase
     print("[+ 🦑 BEDROCK: Task to Upload Link +]")
     content_base_link = ContentBaseLink.objects.get(uuid=content_base_link_uuid)
     content_base_uuid = str(content_base_link.content_base.uuid)
+    project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
     task_manager = CeleryTaskManagerUseCase().create_celery_link_manager(content_base_link=content_base_link)
 
     filename = url_to_markdown(link, str(content_base_link.uuid))
 
-    file_database = BedrockFileDatabase()
+    file_database = BedrockFileDatabase(project_uuid=str(project.uuid))
 
     with open(f"/tmp/{filename}", "rb") as file:
         file_database_response = file_database.add_file(file, content_base_uuid, content_base_link_uuid)
@@ -265,7 +272,7 @@ def bedrock_send_link(link: str, user_email: str, content_base_link_uuid: str):
     content_base_link.save(update_fields=['name'])
 
     print("[+ 🦑 BEDROCK: Link File was added +}")
-    start_ingestion_job(str(task_manager.uuid), "link")
+    start_ingestion_job(str(task_manager.uuid), "link", project_uuid=str(project.uuid))
 
     response = {
         "task_uuid": task_manager.uuid,

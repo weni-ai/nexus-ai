@@ -44,8 +44,9 @@ class BedrockFileDatabase(FileDataBase):
         self,
         agent_foundation_model: List = settings.AWS_BEDROCK_AGENTS_MODEL_ID,
         supervisor_foundation_model: List = settings.AWS_BEDROCK_SUPERVISOR_MODEL_ID,
+        project_uuid: str | None = None,
     ) -> None:
-        self.data_source_id = settings.AWS_BEDROCK_DATASOURCE_ID
+        self.data_source_id = settings.get_datasource_id(project_uuid)
         self.knowledge_base_id = settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID
         self.region_name = settings.AWS_BEDROCK_REGION_NAME
         self.bucket_name = settings.AWS_BEDROCK_BUCKET_NAME
