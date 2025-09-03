@@ -136,6 +136,8 @@ class SimulateWhatsAppBroadcastHTTPClient(DirectMessage):
         full_chunks: List[Dict] = None
     ) -> None:
         msgs = self.get_json_strings(msg)
+        if not msgs:
+            msgs = [{"msg": {"text": str(msg)}}]
         response_data = {"type": "broadcast", "message": msgs, "fonts": []}
 
         return response_data
