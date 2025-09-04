@@ -17,6 +17,7 @@ from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
 
 from .adapter import BedrockTeamAdapter, BedrockDataLakeEventAdapter
+from router.handler import PostMessageHandler
 from inline_agents.adapter import DataLakeEventAdapter
 from nexus.projects.models import Project
 
@@ -290,6 +291,9 @@ class BedrockBackend(InlineAgentsBackend):
             rationale_texts=rationale_texts,
             full_response=full_response,
         )
+
+        post_message_handler = PostMessageHandler()
+        full_response = post_message_handler.handle_post_message(full_response)
 
         if "rationale" in orchestration_trace and msg_external_id and not preview:
             typing_usecase.send_typing_message(
