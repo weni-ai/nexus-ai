@@ -12,6 +12,7 @@ from weni_datalake_sdk.paths.events_path import EventPath
 from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from nexus.celery import app as celery_app
 from nexus.inline_agents.models import AgentCredential, Guardrail
+from nexus.utils import get_datasource_id
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,8 @@ class BedrockTeamAdapter(TeamAdapter):
             "agentCollaboration": supervisor["agent_collaboration"],
             "knowledgeBases": self._get_knowledge_bases(
                 supervisor=supervisor,
-                content_base_uuid=content_base.uuid
+                content_base_uuid=content_base.uuid,
+                project_uuid=project_uuid,
             ),
             "inlineSessionState": self._get_inline_session_state(
                 use_components=use_components,
@@ -206,7 +208,8 @@ class BedrockTeamAdapter(TeamAdapter):
     def _get_knowledge_bases(
         cls,
         supervisor: dict,
-        content_base_uuid: str
+        content_base_uuid: str,
+        project_uuid: str
     ) -> list[dict]:
 
         combined_filter = {
@@ -220,7 +223,7 @@ class BedrockTeamAdapter(TeamAdapter):
                 {
                     "equals": {
                         "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": settings.AWS_BEDROCK_DATASOURCE_ID
+                        "value": get_datasource_id(project_uuid)
                     }
                 }
             ]
