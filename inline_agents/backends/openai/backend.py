@@ -13,7 +13,7 @@ from redis import Redis
 from inline_agents.backend import InlineAgentsBackend
 from inline_agents.backends.openai.adapter import (
     OpenAITeamAdapter,
-    process_openai_trace,
+    OpenAIDataLakeEventAdapter,
 )
 from inline_agents.backends.openai.hooks import SupervisorHooks, RunnerHooks
 from inline_agents.backends.openai.sessions import (
@@ -171,6 +171,11 @@ class OpenAIBackend(InlineAgentsBackend):
         super().__init__()
         self._event_manager_notify = None
         self._data_lake_event_adapter = None
+    
+    def _get_data_lake_event_adapter(self):
+        if self._data_lake_event_adapter is None:
+            self._data_lake_event_adapter = OpenAIDataLakeEventAdapter()
+        return self._data_lake_event_adapter
 
     def _get_client(self):
         return Runner()
@@ -234,6 +239,7 @@ class OpenAIBackend(InlineAgentsBackend):
             turn_off_rationale=turn_off_rationale,
             event_manager_notify=self._event_manager_notify,
             agents=team,
+            data_lake_event_adapter=self._get_data_lake_event_adapter(),
         )
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
@@ -282,7 +288,7 @@ class OpenAIBackend(InlineAgentsBackend):
             client, external_team, session, session_id,
             input_text, contact_urn, project_uuid, channel_uuid,
             user_email, preview, rationale_switch, language,
-            turn_off_rationale, msg_external_id, runner_hooks
+            turn_off_rationale, msg_external_id, supervisor_hooks, runner_hooks
         ))
         return result
 
@@ -302,6 +308,7 @@ class OpenAIBackend(InlineAgentsBackend):
         language,
         turn_off_rationale,
         msg_external_id,
+        supervisor_hooks,
         runner_hooks,
     ):
         """Async wrapper to handle the streaming response"""
@@ -312,48 +319,12 @@ class OpenAIBackend(InlineAgentsBackend):
 
         async for event in result.stream_events():
             if event.type == "run_item_stream_event":
-                converted_event = event_logger.convert_event(event, agent_name="Supervisor")
-                standardized_event = process_openai_trace(asdict(converted_event))
-
-                if event.name == "reasoning_item_created":
-                    summaries = event.item.raw_item.summary
-                    if summaries:
-                        for summary in summaries:
-                            trace_data = {
-                                "collaboratorName": "",
-                                "eventTime": pendulum.now().to_iso8601_string(),
-                                "trace": {
-                                    "orchestrationTrace": {
-                                        "rationale": {
-                                            "text": summary.text,
-                                            "reasoningId": event.item.raw_item.id
-                                        }
-                                    }
-                                }
-                            }
-                            standardized_event = {
-                                "config": {
-                                    "agentName": "",
-                                    "type": "thinking",
-                                },
-                                "trace": trace_data,
-                            }
-                            await self._event_manager_notify(
-                                event="inline_trace_observers_async",
-                                inline_traces=standardized_event,
-                                user_input=input_text,
-                                contact_urn=contact_urn,
-                                project_uuid=project_uuid,
-                                send_message_callback=None,
-                                preview=preview,
-                                rationale_switch=rationale_switch,
-                                language=language,
-                                user_email=user_email,
-                                session_id=session_id,
-                                msg_external_id=msg_external_id,
-                                turn_off_rationale=turn_off_rationale,
-                                channel_uuid=channel_uuid
-                            )
-                            print(f"\n[+] Reasoning: {summary.text}\n")
+                
+                if hasattr(event, 'item') and event.item.type == "tool_call_item":
+                    supervisor_hooks.tool_calls.update(
+                        {
+                            event.item.raw_item.name:event.item.raw_item.arguments
+                        }
+                    )
 
         return result.final_output
