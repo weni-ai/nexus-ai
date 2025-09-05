@@ -1,8 +1,10 @@
 import json
+import logging
 from typing import Callable, Optional
 
 import boto3
 import pendulum
+import sentry_sdk
 from agents import (
     Agent,
     FunctionTool,
@@ -14,9 +16,10 @@ from agents import (
 from django.conf import settings
 from pydantic import BaseModel, Field, create_model
 
-from inline_agents.adapter import TeamAdapter
+from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
+from inline_agents.backends.data_lake import send_data_lake_event
 from inline_agents.backends.openai.entities import Context
-from inline_agents.backends.openai.hooks import SupervisorHooks, RunnerHooks
+from inline_agents.backends.openai.hooks import RunnerHooks, SupervisorHooks
 from inline_agents.backends.openai.sessions import (
     get_watermark,
     only_turns,
@@ -26,9 +29,13 @@ from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
 from nexus.inline_agents.models import (
     AgentCredential,
     InlineAgentsConfiguration,
+    IntegratedAgent,
 )
 from nexus.intelligences.models import ContentBase
 from nexus.projects.models import Project
+from nexus.usecases.inline_agents.update import update_conversation_data
+
+logger = logging.getLogger(__name__)
 
 
 def make_agent_proxy_tool(
@@ -487,3 +494,127 @@ def process_openai_trace(event):
         original_trace["event_data"]["item"]["raw_item"] = {"content": item["raw_item"]["content"], "role": item["raw_item"]["role"], "status": item["raw_item"]["status"], "type": item["raw_item"]["type"]}
         standardized_event = create_standardized_event(agent_name, "sending_response", original_trace=original_trace)
     return standardized_event
+
+
+class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
+    def __init__(
+        self,
+        send_data_lake_event_task: callable = None
+    ):
+        self.send_data_lake_event_task = send_data_lake_event_task
+        if self.send_data_lake_event_task is None:
+            self.send_data_lake_event_task = self._get_send_data_lake_event_task()
+
+    def _get_send_data_lake_event_task(
+        self
+    ) -> callable:
+        return send_data_lake_event
+
+    def to_data_lake_event(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        agent_data: dict = {},
+        tool_call_data: dict = {},
+        preview: bool = False
+    ) -> Optional[dict]:
+
+        if preview or (not agent_data and not tool_call_data):
+            return
+
+        try:
+            event_data = {
+                "event_name": "weni_nexus_data",
+                "date": pendulum.now("America/Sao_Paulo").to_iso8601_string(),
+                "project": project_uuid,
+                "contact_urn": contact_urn,
+                "value_type": "string",
+                "metadata": {
+                    "backend": "openai"
+                }
+            }
+
+            if tool_call_data:
+                event_data["metadata"]["tool_call"] = tool_call_data
+                event_data["key"] = "tool_call"
+                event_data["value"] = tool_call_data["tool_name"]
+                self.send_data_lake_event_task(event_data)
+                return event_data
+
+            if agent_data:
+                event_data["metadata"]["agent_collaboration"] = agent_data
+                event_data["key"] = "agent_invocation"
+                event_data["value"] = agent_data["agent_name"]
+                self.send_data_lake_event_task.delay(event_data)
+                return event_data
+
+        except Exception as e:
+            logger.error(f"Error processing data lake event: {str(e)}")
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.capture_exception(e)
+            return None
+
+    def custom_event_data(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str,
+        event_data: list,
+        preview: bool = False,
+        agent_name: str = ""
+    ):
+        if preview:
+            return None
+
+        for event_to_send in event_data:
+            if not event_to_send.get("metadata"):
+                team_agent = IntegratedAgent.objects.get(
+                    agent__slug=agent_name,
+                    project__uuid=project_uuid
+                )
+                agent_uuid = team_agent.agent.uuid
+                event_to_send["metadata"] = {
+                    "agent_uuid": agent_uuid
+                }
+            if event_to_send.get("key") == "weni_csat":
+                event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
+                to_update = {'csat': event_to_send.get("value")}
+                update_conversation_data(
+                    to_update=to_update,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    channel_uuid=channel_uuid
+                )
+            if event_to_send.get("key") == "weni_nps":
+                event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_NPS
+                to_update = {'nps': event_to_send.get("value")}
+                update_conversation_data(
+                    to_update=to_update,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    channel_uuid=channel_uuid
+                )
+
+            self.to_data_lake_custom_event(
+                event_data=event_to_send,
+                project_uuid=project_uuid,
+                contact_urn=contact_urn
+            )
+
+    def to_data_lake_custom_event(
+        self,
+        event_data: dict,
+        project_uuid: str,
+        contact_urn: str
+    ) -> Optional[dict]:
+        try:
+            event_data["project"] = project_uuid
+            event_data["contact_urn"] = contact_urn
+            self.send_data_lake_event_task.delay(event_data)
+            return event_data
+        except Exception as e:
+            logger.error(f"Error getting trace summary data lake event: {str(e)}")
+            sentry_sdk.set_context("custom event to data lake", {"event_data": event_data})
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.capture_exception(e)
+            return None
