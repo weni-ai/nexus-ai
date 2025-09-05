@@ -12,6 +12,7 @@ from nexus.projects.api.routers import urlpatterns as projects_routes
 from nexus.logs.api.routers import urlpatterns as logs_routes
 from nexus.zeroshot.api.routers import urlpatterns as zeroshot_routes
 from nexus.agents.api.routers import urlpatterns as agent_routes
+from nexus.users.api.urls import urlpatterns as users_routes
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -30,6 +31,7 @@ url_api += actions_routes
 url_api += projects_routes
 url_api += logs_routes
 url_api += agent_routes
+url_api += users_routes
 
 urlpatterns = [
     path("", lambda _: HttpResponse()),
