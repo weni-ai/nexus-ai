@@ -39,6 +39,7 @@ class MessageRepository(Repository):
             response = table.query(
                 KeyConditionExpression="conversation_id = :conv_id",
                 ExpressionAttributeValues={":conv_id": conversation_id},
+                ScanIndexForward=False,
             )
 
             return [
@@ -50,7 +51,47 @@ class MessageRepository(Repository):
                 for item in response["Items"]
             ]
 
+    def get_latest_message_by_source(
+        self, project_uuid: str, contact_urn: str, source_type: str
+    ) -> dict:
+        """
+        Get the most recent message by source type using optimized DynamoDB query.
+
+        Args:
+            project_uuid: Project unique identifier
+            contact_urn: Contact unique resource name
+            source_type: Message source type to filter by
+
+        Returns:
+            Most recent message data or empty dict if not found
+        """
+        with self.table as table:
+            conversation_id = f"{project_uuid}#{contact_urn}"
+
+            response = table.query(
+                KeyConditionExpression="conversation_id = :conv_id",
+                FilterExpression="source_type = :source",
+                ExpressionAttributeValues={
+                    ":conv_id": conversation_id,
+                    ":source": source_type,
+                },
+                ScanIndexForward=False,
+                Limit=1,
+            )
+
+            items = response.get("Items", [])
+            if items:
+                item = items[0]
+                return {
+                    "text": item["message_text"],
+                    "source": item["source_type"],
+                    "created_at": item["created_at"],
+                }
+
+            return {}
+
     def delete_messages(self, project_uuid: str, contact_urn: str) -> None:
+        """Delete all messages for a conversation."""
         with self.table as table:
             conversation_id = f"{project_uuid}#{contact_urn}"
 
@@ -67,3 +108,34 @@ class MessageRepository(Repository):
                             "message_timestamp": item["message_timestamp"],
                         }
                     )
+
+    def delete_pending_tasks(self, project_uuid: str, contact_urn: str) -> None:
+        """
+        Delete pending tasks and task IDs for a conversation.
+
+        Args:
+            project_uuid: Project unique identifier
+            contact_urn: Contact unique resource name
+        """
+        with self.table as table:
+            conversation_id = f"{project_uuid}#{contact_urn}"
+
+            response = table.query(
+                KeyConditionExpression="conversation_id = :conv_id",
+                FilterExpression="source_type IN (:pending, :task_id)",
+                ExpressionAttributeValues={
+                    ":conv_id": conversation_id,
+                    ":pending": "pending",
+                    ":task_id": "task_id",
+                },
+            )
+
+            if response.get("Items"):
+                with table.batch_writer() as batch:
+                    for item in response["Items"]:
+                        batch.delete_item(
+                            Key={
+                                "conversation_id": conversation_id,
+                                "message_timestamp": item["message_timestamp"],
+                            }
+                        )
