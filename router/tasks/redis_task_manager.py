@@ -173,8 +173,13 @@ class RedisTaskManager(TaskManager):
         project_uuid: str,
         contact_urn: str,
         msg_text: str,
-        source: str
+        source: str,
+        channel_uuid: str = None,
+        contact_name: str = None
     ) -> None:
+        from nexus.usecases.intelligences.create import ConversationUseCase
+        from nexus.intelligences.models import Conversation
+
         cached_messages = self.get_cache_messages(project_uuid, contact_urn)
         cached_messages.append({
             "text": msg_text,
@@ -182,6 +187,20 @@ class RedisTaskManager(TaskManager):
             "created_at": pendulum.now().to_iso8601_string()
         })
         self.redis_client.set(f"conversation:{project_uuid}:{contact_urn}", json.dumps(cached_messages))
+
+        conversation_exists = Conversation.objects.filter(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid
+        ).exists()
+        if not conversation_exists:
+            conversation_usecase = ConversationUseCase()
+            conversation_usecase.create_conversation_base_structure(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                channel_uuid=channel_uuid,
+                contact_name=contact_name
+            )
 
     def handle_message_cache(
         self,
@@ -205,7 +224,9 @@ class RedisTaskManager(TaskManager):
                 project_uuid=project_uuid,
                 contact_urn=contact_urn,
                 msg_text=msg_text,
-                source=source
+                source=source,
+                channel_uuid=channel_uuid,
+                contact_name=contact_name
             )
         else:
             self.create_message_to_cache(
