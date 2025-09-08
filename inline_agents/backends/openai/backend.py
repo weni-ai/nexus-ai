@@ -326,5 +326,8 @@ class OpenAIBackend(InlineAgentsBackend):
                             event.item.raw_item.name:event.item.raw_item.arguments
                         }
                     )
+                    print("------------------------------------------")
+                    print("1. Tool call item: ", supervisor_hooks.tool_calls)
+                    print("------------------------------------------")
 
         return result.final_output
