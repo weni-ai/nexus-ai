@@ -189,7 +189,7 @@ class RedisTaskManager(TaskManager):
         self.redis_client.set(f"conversation:{project_uuid}:{contact_urn}", json.dumps(cached_messages))
 
         conversation_exists = Conversation.objects.filter(
-            project_uuid=project_uuid,
+            project_id=project_uuid,
             contact_urn=contact_urn,
             channel_uuid=channel_uuid
         ).exists()
