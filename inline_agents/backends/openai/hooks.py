@@ -156,7 +156,10 @@ class SupervisorHooks(AgentHooks):
 
     async def on_tool_start(self, context, agent, tool):
         context_data = context.context
-        parameters = self.tool_calls.get(tool.name, {})
+        print("------------------------------------------")
+        print("2. Tool call item: ", self.tool_calls)
+        print("------------------------------------------")
+        parameters = self.tool_calls.get(agent.name, {})
         tool_call_data = {
             "tool_name": tool.name,
             "parameters": parameters
