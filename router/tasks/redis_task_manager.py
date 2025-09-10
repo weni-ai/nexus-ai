@@ -1,70 +1,46 @@
 import pendulum
 import json
 
-from abc import ABC, abstractmethod
+
 from typing import Optional
 from redis import Redis
 from django.conf import settings
 
-
-class TaskManager(ABC):
-    """Abstract base class for task management."""
-
-    @abstractmethod
-    def get_pending_response(self, project_uuid: str, contact_urn: str) -> Optional[str]:
-        """Get the pending response for a contact."""
-        pass
-
-    @abstractmethod
-    def get_pending_task_id(self, project_uuid: str, contact_urn: str) -> Optional[str]:
-        """Get the pending task ID for a contact."""
-        pass
-
-    @abstractmethod
-    def store_pending_response(self, project_uuid: str, contact_urn: str, message_text: str) -> None:
-        """Store a pending response for a contact."""
-        pass
-
-    @abstractmethod
-    def store_pending_task_id(self, project_uuid: str, contact_urn: str, task_id: str) -> None:
-        """Store a pending task ID for a contact."""
-        pass
-
-    @abstractmethod
-    def clear_pending_tasks(self, project_uuid: str, contact_urn: str) -> None:
-        """Clear all pending tasks for a contact."""
-        pass
-
-    @abstractmethod
-    def handle_pending_response(self, project_uuid: str, contact_urn: str, message_text: str) -> str:
-        """Handle pending response and return final message text."""
-        pass
+from router.tasks.interfaces import InlineAgentTaskManager
 
 
-class RedisTaskManager(TaskManager):
+class RedisTaskManager(InlineAgentTaskManager):
+    """Redis implementation of inline agent task management."""
+
     CACHE_TIMEOUT = 300  # 5 minutes in seconds
 
     def __init__(self, redis_client: Optional[Redis] = None):
         self.redis_client = redis_client or Redis.from_url(settings.REDIS_URL)
 
-    def get_pending_response(self, project_uuid: str, contact_urn: str) -> Optional[str]:
+    def get_pending_response(
+        self, project_uuid: str, contact_urn: str
+    ) -> Optional[str]:
         """Get the pending response for a contact."""
         pending_response_key = f"response:{project_uuid}:{contact_urn}"
         pending_response = self.redis_client.get(pending_response_key)
-        return pending_response.decode('utf-8') if pending_response else None
+        return pending_response.decode("utf-8") if pending_response else None
 
     def get_pending_task_id(self, project_uuid: str, contact_urn: str) -> Optional[str]:
         """Get the pending task ID for a contact."""
         pending_task_key = f"task:{project_uuid}:{contact_urn}"
         pending_task_id = self.redis_client.get(pending_task_key)
-        return pending_task_id.decode('utf-8') if pending_task_id else None
+        return pending_task_id.decode("utf-8") if pending_task_id else None
 
-    def store_pending_response(self, project_uuid: str, contact_urn: str, message_text: str) -> None:
+    def store_pending_response(
+        self, project_uuid: str, contact_urn: str, message_text: str
+    ) -> None:
         """Store a pending response for a contact."""
         pending_response_key = f"response:{project_uuid}:{contact_urn}"
         self.redis_client.set(pending_response_key, message_text)
 
-    def store_pending_task_id(self, project_uuid: str, contact_urn: str, task_id: str) -> None:
+    def store_pending_task_id(
+        self, project_uuid: str, contact_urn: str, task_id: str
+    ) -> None:
         """Store a pending task ID for a contact."""
         pending_task_key = f"task:{project_uuid}:{contact_urn}"
         self.redis_client.set(pending_task_key, task_id)
@@ -76,7 +52,9 @@ class RedisTaskManager(TaskManager):
         self.redis_client.delete(pending_response_key)
         self.redis_client.delete(pending_task_key)
 
-    def handle_pending_response(self, project_uuid: str, contact_urn: str, message_text: str) -> str:
+    def handle_pending_response(
+        self, project_uuid: str, contact_urn: str, message_text: str
+    ) -> str:
         """
         Handle pending response by either concatenating with existing response
         or storing new response.
@@ -102,24 +80,20 @@ class RedisTaskManager(TaskManager):
 
         if session_data is None:
             session_data = {
-                'rationale_history': [],
-                'first_rationale_text': None,
-                'is_first_rationale': True
+                "rationale_history": [],
+                "first_rationale_text": None,
+                "is_first_rationale": True,
             }
             self.save_rationale_session_data(session_id, session_data)
         else:
-            session_data = eval(session_data.decode('utf-8'))
+            session_data = eval(session_data.decode("utf-8"))
 
         return session_data
 
     def save_rationale_session_data(self, session_id: str, session_data: dict) -> None:
         """Save rationale session data to cache."""
         cache_key = f"rationale_session_{session_id}"
-        self.redis_client.setex(
-            cache_key,
-            self.CACHE_TIMEOUT,
-            str(session_data)
-        )
+        self.redis_client.setex(cache_key, self.CACHE_TIMEOUT, str(session_data))
 
     def create_message_to_cache(
         self,
@@ -128,60 +102,53 @@ class RedisTaskManager(TaskManager):
         contact_name: str,
         project_uuid: str,
         source: str,
-        channel_uuid: str = None
+        channel_uuid: str = None,
     ) -> None:
         from nexus.usecases.intelligences.create import ConversationUseCase
+
         ttl = 172800  # 2 days
 
         msg = [
             {
                 "text": msg_text,
                 "source": source,
-                "created_at": pendulum.now().to_iso8601_string()
+                "created_at": pendulum.now().to_iso8601_string(),
             }
         ]
 
         cache_key = f"conversation:{project_uuid}:{contact_urn}"
-        self.redis_client.setex(
-            cache_key,
-            ttl,
-            json.dumps(msg)
-        )
+        self.redis_client.setex(cache_key, ttl, json.dumps(msg))
 
         usecase = ConversationUseCase()
         usecase.create_conversation_base_structure(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
         )
 
-    def get_cache_messages(
-        self,
-        project_uuid: str,
-        contact_urn: str
-    ) -> list:
+    def get_cache_messages(self, project_uuid: str, contact_urn: str) -> list:
         """Get messages from cache"""
         cache_key = f"conversation:{project_uuid}:{contact_urn}"
         messages = self.redis_client.get(cache_key)
         if messages:
-            return json.loads(messages.decode('utf-8'))
+            return json.loads(messages.decode("utf-8"))
         return []
 
     def add_message_to_cache(
-        self,
-        project_uuid: str,
-        contact_urn: str,
-        msg_text: str,
-        source: str
+        self, project_uuid: str, contact_urn: str, msg_text: str, source: str
     ) -> None:
         cached_messages = self.get_cache_messages(project_uuid, contact_urn)
-        cached_messages.append({
-            "text": msg_text,
-            "source": source,
-            "created_at": pendulum.now().to_iso8601_string()
-        })
-        self.redis_client.set(f"conversation:{project_uuid}:{contact_urn}", json.dumps(cached_messages))
+        cached_messages.append(
+            {
+                "text": msg_text,
+                "source": source,
+                "created_at": pendulum.now().to_iso8601_string(),
+            }
+        )
+        self.redis_client.set(
+            f"conversation:{project_uuid}:{contact_urn}", json.dumps(cached_messages)
+        )
 
     def handle_message_cache(
         self,
@@ -191,7 +158,7 @@ class RedisTaskManager(TaskManager):
         msg_text: str,
         source: str,
         channel_uuid: str = None,
-        preview: bool = False
+        preview: bool = False,
     ) -> None:
         if project_uuid not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
             return
@@ -205,7 +172,7 @@ class RedisTaskManager(TaskManager):
                 project_uuid=project_uuid,
                 contact_urn=contact_urn,
                 msg_text=msg_text,
-                source=source
+                source=source,
             )
         else:
             self.create_message_to_cache(
@@ -214,7 +181,7 @@ class RedisTaskManager(TaskManager):
                 contact_name=contact_name,
                 msg_text=msg_text,
                 source=source,
-                channel_uuid=channel_uuid
+                channel_uuid=channel_uuid,
             )
 
     def clear_message_cache(self, project_uuid: str, contact_urn: str) -> None:
@@ -222,11 +189,7 @@ class RedisTaskManager(TaskManager):
         self.redis_client.delete(f"conversation:{project_uuid}:{contact_urn}")
 
     def rabbitmq_msg_batch_to_cache(
-        self,
-        project_uuid: str,
-        contact_urn: str,
-        messages: list,
-        key: str
+        self, project_uuid: str, contact_urn: str, messages: list, key: str
     ) -> None:
         """
         Store a batch of messages in cache.
@@ -236,7 +199,7 @@ class RedisTaskManager(TaskManager):
 
         if existing_msgs:
             try:
-                existing_msgs = json.loads(existing_msgs.decode('utf-8'))
+                existing_msgs = json.loads(existing_msgs.decode("utf-8"))
                 if isinstance(existing_msgs, list):
                     existing_msgs.extend(messages)
                 else:
