@@ -1,5 +1,7 @@
 import time
 
+import uuid
+
 import logging
 
 from router.infrastructure.database.dynamo import get_message_table
@@ -17,6 +19,7 @@ class MessageRepository(Repository):
             ttl_timestamp = int(time.time()) + (2 * 24 * 60 * 60)
 
             item = {
+                "UUID": str(uuid.uuid4()),
                 "conversation_id": conversation_id,
                 "message_timestamp": int(time.time()) * 1000,
                 "project_uuid": project_uuid,
@@ -24,7 +27,7 @@ class MessageRepository(Repository):
                 "message_text": message_data["text"],
                 "source_type": message_data["source"],
                 "created_at": message_data["created_at"],
-                "ttl": ttl_timestamp,
+                "ExpiresOn": ttl_timestamp,
             }
 
             table.put_item(Item=item)
@@ -33,10 +36,9 @@ class MessageRepository(Repository):
         with get_message_table() as table:
             conversation_id = f"{project_uuid}#{contact_urn}"
 
-            response = table.query(
-                KeyConditionExpression="conversation_id = :conv_id",
+            response = table.scan(
+                FilterExpression="conversation_id = :conv_id",
                 ExpressionAttributeValues={":conv_id": conversation_id},
-                ScanIndexForward=False,
             )
 
             return [
@@ -52,7 +54,7 @@ class MessageRepository(Repository):
         self, project_uuid: str, contact_urn: str, source_type: str
     ) -> dict:
         """
-        Get the most recent message by source type using optimized DynamoDB query.
+        Get the most recent message by source type using DynamoDB scan.
 
         Args:
             project_uuid: Project unique identifier
@@ -65,20 +67,20 @@ class MessageRepository(Repository):
         with get_message_table() as table:
             conversation_id = f"{project_uuid}#{contact_urn}"
 
-            response = table.query(
-                KeyConditionExpression="conversation_id = :conv_id",
-                FilterExpression="source_type = :source",
+            response = table.scan(
+                FilterExpression="conversation_id = :conv_id AND source_type = :source",
                 ExpressionAttributeValues={
                     ":conv_id": conversation_id,
                     ":source": source_type,
                 },
-                ScanIndexForward=False,
-                Limit=1,
             )
 
             items = response.get("Items", [])
             if items:
-                item = items[0]
+                sorted_items = sorted(
+                    items, key=lambda x: x.get("message_timestamp", 0), reverse=True
+                )
+                item = sorted_items[0]
                 return {
                     "text": item["message_text"],
                     "source": item["source_type"],
@@ -92,8 +94,8 @@ class MessageRepository(Repository):
         with get_message_table() as table:
             conversation_id = f"{project_uuid}#{contact_urn}"
 
-            response = table.query(
-                KeyConditionExpression="conversation_id = :conv_id",
+            response = table.scan(
+                FilterExpression="conversation_id = :conv_id",
                 ExpressionAttributeValues={":conv_id": conversation_id},
             )
 
@@ -101,8 +103,7 @@ class MessageRepository(Repository):
                 for item in response["Items"]:
                     batch.delete_item(
                         Key={
-                            "conversation_id": conversation_id,
-                            "message_timestamp": item["message_timestamp"],
+                            "UUID": item["UUID"],
                         }
                     )
 
@@ -117,9 +118,8 @@ class MessageRepository(Repository):
         with get_message_table() as table:
             conversation_id = f"{project_uuid}#{contact_urn}"
 
-            response = table.query(
-                KeyConditionExpression="conversation_id = :conv_id",
-                FilterExpression="source_type IN (:pending, :task_id)",
+            response = table.scan(
+                FilterExpression="conversation_id = :conv_id AND (source_type = :pending OR source_type = :task_id)",
                 ExpressionAttributeValues={
                     ":conv_id": conversation_id,
                     ":pending": "pending",
@@ -132,7 +132,6 @@ class MessageRepository(Repository):
                     for item in response["Items"]:
                         batch.delete_item(
                             Key={
-                                "conversation_id": conversation_id,
-                                "message_timestamp": item["message_timestamp"],
+                                "UUID": item["UUID"],
                             }
                         )
