@@ -1,3 +1,4 @@
+import json
 import pendulum
 from agents import AgentHooks, RunHooks
 from django.conf import settings
@@ -233,6 +234,10 @@ class SupervisorHooks(AgentHooks):
             )
 
     async def on_tool_end(self, context, agent, tool, result):
+        def get_events(result: dict):
+            events = result.get("events", {})
+            return events
+
         context_data = context.context
         if tool.name == self.knowledge_base_tool:
             print(f"\033[33m[HOOK] Agente '{agent.name}' terminou de usar a ferramenta '{tool.name}'.\033[0m")
@@ -278,7 +283,15 @@ class SupervisorHooks(AgentHooks):
             self.current_agent = None
 
         else:
-            events = result.get("events")
+            if isinstance(result, str):
+                try:
+                    result_json = json.loads(result)
+                    events = get_events(result_json)
+                except Exception as e:
+                    events = {}
+            elif isinstance(result, dict):
+                events = get_events(result)
+
             if events:
                 self.data_lake_event_adapter.to_data_lake_custom_event(
                     event_data=events,

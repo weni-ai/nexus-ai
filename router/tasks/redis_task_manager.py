@@ -138,6 +138,9 @@ class RedisTaskManager(InlineAgentTaskManager):
     def add_message_to_cache(
         self, project_uuid: str, contact_urn: str, msg_text: str, source: str
     ) -> None:
+        from nexus.usecases.intelligences.create import ConversationUseCase
+        from nexus.intelligences.models import Conversation
+
         cached_messages = self.get_cache_messages(project_uuid, contact_urn)
         cached_messages.append(
             {
@@ -149,6 +152,20 @@ class RedisTaskManager(InlineAgentTaskManager):
         self.redis_client.set(
             f"conversation:{project_uuid}:{contact_urn}", json.dumps(cached_messages)
         )
+
+        conversation_exists = Conversation.objects.filter(
+            project_id=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid
+        ).exists()
+        if not conversation_exists:
+            conversation_usecase = ConversationUseCase()
+            conversation_usecase.create_conversation_base_structure(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                channel_uuid=channel_uuid,
+                contact_name=contact_name
+            )
 
     def handle_message_cache(
         self,

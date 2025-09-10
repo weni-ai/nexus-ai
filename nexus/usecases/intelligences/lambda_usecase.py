@@ -1,5 +1,6 @@
 import boto3
 import json
+import sentry_sdk
 
 from django.conf import settings
 
@@ -227,17 +228,17 @@ def create_lambda_conversation(
     if payload.get("project_uuid") not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
         return
 
-    lambda_usecase = LambdaUseCase()
-    task_manager = lambda_usecase._get_task_manager()
-    messages = task_manager.get_cache_messages(
-        project_uuid=payload.get("project_uuid"),
-        contact_urn=payload.get("contact_urn")
-    )
-
-    if not messages:
-        return
-
     try:
+        lambda_usecase = LambdaUseCase()
+        task_manager = lambda_usecase._get_task_manager()
+        messages = task_manager.get_cache_messages(
+            project_uuid=payload.get("project_uuid"),
+            contact_urn=payload.get("contact_urn")
+        )
+
+        if not messages:
+            raise ValueError("No messages found")
+
         project = Project.objects.get(uuid=payload.get("project_uuid"))
         conversation_queryset = Conversation.objects.filter(
             project=project,
@@ -246,45 +247,57 @@ def create_lambda_conversation(
             start_date__lte=payload.get("end_date"),
             channel_uuid=payload.get("channel_uuid")
         )
-    except Conversation.DoesNotExist:
-        return
 
-    formated_messages = lambda_usecase.get_lambda_conversation(messages)
-    resolution = lambda_usecase.lambda_conversation_resolution(
-        messages=formated_messages,
-        has_chats_room=payload.get("has_chats_room"),
-        project_uuid=payload.get("project_uuid"),
-        contact_urn=payload.get("contact_urn")
-    )
-    topic = lambda_usecase.lambda_conversation_topics(
-        messages=formated_messages,
-        has_chats_room=payload.get("has_chats_room"),
-        project_uuid=payload.get("project_uuid"),
-        contact_urn=payload.get("contact_urn")
-    )
+        if conversation_queryset.exists():
+            raise Conversation.DoesNotExist("No conversation found")
 
-    resolution_choice_value = lambda_usecase._convert_resolution_to_choice_value(resolution)
+        formated_messages = lambda_usecase.get_lambda_conversation(messages)
+        resolution = lambda_usecase.lambda_conversation_resolution(
+            messages=formated_messages,
+            has_chats_room=payload.get("has_chats_room"),
+            project_uuid=payload.get("project_uuid"),
+            contact_urn=payload.get("contact_urn")
+        )
+        topic = lambda_usecase.lambda_conversation_topics(
+            messages=formated_messages,
+            has_chats_room=payload.get("has_chats_room"),
+            project_uuid=payload.get("project_uuid"),
+            contact_urn=payload.get("contact_urn")
+        )
 
-    update_data = {
-        "start_date": payload.get("start_date"),
-        "end_date": payload.get("end_date"),
-        "has_chats_room": payload.get("has_chats_room"),
-        "external_id": payload.get("external_id"),
-        "resolution": resolution_choice_value,
-        "topic": topic
-    }
+        resolution_choice_value = lambda_usecase._convert_resolution_to_choice_value(resolution)
 
-    conversation_queryset.update(**update_data)
+        update_data = {
+            "start_date": payload.get("start_date"),
+            "end_date": payload.get("end_date"),
+            "has_chats_room": payload.get("has_chats_room"),
+            "external_id": payload.get("external_id"),
+            "resolution": resolution_choice_value,
+            "topic": topic
+        }
 
-    resolution_dto = ResolutionDTO(
-        resolution=resolution_choice_value,
-        project_uuid=payload.get("project_uuid"),
-        contact_urn=payload.get("contact_urn"),
-        external_id=payload.get("external_id")
-    )
-    resolution_message(resolution_dto)
+        conversation_queryset.update(**update_data)
 
-    task_manager.clear_message_cache(
-        project_uuid=payload.get("project_uuid"),
-        contact_urn=payload.get("contact_urn")
-    )
+        resolution_dto = ResolutionDTO(
+            resolution=resolution_choice_value,
+            project_uuid=payload.get("project_uuid"),
+            contact_urn=payload.get("contact_urn"),
+            external_id=payload.get("external_id")
+        )
+        resolution_message(resolution_dto)
+
+        task_manager.clear_message_cache(
+            project_uuid=payload.get("project_uuid"),
+            contact_urn=payload.get("contact_urn")
+        )
+
+    except Exception as e:
+        sentry_sdk.set_context(
+            "conversation_context",
+            {
+                "payload": payload
+            }
+        )
+        sentry_sdk.set_tag("project_uuid", payload.get("project_uuid"))
+        sentry_sdk.set_tag("contact_urn", payload.get("contact_urn"))
+        sentry_sdk.capture_exception(e)
