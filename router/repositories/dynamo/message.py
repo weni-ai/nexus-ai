@@ -9,13 +9,10 @@ logger = logging.getLogger(__name__)
 
 
 class MessageRepository(Repository):
-    def __init__(self):
-        self.table = get_message_table()
-
     def storage_message(
         self, project_uuid: str, contact_urn: str, message_data: dict
     ) -> None:
-        with self.table as table:
+        with get_message_table() as table:
             conversation_id = f"{project_uuid}#{contact_urn}"
             ttl_timestamp = int(time.time()) + (2 * 24 * 60 * 60)
 
@@ -33,7 +30,7 @@ class MessageRepository(Repository):
             table.put_item(Item=item)
 
     def get_messages(self, project_uuid: str, contact_urn: str) -> list:
-        with self.table as table:
+        with get_message_table() as table:
             conversation_id = f"{project_uuid}#{contact_urn}"
 
             response = table.query(
@@ -65,7 +62,7 @@ class MessageRepository(Repository):
         Returns:
             Most recent message data or empty dict if not found
         """
-        with self.table as table:
+        with get_message_table() as table:
             conversation_id = f"{project_uuid}#{contact_urn}"
 
             response = table.query(
@@ -92,7 +89,7 @@ class MessageRepository(Repository):
 
     def delete_messages(self, project_uuid: str, contact_urn: str) -> None:
         """Delete all messages for a conversation."""
-        with self.table as table:
+        with get_message_table() as table:
             conversation_id = f"{project_uuid}#{contact_urn}"
 
             response = table.query(
@@ -117,7 +114,7 @@ class MessageRepository(Repository):
             project_uuid: Project unique identifier
             contact_urn: Contact unique resource name
         """
-        with self.table as table:
+        with get_message_table() as table:
             conversation_id = f"{project_uuid}#{contact_urn}"
 
             response = table.query(
