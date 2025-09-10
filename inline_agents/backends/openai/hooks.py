@@ -293,11 +293,13 @@ class SupervisorHooks(AgentHooks):
                 events = get_events(result)
 
             if events:
-                self.data_lake_event_adapter.to_data_lake_custom_event(
+                self.data_lake_event_adapter.custom_event_data(
                     event_data=events,
                     project_uuid=context_data.project.get("uuid"),
                     contact_urn=context_data.contact.get("urn"),
-                    agent_name=self.current_agent if self.current_agent else agent.name
+                    channel_uuid=context_data.contact.get("channel_uuid"),
+                    agent_name=self.current_agent if self.current_agent else agent.name,
+                    preview=self.preview
                 )
 
             print(f"\033[31m[HOOK] Agente '{agent.name}' terminou de usar a ferramenta '{tool.name}'.\033[0m")
