@@ -94,6 +94,7 @@ class OpenAITeamAdapter(TeamAdapter):
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
         session_factory: Callable = None,
         session: Session = None,
+        preview: bool = False,
         **kwargs
     ) -> list[dict]:
         agents_as_tools = []
@@ -162,7 +163,8 @@ class OpenAITeamAdapter(TeamAdapter):
             tools=supervisor_tools,
             hooks=supervisor_hooks,
             model=supervisor["foundation_model"],
-            prompt_override_configuration=supervisor.get("prompt_override_configuration", {})
+            prompt_override_configuration=supervisor.get("prompt_override_configuration", {}),
+            preview=preview,
         )
 
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
