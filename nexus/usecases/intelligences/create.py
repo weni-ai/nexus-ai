@@ -307,3 +307,34 @@ class ConversationUseCase():
             conversation.contact_name = contact_name
             conversation.save()
         return conversation
+
+    def conversation_in_progress_exists(
+        self,
+        project_uuid: str,
+        channel_uuid: str,
+        contact_urn: str,
+        contact_name: str,
+    ) -> bool:
+        conversation = Conversation.objects.filter(
+            project_id=project_uuid,
+            channel_uuid=channel_uuid,
+            contact_urn=contact_urn,
+            resolution=2
+        )
+
+        if not conversation.exists():
+            self.create_conversation_base_structure(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                contact_name=contact_name,
+                channel_uuid=channel_uuid
+            )
+            return True
+
+        if conversation.count() > 1:
+            conversation = conversation.order_by('-created_at')
+            conversation.exclude(id=conversation.first().id).update(resolution=3)
+
+            return True
+
+        return True
