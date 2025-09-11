@@ -205,6 +205,8 @@ class RedisTaskManager(TaskManager):
         channel_uuid: str = None,
         preview: bool = False
     ) -> None:
+        print("="*100)
+        print("[DEBUG] handle_message_cache")
         if project_uuid not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
             return
 
@@ -212,7 +214,9 @@ class RedisTaskManager(TaskManager):
             return
 
         cached_messages = self.get_cache_messages(project_uuid, contact_urn)
+        print("[DEBUG] cached_messages", cached_messages)
         if cached_messages:
+            print("[DEBUG] add_message_to_cache")
             self.add_message_to_cache(
                 project_uuid=project_uuid,
                 contact_urn=contact_urn,
@@ -222,6 +226,7 @@ class RedisTaskManager(TaskManager):
                 contact_name=contact_name
             )
         else:
+            print("[DEBUG] create_message_to_cache")
             self.create_message_to_cache(
                 project_uuid=project_uuid,
                 contact_urn=contact_urn,
@@ -230,6 +235,7 @@ class RedisTaskManager(TaskManager):
                 source=source,
                 channel_uuid=channel_uuid
             )
+        print("="*100)
 
     def clear_message_cache(self, project_uuid: str, contact_urn: str) -> None:
         """Clear message cache"""

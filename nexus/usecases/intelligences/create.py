@@ -291,6 +291,7 @@ class ConversationUseCase():
         contact_name: str = "",
         channel_uuid: str = None,
     ) -> Conversation:
+        print("[DEBUG] create_conversation_base_structure start")
         msg_created_at = pendulum.now()
 
         start_date = pendulum.instance(msg_created_at)
@@ -315,12 +316,15 @@ class ConversationUseCase():
         contact_urn: str,
         contact_name: str,
     ) -> bool:
+        print("[DEBUG] conversation_in_progress_exists")
         conversation = Conversation.objects.filter(
             project_id=project_uuid,
             channel_uuid=channel_uuid,
             contact_urn=contact_urn,
             resolution=2
         )
+
+        print("[DEBUG] conversation", conversation)
 
         if not conversation.exists():
             self.create_conversation_base_structure(
@@ -329,12 +333,14 @@ class ConversationUseCase():
                 contact_name=contact_name,
                 channel_uuid=channel_uuid
             )
+            print("[DEBUG] create_conversation_base_structure called on exists")
             return True
 
         if conversation.count() > 1:
             conversation = conversation.order_by('-created_at')
             conversation.exclude(id=conversation.first().id).update(resolution=3)
-
+            print("[DEBUG] update_conversation_resolution multiple conversations")
             return True
 
+        print("[DEBUG] update_conversation_resolution single conversation")
         return True
