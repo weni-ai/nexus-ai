@@ -333,7 +333,7 @@ class ConversationUseCase():
 
         if conversation.count() > 1:
             conversation = conversation.order_by('-created_at')
-            conversation.exclude(id=conversation.first().id).update(resolution=3)
+            conversation.exclude(uuid=conversation.first().uuid).update(resolution=3)
 
             return True
 
