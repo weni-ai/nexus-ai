@@ -27,8 +27,8 @@ class Supervisor(Agent):
         hooks: list[AgentHooks] | None = None,
         handoffs: list[Agent] | None = None,
         prompt_override_configuration: dict | None = None,
+        preview: bool = False,
     ):
-
         tools.extend(self.function_tools())
         if model in settings.MODELS_WITH_REASONING:
             super().__init__(
@@ -40,7 +40,7 @@ class Supervisor(Agent):
                 model_settings=ModelSettings(
                     reasoning=Reasoning(
                         effort="medium",
-                        summary="auto"
+                        summary="concise"
                     ),
                 )
             )
