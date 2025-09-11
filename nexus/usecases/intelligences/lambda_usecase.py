@@ -225,8 +225,6 @@ class LambdaUseCase():
 def create_lambda_conversation(
     payload: dict,
 ):
-    if payload.get("project_uuid") not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
-        return
 
     try:
         lambda_usecase = LambdaUseCase()
@@ -243,13 +241,9 @@ def create_lambda_conversation(
         conversation_queryset = Conversation.objects.filter(
             project=project,
             contact_urn=payload.get("contact_urn"),
-            start_date__gte=payload.get("start_date"),
-            start_date__lte=payload.get("end_date"),
-            channel_uuid=payload.get("channel_uuid")
+            channel_uuid=payload.get("channel_uuid"),
+            resolution=2
         )
-
-        if conversation_queryset.exists():
-            raise Conversation.DoesNotExist("No conversation found")
 
         formated_messages = lambda_usecase.get_lambda_conversation(messages)
         resolution = lambda_usecase.lambda_conversation_resolution(
@@ -276,7 +270,22 @@ def create_lambda_conversation(
             "topic": topic
         }
 
-        conversation_queryset.update(**update_data)
+        if conversation_queryset.exists():
+            conversation_queryset.update(**update_data)
+        else:
+            # TODO: Temp fix for older conversations, remove later
+            Conversation.objects.create(
+                contact_urn=payload.get("contact_urn"),
+                project=project,
+                external_id=payload.get("external_id"),
+                start_date=payload.get("start_date"),
+                end_date=payload.get("end_date"),
+                has_chats_room=payload.get("has_chats_room"),
+                contact_name=payload.get("name"),
+                channel_uuid=payload.get("channel_uuid"),
+                resolution=resolution_choice_value,
+                topic=topic
+            )
 
         resolution_dto = ResolutionDTO(
             resolution=resolution_choice_value,
