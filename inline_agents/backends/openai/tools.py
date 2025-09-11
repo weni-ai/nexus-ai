@@ -40,7 +40,7 @@ class Supervisor(Agent):
                 model_settings=ModelSettings(
                     reasoning=Reasoning(
                         effort="medium",
-                        summary="concise"
+                        summary="auto"
                     ),
                 )
             )
