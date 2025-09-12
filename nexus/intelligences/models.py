@@ -232,6 +232,7 @@ class Conversation(models.Model):
         (0, "Resolved"),
         (1, "Unresolved"),
         (2, "In Progress"),
+        (3, "Unclassified")
     ]
 
     CSAT_CHOICES = [
@@ -246,7 +247,7 @@ class Conversation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     contact_urn = models.CharField(max_length=255, null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="conversations")
-    external_id = models.CharField(max_length=255, null=True, blank=True, unique=True)
+    external_id = models.CharField(max_length=255, null=True, blank=True)
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
     has_chats_room = models.BooleanField(default=False)

@@ -51,6 +51,10 @@ def make_agent_proxy_tool(
 ):
     @function_tool
     async def _proxy(ctx: RunContextWrapper[Context], question: str) -> str:
+        """
+        Args:
+            question: Plain-text instruction for the agent in "Agent Name", aligned with "Agent Collaboration Instructions", stating goal, key context, constraints, and desired output.
+        """
         supervisor_session = ctx.context.session
         agent_session = session_factory(agent.name)
 
@@ -76,6 +80,9 @@ def make_agent_proxy_tool(
 
     _proxy.name = tool_name
     _proxy.description = tool_description
+    _proxy.params_json_schema["properties"]["question"]["description"] = (
+        'Plain-text instruction for the agent in "Agent Name", aligned with "Agent Collaboration Instructions", stating goal, key context, constraints, and desired output.'
+    )
     return _proxy
 
 
@@ -176,7 +183,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 make_agent_proxy_tool(
                     agent=openai_agent,
                     tool_name=agent.get("agentName"),
-                    tool_description=agent.get("collaborator_configurations"),
+                    tool_description=f'Agent Name: {agent.get("agentDisplayName")}\nAgent Collaboration Instructions: {agent.get("collaborator_configurations")}',
                     session_factory=session_factory
                 )
             )
@@ -190,7 +197,8 @@ class OpenAITeamAdapter(TeamAdapter):
             tools=supervisor_tools,
             hooks=supervisor_hooks,
             model=supervisor["foundation_model"],
-            prompt_override_configuration=supervisor.get("prompt_override_configuration", {})
+            prompt_override_configuration=supervisor.get("prompt_override_configuration", {}),
+            preview=preview,
         )
 
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
