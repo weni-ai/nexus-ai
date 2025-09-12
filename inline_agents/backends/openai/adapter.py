@@ -212,6 +212,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 content_base_uuid=content_base_uuid,
                 session=session,
                 input_text=input_text,
+                hooks_state=hooks_state,
             )
         }
 
@@ -227,6 +228,7 @@ class OpenAITeamAdapter(TeamAdapter):
         globals_dict: dict = {},
         session: Session = None,
         input_text: str = "",
+        hooks_state: HooksState = None,
     ) -> Context:
         credentials = cls._get_credentials(project_uuid)
         contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name}
@@ -241,6 +243,7 @@ class OpenAITeamAdapter(TeamAdapter):
             content_base=content_base,
             session=session,
             input_text=input_text,
+            hooks_state=hooks_state,
         )
 
     @classmethod
@@ -262,7 +265,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 cls=cls,
                 function_name=action_group.get("actionGroupName"),
                 function_arn=group_executor.get("lambda"),
-                function_description=action_group.get("actionGroupDescription"),
+                function_description=action_group.get("description"),
                 json_schema=action_group.get("functionSchema", {}).get("functions", [{}])[0]
             )
             tools.append(tool)
@@ -278,6 +281,7 @@ class OpenAITeamAdapter(TeamAdapter):
         globals: dict,
         contact: dict,
         project: dict,
+        ctx: RunContextWrapper[Context],
     ) -> str:
         try:
             lambda_client = boto3.client("lambda", region_name="us-east-1")
@@ -287,6 +291,11 @@ class OpenAITeamAdapter(TeamAdapter):
                     "name": key,
                     "value": value
                 })
+            ctx.context.hooks_state.add_tool_call(
+                {
+                    function_name: parameters
+                }
+            )
 
             session_attributes = {
                 "credentials": json.dumps(credentials),
@@ -377,7 +386,8 @@ class OpenAITeamAdapter(TeamAdapter):
                 credentials=ctx.context.credentials,
                 globals=ctx.context.globals,
                 contact=ctx.context.contact,
-                project=ctx.context.project
+                project=ctx.context.project,
+                ctx=ctx
             )
 
         tool_function_args = cls.create_function_args_class(json_schema)
