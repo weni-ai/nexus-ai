@@ -31,7 +31,7 @@ class HooksState:
     def add_tool_call(self, tool_call: Dict[str, Any]):
         self.tool_calls.update(tool_call)
 
-    def get_events(result: dict):
+    def get_events(self, result: dict):
         events = result.get("events", {})
         return events
 
@@ -142,7 +142,7 @@ class CollaboratorHooks(AgentHooks):
         self,
         agent_name: str,
         data_lake_event_adapter: DataLakeEventAdapter,
-        hooks_state: HooksState = None,
+        hooks_state: HooksState,
         event_manager_notify: callable = None,
         preview: bool = False,
         rationale_switch: bool = False,
@@ -156,6 +156,7 @@ class CollaboratorHooks(AgentHooks):
         self.agent_name = agent_name
         self.data_lake_event_adapter = data_lake_event_adapter
         self.hooks_state = hooks_state
+        self.preview = preview
 
     async def on_start(self, context, agent):
         print(f"\033[34m[HOOK] Atribuindo tarefa ao agente '{agent.name}'.\033[0m")
@@ -281,6 +282,7 @@ class SupervisorHooks(AgentHooks):
         agents: list,
         data_lake_event_adapter: DataLakeEventAdapter,
         event_manager_notify: callable,
+        hooks_state: HooksState,
         rationale_switch: bool = False,
         language: str = "en",
         knowledge_base_tool: Optional[str] = None,
@@ -288,7 +290,6 @@ class SupervisorHooks(AgentHooks):
         session_id: Optional[str] = None,
         msg_external_id: Optional[str] = None,
         turn_off_rationale: bool = False,
-        hooks_state: Optional[HooksState] = None,
         **kwargs
     ):
         self.trace_handler = TraceHandler(event_manager_notify, preview, rationale_switch, language, user_email, session_id, msg_external_id, turn_off_rationale)
@@ -298,6 +299,7 @@ class SupervisorHooks(AgentHooks):
         self.knowledge_base_tool = knowledge_base_tool
         self.data_lake_event_adapter = data_lake_event_adapter
         self.hooks_state = hooks_state
+        self.preview = preview
 
         super().__init__()
 
