@@ -123,7 +123,8 @@ class ToolsUseCase:
             "actionGroupName": self.__format_action_group_name(agent_tool.get("slug")),
             "functionSchema": {
                 "functions": [function]
-            }
+            },
+            "description": agent_tool.get("description")
         }
         display_skill = {
             "icon": "",
