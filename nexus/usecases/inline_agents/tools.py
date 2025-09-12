@@ -203,6 +203,7 @@ class ToolsUseCase:
             skills_to_update = [skill for skill in existing_skills if skill in new_skill_names]
 
         for agent_skill in agent_tools:
+            print(agent_skill)
             skill_name = self.TOOL_NAME_FORMAT.format(tool_key=agent_skill.get("key"), agent_id=agent.id)
             skill_file = files[f"{agent.slug}:{agent_skill['key']}"]
 
