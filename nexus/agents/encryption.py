@@ -54,8 +54,6 @@ def decrypt_value(encrypted_value: str) -> str:
         decoded = b64decode(encrypted_value)
         decrypted_bytes = f.decrypt(decoded)
         result = decrypted_bytes.decode()
-        logger.debug(f"Value decrypted successfully. Length before: {len(encrypted_value)}, after: {len(result)}")
         return result
     except Exception as e:
-        logger.error(f"Error decrypting value: {str(e)}")
         return encrypted_value
