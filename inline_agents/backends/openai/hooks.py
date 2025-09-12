@@ -172,7 +172,7 @@ class CollaboratorHooks(AgentHooks):
             }
         )
 
-    async def on_tool_start(self, context, agent, tool):
+    async def tool_started(self, context, agent, tool):
         context_data = context.context
         parameters = self.hooks_state.tool_calls.get(tool.name, {})
 
@@ -195,6 +195,11 @@ class CollaboratorHooks(AgentHooks):
                 }
             }
         }
+        print("==============tool_calls================")
+        print(tool.name)
+        print(self.hooks_state.tool_calls)
+        print(trace_data)
+        print("==========================================")
         await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data)
         self.data_lake_event_adapter.to_data_lake_event(
             project_uuid=context_data.project.get("uuid"),
@@ -207,6 +212,7 @@ class CollaboratorHooks(AgentHooks):
         )
 
     async def on_tool_end(self, context, agent, tool, result):
+        await self.tool_started(context, agent, tool)
         print(f"\033[34m[HOOK] Resultado da ferramenta '{tool.name}' recebido {result}.\033[0m")
         context_data = context.context
         if isinstance(result, str):
@@ -309,7 +315,7 @@ class SupervisorHooks(AgentHooks):
     async def on_start(self, context, agent):
         print(f"\033[34m[HOOK] Agente '{agent.name}' iniciado.\033[0m")
 
-    async def on_tool_start(self, context, agent, tool):
+    async def tool_started(self, context, agent, tool):
         context_data = context.context
         parameters = self.hooks_state.tool_calls.get(tool.name, {})
         tool_call_data = {
@@ -370,6 +376,8 @@ class SupervisorHooks(AgentHooks):
             )
 
     async def on_tool_end(self, context, agent, tool, result):
+        # calling tool_started here instead of on_tool_start so we can get the parameters from tool execution
+        await self.tool_started(context, agent, tool)
         print(f"\033[34m[HOOK] Encaminhando para o manager. {result}\033[0m")
 
         context_data = context.context
