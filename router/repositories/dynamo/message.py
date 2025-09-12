@@ -14,8 +14,6 @@ class MessageRepository(Repository):
     def storage_message(
         self, project_uuid: str, contact_urn: str, message_data: dict
     ) -> None:
-        print(f"[DEBUG] Message data: {message_data}")
-
         with get_message_table() as table:
             conversation_id = f"{project_uuid}#{contact_urn}"
             ttl_timestamp = int(time.time()) + (2 * 24 * 60 * 60)
@@ -31,8 +29,6 @@ class MessageRepository(Repository):
                 "created_at": message_data["created_at"],
                 "ExpiresOn": ttl_timestamp,
             }
-
-            print(f"[DEBUG] Item: {item}")
 
             table.put_item(Item=item)
 

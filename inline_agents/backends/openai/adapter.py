@@ -51,6 +51,10 @@ def make_agent_proxy_tool(
 ):
     @function_tool
     async def _proxy(ctx: RunContextWrapper[Context], question: str) -> str:
+        """
+        Args:
+            question: Plain-text instruction for the agent in "Agent Name", aligned with "Agent Collaboration Instructions", stating goal, key context, constraints, and desired output.
+        """
         supervisor_session = ctx.context.session
         agent_session = session_factory(agent.name)
 
@@ -176,7 +180,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 make_agent_proxy_tool(
                     agent=openai_agent,
                     tool_name=agent.get("agentName"),
-                    tool_description=agent.get("collaborator_configurations"),
+                    tool_description=f'Agent Name: {agent.get("agentDisplayName")}\nAgent Collaboration Instructions: {agent.get("collaborator_configurations")}',
                     session_factory=session_factory
                 )
             )

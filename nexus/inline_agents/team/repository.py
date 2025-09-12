@@ -9,6 +9,9 @@ from .exceptions import TeamDoesNotExist
 
 #  Montar dict e retornar para o bedrock, pegar o integrated do projeto
 class ORMTeamRepository(TeamRepository):
+    def __init__(self, agents_backend: str = "BedrockBackend"):
+        self.agents_backend = agents_backend
+
     def get_team(self, project_uuid: str) -> list[dict]:
         try:
             orm_team = ORMIntegratedAgent.objects.filter(project__uuid=project_uuid)
@@ -39,6 +42,10 @@ class ORMTeamRepository(TeamRepository):
                     "agentCollaboration": "DISABLED",
                     "collaborator_configurations": agent.collaboration_instructions,
                 }
+
+                if self.agents_backend == "OpenAIBackend":
+                    agent_dict["agentDisplayName"] = agent.name
+
                 agents.append(agent_dict)
             return agents
         except ORMIntegratedAgent.DoesNotExist:
