@@ -174,6 +174,10 @@ class CollaboratorHooks(AgentHooks):
 
     async def on_tool_start(self, context, agent, tool):
         context_data = context.context
+        print("==============tool_calls================")
+        print(self.hooks_state.tool_calls)
+        print(tool.name)
+        print("==========================================")
         parameters = self.hooks_state.tool_calls.get(tool.name, {})
 
         print(f"\033[34m[HOOK] Executando ferramenta '{tool.name}'.\033[0m")
