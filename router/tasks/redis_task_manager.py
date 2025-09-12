@@ -139,7 +139,6 @@ class RedisTaskManager(InlineAgentTaskManager):
         self, project_uuid: str, contact_urn: str, msg_text: str, source: str
     ) -> None:
         from nexus.usecases.intelligences.create import ConversationUseCase
-        from nexus.intelligences.models import Conversation
 
         cached_messages = self.get_cache_messages(project_uuid, contact_urn)
         cached_messages.append(
@@ -153,19 +152,13 @@ class RedisTaskManager(InlineAgentTaskManager):
             f"conversation:{project_uuid}:{contact_urn}", json.dumps(cached_messages)
         )
 
-        conversation_exists = Conversation.objects.filter(
-            project_id=project_uuid,
+        conversation_usecase = ConversationUseCase()
+        conversation_usecase.conversation_in_progress_exists(
+            project_uuid=project_uuid,
             contact_urn=contact_urn,
-            channel_uuid=channel_uuid
-        ).exists()
-        if not conversation_exists:
-            conversation_usecase = ConversationUseCase()
-            conversation_usecase.create_conversation_base_structure(
-                project_uuid=project_uuid,
-                contact_urn=contact_urn,
-                channel_uuid=channel_uuid,
-                contact_name=contact_name
-            )
+            channel_uuid=channel_uuid,
+            contact_name=contact_name
+        )
 
     def handle_message_cache(
         self,
@@ -177,6 +170,8 @@ class RedisTaskManager(InlineAgentTaskManager):
         channel_uuid: str = None,
         preview: bool = False,
     ) -> None:
+        print("="*100)
+        print("[DEBUG] handle_message_cache")
         if project_uuid not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
             return
 
@@ -184,7 +179,9 @@ class RedisTaskManager(InlineAgentTaskManager):
             return
 
         cached_messages = self.get_cache_messages(project_uuid, contact_urn)
+        print("[DEBUG] cached_messages", cached_messages)
         if cached_messages:
+            print("[DEBUG] add_message_to_cache")
             self.add_message_to_cache(
                 project_uuid=project_uuid,
                 contact_urn=contact_urn,
@@ -192,6 +189,7 @@ class RedisTaskManager(InlineAgentTaskManager):
                 source=source,
             )
         else:
+            print("[DEBUG] create_message_to_cache")
             self.create_message_to_cache(
                 project_uuid=project_uuid,
                 contact_urn=contact_urn,
@@ -200,6 +198,7 @@ class RedisTaskManager(InlineAgentTaskManager):
                 source=source,
                 channel_uuid=channel_uuid,
             )
+        print("="*100)
 
     def clear_message_cache(self, project_uuid: str, contact_urn: str) -> None:
         """Clear message cache"""
