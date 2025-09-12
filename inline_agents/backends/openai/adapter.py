@@ -75,6 +75,9 @@ def make_agent_proxy_tool(
 
     _proxy.name = tool_name
     _proxy.description = tool_description
+    _proxy.params_json_schema["properties"]["question"]["description"] = (
+        'Plain-text instruction for the agent in "Agent Name", aligned with "Agent Collaboration Instructions", stating goal, key context, constraints, and desired output.'
+    )
     return _proxy
 
 
