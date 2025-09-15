@@ -156,7 +156,7 @@ class RunnerHooks(RunHooks):
     async def on_llm_end(self, context, agent, response, **kwargs):
         context_data = context.context
         for reasoning_item in response.output:
-            if getattr(reasoning_item, "type", None) == "reasoning_item" and hasattr(reasoning_item, "summary") and reasoning_item.summary:
+            if getattr(reasoning_item, "type", None) == "reasoning" and hasattr(reasoning_item, "summary") and reasoning_item.summary:
                 print("\033[34m[HOOK] Pensando.\033[0m")
                 for summary in reasoning_item.summary:
                     summary.text
@@ -210,7 +210,12 @@ class CollaboratorHooks(AgentHooks):
 
     async def on_start(self, context, agent):
         print(f"\033[34m[HOOK] Atribuindo tarefa ao agente '{agent.name}'.\033[0m")
-        input_text = self.hooks_state.tool_calls.get(agent.name, {}).get("question", "")
+        input_text = self.hooks_state.tool_calls.get(agent.name, {})
+        if isinstance(input_text, str):
+            try:
+                input_text = json.loads(input_text).get("question", "")
+            except Exception:
+                input_text = input_text
 
         trace_data = {
             "orchestrationTrace": {
@@ -336,9 +341,6 @@ class CollaboratorHooks(AgentHooks):
                     "observation": {
                         "agentCollaboratorInvocationOutput": {
                             "agentCollaboratorName": agent.name,
-                            "metadata": {
-                                "result": output
-                            },
                             "output": {
                                 "text": output,
                                 "type": "TEXT"
