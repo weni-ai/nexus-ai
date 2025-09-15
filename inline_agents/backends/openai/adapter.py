@@ -156,6 +156,10 @@ class OpenAITeamAdapter(TeamAdapter):
                 default_instructions_for_collaborators = inline_agent_configuration.default_instructions_for_collaborators
                 agent_instructions += f"\n{default_instructions_for_collaborators}"
 
+            supervisor_default_collaborator_instructions = supervisor.get("default_instructions_for_collaborators", "")
+            if supervisor_default_collaborator_instructions and isinstance(supervisor_default_collaborator_instructions, str):
+                agent_instructions += f"\n{supervisor_default_collaborator_instructions}"
+
             agent_name = agent.get("agentName")
 
             hooks = CollaboratorHooks(
@@ -179,6 +183,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 model=settings.OPENAI_AGENTS_FOUNDATION_MODEL,
                 hooks=hooks
             )
+
             agents_as_tools.append(
                 make_agent_proxy_tool(
                     agent=openai_agent,
