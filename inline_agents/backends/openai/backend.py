@@ -152,8 +152,8 @@ class OpenAIBackend(InlineAgentsBackend):
             turn_off_rationale=turn_off_rationale,
             event_manager_notify=self._event_manager_notify,
             agents=team,
-            data_lake_event_adapter=self._get_data_lake_event_adapter(),
             hooks_state=hooks_state,
+            data_lake_event_adapter=data_lake_event_adapter,
         )
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
@@ -166,6 +166,7 @@ class OpenAIBackend(InlineAgentsBackend):
             turn_off_rationale=turn_off_rationale,
             event_manager_notify=self._event_manager_notify,
             agents=team,
+            hooks_state=hooks_state,
         )
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
