@@ -96,7 +96,7 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-            'fields': ('name', 'foundation_model', 'instruction')
+            'fields': ('name', 'foundation_model', 'instruction', 'default_instructions_for_collaborators')
         }),
         ('Configuration', {
             'fields': ('prompt_override_configuration', 'action_groups', 'knowledge_bases')
