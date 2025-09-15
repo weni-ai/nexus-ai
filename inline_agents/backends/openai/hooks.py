@@ -49,11 +49,12 @@ class TraceHandler:
         self.turn_off_rationale = turn_off_rationale
         self.hooks_state = hooks_state
 
-    async def send_trace(self, context_data, agent_name, trace_type, trace_data={}):
+    async def send_trace(self, context_data, agent_name, trace_type, trace_data={}, tool_name=""):
         standardized_event = {
             "config": {
                 "agentName": agent_name,
                 "type": trace_type,
+                "toolName": tool_name,
             },
             "trace": trace_data,
         }
@@ -249,7 +250,7 @@ class CollaboratorHooks(AgentHooks):
         print(self.hooks_state.tool_calls)
         print(trace_data)
         print("==========================================")
-        await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data)
+        await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data, tool_name=tool.name)
         self.data_lake_event_adapter.to_data_lake_event(
             project_uuid=context_data.project.get("uuid"),
             contact_urn=context_data.contact.get("urn"),
@@ -423,7 +424,7 @@ class SupervisorHooks(AgentHooks):
                     }
                 }
             }
-            await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data)
+            await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data, tool_name=tool.name)
             self.data_lake_event_adapter.to_data_lake_event(
                 project_uuid=context_data.project.get("uuid"),
                 contact_urn=context_data.contact.get("urn"),
