@@ -321,7 +321,7 @@ class CollaboratorHooks(AgentHooks):
                 }
             }
         }
-        await self.trace_handler.send_trace(context_data, agent.name, "tool_result_received", trace_data)
+        await self.trace_handler.send_trace(context_data, agent.name, "tool_result_received", trace_data, tool_name=tool.name)
 
     async def on_end(self, context, agent, output):
         print(f"\033[34m[HOOK] Enviando resposta ao manager. {output}\033[0m")
@@ -508,7 +508,7 @@ class SupervisorHooks(AgentHooks):
                     }
                 }
             }
-            await self.trace_handler.send_trace(context_data, agent.name, "tool_result_received", trace_data)
+            await self.trace_handler.send_trace(context_data, agent.name, "tool_result_received", trace_data, tool_name=tool.name)
 
     async def on_end(self, context, agent, output):
         print(f"\033[34m[HOOK] Enviando resposta final {output}.\033[0m")
