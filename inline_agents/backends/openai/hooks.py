@@ -210,16 +210,34 @@ class CollaboratorHooks(AgentHooks):
 
     async def on_start(self, context, agent):
         print(f"\033[34m[HOOK] Atribuindo tarefa ao agente '{agent.name}'.\033[0m")
+        input_text = self.hooks_state.tool_calls.get(agent.name, {}).get("question", "")
 
+        trace_data = {
+            "orchestrationTrace": {
+                "invocationInput": {
+                    "agentCollaboratorInvocationInput": {
+                        "agentCollaboratorAliasArn": f"INLINE_AGENT/{agent.name}",
+                        "agentCollaboratorName": agent.name,
+                        "input": {
+                            "text": input_text,
+                            "type": "TEXT",
+                        },
+                    },
+                    "invocationType": "AGENT_COLLABORATOR",
+                }
+            }
+        }
         context_data = context.context
-        await self.trace_handler.send_trace(context_data, agent.name, "delegating_to_agent")
+        await self.trace_handler.send_trace(
+            context_data, agent.name, "delegating_to_agent", trace_data
+        )
         self.data_lake_event_adapter.to_data_lake_event(
             project_uuid=context_data.project.get("uuid"),
             contact_urn=context_data.contact.get("urn"),
             agent_data={
                 "agent_name": agent.name,
-                "input_text": context_data.input_text
-            }
+                "input_text": context_data.input_text,
+            },
         )
 
     async def tool_started(self, context, agent, tool):

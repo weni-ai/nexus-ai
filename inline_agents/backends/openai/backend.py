@@ -244,6 +244,8 @@ class OpenAIBackend(InlineAgentsBackend):
         async for event in result.stream_events():
             if event.type == "run_item_stream_event":
                 if hasattr(event, 'item') and event.item.type == "tool_call_item":
-                    pass
+                    hooks_state.tool_calls.update({
+                        event.item.raw_item.name: event.item.raw_item.arguments   
+                    })
 
         return result.final_output
