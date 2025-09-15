@@ -315,9 +315,6 @@ class CollaboratorHooks(AgentHooks):
                 "orchestrationTrace": {
                     "observation": {
                         "actionGroupInvocationOutput": {
-                            "metadata": {
-                                "result": result
-                            },
                             "text": result,
                         },
                     }
@@ -505,9 +502,6 @@ class SupervisorHooks(AgentHooks):
                     "orchestrationTrace": {
                         "observation": {
                             "actionGroupInvocationOutput": {
-                                "metadata": {
-                                    "result": result
-                                },
                                 "text": result,
                             },
                         }
