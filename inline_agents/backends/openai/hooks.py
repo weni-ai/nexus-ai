@@ -474,7 +474,7 @@ class SupervisorHooks(AgentHooks):
                 }
             }
             await self.trace_handler.send_trace(context_data, agent.name, "search_result_received", trace_data)
-        elif tool.name in self.hooks_state.agents_names:
+        elif tool.name not in self.hooks_state.agents_names:
             if isinstance(result, str):
                 try:
                     result_json = json.loads(result)
