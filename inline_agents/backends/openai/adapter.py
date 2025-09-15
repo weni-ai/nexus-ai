@@ -19,7 +19,12 @@ from pydantic import BaseModel, Field, create_model
 from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.data_lake import send_data_lake_event
 from inline_agents.backends.openai.entities import Context
-from inline_agents.backends.openai.hooks import RunnerHooks, SupervisorHooks
+from inline_agents.backends.openai.hooks import (
+    CollaboratorHooks,
+    HooksState,
+    RunnerHooks,
+    SupervisorHooks,
+)
 from inline_agents.backends.openai.sessions import (
     get_watermark,
     only_turns,
@@ -101,7 +106,16 @@ class OpenAITeamAdapter(TeamAdapter):
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
         session_factory: Callable = None,
         session: Session = None,
+        data_lake_event_adapter: DataLakeEventAdapter = None,
         preview: bool = False,
+        hooks_state: HooksState = None,
+        event_manager_notify: callable = None,
+        rationale_switch: bool = False,
+        language: str = "en",
+        user_email: str = None,
+        session_id: str = None,
+        msg_external_id: str = None,
+        turn_off_rationale: bool = False,
         **kwargs
     ) -> list[dict]:
         agents_as_tools = []
@@ -143,14 +157,27 @@ class OpenAITeamAdapter(TeamAdapter):
                 agent_instructions += f"\n{default_instructions_for_collaborators}"
 
             agent_name = agent.get("agentName")
-            if "_agent" not in agent_name:
-                agent_name = f"{agent_name}_agent"
+
+            hooks = CollaboratorHooks(
+                agent_name=agent_name,
+                data_lake_event_adapter=data_lake_event_adapter,
+                hooks_state=hooks_state,
+                event_manager_notify=event_manager_notify,
+                preview=preview,
+                rationale_switch=rationale_switch,
+                language=language,
+                user_email=user_email,
+                session_id=session_id,
+                msg_external_id=msg_external_id,
+                turn_off_rationale=turn_off_rationale
+            )
+
             openai_agent = Agent[Context](
                 name=agent_name,
                 instructions=agent_instructions,
                 tools=cls._get_tools(agent["actionGroups"]),
                 model=settings.OPENAI_AGENTS_FOUNDATION_MODEL,
-                hooks=supervisor_hooks
+                hooks=hooks
             )
             agents_as_tools.append(
                 make_agent_proxy_tool(
@@ -188,6 +215,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 content_base_uuid=content_base_uuid,
                 session=session,
                 input_text=input_text,
+                hooks_state=hooks_state,
             )
         }
 
@@ -203,6 +231,7 @@ class OpenAITeamAdapter(TeamAdapter):
         globals_dict: dict = {},
         session: Session = None,
         input_text: str = "",
+        hooks_state: HooksState = None,
     ) -> Context:
         credentials = cls._get_credentials(project_uuid)
         contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name}
@@ -217,6 +246,7 @@ class OpenAITeamAdapter(TeamAdapter):
             content_base=content_base,
             session=session,
             input_text=input_text,
+            hooks_state=hooks_state,
         )
 
     @classmethod
@@ -238,7 +268,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 cls=cls,
                 function_name=action_group.get("actionGroupName"),
                 function_arn=group_executor.get("lambda"),
-                function_description=action_group.get("actionGroupDescription"),
+                function_description=action_group.get("description"),
                 json_schema=action_group.get("functionSchema", {}).get("functions", [{}])[0]
             )
             tools.append(tool)
@@ -254,6 +284,7 @@ class OpenAITeamAdapter(TeamAdapter):
         globals: dict,
         contact: dict,
         project: dict,
+        ctx: RunContextWrapper[Context],
     ) -> str:
         try:
             lambda_client = boto3.client("lambda", region_name="us-east-1")
@@ -263,6 +294,11 @@ class OpenAITeamAdapter(TeamAdapter):
                     "name": key,
                     "value": value
                 })
+            ctx.context.hooks_state.add_tool_call(
+                {
+                    function_name: parameters
+                }
+            )
 
             session_attributes = {
                 "credentials": json.dumps(credentials),
@@ -353,7 +389,8 @@ class OpenAITeamAdapter(TeamAdapter):
                 credentials=ctx.context.credentials,
                 globals=ctx.context.globals,
                 contact=ctx.context.contact,
-                project=ctx.context.project
+                project=ctx.context.project,
+                ctx=ctx
             )
 
         tool_function_args = cls.create_function_args_class(json_schema)
