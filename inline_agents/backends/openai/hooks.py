@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 import pendulum
 from agents import AgentHooks, RunHooks
@@ -14,6 +14,7 @@ class HooksState:
         self.agents_names = []
         self.lambda_names = {}
         self.tool_calls = {}
+        self.trace_data = []
 
         for agent in self.agents:
             self.agents_names.append(agent.get("agentName"))
@@ -37,7 +38,7 @@ class HooksState:
 
 
 class TraceHandler:
-    def __init__(self, event_manager_notify, preview, rationale_switch, language, user_email, session_id, msg_external_id, turn_off_rationale):
+    def __init__(self, event_manager_notify, preview, rationale_switch, language, user_email, session_id, msg_external_id, turn_off_rationale, hooks_state):
         self.event_manager_notify = event_manager_notify
         self.preview = preview
         self.rationale_switch = rationale_switch
@@ -46,15 +47,18 @@ class TraceHandler:
         self.session_id = session_id
         self.msg_external_id = msg_external_id
         self.turn_off_rationale = turn_off_rationale
+        self.hooks_state = hooks_state
 
-    async def send_trace(self, context_data, agent_name, trace_type, trace_data={}):
+    async def send_trace(self, context_data, agent_name, trace_type, trace_data={}, tool_name=""):
         standardized_event = {
             "config": {
                 "agentName": agent_name,
                 "type": trace_type,
+                "toolName": tool_name,
             },
             "trace": trace_data,
         }
+        self.hooks_state.trace_data.append(standardized_event)
         await self.event_manager_notify(
             event="inline_trace_observers_async",
             inline_traces=standardized_event,
@@ -72,6 +76,31 @@ class TraceHandler:
             channel_uuid=context_data.contact.get("channel_uuid"),
         )
 
+    async def save_trace_data(
+        self,
+        trace_events: List[Dict],
+        project_uuid: str,
+        input_text: str,
+        contact_urn: str,
+        full_response: str,
+        preview: bool,
+        session_id: str,
+        contact_name: str,
+        channel_uuid: str
+    ):
+        await self.event_manager_notify(
+            event='save_inline_trace_events',
+            trace_events=trace_events,
+            project_uuid=project_uuid,
+            user_input=input_text,
+            contact_urn=contact_urn,
+            agent_response=full_response,
+            preview=preview,
+            session_id=session_id,
+            source_type="agent",  # If user message, source_type="user"
+            contact_name=contact_name,
+            channel_uuid=channel_uuid
+        )
 
 class RunnerHooks(RunHooks):
     def __init__(
@@ -86,8 +115,19 @@ class RunnerHooks(RunHooks):
         turn_off_rationale: bool,
         event_manager_notify: callable,
         agents: list,
+        hooks_state: HooksState,
     ):
-        self.trace_handler = TraceHandler(event_manager_notify, preview, rationale_switch, language, user_email, session_id, msg_external_id, turn_off_rationale)
+        self.trace_handler = TraceHandler(
+            event_manager_notify=event_manager_notify,
+            preview=preview,
+            rationale_switch=rationale_switch,
+            language=language,
+            user_email=user_email,
+            session_id=session_id,
+            msg_external_id=msg_external_id,
+            turn_off_rationale=turn_off_rationale,
+            hooks_state=hooks_state
+        )
         self.agents = agents
         self.supervisor_name = supervisor_name
         self.rationale_switch = rationale_switch
@@ -152,7 +192,17 @@ class CollaboratorHooks(AgentHooks):
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
     ):
-        self.trace_handler = TraceHandler(event_manager_notify, preview, rationale_switch, language, user_email, session_id, msg_external_id, turn_off_rationale)
+        self.trace_handler = TraceHandler(
+            event_manager_notify=event_manager_notify,
+            preview=preview,
+            rationale_switch=rationale_switch,
+            language=language,
+            user_email=user_email,
+            session_id=session_id,
+            msg_external_id=msg_external_id,
+            turn_off_rationale=turn_off_rationale,
+            hooks_state=hooks_state
+        )
         self.agent_name = agent_name
         self.data_lake_event_adapter = data_lake_event_adapter
         self.hooks_state = hooks_state
@@ -204,7 +254,7 @@ class CollaboratorHooks(AgentHooks):
         print(self.hooks_state.tool_calls)
         print(trace_data)
         print("==========================================")
-        await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data)
+        await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data, tool_name=tool.name)
         self.data_lake_event_adapter.to_data_lake_event(
             project_uuid=context_data.project.get("uuid"),
             contact_urn=context_data.contact.get("urn"),
@@ -302,7 +352,17 @@ class SupervisorHooks(AgentHooks):
         turn_off_rationale: bool = False,
         **kwargs
     ):
-        self.trace_handler = TraceHandler(event_manager_notify, preview, rationale_switch, language, user_email, session_id, msg_external_id, turn_off_rationale)
+        self.trace_handler = TraceHandler(
+            event_manager_notify=event_manager_notify,
+            preview=preview,
+            rationale_switch=rationale_switch,
+            language=language,
+            user_email=user_email,
+            session_id=session_id,
+            msg_external_id=msg_external_id,
+            turn_off_rationale=turn_off_rationale,
+            hooks_state=hooks_state
+        )
         self.agent_name = agent_name
         self.preview = preview
         self.agents = agents
@@ -368,7 +428,7 @@ class SupervisorHooks(AgentHooks):
                     }
                 }
             }
-            await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data)
+            await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data, tool_name=tool.name)
             self.data_lake_event_adapter.to_data_lake_event(
                 project_uuid=context_data.project.get("uuid"),
                 contact_urn=context_data.contact.get("urn"),
@@ -458,3 +518,14 @@ class SupervisorHooks(AgentHooks):
             }
         }
         await self.trace_handler.send_trace(context_data, agent.name, "sending_response", trace_data)
+        await self.trace_handler.save_trace_data(
+            trace_events=self.trace_handler.hooks_state.trace_data,
+            project_uuid=context_data.project.get("uuid"),
+            input_text=context_data.input_text,
+            contact_urn=context_data.contact.get("urn"),
+            full_response=output,
+            preview=self.preview,
+            session_id=context_data.session.get_session_id(),
+            contact_name=context_data.contact.get("name"),
+            channel_uuid=context_data.contact.get("channel_uuid")
+        )

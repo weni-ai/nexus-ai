@@ -28,6 +28,7 @@ class ConversationConsumer(EDAConsumer):
             )
 
             if body.get("project_uuid") not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
+                message.channel.basic_ack(message.delivery_tag)
                 return
 
             create_lambda_conversation.delay(window_conversation_dto.dict())

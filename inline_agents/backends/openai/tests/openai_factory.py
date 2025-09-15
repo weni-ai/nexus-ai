@@ -15,3 +15,4 @@ class OpenAISupervisorFactory(factory.django.DjangoModelFactory):
     human_support_action_groups = factory.LazyFunction(lambda: [{"name": "human_support", "description": "Human support action"}])
     components_prompt = factory.Faker('text', max_nb_chars=200)
     components_human_support_prompt = factory.Faker('text', max_nb_chars=200)
+    default_instructions_for_collaborators = factory.Faker('text', max_nb_chars=200)

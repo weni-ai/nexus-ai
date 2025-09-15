@@ -18,7 +18,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
 
         expected_keys = [
             "instruction", "tools", "foundation_model",
-            "knowledge_bases", "prompt_override_configuration"
+            "knowledge_bases", "prompt_override_configuration", "default_instructions_for_collaborators"
         ]
         self.assertEqual(set(result.keys()), set(expected_keys))
         self.assertEqual(result["foundation_model"], self.supervisor.foundation_model)
@@ -147,7 +147,8 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
             human_support_action_groups=[{"name": "human_support", "type": "action"}],
             foundation_model="gpt-4-turbo",
             knowledge_bases=[{"name": "kb1", "type": "knowledge"}],
-            prompt_override_configuration={"temperature": 0.8, "max_tokens": 1000}
+            prompt_override_configuration={"temperature": 0.8, "max_tokens": 1000},
+            default_instructions_for_collaborators="Always be helpful and professional."
         )
 
         result = OpenAISupervisorRepository.get_supervisor(self.project)
@@ -157,3 +158,32 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         self.assertEqual(result["foundation_model"], "gpt-4-turbo")
         self.assertEqual(result["knowledge_bases"], [{"name": "kb1", "type": "knowledge"}])
         self.assertEqual(result["prompt_override_configuration"], {"temperature": 0.8, "max_tokens": 1000})
+        self.assertEqual(result["default_instructions_for_collaborators"], "Always be helpful and professional.")
+
+    def test_default_instructions_for_collaborators_field(self):
+        """Test that default_instructions_for_collaborators field is properly handled."""
+        supervisor = OpenAISupervisorFactory(
+            default_instructions_for_collaborators="Always be helpful and polite to users."
+        )
+        self.assertEqual(supervisor.default_instructions_for_collaborators, "Always be helpful and polite to users.")
+
+        supervisor_none = OpenAISupervisorFactory(
+            default_instructions_for_collaborators=None
+        )
+        self.assertIsNone(supervisor_none.default_instructions_for_collaborators)
+
+        supervisor_empty = OpenAISupervisorFactory(
+            default_instructions_for_collaborators=""
+        )
+        self.assertEqual(supervisor_empty.default_instructions_for_collaborators, "")
+
+    def test_get_supervisor_includes_default_instructions_for_collaborators(self):
+        """Test that get_supervisor includes default_instructions_for_collaborators in the result."""
+        OpenAISupervisorFactory(
+            default_instructions_for_collaborators="Be concise and professional in all responses."
+        )
+
+        result = OpenAISupervisorRepository.get_supervisor(self.project)
+
+        self.assertIn("default_instructions_for_collaborators", result)
+        self.assertEqual(result["default_instructions_for_collaborators"], "Be concise and professional in all responses.")
