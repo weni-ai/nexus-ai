@@ -19,10 +19,7 @@ class Intelligence(BaseModel, SoftDeleteModel):
     org = models.ForeignKey(
         Org, on_delete=models.CASCADE, related_name='intelligences'
     )
-
-    @property
-    def is_router(self):
-        return self.contentbases.filter(is_router=True).exists()
+    is_router = models.BooleanField(default=False)
 
     def increase_content_bases_count(self):
         self.content_bases_count += 1

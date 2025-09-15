@@ -253,6 +253,7 @@ def create_base_brain_structure(
         name=proj.name,
         org=org,
         created_by=user,
+        is_router=True
     )
     ContentBase.objects.create(
         title=proj.name,
