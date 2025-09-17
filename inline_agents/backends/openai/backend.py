@@ -81,6 +81,7 @@ class OpenAIBackend(InlineAgentsBackend):
         super().__init__()
         self._event_manager_notify = None
         self._data_lake_event_adapter = None
+        self.langfuse_c = get_client()
 
     def _get_data_lake_event_adapter(self):
         if self._data_lake_event_adapter is None:
@@ -239,9 +240,7 @@ class OpenAIBackend(InlineAgentsBackend):
         hooks_state,
     ):
         """Async wrapper to handle the streaming response"""
-        langfuse_c = get_client()
-
-        with langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
+        with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
             result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
             async for event in result.stream_events():
                 if event.type == "run_item_stream_event":
