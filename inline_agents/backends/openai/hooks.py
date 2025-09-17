@@ -58,7 +58,7 @@ class TraceHandler:
             },
             "trace": trace_data,
         }
-        self.hooks_state.trace_data.append(standardized_event)
+        self.hooks_state.trace_data.append({"trace": standardized_event})
         await self.event_manager_notify(
             event="inline_trace_observers_async",
             inline_traces=standardized_event,
@@ -319,16 +319,13 @@ class CollaboratorHooks(AgentHooks):
                 "orchestrationTrace": {
                     "observation": {
                         "actionGroupInvocationOutput": {
-                            "metadata": {
-                                "result": result
-                            },
                             "text": result,
                         },
                     }
                 }
             }
         }
-        await self.trace_handler.send_trace(context_data, agent.name, "tool_result_received", trace_data)
+        await self.trace_handler.send_trace(context_data, agent.name, "tool_result_received", trace_data, tool_name=tool.name)
 
     async def on_end(self, context, agent, output):
         print(f"\033[34m[HOOK] Enviando resposta ao manager. {output}\033[0m")
@@ -481,7 +478,7 @@ class SupervisorHooks(AgentHooks):
                 }
             }
             await self.trace_handler.send_trace(context_data, agent.name, "search_result_received", trace_data)
-        elif tool.name in self.hooks_state.agents_names:
+        elif tool.name not in self.hooks_state.agents_names:
             if isinstance(result, str):
                 try:
                     result_json = json.loads(result)
@@ -509,16 +506,13 @@ class SupervisorHooks(AgentHooks):
                     "orchestrationTrace": {
                         "observation": {
                             "actionGroupInvocationOutput": {
-                                "metadata": {
-                                    "result": result
-                                },
                                 "text": result,
                             },
                         }
                     }
                 }
             }
-            await self.trace_handler.send_trace(context_data, agent.name, "tool_result_received", trace_data)
+            await self.trace_handler.send_trace(context_data, agent.name, "tool_result_received", trace_data, tool_name=tool.name)
 
     async def on_end(self, context, agent, output):
         print(f"\033[34m[HOOK] Enviando resposta final {output}.\033[0m")

@@ -57,10 +57,11 @@ weni-datalake-sdk = "0.2.2"
 pyjwt = "^2.10.1"
 cryptography = "^45.0.5"
 openai-agents = {extras = ["litellm"], version = "^0.3.0"}
-langfuse = "^3.3.2"
+langfuse = "3.4.0"
 nest-asyncio = "^1.6.0"
 pydantic-ai = {extras = ["logfire"], version = "^0.8.0"}
 aiohttp = "3.10"
+litellm = "1.76.3"
 
 
 
