@@ -28,7 +28,9 @@ from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
-
+from langfuse import get_client
+ 
+langfuse_c = get_client()
 
 class OpenAISupervisorRepository:
     @classmethod
@@ -239,13 +241,17 @@ class OpenAIBackend(InlineAgentsBackend):
     ):
         """Async wrapper to handle the streaming response"""
 
-        result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
-
-        async for event in result.stream_events():
-            if event.type == "run_item_stream_event":
-                if hasattr(event, 'item') and event.item.type == "tool_call_item":
-                    hooks_state.tool_calls.update({
-                        event.item.raw_item.name: event.item.raw_item.arguments   
-                    })
+        with langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
+            result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
+            async for event in result.stream_events():
+                if event.type == "run_item_stream_event":
+                    if hasattr(event, 'item') and event.item.type == "tool_call_item":
+                        hooks_state.tool_calls.update({
+                            event.item.raw_item.name: event.item.raw_item.arguments   
+                        })
+            root_span.update_trace(
+                input=input_text,
+                output=result.final_output
+            )
 
         return result.final_output
