@@ -113,3 +113,10 @@ async_event_manager.subscribe(
         AsyncSummaryTracesObserver()
     ]
 )
+
+async_event_manager.subscribe(
+    event="save_inline_trace_events",
+    observer=[
+        SaveTracesObserver()
+    ]
+)

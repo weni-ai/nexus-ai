@@ -152,8 +152,8 @@ class OpenAIBackend(InlineAgentsBackend):
             turn_off_rationale=turn_off_rationale,
             event_manager_notify=self._event_manager_notify,
             agents=team,
-            data_lake_event_adapter=self._get_data_lake_event_adapter(),
             hooks_state=hooks_state,
+            data_lake_event_adapter=data_lake_event_adapter,
         )
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
@@ -166,6 +166,7 @@ class OpenAIBackend(InlineAgentsBackend):
             turn_off_rationale=turn_off_rationale,
             event_manager_notify=self._event_manager_notify,
             agents=team,
+            hooks_state=hooks_state,
         )
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
@@ -243,6 +244,8 @@ class OpenAIBackend(InlineAgentsBackend):
         async for event in result.stream_events():
             if event.type == "run_item_stream_event":
                 if hasattr(event, 'item') and event.item.type == "tool_call_item":
-                    pass
+                    hooks_state.tool_calls.update({
+                        event.item.raw_item.name: event.item.raw_item.arguments   
+                    })
 
         return result.final_output
