@@ -3215,14 +3215,14 @@ langchain-core = ">=0.3.0,<0.4.0"
 
 [[package]]
 name = "langfuse"
-version = "3.3.2"
+version = "3.4.0"
 description = "A client library for accessing langfuse"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["main"]
 files = [
-    {file = "langfuse-3.3.2-py3-none-any.whl", hash = "sha256:0a5871501720c362183fbf2970c895fb0d46f4ed121a5f95a1874f9af081cfdd"},
-    {file = "langfuse-3.3.2.tar.gz", hash = "sha256:4b029fed675b2b631b96da157459c285930420139667f25a6ee71ed3b3c5a71c"},
+    {file = "langfuse-3.4.0-py3-none-any.whl", hash = "sha256:860624f84875cfe98bc228db55c6e09ca9ad6db4275b1b2ccae2ece9751f97a5"},
+    {file = "langfuse-3.4.0.tar.gz", hash = "sha256:34fa80ea52bb13f48530de4d3540efb0011a72cdb1589de598b047e07eb5d387"},
 ]
 
 [package.dependencies]
@@ -7178,4 +7178,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.12"
-content-hash = "21cec895f22eda99945c7c96ca663eef0657b1a5f89fc087d25faed89b2405ec"
+content-hash = "83a309220ff3b1df34bc38570052ebc42a5e387a5dddcd25e3768983d812f8d5"

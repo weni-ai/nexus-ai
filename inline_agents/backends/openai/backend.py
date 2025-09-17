@@ -28,6 +28,7 @@ from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
+from langfuse import get_client 
 
 
 class OpenAISupervisorRepository:
@@ -80,6 +81,7 @@ class OpenAIBackend(InlineAgentsBackend):
         super().__init__()
         self._event_manager_notify = None
         self._data_lake_event_adapter = None
+        self.langfuse_c = get_client()
 
     def _get_data_lake_event_adapter(self):
         if self._data_lake_event_adapter is None:
@@ -238,14 +240,23 @@ class OpenAIBackend(InlineAgentsBackend):
         hooks_state,
     ):
         """Async wrapper to handle the streaming response"""
-
-        result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
-
-        async for event in result.stream_events():
-            if event.type == "run_item_stream_event":
-                if hasattr(event, 'item') and event.item.type == "tool_call_item":
-                    hooks_state.tool_calls.update({
-                        event.item.raw_item.name: event.item.raw_item.arguments   
-                    })
+        with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
+            result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
+            async for event in result.stream_events():
+                if event.type == "run_item_stream_event":
+                    if hasattr(event, 'item') and event.item.type == "tool_call_item":
+                        hooks_state.tool_calls.update({
+                            event.item.raw_item.name: event.item.raw_item.arguments   
+                        })
+            root_span.update_trace(
+                input=input_text,
+                output=result.final_output,
+                metadata={
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "channel_uuid": channel_uuid,
+                    "preview": preview,
+                }
+            )
 
         return result.final_output
