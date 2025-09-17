@@ -44,7 +44,8 @@ class CreateIntelligencesUseCase():
             org_uuid: str,
             user_email: str,
             name: str,
-            description: str = None
+            description: str = None,
+            is_router: bool = False
     ):
         org = orgs.get_by_uuid(org_uuid)
         user = users.get_by_email(user_email)
@@ -55,7 +56,8 @@ class CreateIntelligencesUseCase():
 
         intelligence = Intelligence.objects.create(
             name=name, description=description,
-            org=org, created_by=user
+            org=org, created_by=user,
+            is_router=is_router
         )
         self.event_manager_notify(
             event="intelligence_create_activity",
