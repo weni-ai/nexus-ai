@@ -180,7 +180,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 name=agent_name,
                 instructions=agent_instructions,
                 tools=cls._get_tools(agent["actionGroups"]),
-                model=settings.OPENAI_AGENTS_FOUNDATION_MODEL,
+                model=agent.get('foundationModel', {}).get("model", settings.OPENAI_AGENTS_FOUNDATION_MODEL),
                 hooks=hooks
             )
 
