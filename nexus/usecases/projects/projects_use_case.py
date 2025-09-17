@@ -88,6 +88,7 @@ class ProjectsUseCase:
             org_uuid=project_dto.org_uuid,
             user_email=user_email,
             name=project_dto.name,
+            is_router=True
         )
 
         create_integrated_intelligence(
