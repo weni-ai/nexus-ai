@@ -1,3 +1,5 @@
+import sentry_sdk
+
 from django.core.exceptions import ValidationError
 
 from .exceptions import (
@@ -96,23 +98,40 @@ def get_or_create_default_integrated_intelligence_by_project(
     project_uuid: str
 ) -> IntegratedIntelligence:
     try:
-        project = Project.objects.get(uuid=project_uuid)
-        org = project.org
-        intelligence = org.intelligences.filter(
-            name=project.name,
-        ).order_by("created_at").first()
-        if not intelligence or intelligence.is_router is False:
-            integrated_intelligence = create_base_brain_structure(project)
-            return integrated_intelligence
-        return IntegratedIntelligence.objects.get(project__uuid=project_uuid)
-    except IntegratedIntelligence.DoesNotExist:
-        integrated_intelligence = IntegratedIntelligence.objects.create(
-            project=project,
-            intelligence=intelligence,
-            created_by=project.created_by
+        return IntegratedIntelligence.objects.get(
+            project__uuid=project_uuid,
+            intelligence__is_router=True
         )
+    except IntegratedIntelligence.DoesNotExist:
+        project = Project.objects.get(uuid=project_uuid)
+        integrated_intelligence = create_base_brain_structure(project)
         return integrated_intelligence
+    except IntegratedIntelligence.MultipleObjectsReturned:
+        # Get all IntegratedIntelligence objects for this project with is_router=True
+        integrated_intelligences = IntegratedIntelligence.objects.filter(
+            project__uuid=project_uuid,
+            intelligence__is_router=True
+        ).order_by("created_at")
+
+        # Get the oldest one (first in the ordered list)
+        oldest_integrated_intelligence = integrated_intelligences.first()
+
+        # Get all the duplicates (excluding the oldest one)
+        duplicate_integrated_intelligences = integrated_intelligences[1:]
+
+        # Update intelligence__is_router=False for all duplicates
+        for duplicate in duplicate_integrated_intelligences:
+            duplicate.intelligence.is_router = False
+            duplicate.intelligence.save()
+
+        # Delete the duplicate IntegratedIntelligence objects
+        duplicate_integrated_intelligences.delete()
+
+        return oldest_integrated_intelligence
+
     except Exception as exception:
+        sentry_sdk.capture_exception(exception)
+        sentry_sdk.set_tag("project_uuid", project_uuid)
         raise Exception(f"[ Intelligence ] - Intelligence error to get - error: `{exception}`")
 
 
