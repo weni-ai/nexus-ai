@@ -39,7 +39,7 @@ class IntegratedIntelligence(BaseModel):
         if self.intelligence.is_router:
             existing_router = IntegratedIntelligence.objects.filter(
                 project=self.project,
-                intelligence__contentbases__is_router=True
+                intelligence__is_router=True
             ).exclude(uuid=self.uuid)
             if existing_router.exists():
                 raise ValidationError("A project can only have one IntegratedIntelligence with is_router=True")

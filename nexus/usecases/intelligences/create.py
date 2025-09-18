@@ -1,6 +1,7 @@
 import pendulum
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from nexus.intelligences.models import (
     Intelligence,
     ContentBase,
@@ -28,6 +29,7 @@ from nexus.usecases import (
 from nexus.events import event_manager
 from nexus.orgs import permissions
 from nexus.projects.models import Project
+from nexus.users.models import User
 from .exceptions import IntelligencePermissionDenied
 
 
@@ -44,7 +46,8 @@ class CreateIntelligencesUseCase():
             org_uuid: str,
             user_email: str,
             name: str,
-            description: str = None
+            description: str = None,
+            is_router: bool = False
     ):
         org = orgs.get_by_uuid(org_uuid)
         user = users.get_by_email(user_email)
@@ -55,7 +58,8 @@ class CreateIntelligencesUseCase():
 
         intelligence = Intelligence.objects.create(
             name=name, description=description,
-            org=org, created_by=user
+            org=org, created_by=user,
+            is_router=is_router
         )
         self.event_manager_notify(
             event="intelligence_create_activity",
@@ -243,6 +247,47 @@ def create_llm(
     return llm
 
 
+def create_base_integrated_intelligence(
+    project: Project,
+    user: User,
+    intelligence: Intelligence
+) -> IntegratedIntelligence:
+    try:
+        return IntegratedIntelligence.objects.create(
+            project=project,
+            intelligence=intelligence,
+            created_by=user
+        )
+    except ValidationError as e:
+        # Check if this is a router validation error
+        if "A project can only have one IntegratedIntelligence with is_router=True" in str(e):
+            # Find the existing IntegratedIntelligence with router intelligence
+            existing_integrated_intelligence = IntegratedIntelligence.objects.filter(
+                project=project,
+                intelligence__is_router=True
+            ).first()
+
+            if existing_integrated_intelligence:
+                # Check if the existing intelligence is not a router, if so, make it a router
+                if not existing_integrated_intelligence.intelligence.is_router:
+                    existing_integrated_intelligence.intelligence.is_router = True
+                    existing_integrated_intelligence.intelligence.save()
+                return existing_integrated_intelligence
+            else:
+                # If no existing router found, make the current intelligence a router and try again
+                intelligence.is_router = True
+                intelligence.save()
+                integrated_intelligence = IntegratedIntelligence.objects.create(
+                    project=project,
+                    intelligence=intelligence,
+                    created_by=user
+                )
+                return integrated_intelligence
+        else:
+            # Re-raise if it's a different validation error
+            raise e
+
+
 def create_base_brain_structure(
     proj: Project,
 ) -> IntegratedIntelligence:
@@ -261,10 +306,10 @@ def create_base_brain_structure(
         created_by=user,
         is_router=True
     )
-    integrated_intelligence = IntegratedIntelligence.objects.create(
+    integrated_intelligence = create_base_integrated_intelligence(
         project=proj,
-        intelligence=intelligence,
-        created_by=user
+        user=user,
+        intelligence=intelligence
     )
     # TODO: Handle different languages
     LLM.objects.create(
