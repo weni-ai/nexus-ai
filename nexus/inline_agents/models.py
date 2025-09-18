@@ -11,7 +11,6 @@ from nexus.agents.exceptions import (
     CredentialIsConfidentialInvalid,
 )
 from nexus.projects.models import Project
-from nexus.settings import DEFAULT_FOUNDATION_MODELS
 
 
 class Guardrail(models.Model):
@@ -42,7 +41,7 @@ class Agent(models.Model):
     instruction = models.TextField()
     collaboration_instructions = models.TextField()
     foundation_model = models.CharField(max_length=255)
-    foundation_models = models.JSONField(default=DEFAULT_FOUNDATION_MODELS)
+    foundation_models = models.JSONField(default=dict)
     source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
 
     @property
@@ -53,7 +52,7 @@ class Agent(models.Model):
     def current_foundation_model(self):
         if self.project.default_collaborators_foundation_model:
             return self.project.default_collaborators_foundation_model
-        return self.foundation_models.get(self.project.agents_backend)
+        return self.foundation_models.get(self.project.agents_backend, self.foundation_model)
 
 
 class IntegratedAgent(models.Model):
