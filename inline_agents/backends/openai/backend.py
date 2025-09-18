@@ -29,6 +29,7 @@ from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
 from langfuse import get_client 
+from router.traces_observers.save_traces import save_inline_message_to_database
 
 
 class OpenAISupervisorRepository:
@@ -142,6 +143,17 @@ class OpenAIBackend(InlineAgentsBackend):
         data_lake_event_adapter = self._get_data_lake_event_adapter()
 
         hooks_state = HooksState(agents=team)
+
+        save_inline_message_to_database(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            text=input_text,
+            preview=preview,
+            session_id=session_id,
+            source_type="user",
+            contact_name=contact_name,
+            channel_uuid=channel_uuid
+        )
 
         supervisor_hooks = SupervisorHooks(
             agent_name="manager",

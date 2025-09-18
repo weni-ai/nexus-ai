@@ -58,7 +58,7 @@ class TraceHandler:
             },
             "trace": trace_data,
         }
-        self.hooks_state.trace_data.append(standardized_event)
+        self.hooks_state.trace_data.append({"trace": standardized_event})
         await self.event_manager_notify(
             event="inline_trace_observers_async",
             inline_traces=standardized_event,
