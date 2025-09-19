@@ -38,7 +38,7 @@ class ORMTeamRepository(TeamRepository):
                     "agentName": agent.slug,
                     "instruction": agent.instruction,
                     "actionGroups": skills,
-                    "foundationModel": agent.current_foundation_model,
+                    "foundationModel": agent.current_foundation_model(self.agents_backend),
                     "agentCollaboration": "DISABLED",
                     "collaborator_configurations": agent.collaboration_instructions,
                 }
