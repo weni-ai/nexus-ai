@@ -204,6 +204,7 @@ class OpenAITeamAdapter(TeamAdapter):
             model=supervisor["foundation_model"],
             prompt_override_configuration=supervisor.get("prompt_override_configuration", {}),
             preview=preview,
+            max_tokens=supervisor.get("max_tokens", 2048),
         )
 
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)

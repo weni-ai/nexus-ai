@@ -52,6 +52,7 @@ class OpenAISupervisorRepository:
             "knowledge_bases": supervisor.knowledge_bases,
             "prompt_override_configuration": supervisor.prompt_override_configuration,
             "default_instructions_for_collaborators": supervisor.default_instructions_for_collaborators,
+            "max_tokens": supervisor.max_tokens,
         }
 
         return supervisor_dict
