@@ -23,7 +23,7 @@ class TestORMTeamRepository(TestCase):
             instruction="Test instruction 1",
             collaboration_instructions="Test collaboration 1",
             foundation_model="claude-3-sonnet",
-            foundation_models={"BedrockBackend": "claude-3-sonnet", "OpenAIBackend": "gpt-4"},
+            backend_foundation_models={"BedrockBackend": "claude-3-sonnet", "OpenAIBackend": "gpt-4"},
         )
 
         self.agent2 = Agent.objects.create(
@@ -33,7 +33,7 @@ class TestORMTeamRepository(TestCase):
             instruction="Test instruction 2",
             collaboration_instructions="Test collaboration 2",
             foundation_model="claude-3-haiku",
-            foundation_models={"BedrockBackend": "claude-3-haiku", "OpenAIBackend": "gpt-3.5-turbo"},
+            backend_foundation_models={"BedrockBackend": "claude-3-haiku", "OpenAIBackend": "gpt-3.5-turbo"},
         )
 
         self.version1 = Version.objects.create(
@@ -242,7 +242,7 @@ class TestORMTeamRepository(TestCase):
             instruction="Test instruction",
             collaboration_instructions="Test collaboration",
             foundation_model="claude-3-sonnet",
-            foundation_models={"BedrockBackend": "claude-3-sonnet"},
+            backend_foundation_models={"BedrockBackend": "claude-3-sonnet"},
         )
         
         # Create version with empty skills
