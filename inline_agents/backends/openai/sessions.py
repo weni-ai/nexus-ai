@@ -78,12 +78,20 @@ async def set_watermark(session, ns: str, cursor: int):
 
 
 class RedisSession(Session):
-    def __init__(self, session_id: str, r: redis.Redis, project_uuid: str, sanitized_urn: str):
+    def __init__(
+        self,
+        session_id: str,
+        r: redis.Redis,
+        project_uuid: str,
+        sanitized_urn: str,
+        limit: Optional[int] = None
+    ):
         print(f"[DEBUG] RedisSession: {session_id}")
         self._key = session_id
         self.r = r
         self.project_uuid = project_uuid
         self.sanitized_urn = sanitized_urn
+        self.limit = limit
 
         if not self.is_connected():
             logger.error(f"Redis connection failed for session {session_id}")
@@ -111,11 +119,14 @@ class RedisSession(Session):
             return False
 
     async def get_items(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        limit = limit or self.limit
         try:
-            end_index = -1 if limit is None or limit <= 0 else limit - 1
-
             with self.r.pipeline() as pipe:
-                pipe.lrange(self._key, 0, end_index)
+                if limit is None or limit <= 0:
+                    pipe.lrange(self._key, 0, -1)
+                else:
+                    pipe.lrange(self._key, -limit, -1)
+
                 pipe.expire(self._key, settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS)
                 results = pipe.execute()
 
@@ -182,8 +193,8 @@ class RedisSession(Session):
         self.r.delete(self._key)
 
 
-def make_session_factory(redis: redis.Redis, base_id: str, project_uuid: str, sanitized_urn: str):
+def make_session_factory(redis: redis.Redis, base_id: str, project_uuid: str, sanitized_urn: str, limit: int):
     def for_agent(agent_name: str | None = None):
         key = f"{base_id}:{agent_name}"
-        return RedisSession(key, redis, project_uuid, sanitized_urn)
+        return RedisSession(key, redis, project_uuid, sanitized_urn, limit)
     return for_agent
