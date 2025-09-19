@@ -2,10 +2,11 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
+import pendulum
 import redis
+import sentry_sdk
 from agents.memory import Session
 from django.conf import settings
-import sentry_sdk
 
 TURN_ROLES = {"user", "assistant"}
 TURN_TYPES = {"message_input_item", "message_output_item"}
@@ -120,6 +121,7 @@ class RedisSession(Session):
 
     async def get_items(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         limit = limit or self.limit
+        print(f"\t\t\t[DEBUG] limit: {limit}")
         try:
             with self.r.pipeline() as pipe:
                 if limit is None or limit <= 0:
