@@ -97,5 +97,5 @@ class TestCreateAgentsUsecase(TestCase):
                 key, agents[key], self.project, self.files
             )
             self.assertEquals(
-                agent.foundation_models, settings.DEFAULT_FOUNDATION_MODELS
+                agent.backend_foundation_models, settings.DEFAULT_FOUNDATION_MODELS
             )

@@ -41,7 +41,7 @@ class Agent(models.Model):
     instruction = models.TextField()
     collaboration_instructions = models.TextField()
     foundation_model = models.CharField(max_length=255)
-    foundation_models = models.JSONField(default=dict)
+    backend_foundation_models = models.JSONField(default=dict)
     source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
 
     @property
@@ -52,7 +52,7 @@ class Agent(models.Model):
     def current_foundation_model(self):
         if self.project.default_collaborators_foundation_model:
             return self.project.default_collaborators_foundation_model
-        return self.foundation_models.get(self.project.agents_backend, self.foundation_model)
+        return self.backend_foundation_models.get(self.project.agents_backend, self.foundation_model)
 
 
 class IntegratedAgent(models.Model):
