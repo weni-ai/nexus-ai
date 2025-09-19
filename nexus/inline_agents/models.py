@@ -1,6 +1,7 @@
 from uuid import uuid4
 from django.db import models
 from django.contrib.postgres.fields import ArrayField
+from django.conf import settings
 
 from nexus.agents.encryption import decrypt_value
 from nexus.agents.exceptions import (
@@ -40,7 +41,7 @@ class Agent(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_agents")
     instruction = models.TextField()
     collaboration_instructions = models.TextField()
-    foundation_model = models.CharField(max_length=255)
+    foundation_model = models.CharField(max_length=255)  # will be deprecated
     backend_foundation_models = models.JSONField(default=dict)
     source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
 
@@ -48,11 +49,21 @@ class Agent(models.Model):
     def current_version(self):
         return self.versions.order_by('created_on').last()
 
-    @property
-    def current_foundation_model(self):
-        if self.project.default_collaborators_foundation_model:
-            return self.project.default_collaborators_foundation_model
-        return self.backend_foundation_models.get(self.project.agents_backend, self.foundation_model)
+    def __get_default_value_fallback(self, agents_backend):
+        if agents_backend == "BedrockBackend":
+            return self.foundation_model
+        elif agents_backend == "OpenAIBackend":
+            return settings.OPENAI_AGENTS_FOUNDATION_MODEL
+
+    def current_foundation_model(self, agents_backend, project = None):
+        if not project:
+            project = self.project
+
+        default_value = self.__get_default_value_fallback(agents_backend)
+
+        if project.default_collaborators_foundation_model:
+            return project.default_collaborators_foundation_model
+        return self.backend_foundation_models.get(agents_backend, default_value)
 
 
 class IntegratedAgent(models.Model):

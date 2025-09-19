@@ -199,7 +199,7 @@ def start_inline_agents(
         agents_backend = project.agents_backend
         backend = BackendsRegistry.get_backend(agents_backend)
 
-        rep = ORMTeamRepository(agents_backend=agents_backend)
+        rep = ORMTeamRepository(agents_backend=agents_backend, project=project)
         team = rep.get_team(message_obj.project_uuid)
 
         response = backend.invoke_agents(
