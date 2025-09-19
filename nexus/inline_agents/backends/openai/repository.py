@@ -1,16 +1,20 @@
-from nexus.inline_agents.backends import Supervisor
+
+
+from nexus.inline_agents.backends.openai.models import (
+    OpenAISupervisor as Supervisor,
+)
 from nexus.projects.models import Project
 from inline_agents.repository import SupervisorRepository
+from nexus.inline_agents.models import Agent
 
 
-class BedrockSupervisorRepository(SupervisorRepository):
-
+class OpenAISupervisorRepository(SupervisorRepository):
     @classmethod
     def get_supervisor(
         cls,
         project: Project,
         foundation_model: str = None,
-    ) -> dict:
+    ) -> Agent:
 
         supervisor = Supervisor.objects.order_by('id').last()
 
@@ -18,30 +22,16 @@ class BedrockSupervisorRepository(SupervisorRepository):
             raise Supervisor.DoesNotExist()
 
         supervisor_dict = {
-            "prompt_override_configuration": supervisor.prompt_override_configuration,
             "instruction": cls._get_supervisor_instructions(project=project, supervisor=supervisor),
-            "action_groups": cls._get_action_groups(project=project, supervisor=supervisor),
+            "tools": cls._get_supervisor_tools(project=project, supervisor=supervisor),
             "foundation_model": cls.get_foundation_model(project=project, supervisor=supervisor, foundation_model=foundation_model),
             "knowledge_bases": supervisor.knowledge_bases,
-            "agent_collaboration": cls._get_agent_collaboration(project=project),
+            "prompt_override_configuration": supervisor.prompt_override_configuration,
+            "default_instructions_for_collaborators": supervisor.default_instructions_for_collaborators,
+            "max_tokens": supervisor.max_tokens,
         }
 
         return supervisor_dict
-
-    @classmethod
-    def _get_agent_collaboration(cls, project) -> str:
-        # if there is agents in the team return "SUPERVISOR"
-        if project.integrated_agents.exists():
-            return "SUPERVISOR"
-
-        return "DISABLED"
-
-    @classmethod
-    def _get_action_groups(cls, project, supervisor) -> list[dict]:
-        if not project.human_support:
-            return supervisor.action_groups
-
-        return supervisor.human_support_action_groups
 
     @classmethod
     def _get_supervisor_instructions(cls, project, supervisor) -> str:
@@ -53,3 +43,9 @@ class BedrockSupervisorRepository(SupervisorRepository):
             return supervisor.human_support_prompt
         else:
             return supervisor.instruction
+
+    @classmethod
+    def _get_supervisor_tools(cls, project, supervisor) -> list[dict]:
+        if project.human_support:
+            return supervisor.human_support_action_groups
+        return supervisor.action_groups
