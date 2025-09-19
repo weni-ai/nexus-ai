@@ -148,7 +148,8 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
             foundation_model="gpt-4-turbo",
             knowledge_bases=[{"name": "kb1", "type": "knowledge"}],
             prompt_override_configuration={"temperature": 0.8, "max_tokens": 1000},
-            default_instructions_for_collaborators="Always be helpful and professional."
+            default_instructions_for_collaborators="Always be helpful and professional.",
+            max_tokens=4096
         )
 
         result = OpenAISupervisorRepository.get_supervisor(self.project)
@@ -159,6 +160,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         self.assertEqual(result["knowledge_bases"], [{"name": "kb1", "type": "knowledge"}])
         self.assertEqual(result["prompt_override_configuration"], {"temperature": 0.8, "max_tokens": 1000})
         self.assertEqual(result["default_instructions_for_collaborators"], "Always be helpful and professional.")
+        self.assertEqual(result["max_tokens"], 4096)
 
     def test_default_instructions_for_collaborators_field(self):
         """Test that default_instructions_for_collaborators field is properly handled."""

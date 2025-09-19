@@ -28,6 +28,7 @@ class Supervisor(Agent):
         handoffs: list[Agent] | None = None,
         prompt_override_configuration: dict | None = None,
         preview: bool = False,
+        max_tokens: int | None = None,
     ):
         tools.extend(self.function_tools())
         if model in settings.MODELS_WITH_REASONING:
@@ -38,6 +39,7 @@ class Supervisor(Agent):
                 tools=tools,
                 hooks=hooks,
                 model_settings=ModelSettings(
+                    max_tokens=max_tokens,
                     reasoning=Reasoning(
                         effort="medium",
                         summary="auto"
@@ -52,6 +54,9 @@ class Supervisor(Agent):
             model=model,
             tools=tools,
             hooks=hooks,
+            model_settings=ModelSettings(
+                max_tokens=max_tokens,
+            ),
         )
         return
 
