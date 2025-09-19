@@ -8,6 +8,7 @@ import sentry_sdk
 from agents import (
     Agent,
     FunctionTool,
+    ModelSettings,
     RunContextWrapper,
     Runner,
     Session,
@@ -132,6 +133,8 @@ class OpenAITeamAdapter(TeamAdapter):
         time_now = pendulum.now("America/Sao_Paulo")
         llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
 
+        max_tokens = supervisor.get("max_tokens", 2048)
+
         instruction = cls._format_supervisor_instructions(
             instruction=supervisor["instruction"],
             date_time_now=llm_formatted_time,
@@ -181,7 +184,10 @@ class OpenAITeamAdapter(TeamAdapter):
                 instructions=agent_instructions,
                 tools=cls._get_tools(agent["actionGroups"]),
                 model=agent.get("foundationModel", settings.OPENAI_AGENTS_FOUNDATION_MODEL),
-                hooks=hooks
+                hooks=hooks,
+                model_settings=ModelSettings(
+                    max_tokens=max_tokens,
+                )
             )
 
             agents_as_tools.append(
@@ -204,7 +210,7 @@ class OpenAITeamAdapter(TeamAdapter):
             model=supervisor["foundation_model"],
             prompt_override_configuration=supervisor.get("prompt_override_configuration", {}),
             preview=preview,
-            max_tokens=supervisor.get("max_tokens", 2048),
+            max_tokens=max_tokens,
         )
 
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
