@@ -96,7 +96,7 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-            'fields': ('name', 'foundation_model', 'instruction', 'default_instructions_for_collaborators')
+            'fields': ('name', 'foundation_model', 'instruction', 'default_instructions_for_collaborators', 'max_tokens')
         }),
         ('Configuration', {
             'fields': ('prompt_override_configuration', 'action_groups', 'knowledge_bases')
@@ -134,7 +134,7 @@ class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
 class AgentAdmin(admin.ModelAdmin):
     list_display = ('uuid', 'name', 'project', 'is_official')
     list_filter = ('is_official', 'source_type')
-    search_fields = ('name', 'project__name', 'project__uuid')
+    search_fields = ('name', 'project__name', 'project__uuid', 'slug')
     ordering = ('project__name',)
     autocomplete_fields = ['project']
 
