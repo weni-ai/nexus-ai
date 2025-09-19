@@ -134,7 +134,7 @@ class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
 class AgentAdmin(admin.ModelAdmin):
     list_display = ('uuid', 'name', 'project', 'is_official')
     list_filter = ('is_official', 'source_type')
-    search_fields = ('name', 'project__name', 'project__uuid')
+    search_fields = ('name', 'project__name', 'project__uuid', 'slug')
     ordering = ('project__name',)
     autocomplete_fields = ['project']
 
