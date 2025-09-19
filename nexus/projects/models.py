@@ -48,6 +48,7 @@ class Project(BaseModel, SoftDeleteModel):
     inline_agent_switch = models.BooleanField(default=False)
     use_components = models.BooleanField(default=False)
     default_supervisor_foundation_model = models.CharField(max_length=100, blank=True, null=True)
+    default_collaborators_foundation_model = models.CharField(max_length=100, blank=True, null=True)
     use_prompt_creation_configurations = models.BooleanField(default=True)
     conversation_turns_to_include = models.IntegerField(default=10)
     exclude_previous_thinking_steps = models.BooleanField(default=True)
