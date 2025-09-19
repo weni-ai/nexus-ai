@@ -55,10 +55,14 @@ class Agent(models.Model):
         elif agents_backend == "OpenAIBackend":
             return settings.OPENAI_AGENTS_FOUNDATION_MODEL
 
-    def current_foundation_model(self, agents_backend):
+    def current_foundation_model(self, agents_backend, project = None):
+        if not project:
+            project = self.project
+
         default_value = self.__get_default_value_fallback(agents_backend)
-        if self.project.default_collaborators_foundation_model:
-            return self.project.default_collaborators_foundation_model
+
+        if project.default_collaborators_foundation_model:
+            return project.default_collaborators_foundation_model
         return self.backend_foundation_models.get(agents_backend, default_value)
 
 
