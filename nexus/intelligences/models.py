@@ -19,10 +19,7 @@ class Intelligence(BaseModel, SoftDeleteModel):
     org = models.ForeignKey(
         Org, on_delete=models.CASCADE, related_name='intelligences'
     )
-
-    @property
-    def is_router(self):
-        return self.contentbases.filter(is_router=True).exists()
+    is_router = models.BooleanField(default=False)
 
     def increase_content_bases_count(self):
         self.content_bases_count += 1
@@ -42,7 +39,7 @@ class IntegratedIntelligence(BaseModel):
         if self.intelligence.is_router:
             existing_router = IntegratedIntelligence.objects.filter(
                 project=self.project,
-                intelligence__contentbases__is_router=True
+                intelligence__is_router=True
             ).exclude(uuid=self.uuid)
             if existing_router.exists():
                 raise ValidationError("A project can only have one IntegratedIntelligence with is_router=True")
