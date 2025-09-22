@@ -191,7 +191,7 @@ class RedisSession(Session):
         raw = self.r.rpop(self._key)
         return json.loads(raw) if raw else None
 
-    async def clear_session(self):
+    def clear_session(self):
         self.r.delete(self._key)
 
 

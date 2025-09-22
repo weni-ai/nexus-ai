@@ -49,12 +49,12 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_client(self):
         return Runner()
 
-    def _get_session(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None) -> tuple[RedisSession, str]:
+    def _get_session(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None) -> tuple[RedisSession, str]:
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         return RedisSession(session_id=session_id, r=redis_client, project_uuid=project_uuid, sanitized_urn=sanitized_urn, limit=conversation_turns_to_include), session_id
 
-    def _get_session_factory(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None):
+    def _get_session_factory(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None):
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         return make_session_factory(redis=redis_client, base_id=session_id, project_uuid=project_uuid, sanitized_urn=sanitized_urn, limit=conversation_turns_to_include)
