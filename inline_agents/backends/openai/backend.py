@@ -49,15 +49,15 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_client(self):
         return Runner()
 
-    def _get_session(self, project_uuid: str, sanitized_urn: str) -> tuple[RedisSession, str]:
+    def _get_session(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None) -> tuple[RedisSession, str]:
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
-        return RedisSession(session_id=session_id, r=redis_client), session_id
+        return RedisSession(session_id=session_id, r=redis_client, project_uuid=project_uuid, sanitized_urn=sanitized_urn, limit=conversation_turns_to_include), session_id
 
-    def _get_session_factory(self, project_uuid: str, sanitized_urn: str):
+    def _get_session_factory(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None):
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
-        return make_session_factory(redis=redis_client, base_id=session_id)
+        return make_session_factory(redis=redis_client, base_id=session_id, project_uuid=project_uuid, sanitized_urn=sanitized_urn, limit=conversation_turns_to_include)
 
     def end_session(self, project_uuid: str, sanitized_urn: str):
         session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
@@ -92,9 +92,18 @@ class OpenAIBackend(InlineAgentsBackend):
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
         **kwargs
     ):
+        turns_to_include = None
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
-        session_factory = self._get_session_factory(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
-        session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
+        session_factory = self._get_session_factory(
+            project_uuid=project_uuid,
+            sanitized_urn=sanitized_urn,
+            conversation_turns_to_include=turns_to_include
+        )
+        session, session_id = self._get_session(
+            project_uuid=project_uuid,
+            sanitized_urn=sanitized_urn,
+            conversation_turns_to_include=turns_to_include
+        )
 
         supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
         data_lake_event_adapter = self._get_data_lake_event_adapter()
