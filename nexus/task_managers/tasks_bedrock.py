@@ -21,14 +21,14 @@ from langchain_community.document_transformers import Html2TextTransformer
 
 
 @app.task
-def check_ingestion_job_status(celery_task_manager_uuid: str, ingestion_job_id: str, waiting_time: int = 10, file_type: str = "file"):
+def check_ingestion_job_status(celery_task_manager_uuid: str, ingestion_job_id: str, waiting_time: int = 10, file_type: str = "file", project_uuid: str | None = None):
 
     if waiting_time:
         sleep(waiting_time)
 
     print(f"[+ 🦑 BEDROCK: Checking Ingestion Job {ingestion_job_id} Status +]")
 
-    file_database = BedrockFileDatabase()
+    file_database = BedrockFileDatabase(project_uuid=project_uuid)
     ingestion_job_status: str = file_database.get_bedrock_ingestion_status(ingestion_job_id)
     status = TaskManager.status_map.get(ingestion_job_status)
 
@@ -38,7 +38,7 @@ def check_ingestion_job_status(celery_task_manager_uuid: str, ingestion_job_id: 
     print(f"[+ 🦑 BEDROCK: Ingestion Job {ingestion_job_id} Status: {status} +]")
 
     if ingestion_job_status not in ["COMPLETE", "FAILED"]:
-        check_ingestion_job_status.delay(celery_task_manager_uuid, ingestion_job_id, file_type=file_type)
+        check_ingestion_job_status.delay(celery_task_manager_uuid, ingestion_job_id, file_type=file_type, project_uuid=project_uuid)
 
     return True
 
@@ -68,7 +68,7 @@ def start_ingestion_job(celery_task_manager_uuid: str, file_type: str = "file", 
 
         status = TaskManager.status_map.get("IN_PROGRESS")
         task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
-        return check_ingestion_job_status.delay(celery_task_manager_uuid, ingestion_job_id, file_type=file_type)
+        return check_ingestion_job_status.delay(celery_task_manager_uuid, ingestion_job_id, file_type=file_type, project_uuid=project_uuid)
 
     except ClientError as e:
         if e.response["Error"]["Code"] == "ConflictException":
