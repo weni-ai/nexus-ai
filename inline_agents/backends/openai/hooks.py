@@ -29,9 +29,12 @@ class HooksState:
                     "function_name": function_names[0],
                     "function_arn": action_group.get("actionGroupExecutor", {}).get("lambda")
                 }
-    
+
     def add_tool_info(self, tool_name: str, info: Dict[str, Any]):
-        self.tool_info.update({tool_name: info})
+        try:
+            self.tool_info[tool_name].update(info)
+        except KeyError:
+            self.tool_info[tool_name] = info
 
     def add_tool_call(self, tool_call: Dict[str, Any]):
         self.tool_calls.update(tool_call)
@@ -306,6 +309,7 @@ class CollaboratorHooks(AgentHooks):
             events = self.hooks_state.get_events(result, tool.name)
 
         if events:
+            print(f"\033[34m[HOOK] Eventos da ferramenta '{tool.name}': {events}\033[0m")
             self.data_lake_event_adapter.custom_event_data(
                 event_data=events,
                 project_uuid=context_data.project.get("uuid"),
