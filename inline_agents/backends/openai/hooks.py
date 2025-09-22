@@ -15,6 +15,7 @@ class HooksState:
         self.lambda_names = {}
         self.tool_calls = {}
         self.trace_data = []
+        self.tool_info = {}
 
         for agent in self.agents:
             self.agents_names.append(agent.get("agentName"))
@@ -28,11 +29,18 @@ class HooksState:
                     "function_name": function_names[0],
                     "function_arn": action_group.get("actionGroupExecutor", {}).get("lambda")
                 }
+    
+    def add_tool_info(self, tool_name: str, info: Dict[str, Any]):
+        self.tool_info.update({tool_name: info})
 
     def add_tool_call(self, tool_call: Dict[str, Any]):
         self.tool_calls.update(tool_call)
 
-    def get_events(self, result: dict):
+    def get_events(self, result: dict, tool_name: str):
+        session_events = self.tool_info.get(tool_name, {}).get("events", {})
+        if session_events:
+            return session_events
+
         events = result.get("events", {})
         return events
 
@@ -247,7 +255,7 @@ class CollaboratorHooks(AgentHooks):
 
     async def tool_started(self, context, agent, tool):
         context_data = context.context
-        parameters = self.hooks_state.tool_calls.get(tool.name, {})
+        parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", {})
 
         print(f"\033[34m[HOOK] Executando ferramenta '{tool.name}'.\033[0m")
         print(f"\033[33m[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.\033[0m")
@@ -270,7 +278,7 @@ class CollaboratorHooks(AgentHooks):
         }
         print("==============tool_calls================")
         print(tool.name)
-        print(self.hooks_state.tool_calls)
+        print(self.hooks_state.tool_info)
         print(trace_data)
         print("==========================================")
         await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data, tool_name=tool.name)
@@ -291,11 +299,11 @@ class CollaboratorHooks(AgentHooks):
         if isinstance(result, str):
             try:
                 result_json = json.loads(result)
-                events = self.hooks_state.get_events(result_json)
+                events = self.hooks_state.get_events(result_json, tool.name)
             except Exception:
                 events = {}
         elif isinstance(result, dict):
-            events = self.hooks_state.get_events(result)
+            events = self.hooks_state.get_events(result, tool.name)
 
         if events:
             self.data_lake_event_adapter.custom_event_data(
@@ -394,7 +402,7 @@ class SupervisorHooks(AgentHooks):
 
     async def tool_started(self, context, agent, tool):
         context_data = context.context
-        parameters = self.hooks_state.tool_calls.get(tool.name, {})
+        parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", {})
         tool_call_data = {
             "tool_name": tool.name,
             "parameters": parameters
@@ -478,13 +486,14 @@ class SupervisorHooks(AgentHooks):
             if isinstance(result, str):
                 try:
                     result_json = json.loads(result)
-                    events = self.hooks_state.get_events(result_json)
+                    events = self.hooks_state.get_events(result_json, tool.name)
                 except Exception:
                     events = {}
             elif isinstance(result, dict):
-                events = self.hooks_state.get_events(result)
+                events = self.hooks_state.get_events(result, tool.name)
 
             if events:
+                print(f"\033[34m[HOOK] Eventos da ferramenta '{tool.name}': {events}\033[0m")
                 self.data_lake_event_adapter.custom_event_data(
                     event_data=events,
                     project_uuid=context_data.project.get("uuid"),
