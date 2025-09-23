@@ -456,18 +456,10 @@ class MultiAgentView(APIView):
             )
 
         try:
-            can_view = False
-            # Check if user has email attribute (not AnonymousUser)
-            if hasattr(request.user, 'email') and request.user.email:
-                for can_view_email in settings.MULTI_AGENTS_CAN_ACCESS:
-                    if can_view_email in request.user.email:
-                        can_view = True
-                        break
 
             project = Project.objects.get(uuid=project_uuid)
             return Response({
                 "multi_agents": project.inline_agent_switch,
-                "can_view": can_view
             })
         except Project.DoesNotExist:
             return Response(
@@ -486,19 +478,6 @@ class MultiAgentView(APIView):
             return Response(
                 {"error": "multi_agents field is required"},
                 status=400
-            )
-
-        can_access = False
-        # Check if user has email attribute (not AnonymousUser)
-        if hasattr(request.user, 'email') and request.user.email:
-            for can_access_email in settings.MULTI_AGENTS_CAN_ACCESS:
-                if can_access_email in request.user.email:
-                    can_access = True
-                    break
-        if not can_access:
-            return Response(
-                {"error": "You are not authorized to access this resource"},
-                status=403
             )
 
         try:
