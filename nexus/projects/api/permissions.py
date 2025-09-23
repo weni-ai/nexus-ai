@@ -41,7 +41,11 @@ class ExternalTokenPermission(permissions.BasePermission):
         if not authorization_header:
             return False
 
-        token = authorization_header.split("Bearer")[1].strip()
+        # Fix: Split on "Bearer " (with space) instead of "Bearer"
+        if not authorization_header.startswith("Bearer "):
+            return False
+
+        token = authorization_header.split("Bearer ")[1].strip()
 
         if token not in settings.EXTERNAL_SUPERUSERS_TOKENS:
             return False
