@@ -446,6 +446,7 @@ class LogGroupView(APIView):
 
 class MultiAgentView(APIView):
     permission_classes = [CombinedExternalProjectPermission]
+    authentication_classes = []  # Disable default authentication
 
     def get(self, request, project_uuid):
         if not project_uuid:
@@ -456,10 +457,12 @@ class MultiAgentView(APIView):
 
         try:
             can_view = False
-            for can_view_email in settings.MULTI_AGENTS_CAN_ACCESS:
-                if can_view_email in request.user.email:
-                    can_view = True
-                    break
+            # Check if user has email attribute (not AnonymousUser)
+            if hasattr(request.user, 'email') and request.user.email:
+                for can_view_email in settings.MULTI_AGENTS_CAN_ACCESS:
+                    if can_view_email in request.user.email:
+                        can_view = True
+                        break
 
             project = Project.objects.get(uuid=project_uuid)
             return Response({
@@ -486,10 +489,12 @@ class MultiAgentView(APIView):
             )
 
         can_access = False
-        for can_access_email in settings.MULTI_AGENTS_CAN_ACCESS:
-            if can_access_email in request.user.email:
-                can_access = True
-                break
+        # Check if user has email attribute (not AnonymousUser)
+        if hasattr(request.user, 'email') and request.user.email:
+            for can_access_email in settings.MULTI_AGENTS_CAN_ACCESS:
+                if can_access_email in request.user.email:
+                    can_access = True
+                    break
         if not can_access:
             return Response(
                 {"error": "You are not authorized to access this resource"},
