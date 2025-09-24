@@ -202,7 +202,7 @@ class BedrockBackend(InlineAgentsBackend):
                     contact_urn=contact_urn,
                     preview=preview,
                     backend="bedrock",
-                    foundation_model=collaborator_foundation_model if collaborator_foundation_model else supervisor["foundation_model"]
+                    foundation_model=collaborator_foundation_model if collaborator_foundation_model else supervisor.get("foundation_model", "")
                 )
 
                 if "rationale" in orchestration_trace:
