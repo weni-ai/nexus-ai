@@ -394,9 +394,6 @@ class SupervisorHooks(AgentHooks):
         self.knowledge_base_tool = knowledge_base_tool
 
     async def on_start(self, context, agent):
-        print("/////////////////////////////////////////////////////////////////////////////")
-        print(agent.model)
-        print("/////////////////////////////////////////////////////////////////////////////")
         print(f"\033[34m[HOOK] Agente '{agent.name}' iniciado.\033[0m")
 
     async def tool_started(self, context, agent, tool):
