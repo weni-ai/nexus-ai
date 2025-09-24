@@ -439,7 +439,9 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         inline_trace: dict,
         project_uuid: str,
         contact_urn: str,
-        preview: bool = False
+        preview: bool = False,
+        backend: str = "bedrock",
+        foundation_model: str = "",
     ) -> Optional[dict]:
 
         if preview:
@@ -459,7 +461,10 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                 "project": project_uuid,
                 "contact_urn": contact_urn,
                 "value_type": "string",
-                "metadata": {}
+                "metadata": {
+                    "backend": backend,
+                    "foundation_model": foundation_model
+                }
             }
 
             if has_action_group:
