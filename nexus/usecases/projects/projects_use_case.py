@@ -292,7 +292,7 @@ class ProjectsUseCase:
             {
                 "name": integrated_agent.agent.name,
                 "slug": integrated_agent.agent.slug,
-                "foundation_model": integrated_agent.agent.foundation_model,
+                "foundation_model": integrated_agent.agent.current_foundation_model(project.agents_backend, project),
             }
             for integrated_agent in integrated_agents
         ]
