@@ -50,20 +50,16 @@ class ExternalTokenPermission(permissions.BasePermission):
 
 
 class CombinedExternalProjectPermission(permissions.BasePermission):
-    """
-    Permission class that allows access if either ExternalTokenPermission OR ProjectPermission passes.
-    For ProjectPermission, only allows access if user has email attribute (not AnonymousUser).
-    """
+
     def has_permission(self, request, view):
-        # Check ExternalTokenPermission first
+
         external_token_permission = ExternalTokenPermission()
         if external_token_permission.has_permission(request, view):
             return True
 
-        # If ExternalTokenPermission fails, check ProjectPermission only if user has email
-        if hasattr(request.user, 'email') and request.user.email:
+        authorization_header = request.headers.get('Authorization')
+        if authorization_header:
             project_permission = ProjectPermission()
             return project_permission.has_permission(request, view)
 
-        # If no valid token and no email, deny access
         return False
