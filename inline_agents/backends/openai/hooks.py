@@ -243,6 +243,8 @@ class CollaboratorHooks(AgentHooks):
                 "agent_name": agent.name,
                 "input_text": context_data.input_text,
             },
+            foundation_model=agent.model,
+            backend="openai",
         )
 
     async def tool_started(self, context, agent, tool):
@@ -281,7 +283,9 @@ class CollaboratorHooks(AgentHooks):
                 "tool_name": tool.name,
                 "parameters": parameters,
                 "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name")
-            }
+            },
+            foundation_model=agent.model,
+            backend="openai",
         )
 
     async def on_tool_end(self, context, agent, tool, result):
@@ -390,6 +394,9 @@ class SupervisorHooks(AgentHooks):
         self.knowledge_base_tool = knowledge_base_tool
 
     async def on_start(self, context, agent):
+        print("/////////////////////////////////////////////////////////////////////////////")
+        print(agent.model)
+        print("/////////////////////////////////////////////////////////////////////////////")
         print(f"\033[34m[HOOK] Agente '{agent.name}' iniciado.\033[0m")
 
     async def tool_started(self, context, agent, tool):
@@ -404,7 +411,9 @@ class SupervisorHooks(AgentHooks):
             self.data_lake_event_adapter.to_data_lake_event(
                 project_uuid=context_data.project.get("uuid"),
                 contact_urn=context_data.contact.get("urn"),
-                tool_call_data=tool_call_data
+                tool_call_data=tool_call_data,
+                foundation_model=agent.model,
+                backend="openai",
             )
             trace_data = {
                 "eventTime": pendulum.now().to_iso8601_string(),
@@ -449,7 +458,9 @@ class SupervisorHooks(AgentHooks):
                     "tool_name": tool.name,
                     "parameters": parameters,
                     "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name")
-                }
+                },
+                foundation_model=agent.model,
+                backend="openai",
             )
 
     async def on_tool_end(self, context, agent, tool, result):
