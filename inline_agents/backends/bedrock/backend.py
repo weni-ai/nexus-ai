@@ -185,6 +185,8 @@ class BedrockBackend(InlineAgentsBackend):
 
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
 
+                collaborator_foundation_model = orchestration_trace.get("modelInvocationInput", {}).get("foundationModel", "")
+
                 self._data_lake_event_adapter.custom_event_data(
                     inline_trace=trace_data,
                     project_uuid=project_uuid,
@@ -198,7 +200,9 @@ class BedrockBackend(InlineAgentsBackend):
                     inline_trace=trace_data,
                     project_uuid=project_uuid,
                     contact_urn=contact_urn,
-                    preview=preview
+                    preview=preview,
+                    backend="bedrock",
+                    foundation_model=collaborator_foundation_model if collaborator_foundation_model else supervisor["foundation_model"]
                 )
 
                 if "rationale" in orchestration_trace:
