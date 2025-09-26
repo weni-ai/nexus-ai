@@ -197,6 +197,10 @@ class LambdaUseCase():
         final_response: str,
         use_components: bool
     ) -> str:
+        print("=" * 10, "COMPONENT_PARSER_START", "=" * 10)
+        print(f"Final Response: {final_response}")
+        print(f"Use Components: {use_components}")
+
         if not use_components:
             return final_response
 
@@ -205,11 +209,14 @@ class LambdaUseCase():
             "invokeModelRawResponse": f"<final_response>{final_response}</final_response>",
             "promptType": prompt_type,
         }
+        print(f"Data: {data}")
         response = self.invoke_lambda(
             lambda_name=str(settings.AWS_COMPONENTS_FUNCTION_ARN),
             payload=data
         )
+        print(f"Response: {response}")
         response = json.loads(response.get("Payload").read())
+        print(f"Response Payload: {response}")
         parsed_final_response = response.get("postProcessingParsedResponse").get("responseText")
         return parsed_final_response
 

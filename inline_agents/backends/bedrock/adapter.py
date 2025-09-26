@@ -517,6 +517,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             else:
                 event_data = []
             for event_to_send in event_data:
+                print(f"[ + DEBUG event_to_send + ] event_to_send base: {event_to_send}")
                 if "metadata" not in event_to_send or event_to_send.get("metadata") is None:
                     team_agent = IntegratedAgent.objects.get(
                         agent__slug=collaborator_name,
@@ -544,6 +545,8 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                         contact_urn=contact_urn,
                         channel_uuid=channel_uuid
                     )
+
+                print(f"[ + DEBUG event_to_send + ] event_to_send final: {event_to_send}")
 
                 self.to_data_lake_custom_event(
                     event_data=event_to_send,
