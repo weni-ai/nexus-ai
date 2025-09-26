@@ -9,7 +9,8 @@ from nexus.celery import app as celery_app
 from nexus.projects.models import Project
 from nexus.intelligences.producer.resolution_producer import ResolutionDTO, resolution_message
 
-from router.tasks.redis_task_manager import RedisTaskManager
+from router.services.message_service import MessageService
+from router.repositories.dynamo.message import MessageRepository
 
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 
@@ -178,9 +179,11 @@ class LambdaUseCase():
                 return None
         return None
 
-    def _get_task_manager(self):
+    def _get_message_service(self):
         if self.task_manager is None:
-            self.task_manager = RedisTaskManager()
+            # Initialize DynamoDB repository and message service
+            dynamo_repository = MessageRepository()
+            self.task_manager = MessageService(dynamo_repository)
         return self.task_manager
 
     def _convert_resolution_to_choice_value(self, resolution_string: str) -> str:
@@ -221,14 +224,20 @@ def create_lambda_conversation(
 
     try:
         lambda_usecase = LambdaUseCase()
-        task_manager = lambda_usecase._get_task_manager()
-        messages = task_manager.get_cache_messages(
+        message_service = lambda_usecase._get_message_service()
+
+        # Use new conversation-based message retrieval
+        messages = message_service.get_messages_for_conversation(
             project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn")
+            contact_urn=payload.get("contact_urn"),
+            channel_uuid=payload.get("channel_uuid"),
+            start_date=payload.get("start_date"),
+            end_date=payload.get("end_date"),
+            resolution_status=2  # Only unclassified messages
         )
 
         if not messages:
-            raise ValueError("No messages found")
+            raise ValueError("No unclassified messages found for conversation period")
 
         project = Project.objects.get(uuid=payload.get("project_uuid"))
         conversation_queryset = Conversation.objects.filter(
@@ -288,9 +297,14 @@ def create_lambda_conversation(
         )
         resolution_message(resolution_dto)
 
-        task_manager.clear_message_cache(
+        # Update message resolution status after processing
+        message_service.update_messages_resolution(
             project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn")
+            contact_urn=payload.get("contact_urn"),
+            channel_uuid=payload.get("channel_uuid"),
+            start_date=payload.get("start_date"),
+            end_date=payload.get("end_date"),
+            new_resolution=resolution_choice_value
         )
 
     except Exception as e:
