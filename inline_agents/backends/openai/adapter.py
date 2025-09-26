@@ -574,7 +574,9 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         contact_urn: str,
         agent_data: dict = {},
         tool_call_data: dict = {},
-        preview: bool = False
+        preview: bool = False,
+        backend: str = "openai",
+        foundation_model: str = "",
     ) -> Optional[dict]:
 
         if preview or (not agent_data and not tool_call_data):
@@ -588,7 +590,8 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                 "contact_urn": contact_urn,
                 "value_type": "string",
                 "metadata": {
-                    "backend": "openai"
+                    "backend": backend,
+                    "foundation_model": foundation_model
                 }
             }
 
