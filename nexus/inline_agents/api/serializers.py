@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from nexus.inline_agents.models import Agent, IntegratedAgent, AgentCredential
+from nexus.projects.models import Project
 
 
 class IntegratedAgentSerializer(serializers.ModelSerializer):
@@ -51,11 +52,16 @@ class AgentSerializer(serializers.ModelSerializer):
         ]
 
     description = serializers.CharField(source='collaboration_instructions')
-    model = serializers.CharField(source='foundation_model')
+    model = serializers.SerializerMethodField("get_model")
     skills = serializers.SerializerMethodField("get_skills")
     assigned = serializers.SerializerMethodField("get_is_assigned")
 
     credentials = serializers.SerializerMethodField("get_credentials")
+
+    def get_model(self, obj):
+        project_uuid = self.context.get("project_uuid")
+        project = Project.objects.get(uuid=project_uuid)
+        return obj.current_foundation_model(project.agents_backend, project)
 
     def get_skills(self, obj):
         if obj.current_version:
