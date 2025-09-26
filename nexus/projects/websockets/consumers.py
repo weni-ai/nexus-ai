@@ -66,6 +66,7 @@ class WebsocketMessageConsumer(WebsocketConsumer):
 
         if self.user.is_anonymous or close is True or self.project is None:
             self.close()
+            return
 
         if not has_project_permission(
             self.user,
@@ -73,6 +74,7 @@ class WebsocketMessageConsumer(WebsocketConsumer):
             "GET"
         ):
             self.close()
+            return
 
         async_to_sync(self.channel_layer.group_add)(
             self.room_group_name,
