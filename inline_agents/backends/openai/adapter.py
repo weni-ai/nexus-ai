@@ -306,9 +306,16 @@ class OpenAITeamAdapter(TeamAdapter):
                     "name": key,
                     "value": value
                 })
-            ctx.context.hooks_state.add_tool_call(
+            # ctx.context.hooks_state.add_tool_call(
+            #     {
+            #         function_name: parameters
+            #     }
+            # )
+
+            ctx.context.hooks_state.add_tool_info(
+                function_name, 
                 {
-                    function_name: parameters
+                    "parameters": parameters
                 }
             )
 
@@ -349,6 +356,11 @@ class OpenAITeamAdapter(TeamAdapter):
                 return json.dumps({
                     "error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"
                 })
+        
+            ctx.context.hooks_state.add_tool_info(
+                function_name, 
+                result["response"].get("sessionAttributes", {})
+            )
 
             return result["response"]["functionResponse"]["responseBody"]["TEXT"]["body"]
         except Exception as e:
