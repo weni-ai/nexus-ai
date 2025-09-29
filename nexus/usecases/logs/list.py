@@ -5,6 +5,8 @@ from django.core.exceptions import FieldError
 
 from nexus.logs.models import MessageLog
 from nexus.inline_agents.models import InlineAgentMessage
+from router.services.message_service import MessageService
+from router.repositories.dynamo.message import MessageRepository
 
 
 class ListLogUsecase:
@@ -58,5 +60,47 @@ class ListLogUsecase:
             contact_urn=contact_urn,
             created_at__range=(start, end)
         ).order_by("created_at")
+
+        return messages
+
+    def list_messages_for_conversation(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str,
+        start: datetime,
+        end: datetime
+    ):
+        """
+        Get all messages for a specific conversation period using DynamoDB repository.
+        This method retrieves all messages within the time period, regardless of resolution status.
+
+        Args:
+            project_uuid: Project unique identifier
+            contact_urn: Contact unique resource name
+            channel_uuid: Channel unique identifier
+            start: Start datetime for conversation period
+            end: End datetime for conversation period
+
+        Returns:
+            List of all messages within the conversation period
+        """
+        # Initialize DynamoDB repository and message service
+        dynamo_repository = MessageRepository()
+        message_service = MessageService(dynamo_repository)
+
+        # Convert datetime objects to ISO strings for DynamoDB queries
+        start_iso = start.isoformat()
+        end_iso = end.isoformat()
+
+        # Get all messages for the conversation period (no resolution filtering)
+        messages = message_service.get_messages_for_conversation(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            start_date=start_iso,
+            end_date=end_iso,
+            resolution_status=None  # No resolution filtering - get all messages
+        )
 
         return messages
