@@ -1,7 +1,8 @@
 import json
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 import pendulum
+import sentry_sdk
 from agents import AgentHooks, RunHooks
 from django.conf import settings
 
@@ -301,8 +302,12 @@ class CollaboratorHooks(AgentHooks):
 
     async def on_tool_end(self, context, agent, tool, result):
         await self.tool_started(context, agent, tool)
+
         print(f"\033[34m[HOOK] Resultado da ferramenta '{tool.name}' recebido {result}.\033[0m")
+
         context_data = context.context
+        project_uuid = context_data.project.get("uuid")
+
         if isinstance(result, str):
             try:
                 result_json = json.loads(result)
@@ -313,10 +318,23 @@ class CollaboratorHooks(AgentHooks):
             events = self.hooks_state.get_events(result, tool.name)
 
         if events and events != '[]' and events != []:
+
+            if isinstance(events, str):
+                try:
+                    events = json.loads(events)
+                except json.JSONDecodeError as e:
+                    sentry_sdk.set_context("custom event to data lake", {"event_data": events})
+                    sentry_sdk.set_tag("project_uuid", project_uuid)
+                    sentry_sdk.capture_exception(e)
+                    events = {}
+
+            elif not isinstance(events, {}):
+                events = {}
+
             print(f"\033[34m[HOOK] Eventos da ferramenta '{tool.name}': {events}\033[0m")
             self.data_lake_event_adapter.custom_event_data(
                 event_data=events,
-                project_uuid=context_data.project.get("uuid"),
+                project_uuid=project_uuid,
                 contact_urn=context_data.contact.get("urn"),
                 channel_uuid=context_data.contact.get("channel_uuid"),
                 agent_name=agent.name,
@@ -478,6 +496,7 @@ class SupervisorHooks(AgentHooks):
         print(f"\033[34m[HOOK] Encaminhando para o manager. {result}\033[0m")
 
         context_data = context.context
+        project_uuid = context_data.project.get("uuid")
 
         if tool.name == self.knowledge_base_tool:
             trace_data = {
@@ -506,9 +525,22 @@ class SupervisorHooks(AgentHooks):
 
             if events and events != '[]' and events != []:
                 print(f"\033[34m[HOOK] Eventos da ferramenta '{tool.name}': {events}\033[0m")
+
+                if isinstance(events, str):
+                    try:
+                        events = json.loads(events)
+                    except json.JSONDecodeError as e:
+                        sentry_sdk.set_context("custom event to data lake", {"event_data": events})
+                        sentry_sdk.set_tag("project_uuid", project_uuid)
+                        sentry_sdk.capture_exception(e)
+                        events = {}
+
+                elif not isinstance(events, {}):
+                    events = {}
+
                 self.data_lake_event_adapter.custom_event_data(
                     event_data=events,
-                    project_uuid=context_data.project.get("uuid"),
+                    project_uuid=project_uuid,
                     contact_urn=context_data.contact.get("urn"),
                     channel_uuid=context_data.contact.get("channel_uuid"),
                     agent_name=agent.name,
