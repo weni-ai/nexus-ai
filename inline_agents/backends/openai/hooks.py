@@ -312,7 +312,7 @@ class CollaboratorHooks(AgentHooks):
         elif isinstance(result, dict):
             events = self.hooks_state.get_events(result, tool.name)
 
-        if events:
+        if events and events != '[]' and events != []:
             print(f"\033[34m[HOOK] Eventos da ferramenta '{tool.name}': {events}\033[0m")
             self.data_lake_event_adapter.custom_event_data(
                 event_data=events,
@@ -504,7 +504,7 @@ class SupervisorHooks(AgentHooks):
             elif isinstance(result, dict):
                 events = self.hooks_state.get_events(result, tool.name)
 
-            if events:
+            if events and events != '[]' and events != []:
                 print(f"\033[34m[HOOK] Eventos da ferramenta '{tool.name}': {events}\033[0m")
                 self.data_lake_event_adapter.custom_event_data(
                     event_data=events,
