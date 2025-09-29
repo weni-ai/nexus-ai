@@ -29,7 +29,7 @@ from nexus.projects.websockets.consumers import (
 from langfuse import get_client 
 from router.traces_observers.save_traces import save_inline_message_to_database
 from nexus.inline_agents.backends.openai.repository import OpenAISupervisorRepository
-
+from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 
 class OpenAIBackend(InlineAgentsBackend):
     supervisor_repository = OpenAISupervisorRepository
@@ -148,6 +148,10 @@ class OpenAIBackend(InlineAgentsBackend):
             agents=team,
             hooks_state=hooks_state,
         )
+
+        jwt_usecase = JWTUsecase()
+        auth_token = jwt_usecase.generate_jwt_token(project_uuid)
+
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
             agents=team,
@@ -174,6 +178,7 @@ class OpenAIBackend(InlineAgentsBackend):
             session_id=session_id,
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
+            auth_token=auth_token,
         )
 
         client = self._get_client()
