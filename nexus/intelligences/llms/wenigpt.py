@@ -279,7 +279,7 @@ class WeniGPTClient(LLMClient):
             conversation_history += conversation
 
             inference_config = {
-                "maxTokens": int(settings.WENIGPT_MAX_LENGHT),
+                "maxTokens": settings.BEDROCK_CONVERSE_MAX_LENGHT,
                 "temperature": float(settings.WENIGPT_TEMPERATURE),
                 "topP": float(settings.WENIGPT_TOP_P)
             }
