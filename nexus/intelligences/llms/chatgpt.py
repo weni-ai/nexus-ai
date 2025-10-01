@@ -40,7 +40,8 @@ class ChatGPTClient(LLMClient):
         agent: Dict,
         question: str,
         llm_config: LLMSetupDTO,
-        last_messages: List[ContactMessageDTO]
+        last_messages: List[ContactMessageDTO],
+        **kwargs,
     ):  # pragma: no cover
         return self.chat_completion(
             instructions=instructions,
