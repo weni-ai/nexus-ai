@@ -1,19 +1,22 @@
 import json
-from typing import List, Dict, Tuple
+import logging
+from typing import Dict, List, Tuple
 
+import boto3
 import requests
 import sentry_sdk
 import tiktoken
-
 from django.conf import settings
 
 from nexus.intelligences.llms.client import LLMClient
-from nexus.intelligences.llms.exceptions import TokenLimitError
-from router.entities import LLMSetupDTO, ContactMessageDTO
-from nexus.intelligences.llms.exceptions import WeniGPTInvalidVersionError
+from nexus.intelligences.llms.exceptions import (
+    TokenLimitError,
+    WeniGPTInvalidVersionError,
+)
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
-import boto3
+from router.entities import ContactMessageDTO, LLMSetupDTO
 
+logger = logging.getLogger(__name__)
 
 def count_tokens(text: str, encoding_name: str) -> int:
     encoding = tiktoken.get_encoding(encoding_name)
@@ -308,7 +311,8 @@ class WeniGPTClient(LLMClient):
                 sentry_sdk.set_context("question", question)
                 sentry_sdk.set_tag("project_uuid", project_uuid)
                 sentry_sdk.capture_exception(e)
+                logger.error(f"Error on Bedrock converse: {str(e)}")
                 response = {"error": str(e)}
-                return {"answers": None, "id": "0", "message": response.get("error")}
+                return {"answers": [{"text": ""}], "id": "0", "message": response.get("error")}
 
         raise TokenLimitError
