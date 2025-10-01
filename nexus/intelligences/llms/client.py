@@ -40,7 +40,7 @@ class LLMClient(ABC):  # pragma: no cover
             return self.replace_vars(self.prompt_with_context, variables)
         return self.replace_vars(self.prompt_without_context, variables)
 
-    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO]):
+    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO], **kwargs):
         pass
 
     def format_few_shot(self, few_shot: str) -> List[Dict]:
