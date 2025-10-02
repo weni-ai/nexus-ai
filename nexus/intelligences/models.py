@@ -229,7 +229,8 @@ class Conversation(models.Model):
         (0, "Resolved"),
         (1, "Unresolved"),
         (2, "In Progress"),
-        (3, "Unclassified")
+        (3, "Unclassified"),
+        (4, "Has Chat Room")
     ]
 
     CSAT_CHOICES = [
