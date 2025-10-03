@@ -179,6 +179,7 @@ class OpenAIBackend(InlineAgentsBackend):
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
             auth_token=auth_token,
+            use_components=use_components,
         )
 
         client = self._get_client()
