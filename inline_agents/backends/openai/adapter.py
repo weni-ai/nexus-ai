@@ -1,7 +1,8 @@
 import json
 import logging
 from typing import Callable, Optional
-
+from django.template import Template
+from django.template import Context as TemplateContext
 import boto3
 import pendulum
 import sentry_sdk
@@ -117,6 +118,7 @@ class OpenAITeamAdapter(TeamAdapter):
         session_id: str = None,
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
+        use_components: bool = False,
         **kwargs
     ) -> list[dict]:
         agents_as_tools = []
@@ -135,7 +137,7 @@ class OpenAITeamAdapter(TeamAdapter):
 
         max_tokens = supervisor.get("max_tokens", 2048)
 
-        instruction = cls._format_supervisor_instructions(
+        instruction = cls.get_supervisor_instructions(
             instruction=supervisor["instruction"],
             date_time_now=llm_formatted_time,
             contact_fields=contact_fields,
@@ -150,6 +152,10 @@ class OpenAITeamAdapter(TeamAdapter):
             contact_name=contact_name,
             channel_uuid=channel_uuid,
             content_base_uuid=content_base_uuid,
+            use_components=use_components,
+            use_human_support=supervisor.get("use_human_support", False),
+            components_instructions=supervisor.get("components_instructions", ""),
+            human_support_instructions=supervisor.get("human_support_instructions", ""),
         )
 
         for agent in agents:
@@ -211,6 +217,8 @@ class OpenAITeamAdapter(TeamAdapter):
             prompt_override_configuration=supervisor.get("prompt_override_configuration", {}),
             preview=preview,
             max_tokens=max_tokens,
+            use_components=use_components,
+            formatter_agent_instructions=supervisor.get("components_instructions", ""),
         )
 
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
@@ -451,6 +459,56 @@ class OpenAITeamAdapter(TeamAdapter):
 
             if "properties" in schema and "required" in schema:
                 schema["required"] = list(schema["properties"].keys())
+    
+    @classmethod
+    def get_supervisor_instructions(
+        cls,
+        instruction,
+        date_time_now,
+        contact_fields,
+        supervisor_name,
+        supervisor_role,
+        supervisor_goal,
+        supervisor_adjective,
+        supervisor_instructions,
+        business_rules,
+        project_id,
+        contact_id,
+        contact_name,
+        channel_uuid,
+        content_base_uuid,
+        use_components,
+        use_human_support,
+        components_instructions,
+        human_support_instructions,
+    ) -> str:
+        template_string = instruction
+        template = Template(template_string)
+
+        context_data = {
+            "PROJECT_ID": project_id,
+            "CONTACT_ID": contact_id,
+            "CONTACT_NAME": contact_name,
+            "CHANNEL_UUID": channel_uuid,
+            "CONTENT_BASE_UUID": content_base_uuid,
+            "DATE_TIME_NOW": date_time_now,
+            "CONTACT_FIELDS": contact_fields,
+            "SUPERVISOR_NAME": supervisor_name,
+            "SUPERVISOR_ROLE": supervisor_role,
+            "SUPERVISOR_GOAL": supervisor_goal,
+            "SUPERVISOR_ADJECTIVE": supervisor_adjective,
+            "SUPERVISOR_INSTRUCTIONS": supervisor_instructions,
+            "BUSINESS_RULES": business_rules,
+            "USE_HUMAN_SUPPORT": use_human_support,
+            "HUMAN_SUPPORT_INSTRUCTIONS": human_support_instructions,
+            "USE_COMPONENTS": use_components,
+            "COMPONENTS_INSTRUCTIONS": components_instructions,
+        }
+
+        context_object = TemplateContext(context_data) 
+
+        rendered_content = template.render(context_object)
+        return rendered_content
 
     @classmethod
     def _format_supervisor_instructions(
