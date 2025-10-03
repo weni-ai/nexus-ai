@@ -41,7 +41,6 @@ class Agent(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_agents")
     instruction = models.TextField()
     collaboration_instructions = models.TextField()
-    foundation_model = models.CharField(max_length=255)  # will be deprecated
     backend_foundation_models = models.JSONField(default=dict)
     source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
 
@@ -51,7 +50,7 @@ class Agent(models.Model):
 
     def __get_default_value_fallback(self, agents_backend):
         if agents_backend == "BedrockBackend":
-            return self.foundation_model
+            return settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]
         elif agents_backend == "OpenAIBackend":
             return settings.OPENAI_AGENTS_FOUNDATION_MODEL
 
