@@ -20,13 +20,17 @@ def dispatch(
     urns = [message.contact_urn]
 
     if direct_message:
-        return direct_message.send_direct_message(
+        msg = direct_message.send_direct_message(
             llm_response,
             urns,
             message.project_uuid,
             user_email,
             full_chunks=full_chunks
         )
+        print("=====================MSG===================")
+        print(msg)
+        print("========================================")
+        return msg
 
     return flow_start.start_flow(
         flow=flow,

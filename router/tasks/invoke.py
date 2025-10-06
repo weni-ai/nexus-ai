@@ -229,6 +229,11 @@ def start_inline_agents(
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
 
+        print("========================================")
+        print(project.use_components)
+        print(response)
+        print("========================================")
+
         if preview:
             response_msg = dispatch(
                 llm_response=response,
