@@ -125,7 +125,8 @@ def get_or_create_default_integrated_intelligence_by_project(
             duplicate.intelligence.save()
 
         # Delete the duplicate IntegratedIntelligence objects
-        duplicate_integrated_intelligences.delete()
+        duplicate_ids = [duplicate.id for duplicate in duplicate_integrated_intelligences]
+        IntegratedIntelligence.objects.filter(id__in=duplicate_ids).delete()
 
         return oldest_integrated_intelligence
 
