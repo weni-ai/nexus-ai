@@ -56,15 +56,16 @@ class MessageService:
         contact_name: str,
         project_uuid: str,
         source: str,
-        channel_uuid: str = None
+        channel_uuid: str = None,
+        ttl_hours: int = 48
     ) -> None:
-        """Create a new message and store it - matches original create_message_to_cache logic."""
+        """Create a new message and store it with TTL - matches original create_message_to_cache logic."""
         message_data = {
             "text": msg_text,
             "source": source,
             "created_at": self._get_current_timestamp()
         }
-        self.message_repository.storage_message(project_uuid, contact_urn, message_data, channel_uuid)
+        self.message_repository.storage_message(project_uuid, contact_urn, message_data, channel_uuid, ttl_hours)
 
         # Create conversation only if channel_uuid is not None
         self.conversation_service.create_conversation_if_channel_exists(
@@ -103,9 +104,9 @@ class MessageService:
         """Get messages from cache - matches original get_cache_messages logic."""
         return self.message_repository.get_messages(project_uuid, contact_urn)
 
-    def clear_message_cache(self, project_uuid: str, contact_urn: str) -> None:
+    def clear_message_cache(self, project_uuid: str, contact_urn: str, channel_uuid: str = None) -> None:
         """Clear message cache - matches original clear_message_cache logic."""
-        self.message_repository.delete_messages(project_uuid, contact_urn)
+        self.message_repository.delete_messages(project_uuid, contact_urn, channel_uuid)
 
     def rabbitmq_msg_batch_to_cache(
         self,

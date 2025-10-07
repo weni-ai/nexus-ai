@@ -1,25 +1,32 @@
 import uuid
 import logging
+import time
 
 from router.infrastructure.database.dynamo import get_message_table
 from router.repositories import Repository
+from router.repositories.entities import ResolutionEntities
 
 logger = logging.getLogger(__name__)
 
 
 class MessageRepository(Repository):
+
     def storage_message(
         self,
         project_uuid: str,
         contact_urn: str,
         message_data: dict,
         channel_uuid: str = None,
-        resolution_status: int = 2
+        resolution_status: int = ResolutionEntities.IN_PROGRESS,
+        ttl_hours: int = 48
     ) -> None:
         """Store message with proper conversation and resolution tracking."""
         conversation_key = f"{project_uuid}#{contact_urn}#{channel_uuid}"
         message_timestamp = message_data["created_at"]
         message_id = str(uuid.uuid4())
+
+        # Calculate TTL timestamp (current time + TTL hours)
+        ttl_timestamp = int(time.time()) + (ttl_hours * 3600)
 
         with get_message_table() as table:
             item = {
@@ -37,6 +44,7 @@ class MessageRepository(Repository):
                 "source_type": message_data["source"],
                 "created_at": message_data["created_at"],
                 "resolution_status": resolution_status,
+                "ExpiresOn": ttl_timestamp,  # DynamoDB TTL attribute
             }
 
             table.put_item(Item=item)
@@ -194,25 +202,27 @@ class MessageRepository(Repository):
 
             return {}
 
-    def delete_messages(self, project_uuid: str, contact_urn: str) -> None:
+    def delete_messages(self, project_uuid: str, contact_urn: str, channel_uuid: str = None) -> None:
         """Delete all messages for a conversation."""
+        conversation_key = f"{project_uuid}#{contact_urn}#{channel_uuid}"
+
         with get_message_table() as table:
-            response = table.scan(
-                FilterExpression="project_uuid = :project AND contact_urn = :contact",
+            response = table.query(
+                KeyConditionExpression='conversation_key = :conv_key',
                 ExpressionAttributeValues={
-                    ":project": project_uuid,
-                    ":contact": contact_urn
-                },
+                    ':conv_key': conversation_key
+                }
             )
 
-            with table.batch_writer() as batch:
-                for item in response["Items"]:
-                    batch.delete_item(
-                        Key={
-                            "conversation_key": item["conversation_key"],
-                            "message_timestamp": item["message_timestamp"],
-                        }
-                    )
+            if response["Items"]:
+                with table.batch_writer() as batch:
+                    for item in response["Items"]:
+                        batch.delete_item(
+                            Key={
+                                "conversation_key": item["conversation_key"],
+                                "message_timestamp": item["message_timestamp"],
+                            }
+                        )
 
     def delete_pending_tasks(self, project_uuid: str, contact_urn: str) -> None:
         """

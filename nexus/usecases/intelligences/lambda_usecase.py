@@ -297,14 +297,11 @@ def create_lambda_conversation(
         )
         resolution_message(resolution_dto)
 
-        # Update message resolution status after processing
-        message_service.update_messages_resolution(
+        # Delete messages after processing (instead of updating resolution)
+        message_service.clear_message_cache(
             project_uuid=payload.get("project_uuid"),
             contact_urn=payload.get("contact_urn"),
-            channel_uuid=payload.get("channel_uuid"),
-            start_date=payload.get("start_date"),
-            end_date=payload.get("end_date"),
-            new_resolution=resolution_choice_value
+            channel_uuid=payload.get("channel_uuid")
         )
 
     except Exception as e:
