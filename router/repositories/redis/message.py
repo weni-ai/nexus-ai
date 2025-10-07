@@ -30,22 +30,37 @@ class MessageRepository(Repository):
             json.dumps(msg)
         )
 
-    def get_messages(self, project_uuid: str, contact_urn: str) -> list:
+    def get_messages(self, project_uuid: str, contact_urn: str, channel_uuid: str, limit: int = 50, cursor: str = None) -> dict:
         """Get all messages for a conversation - matches original get_cache_messages logic."""
         cache_key = f"conversation:{project_uuid}:{contact_urn}"
         messages = self.redis_client.get(cache_key)
         if messages:
-            return json.loads(messages.decode('utf-8'))
-        return []
+            message_list = json.loads(messages.decode('utf-8'))
+            # For Redis, we'll return all messages in a paginated format
+            # Apply limit if specified
+            if limit and len(message_list) > limit:
+                message_list = message_list[:limit]
 
-    def add_message(self, project_uuid: str, contact_urn: str, message: dict) -> None:
+            return {
+                'items': message_list,
+                'next_cursor': None,  # Redis doesn't support cursor-based pagination
+                'total_count': len(message_list)
+            }
+        return {
+            'items': [],
+            'next_cursor': None,
+            'total_count': 0
+        }
+
+    def add_message(self, project_uuid: str, contact_urn: str, message: dict, channel_uuid: str = None) -> None:
         """Add a single message to existing messages - matches original add_message_to_cache logic."""
-        cached_messages = self.get_messages(project_uuid, contact_urn)
+        cached_response = self.get_messages(project_uuid, contact_urn, channel_uuid)
+        cached_messages = cached_response['items']
         cached_messages.append(message)
         cache_key = f"conversation:{project_uuid}:{contact_urn}"
         self.redis_client.set(cache_key, json.dumps(cached_messages))
 
-    def delete_messages(self, project_uuid: str, contact_urn: str) -> None:
+    def delete_messages(self, project_uuid: str, contact_urn: str, channel_uuid: str = None) -> None:
         """Clear all messages for a conversation - matches original clear_message_cache logic."""
         cache_key = f"conversation:{project_uuid}:{contact_urn}"
         self.redis_client.delete(cache_key)

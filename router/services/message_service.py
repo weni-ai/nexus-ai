@@ -19,7 +19,7 @@ class MessageService:
         project_uuid: str,
         msg_text: str,
         source: str,
-        channel_uuid: str = None,
+        channel_uuid: str,
         preview: bool = False
     ) -> None:
         """Handle message cache logic - matches original RedisTaskManager.handle_message_cache."""
@@ -29,7 +29,8 @@ class MessageService:
         if preview:
             return
 
-        current_conversation = self.message_repository.get_messages(project_uuid, contact_urn)
+        current_conversation_response = self.message_repository.get_messages(project_uuid, contact_urn, channel_uuid, limit=1)
+        current_conversation = current_conversation_response.get('items', [])
         if current_conversation:
             self.add_message_to_cache(
                 project_uuid=project_uuid,
@@ -100,9 +101,9 @@ class MessageService:
             channel_uuid=channel_uuid
         )
 
-    def get_cache_messages(self, project_uuid: str, contact_urn: str) -> list:
-        """Get messages from cache - matches original get_cache_messages logic."""
-        return self.message_repository.get_messages(project_uuid, contact_urn)
+    def get_cache_messages(self, project_uuid: str, contact_urn: str, channel_uuid: str, limit: int = 50, cursor: str = None) -> dict:
+        """Get messages from cache with pagination - optimized for large datasets."""
+        return self.message_repository.get_messages(project_uuid, contact_urn, channel_uuid, limit, cursor)
 
     def clear_message_cache(self, project_uuid: str, contact_urn: str, channel_uuid: str = None) -> None:
         """Clear message cache - matches original clear_message_cache logic."""
@@ -126,23 +127,6 @@ class MessageService:
         """Get messages for a specific conversation period."""
         return self.message_repository.get_messages_for_conversation(
             project_uuid, contact_urn, channel_uuid, start_date, end_date, resolution_status
-        )
-
-    def get_unclassified_messages(
-        self, project_uuid: str, contact_urn: str, channel_uuid: str
-    ) -> list:
-        """Get unclassified messages for active conversation."""
-        return self.message_repository.get_unclassified_messages(
-            project_uuid, contact_urn, channel_uuid
-        )
-
-    def update_messages_resolution(
-        self, project_uuid: str, contact_urn: str, channel_uuid: str,
-        start_date: str, end_date: str, new_resolution: int
-    ) -> None:
-        """Update resolution status for messages in a conversation."""
-        self.message_repository.update_messages_resolution(
-            project_uuid, contact_urn, channel_uuid, start_date, end_date, new_resolution
         )
 
     def _get_current_timestamp(self) -> str:
