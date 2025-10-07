@@ -154,8 +154,7 @@ class OpenAIBackend(InlineAgentsBackend):
         )
 
         jwt_usecase = JWTUsecase()
-        # auth_token = jwt_usecase.generate_jwt_token(project_uuid)
-        auth_token = "jwt_usecase.generate_jwt_token(project_uuid)"
+        auth_token = jwt_usecase.generate_jwt_token(project_uuid)
 
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
