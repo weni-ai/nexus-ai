@@ -22,7 +22,6 @@ class MessageRepository(Repository):
     ) -> None:
         """Store message with proper conversation and resolution tracking."""
         conversation_key = f"{project_uuid}#{contact_urn}#{channel_uuid}"
-        message_timestamp = message_data["created_at"]
         message_id = str(uuid.uuid4())
 
         # Calculate TTL timestamp (current time + TTL hours)
@@ -32,7 +31,7 @@ class MessageRepository(Repository):
             item = {
                 # Primary Keys
                 "conversation_key": conversation_key,
-                "message_timestamp": f"{message_timestamp}#{message_id}",
+                "message_timestamp": f"{message_data['created_at']}#{message_id}",  # Use created_at for better querying
 
                 # Attributes
                 "conversation_id": conversation_key,
@@ -79,26 +78,24 @@ class MessageRepository(Repository):
         conversation_key = f"{project_uuid}#{contact_urn}#{channel_uuid}"
 
         with get_message_table() as table:
-            # Build filter expression based on whether resolution_status is provided
+            # Use KeyConditionExpression for time filtering since message_timestamp now contains created_at
+            key_condition = 'conversation_key = :conv_key AND message_timestamp BETWEEN :start AND :end'
+            expression_values = {
+                ':conv_key': conversation_key,
+                ':start': f"{start_date}#",  # Start of time range
+                ':end': f"{end_date}#"       # End of time range
+            }
+
+            # Add resolution filter if specified
             if resolution_status is not None:
-                filter_expression = 'resolution_status = :resolution AND message_timestamp BETWEEN :start AND :end'
-                expression_values = {
-                    ':conv_key': conversation_key,
-                    ':resolution': resolution_status,
-                    ':start': start_date,
-                    ':end': end_date
-                }
+                filter_expression = 'resolution_status = :resolution'
+                expression_values[':resolution'] = resolution_status
             else:
-                filter_expression = 'message_timestamp BETWEEN :start AND :end'
-                expression_values = {
-                    ':conv_key': conversation_key,
-                    ':start': start_date,
-                    ':end': end_date
-                }
+                filter_expression = None
 
             response = table.query(
                 IndexName='conversation-index',  # GSI2
-                KeyConditionExpression='conversation_key = :conv_key',
+                KeyConditionExpression=key_condition,
                 FilterExpression=filter_expression,
                 ExpressionAttributeValues=expression_values,
                 ScanIndexForward=True  # Chronological order
@@ -134,15 +131,15 @@ class MessageRepository(Repository):
         conversation_key = f"{project_uuid}#{contact_urn}#{channel_uuid}"
 
         with get_message_table() as table:
-            # Get messages to update
+            # Get messages to update using efficient key-based filtering
+            key_condition = 'conversation_key = :conv_key AND message_timestamp BETWEEN :start AND :end'
             response = table.query(
                 IndexName='conversation-index',
-                KeyConditionExpression='conversation_key = :conv_key',
-                FilterExpression='message_timestamp BETWEEN :start AND :end',
+                KeyConditionExpression=key_condition,
                 ExpressionAttributeValues={
                     ':conv_key': conversation_key,
-                    ':start': start_date,
-                    ':end': end_date
+                    ':start': f"{start_date}#",  # Start of time range
+                    ':end': f"{end_date}#"       # End of time range
                 }
             )
 
