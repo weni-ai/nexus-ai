@@ -1,8 +1,10 @@
 import asyncio
 from typing import Any, Dict
 
-from agents import Agent, Runner
+import pendulum
+from agents import Agent, Runner, trace
 from django.conf import settings
+from langfuse import get_client
 from redis import Redis
 
 from inline_agents.backend import InlineAgentsBackend
@@ -10,6 +12,7 @@ from inline_agents.backends.openai.adapter import (
     OpenAIDataLakeEventAdapter,
     OpenAITeamAdapter,
 )
+from inline_agents.backends.openai.entities import FinalResponse
 from inline_agents.backends.openai.hooks import (
     HooksState,
     RunnerHooks,
@@ -19,17 +22,18 @@ from inline_agents.backends.openai.sessions import (
     RedisSession,
     make_session_factory,
 )
-
+from nexus.inline_agents.backends.openai.repository import (
+    OpenAISupervisorRepository,
+)
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.intelligences.models import ContentBase
 from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
-from langfuse import get_client 
-from router.traces_observers.save_traces import save_inline_message_to_database
-from nexus.inline_agents.backends.openai.repository import OpenAISupervisorRepository
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
+from router.traces_observers.save_traces import save_inline_message_to_database
+
 
 class OpenAIBackend(InlineAgentsBackend):
     supervisor_repository = OpenAISupervisorRepository
@@ -150,7 +154,8 @@ class OpenAIBackend(InlineAgentsBackend):
         )
 
         jwt_usecase = JWTUsecase()
-        auth_token = jwt_usecase.generate_jwt_token(project_uuid)
+        # auth_token = jwt_usecase.generate_jwt_token(project_uuid)
+        auth_token = "jwt_usecase.generate_jwt_token(project_uuid)"
 
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
@@ -179,6 +184,7 @@ class OpenAIBackend(InlineAgentsBackend):
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
             auth_token=auth_token,
+            use_components=use_components,
         )
 
         client = self._get_client()
@@ -224,22 +230,31 @@ class OpenAIBackend(InlineAgentsBackend):
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
-            result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
-            async for event in result.stream_events():
-                if event.type == "run_item_stream_event":
-                    if hasattr(event, 'item') and event.item.type == "tool_call_item":
-                        hooks_state.tool_calls.update({
-                            event.item.raw_item.name: event.item.raw_item.arguments   
-                        })
-            root_span.update_trace(
-                input=input_text,
-                output=result.final_output,
-                metadata={
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "channel_uuid": channel_uuid,
-                    "preview": preview,
-                }
-            )
+            trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")
+            print(f"[+ DEBUG +] Trace ID: {trace_id}")
+            with trace(workflow_name=project_uuid, trace_id=trace_id):
+                result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
+                async for event in result.stream_events():
+                    if event.type == "run_item_stream_event":
+                        if hasattr(event, 'item') and event.item.type == "tool_call_item":
+                            hooks_state.tool_calls.update({
+                                event.item.raw_item.name: event.item.raw_item.arguments   
+                            })
+                final_response = self._get_final_response(result)
+                root_span.update_trace(
+                    input=input_text,
+                    output=final_response,
+                    metadata={
+                        "project_uuid": project_uuid,
+                        "contact_urn": contact_urn,
+                        "channel_uuid": channel_uuid,
+                        "preview": preview,
+                    }
+                )
+        return self._get_final_response(result)
 
-        return result.final_output
+    def _get_final_response(self, result):
+        if isinstance(result.final_output, FinalResponse):
+            return result.final_output.final_response
+        else:
+            return result.final_output
