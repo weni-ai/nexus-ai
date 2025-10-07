@@ -7,46 +7,7 @@ from agents import AgentHooks, RunHooks
 from django.conf import settings
 
 from inline_agents.adapter import DataLakeEventAdapter
-
-
-class HooksState:
-    def __init__(self, agents: list):
-        self.agents = agents
-        self.agents_names = []
-        self.lambda_names = {}
-        self.tool_calls = {}
-        self.trace_data = []
-        self.tool_info = {}
-
-        for agent in self.agents:
-            self.agents_names.append(agent.get("agentName"))
-            for action_group in agent.get("actionGroups", []):
-                action_group_name = action_group.get("actionGroupName")
-                function_names = []
-                for function_schema in action_group.get("functionSchema", {}).get("functions", []):
-                    function_name = function_schema.get("name")
-                    function_names.append(function_name)
-                self.lambda_names[action_group_name] = {
-                    "function_name": function_names[0],
-                    "function_arn": action_group.get("actionGroupExecutor", {}).get("lambda")
-                }
-
-    def add_tool_info(self, tool_name: str, info: Dict[str, Any]):
-        try:
-            self.tool_info[tool_name].update(info)
-        except KeyError:
-            self.tool_info[tool_name] = info
-
-    def add_tool_call(self, tool_call: Dict[str, Any]):
-        self.tool_calls.update(tool_call)
-
-    def get_events(self, result: dict, tool_name: str):
-        session_events = self.tool_info.get(tool_name, {}).get("events", {})
-        if session_events:
-            return session_events
-
-        events = result.get("events", {})
-        return events
+from inline_agents.backends.openai.entities import FinalResponse, HooksState
 
 
 class TraceHandler:
@@ -565,6 +526,12 @@ class SupervisorHooks(AgentHooks):
 
     async def on_end(self, context, agent, output):
         print(f"\033[34m[HOOK] Enviando resposta final {output}.\033[0m")
+
+        if isinstance(output, FinalResponse):
+            final_response = output.final_response
+        else:
+            final_response = output
+
         context_data = context.context
         trace_data = {
             "eventTime": pendulum.now().to_iso8601_string(),
@@ -573,7 +540,7 @@ class SupervisorHooks(AgentHooks):
                 "orchestrationTrace": {
                     "observation": {
                         "finalResponse": {
-                            "text": output
+                            "text": final_response
                         },
                         "type": "FINISH"
                     }
@@ -586,7 +553,7 @@ class SupervisorHooks(AgentHooks):
             project_uuid=context_data.project.get("uuid"),
             input_text=context_data.input_text,
             contact_urn=context_data.contact.get("urn"),
-            full_response=output,
+            full_response=final_response,
             preview=self.preview,
             session_id=context_data.session.get_session_id(),
             contact_name=context_data.contact.get("name"),
