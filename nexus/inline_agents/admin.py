@@ -99,7 +99,8 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
             'fields': ('name', 'foundation_model', 'instruction', 'default_instructions_for_collaborators', 'max_tokens')
         }),
         ('Configuration', {
-            'fields': ('prompt_override_configuration', 'action_groups', 'knowledge_bases')
+            'fields': ('prompt_override_configuration', 'action_groups', 'knowledge_bases'),
+            'classes': ('collapse',)
         }),
         ('Human Support', {
             'fields': ('human_support_prompt', 'human_support_action_groups'),
