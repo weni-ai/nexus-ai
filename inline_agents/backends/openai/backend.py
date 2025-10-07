@@ -229,7 +229,7 @@ class OpenAIBackend(InlineAgentsBackend):
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
-            trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")
+            trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
             print(f"[+ DEBUG +] Trace ID: {trace_id}")
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
