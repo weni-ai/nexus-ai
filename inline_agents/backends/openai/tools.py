@@ -4,23 +4,19 @@ import boto3
 from agents import (
     Agent,
     AgentHooks,
+    FunctionToolResult,
     ModelSettings,
     RunContextWrapper,
     function_tool,
     handoff,
-    FunctionToolResult,
 )
+from agents.agent import ToolsToFinalOutputResult
 from django.conf import settings
 from openai.types.shared import Reasoning
-from pydantic import BaseModel, Field
-from inline_agents.backends.openai.entities import Context
-from nexus.utils import get_datasource_id
-from inline_agents.backends.openai.components_tools import COMPONENT_TOOLS
-from agents.agent import ToolsToFinalOutputResult
 
-class FinalResponse(BaseModel):
-    """Modelo para a resposta final formatada"""
-    final_response: str = Field(description="O resultado final da resposta que ira ser formatado")
+from inline_agents.backends.openai.components_tools import COMPONENT_TOOLS
+from inline_agents.backends.openai.entities import Context, FinalResponse
+from nexus.utils import get_datasource_id
 
 
 class Supervisor(Agent):
@@ -60,9 +56,24 @@ class Supervisor(Agent):
             return
 
         self.formatter_agent = self.get_formatter_agent(model, hooks, formatter_agent_instructions)
-        self.format_handoff = self._create_formatter_handoff()
+        self.format_handoff = self._create_formatter_handoff(self.formatter_agent)
 
-        agent = super().__init__(
+        if use_components:
+            super().__init__(
+                name=name,
+                instructions=instructions,
+                model=model,
+                tools=tools,
+                hooks=hooks,
+                model_settings=ModelSettings(
+                    max_tokens=max_tokens,
+                ),
+                handoffs=[self.format_handoff],
+                output_type=FinalResponse
+            )
+            return
+
+        super().__init__(
             name=name,
             instructions=instructions,
             model=model,
@@ -72,9 +83,6 @@ class Supervisor(Agent):
                 max_tokens=max_tokens,
             ),
         )
-        if use_components:
-            agent.handoffs = [self.format_handoff]
-            agent.output_type = FinalResponse
 
         return
 
@@ -143,7 +151,7 @@ class Supervisor(Agent):
             # Aqui você pode adicionar lógica adicional, como logging ou métricas
 
         return handoff(
-            agent=self.formatter_agent,
+            agent=formatter_agent,
             tool_name_override="format_final_response",
             tool_description_override="Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically.",
             on_handoff=on_handoff_to_formatter,

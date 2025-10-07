@@ -1,11 +1,11 @@
 
 
+from inline_agents.repository import SupervisorRepository
 from nexus.inline_agents.backends.openai.models import (
     OpenAISupervisor as Supervisor,
 )
-from nexus.projects.models import Project
-from inline_agents.repository import SupervisorRepository
 from nexus.inline_agents.models import Agent
+from nexus.projects.models import Project
 
 
 class OpenAISupervisorRepository(SupervisorRepository):
@@ -26,6 +26,7 @@ class OpenAISupervisorRepository(SupervisorRepository):
             "use_components": project.use_components,
             "use_human_support": project.human_support,
             "components_instructions": supervisor.components_prompt,
+            "formatter_agent_components_instructions": supervisor.components_human_support_prompt,
             "human_support_instructions": supervisor.human_support_prompt,
             "tools": cls._get_supervisor_tools(project=project, supervisor=supervisor),
             "foundation_model": cls.get_foundation_model(project=project, supervisor=supervisor, foundation_model=foundation_model),

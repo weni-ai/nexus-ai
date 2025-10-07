@@ -1,8 +1,7 @@
 import json
 import logging
 from typing import Callable, Optional
-from django.template import Template
-from django.template import Context as TemplateContext
+
 import boto3
 import pendulum
 import sentry_sdk
@@ -16,14 +15,15 @@ from agents import (
     function_tool,
 )
 from django.conf import settings
+from django.template import Context as TemplateContext
+from django.template import Template
 from pydantic import BaseModel, Field, create_model
 
 from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.data_lake import send_data_lake_event
-from inline_agents.backends.openai.entities import Context
+from inline_agents.backends.openai.entities import Context, HooksState
 from inline_agents.backends.openai.hooks import (
     CollaboratorHooks,
-    HooksState,
     RunnerHooks,
     SupervisorHooks,
 )
@@ -218,7 +218,7 @@ class OpenAITeamAdapter(TeamAdapter):
             preview=preview,
             max_tokens=max_tokens,
             use_components=use_components,
-            formatter_agent_instructions=supervisor.get("components_instructions", ""),
+            formatter_agent_instructions=supervisor.get("formatter_agent_components_instructions", ""),
         )
 
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
@@ -508,6 +508,7 @@ class OpenAITeamAdapter(TeamAdapter):
         context_object = TemplateContext(context_data) 
 
         rendered_content = template.render(context_object)
+
         return rendered_content
 
     @classmethod
