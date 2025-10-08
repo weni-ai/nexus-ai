@@ -100,6 +100,11 @@ def save_inline_trace_events(
         )
 
 
+def _get_message_service():
+    from router.services.message_service import MessageService
+    return MessageService()
+
+
 def save_inline_message_to_database(
     project_uuid: str,
     contact_urn: str,
@@ -110,8 +115,7 @@ def save_inline_message_to_database(
     contact_name: str,
     channel_uuid: str = None
 ) -> InlineAgentMessage:
-    from router.services.message_service import MessageService
-    message_service = MessageService()
+    message_service = _get_message_service()
     message_service.handle_message_cache(
         contact_urn=contact_urn,
         contact_name=contact_name,
