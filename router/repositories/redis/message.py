@@ -40,10 +40,11 @@ class MessageRepository(Repository):
 
     def add_message(self, project_uuid: str, contact_urn: str, message: dict) -> None:
         """Add a single message to existing messages - matches original add_message_to_cache logic."""
+        ttl = 172800  # 2 days
         cached_messages = self.get_messages(project_uuid, contact_urn)
         cached_messages.append(message)
         cache_key = f"conversation:{project_uuid}:{contact_urn}"
-        self.redis_client.set(cache_key, json.dumps(cached_messages))
+        self.redis_client.setex(cache_key, ttl, json.dumps(cached_messages))
 
     def delete_messages(self, project_uuid: str, contact_urn: str) -> None:
         """Clear all messages for a conversation - matches original clear_message_cache logic."""
@@ -59,6 +60,7 @@ class MessageRepository(Repository):
     ) -> None:
         """Store a batch of messages with a custom key - matches original rabbitmq_msg_batch_to_cache logic."""
         cache_key = f"{key}:{project_uuid}:{contact_urn}"
+        ttl = 172800  # 2 days
         existing_msgs = self.redis_client.get(cache_key)
 
         if existing_msgs:
@@ -70,6 +72,6 @@ class MessageRepository(Repository):
                     existing_msgs = messages
             except (json.JSONDecodeError, AttributeError):
                 existing_msgs = messages
-            self.redis_client.set(cache_key, json.dumps(existing_msgs))
+            self.redis_client.setex(cache_key, ttl, json.dumps(existing_msgs))
         else:
-            self.redis_client.set(cache_key, json.dumps(messages))
+            self.redis_client.setex(cache_key, ttl, json.dumps(messages))
