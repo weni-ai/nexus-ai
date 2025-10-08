@@ -6,7 +6,6 @@ from django.core.exceptions import FieldError
 from nexus.logs.models import MessageLog
 from nexus.inline_agents.models import InlineAgentMessage
 from router.services.message_service import MessageService
-from router.repositories.dynamo.message import MessageRepository
 
 
 class ListLogUsecase:
@@ -85,9 +84,8 @@ class ListLogUsecase:
         Returns:
             List of all messages within the conversation period
         """
-        # Initialize DynamoDB repository and message service
-        dynamo_repository = MessageRepository()
-        message_service = MessageService(dynamo_repository)
+        # Initialize MessageService with default DynamoDB repository
+        message_service = MessageService()
 
         # Convert datetime objects to ISO strings for DynamoDB queries
         start_iso = start.isoformat()
