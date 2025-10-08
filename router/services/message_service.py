@@ -70,7 +70,13 @@ class MessageService:
             "source": source,
             "created_at": self._get_current_timestamp()
         }
-        self.message_repository.storage_message(project_uuid, contact_urn, message_data, channel_uuid, ttl_hours)
+        self.message_repository.storage_message(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            message_data=message_data,
+            channel_uuid=channel_uuid,
+            ttl_hours=ttl_hours
+        )
 
         # Create conversation only if channel_uuid is not None
         self.conversation_service.create_conversation_if_channel_exists(

@@ -136,10 +136,11 @@ class MessageRepository(Repository):
             if start_date and end_date:
                 start_sortable = self._convert_to_dynamo_sortable_timestamp(start_date)
                 end_sortable = self._convert_to_dynamo_sortable_timestamp(end_date)
-                # Use created_at for time range filtering (more reliable than message_timestamp with UUID)
-                filter_parts.append('created_at BETWEEN :start AND :end')
-                expression_values[':start'] = start_sortable
-                expression_values[':end'] = end_sortable
+                # Use message_timestamp for time range since it's the GSI2 sort key
+                # Add # suffix to match the format and avoid UUID interference
+                filter_parts.append('message_timestamp BETWEEN :start AND :end')
+                expression_values[':start'] = f"{start_sortable}#"
+                expression_values[':end'] = f"{end_sortable}#"
 
             if resolution_status is not None:
                 filter_parts.append('resolution_status = :resolution')
@@ -149,7 +150,6 @@ class MessageRepository(Repository):
             filter_expression = ' AND '.join(filter_parts) if filter_parts else None
 
             response = table.query(
-                IndexName='conversation-index',  # Use GSI2 for conversation-based queries
                 KeyConditionExpression=key_condition,
                 FilterExpression=filter_expression,
                 ExpressionAttributeValues=expression_values,
