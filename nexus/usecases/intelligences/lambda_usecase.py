@@ -10,7 +10,6 @@ from nexus.projects.models import Project
 from nexus.intelligences.producer.resolution_producer import ResolutionDTO, resolution_message
 
 from router.services.message_service import MessageService
-from router.repositories.dynamo.message import MessageRepository
 
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 
@@ -181,9 +180,7 @@ class LambdaUseCase():
 
     def _get_message_service(self):
         if self.task_manager is None:
-            # Initialize DynamoDB repository and message service
-            dynamo_repository = MessageRepository()
-            self.task_manager = MessageService(dynamo_repository)
+            self.task_manager = MessageService()
         return self.task_manager
 
     def _convert_resolution_to_choice_value(self, resolution_string: str) -> str:

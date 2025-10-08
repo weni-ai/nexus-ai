@@ -8,7 +8,11 @@ from router.services.conversation_service import ConversationService
 class MessageService:
     """Message service implementation that works with any message repository."""
 
-    def __init__(self, message_repository: Repository):
+    def __init__(self, message_repository: Repository = None):
+        if message_repository is None:
+            from router.repositories.dynamo.message import MessageRepository as DynamoMessageRepository
+            message_repository = DynamoMessageRepository()
+
         self.message_repository = message_repository
         self.conversation_service = ConversationService()
 
