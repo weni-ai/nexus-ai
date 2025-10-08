@@ -126,9 +126,9 @@ class MessageService:
 
     def get_messages_for_conversation(
         self, project_uuid: str, contact_urn: str, channel_uuid: str,
-        start_date: str, end_date: str, resolution_status: int = 2
+        start_date: str = None, end_date: str = None, resolution_status: int = None
     ) -> list:
-        """Get messages for a specific conversation period."""
+        """Get messages for a specific conversation, optionally filtered by time range and resolution."""
         return self.message_repository.get_messages_for_conversation(
             project_uuid, contact_urn, channel_uuid, start_date, end_date, resolution_status
         )

@@ -4,6 +4,8 @@ import time
 import base64
 import json
 
+import pendulum
+
 from router.infrastructure.database.dynamo import get_message_table
 from router.repositories import Repository
 from router.repositories.entities import ResolutionEntities
@@ -12,6 +14,21 @@ logger = logging.getLogger(__name__)
 
 
 class MessageRepository(Repository):
+
+    def _convert_to_dynamo_sortable_timestamp(self, created_at: str) -> str:
+        """
+        Convert timestamp to consistent format for DynamoDB range queries.
+        Normalizes timezone to UTC and removes timezone info for lexicographic sorting.
+        """
+        try:
+            # Parse the timestamp (handles all ISO 8601 formats)
+            dt = pendulum.parse(created_at)
+            # Convert to UTC and format without timezone info for consistent lexicographic sorting
+            return dt.in_timezone('UTC').format('YYYY-MM-DDTHH:mm:ss')
+        except Exception as e:
+            logger.warning(f"Failed to parse timestamp '{created_at}': {str(e)}. Using original value.")
+            # Fallback: remove common timezone suffixes
+            return created_at.replace('Z', '').replace('+00:00', '')
 
     def storage_message(
         self,
@@ -29,11 +46,14 @@ class MessageRepository(Repository):
         # Calculate TTL timestamp (current time + TTL hours)
         ttl_timestamp = int(time.time()) + (ttl_hours * 3600)
 
+        # Convert created_at to DynamoDB sortable format for range queries
+        sortable_timestamp = self._convert_to_dynamo_sortable_timestamp(message_data['created_at'])
+
         with get_message_table() as table:
             item = {
                 # Primary Keys
                 "conversation_key": conversation_key,
-                "message_timestamp": f"{message_data['created_at']}#{message_id}",  # Use created_at for better querying
+                "message_timestamp": f"{sortable_timestamp}#{message_id}",  # Sortable timestamp + UUID for uniqueness
 
                 # Attributes
                 "conversation_id": conversation_key,
@@ -43,7 +63,7 @@ class MessageRepository(Repository):
                 "message_id": message_id,
                 "message_text": message_data["text"],
                 "source_type": message_data["source"],
-                "created_at": message_data["created_at"],
+                "created_at": sortable_timestamp,  # Use sortable timestamp for consistent range queries
                 "resolution_status": resolution_status,
                 "ExpiresOn": ttl_timestamp,  # DynamoDB TTL attribute
             }
@@ -101,29 +121,35 @@ class MessageRepository(Repository):
 
     def get_messages_for_conversation(
         self, project_uuid: str, contact_urn: str, channel_uuid: str,
-        start_date: str, end_date: str, resolution_status: int = 2
+        start_date: str = None, end_date: str = None, resolution_status: int = None
     ) -> list:
-        """Get messages for a specific conversation within time boundaries."""
+        """Get messages for a specific conversation, optionally filtered by time range and resolution."""
         conversation_key = f"{project_uuid}#{contact_urn}#{channel_uuid}"
 
         with get_message_table() as table:
-            # Use KeyConditionExpression for time filtering since message_timestamp now contains created_at
-            key_condition = 'conversation_key = :conv_key AND message_timestamp BETWEEN :start AND :end'
-            expression_values = {
-                ':conv_key': conversation_key,
-                ':start': f"{start_date}#",  # Start of time range
-                ':end': f"{end_date}#"       # End of time range
-            }
+            # Use GSI2 (conversation-index) for efficient conversation-based queries
+            key_condition = 'conversation_key = :conv_key'
+            expression_values = {':conv_key': conversation_key}
 
-            # Add resolution filter if specified
+            filter_parts = []
+
+            if start_date and end_date:
+                start_sortable = self._convert_to_dynamo_sortable_timestamp(start_date)
+                end_sortable = self._convert_to_dynamo_sortable_timestamp(end_date)
+                # Use created_at for time range filtering (more reliable than message_timestamp with UUID)
+                filter_parts.append('created_at BETWEEN :start AND :end')
+                expression_values[':start'] = start_sortable
+                expression_values[':end'] = end_sortable
+
             if resolution_status is not None:
-                filter_expression = 'resolution_status = :resolution'
+                filter_parts.append('resolution_status = :resolution')
                 expression_values[':resolution'] = resolution_status
-            else:
-                filter_expression = None
+
+            # Only add FilterExpression if we have filters
+            filter_expression = ' AND '.join(filter_parts) if filter_parts else None
 
             response = table.query(
-                IndexName='conversation-index',  # GSI2
+                IndexName='conversation-index',  # Use GSI2 for conversation-based queries
                 KeyConditionExpression=key_condition,
                 FilterExpression=filter_expression,
                 ExpressionAttributeValues=expression_values,
