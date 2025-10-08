@@ -119,13 +119,15 @@ def get_or_create_default_integrated_intelligence_by_project(
         # Get all the duplicates (excluding the oldest one)
         duplicate_integrated_intelligences = integrated_intelligences[1:]
 
-        # Update intelligence__is_router=False for all duplicates
+        # Update intelligence__is_router=False and collect IDs for deletion in one loop
+        duplicate_ids = []
         for duplicate in duplicate_integrated_intelligences:
             duplicate.intelligence.is_router = False
             duplicate.intelligence.save()
+            duplicate_ids.append(duplicate.id)
 
         # Delete the duplicate IntegratedIntelligence objects
-        duplicate_integrated_intelligences.delete()
+        IntegratedIntelligence.objects.filter(id__in=duplicate_ids).delete()
 
         return oldest_integrated_intelligence
 

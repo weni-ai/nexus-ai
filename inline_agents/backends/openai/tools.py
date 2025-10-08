@@ -144,11 +144,8 @@ class Supervisor(Agent):
             ctx: RunContextWrapper[Context],
             input_data: FinalResponse
         ):
-            # Log do handoff para debug
             print(f"🔄 Handoff para formatador recebido")
             print(f"📝 Dados recebidos: {input_data.final_response[:100]}..." if len(input_data.final_response) > 100 else f"📝 Dados: {input_data.final_response}")
-            
-            # Aqui você pode adicionar lógica adicional, como logging ou métricas
 
         return handoff(
             agent=formatter_agent,
@@ -174,7 +171,7 @@ class Supervisor(Agent):
         formatter_agent = Agent(
             name="Response Formatter Agent",
             instructions=formatter_agent_instructions,
-            model=model,
+            model=settings.FORMATTER_AGENT_MODEL,
             tools=COMPONENT_TOOLS,
             hooks=hooks,
             tool_use_behavior=self.custom_tool_handler,
