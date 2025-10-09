@@ -120,28 +120,35 @@ class MessageRepository(Repository):
                 raise e
 
     def get_messages_for_conversation(
-        self, project_uuid: str, contact_urn: str, channel_uuid: str,
-        start_date: str = None, end_date: str = None, resolution_status: int = None
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str,
+        start_date: str = None,
+        end_date: str = None,
+        resolution_status: int = None
     ) -> list:
         """Get messages for a specific conversation, optionally filtered by time range and resolution."""
         conversation_key = f"{project_uuid}#{contact_urn}#{channel_uuid}"
 
         with get_message_table() as table:
-            # Use GSI2 (conversation-index) for efficient conversation-based queries
-            key_condition = 'conversation_key = :conv_key'
+            # Build query parameters
             expression_values = {':conv_key': conversation_key}
 
-            filter_parts = []
-
+            # Use KeyConditionExpression for efficient querying
             if start_date and end_date:
                 start_sortable = self._convert_to_dynamo_sortable_timestamp(start_date)
                 end_sortable = self._convert_to_dynamo_sortable_timestamp(end_date)
-                # Use message_timestamp for time range since it's the GSI2 sort key
-                # Add # suffix to match the format and avoid UUID interference
-                filter_parts.append('message_timestamp BETWEEN :start AND :end')
+                # Use sort key in KeyConditionExpression for better performance
+                key_condition = 'conversation_key = :conv_key AND message_timestamp BETWEEN :start AND :end'
                 expression_values[':start'] = f"{start_sortable}#"
                 expression_values[':end'] = f"{end_sortable}#"
+            else:
+                # No time range - just query by conversation
+                key_condition = 'conversation_key = :conv_key'
 
+            # Build FilterExpression only for non-key attributes
+            filter_parts = []
             if resolution_status is not None:
                 filter_parts.append('resolution_status = :resolution')
                 expression_values[':resolution'] = resolution_status
