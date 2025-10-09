@@ -6,6 +6,7 @@ import re
 import ast
 from nexus.internals.flows import FlowsRESTClient
 from router.direct_message import DirectMessage, exceptions
+import sentry_sdk
 
 
 class SendMessageHTTPClient(DirectMessage):
@@ -14,7 +15,7 @@ class SendMessageHTTPClient(DirectMessage):
         self.__host = host
         self.__access_token = access_token
 
-    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> None:
+    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs) -> None:
         url = f"{self.__host}/mr/msg/send"
 
         payload = {"user": user, "project_uuid": project_uuid, "urns": urns, "text": text}
@@ -110,11 +111,15 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         urns: List,
         project_uuid: str,
         user: str,
-        full_chunks: List[Dict] = None
+        full_chunks: List[Dict] = None,
+        backend: str = "BedrockBackend",
+        **kwargs
     ) -> None:
-        msgs = self.get_json_strings(msg)
-        if not msgs:
-            msgs = [{"msg": {"text": str(msg)}}]
+
+        if backend == "BedrockBackend":
+            msgs = self.format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)
+        else:
+            msgs = self.format_message_for_openai(msg, urns, project_uuid, user, full_chunks)
 
         for msg in msgs:
             response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid)
@@ -122,6 +127,32 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
                 response.raise_for_status()
             except Exception as error:
                 raise exceptions.UnableToSendMessage(str(error))
+
+    def format_response_for_bedrock(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> None:
+        msgs = self.get_json_strings(msg)
+        if not msgs:
+            msgs = [{"msg": {"text": str(msg)}}]
+        return msgs
+
+    def format_message_for_openai(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> Dict:
+        try:
+            msgs = json.loads(msg)
+        except Exception as error:
+            sentry_context = {
+                "message": msg,
+                "error_type": type(error).__name__,
+                "error_message": str(error),
+                "project_uuid": project_uuid,
+                "preview": False,
+            }
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_context("session_error", sentry_context)
+            sentry_sdk.capture_exception(error)
+        
+        if not isinstance(msgs, list):
+            msgs = [msgs]
+
+        return msgs
 
     def get_json_strings_from_text(self, text):
         pattern = r'(.*?)\s*(\{[\s\S]*"msg"[\s\S]*\})'
