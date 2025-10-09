@@ -62,6 +62,7 @@ class MessageRepository(Repository):
         ttl = 172800  # 2 days
         cached_response = self.get_messages(project_uuid, contact_urn, channel_uuid)
         cached_messages = cached_response['items']
+        cached_messages.append(message)
         cache_key = f"conversation:{project_uuid}:{contact_urn}"
         self.redis_client.setex(cache_key, ttl, json.dumps(cached_messages))
 
