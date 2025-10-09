@@ -22,11 +22,17 @@ from aiortc.rtcdtlstransport import (
     certificate_digest,
 )
 from decouple import config
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response, status
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 from calling.calling import get_calling_agents
+from calling.clients import accept_call, get_answer, pre_accept_call
 from calling.functions import registry
+
+WA_VERIFY_TOKEN = config("PROTOTYPE_WA_VERIFY_TOKEN")
+WA_PHONE_NUMBER = config("PROTOTYPE_WA_PHONE_NUMBER")
+WA_ACCESS_TOKEN = config("PROTOTYPE_WA_ACCESS_TOKEN")
 
 
 def getFingerprints_sha256(self):
@@ -41,7 +47,7 @@ app = FastAPI()
 relay = MediaRelay()
 
 # OpenAI Realtime config
-OPENAI_API_KEY = config("OPENAI_API_KEY", "")
+OPENAI_API_KEY = config("PROTOTYPE_OPENAI_API_KEY", "")
 REALTIME_MODEL = config("REALTIME_MODEL", "gpt-realtime")
 
 
@@ -355,21 +361,65 @@ async def api_offers(offer: Offer):
     return {"sdp": answer_sdp}
 
 
-@app.post("/end_call/{call_id}")
 async def end_call(call_id: str):
-    print("[/end_call] Webhook recebido: call ended")
-
+    print("[End call] Encerrando a call")
     try:
         session = active_sessions.pop(call_id)
         await session.close()
     except Exception:
         pass
 
-    return {"status": "ok"}
+
+@app.get("/webhook")
+async def verify_webhook(request: Request):
+    verify = request.query_params.get("hub.verify_token")
+    challenge = request.query_params.get("hub.challenge")
+
+    if verify == WA_VERIFY_TOKEN:
+        return PlainTextResponse(challenge or "")
+    else:
+        return Response(content="Invalid token", status_code=status.HTTP_403_FORBIDDEN)
+
+
+@app.post("/webhook")
+async def receive_webhook(request: Request):
+    body = await request.json()
+
+    try:
+        change = body["entry"][0]["changes"][0]
+    except (KeyError, IndexError):
+        return Response(status_code=200)
+
+    if change.get("field") == "calls":
+        print("[WEBHOOK] Ligação recebida")
+
+        value = change.get("value", {})
+        calls = value.get("calls", [])
+        call_data = calls[0] if calls else {}
+        sdp = call_data.get("session", {}).get("sdp")
+        call_id = call_data.get("id")
+
+        if not sdp:
+            event = call_data.get("event")
+            if event == "terminate":
+                await end_call(call_id)
+            return Response(status_code=200)
+
+        sdp_answer = await get_answer(sdp, call_id)
+        await pre_accept_call(sdp_answer, call_id, WA_PHONE_NUMBER, WA_ACCESS_TOKEN)
+
+        # pequeno atraso antes do ACCEPT
+        await asyncio.sleep(0.8)
+
+        await accept_call(sdp_answer, call_id, WA_PHONE_NUMBER, WA_ACCESS_TOKEN)
+
+        return Response(status_code=200)
+
+    return Response(status_code=200)
 
 
 async def main():
-    config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")
+    config = uvicorn.Config(app, host="0.0.0.0", port=3000, log_level="info")
     server = uvicorn.Server(config)
 
     await server.serve()

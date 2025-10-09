@@ -64,6 +64,7 @@ aiohttp = "3.10"
 litellm = "1.76.3"
 aiortc = "^1.13.0"
 python-decouple = "^3.8"
+httpx = "^0.28.1"
 
 
 
