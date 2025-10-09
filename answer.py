@@ -1,3 +1,4 @@
+import argparse
 import os
 
 import django
@@ -22,10 +23,10 @@ from aiortc.rtcdtlstransport import (
 )
 from decouple import config
 from fastapi import FastAPI
-from functions import registry
 from pydantic import BaseModel
 
-from calling import get_calling_agents
+from calling.calling import get_calling_agents
+from calling.functions import registry
 
 
 def getFingerprints_sha256(self):
@@ -57,25 +58,8 @@ ICE_URLS = ["stun:stun.l.google.com:19302"]
 ICE_SERVERS = [RTCIceServer(urls=u) for u in ICE_URLS]
 RTC_CONFIG = RTCConfiguration(iceServers=ICE_SERVERS)
 
-
-message_dict = {
-    "project_uuid": "9af5f63f-20e6-47d0-8e7b-e089aef4115c",
-    "text": "Sample",
-    "contact_urn": "ext:260257732924@",
-    "channel_uuid": "4c81eaea-b413-4859-8de2-4ff5dba27458",
-    "contact_name": "260257732924@",
-}
-
-agents = get_calling_agents(message_dict)
-
-tools_session = {
-    "type": "session.update",
-    "session": {
-        "type": "realtime",
-        "tools": agents.get("tools"),
-        "tool_choice": "auto",
-    },
-}
+project: str = ""
+contact_channel: str = ""
 
 
 active_sessions = {}
@@ -86,6 +70,7 @@ class Session:
     call_id: str
     offer_sdp: str
     wpp_connection: RTCPeerConnection
+    agents: dict
     openai_connection: RTCPeerConnection = None
 
     async def close(self):
@@ -104,13 +89,13 @@ def _dc_send_json(dc, obj):
         print("[OAI][DC] Falha ao enviar JSON:", e)
 
 
-async def _post_openai_realtime_sdp(offer_sdp: str) -> str:
+async def _post_openai_realtime_sdp(offer_sdp: str, instructions: str) -> str:
     """POSTa o SDP de offer para a OpenAI e retorna o SDP de answer (texto)."""
     if not OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY não definido")
 
     session_config = {
-        "instructions": agents.get("instructions"),
+        "instructions": instructions,
         "type": "realtime",
         "model": "gpt-realtime",
         "audio": {
@@ -165,6 +150,16 @@ async def connect_openai_and_bridge(session: Session, incoming_wa_track):
         def on_open():
             print("[OAI][DC] Canal oai-events aberto")
             # Registra tools e instruções na sessão Realtime
+
+            tools_session = {
+                "type": "session.update",
+                "session": {
+                    "type": "realtime",
+                    "tools": session.agents.get("tools"),
+                    "tool_choice": "auto",
+                },
+            }
+
             _dc_send_json(dc, tools_session)
 
         @dc.on("message")
@@ -274,7 +269,9 @@ async def connect_openai_and_bridge(session: Session, incoming_wa_track):
     print("[OAI] Enviando offer para OpenAI (tamanho)", len(openai_connection.localDescription.sdp or ""))
 
     try:
-        answer_sdp = await _post_openai_realtime_sdp(openai_connection.localDescription.sdp)
+        answer_sdp = await _post_openai_realtime_sdp(
+            openai_connection.localDescription.sdp, session.agents.get("instructions")
+        )
         await openai_connection.setRemoteDescription(RTCSessionDescription(answer_sdp, "answer"))
         print("[OAI] Answer da OpenAI aplicado (tamanho)", len(answer_sdp or ""))
     except Exception as e:
@@ -337,10 +334,20 @@ async def handle_offer(session: Session):
 async def api_offers(offer: Offer):
     print("[/offers] Recebendo offer")
 
+    message_dict = {
+        "project_uuid": project,
+        "text": "Sample",
+        "contact_urn": "ext:260257732924@",
+        "channel_uuid": contact_channel,
+        "contact_name": "260257732924@",
+    }
+
+    agents = get_calling_agents(message_dict)
+
     call_id = offer.call_id
 
     wpp_connection = RTCPeerConnection(configuration=RTC_CONFIG)
-    session = Session(call_id, offer.sdp, wpp_connection)
+    session = Session(call_id, offer.sdp, wpp_connection, agents)
 
     active_sessions[call_id] = session
     answer_sdp = await handle_offer(session=session)
@@ -369,4 +376,20 @@ async def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Remove o campo 'strict' de cada tool em um arquivo JSON/dict.")
+    parser.add_argument(
+        "--project",
+        dest="project",
+        help="Projeto onde o protótipo buscará os dados",
+        default="9af5f63f-20e6-47d0-8e7b-e089aef4115c",
+    )
+    parser.add_argument(
+        "--channel", dest="channel", help="Canal do contato", default="4c81eaea-b413-4859-8de2-4ff5dba27458"
+    )
+
+    args = parser.parse_args()
+
+    project = args.project
+    contact_channel = args.channel
+
     asyncio.run(main())
