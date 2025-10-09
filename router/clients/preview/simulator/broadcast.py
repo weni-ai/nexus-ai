@@ -5,6 +5,7 @@ import re
 from typing import List, Dict, Callable
 
 from router.direct_message import DirectMessage
+import sentry_sdk
 
 
 class SimulateBroadcast(DirectMessage):
@@ -150,6 +151,19 @@ class SimulateWhatsAppBroadcastHTTPClient(DirectMessage):
         return response_data
 
     def format_message_for_openai(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> Dict:
+        try:
+            msg = json.loads(msg)
+        except Exception as error:
+            sentry_context = {
+                "message": msg,
+                "error_type": type(error).__name__,
+                "error_message": str(error),
+                "project_uuid": project_uuid,
+            }
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_context("session_error", sentry_context)
+            sentry_sdk.capture_exception(error)
+
         print("!!!!!!!!!!!!!!PASSOU PELO OPENAI!!!!!!!!!!!!!!!!")
         print(type(msg))
         print({"type": "broadcast", "message": msg, "fonts": []})
