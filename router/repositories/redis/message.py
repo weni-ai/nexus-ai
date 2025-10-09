@@ -10,10 +10,15 @@ class MessageRepository(Repository):
         self.redis_client = redis_client
 
     def storage_message(
-        self, project_uuid: str, contact_urn: str, message_data: dict
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        message_data: dict,
+        channel_uuid: str = None,
+        ttl_hours: int = 48
     ) -> None:
         """Store a single message in Redis - matches original create_message_to_cache logic."""
-        ttl = 172800  # 2 days
+        ttl_seconds = ttl_hours * 3600
 
         msg = [
             {
@@ -26,7 +31,7 @@ class MessageRepository(Repository):
         cache_key = f"conversation:{project_uuid}:{contact_urn}"
         self.redis_client.setex(
             cache_key,
-            ttl,
+            ttl_seconds,
             json.dumps(msg)
         )
 

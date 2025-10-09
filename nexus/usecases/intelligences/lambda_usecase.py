@@ -10,6 +10,7 @@ from nexus.projects.models import Project
 from nexus.intelligences.producer.resolution_producer import ResolutionDTO, resolution_message
 
 from router.services.message_service import MessageService
+from router.repositories.entities import ResolutionEntities
 
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 
@@ -183,15 +184,6 @@ class LambdaUseCase():
             self.task_manager = MessageService()
         return self.task_manager
 
-    def _convert_resolution_to_choice_value(self, resolution_string: str) -> str:
-
-        resolution_mapping = {
-            "resolved": "0",
-            "unresolved": "1",
-            "in progress": "2"
-        }
-        return resolution_mapping.get(resolution_string.lower(), "2")  # Default to "2" (In Progress)
-
     def lambda_component_parser(
         self,
         final_response: str,
@@ -228,9 +220,9 @@ def create_lambda_conversation(
             project_uuid=payload.get("project_uuid"),
             contact_urn=payload.get("contact_urn"),
             channel_uuid=payload.get("channel_uuid"),
+            # If any errors happen to an older conversation, we will get all messages for correct conversation
             start_date=payload.get("start_date"),
             end_date=payload.get("end_date"),
-            resolution_status=2  # Only unclassified messages
         )
 
         if not messages:
@@ -241,7 +233,7 @@ def create_lambda_conversation(
             project=project,
             contact_urn=payload.get("contact_urn"),
             channel_uuid=payload.get("channel_uuid"),
-            resolution=2
+            resolution=ResolutionEntities.IN_PROGRESS
         )
 
         formated_messages = lambda_usecase.get_lambda_conversation(messages)
@@ -258,7 +250,9 @@ def create_lambda_conversation(
             contact_urn=payload.get("contact_urn")
         )
 
-        resolution_choice_value = lambda_usecase._convert_resolution_to_choice_value(resolution)
+        resolution_choice_value = ResolutionEntities.resolution_mapping(
+            ResolutionEntities.convert_resolution_string_to_int(resolution)
+        )
 
         update_data = {
             "start_date": payload.get("start_date"),

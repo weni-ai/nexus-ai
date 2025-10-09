@@ -5,12 +5,22 @@ class ResolutionEntities:
     IN_PROGRESS = 2
     UNCLASSIFIED = 3
 
-    def resolution_mapping(self, resolution_status: int) -> int:
-        resolution_choices = [
-            (self.RESOLVED, "Resolved"),
-            (self.UNRESOLVED, "Unresolved"),
-            (self.IN_PROGRESS, "In Progress"),
-            (self.UNCLASSIFIED, "Unclassified")
-        ]
+    @staticmethod
+    def resolution_mapping(resolution_status: int) -> tuple:
+        resolution_choices = {
+            ResolutionEntities.RESOLVED: (ResolutionEntities.RESOLVED, "Resolved"),
+            ResolutionEntities.UNRESOLVED: (ResolutionEntities.UNRESOLVED, "Unresolved"),
+            ResolutionEntities.IN_PROGRESS: (ResolutionEntities.IN_PROGRESS, "In Progress"),
+            ResolutionEntities.UNCLASSIFIED: (ResolutionEntities.UNCLASSIFIED, "Unclassified")
+        }
 
-        return resolution_choices[resolution_status]
+        return resolution_choices.get(resolution_status, (ResolutionEntities.UNCLASSIFIED, "Unclassified"))
+
+    @staticmethod
+    def convert_resolution_string_to_int(resolution_string: str) -> int:
+        resolution_mapping = {
+            "resolved": ResolutionEntities.RESOLVED,
+            "unresolved": ResolutionEntities.UNRESOLVED,
+            "in progress": ResolutionEntities.IN_PROGRESS
+        }
+        return resolution_mapping.get(resolution_string.lower(), ResolutionEntities.IN_PROGRESS)
