@@ -133,11 +133,25 @@ class SimulateWhatsAppBroadcastHTTPClient(DirectMessage):
         urns: List,
         project_uuid: str,
         user: str,
-        full_chunks: List[Dict] = None
+        full_chunks: List[Dict] = None,
+        backend: str = "BedrockBackend"
     ) -> None:
+        if backend == "BedrockBackend":
+            return self.format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)
+        
+        return self.format_message_for_openai(msg, urns, project_uuid, user, full_chunks)
+
+    def format_response_for_bedrock(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> Dict:
         msgs = self.get_json_strings(msg)
         if not msgs:
             msgs = [{"msg": {"text": str(msg)}}]
         response_data = {"type": "broadcast", "message": msgs, "fonts": []}
 
         return response_data
+
+    def format_message_for_openai(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> Dict:
+        print("!!!!!!!!!!!!!!PASSOU PELO OPENAI!!!!!!!!!!!!!!!!")
+        print(type(msg))
+        print({"type": "broadcast", "message": msg, "fonts": []})
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        return {"type": "broadcast", "message": msg, "fonts": []}
