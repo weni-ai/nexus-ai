@@ -5,6 +5,7 @@ import re
 from typing import List, Dict, Callable
 
 from router.direct_message import DirectMessage
+import sentry_sdk
 
 
 class SimulateBroadcast(DirectMessage):
@@ -13,7 +14,7 @@ class SimulateBroadcast(DirectMessage):
         self.__access_token = access_token
         self.get_file_info = get_file_info
 
-    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> None:
+    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs) -> None:
         sources: List[Dict] = []
         seen_uuid: List[str] = []
 
@@ -133,11 +134,38 @@ class SimulateWhatsAppBroadcastHTTPClient(DirectMessage):
         urns: List,
         project_uuid: str,
         user: str,
-        full_chunks: List[Dict] = None
+        full_chunks: List[Dict] = None,
+        backend: str = "BedrockBackend"
     ) -> None:
+        if backend == "BedrockBackend":
+            return self.format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)
+        
+        return self.format_message_for_openai(msg, urns, project_uuid, user, full_chunks)
+
+    def format_response_for_bedrock(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> Dict:
         msgs = self.get_json_strings(msg)
         if not msgs:
             msgs = [{"msg": {"text": str(msg)}}]
         response_data = {"type": "broadcast", "message": msgs, "fonts": []}
 
         return response_data
+
+    def format_message_for_openai(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> Dict:
+        try:
+            msg = json.loads(msg)
+        except Exception as error:
+            sentry_context = {
+                "message": msg,
+                "error_type": type(error).__name__,
+                "error_message": str(error),
+                "project_uuid": project_uuid,
+            }
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_context("session_error", sentry_context)
+            sentry_sdk.capture_exception(error)
+
+        print("!!!!!!!!!!!!!!PASSOU PELO OPENAI!!!!!!!!!!!!!!!!")
+        print(type(msg))
+        print({"type": "broadcast", "message": msg, "fonts": []})
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        return {"type": "broadcast", "message": msg, "fonts": []}

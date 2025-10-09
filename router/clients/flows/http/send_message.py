@@ -14,7 +14,7 @@ class SendMessageHTTPClient(DirectMessage):
         self.__host = host
         self.__access_token = access_token
 
-    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> None:
+    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs) -> None:
         url = f"{self.__host}/mr/msg/send"
 
         payload = {"user": user, "project_uuid": project_uuid, "urns": urns, "text": text}
@@ -110,7 +110,8 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         urns: List,
         project_uuid: str,
         user: str,
-        full_chunks: List[Dict] = None
+        full_chunks: List[Dict] = None,
+        **kwargs
     ) -> None:
         msgs = self.get_json_strings(msg)
         if not msgs:
