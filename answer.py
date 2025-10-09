@@ -24,10 +24,9 @@ from aiortc.rtcdtlstransport import (
 from decouple import config
 from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel
 
 from calling.calling import get_calling_agents
-from calling.clients import accept_call, get_answer, pre_accept_call
+from calling.clients import accept_call, pre_accept_call
 from calling.functions import registry
 
 WA_VERIFY_TOKEN = config("PROTOTYPE_WA_VERIFY_TOKEN")
@@ -50,11 +49,6 @@ relay = MediaRelay()
 # OpenAI Realtime config
 OPENAI_API_KEY = config("PROTOTYPE_OPENAI_API_KEY", "")
 REALTIME_MODEL = config("REALTIME_MODEL", "gpt-realtime")
-
-
-class Offer(BaseModel):
-    sdp: str
-    call_id: str
 
 
 received_offers: list[str] = []
@@ -337,9 +331,8 @@ async def handle_offer(session: Session):
     return answer.sdp
 
 
-@app.post("/offers")
-async def api_offers(offer: Offer):
-    print("[/offers] Recebendo offer")
+async def get_answer(sdp: str, call_id: str):
+    print("[Get Answer] Recebendo offer")
 
     message_dict = {
         "project_uuid": project,
@@ -351,15 +344,13 @@ async def api_offers(offer: Offer):
 
     agents = get_calling_agents(message_dict)
 
-    call_id = offer.call_id
-
     wpp_connection = RTCPeerConnection(configuration=RTC_CONFIG)
-    session = Session(call_id, offer.sdp, wpp_connection, agents)
+    session = Session(call_id, sdp, wpp_connection, agents)
 
     active_sessions[call_id] = session
     answer_sdp = await handle_offer(session=session)
 
-    return {"sdp": answer_sdp}
+    return answer_sdp
 
 
 async def end_call(call_id: str):

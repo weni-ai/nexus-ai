@@ -54,16 +54,3 @@ async def accept_call(sdp: str, call_id: str, phone_number_id: str, access_token
     print("[WA←Graph] ACCEPT body=", body)
 
     return {"status": response.status_code, "ok": response.is_success, "body": body}
-
-
-async def get_answer(sdp: str, call_id: str):
-    url = f"{answerBaseUrl}/offers"
-    headers = {"Content-Type": "application/json"}
-    payload = {"sdp": sdp, "call_id": call_id}
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, json=payload, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-
-    return data.get("sdp")
