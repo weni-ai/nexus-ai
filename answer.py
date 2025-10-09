@@ -33,6 +33,7 @@ from calling.functions import registry
 WA_VERIFY_TOKEN = config("PROTOTYPE_WA_VERIFY_TOKEN")
 WA_PHONE_NUMBER = config("PROTOTYPE_WA_PHONE_NUMBER")
 WA_ACCESS_TOKEN = config("PROTOTYPE_WA_ACCESS_TOKEN")
+WEBHOOK_UUID = config("PROTOTYPE_WEBHOOK_UUID")
 
 
 def getFingerprints_sha256(self):
@@ -370,7 +371,7 @@ async def end_call(call_id: str):
         pass
 
 
-@app.get("/webhook")
+@app.get(f"/{WEBHOOK_UUID}/webhook")
 async def verify_webhook(request: Request):
     verify = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")
@@ -381,7 +382,7 @@ async def verify_webhook(request: Request):
         return Response(content="Invalid token", status_code=status.HTTP_403_FORBIDDEN)
 
 
-@app.post("/webhook")
+@app.post(f"/{WEBHOOK_UUID}/webhook")
 async def receive_webhook(request: Request):
     body = await request.json()
 
