@@ -343,6 +343,7 @@ async def get_answer(sdp: str, call_id: str):
     }
 
     agents = get_calling_agents(message_dict)
+    print(agents)
 
     wpp_connection = RTCPeerConnection(configuration=RTC_CONFIG)
     session = Session(call_id, sdp, wpp_connection, agents)
