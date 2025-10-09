@@ -9,7 +9,8 @@ from nexus.celery import app as celery_app
 from nexus.projects.models import Project
 from nexus.intelligences.producer.resolution_producer import ResolutionDTO, resolution_message
 
-from router.tasks.redis_task_manager import RedisTaskManager
+from router.services.message_service import MessageService
+from router.repositories.entities import ResolutionEntities
 
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 
@@ -178,19 +179,10 @@ class LambdaUseCase():
                 return None
         return None
 
-    def _get_task_manager(self):
+    def _get_message_service(self):
         if self.task_manager is None:
-            self.task_manager = RedisTaskManager()
+            self.task_manager = MessageService()
         return self.task_manager
-
-    def _convert_resolution_to_choice_value(self, resolution_string: str) -> str:
-
-        resolution_mapping = {
-            "resolved": "0",
-            "unresolved": "1",
-            "in progress": "2"
-        }
-        return resolution_mapping.get(resolution_string.lower(), "2")  # Default to "2" (In Progress)
 
     def lambda_component_parser(
         self,
@@ -221,21 +213,27 @@ def create_lambda_conversation(
 
     try:
         lambda_usecase = LambdaUseCase()
-        task_manager = lambda_usecase._get_task_manager()
-        messages = task_manager.get_cache_messages(
+        message_service = lambda_usecase._get_message_service()
+
+        # Use new conversation-based message retrieval
+        messages = message_service.get_messages_for_conversation(
             project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn")
+            contact_urn=payload.get("contact_urn"),
+            channel_uuid=payload.get("channel_uuid"),
+            # If any errors happen to an older conversation, we will get all messages for correct conversation
+            start_date=payload.get("start_date"),
+            end_date=payload.get("end_date"),
         )
 
         if not messages:
-            raise ValueError("No messages found")
+            raise ValueError("No unclassified messages found for conversation period")
 
         project = Project.objects.get(uuid=payload.get("project_uuid"))
         conversation_queryset = Conversation.objects.filter(
             project=project,
             contact_urn=payload.get("contact_urn"),
             channel_uuid=payload.get("channel_uuid"),
-            resolution=2
+            resolution=ResolutionEntities.IN_PROGRESS
         )
 
         formated_messages = lambda_usecase.get_lambda_conversation(messages)
@@ -252,7 +250,9 @@ def create_lambda_conversation(
             contact_urn=payload.get("contact_urn")
         )
 
-        resolution_choice_value = lambda_usecase._convert_resolution_to_choice_value(resolution)
+        resolution_choice_value = ResolutionEntities.resolution_mapping(
+            ResolutionEntities.convert_resolution_string_to_int(resolution)
+        )
 
         update_data = {
             "start_date": payload.get("start_date"),
@@ -288,9 +288,11 @@ def create_lambda_conversation(
         )
         resolution_message(resolution_dto)
 
-        task_manager.clear_message_cache(
+        # Delete messages after processing (instead of updating resolution)
+        message_service.clear_message_cache(
             project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn")
+            contact_urn=payload.get("contact_urn"),
+            channel_uuid=payload.get("channel_uuid")
         )
 
     except Exception as e:
