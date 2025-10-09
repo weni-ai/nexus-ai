@@ -153,15 +153,18 @@ class MessageRepository(Repository):
                 filter_parts.append('resolution_status = :resolution')
                 expression_values[':resolution'] = resolution_status
 
-            # Only add FilterExpression if we have filters
-            filter_expression = ' AND '.join(filter_parts) if filter_parts else None
+            # Build query parameters
+            query_params = {
+                'KeyConditionExpression': key_condition,
+                'ExpressionAttributeValues': expression_values,
+                'ScanIndexForward': True  # Chronological order
+            }
 
-            response = table.query(
-                KeyConditionExpression=key_condition,
-                FilterExpression=filter_expression,
-                ExpressionAttributeValues=expression_values,
-                ScanIndexForward=True  # Chronological order
-            )
+            # Only add FilterExpression if we have filters
+            if filter_parts:
+                query_params['FilterExpression'] = ' AND '.join(filter_parts)
+
+            response = table.query(**query_params)
 
             return [self._format_message(item) for item in response["Items"]]
 
