@@ -139,13 +139,10 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         return msgs
 
     def format_message_for_openai(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> Dict:
-        print("!!!!!!!!!!!!!! PELO OPENAI!!!!!!!!!!!!!!!!")
-        print(type(msg))
-        print(msg)
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         try:
             msgs = json.loads(msg)
         except Exception as error:
+            msgs = msg
             sentry_context = {
                 "message": msg,
                 "error_type": type(error).__name__,
@@ -157,10 +154,13 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
             sentry_sdk.set_context("session_error", sentry_context)
             sentry_sdk.capture_exception(error)
 
-        if not isinstance(msg, list):
-            msgs = [msg]
-        else:
-            msgs = msg
+        print("!!!!!!!!!!!!!! PELO OPENAI!!!!!!!!!!!!!!!!")
+        print(type(msgs))
+        print(msgs)
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
+        if not isinstance(msgs, list):
+            msgs = [msgs]
 
         return msgs
 
