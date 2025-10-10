@@ -94,10 +94,10 @@ libatk-bridge2.0-0 libcups2 libdrm2 libxcb1 \
 libxkbcommon0 libatspi2.0-0 libx11-6 libxcomposite1 \
 libxdamage1 libxext6 libxfixes3 libxrandr2 \
 libgbm1 libpango-1.0-0 libcairo2 libasound2 -y
+RUN pip install html2text==2024.2.26
 
 COPY --from=build /install /usr/local
 COPY --chown=${APP_USER}:${APP_GROUP} . ${APP_PATH}
-RUN pip install html2text==2024.2.26
 
 USER "${APP_USER}:${APP_GROUP}"
 EXPOSE 8000
