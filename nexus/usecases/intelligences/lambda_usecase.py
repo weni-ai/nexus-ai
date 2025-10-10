@@ -250,9 +250,7 @@ def create_lambda_conversation(
             contact_urn=payload.get("contact_urn")
         )
 
-        resolution_choice_value = ResolutionEntities.resolution_mapping(
-            ResolutionEntities.convert_resolution_string_to_int(resolution)
-        )
+        resolution_choice_value = ResolutionEntities.convert_resolution_string_to_int(resolution)
 
         update_data = {
             "start_date": payload.get("start_date"),
