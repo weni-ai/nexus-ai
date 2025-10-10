@@ -266,6 +266,7 @@ def start_inline_agents(
             direct_message=broadcast,
             user_email=flows_user_email,
             full_chunks=[],
+            backend=agents_backend,
         )
 
     except Exception as e:
