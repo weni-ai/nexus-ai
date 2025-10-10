@@ -100,6 +100,11 @@ def save_inline_trace_events(
         )
 
 
+def _get_message_service():
+    from router.services.message_service import MessageService
+    return MessageService()
+
+
 def save_inline_message_to_database(
     project_uuid: str,
     contact_urn: str,
@@ -110,10 +115,8 @@ def save_inline_message_to_database(
     contact_name: str,
     channel_uuid: str = None
 ) -> InlineAgentMessage:
-
-    from router.tasks.redis_task_manager import RedisTaskManager
-    task_manager = RedisTaskManager()
-    task_manager.handle_message_cache(
+    message_service = _get_message_service()
+    message_service.handle_message_cache(
         contact_urn=contact_urn,
         contact_name=contact_name,
         project_uuid=project_uuid,
@@ -122,6 +125,7 @@ def save_inline_message_to_database(
         channel_uuid=channel_uuid,
         preview=preview
     )
+
     source = {
         True: "preview",
         False: "router"
