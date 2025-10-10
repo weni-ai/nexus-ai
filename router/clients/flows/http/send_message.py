@@ -116,6 +116,10 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         **kwargs
     ) -> None:
 
+        print("!!!!!!!!!!!!!!PASSOU PELO SEND_DIRECT_MESSAGE!!!!!!!!!!!!!!!!")
+        print("backend            ", backend)
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
         if backend == "BedrockBackend":
             msgs = self.format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)
         else:
@@ -135,6 +139,10 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         return msgs
 
     def format_message_for_openai(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> Dict:
+        print("!!!!!!!!!!!!!! PELO OPENAI!!!!!!!!!!!!!!!!")
+        print(type(msg))
+        print(msg)
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         try:
             msgs = json.loads(msg)
         except Exception as error:
@@ -148,9 +156,11 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_context("session_error", sentry_context)
             sentry_sdk.capture_exception(error)
-        
-        if not isinstance(msgs, list):
-            msgs = [msgs]
+
+        if not isinstance(msg, list):
+            msgs = [msg]
+        else:
+            msgs = msg
 
         return msgs
 
