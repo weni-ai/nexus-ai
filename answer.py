@@ -165,10 +165,11 @@ async def connect_openai_and_bridge(session: Session, incoming_wa_track):
 
         @dc.on("message")
         def on_message(message):
-            # print("[OAI][DC] Mensagem recebida:", message)
             try:
                 data = json.loads(message)
-                # print(data.get("type"))
+                print(data)
+                if data.get("type") == "error":
+                    print("[on_message] Error message:", data)
                 if data.get("type") == "response.function_call_arguments.done":
                     name = data["name"]
                     call_id = data["call_id"]
@@ -240,7 +241,7 @@ async def connect_openai_and_bridge(session: Session, incoming_wa_track):
                 send_proxy = relay.subscribe(track)
                 if getattr(session, "wpp_audio_sender", None) is not None:
                     try:
-                        await session.wpp_audio_sender.replaceTrack(send_proxy)
+                        session.wpp_audio_sender.replaceTrack(send_proxy)
                         print("[BRIDGE] Áudio da OpenAI encaminhado para WhatsApp (replaceTrack)")
                     except Exception as e:
                         print("[BRIDGE] Falha ao replaceTrack para WA:", e)
@@ -408,6 +409,11 @@ async def receive_webhook(request: Request):
 
         return Response(status_code=200)
 
+    return Response(status_code=200)
+
+
+@app.get("/")
+def index():
     return Response(status_code=200)
 
 
