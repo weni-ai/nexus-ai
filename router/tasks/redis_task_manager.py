@@ -4,6 +4,7 @@ from typing import Optional
 from redis import Redis
 from django.conf import settings
 import pendulum
+import json
 from router.repositories.redis.message import MessageRepository as RedisMessageRepository
 from router.services.conversation_service import ConversationService
 
@@ -116,7 +117,7 @@ class RedisTaskManager(TaskManager):
             }
             self.save_rationale_session_data(session_id, session_data)
         else:
-            session_data = eval(session_data.decode('utf-8'))
+            session_data = json.loads(session_data.decode('utf-8'))
 
         return session_data
 
@@ -126,7 +127,7 @@ class RedisTaskManager(TaskManager):
         self.redis_client.setex(
             cache_key,
             self.CACHE_TIMEOUT,
-            str(session_data)
+            json.dumps(session_data)
         )
 
     def create_message_to_cache(
