@@ -147,7 +147,7 @@ class MockIndexer:
 
 
 class MockBroadcastHTTPClient():
-    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]):
+    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs):
         print(f"[+ Test: Sending direct message to {urns} +]")
 
 

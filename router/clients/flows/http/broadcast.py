@@ -11,7 +11,7 @@ class BroadcastHTTPClient(DirectMessage):
         self.__host = host
         self.__access_token = access_token
 
-    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str) -> None:
+    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, **kwargs) -> None:
         url = f"{self.__host}/api/v2/internals/broadcasts/"
 
         payload = {"user": user, "project": project_uuid, "urns": urns, "text": text}

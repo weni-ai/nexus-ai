@@ -10,6 +10,7 @@ class DirectMessage(ABC):  # pragma: no cover
         urns: List,
         project_uuid: str,
         user: str,
-        full_chunks: List[Dict] = None
+        full_chunks: List[Dict] = None,
+        **kwargs
     ) -> None:
         pass
