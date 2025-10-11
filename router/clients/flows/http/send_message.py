@@ -115,11 +115,6 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         backend: str = "BedrockBackend",
         **kwargs
     ) -> None:
-
-        print("!!!!!!!!!!!!!!PASSOU PELO SEND_DIRECT_MESSAGE!!!!!!!!!!!!!!!!")
-        print("backend            ", backend)
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-
         if backend == "BedrockBackend":
             msgs = self.format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)
         else:
@@ -153,11 +148,6 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_context("session_error", sentry_context)
             sentry_sdk.capture_exception(error)
-
-        print("!!!!!!!!!!!!!! PELO OPENAI!!!!!!!!!!!!!!!!")
-        print(type(msgs))
-        print(msgs)
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
         if not isinstance(msgs, list):
             msgs = [msgs]

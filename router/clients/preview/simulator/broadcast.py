@@ -79,9 +79,4 @@ class SimulateWhatsAppBroadcastHTTPClient(WhatsAppBroadcastHTTPClient):
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_context("session_error", sentry_context)
             sentry_sdk.capture_exception(error)
-
-        print("!!!!!!!!!!!!!!PASSOU PELO OPENAI!!!!!!!!!!!!!!!!")
-        print(type(msg))
-        print({"type": "broadcast", "message": msg, "fonts": []})
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         return {"type": "broadcast", "message": msg, "fonts": []}
