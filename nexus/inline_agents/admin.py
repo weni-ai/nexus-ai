@@ -141,6 +141,6 @@ class AgentAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-            'fields': ('name', 'project', 'is_official', 'instruction', 'collaboration_instructions', 'foundation_model', 'backend_foundation_models', 'source_type')
+            'fields': ('name', 'project', 'is_official', 'instruction', 'collaboration_instructions', 'backend_foundation_models', 'source_type')
         }),
     )
