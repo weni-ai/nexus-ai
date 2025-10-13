@@ -30,6 +30,7 @@ from nexus.inline_agents.models import (
     AgentCredential,
     InlineAgentsConfiguration,
     IntegratedAgent,
+    Guardrail,
 )
 from nexus.intelligences.models import ContentBase
 from nexus.projects.models import Project
@@ -441,6 +442,18 @@ class OpenAITeamAdapter(TeamAdapter):
             "{{CONTENT_BASE_UUID}}", content_base_uuid
         )
         return instruction
+
+    @classmethod
+    def _get_guardrails(cls, project_uuid: str) -> list[dict]:
+        try:
+            guardrails = Guardrail.objects.get(project__uuid=project_uuid)
+        except Guardrail.DoesNotExist:
+            guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
+
+        return {
+            'guardrailIdentifier': guardrails.identifier,
+            'guardrailVersion': str(guardrails.version)
+        }
 
 
 def create_standardized_event(agent_name, type, tool_name="", original_trace=None):

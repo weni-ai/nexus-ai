@@ -92,6 +92,40 @@ def complexity_layer(input_text: str) -> str | None:
             sentry_sdk.capture_exception(e)
             return None
 
+def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
+    print(f"[DEBUG] Guardrails complexity layer: {input_text}, {guardrail_id}, {guardrail_version}")
+    try:
+        payload = {
+            "first_input": input_text,
+            "guardrail_id": guardrail_id,
+            "guardrail_version": guardrail_version,
+        }
+        response = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME).invoke(
+            FunctionName=settings.GUARDRAILS_LAYER_LAMBDA,
+            InvocationType="RequestResponse",
+            Payload=json.dumps(payload).encode("utf-8"),
+        )
+        print("------------------------------------------")
+        print("Guardrails layer response: ")
+        print(response)
+        print("------------------------------------------")
+        if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
+            payload = json.loads(response['Payload'].read().decode('utf-8'))
+            print(f"[DEBUG] Guardrails complexity layer response: {payload}")
+            response = payload
+            status_code = payload.get("statusCode")
+            if status_code == 200:
+                guardrails_message = response.get("body", {}).get("message")
+                return guardrails_message
+            else:
+                return None
+            
+    except Exception as e:
+        print("------------------------------------------")
+        print("Guardrails layer error: ")
+        print(e)
+        print("------------------------------------------")
+        return None
 
 @celery_app.task(
     bind=True,
@@ -130,15 +164,14 @@ def start_inline_agents(
             preview=preview
         )
 
-        foundation_model = complexity_layer(text)
+        guardrails_message: Optional[str] = None
+        foundation_model: Optional[str] = None
 
         text, turn_off_rationale = handle_attachments(
             text=text,
             attachments=attachments
         )
-
-        if len(product_items) > 0:
-            text = handle_product_items(text, product_items)
+        text = handle_product_items(text, product_items)
 
         if not text.strip():
             raise EmptyTextException(
@@ -166,68 +199,77 @@ def start_inline_agents(
 
         project, content_base, inline_agent_configuration = get_project_and_content_base_data(message_obj.project_uuid)
 
-        pending_task_id = task_manager.get_pending_task_id(message_obj.project_uuid, message_obj.contact_urn)
-        if pending_task_id:
-            celery_app.control.revoke(pending_task_id, terminate=True)
-
-        final_message_text = task_manager.handle_pending_response(message_obj.project_uuid, message_obj.contact_urn, message_obj.text)
-        message_obj.text = final_message_text
-
-        task_manager.store_pending_task_id(message_obj.project_uuid, message_obj.contact_urn, self.request.id)
-
-        if user_email:
-            send_preview_message_to_websocket(
-                project_uuid=message_obj.project_uuid,
-                user_email=user_email,
-                message_data={
-                    "type": "status",
-                    "content": "Starting multi-agent processing",
-                    # "session_id": session_id # TODO: add session_id
-                }
-            )
-
-        project_use_components = project.use_components
-
-        broadcast, _ = get_action_clients(
-            preview=preview,
-            multi_agents=True,
-            project_use_components=project_use_components
-        )
-
-        flows_user_email = os.environ.get("FLOW_USER_EMAIL")
-
         agents_backend = project.agents_backend
         backend = BackendsRegistry.get_backend(agents_backend)
 
-        rep = ORMTeamRepository()
-        team = rep.get_team(message_obj.project_uuid)
+        if agents_backend == "BedrockBackend":
+            foundation_model = complexity_layer(text)
+        elif agents_backend == "OpenAIBackend":
+            guardrails = backend.team_adapter._get_guardrails(message_obj.project_uuid)
+            guardrails_message = guardrails_complexity_layer(message_obj.text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion"))
+        
+        if not guardrails_message:
+            pending_task_id = task_manager.get_pending_task_id(message_obj.project_uuid, message_obj.contact_urn)
+            if pending_task_id:
+                celery_app.control.revoke(pending_task_id, terminate=True)
 
-        response = backend.invoke_agents(
-            team=team,
-            input_text=message_obj.text,
-            contact_urn=message_obj.contact_urn,
-            project_uuid=message_obj.project_uuid,
-            preview=preview,
-            rationale_switch=project.rationale_switch,
-            sanitized_urn=message_obj.sanitized_urn,
-            language=language,
-            user_email=user_email,
-            use_components=project.use_components,
-            contact_fields=message_obj.contact_fields_as_json,
-            contact_name=message_obj.contact_name,
-            channel_uuid=message_obj.channel_uuid,
-            msg_external_id=message_event.get("msg_external_id", ""),
-            turn_off_rationale=turn_off_rationale,
-            use_prompt_creation_configurations=project.use_prompt_creation_configurations,
-            conversation_turns_to_include=project.conversation_turns_to_include,
-            exclude_previous_thinking_steps=project.exclude_previous_thinking_steps,
-            project=project,
-            content_base=content_base,
-            foundation_model=foundation_model,
-            inline_agent_configuration=inline_agent_configuration,
-        )
+            final_message_text = task_manager.handle_pending_response(message_obj.project_uuid, message_obj.contact_urn, message_obj.text)
+            message_obj.text = final_message_text
 
-        task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
+            task_manager.store_pending_task_id(message_obj.project_uuid, message_obj.contact_urn, self.request.id)
+
+            if user_email:
+                send_preview_message_to_websocket(
+                    project_uuid=message_obj.project_uuid,
+                    user_email=user_email,
+                    message_data={
+                        "type": "status",
+                        "content": "Starting multi-agent processing",
+                        # "session_id": session_id # TODO: add session_id
+                    }
+                )
+
+            project_use_components = project.use_components
+
+            broadcast, _ = get_action_clients(
+                preview=preview,
+                multi_agents=True,
+                project_use_components=project_use_components
+            )
+
+            flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+
+            rep = ORMTeamRepository()
+            team = rep.get_team(message_obj.project_uuid)
+
+            response = backend.invoke_agents(
+                team=team,
+                input_text=message_obj.text,
+                contact_urn=message_obj.contact_urn,
+                project_uuid=message_obj.project_uuid,
+                preview=preview,
+                rationale_switch=project.rationale_switch,
+                sanitized_urn=message_obj.sanitized_urn,
+                language=language,
+                user_email=user_email,
+                use_components=project.use_components,
+                contact_fields=message_obj.contact_fields_as_json,
+                contact_name=message_obj.contact_name,
+                channel_uuid=message_obj.channel_uuid,
+                msg_external_id=message_event.get("msg_external_id", ""),
+                turn_off_rationale=turn_off_rationale,
+                use_prompt_creation_configurations=project.use_prompt_creation_configurations,
+                conversation_turns_to_include=project.conversation_turns_to_include,
+                exclude_previous_thinking_steps=project.exclude_previous_thinking_steps,
+                project=project,
+                content_base=content_base,
+                foundation_model=foundation_model,
+                inline_agent_configuration=inline_agent_configuration,
+            )
+
+            task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
+        else:
+            response = guardrails_message
 
         if preview:
             response_msg = dispatch(
