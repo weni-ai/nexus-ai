@@ -118,7 +118,7 @@ def _preprocess_message_input(message: Dict) -> Tuple[Dict, Optional[str], bool]
     processed_message['text'] = text
     return processed_message, foundation_model, turn_off_rationale
 
-def _manage_pending_task(task_manager: RedisTaskManager, message_obj: MessageEntity, current_task_id: str) -> str:
+def _manage_pending_task(task_manager: RedisTaskManager, message_obj, current_task_id: str) -> str:
     """
     Handles revoking old tasks and concatenating messages for rapid inputs.
     """
