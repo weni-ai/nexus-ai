@@ -53,7 +53,7 @@ from .actions_client import get_action_clients
 
 client = OpenAI()
 logger = logging.getLogger(__name__)
-
+flows_user_email = settings.FLOW_USER_EMAIL
 
 def improve_rationale_text(rationale_text: str, previous_rationales: list = [], user_input: str = "", is_first_rationale: bool = False) -> str:
     try:
@@ -386,8 +386,6 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
         broadcast, flow_start = get_action_clients(preview)
 
-        flows_user_email = os.environ.get("FLOW_USER_EMAIL")
-
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(
             message.project_uuid
         )
@@ -605,7 +603,6 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         broadcast, _ = get_action_clients(preview, multi_agents=True, project_use_components=project_use_components)
         print("[+ Starting multi-agents +]")
 
-        flows_user_email = os.environ.get("FLOW_USER_EMAIL")
         full_chunks = []
         rationale_history = []
         full_response = ""
