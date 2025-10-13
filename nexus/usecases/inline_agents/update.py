@@ -1,5 +1,3 @@
-from django.conf import settings
-
 from nexus.agents.encryption import encrypt_value
 from nexus.inline_agents.models import Agent, AgentCredential
 
@@ -128,9 +126,6 @@ def update_conversation_data(
     channel_uuid: str
 ):
     from nexus.intelligences.models import Conversation
-
-    if project_uuid not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
-        return
 
     conversation = Conversation.objects.filter(
         project__uuid=project_uuid,
