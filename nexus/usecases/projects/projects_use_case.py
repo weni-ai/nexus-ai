@@ -126,6 +126,9 @@ class ProjectsUseCase:
     ) -> Project:
         user = get_by_email(user_email=user_email)
         org = orgs.get_by_uuid(org_uuid=project_dto.org_uuid)
+
+        openai_backend = "OpenAIBackend"
+
         template_type = None
         if project_dto.is_template:
             from nexus.usecases.template_type.template_type_usecase import TemplateTypeUseCase
@@ -138,7 +141,8 @@ class ProjectsUseCase:
             is_template=project_dto.is_template,
             created_by=user,
             brain_on=project_dto.brain_on,
-            indexer_database=project_dto.indexer_database
+            indexer_database=project_dto.indexer_database,
+            agents_backend=openai_backend
         )
 
         self.create_brain_project_base(
