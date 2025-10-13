@@ -1,6 +1,5 @@
 import pendulum
 
-from django.conf import settings
 from router.repositories import Repository
 from router.services.conversation_service import ConversationService
 
@@ -27,9 +26,6 @@ class MessageService:
         preview: bool = False
     ) -> None:
         """Handle message cache logic - matches original RedisTaskManager.handle_message_cache."""
-        if project_uuid not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
-            return
-
         if preview:
             return
 

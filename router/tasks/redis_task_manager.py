@@ -197,8 +197,6 @@ class RedisTaskManager(TaskManager):
         channel_uuid: str = None,
         preview: bool = False
     ) -> None:
-        if project_uuid not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
-            return
 
         if preview:
             return
