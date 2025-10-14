@@ -206,6 +206,8 @@ def start_inline_agents(
     user_email: str = '',
     task_manager: Optional[RedisTaskManager] = None
 ) -> bool:  # pragma: no cover
+    task_manager = task_manager or get_task_manager()
+    
     try:
         processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(message)
         
