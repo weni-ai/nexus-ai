@@ -2,7 +2,8 @@ import asyncio
 from typing import Any, Dict
 
 import pendulum
-from agents import Agent, Runner, trace
+from agents import Agent, Runner, trace, ModelSettings
+from agents.agent import ToolsToFinalOutputResult
 from django.conf import settings
 from langfuse import get_client
 from redis import Redis
@@ -13,6 +14,7 @@ from inline_agents.backends.openai.adapter import (
     OpenAITeamAdapter,
 )
 from inline_agents.backends.openai.entities import FinalResponse
+from inline_agents.backends.openai.components_tools import COMPONENT_TOOLS
 from inline_agents.backends.openai.hooks import (
     HooksState,
     RunnerHooks,
@@ -203,9 +205,82 @@ class OpenAIBackend(InlineAgentsBackend):
             client, external_team, session, session_id,
             input_text, contact_urn, project_uuid, channel_uuid,
             user_email, preview, rationale_switch, language,
-            turn_off_rationale, msg_external_id, supervisor_hooks, runner_hooks, hooks_state
+            turn_off_rationale, msg_external_id, supervisor_hooks, runner_hooks, hooks_state,
+            use_components
         ))
+
+        # If use_components is True, process the result through the formatter agent
+        if use_components and isinstance(result, FinalResponse):
+            formatted_result = self._use_components_invoke(
+                use_components=use_components,
+                final_response=result,
+                session=session,
+                supervisor_hooks=supervisor_hooks,
+            )
+            return formatted_result
+
         return result
+
+    def _use_components_invoke(
+        self,
+        use_components: bool,
+        final_response: FinalResponse,
+        session,
+        supervisor_hooks,
+    ):
+        if not use_components:
+            return final_response
+
+        # Create formatter agent to process the final response
+        formatter_agent = self._create_formatter_agent(supervisor_hooks)
+
+        # Run the formatter agent with the final response
+        formatter_result = asyncio.run(self._run_formatter_agent(
+            formatter_agent, final_response, session
+        ))
+
+        return formatter_result
+
+    def _create_formatter_agent(self, supervisor_hooks):
+        """Create the formatter agent with component tools"""
+        def custom_tool_handler(context, tool_results):
+            if tool_results:
+                first_result = tool_results[0]
+                return ToolsToFinalOutputResult(
+                    is_final_output=True,
+                    final_output=first_result.output
+                )
+            return ToolsToFinalOutputResult(
+                is_final_output=False,
+                final_output=None
+            )
+
+        formatter_agent = Agent(
+            name="Response Formatter Agent",
+            instructions="Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically.",
+            model=settings.FORMATTER_AGENT_MODEL,
+            tools=COMPONENT_TOOLS,
+            hooks=supervisor_hooks,
+            tool_use_behavior=custom_tool_handler,
+            model_settings=ModelSettings(
+                tool_choice="required",
+                parallel_tool_calls=False
+            )
+        )
+        return formatter_agent
+
+    async def _run_formatter_agent(self, formatter_agent, final_response, session):
+        """Run the formatter agent with the final response"""
+        try:
+            result = await formatter_agent.run_async(
+                input_data=final_response,
+                session=session
+            )
+            return result.final_output
+        except Exception as e:
+            print(f"Error in formatter agent: {e}")
+            # Return the original response if formatter fails
+            return final_response.final_response
 
     async def _invoke_agents_async(
         self,
@@ -226,6 +301,7 @@ class OpenAIBackend(InlineAgentsBackend):
         supervisor_hooks,
         runner_hooks,
         hooks_state,
+        use_components,
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
@@ -237,7 +313,7 @@ class OpenAIBackend(InlineAgentsBackend):
                     if event.type == "run_item_stream_event":
                         if hasattr(event, 'item') and event.item.type == "tool_call_item":
                             hooks_state.tool_calls.update({
-                                event.item.raw_item.name: event.item.raw_item.arguments   
+                                event.item.raw_item.name: event.item.raw_item.arguments
                             })
                 final_response = self._get_final_response(result)
                 root_span.update_trace(
@@ -254,6 +330,7 @@ class OpenAIBackend(InlineAgentsBackend):
 
     def _get_final_response(self, result):
         if isinstance(result.final_output, FinalResponse):
-            return result.final_output.final_response
+            final_response = result.final_output.final_response
         else:
-            return result.final_output
+            final_response = result.final_output
+        return final_response
