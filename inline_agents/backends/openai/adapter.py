@@ -155,6 +155,7 @@ class OpenAITeamAdapter(TeamAdapter):
             use_components=use_components,
             use_human_support=supervisor.get("use_human_support", False),
             components_instructions=supervisor.get("components_instructions", ""),
+            components_instructions_up=supervisor.get("components_instructions_up", ""),
             human_support_instructions=supervisor.get("human_support_instructions", ""),
         )
 
@@ -321,7 +322,7 @@ class OpenAITeamAdapter(TeamAdapter):
             # )
 
             ctx.context.hooks_state.add_tool_info(
-                function_name, 
+                function_name,
                 {
                     "parameters": parameters
                 }
@@ -364,9 +365,9 @@ class OpenAITeamAdapter(TeamAdapter):
                 return json.dumps({
                     "error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"
                 })
-        
+
             ctx.context.hooks_state.add_tool_info(
-                function_name, 
+                function_name,
                 result["response"].get("sessionAttributes", {})
             )
 
@@ -459,7 +460,7 @@ class OpenAITeamAdapter(TeamAdapter):
 
             if "properties" in schema and "required" in schema:
                 schema["required"] = list(schema["properties"].keys())
-    
+
     @classmethod
     def get_supervisor_instructions(
         cls,
@@ -480,6 +481,7 @@ class OpenAITeamAdapter(TeamAdapter):
         use_components,
         use_human_support,
         components_instructions,
+        components_instructions_up,
         human_support_instructions,
     ) -> str:
         template_string = instruction
@@ -503,9 +505,10 @@ class OpenAITeamAdapter(TeamAdapter):
             "HUMAN_SUPPORT_INSTRUCTIONS": human_support_instructions,
             "USE_COMPONENTS": use_components,
             "COMPONENTS_INSTRUCTIONS": components_instructions,
+            "COMPONENTS_INSTRUCTIONS_UP": components_instructions_up,
         }
 
-        context_object = TemplateContext(context_data) 
+        context_object = TemplateContext(context_data)
 
         rendered_content = template.render(context_object)
 

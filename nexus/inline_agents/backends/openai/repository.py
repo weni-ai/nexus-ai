@@ -27,6 +27,7 @@ class OpenAISupervisorRepository(SupervisorRepository):
             "use_human_support": project.human_support,
             "components_instructions": supervisor.components_prompt,
             "formatter_agent_components_instructions": supervisor.components_human_support_prompt,
+            "components_instructions_up": supervisor.components_instructions_up_prompt,
             "human_support_instructions": supervisor.human_support_prompt,
             "tools": cls._get_supervisor_tools(project=project, supervisor=supervisor),
             "foundation_model": cls.get_foundation_model(project=project, supervisor=supervisor, foundation_model=foundation_model),
