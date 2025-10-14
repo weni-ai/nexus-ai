@@ -210,7 +210,7 @@ class OpenAIBackend(InlineAgentsBackend):
         ))
 
         # If use_components is True, process the result through the formatter agent
-        if use_components and isinstance(result, FinalResponse):
+        if use_components:
             formatted_result = self._use_components_invoke(
                 use_components=use_components,
                 final_response=result,
@@ -224,7 +224,7 @@ class OpenAIBackend(InlineAgentsBackend):
     def _use_components_invoke(
         self,
         use_components: bool,
-        final_response: FinalResponse,
+        final_response: str,
         session,
         supervisor_hooks,
     ):
@@ -272,15 +272,17 @@ class OpenAIBackend(InlineAgentsBackend):
     async def _run_formatter_agent(self, formatter_agent, final_response, session):
         """Run the formatter agent with the final response"""
         try:
+            # Create a FinalResponse object for the formatter agent
+            final_response_obj = FinalResponse(final_response=final_response)
             result = await formatter_agent.run_async(
-                input_data=final_response,
+                input_data=final_response_obj,
                 session=session
             )
             return result.final_output
         except Exception as e:
             print(f"Error in formatter agent: {e}")
             # Return the original response if formatter fails
-            return final_response.final_response
+            return final_response
 
     async def _invoke_agents_async(
         self,
