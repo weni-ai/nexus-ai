@@ -210,14 +210,14 @@ class OpenAIBackend(InlineAgentsBackend):
         ))
         return result
 
-    async def _run_formatter_agent_async(self, final_response: str, session, supervisor_hooks):
+    async def _run_formatter_agent_async(self, final_response: str, session, supervisor_hooks, context):
         """Run the formatter agent asynchronously within the trace context"""
         # Create formatter agent to process the final response
         formatter_agent = self._create_formatter_agent(supervisor_hooks)
 
         # Run the formatter agent with the final response
         formatter_result = await self._run_formatter_agent(
-            formatter_agent, final_response, session
+            formatter_agent, final_response, session, context
         )
 
         return formatter_result
@@ -250,13 +250,14 @@ class OpenAIBackend(InlineAgentsBackend):
         )
         return formatter_agent
 
-    async def _run_formatter_agent(self, formatter_agent, final_response, session):
+    async def _run_formatter_agent(self, formatter_agent, final_response, session, context):
         """Run the formatter agent with the final response"""
         try:
             # Create a FinalResponse object for the formatter agent
             result = await Runner.run(
                 starting_agent=formatter_agent,
                 input=final_response,
+                context=context,
                 session=session,
             )
             return result.final_output
@@ -303,7 +304,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 # If use_components is True, process the result through the formatter agent
                 if use_components:
                     formatted_response = await self._run_formatter_agent_async(
-                        final_response, session, supervisor_hooks
+                        final_response, session, supervisor_hooks, external_team["context"]
                     )
                     final_response = formatted_response
 
