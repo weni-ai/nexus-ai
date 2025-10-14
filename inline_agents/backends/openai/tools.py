@@ -1,21 +1,17 @@
-from typing import Any, List
+from typing import Any
 
 import boto3
 from agents import (
     Agent,
     AgentHooks,
-    FunctionToolResult,
     ModelSettings,
     RunContextWrapper,
     function_tool,
-    handoff,
 )
-from agents.agent import ToolsToFinalOutputResult
 from django.conf import settings
 from openai.types.shared import Reasoning
 
-from inline_agents.backends.openai.components_tools import COMPONENT_TOOLS
-from inline_agents.backends.openai.entities import Context, FinalResponse
+from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
 
 
@@ -55,9 +51,6 @@ class Supervisor(Agent):
             )
             return
 
-        self.formatter_agent = self.get_formatter_agent(model, hooks, formatter_agent_instructions)
-        self.format_handoff = self._create_formatter_handoff(self.formatter_agent)
-
         if use_components:
             super().__init__(
                 name=name,
@@ -68,8 +61,6 @@ class Supervisor(Agent):
                 model_settings=ModelSettings(
                     max_tokens=max_tokens,
                 ),
-                handoffs=[self.format_handoff],
-                output_type=FinalResponse
             )
             return
 
@@ -136,48 +127,3 @@ class Supervisor(Agent):
             return "\n".join(all_results)
 
         return "No response found in knowledge base."
-
-    def _create_formatter_handoff(self, formatter_agent: Agent):
-        """Cria o handoff para o agente formatador"""
-        
-        async def on_handoff_to_formatter(
-            ctx: RunContextWrapper[Context],
-            input_data: FinalResponse
-        ):
-            print(f"🔄 Handoff para formatador recebido")
-            print(f"📝 Dados recebidos: {input_data.final_response[:100]}..." if len(input_data.final_response) > 100 else f"📝 Dados: {input_data.final_response}")
-
-        return handoff(
-            agent=formatter_agent,
-            tool_name_override="format_final_response",
-            tool_description_override="Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically.",
-            on_handoff=on_handoff_to_formatter,
-            input_type=FinalResponse
-        )
-
-    def custom_tool_handler(self, context: RunContextWrapper[Context], tool_results: List[FunctionToolResult]) -> ToolsToFinalOutputResult:
-        if tool_results:
-            first_result = tool_results[0]
-            return ToolsToFinalOutputResult(
-                is_final_output=True,
-                final_output=first_result.output
-            )
-        return ToolsToFinalOutputResult(
-            is_final_output=False,
-            final_output=None
-        )
-
-    def get_formatter_agent(self, model: str, hooks, formatter_agent_instructions: str = ""):
-        formatter_agent = Agent(
-            name="Response Formatter Agent",
-            instructions=formatter_agent_instructions,
-            model=settings.FORMATTER_AGENT_MODEL,
-            tools=COMPONENT_TOOLS,
-            hooks=hooks,
-            tool_use_behavior=self.custom_tool_handler,
-            model_settings=ModelSettings(
-                tool_choice="required",
-                parallel_tool_calls=False
-            )
-        )
-        return formatter_agent
