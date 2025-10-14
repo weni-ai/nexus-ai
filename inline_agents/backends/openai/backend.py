@@ -258,10 +258,9 @@ class OpenAIBackend(InlineAgentsBackend):
         """Run the formatter agent with the final response"""
         try:
             # Create a FinalResponse object for the formatter agent
-            final_response_obj = FinalResponse(final_response=final_response)
             result = await Runner.run(
                 starting_agent=formatter_agent,
-                input=final_response_obj,
+                input=final_response,
                 session=session,
             )
             return result.final_output
