@@ -259,9 +259,10 @@ class OpenAIBackend(InlineAgentsBackend):
         try:
             # Create a FinalResponse object for the formatter agent
             final_response_obj = FinalResponse(final_response=final_response)
-            result = await formatter_agent.run_async(
-                input_data=final_response_obj,
-                session=session
+            result = await Runner.run(
+                starting_agent=formatter_agent,
+                input=final_response_obj,
+                session=session,
             )
             return result.final_output
         except Exception as e:
