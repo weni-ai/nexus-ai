@@ -1,76 +1,81 @@
-from typing import Any, Union, Literal
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List, Dict, Any
-from agents import RunContextWrapper, FunctionTool
 import json
+import uuid
+
+from typing import Optional, List, Any
+from agents import RunContextWrapper, FunctionTool
+from pydantic import BaseModel, Field, field_validator
 
 
 class SimpleTextArgs(BaseModel):
-    """Argumentos para componente de texto simples"""
-    text: str = Field(..., max_length=4096, description="Texto da mensagem, máximo 4096 caracteres")
-    header_text: Optional[str] = Field(None, max_length=60, description="Texto do cabeçalho opcional, máximo 60 caracteres")
-    footer: Optional[str] = Field(None, max_length=60, description="Rodapé opcional, máximo 60 caracteres")
+    """Arguments for simple text component"""
+    text: str = Field(..., max_length=4096, description="Message text, maximum 4096 characters")
+    header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
+    footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
+
 
 class QuickRepliesArgs(BaseModel):
-    """Argumentos para componente de respostas rápidas (2-3 opções)"""
-    text: str = Field(..., max_length=1024, description="Texto da mensagem, máximo 1024 caracteres")
-    quick_replies: List[str] = Field(..., min_length=2, max_length=3, description="Lista de 2-3 opções de resposta rápida, máximo 15 caracteres cada")
-    header_text: Optional[str] = Field(None, max_length=60, description="Texto do cabeçalho opcional, máximo 60 caracteres")
-    footer: Optional[str] = Field(None, max_length=60, description="Rodapé opcional, máximo 60 caracteres")
-    
+    """Arguments for quick replies component (2-3 options)"""
+    text: str = Field(..., max_length=1024, description="Message text, maximum 1024 characters")
+    quick_replies: List[str] = Field(..., min_length=2, max_length=3, description="List of 2-3 quick reply options, maximum 20 characters each")
+    header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
+    footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
+
     @field_validator('quick_replies')
     @classmethod
     def validate_quick_replies(cls, v):
-        # Validar tamanho de cada opção (máximo 15 caracteres)
+        # Validate size of each option (maximum 20 characters)
         for i, option in enumerate(v):
-            if len(option) > 15:
-                v[i] = option[:12] + "..."
+            if len(option) > 20:
+                v[i] = option[:20]
         return v
 
+
 class ListItemArgs(BaseModel):
-    """Argumentos para item de lista"""
-    title: str = Field(..., max_length=15, description="Título do item, máximo 15 caracteres")
-    description: str = Field(..., max_length=60, description="Descrição do item, máximo 60 caracteres")
-    uuid: str = Field(..., description="Identificador único do item")
+    """Arguments for list item"""
+    title: str = Field(..., max_length=24, description="Item title, maximum 24 characters")
+    description: str = Field(..., max_length=72, description="Item description, maximum 72 characters")
+
 
 class ListMessageArgs(BaseModel):
-    """Argumentos para componente de lista (4-10 opções com descrições)"""
-    text: str = Field(..., max_length=4096, description="Texto da mensagem, máximo 4096 caracteres")
-    button_text: str = Field(..., max_length=15, description="Texto do botão, máximo 15 caracteres")
-    list_items: List[ListItemArgs] = Field(..., min_length=2, max_length=10, description="Lista de 2-10 itens com título, descrição e uuid")
-    header_text: Optional[str] = Field(None, max_length=60, description="Texto do cabeçalho opcional, máximo 60 caracteres")
-    footer: Optional[str] = Field(None, max_length=60, description="Rodapé opcional, máximo 60 caracteres")
+    """Arguments for list component (4-10 options with descriptions)"""
+    text: str = Field(..., max_length=4096, description="Message text, maximum 4096 characters")
+    button_text: str = Field(..., max_length=20, description="Button text, maximum 20 characters")
+    list_items: List[ListItemArgs] = Field(..., min_length=2, max_length=10, description="List of 2-10 items with title and description")
+    header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
+    footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
+
 
 class CtaMessageArgs(BaseModel):
-    """Argumentos para componente de Call to Action com URL"""
-    text: str = Field(..., max_length=1024, description="Texto da mensagem, máximo 1024 caracteres")
-    url: str = Field(..., description="URL válida para redirecionamento")
-    display_text: str = Field(..., max_length=15, description="Texto do botão, máximo 15 caracteres")
-    header_text: Optional[str] = Field(None, max_length=60, description="Texto do cabeçalho opcional, máximo 60 caracteres")
-    footer: Optional[str] = Field(None, max_length=60, description="Rodapé opcional, máximo 60 caracteres")
+    """Arguments for Call to Action component with URL"""
+    text: str = Field(..., max_length=1024, description="Message text, maximum 1024 characters")
+    url: str = Field(..., description="Valid URL for redirection")
+    display_text: str = Field(..., max_length=20, description="Button text, maximum 20 characters")
+    header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
+    footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
+
 
 class ProductArgs(BaseModel):
-    """Argumentos para produto no catálogo"""
-    product: str = Field(..., description="Nome da categoria de produtos")
-    product_retailer_ids: List[str] = Field(..., min_length=1, description="lista de SKUs IDs dos produtos dessa categoria no formato 'sku_id#seller_id'")
+    """Arguments for catalog product"""
+    product: str = Field(..., description="Product category name")
+    product_retailer_ids: List[str] = Field(..., min_length=1, description="list of product SKU IDs for this category in format 'sku_id#seller_id'")
+
 
 class CatalogMessageArgs(BaseModel):
-    """Argumentos para componente de catálogo de produtos"""
-    text: str = Field(..., max_length=1024, description="Texto da mensagem, máximo 1024 caracteres")
-    action_button_text: str = Field(..., max_length=15, description="Texto do botão de ação, máximo 15 caracteres")
-    products: List[ProductArgs] = Field(..., min_length=1, description="Lista de produtos com nomes e SKUs IDs")
-    header_text: Optional[str] = Field(None, max_length=60, description="Texto do cabeçalho opcional, máximo 60 caracteres")
-    footer: Optional[str] = Field(None, max_length=60, description="Rodapé opcional, máximo 60 caracteres")
-
+    """Arguments for product catalog component"""
+    text: str = Field(..., max_length=1024, description="Message text, maximum 1024 characters")
+    action_button_text: str = Field(..., max_length=20, description="Action button text, maximum 20 characters")
+    products: List[ProductArgs] = Field(..., min_length=1, description="List of products with names and SKU IDs")
+    header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
+    footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
 
 
 async def create_simple_text_message(ctx: RunContextWrapper[Any], args: str) -> str:
     """
-    Cria uma mensagem de texto simples.
-    Use quando: resposta informativa direta, sem interações especiais.
+    Creates a simple text message.
+    Use when: direct informative response, without special interactions.
     """
     parsed = SimpleTextArgs.model_validate_json(args)
-    
+
     msg = {
         "text": parsed.text
     }
@@ -83,17 +88,18 @@ async def create_simple_text_message(ctx: RunContextWrapper[Any], args: str) -> 
 
     if parsed.footer:
         msg["footer"] = parsed.footer
-    
+
     response = [{"msg": msg}]
     return json.dumps(response, ensure_ascii=False)
 
+
 async def create_quick_replies_message(ctx: RunContextWrapper[Any], args: str) -> str:
     """
-    Cria uma mensagem com opções de resposta rápida (2-3 opções).
-    Use quando: usuário precisa escolher entre 2-3 opções simples.
+    Creates a message with quick reply options (2-3 options).
+    Use when: user needs to choose between 2-3 simple options.
     """
     parsed = QuickRepliesArgs.model_validate_json(args)
-    
+
     msg = {
         "text": parsed.text,
         "quick_replies": parsed.quick_replies
@@ -104,28 +110,31 @@ async def create_quick_replies_message(ctx: RunContextWrapper[Any], args: str) -
             "type": "text",
             "text": parsed.header_text
         }
-    
+
     if parsed.footer:
         msg["footer"] = parsed.footer
-    
+
     response = [{"msg": msg}]
     return json.dumps(response, ensure_ascii=False)
 
+
 async def create_list_message(ctx: RunContextWrapper[Any], args: str) -> str:
     """
-    Cria uma mensagem com lista de opções (4-10 opções com descrições).
-    Use quando: usuário precisa escolher entre múltiplas opções que precisam de descrição.
+    Creates a message with list of options (4-10 options with descriptions).
+    Use when: user needs to choose between multiple options that need description.
     """
     parsed = ListMessageArgs.model_validate_json(args)
-    
+
     list_items = []
+
     for item in parsed.list_items:
+        item_uuid = str(uuid.uuid4())
         list_items.append({
             "title": item.title,
             "description": item.description,
-            "uuid": item.uuid
+            "uuid": item_uuid
         })
-    
+
     msg = {
         "text": parsed.text,
         "interaction_type": "list",
@@ -134,26 +143,27 @@ async def create_list_message(ctx: RunContextWrapper[Any], args: str) -> str:
             "list_items": list_items
         }
     }
-    
+
     if parsed.header_text:
         msg["header"] = {
             "type": "text",
             "text": parsed.header_text
         }
-    
+
     if parsed.footer:
         msg["footer"] = parsed.footer
 
     response = [{"msg": msg}]
     return json.dumps(response, ensure_ascii=False)
 
+
 async def create_cta_message(ctx: RunContextWrapper[Any], args: str) -> str:
     """
-    Cria uma mensagem com botão de Call to Action (CTA) com URL.
-    Use quando: usuário precisa acessar um link externo ou página específica.
+    Creates a message with Call to Action (CTA) button with URL.
+    Use when: user needs to access an external link or specific page.
     """
     parsed = CtaMessageArgs.model_validate_json(args)
-    
+
     msg = {
         "text": parsed.text,
         "interaction_type": "cta_url",
@@ -168,190 +178,196 @@ async def create_cta_message(ctx: RunContextWrapper[Any], args: str) -> str:
             "type": "text",
             "text": parsed.header_text
         }
-    
+
     if parsed.footer:
         msg["footer"] = parsed.footer
-    
+
     response = [{"msg": msg}]
     return json.dumps(response, ensure_ascii=False)
 
+
 async def create_catalog_message(ctx: RunContextWrapper[Any], args: str) -> str:
     """
-    Cria uma mensagem com catálogo de produtos.
-    Use quando: produtos foram encontrados e devem ser exibidos ao usuário.
+    Creates a message with product catalog.
+    Use when: products were found and should be displayed to the user.
     """
     parsed = CatalogMessageArgs.model_validate_json(args)
-    
+
     products = []
     for product in parsed.products:
         products.append({
             "product": product.product,
             "product_retailer_ids": product.product_retailer_ids
         })
-    
+
     msg = {
         "text": parsed.text,
         "catalog_message": {
-            "send_catalog": False,  # Sempre False conforme regras
+            "send_catalog": False,  # Always False according to rules
             "action_button_text": parsed.action_button_text,
             "products": products
         }
     }
-    
+
     if parsed.header_text:
         msg["header"] = {
             "type": "text",
             "text": parsed.header_text
         }
-    
+
     if parsed.footer:
         msg["footer"] = parsed.footer
-    
+
     response = [{"msg": msg}]
     return json.dumps(response, ensure_ascii=False)
 
 
 simple_text_tool = FunctionTool(
     name="create_simple_text_message",
-    description="Cria uma mensagem de texto simples. Use para respostas informativas diretas sem interações especiais.",
+    description="Creates a simple text message. Use for direct informative responses without special interactions.",
     params_json_schema=SimpleTextArgs.model_json_schema(),
     on_invoke_tool=create_simple_text_message,
 )
 
 quick_replies_tool = FunctionTool(
     name="create_quick_replies_message", 
-    description="Cria uma mensagem com 2-3 opções de resposta rápida. Use quando o usuário precisa escolher entre opções simples.",
+    description="Creates a message with 2-3 quick reply options. Use when the user needs to choose between simple options.",
     params_json_schema=QuickRepliesArgs.model_json_schema(),
     on_invoke_tool=create_quick_replies_message,
 )
 
 list_message_tool = FunctionTool(
     name="create_list_message",
-    description="Cria uma mensagem com lista de 4-10 opções com descrições. Use quando há múltiplas opções que precisam de explicação.",
+    description="Creates a message with list of 4-10 options with descriptions. Use when there are multiple options that need explanation.",
     params_json_schema=ListMessageArgs.model_json_schema(),
     on_invoke_tool=create_list_message,
 )
 
 cta_message_tool = FunctionTool(
     name="create_cta_message",
-    description="Cria uma mensagem com botão de Call to Action (CTA) com URL. Use quando o usuário precisa acessar um link externo.",
+    description="Creates a message with Call to Action (CTA) button with URL. Use when the user needs to access an external link.",
     params_json_schema=CtaMessageArgs.model_json_schema(),
     on_invoke_tool=create_cta_message,
 )
 
 catalog_message_tool = FunctionTool(
     name="create_catalog_message",
-    description="Cria uma mensagem com catálogo de produtos. Use quando produtos foram encontrados e devem ser exibidos.",
+    description="Creates a message with product catalog. Use when products were found and should be displayed.",
     params_json_schema=CatalogMessageArgs.model_json_schema(),
     on_invoke_tool=create_catalog_message,
 )
 
 
-# Classes para componentes combinados (simple_text + outro componente)
+# Classes for combined components (simple_text + another component)
 class SimpleTextWithQuickRepliesArgs(BaseModel):
-    """Argumentos para componente que combina texto simples + respostas rápidas"""
-    # Campos do simple_text
-    text: str = Field(..., max_length=4096, description="Texto da mensagem inicial, máximo 4096 caracteres")
-    header_text: Optional[str] = Field(None, max_length=60, description="Texto do cabeçalho opcional, máximo 60 caracteres")
-    footer: Optional[str] = Field(None, max_length=60, description="Rodapé opcional, máximo 60 caracteres")
-    
-    # Campos do quick_replies
-    quick_replies_text: str = Field(..., max_length=1024, description="Texto da segunda mensagem com opções, máximo 1024 caracteres")
-    quick_replies: List[str] = Field(..., min_length=2, max_length=3, description="Lista de 2-3 opções de resposta rápida, máximo 15 caracteres cada")
-    
+    """Arguments for component that combines simple text + quick replies"""
+    # simple_text fields
+    text: str = Field(..., max_length=4096, description="Initial message text, maximum 4096 characters")
+    header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
+    footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
+
+    # quick_replies fields
+    quick_replies_text: str = Field(..., max_length=1024, description="Second message text with options, maximum 1024 characters")
+    quick_replies: List[str] = Field(..., min_length=2, max_length=3, description="List of 2-3 quick reply options, maximum 20 characters each")
+
     @field_validator('quick_replies')
     @classmethod
     def validate_quick_replies(cls, v):
-        # Validar tamanho de cada opção (máximo 15 caracteres)
+        # Validate size of each option (maximum 20 characters)
         for i, option in enumerate(v):
-            if len(option) > 15:
-                v[i] = option[:12] + "..."
+            if len(option) > 20:
+                v[i] = option[:20]
         return v
 
+
 class SimpleTextWithListArgs(BaseModel):
-    """Argumentos para componente que combina texto simples + lista"""
-    # Campos do simple_text
-    text: str = Field(..., max_length=4096, description="Texto da mensagem inicial, máximo 4096 caracteres")
-    header_text: Optional[str] = Field(None, max_length=60, description="Texto do cabeçalho opcional, máximo 60 caracteres")
-    footer: Optional[str] = Field(None, max_length=60, description="Rodapé opcional, máximo 60 caracteres")
-    
-    # Campos do list_message
-    list_text: str = Field(..., max_length=4096, description="Texto da segunda mensagem com lista, máximo 4096 caracteres")
-    button_text: str = Field(..., max_length=15, description="Texto do botão, máximo 15 caracteres")
-    list_items: List[ListItemArgs] = Field(..., min_length=2, max_length=10, description="Lista de 2-10 itens com título, descrição e uuid")
+    """Arguments for component that combines simple text + list"""
+    # simple_text fields
+    text: str = Field(..., max_length=4096, description="Initial message text, maximum 4096 characters")
+    header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
+    footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
+
+    # list_message fields
+    list_text: str = Field(..., max_length=4096, description="Second message text with list, maximum 4096 characters")
+    button_text: str = Field(..., max_length=20, description="Button text, maximum 20 characters")
+    list_items: List[ListItemArgs] = Field(..., min_length=2, max_length=10, description="List of 2-10 items with title, description and uuid")
+
 
 class SimpleTextWithCtaArgs(BaseModel):
-    """Argumentos para componente que combina texto simples + CTA"""
-    # Campos do simple_text
-    text: str = Field(..., max_length=4096, description="Texto da mensagem inicial com a mensagem do supervisor, máximo 4096 caracteres")
-    header_text: Optional[str] = Field(None, max_length=60, description="Texto do cabeçalho opcional, máximo 60 caracteres")
-    footer: Optional[str] = Field(None, max_length=60, description="Rodapé opcional, máximo 60 caracteres")
-    
-    # Campos do cta_message
-    cta_text: str = Field(..., max_length=1024, description="Texto da segunda mensagem com CTA com a mensagem do supervisor, máximo 1024 caracteres")
-    url: str = Field(..., description="URL válida para redirecionamento")
-    display_text: str = Field(..., max_length=15, description="Texto do botão, máximo 15 caracteres")
+    """Arguments for component that combines simple text + CTA"""
+    # simple_text fields
+    text: str = Field(..., max_length=4096, description="Initial message text with supervisor message, maximum 4096 characters")
+    header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
+    footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
+
+    # cta_message fields
+    cta_text: str = Field(..., max_length=1024, description="Second message text with CTA with supervisor message, maximum 1024 characters")
+    url: str = Field(..., description="Valid URL for redirection")
+    display_text: str = Field(..., max_length=20, description="Button text, maximum 20 characters")
+
 
 class SimpleTextWithCatalogArgs(BaseModel):
-    """Argumentos para componente que combina texto simples + catálogo"""
-    # Campos do simple_text
-    text: str = Field(..., max_length=4096, description="Texto da mensagem inicial, máximo 4096 caracteres")
-    header_text: Optional[str] = Field(None, max_length=60, description="Texto do cabeçalho opcional, máximo 60 caracteres")
-    footer: Optional[str] = Field(None, max_length=60, description="Rodapé opcional, máximo 60 caracteres")
-    
-    # Campos do catalog_message
-    catalog_text: str = Field(..., max_length=1024, description="Texto da segunda mensagem com catálogo, máximo 1024 caracteres")
-    action_button_text: str = Field(..., max_length=15, description="Texto do botão de ação, máximo 15 caracteres")
-    products: List[ProductArgs] = Field(..., min_length=1, description="Lista de produtos com nomes e SKUs IDs")
+    """Arguments for component that combines simple text + catalog"""
+    # simple_text fields
+    text: str = Field(..., max_length=4096, description="Initial message text, maximum 4096 characters")
+    header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
+    footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
+
+    # catalog_message fields
+    catalog_text: str = Field(..., max_length=1024, description="Second message text with catalog, maximum 1024 characters")
+    action_button_text: str = Field(..., max_length=20, description="Action button text, maximum 20 characters")
+    products: List[ProductArgs] = Field(..., min_length=1, description="List of products with names and SKU IDs")
 
 
-# Funções para componentes combinados
+# Functions for combined components
 async def create_simple_text_with_quick_replies(ctx: RunContextWrapper[Any], args: str) -> str:
     """
-    Cria uma mensagem de texto simples seguida de uma mensagem com respostas rápidas.
-    Use quando: precisa dar uma informação inicial e depois oferecer opções de escolha.
+    Creates a simple text message followed by a message with quick replies.
+    Use when: need to give initial information and then offer choice options.
     """
     parsed = SimpleTextWithQuickRepliesArgs.model_validate_json(args)
-    
-    # Primeira mensagem (simple_text)
+
+    # First message (simple_text)
     msg1 = {"text": parsed.text}
     if parsed.header_text:
         msg1["header"] = {"type": "text", "text": parsed.header_text}
     if parsed.footer:
         msg1["footer"] = parsed.footer
-    
-    # Segunda mensagem (quick_replies)
+
+    # Second message (quick_replies)
     msg2 = {
         "text": parsed.quick_replies_text,
         "quick_replies": parsed.quick_replies
     }
-    
+
     response = [{"msg": msg1}, {"msg": msg2}]
     return json.dumps(response, ensure_ascii=False)
 
+
 async def create_simple_text_with_list(ctx: RunContextWrapper[Any], args: str) -> str:
     """
-    Cria uma mensagem de texto simples seguida de uma mensagem com lista.
-    Use quando: precisa dar uma informação inicial e depois mostrar opções detalhadas.
+    Creates a simple text message followed by a message with list.
+    Use when: need to give initial information and then show detailed options.
     """
     parsed = SimpleTextWithListArgs.model_validate_json(args)
-    
-    # Primeira mensagem (simple_text)
+
+    # First message (simple_text)
     msg1 = {"text": parsed.text}
     if parsed.header_text:
         msg1["header"] = {"type": "text", "text": parsed.header_text}
     if parsed.footer:
         msg1["footer"] = parsed.footer
-    
-    # Segunda mensagem (list_message)
+
+    # Second message (list_message)
     list_items = []
     for item in parsed.list_items:
+        item_uuid = str(uuid.uuid4())
         list_items.append({
             "title": item.title,
             "description": item.description,
-            "uuid": item.uuid
+            "uuid": item_uuid
         })
-    
+
     msg2 = {
         "text": parsed.list_text,
         "interaction_type": "list",
@@ -360,25 +376,26 @@ async def create_simple_text_with_list(ctx: RunContextWrapper[Any], args: str) -
             "list_items": list_items
         }
     }
-    
+
     response = [{"msg": msg1}, {"msg": msg2}]
     return json.dumps(response, ensure_ascii=False)
 
+
 async def create_simple_text_with_cta(ctx: RunContextWrapper[Any], args: str) -> str:
     """
-    Cria uma mensagem de texto simples seguida de uma mensagem com CTA.
-    Use quando: precisa dar uma informação inicial e depois oferecer um link/ação.
+    Creates a simple text message followed by a message with CTA.
+    Use when: need to give initial information and then offer a link/action.
     """
     parsed = SimpleTextWithCtaArgs.model_validate_json(args)
-    
-    # Primeira mensagem (simple_text)
+
+    # First message (simple_text)
     msg1 = {"text": parsed.text}
     if parsed.header_text:
         msg1["header"] = {"type": "text", "text": parsed.header_text}
     if parsed.footer:
         msg1["footer"] = parsed.footer
-    
-    # Segunda mensagem (cta_message)
+
+    # Second message (cta_message)
     msg2 = {
         "text": parsed.cta_text,
         "interaction_type": "cta_url",
@@ -387,32 +404,33 @@ async def create_simple_text_with_cta(ctx: RunContextWrapper[Any], args: str) ->
             "display_text": parsed.display_text
         }
     }
-    
+
     response = [{"msg": msg1}, {"msg": msg2}]
     return json.dumps(response, ensure_ascii=False)
 
+
 async def create_simple_text_with_catalog(ctx: RunContextWrapper[Any], args: str) -> str:
     """
-    Cria uma mensagem de texto simples seguida de uma mensagem com catálogo.
-    Use quando: precisa dar uma informação inicial e depois mostrar produtos.
+    Creates a simple text message followed by a message with catalog.
+    Use when: need to give initial information and then show products.
     """
     parsed = SimpleTextWithCatalogArgs.model_validate_json(args)
-    
-    # Primeira mensagem (simple_text)
+
+    # First message (simple_text)
     msg1 = {"text": parsed.text}
     if parsed.header_text:
         msg1["header"] = {"type": "text", "text": parsed.header_text}
     if parsed.footer:
         msg1["footer"] = parsed.footer
-    
-    # Segunda mensagem (catalog_message)
+
+    # Second message (catalog_message)
     products = []
     for product in parsed.products:
         products.append({
             "product": product.product,
             "product_retailer_ids": product.product_retailer_ids
         })
-    
+
     msg2 = {
         "text": parsed.catalog_text,
         "catalog_message": {
@@ -421,36 +439,36 @@ async def create_simple_text_with_catalog(ctx: RunContextWrapper[Any], args: str
             "products": products
         }
     }
-    
+
     response = [{"msg": msg1}, {"msg": msg2}]
     return json.dumps(response, ensure_ascii=False)
 
 
-# Ferramentas para componentes combinados
+# Tools for combined components
 simple_text_with_quick_replies_tool = FunctionTool(
     name="create_simple_text_with_quick_replies",
-    description="Cria uma mensagem de texto simples seguida de opções de resposta rápida. Use quando precisa informar algo e depois oferecer escolhas.",
+    description="Creates a simple text message followed by quick reply options. Use MANDATORILY when the response text is extensive and exceeds the character limit of the pure quick_replies component (which has a limit in the 'text' field). Separates the extensive informative content in the first message and the choice options in the second.",
     params_json_schema=SimpleTextWithQuickRepliesArgs.model_json_schema(),
     on_invoke_tool=create_simple_text_with_quick_replies,
 )
 
 simple_text_with_list_tool = FunctionTool(
     name="create_simple_text_with_list",
-    description="Cria uma mensagem de texto simples seguida de uma lista de opções. Use quando precisa informar algo e depois mostrar opções detalhadas.",
+    description="Creates a simple text message followed by a list of options. Use MANDATORILY when the response text is extensive and exceeds the character limit of the pure list_message component (which has a limit in the 'text' field). Separates the extensive informative content in the first message and the detailed options in the second.",
     params_json_schema=SimpleTextWithListArgs.model_json_schema(),
     on_invoke_tool=create_simple_text_with_list,
 )
 
 simple_text_with_cta_tool = FunctionTool(
     name="create_simple_text_with_cta",
-    description="Cria uma mensagem de texto simples seguida de um botão CTA. Use quando precisa informar algo e depois oferecer um link/ação.",
+    description="Creates a simple text message followed by a CTA button. Use MANDATORILY when the response text is extensive and exceeds the character limit of the pure cta_url component (which has a limit in the 'text' field). Separates the extensive informative content in the first message and the action button in the second.",
     params_json_schema=SimpleTextWithCtaArgs.model_json_schema(),
     on_invoke_tool=create_simple_text_with_cta,
 )
 
 simple_text_with_catalog_tool = FunctionTool(
     name="create_simple_text_with_catalog",
-    description="Cria uma mensagem de texto simples seguida de um catálogo de produtos. Use quando precisa informar algo e depois mostrar produtos.",
+    description="Creates a simple text message followed by a product catalog. Use MANDATORILY when the response text is extensive and exceeds the character limit of the pure catalog_message component (which has a limit in the 'text' field). Separates the extensive informative content in the first message and the product catalog in the second.",
     params_json_schema=SimpleTextWithCatalogArgs.model_json_schema(),
     on_invoke_tool=create_simple_text_with_catalog,
 )
@@ -462,7 +480,7 @@ COMPONENT_TOOLS = [
     list_message_tool,
     cta_message_tool,
     catalog_message_tool,
-    # Componentes combinados
+    # Combined components
     simple_text_with_quick_replies_tool,
     simple_text_with_list_tool,
     simple_text_with_cta_tool,
