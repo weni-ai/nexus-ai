@@ -208,36 +208,17 @@ class OpenAIBackend(InlineAgentsBackend):
             turn_off_rationale, msg_external_id, supervisor_hooks, runner_hooks, hooks_state,
             use_components
         ))
-
-        # If use_components is True, process the result through the formatter agent
-        if use_components:
-            formatted_result = self._use_components_invoke(
-                use_components=use_components,
-                final_response=result,
-                session=session,
-                supervisor_hooks=supervisor_hooks,
-            )
-            return formatted_result
-
         return result
 
-    def _use_components_invoke(
-        self,
-        use_components: bool,
-        final_response: str,
-        session,
-        supervisor_hooks,
-    ):
-        if not use_components:
-            return final_response
-
+    async def _run_formatter_agent_async(self, final_response: str, session, supervisor_hooks):
+        """Run the formatter agent asynchronously within the trace context"""
         # Create formatter agent to process the final response
         formatter_agent = self._create_formatter_agent(supervisor_hooks)
 
         # Run the formatter agent with the final response
-        formatter_result = asyncio.run(self._run_formatter_agent(
+        formatter_result = await self._run_formatter_agent(
             formatter_agent, final_response, session
-        ))
+        )
 
         return formatter_result
 
@@ -318,6 +299,14 @@ class OpenAIBackend(InlineAgentsBackend):
                                 event.item.raw_item.name: event.item.raw_item.arguments
                             })
                 final_response = self._get_final_response(result)
+
+                # If use_components is True, process the result through the formatter agent
+                if use_components:
+                    formatted_response = await self._run_formatter_agent_async(
+                        final_response, session, supervisor_hooks
+                    )
+                    final_response = formatted_response
+
                 root_span.update_trace(
                     input=input_text,
                     output=final_response,
@@ -328,7 +317,8 @@ class OpenAIBackend(InlineAgentsBackend):
                         "preview": preview,
                     }
                 )
-        return self._get_final_response(result)
+
+        return final_response
 
     def _get_final_response(self, result):
         if isinstance(result.final_output, FinalResponse):
