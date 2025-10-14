@@ -209,14 +209,20 @@ class OpenAIBackend(InlineAgentsBackend):
             use_components
         ))
 
+        print("="*60 + " COMPONENTS DEBUG " + "="*60)
+        print("[DEBUG] Invoked agents result: ", result)
+
         # If use_components is True, process the result through the formatter agent
         if use_components:
+            print("[DEBUG] Start using components")
             formatted_result = self._use_components_invoke(
                 use_components=use_components,
                 final_response=result,
                 session=session,
                 supervisor_hooks=supervisor_hooks,
             )
+            print("[DEBUG] Formatted result: ", formatted_result)
+            print("="*60 + " COMPONENTS DEBUG " + "="*60)
             return formatted_result
 
         return result
@@ -228,16 +234,22 @@ class OpenAIBackend(InlineAgentsBackend):
         session,
         supervisor_hooks,
     ):
+        print("[DEBUG] Use components: ", use_components)
         if not use_components:
             return final_response
 
         # Create formatter agent to process the final response
+        print("[DEBUG] Create formatter agent")
         formatter_agent = self._create_formatter_agent(supervisor_hooks)
+        print("[DEBUG] Formatter agent created")
 
         # Run the formatter agent with the final response
+        print("[DEBUG] Run formatter agent")
         formatter_result = asyncio.run(self._run_formatter_agent(
             formatter_agent, final_response, session
         ))
+
+        print("[DEBUG] Formatter agent result: ", formatter_result)
 
         return formatter_result
 
