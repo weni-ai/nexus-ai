@@ -219,7 +219,6 @@ class OpenAITeamAdapter(TeamAdapter):
             preview=preview,
             max_tokens=max_tokens,
             use_components=use_components,
-            formatter_agent_instructions=supervisor.get("formatter_agent_components_instructions", ""),
         )
 
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
@@ -237,7 +236,8 @@ class OpenAITeamAdapter(TeamAdapter):
                 session=session,
                 input_text=input_text,
                 hooks_state=hooks_state,
-            )
+            ),
+            "formatter_agent_instructions": supervisor.get("formatter_agent_components_instructions", ""),
         }
 
     @classmethod
