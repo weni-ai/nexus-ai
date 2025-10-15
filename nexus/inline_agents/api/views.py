@@ -6,6 +6,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from inline_agents.backends import BackendsRegistry
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     IntegratedAgentSerializer,
@@ -514,9 +515,6 @@ class AgentEndSessionView(APIView):
     
         projects_use_case = ProjectsUseCase()
         agents_backend = projects_use_case.get_agents_backend_by_project(project_uuid)
-        
-        from inline_agents.backends import BackendsRegistry
-        
         backend = BackendsRegistry.get_backend(agents_backend)
         backend.end_session(message_obj.project_uuid, message_obj.sanitized_urn)
         return Response({

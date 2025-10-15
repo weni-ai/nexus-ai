@@ -7,10 +7,6 @@ def classify(
     classifier: Classifier,
     message: str,
     flows: List,
-    language: str = None
+    language: str = settings.WENIGPT_DEFAULT_LANGUAGE
 ) -> str:
-    if language is None:
-        from django.conf import settings
-        language = settings.WENIGPT_DEFAULT_LANGUAGE
-        
     return classifier.predict(message, flows, language)

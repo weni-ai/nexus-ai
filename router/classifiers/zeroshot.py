@@ -5,21 +5,23 @@ from router.clients.zeroshot import ZeroshotClient, NexusZeroshotClient
 
 from router.entities.flow import FlowDTO
 
+from django.conf import settings
+
 
 class ZeroshotException(Exception):
     pass
 
 
 class ZeroshotClassifier(Classifier):
+
     def __init__(
         self,
         version: str = None,
         client=NexusZeroshotClient,
-        chatbot_goal: str = None
+        chatbot_goal: str = settings.DEFAULT_AGENT_GOAL
     ) -> None:
-        from django.conf import settings
         self.__version = version
-        self.chatbot_goal = chatbot_goal or settings.DEFAULT_AGENT_GOAL
+        self.chatbot_goal = chatbot_goal
         self.client = client
 
     def predict(self, message: str, flows: List[FlowDTO], language: str = "por") -> str:

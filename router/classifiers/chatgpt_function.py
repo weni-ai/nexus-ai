@@ -3,6 +3,7 @@ from openai import OpenAI
 
 from typing import List, Dict
 
+from django.conf import settings
 
 from router.classifiers.interfaces import Classifier, OpenAIClientInterface
 
@@ -31,15 +32,15 @@ class OpenAIClient(OpenAIClientInterface):  # pragma: no cover
 
 
 class ChatGPTFunctionClassifier(Classifier):
+
     def __init__(
         self,
         agent_goal: str,
-        client: OpenAIClientInterface = None,
-        chatgpt_model: str = None,
+        client: OpenAIClientInterface = OpenAIClient(settings.OPENAI_API_KEY),
+        chatgpt_model: str = settings.FUNCTION_CALLING_CHATGPT_MODEL,
     ):
-        from django.conf import settings
-        self.chatgpt_model = chatgpt_model or settings.FUNCTION_CALLING_CHATGPT_MODEL
-        self.client = client or OpenAIClient(settings.OPENAI_API_KEY)
+        self.chatgpt_model = chatgpt_model
+        self.client = client
         self.prompt = settings.FUNCTION_CALLING_CHATGPT_PROMPT
         self.flow_name_mapping = {}
         self.agent_goal = agent_goal
