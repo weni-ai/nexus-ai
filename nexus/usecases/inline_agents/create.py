@@ -31,7 +31,6 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             collaboration_instructions=agent["description"],
             project=project,
             instruction=instructions,
-            foundation_model=settings.AWS_BEDROCK_AGENTS_MODEL_ID[0],
             backend_foundation_models=settings.DEFAULT_FOUNDATION_MODELS,
         )
         self.handle_tools(agent_obj, project, agent["tools"], files, str(project.uuid))
