@@ -295,6 +295,8 @@ class OpenAIBackend(InlineAgentsBackend):
             trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
             print(f"[+ DEBUG +] Trace ID: {trace_id}")
             with trace(workflow_name=project_uuid, trace_id=trace_id):
+                # Extract formatter_agent_instructions before passing to Runner.run_streamed
+                formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
                 result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
                 async for event in result.stream_events():
                     if event.type == "run_item_stream_event":
@@ -308,7 +310,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 if use_components:
                     formatted_response = await self._run_formatter_agent_async(
                         final_response, session, supervisor_hooks, external_team["context"],
-                        external_team.get("formatter_agent_instructions", "")
+                        formatter_agent_instructions
                     )
                     final_response = formatted_response
 
