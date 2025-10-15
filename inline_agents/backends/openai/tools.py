@@ -31,7 +31,6 @@ class Supervisor(Agent):
         preview: bool = False,
         max_tokens: int | None = None,
         use_components: bool = False,
-        formatter_agent_instructions: str = "",
     ):
         tools.extend(self.function_tools())
         if model in settings.MODELS_WITH_REASONING:
