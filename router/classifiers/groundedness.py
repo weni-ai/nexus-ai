@@ -6,8 +6,6 @@ from typing import Dict
 from router.classifiers.interfaces import OpenAIClientInterface
 from openai import OpenAI
 
-from django.conf import settings
-
 from nexus.logs.models import MessageLog
 
 
@@ -21,6 +19,8 @@ class OpenAIClient(OpenAIClientInterface):  # pragma: no cover
         self,
         messages,
     ):
+        from django.conf import settings
+
         groundedness_model = settings.GROUNDEDNESS_MODEL
         return self.client.chat.completions.create(
             model=groundedness_model,
@@ -29,24 +29,24 @@ class OpenAIClient(OpenAIClientInterface):  # pragma: no cover
 
 
 class Groundedness:
-
     def __init__(
         self,
         llm_response: str,
         llm_chunk_used: str,
         log: MessageLog,
-        system_prompt: str = settings.GROUNDEDNESS_SYSTEM_PROMPT,
-        user_prompt: str = settings.GROUNDEDNESS_USER_PROMPT,
-        score_avg_threshold: int = settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD,
+        system_prompt: str = None,
+        user_prompt: str = None,
+        score_avg_threshold: int = None,
     ) -> None:
+        from django.conf import settings
 
         self.client = OpenAIClient(settings.OPENAI_API_KEY)
         self.llm_chunk_used = llm_chunk_used
         self.llm_response = llm_response
         self.log = log
-        self.system_prompt = system_prompt.replace("\\n", "\n")
-        self.user_prompt = user_prompt.replace("\\n", "\n")
-        self.score_avg_threshold = score_avg_threshold
+        self.system_prompt = (system_prompt or settings.GROUNDEDNESS_SYSTEM_PROMPT).replace("\\n", "\n")
+        self.user_prompt = (user_prompt or settings.GROUNDEDNESS_USER_PROMPT).replace("\\n", "\n")
+        self.score_avg_threshold = score_avg_threshold or settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD
 
     def extract_score_and_sentences(
         self,

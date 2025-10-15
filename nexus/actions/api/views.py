@@ -47,7 +47,6 @@ from nexus.usecases.intelligences.exceptions import (
     IntelligencePermissionDenied,
 )
 from router.entities import Message as UserMessage
-from router.tasks.invoke import start_inline_agents
 from router.tasks.tasks import start_route
 
 
@@ -227,6 +226,8 @@ class MessagePreviewView(APIView):
             )
             if project.inline_agent_switch:
                 print("[+ Starting Inline Agent +]")
+                from router.tasks.invoke import start_inline_agents
+                
                 start_inline_agents.apply_async(
                     kwargs={
                         'message': message.dict(),
