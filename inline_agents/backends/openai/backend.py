@@ -210,10 +210,10 @@ class OpenAIBackend(InlineAgentsBackend):
         ))
         return result
 
-    async def _run_formatter_agent_async(self, final_response: str, session, supervisor_hooks, context):
+    async def _run_formatter_agent_async(self, final_response: str, session, supervisor_hooks, context, formatter_instructions=""):
         """Run the formatter agent asynchronously within the trace context"""
         # Create formatter agent to process the final response
-        formatter_agent = self._create_formatter_agent(supervisor_hooks)
+        formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions)
 
         # Run the formatter agent with the final response
         formatter_result = await self._run_formatter_agent(
@@ -222,7 +222,7 @@ class OpenAIBackend(InlineAgentsBackend):
 
         return formatter_result
 
-    def _create_formatter_agent(self, supervisor_hooks):
+    def _create_formatter_agent(self, supervisor_hooks, formatter_instructions=""):
         """Create the formatter agent with component tools"""
         def custom_tool_handler(context, tool_results):
             if tool_results:
@@ -236,9 +236,12 @@ class OpenAIBackend(InlineAgentsBackend):
                 final_output=None
             )
 
+        # Use custom instructions if provided, otherwise use default
+        instructions = formatter_instructions or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
+
         formatter_agent = Agent(
             name="Response Formatter Agent",
-            instructions="Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically.",
+            instructions=instructions,
             model=settings.FORMATTER_AGENT_MODEL,
             tools=COMPONENT_TOOLS,
             hooks=supervisor_hooks,
@@ -304,7 +307,8 @@ class OpenAIBackend(InlineAgentsBackend):
                 # If use_components is True, process the result through the formatter agent
                 if use_components:
                     formatted_response = await self._run_formatter_agent_async(
-                        final_response, session, supervisor_hooks, external_team["context"]
+                        final_response, session, supervisor_hooks, external_team["context"],
+                        external_team.get("formatter_agent_instructions", "")
                     )
                     final_response = formatted_response
 
