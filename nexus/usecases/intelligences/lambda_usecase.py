@@ -261,6 +261,11 @@ def create_lambda_conversation(
                 "resolution": resolution_choice_value,
                 "topic": topic
             }
+            
+            new_name = payload.get("name")
+            if new_name:
+                update_data["contact_name"] = new_name
+            
             conversation_queryset.update(**update_data)
         else:
             # TODO: Temp fix for older conversations, remove later
