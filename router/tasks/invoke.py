@@ -269,6 +269,7 @@ def start_inline_agents(
             preview=preview, multi_agents=True, project_use_components=project.use_components
         )
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+        agents_backend = project.agents_backend
 
         if preview:
             response_msg = dispatch(
@@ -277,6 +278,7 @@ def start_inline_agents(
                 direct_message=broadcast,
                 user_email=flows_user_email,
                 full_chunks=[],
+                backend=agents_backend
             )
             send_preview_message_to_websocket(
                 project_uuid=message_obj.project_uuid,
@@ -294,6 +296,7 @@ def start_inline_agents(
                 direct_message=broadcast,
                 user_email=flows_user_email,
                 full_chunks=[],
+                backend=agents_backend
             )
 
     except Exception as e:

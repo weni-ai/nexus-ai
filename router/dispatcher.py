@@ -15,7 +15,8 @@ def dispatch(
         llm_response: str = None,
         direct_message: DirectMessage = None,
         flow_start: FlowStart = None,
-        full_chunks: List[Dict] = None
+        full_chunks: List[Dict] = None,
+        backend: str = "BedrockBackend"
 ):
     urns = [message.contact_urn]
 
@@ -25,7 +26,8 @@ def dispatch(
             urns,
             message.project_uuid,
             user_email,
-            full_chunks=full_chunks
+            full_chunks=full_chunks,
+            backend=backend
         )
 
     return flow_start.start_flow(

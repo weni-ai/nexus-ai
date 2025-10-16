@@ -7,8 +7,6 @@ from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
 from nexus.usecases.intelligences.lambda_usecase import create_lambda_conversation
 
-from django.conf import settings
-
 
 class ConversationConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
@@ -26,10 +24,6 @@ class ConversationConsumer(EDAConsumer):
                 external_id=body.get("id"),
                 name=body.get("contact_name")
             )
-
-            if body.get("project_uuid") not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
-                message.channel.basic_ack(message.delivery_tag)
-                return
 
             create_lambda_conversation.delay(window_conversation_dto.dict())
 
