@@ -272,16 +272,15 @@ def create_lambda_conversation(
 
         resolution_choice_value = ResolutionEntities.convert_resolution_string_to_int(resolution)
 
-        update_data = {
-            "start_date": payload.get("start_date"),
-            "end_date": payload.get("end_date"),
-            "has_chats_room": payload.get("has_chats_room"),
-            "external_id": payload.get("external_id"),
-            "resolution": resolution_choice_value,
-            "topic": topic
-        }
-
         if conversation_queryset.exists():
+            update_data = {
+                "start_date": payload.get("start_date"),
+                "end_date": payload.get("end_date"),
+                "has_chats_room": payload.get("has_chats_room"),
+                "external_id": payload.get("external_id"),
+                "resolution": resolution_choice_value,
+                "topic": topic
+            }
             conversation_queryset.update(**update_data)
         else:
             # TODO: Temp fix for older conversations, remove later
@@ -294,7 +293,7 @@ def create_lambda_conversation(
                 has_chats_room=payload.get("has_chats_room"),
                 contact_name=payload.get("name"),
                 channel_uuid=payload.get("channel_uuid"),
-                resolution=resolution_choice_value,
+                resolution=ResolutionEntities.IN_PROGRESS,
                 topic=topic
             )
 
