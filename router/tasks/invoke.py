@@ -235,8 +235,10 @@ def start_inline_agents(
         message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
 
         project, content_base, inline_agent_configuration = get_project_and_content_base_data(message_obj.project_uuid)
-        backend = BackendsRegistry.get_backend(project.agents_backend)
-        team = ORMTeamRepository(agents_backend=project.agents_backend, project=project).get_team(message_obj.project_uuid)
+        
+        agents_backend = project.agents_backend
+        backend = BackendsRegistry.get_backend(agents_backend)
+        team = ORMTeamRepository(agents_backend=agents_backend, project=project).get_team(message_obj.project_uuid)
 
         response = backend.invoke_agents(
             team=team,
@@ -269,7 +271,6 @@ def start_inline_agents(
             preview=preview, multi_agents=True, project_use_components=project.use_components
         )
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
-        agents_backend = project.agents_backend
 
         if preview:
             response_msg = dispatch(
