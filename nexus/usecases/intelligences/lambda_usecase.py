@@ -252,6 +252,7 @@ def create_lambda_conversation(
 
         resolution_choice_value = ResolutionEntities.convert_resolution_string_to_int(resolution)
 
+        contact_name = payload.get("name")
         if conversation_queryset.exists():
             update_data = {
                 "start_date": payload.get("start_date"),
@@ -262,9 +263,8 @@ def create_lambda_conversation(
                 "topic": topic
             }
             
-            new_name = payload.get("name")
-            if new_name:
-                update_data["contact_name"] = new_name
+            if contact_name:
+                update_data["contact_name"] = contact_name
             
             conversation_queryset.update(**update_data)
         else:
@@ -276,7 +276,7 @@ def create_lambda_conversation(
                 start_date=payload.get("start_date"),
                 end_date=payload.get("end_date"),
                 has_chats_room=payload.get("has_chats_room"),
-                contact_name=payload.get("name"),
+                contact_name=contact_name,
                 channel_uuid=payload.get("channel_uuid"),
                 resolution=ResolutionEntities.IN_PROGRESS,
                 topic=topic
