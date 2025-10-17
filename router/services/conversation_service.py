@@ -1,5 +1,7 @@
 from typing import Optional
 from nexus.usecases.intelligences.create import ConversationUseCase
+from nexus.intelligences.models import Conversation
+from router.repositories.entities import ResolutionEntities
 
 
 class ConversationService:
@@ -51,3 +53,21 @@ class ConversationService:
             channel_uuid=channel_uuid,
             contact_name=contact_name
         )
+
+    def get_or_create_conversation(self, project_uuid, contact_urn, external_id, channel_uuid=None, contact_name=None):
+        if not external_id:
+            # Or handle this error more gracefully, but we need the ID
+            raise ValueError("external_id is required to get or create a conversation")
+
+        obj, created = Conversation.objects.get_or_create(
+            project_id=project_uuid,
+            external_id=external_id,
+            defaults={
+                'contact_urn': contact_urn,
+                'contact_name': contact_name,
+                'channel_uuid': channel_uuid,
+                'resolution': ResolutionEntities.IN_PROGRESS  # Set default resolution
+            }
+        )
+        
+        return obj
