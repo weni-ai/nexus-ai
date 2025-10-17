@@ -20,7 +20,7 @@ class ProjectTestCase(TestCase):
         self.org = OrgFactory()
         self.user = self.org.created_by
         self.default_prompt_creation_configurations = {
-            "use_prompt_creation_configurations": False,
+            "use_prompt_creation_configurations": True,
             "conversation_turns_to_include": 10,
             "exclude_previous_thinking_steps": True
         }
@@ -54,7 +54,7 @@ class ProjectTestCase(TestCase):
         self.assertEqual(self.project.conversation_turns_to_include, 10)
     
     def test_default_prompt_creation_configurations(self):
-        self.assertFalse(self.project.use_prompt_creation_configurations)
+        self.assertTrue(self.project.use_prompt_creation_configurations)
         self.assertTrue(self.project.exclude_previous_thinking_steps)
         self.assertEqual(self.project.conversation_turns_to_include, 10)
     

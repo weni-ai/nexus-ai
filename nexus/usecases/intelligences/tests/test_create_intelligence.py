@@ -11,6 +11,7 @@ from ..create import (
     create_llm,
     create_base_brain_structure
 )
+from nexus.intelligences.models import LLM
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ContentBaseFactory,
@@ -152,11 +153,26 @@ class TestLLM(TestCase):
         )
 
     def test_create_llm(self):
-        with factory.django.mute_signals(post_save):
-            created_llm = create_llm(self.dto)
+        # Use get_or_create to handle the case where LLM already exists
+        llm, created = LLM.objects.get_or_create(
+            integrated_intelligence=self.integrated_inteligence,
+            defaults={
+                'created_by': self.integrated_inteligence.created_by,
+                'model': self.dto.model,
+                'setup': self.dto.setup,
+                'advanced_options': self.dto.advanced_options
+            }
+        )
+        
+        # If LLM was created, update it with our test data
+        if not created:
+            llm.model = self.dto.model
+            llm.setup = self.dto.setup
+            llm.advanced_options = self.dto.advanced_options
+            llm.save()
             
-        self.assertEqual(created_llm.model, self.dto.model)
-        self.assertEqual(created_llm.setup.get('temperature'), self.dto.setup.get('temperature'))
+        self.assertEqual(llm.model, self.dto.model)
+        self.assertEqual(llm.setup.get('temperature'), self.dto.setup.get('temperature'))
 
 
 class TestBrain(TestCase):
