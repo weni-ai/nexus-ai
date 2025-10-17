@@ -95,7 +95,8 @@ def get_log_by_question_uuid(user_question_uuid: str) -> ContentBaseLogs:
 
 
 def get_or_create_default_integrated_intelligence_by_project(
-    project_uuid: str
+    project_uuid: str,
+    project: Project = None
 ) -> IntegratedIntelligence:
     try:
         return IntegratedIntelligence.objects.get(
@@ -103,7 +104,8 @@ def get_or_create_default_integrated_intelligence_by_project(
             intelligence__is_router=True
         )
     except IntegratedIntelligence.DoesNotExist:
-        project = Project.objects.get(uuid=project_uuid)
+        if project is None:
+            project = Project.objects.get(uuid=project_uuid)
         integrated_intelligence = create_base_brain_structure(project)
         return integrated_intelligence
     except IntegratedIntelligence.MultipleObjectsReturned:
@@ -138,10 +140,11 @@ def get_or_create_default_integrated_intelligence_by_project(
 
 
 def get_integrated_intelligence_by_project(
-    project_uuid: str
+    project_uuid: str,
+    project: Project = None
 ) -> IntegratedIntelligence:
     try:
-        return get_or_create_default_integrated_intelligence_by_project(project_uuid)
+        return get_or_create_default_integrated_intelligence_by_project(project_uuid, project)
     except IntegratedIntelligence.DoesNotExist:
         raise Exception(f"[ IntegratedIntelligence ] - IntegratedIntelligence with project uuid `{project_uuid}` does not exists.")
     except Exception as exception:
@@ -162,14 +165,16 @@ def get_default_content_base_by_project(
 
 
 def get_project_and_content_base_data(
-    project_uuid: str
+    project_uuid: str,
+    project: Project = None
 ) -> tuple[Project, ContentBase, InlineAgentsConfiguration | None]:
     # TODO: optimize queries to avoid N+1
     try:
         inline_agent_configuration = None
-        project = Project.objects.select_related('org').get(uuid=project_uuid)
+        if project is None:
+            project = Project.objects.select_related('org').get(uuid=project_uuid)
 
-        integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
+        integrated_intelligence = get_integrated_intelligence_by_project(project_uuid, project)
 
         content_base = integrated_intelligence.intelligence.contentbases.select_related(
             'agent'
