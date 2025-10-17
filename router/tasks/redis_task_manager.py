@@ -201,6 +201,10 @@ class RedisTaskManager(TaskManager):
 
         if preview:
             return
+        
+        if channel_uuid is None:
+            print(f"[RedisTaskManager] - Skipping message cache: channel_uuid is None for contact {contact_urn}.")
+            return
 
         cached_messages = self.get_cache_messages(project_uuid, contact_urn)
         if cached_messages:
