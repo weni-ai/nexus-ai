@@ -85,6 +85,26 @@ class LambdaUseCase():
         project_uuid: str,
         contact_urn: str
     ):
+        # If has_chats_room is True, skip lambda call and set resolution to "Has Chat Room"
+        if has_chats_room:
+            resolution = "Has Chat Room"
+            event_data = {
+                "event_name": "weni_nexus_data",
+                "key": "conversation_classification",
+                "value_type": "string",
+                "value": resolution,
+                "metadata": {
+                    "human_support": has_chats_room,
+                }
+            }
+            self.send_datalake_event(
+                event_data=event_data,
+                project_uuid=project_uuid,
+                contact_urn=contact_urn
+            )
+            return resolution
+
+        # Original logic for when has_chats_room is False
         lambda_conversation = messages
         payload_conversation = {
             "conversation": lambda_conversation
