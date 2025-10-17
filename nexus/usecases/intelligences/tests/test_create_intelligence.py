@@ -1,5 +1,7 @@
 from django.test import TestCase
 from django.conf import settings
+import factory
+from django.db.models.signals import post_save
 
 from ..create import (
     CreateIntelligencesUseCase,
@@ -84,29 +86,51 @@ class TestCreateContentBaseUseCase(TestCase):
 class TestCreateIntegratedIntelligence(TestCase):
 
     def setUp(self) -> None:
-        self.intelligence = IntelligenceFactory()
-        self.org = self.intelligence.org
-        self.user = self.intelligence.created_by
-        self.project = ProjectFactory(
-            org=self.org,
-            created_by=self.user
+        with factory.django.mute_signals(post_save):
+            self.integrated_inteligence = IntegratedIntelligenceFactory()
+            
+        ContentBaseFactory(
+            intelligence=self.integrated_inteligence.intelligence,
+            created_by=self.integrated_inteligence.intelligence.created_by,
+            is_router=True
+        )
+
+        setup = {
+            'temperature': 0.5,
+            'top_p': 0.9,
+            'top_k': 0.9,
+            'max_length': 100,
+            'threshold': 0.5,
+        }
+        self.dto = LLMDTO(
+            model="gpt2",
+            user_email=self.integrated_inteligence.created_by.email,
+            project_uuid=str(self.integrated_inteligence.project.uuid),
+            setup=setup
         )
 
     def test_create_integrated_intelligence(self):
         integrated_intelligence = create_integrated_intelligence(
-            intelligence_uuid=self.intelligence.uuid,
-            user_email=self.user.email,
-            project_uuid=self.project.uuid
+            intelligence_uuid=self.integrated_inteligence.intelligence.uuid,
+            user_email=self.integrated_inteligence.created_by.email,
+            project_uuid=self.integrated_inteligence.project.uuid
         )
-        self.assertEqual(integrated_intelligence.intelligence.uuid, self.intelligence.uuid)
-        self.assertEqual(integrated_intelligence.project.uuid, self.project.uuid)
+        self.assertEqual(
+            integrated_intelligence.intelligence.uuid,
+            self.integrated_inteligence.intelligence.uuid
+        )
+        self.assertEqual(
+            integrated_intelligence.project.uuid,
+            self.integrated_inteligence.project.uuid
+        )
 
 
 class TestLLM(TestCase):
 
     def setUp(self) -> None:
-
-        self.integrated_inteligence = IntegratedIntelligenceFactory()
+        with factory.django.mute_signals(post_save):
+            self.integrated_inteligence = IntegratedIntelligenceFactory()
+            
         ContentBaseFactory(
             intelligence=self.integrated_inteligence.intelligence,
             created_by=self.integrated_inteligence.intelligence.created_by,
@@ -128,7 +152,9 @@ class TestLLM(TestCase):
         )
 
     def test_create_llm(self):
-        created_llm = create_llm(self.dto)
+        with factory.django.mute_signals(post_save):
+            created_llm = create_llm(self.dto)
+            
         self.assertEqual(created_llm.model, self.dto.model)
         self.assertEqual(created_llm.setup.get('temperature'), self.dto.setup.get('temperature'))
 
