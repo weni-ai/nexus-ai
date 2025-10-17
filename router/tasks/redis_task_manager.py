@@ -137,7 +137,8 @@ class RedisTaskManager(TaskManager):
         contact_name: str,
         project_uuid: str,
         source: str,
-        channel_uuid: str = None
+        channel_uuid: str = None,
+        external_id: str = None
     ) -> None:
         # Store the message using the repository
         message_data = {
@@ -147,12 +148,12 @@ class RedisTaskManager(TaskManager):
         }
         self.message_repository.storage_message(project_uuid, contact_urn, message_data)
 
-        # Create conversation only if channel_uuid is not None
-        self.conversation_service.create_conversation_if_channel_exists(
+        self.conversation_service.get_or_create_conversation(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
+            external_id=external_id
         )
 
     def get_cache_messages(
@@ -170,7 +171,8 @@ class RedisTaskManager(TaskManager):
         msg_text: str,
         source: str,
         channel_uuid: str = None,
-        contact_name: str = None
+        contact_name: str = None,
+        external_id: str = None
     ) -> None:
         # Add the message using the repository (matches original add_message_to_cache logic)
         message = {
@@ -180,14 +182,14 @@ class RedisTaskManager(TaskManager):
         }
         self.message_repository.add_message(project_uuid, contact_urn, message)
 
-        # Ensure conversation exists only if channel_uuid is not None
-        self.conversation_service.ensure_conversation_exists(
+        self.conversation_service.get_or_create_conversation(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
+            external_id=external_id
         )
-
+        
     def handle_message_cache(
         self,
         contact_urn: str,
@@ -196,7 +198,8 @@ class RedisTaskManager(TaskManager):
         msg_text: str,
         source: str,
         channel_uuid: str = None,
-        preview: bool = False
+        preview: bool = False,
+        external_id: str = None
     ) -> None:
 
         if preview:
@@ -210,7 +213,8 @@ class RedisTaskManager(TaskManager):
                 msg_text=msg_text,
                 source=source,
                 channel_uuid=channel_uuid,
-                contact_name=contact_name
+                contact_name=contact_name,
+                external_id=external_id
             )
         else:
             self.create_message_to_cache(
@@ -219,7 +223,8 @@ class RedisTaskManager(TaskManager):
                 contact_name=contact_name,
                 msg_text=msg_text,
                 source=source,
-                channel_uuid=channel_uuid
+                channel_uuid=channel_uuid,
+                external_id=external_id
             )
 
     def clear_message_cache(self, project_uuid: str, contact_urn: str) -> None:

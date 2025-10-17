@@ -131,7 +131,8 @@ class BedrockBackend(InlineAgentsBackend):
             session_id=session_id,
             source_type="user",
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
+            msg_external_id=msg_external_id
         )
         print(f"[DEBUG] Session ID: {session_id}")
         print(f"[DEBUG] Log: {log}")

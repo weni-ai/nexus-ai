@@ -113,7 +113,8 @@ def save_inline_message_to_database(
     session_id: str,
     source_type: str,
     contact_name: str,
-    channel_uuid: str = None
+    channel_uuid: str = None,
+    msg_external_id: str = None
 ) -> InlineAgentMessage:
     message_service = _get_message_service()
     message_service.handle_message_cache(
@@ -123,7 +124,8 @@ def save_inline_message_to_database(
         msg_text=text,
         source=source_type,
         channel_uuid=channel_uuid,
-        preview=preview
+        preview=preview,
+        external_id=msg_external_id
     )
 
     source = {

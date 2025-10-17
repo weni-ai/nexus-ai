@@ -124,7 +124,8 @@ class OpenAIBackend(InlineAgentsBackend):
             session_id=session_id,
             source_type="user",
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
+            msg_external_id=msg_external_id
         )
 
         supervisor_hooks = SupervisorHooks(
