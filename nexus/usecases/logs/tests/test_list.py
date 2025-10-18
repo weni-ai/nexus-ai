@@ -1,3 +1,4 @@
+import requests
 from django.test import TestCase
 from django.urls import reverse
 
@@ -8,12 +9,15 @@ from nexus.logs.models import Message, MessageLog
 from nexus.logs.api.views import ConversationContextViewset
 
 from nexus.intelligences.models import IntegratedIntelligence
+from nexus.projects.models import ProjectAuth, ProjectAuthorizationRole
+from nexus.usecases.projects.tests.project_factory import ProjectAuthFactory
 
 from nexus.usecases.logs.list import ListLogUsecase
 from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory, IntegratedIntelligenceFactory
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.logs.tests.logs_factory import MessageLogFactory
+from unittest.mock import patch
 
 
 class ListLogsTestCase(TestCase):
@@ -99,6 +103,10 @@ class ConversationContextViewsetTestCase(APITestCase):
         self.project = ii.project
         self.content_base = ii.intelligence.contentbases.first()
         self.user = self.project.created_by
+        
+        auth = ProjectAuth.objects.get(project=self.project, user=self.user)
+        auth.role = ProjectAuthorizationRole.CONTRIBUTOR.value
+        auth.save()
 
         self.msg_log = MessageLogFactory.create_batch(
             10,
@@ -111,7 +119,10 @@ class ConversationContextViewsetTestCase(APITestCase):
         self.view = ConversationContextViewset.as_view({'get': 'list'})
         self.url = reverse('list-conversation-context', kwargs={'project_uuid': str(self.project.uuid)})
 
-    def test_list_last_messages(self):
+    @patch('nexus.projects.permissions._check_project_authorization')
+    def test_list_last_messages(self, mock_check_authorization):
+        mock_check_authorization.side_effect = requests.RequestException
+
         log_id = self.msg_log[-1].id
         request = self.factory.get(self.url, {'log_id': log_id, 'number_of_messages': 5})
         force_authenticate(request, user=self.user)
