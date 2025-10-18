@@ -248,7 +248,8 @@ class AgentUsecase:
         supervisor_instructions: str,
         is_single_agent: bool,
     ):
-        external_id, alias_name = self.create_external_supervisor(
+        external_id, alias_name, _ = self.create_external_supervisor(
+            project_uuid,
             supervisor_name,
             supervisor_description,
             supervisor_instructions,
@@ -269,12 +270,14 @@ class AgentUsecase:
 
     def create_external_supervisor(
         self,
+        project_uuid: str,
         supervisor_name: str,
         supervisor_description: str,
         supervisor_instructions: str,
         is_single_agent: bool,
     ) -> Tuple[str, str]:
         return self.external_agent_client.create_supervisor(
+            project_uuid,
             supervisor_name,
             supervisor_description,
             supervisor_instructions,

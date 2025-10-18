@@ -105,7 +105,8 @@ class MockGPTClient:
         agent: Dict,
         question: str,
         llm_config: Dict,
-        last_messages: List
+        last_messages: List,
+        project_uuid: str = None
     ):
         return {
             "answers": [

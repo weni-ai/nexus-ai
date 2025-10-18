@@ -281,7 +281,7 @@ class RecentActivitiesViewset(
         project = self.kwargs.get('project_uuid')
 
         filter_params = {
-            'project': project
+            'project__uuid': project
         }
 
         start_date_str = settings.RECENT_ACTIVITIES_START_DATE

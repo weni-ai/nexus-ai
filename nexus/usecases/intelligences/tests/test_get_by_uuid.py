@@ -23,6 +23,7 @@ from .intelligence_factory import (
     IntegratedIntelligenceFactory
 )
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.intelligences.models import IntegratedIntelligence
 
 
 class GetByIntelligenceUuidTestCase(TestCase):
@@ -107,13 +108,12 @@ class GetByContentBaseTextUuidTestCase(TestCase):
 class TestGetByIntegratedIntelligence(TestCase):
 
     def setUp(self) -> None:
-        self.integrated_intelligence = IntegratedIntelligenceFactory()
-        self.content_base = ContentBaseFactory(
-            is_router=True,
-            intelligence=self.integrated_intelligence.intelligence,
-            created_by=self.integrated_intelligence.intelligence.created_by
+        self.project = ProjectFactory()
+        self.integrated_intelligence = get_or_create_default_integrated_intelligence_by_project(
+            project_uuid=self.project.uuid
         )
-
+        self.content_base = self.integrated_intelligence.intelligence.contentbases.get(is_router=True)
+        
     def test_get_integrated_intelligence_by_project(self):
 
         retrieved_integrated_intelligence = get_integrated_intelligence_by_project(
@@ -126,19 +126,27 @@ class TestGetByIntegratedIntelligence(TestCase):
 
     def test_get_default_content_base_by_project(self):
         retrieved_content_base = get_default_content_base_by_project(
-            self.integrated_intelligence.project.uuid
+            self.project.uuid
         )
         self.assertEqual(
-            self.integrated_intelligence.intelligence.contentbases.get(is_router=True),
+            self.content_base,
             retrieved_content_base
         )
 
     def test_get_or_create_default_integrated_intelligence_by_project(self):
-        project = ProjectFactory()
         integrated_intelligence = get_or_create_default_integrated_intelligence_by_project(
-            project.uuid
+            self.project.uuid
         )
         self.assertEqual(
-            integrated_intelligence.project.uuid,
-            project.uuid
+            integrated_intelligence,
+            self.integrated_intelligence
+        )
+
+        new_project = ProjectFactory()
+        new_integrated_intelligence = get_or_create_default_integrated_intelligence_by_project(
+            new_project.uuid
+        )
+        self.assertEqual(
+            new_integrated_intelligence.project.uuid,
+            new_project.uuid
         )

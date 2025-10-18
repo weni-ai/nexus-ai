@@ -77,10 +77,11 @@ logfire.configure(
     send_to_logfire=False,
 )
 
-logfire.instrument_openai_agents() 
-langfuse = get_client()
+if not settings.TESTING:
+    logfire.instrument_openai_agents()
+    langfuse = get_client()
 
-if langfuse.auth_check():
-    print("Langfuse client is authenticated and ready!")
-else:
-    print("Authentication failed. Please check your credentials and host.")
+    if langfuse.auth_check():
+        print("Langfuse client is authenticated and ready!")
+    else:
+        print("Authentication failed. Please check your credentials and host.")

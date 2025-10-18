@@ -109,17 +109,15 @@ class RouteTestCase(TestCase):
             instruction="Teste Instruction"
         )
 
-        llm_dto = LLMDTO(
-            user_email=self.user.email,
-            project_uuid=str(self.project.uuid),
-            setup={
-                'temperature': settings.WENIGPT_TEMPERATURE,
-                'top_p': settings.WENIGPT_TOP_P,
-                'top_k': settings.WENIGPT_TOP_K,
-                'max_length': settings.WENIGPT_MAX_LENGHT,
-            }
-        )
-        self.llm = create_llm(llm_dto=llm_dto)
+        self.llm = get_llm_by_project_uuid(str(self.project.uuid))
+        self.llm.setup = {
+            'temperature': settings.WENIGPT_TEMPERATURE,
+            'top_p': settings.WENIGPT_TOP_P,
+            'top_k': settings.WENIGPT_TOP_K,
+            'max_length': settings.WENIGPT_MAX_LENGHT,
+        }
+        self.llm.save()
+        
         self.link = ContentBaseLink.objects.create(
             content_base=self.content_base,
             link="http://test.co",
