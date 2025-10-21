@@ -225,6 +225,42 @@ class LambdaUseCase():
         parsed_final_response = response.get("postProcessingParsedResponse").get("responseText")
         return parsed_final_response
 
+    def instruction_classify(
+        self,
+        name: str,
+        occupation: str,
+        goal: str,
+        adjective: str,
+        instructions: list,
+        instruction_to_classify: str
+    ):
+        try:
+            instructions_payload = {
+                "name": name,
+                "occupation": occupation,
+                "goal": goal,
+                "adjective": adjective,
+                "instructions": instructions,
+                "instruction_to_classify": instruction_to_classify
+            }
+            
+            response = self.invoke_lambda(
+                lambda_name=str(settings.CONVERSATION_RESOLUTION_NAME),
+                payload=instructions_payload
+            )
+            
+            response_data = json.loads(response.get("Payload").read())
+            
+            classification = response_data.get("classification", [])
+            reason = response_data.get("reason", "")
+            suggestion = response_data.get("suggestion")
+            
+            return classification, reason, suggestion
+            
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            raise e
+
 
 @celery_app.task
 def create_lambda_conversation(
