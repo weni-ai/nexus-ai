@@ -1656,6 +1656,32 @@ class InstructionsClassificationAPIView(APIView):
                 instruction_to_classify=instruction
             )
             
+            validation_result = self._determine_validation_result(classification)
+            
+            from nexus.event_domain.recent_activity.create import create_recent_activity
+            from nexus.event_domain.recent_activity.recent_activities_dto import CreateRecentActivityDTO
+            
+            dto = CreateRecentActivityDTO(
+                action_type="V",
+                project=project,
+                created_by=user,
+                intelligence=content_base.intelligence,
+                action_details={
+                    "validation_result": validation_result,
+                    "instruction": instruction,
+                    "classification": classification,
+                    "reason": reason,
+                    "suggestion": suggestion
+                }
+            )
+            
+            class ValidationInstance:
+                def __init__(self):
+                    self.__class__.__name__ = "InstructionValidation"
+            
+            validation_instance = ValidationInstance()
+            create_recent_activity(validation_instance, dto=dto)
+            
             return Response({
                 "classification": classification,
                 "reason": reason,
@@ -1668,3 +1694,22 @@ class InstructionsClassificationAPIView(APIView):
                 {"error": str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    def _determine_validation_result(self, classification):
+        """Determine validation result based on classification array"""
+        if not classification:
+            return "PASSED"
+        
+        # Map classification to validation result
+        if "duplicate" in classification:
+            return "DUPLICATE"
+        elif "conflict" in classification:
+            return "CONFLICT"
+        elif "ambiguity" in classification:
+            return "AMBIGUOUS"
+        elif "lack_of_clarity" in classification:
+            return "UNCLEAR"
+        elif "incorrect" in classification:
+            return "FAILED"
+        else:
+            return "PASSED"
