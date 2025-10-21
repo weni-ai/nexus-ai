@@ -245,7 +245,7 @@ class LambdaUseCase():
             }
             
             response = self.invoke_lambda(
-                lambda_name=str(settings.INSTRUCTION_CLASSIFY_NAME),
+                lambda_name=str(settings.CONVERSATION_RESOLUTION_NAME),
                 payload=instructions_payload
             )
             

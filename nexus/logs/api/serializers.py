@@ -133,7 +133,6 @@ class RecentActivitiesSerializer(serializers.ModelSerializer):
             "ContentBaseLink": "Content",
             "ContentBaseText": "Content",
             "LLM": "Config",
-            "InstructionValidation": "Validation",
         }
         return ACTION_MODEL_GROUPS.get(obj.action_model, "")
 
