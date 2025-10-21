@@ -270,6 +270,7 @@ def create_lambda_conversation(
             contact_urn=payload.get("contact_urn")
         )
 
+        contact_name = payload.get("name")
         resolution_choice_value = ResolutionEntities.convert_resolution_string_to_int(resolution)
 
         update_data = {
@@ -280,23 +281,11 @@ def create_lambda_conversation(
             "resolution": resolution_choice_value,
             "topic": topic
         }
-
-        if conversation_queryset.exists():
-            conversation_queryset.update(**update_data)
-        else:
-            # TODO: Temp fix for older conversations, remove later
-            Conversation.objects.create(
-                contact_urn=payload.get("contact_urn"),
-                project=project,
-                external_id=payload.get("external_id"),
-                start_date=payload.get("start_date"),
-                end_date=payload.get("end_date"),
-                has_chats_room=payload.get("has_chats_room"),
-                contact_name=payload.get("name"),
-                channel_uuid=payload.get("channel_uuid"),
-                resolution=resolution_choice_value,
-                topic=topic
-            )
+        
+        if contact_name:
+            update_data["contact_name"] = contact_name
+        
+        conversation_queryset.update(**update_data)
 
         resolution_dto = ResolutionDTO(
             resolution=resolution_choice_value,

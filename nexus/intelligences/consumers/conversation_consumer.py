@@ -15,11 +15,11 @@ class ConversationConsumer(EDAConsumer):
             body = JSONParser.parse(message.body)
 
             window_conversation_dto = WindowConversationDTO(
-                project_uuid=body.get("project_uuid"),
-                channel_uuid=body.get("channel_uuid"),
+                project_uuid=body["project_uuid"],
+                channel_uuid=body["channel_uuid"],
+                contact_urn=body["contact_urn"],
                 start_date=body.get("start"),
                 end_date=body.get("end"),
-                contact_urn=body.get("contact_urn"),
                 has_chats_room=body.get("has_chats_room"),
                 external_id=body.get("id"),
                 name=body.get("contact_name")
@@ -29,6 +29,12 @@ class ConversationConsumer(EDAConsumer):
 
             message.channel.basic_ack(message.delivery_tag)
             print(f"[ ConversationConsumer ] - get conversation: {window_conversation_dto.contact_urn} {window_conversation_dto.start_date} - {window_conversation_dto.end_date}")
+            
+        except KeyError as e:
+            capture_exception(e)
+            message.channel.basic_reject(message.delivery_tag, requeue=False)
+            print(f"[ ConversationConsumer ] - Message rejected, missing required field: {e}")
+            
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
