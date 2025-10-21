@@ -263,7 +263,6 @@ ACTION_MODEL_GROUPS = {
     "Customization": ["ContentBaseAgent", "ContentBaseInstruction"],
     "Content": ["ContentBase", "ContentBaseFile", "ContentBaseLink", "ContentBaseText"],
     "Config": ["LLM", "Project"],
-    "Validation": ["InstructionValidation"],
 }
 
 
