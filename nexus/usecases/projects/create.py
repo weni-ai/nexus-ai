@@ -4,6 +4,7 @@ from nexus.projects.models import ProjectAuth, IntegratedFeature
 from nexus.projects.project_dto import (
     ProjectAuthCreationDTO,
 )
+from django.db import IntegrityError
 from nexus.usecases.actions.create import CreateFlowsUseCase
 from nexus.usecases.actions.update import UpdateFlowsUseCase
 from nexus.usecases.projects.dto import IntegratedFeatureFlowDTO, IntegratedFeatureDTO
@@ -83,7 +84,6 @@ class ProjectAuthUseCase:
 
 
 class CreateIntegratedFeatureUseCase:
-
     def create_integrated_feature(
         self,
         integrated_feature_dto: IntegratedFeatureDTO
@@ -97,22 +97,20 @@ class CreateIntegratedFeatureUseCase:
             raise ValueError("Action is required")
 
         try:
-            project = get_project_by_uuid(
-                project_uuid=project_uuid
+            project = get_project_by_uuid(project_uuid=project_uuid)
+            
+            integrated_feature = IntegratedFeature.objects.create(
+                project=project,
+                feature_uuid=feature_uuid,
+                current_version_setup=action_list
             )
+            return integrated_feature
+
         except ProjectDoesNotExist as e:
             raise e
-
-        integrated_feature, created = IntegratedFeature.objects.get_or_create(
-            project=project,
-            feature_uuid=feature_uuid,
-            current_version_setup=action_list
-        )
-
-        if not created and integrated_feature.is_integrated:
-            raise ValueError("Integrated feature already exists")
-
-        return integrated_feature
+        
+        except IntegrityError:
+            raise ValueError(f"Integrated feature for project `{project_uuid}` and feature `{feature_uuid}` already exists.")
 
     def integrate_feature_flows(
         self,

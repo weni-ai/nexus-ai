@@ -22,6 +22,11 @@ class MessageFactory(factory.django.DjangoModelFactory):
     text = factory.Sequence(lambda n: f'Text {n}')
     contact_urn = 'whatsapp:+1234567890'
     status = 'S'
+    groundedness_details_cache = {
+        "sentence": "Test sentence",
+        "sources": [],
+        "score": 0.8
+    }
 
 
 class MessageLogFactory(factory.django.DjangoModelFactory):
@@ -39,11 +44,18 @@ class MessageLogFactory(factory.django.DjangoModelFactory):
         ProjectFactory,
         created_by=factory.SelfAttribute('..content_base.intelligence.created_by')
     )
-    created_at = pendulum.now()
+    created_at = factory.LazyFunction(lambda: pendulum.now('UTC'))
     groundedness_score = 10
+    groundedness_details = {
+        "sentence": "Test sentence",
+        "sources": [],
+        "score": 0.8
+    }
     reflection_data = {
         "tag": "action"
     }
+    classification = "test_classification"
+    is_approved = True
     source = 'router'
 
 
@@ -65,4 +77,4 @@ class RecentActivitiesFactory(factory.django.DjangoModelFactory):
         created_by=factory.SelfAttribute('..project.created_by'),
         org=factory.SelfAttribute('..project.org')
     )
-    created_at = pendulum.now()
+    created_at = factory.LazyFunction(lambda: pendulum.now('UTC'))

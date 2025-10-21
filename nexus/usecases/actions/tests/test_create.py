@@ -18,10 +18,16 @@ class CreateFlowsUseCaseTest(TestCase):
         integrated_intelligence = IntegratedIntelligenceFactory()
         self.template_action = TemplateActionFactory()
         self.project = integrated_intelligence.project
+        
+        # Ensure we have a router content base for this intelligence
         self.content_base = ContentBaseFactory(
             intelligence=integrated_intelligence.intelligence,
             is_router=True
         )
+        
+        # Get the actual default content base that will be used by the use case
+        from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+        self.actual_content_base = get_default_content_base_by_project(str(self.project.uuid))
 
     def test_create_flow(self):
         flow_uuid = str(uuid4())
@@ -45,7 +51,7 @@ class CreateFlowsUseCaseTest(TestCase):
         self.assertEqual(flow.prompt, "flow_prompt")
         self.assertEqual(flow.fallback, False)
         self.assertEqual(flow.action_type, "custom")
-        self.assertEqual(flow.content_base, self.content_base)
+        self.assertEqual(flow.content_base, self.actual_content_base)
         self.assertEqual(flow.flow_uuid, flow_uuid)
 
     def test_blank_prompt_for_custom_flow(self):
@@ -89,7 +95,7 @@ class CreateFlowsUseCaseTest(TestCase):
         self.assertEqual(flow.prompt, None)
         self.assertEqual(flow.fallback, False)
         self.assertEqual(flow.action_type, "whatsapp_cart")
-        self.assertEqual(flow.content_base, self.content_base)
+        self.assertEqual(flow.content_base, self.actual_content_base)
         self.assertEqual(flow.flow_uuid, flow_uuid)
 
     def test_create_flow_with_template_action(self):
@@ -115,7 +121,7 @@ class CreateFlowsUseCaseTest(TestCase):
         self.assertEqual(flow.prompt, self.template_action.prompt)
         self.assertEqual(flow.fallback, False)
         self.assertEqual(flow.action_type, self.template_action.action_type)
-        self.assertEqual(flow.content_base, self.content_base)
+        self.assertEqual(flow.content_base, self.actual_content_base)
         self.assertEqual(flow.flow_uuid, flow_uuid)
 
 

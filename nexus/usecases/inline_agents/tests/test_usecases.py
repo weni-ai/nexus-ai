@@ -7,6 +7,7 @@ from django.core.files.uploadedfile import InMemoryUploadedFile
 from io import BytesIO
 from nexus.inline_agents.tests import MockBedrockClient
 from django.conf import settings
+from unittest.mock import patch
 
 
 class TestCreateAgentsUsecase(TestCase):
@@ -90,7 +91,11 @@ class TestCreateAgentsUsecase(TestCase):
             }
         )
 
-    def test_create_agents(self):
+    @patch('nexus.usecases.inline_agents.tools.FlowsRESTClient')
+    def test_create_agents(self, mock_flows_client):
+        mock_instance = mock_flows_client.return_value
+        mock_instance.list_project_contact_fields.return_value = {'results': []}
+
         agents = self.agents
         for key in agents:
             agent = self.usecase.create_agent(
@@ -99,3 +104,5 @@ class TestCreateAgentsUsecase(TestCase):
             self.assertEquals(
                 agent.backend_foundation_models, settings.DEFAULT_FOUNDATION_MODELS
             )
+        
+        mock_instance.list_project_contact_fields.assert_called()
