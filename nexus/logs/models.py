@@ -172,7 +172,8 @@ class RecentActivities(models.Model):
     ACTION_CHOICES = (
         ("C", "created"),
         ("U", "updated"),
-        ("D", "deleted")
+        ("D", "deleted"),
+        ("V", "validated")
     )
 
     action_model = models.TextField()
