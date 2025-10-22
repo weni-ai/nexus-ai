@@ -337,14 +337,12 @@ async def create_catalog_message(ctx: RunContextWrapper[Any], args: str) -> str:
             "send_catalog": False,  # Always False according to rules
             "action_button_text": parsed.action_button_text,
             "products": products
-        }
-    }
-
-    if parsed.header_text:
-        msg["header"] = {
+        },
+        "header": {
             "type": "text",
             "text": parsed.header_text
         }
+    }
 
     if parsed.footer:
         msg["footer"] = parsed.footer
