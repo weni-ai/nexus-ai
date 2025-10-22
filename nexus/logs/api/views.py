@@ -194,7 +194,7 @@ class MessageHistoryViewset(
                 status_value = status.get(tag_param)
                 if status_value:
                     queryset = queryset.filter(
-                        message__response_status=status_value
+                        message__response_status_cache=status_value
                     ).exclude(
                         reflection_data__tag="action_started"
                     )
