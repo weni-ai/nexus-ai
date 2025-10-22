@@ -11,7 +11,7 @@ from nexus.intelligences.models import (
     Intelligence,
     ContentBaseLogs
 )
-from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory, IntegratedIntelligenceFactory
+from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory, IntegratedIntelligenceFactory, IntelligenceFactory
 
 
 @pytest.mark.django_db
@@ -44,14 +44,12 @@ def test_create_content_base_link(
     user = create_user
     intel = create_intelligence
     content_base = create_content_base
-    content_base = ContentBaseLink.objects.create(
-        title='Test content base',
-        intelligence=intel,
-        created_by=user,
+    content_base_link = ContentBaseLink.objects.create(
         link='https://test.co',
         content_base=content_base,
+        created_by=user,
     )
-    assert content_base.link
+    assert content_base_link.link
 
 
 @pytest.mark.django_db
@@ -63,17 +61,15 @@ def test_create_content_base_file(
     file = 'https://test.co'
     content_base = create_content_base
 
-    content_base = ContentBaseFile.objects.create(
-        title='Test content base',
-        intelligence=intel,
-        created_by=user,
+    content_base_file = ContentBaseFile.objects.create(
         file=file,
         extension_file='txt',
         content_base=content_base,
+        created_by=user,
     )
 
-    assert content_base.file == file
-    assert content_base.extension_file == 'txt'
+    assert content_base_file.file == file
+    assert content_base_file.extension_file == 'txt'
 
 
 @pytest.mark.django_db
@@ -84,15 +80,13 @@ def test_create_content_base_text(
     intel = create_intelligence
     text = 'Lorem Ipsum'
     content_base = create_content_base
-    content_base = ContentBaseText.objects.create(
-        title='Test content base',
-        intelligence=intel,
-        created_by=user,
+    content_base_text = ContentBaseText.objects.create(
         text=text,
         content_base=content_base,
+        created_by=user,
     )
 
-    assert content_base.text == text
+    assert content_base_text.text == text
 
 
 class ContentBaseLogsTestCase(TestCase):
@@ -126,18 +120,21 @@ class IntegratedIntelligenceTestCase(TestCase):
         self.content_base = ContentBaseFactory(
             is_router=True
         )
+        # Make sure the intelligence is also a router
+        self.content_base.intelligence.is_router = True
+        self.content_base.intelligence.save()
+        
         self.integrated_intelligence = IntegratedIntelligenceFactory(
             intelligence=self.content_base.intelligence
         )
         self.project = self.integrated_intelligence.project
 
     def test_multiple_integrated_routers(self):
-        content_base_2 = ContentBaseFactory(
-            is_router=True
-        )
+        # Create a second intelligence that is a router
+        intelligence_2 = IntelligenceFactory(is_router=True)
         with self.assertRaises(ValidationError):
             IntegratedIntelligence.objects.create(
                 project=self.project,
-                intelligence=content_base_2.intelligence,
+                intelligence=intelligence_2,
                 created_by=self.integrated_intelligence.created_by
             )
