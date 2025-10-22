@@ -1,5 +1,6 @@
-import json
+import re
 import uuid
+import json
 
 from typing import Optional, List, Any
 from agents import RunContextWrapper, FunctionTool
@@ -11,6 +12,32 @@ class SimpleTextArgs(BaseModel):
     text: str = Field(..., max_length=4096, description="Message text, maximum 4096 characters")
     header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
     footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
+
+    @field_validator('header_text')
+    @classmethod
+    def clean_header(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
+
+    @field_validator('footer')
+    @classmethod
+    def clean_footer(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
 
 
 class QuickRepliesArgs(BaseModel):
@@ -29,6 +56,32 @@ class QuickRepliesArgs(BaseModel):
                 v[i] = option[:20]
         return v
 
+    @field_validator('header_text')
+    @classmethod
+    def clean_header(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
+
+    @field_validator('footer')
+    @classmethod
+    def clean_footer(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
+
 
 class ListItemArgs(BaseModel):
     """Arguments for list item"""
@@ -44,6 +97,32 @@ class ListMessageArgs(BaseModel):
     header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
     footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
 
+    @field_validator('header_text')
+    @classmethod
+    def clean_header(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
+
+    @field_validator('footer')
+    @classmethod
+    def clean_footer(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
+
 
 class CtaMessageArgs(BaseModel):
     """Arguments for Call to Action component with URL"""
@@ -53,10 +132,36 @@ class CtaMessageArgs(BaseModel):
     header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
     footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
 
+    @field_validator('header_text')
+    @classmethod
+    def clean_header(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
+
+    @field_validator('footer')
+    @classmethod
+    def clean_footer(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
+
 
 class ProductArgs(BaseModel):
     """Arguments for catalog product"""
-    product: str = Field(..., description="Product category name")
+    product: str = Field(..., max_length=72, description="Product category name, maximum 72 characters")
     product_retailer_ids: List[str] = Field(..., min_length=1, description="list of product SKU IDs for this category in format 'sku_id#seller_id'")
 
 
@@ -65,8 +170,34 @@ class CatalogMessageArgs(BaseModel):
     text: str = Field(..., max_length=1024, description="Message text, maximum 1024 characters")
     action_button_text: str = Field(..., max_length=20, description="Action button text, maximum 20 characters")
     products: List[ProductArgs] = Field(..., min_length=1, description="List of products with names and SKU IDs")
-    header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
+    header_text: str = Field(..., max_length=60, description="Header text, maximum 60 characters")
     footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
+
+    @field_validator('header_text')
+    @classmethod
+    def clean_header(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
+
+    @field_validator('footer')
+    @classmethod
+    def clean_footer(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
 
 
 async def create_simple_text_message(ctx: RunContextWrapper[Any], args: str) -> str:
@@ -167,9 +298,9 @@ async def create_cta_message(ctx: RunContextWrapper[Any], args: str) -> str:
     msg = {
         "text": parsed.text,
         "interaction_type": "cta_url",
-        "cta_url": {
-            "url": parsed.url,
-            "display_text": parsed.display_text
+        "cta_message": {
+            "display_text": parsed.display_text,
+            "url": parsed.url
         }
     }
 
@@ -206,14 +337,12 @@ async def create_catalog_message(ctx: RunContextWrapper[Any], args: str) -> str:
             "send_catalog": False,  # Always False according to rules
             "action_button_text": parsed.action_button_text,
             "products": products
-        }
-    }
-
-    if parsed.header_text:
-        msg["header"] = {
+        },
+        "header": {
             "type": "text",
             "text": parsed.header_text
         }
+    }
 
     if parsed.footer:
         msg["footer"] = parsed.footer
@@ -269,6 +398,8 @@ class SimpleTextWithQuickRepliesArgs(BaseModel):
     # quick_replies fields
     quick_replies_text: str = Field(..., max_length=1024, description="Second message text with options, maximum 1024 characters")
     quick_replies: List[str] = Field(..., min_length=2, max_length=3, description="List of 2-3 quick reply options, maximum 20 characters each")
+    quick_replies_header_text: Optional[str] = Field(None, max_length=60, description="Optional header text for quick replies, maximum 60 characters")
+    quick_replies_footer: Optional[str] = Field(None, max_length=60, description="Optional footer for quick replies, maximum 60 characters")
 
     @field_validator('quick_replies')
     @classmethod
@@ -277,6 +408,32 @@ class SimpleTextWithQuickRepliesArgs(BaseModel):
         for i, option in enumerate(v):
             if len(option) > 20:
                 v[i] = option[:20]
+        return v
+
+    @field_validator('header_text', 'quick_replies_header_text')
+    @classmethod
+    def clean_header(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
+
+    @field_validator('footer', 'quick_replies_footer')
+    @classmethod
+    def clean_footer(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
         return v
 
 
@@ -291,6 +448,34 @@ class SimpleTextWithListArgs(BaseModel):
     list_text: str = Field(..., max_length=4096, description="Second message text with list, maximum 4096 characters")
     button_text: str = Field(..., max_length=20, description="Button text, maximum 20 characters")
     list_items: List[ListItemArgs] = Field(..., min_length=2, max_length=10, description="List of 2-10 items with title, description and uuid")
+    list_header_text: Optional[str] = Field(None, max_length=60, description="Optional header text for list, maximum 60 characters")
+    list_footer: Optional[str] = Field(None, max_length=60, description="Optional footer for list, maximum 60 characters")
+
+    @field_validator('header_text', 'list_header_text')
+    @classmethod
+    def clean_header(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
+
+    @field_validator('footer', 'list_footer')
+    @classmethod
+    def clean_footer(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
 
 
 class SimpleTextWithCtaArgs(BaseModel):
@@ -304,6 +489,34 @@ class SimpleTextWithCtaArgs(BaseModel):
     cta_text: str = Field(..., max_length=1024, description="Second message text with CTA with supervisor message, maximum 1024 characters")
     url: str = Field(..., description="Valid URL for redirection")
     display_text: str = Field(..., max_length=20, description="Button text, maximum 20 characters")
+    cta_header_text: Optional[str] = Field(None, max_length=60, description="Optional header text for CTA, maximum 60 characters")
+    cta_footer: Optional[str] = Field(None, max_length=60, description="Optional footer for CTA, maximum 60 characters")
+
+    @field_validator('header_text', 'cta_header_text')
+    @classmethod
+    def clean_header(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
+
+    @field_validator('footer', 'cta_footer')
+    @classmethod
+    def clean_footer(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
 
 
 class SimpleTextWithCatalogArgs(BaseModel):
@@ -315,8 +528,36 @@ class SimpleTextWithCatalogArgs(BaseModel):
 
     # catalog_message fields
     catalog_text: str = Field(..., max_length=1024, description="Second message text with catalog, maximum 1024 characters")
+    catalog_header_text: str = Field(..., max_length=60, description="Catalog header text, maximum 60 characters")
     action_button_text: str = Field(..., max_length=20, description="Action button text, maximum 20 characters")
     products: List[ProductArgs] = Field(..., min_length=1, description="List of products with names and SKU IDs")
+    catalog_footer: Optional[str] = Field(None, max_length=60, description="Optional footer for catalog, maximum 60 characters")
+
+    @field_validator('header_text', 'catalog_header_text')
+    @classmethod
+    def clean_header(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
+
+    @field_validator('footer', 'catalog_footer')
+    @classmethod
+    def clean_footer(cls, v):
+        if v is None:
+            return v
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
+        v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
+        v = v.strip()
+        # Se ficou vazio após a limpeza, retorna None
+        if not v:
+            return None
+        return v
 
 
 # Functions for combined components
@@ -339,6 +580,10 @@ async def create_simple_text_with_quick_replies(ctx: RunContextWrapper[Any], arg
         "text": parsed.quick_replies_text,
         "quick_replies": parsed.quick_replies
     }
+    if parsed.quick_replies_header_text:
+        msg2["header"] = {"type": "text", "text": parsed.quick_replies_header_text}
+    if parsed.quick_replies_footer:
+        msg2["footer"] = parsed.quick_replies_footer
 
     response = [{"msg": msg1}, {"msg": msg2}]
     return json.dumps(response, ensure_ascii=False)
@@ -376,6 +621,10 @@ async def create_simple_text_with_list(ctx: RunContextWrapper[Any], args: str) -
             "list_items": list_items
         }
     }
+    if parsed.list_header_text:
+        msg2["header"] = {"type": "text", "text": parsed.list_header_text}
+    if parsed.list_footer:
+        msg2["footer"] = parsed.list_footer
 
     response = [{"msg": msg1}, {"msg": msg2}]
     return json.dumps(response, ensure_ascii=False)
@@ -399,11 +648,15 @@ async def create_simple_text_with_cta(ctx: RunContextWrapper[Any], args: str) ->
     msg2 = {
         "text": parsed.cta_text,
         "interaction_type": "cta_url",
-        "cta_url": {
-            "url": parsed.url,
-            "display_text": parsed.display_text
+        "cta_message": {
+            "display_text": parsed.display_text,
+            "url": parsed.url
         }
     }
+    if parsed.cta_header_text:
+        msg2["header"] = {"type": "text", "text": parsed.cta_header_text}
+    if parsed.cta_footer:
+        msg2["footer"] = parsed.cta_footer
 
     response = [{"msg": msg1}, {"msg": msg2}]
     return json.dumps(response, ensure_ascii=False)
@@ -433,12 +686,18 @@ async def create_simple_text_with_catalog(ctx: RunContextWrapper[Any], args: str
 
     msg2 = {
         "text": parsed.catalog_text,
+        "header": {
+            "type": "text",
+            "text": parsed.catalog_header_text
+        },
         "catalog_message": {
             "send_catalog": False,
             "action_button_text": parsed.action_button_text,
             "products": products
         }
     }
+    if parsed.catalog_footer:
+        msg2["footer"] = parsed.catalog_footer
 
     response = [{"msg": msg1}, {"msg": msg2}]
     return json.dumps(response, ensure_ascii=False)
