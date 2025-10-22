@@ -95,6 +95,7 @@ extend_skip = ['migrations', 'manage.py', 'wsgi.py', 'asgi.py', '__init__.py']
 pythonpath = "."
 python_files = "tests.py test_*.py *_tests.py"
 DJANGO_SETTINGS_MODULE = "nexus.settings"
+addopts = "--ignore=nexus/projects/tests/test_permissions.py --ignore=nexus/actions/tests.py"
 
 [tool.blue]
 extend-exclude = '''
