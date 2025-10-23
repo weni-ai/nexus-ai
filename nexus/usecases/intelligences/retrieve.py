@@ -136,6 +136,9 @@ class RetrieveContentBaseLinkUseCase():
             raise IntelligencePermissionDenied()
         return get_by_content_base_link_uuid(contentbaselink_uuid)
 
+    def get_inline_contentbaselink(self, contentbaselink_uuid: str):
+        return get_by_content_base_link_uuid(contentbaselink_uuid)
+
     def get_content_base_link_by_link(self, link: str, content_base_uuid: str):
 
         links = ContentBaseLink.objects.filter(
