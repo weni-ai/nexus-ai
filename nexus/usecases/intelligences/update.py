@@ -157,6 +157,35 @@ class UpdateContentBaseTextUseCase():
 
         return contentbasetext
 
+    def update_inline_contentbasetext(
+            self,
+            contentbasetext: ContentBaseText,
+            user_email: str,
+            text: str = None,
+    ):
+        user = users.get_by_email(user_email)
+
+        old_contentbasetext_data = model_to_dict(contentbasetext)
+        old_contentbasetext_data['modified_at'] = str(old_contentbasetext_data['modified_at'])
+        if text is not None:
+            contentbasetext.text = text
+            contentbasetext.modified_at = pendulum.now()
+            contentbasetext.modified_by = user
+            contentbasetext.save(
+                update_fields=['text', 'modified_at', 'modified_by']
+            )
+        new_contentbase_data = model_to_dict(contentbasetext)
+        new_contentbase_data['modified_at'] = str(new_contentbase_data['modified_at'])
+
+        self.event_manager_notify(
+            event="contentbase_text_activity",
+            content_base_text=contentbasetext,
+            old_contentbasetext_data=old_contentbasetext_data,
+            new_contentbase_data=new_contentbase_data,
+            user=user,
+            action_type="U",
+        )
+
 
 class UpdateContentBaseFileUseCase():
 
