@@ -194,6 +194,20 @@ def generate_env():
         "FILTER_SENTRY_EVENTS": "",
         "AGENT_VALID_ORGS": "",
         "AGENT_CONFIGURATION_ALLOWED_USERS": "",
+        "AWS_BEDROCK_SUPERVISOR_ACTION_GROUP_ID": "",
+        "AWS_BEDROCK_SUPERVISOR_KNOWLEDGE_BASE_INSTRUCTIONS": "",
+        "SENTENX_THRESHOLD": "1.0",
+        "OIDC_DRF_AUTH_BACKEND": "nexus.authentication.authentication.WeniOIDCAuthenticationBackend",
+        "WENIGPT_SHARK_CONTEXT_PROMPT": "",
+        "WENIGPT_SHARK_NO_CONTEXT_PROMPT": "",
+        "WENIGPT_SHARK_PAIRS_TEMPLATE_PROMPT": "",
+        "WENIGPT_SHARK_NEXT_QUESTION_TEMPLATE_PROMPT": "",
+        "TOKEN_LIMIT": "0",
+        "SEND_EMAILS": "False",
+        "EMAIL_USE_SSL": "False",
+        "EMAIL_USE_TLS": "False",
+        "OPENAI_AGENTS_FOUNDATION_MODEL": "gpt-4o-mini",
+        "BEDROCK_CONVERSE_MAX_LENGHT": "4096",
     }
 
     with open(env_path, "w") as configfile:
