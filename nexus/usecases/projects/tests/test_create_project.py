@@ -20,8 +20,11 @@ from nexus.agents.models import Agent
 
 
 class MockExternalAgentClient:
-    def create_supervisor(self, supervisor_name, supervisor_description, supervisor_instructions):
-        return "supervisor_id", "supervisor_alias"
+    def create_supervisor(self, project_uuid, supervisor_name, supervisor_description, supervisor_instructions, is_single_agent):
+        return "supervisor_id", "supervisor_alias", "v1"
+
+    def prepare_agent(self, agent_id: str):
+        pass
 
     def wait_agent_status_update(self, external_id):
         pass
@@ -30,7 +33,7 @@ class MockExternalAgentClient:
         pass
 
     def create_agent_alias(self, **kwargs):
-        return "sub_agent_alias_id", "sub_agent_alias_arn"
+        return "sub_agent_alias_id", "sub_agent_alias_arn", "v1"
 
 
 class TestCreateProject(TestCase):
@@ -62,15 +65,20 @@ class TestCreateProject(TestCase):
 
     def test_create_brain_on_project(self):
         self.project_dto.brain_on = True
-        project = ProjectsUseCase(
+        usecase = ProjectsUseCase(
             event_manager_notify=mock_event_manager_notify,
-        ).create_project(
+            external_agent_client=MockExternalAgentClient,
+        )
+        
+        project = usecase.create_project(
             project_dto=self.project_dto,
             user_email=self.user.email
         )
+        
         self.assertEqual(project.uuid, self.project_dto.uuid)
         self.assertTrue(project.brain_on)
-
+        self.assertIsNotNone(project.team.external_id)
+        
     def test_create_multi_agents_project(self):
         self.official_agents = Agent.objects.create(
             project=self.official_agents,

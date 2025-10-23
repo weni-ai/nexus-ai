@@ -1549,7 +1549,7 @@ class SupervisorViewset(ModelViewSet):
     filterset_class = ConversationFilter
     search_fields = ['contact_name', 'contact_urn']
     ordering_fields = ['created_at', 'start_date', 'end_date']
-    ordering = ['-created_at']
+    ordering = ['-start_date']
 
     def get_queryset(self):
         project_uuid = self.kwargs.get('project_uuid')

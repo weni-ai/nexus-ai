@@ -1,10 +1,10 @@
-from typing import Any
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
-from agents import RunContextWrapper, FunctionTool
-import json
-import uuid
 import re
+import uuid
+import json
+
+from typing import Optional, List, Any
+from agents import RunContextWrapper, FunctionTool
+from pydantic import BaseModel, Field, field_validator
 
 
 class SimpleTextArgs(BaseModel):
@@ -18,10 +18,10 @@ class SimpleTextArgs(BaseModel):
     def clean_header(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -31,10 +31,10 @@ class SimpleTextArgs(BaseModel):
     def clean_footer(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -61,10 +61,10 @@ class QuickRepliesArgs(BaseModel):
     def clean_header(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -74,10 +74,10 @@ class QuickRepliesArgs(BaseModel):
     def clean_footer(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -102,10 +102,10 @@ class ListMessageArgs(BaseModel):
     def clean_header(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -115,10 +115,10 @@ class ListMessageArgs(BaseModel):
     def clean_footer(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -137,10 +137,10 @@ class CtaMessageArgs(BaseModel):
     def clean_header(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -150,10 +150,10 @@ class CtaMessageArgs(BaseModel):
     def clean_footer(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -178,10 +178,10 @@ class CatalogMessageArgs(BaseModel):
     def clean_header(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -191,10 +191,10 @@ class CatalogMessageArgs(BaseModel):
     def clean_footer(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -337,14 +337,12 @@ async def create_catalog_message(ctx: RunContextWrapper[Any], args: str) -> str:
             "send_catalog": False,  # Always False according to rules
             "action_button_text": parsed.action_button_text,
             "products": products
-        }
-    }
-
-    if parsed.header_text:
-        msg["header"] = {
+        },
+        "header": {
             "type": "text",
             "text": parsed.header_text
         }
+    }
 
     if parsed.footer:
         msg["footer"] = parsed.footer
@@ -417,10 +415,10 @@ class SimpleTextWithQuickRepliesArgs(BaseModel):
     def clean_header(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -430,10 +428,10 @@ class SimpleTextWithQuickRepliesArgs(BaseModel):
     def clean_footer(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -458,10 +456,10 @@ class SimpleTextWithListArgs(BaseModel):
     def clean_header(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -471,10 +469,10 @@ class SimpleTextWithListArgs(BaseModel):
     def clean_footer(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -499,10 +497,10 @@ class SimpleTextWithCtaArgs(BaseModel):
     def clean_header(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -512,10 +510,10 @@ class SimpleTextWithCtaArgs(BaseModel):
     def clean_footer(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -540,10 +538,10 @@ class SimpleTextWithCatalogArgs(BaseModel):
     def clean_header(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v
@@ -553,10 +551,10 @@ class SimpleTextWithCatalogArgs(BaseModel):
     def clean_footer(cls, v):
         if v is None:
             return v
-        # Remove control characters (including \u000e, \x0e, etc)
+        # Remove caracteres de controle (incluindo \u000e, \x0e, etc)
         v = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', v)
         v = v.strip()
-        # If empty after cleaning, return None
+        # Se ficou vazio após a limpeza, retorna None
         if not v:
             return None
         return v

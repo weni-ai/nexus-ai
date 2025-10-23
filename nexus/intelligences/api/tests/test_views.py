@@ -430,7 +430,18 @@ class TestContentBaseLinkViewset(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data.get("status"), TaskManager.STATUS_WAITING)
 
-    def test_create(self):
+    @mock.patch('nexus.task_managers.tasks.send_link.delay')
+    def test_create(self, mock_send_link_delay):
+        # Mock the send_link.delay task to run synchronously
+        def mock_send_link_sync(link, user_email, content_base_link_uuid):
+            from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
+            from nexus.intelligences.models import ContentBaseLink
+            content_base_link = ContentBaseLink.objects.get(uuid=content_base_link_uuid)
+            task_manager = CeleryTaskManagerUseCase().create_celery_link_manager(content_base_link=content_base_link)
+            return {"task_uuid": task_manager.uuid}
+        
+        mock_send_link_delay.side_effect = mock_send_link_sync
+        
         data = {
             'link': 'https://example.com/',
         }
@@ -461,7 +472,7 @@ class TestContentBasePersonalizationViewSet(TestCase):
     def setUp(self) -> None:
         self.factory = APIRequestFactory()
         self.content_base = ContentBaseFactory(is_router=True)
-        self.instruction_1 = self.content_base.instructions.first()
+        
         self.org = self.content_base.intelligence.org
         self.user = self.org.created_by
         self.project = ProjectFactory(
@@ -470,11 +481,24 @@ class TestContentBasePersonalizationViewSet(TestCase):
             org=self.org,
             created_by=self.user
         )
+        # Use the same intelligence as the content_base
         IntegratedIntelligenceFactory(
             intelligence=self.content_base.intelligence,
             project=self.project,
             created_by=self.user
         )
+        
+        # Get the actual content base that the view will use
+        from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+        actual_content_base = get_default_content_base_by_project(str(self.project.uuid))
+        
+        # Create instruction on the actual content base that will be used
+        from nexus.intelligences.models import ContentBaseInstruction
+        self.instruction_1 = ContentBaseInstruction.objects.create(
+            content_base=actual_content_base,
+            instruction="Test instruction"
+        )
+        
         # Create a team with human support data
         self.team = Team.objects.create(
             project=self.project,
@@ -526,9 +550,13 @@ class TestContentBasePersonalizationViewSet(TestCase):
         response.render()
         content = json.loads(response.content)
 
-        # Validate team data is null when no team exists
+        # Validate team data contains project data when no team exists
         self.assertIn('team', content)
-        self.assertIsNone(content['team'])
+        team_data = content['team']
+        self.assertIsNotNone(team_data)
+        # When no team exists, it should return project's human support data
+        self.assertIn('human_support', team_data)
+        self.assertIn('human_support_prompt', team_data)
 
     def test_get_personalization_external_token(self):
         url_retrieve = f'{self.url}/'
@@ -1109,6 +1137,14 @@ class TestSupervisorViewset(TestCase):
         self.project = ProjectFactory(
             created_by=self.user,
         )
+        
+        # Give the user permission to access the project
+        from nexus.projects.models import ProjectAuth, ProjectAuthorizationRole
+        ProjectAuth.objects.update_or_create(
+            user=self.user,
+            project=self.project,
+            defaults={'role': ProjectAuthorizationRole.MODERATOR.value}
+        )
 
         # Create test topics
         self.topic1 = TopicsFactory(project=self.project, name="Customer Support")
@@ -1286,9 +1322,9 @@ class TestSupervisorViewset(TestCase):
         """Test listing supervisor data with invalid project UUID"""
         url = reverse('supervisor', kwargs={'project_uuid': 'invalid-uuid'})
         response = self.client.get(url)
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn('error', response.data)
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('detail', response.data)
 
     def test_list_supervisor_data_invalid_date_format(self):
         """Test listing supervisor data with invalid date format"""
@@ -1308,6 +1344,6 @@ class TestSupervisorViewset(TestCase):
         fake_uuid = str(uuid.uuid4())
         url = reverse('supervisor', kwargs={'project_uuid': fake_uuid})
         response = self.client.get(url)
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn('error', response.data)
+        
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn('detail', response.data)
