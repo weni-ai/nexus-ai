@@ -109,11 +109,13 @@ class BedrockBackend(InlineAgentsBackend):
             contact_name=contact_name,
             channel_uuid=channel_uuid,
             auth_token=auth_token,
-            sanitized_urn=sanitized_urn
+            sanitized_urn=sanitized_urn,
+            project=project,
+            content_base=kwargs.get('content_base')
         )
 
         if use_prompt_creation_configurations:
-            external_team["promptCreationConfigurations"] = { 
+            external_team["promptCreationConfigurations"] = {
                 "excludePreviousThinkingSteps": exclude_previous_thinking_steps,
                 "previousConversationTurnsToInclude": conversation_turns_to_include,
             }
