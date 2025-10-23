@@ -219,7 +219,7 @@ def generate_env():
         "EMAIL_PORT": "0",
         "PROJECT_COMPONENTS": "",
         "REDIS_MESSAGE_CACHE_KEY_DURATION": "0",
-        "USE_REDIS_CACHE_CONTEXT": "False",
+        "USE_REDIS_CACHE_CONTEXT": "True",
         "EDA_BROKER_PORT": "5672",
         "OIDC_RP_SCOPES": "openid email",
         "LLM_CHAR_LIMIT": "640",
