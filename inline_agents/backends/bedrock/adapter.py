@@ -308,6 +308,9 @@ class BedrockTeamAdapter(TeamAdapter):
         except Guardrail.DoesNotExist:
             guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
 
+        if guardrails is None:
+            return None
+
         return {
             'guardrailIdentifier': guardrails.identifier,
             'guardrailVersion': str(guardrails.version)

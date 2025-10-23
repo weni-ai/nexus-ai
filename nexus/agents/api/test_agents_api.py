@@ -13,11 +13,8 @@ from rest_framework.test import APIRequestFactory, APIClient
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
-from nexus.agents.models import (
-    Agent,
-    ActiveAgent,
-    Team
-)
+from nexus.inline_agents.models import Agent as InlineAgent, IntegratedAgent
+from nexus.agents.models import Team
 
 from urllib.parse import urlencode
 
@@ -31,27 +28,21 @@ class AgentViewsetSetTestCase(TestCase):
             external_id="EXTERNALID",
             project=self.project,
         )
-        self.agent = Agent.objects.create(
-            external_id="AGENTID",
-            slug="test_agent",
-            display_name="Test Agent",
-            model="model:version",
-            is_official=False,
+        self.agent = InlineAgent.objects.create(
+            name="Test Agent",
+            slug="test-agent",
+            instruction="Test Agent Description",
+            collaboration_instructions="Test Agent Description",
+            foundation_model="model:version",
             project=self.project,
-            metadata={},
-            description="Test Agent Description",
-            created_by=self.user,
         )
-        self.agent2 = Agent.objects.create(
-            external_id="AAENTID",
-            slug="test_aaent",
-            display_name="Information Analyst",
-            model="model:version",
-            is_official=False,
+        self.agent2 = InlineAgent.objects.create(
+            name="Information Analyst",
+            slug="test-analyst",
+            instruction="Test Agent Description",
+            collaboration_instructions="Test Agent Description",
+            foundation_model="model:version",
             project=self.project,
-            metadata={},
-            description="Test Agent Description",
-            created_by=self.user,
         )
 
     def test_get_my_agents(self):
@@ -81,8 +72,10 @@ class AgentViewsetSetTestCase(TestCase):
 
     def make_agents_official(self):
         self.agent.is_official = True
+        self.agent.source_type = InlineAgent.PLATFORM
         self.agent.save()
         self.agent2.is_official = True
+        self.agent2.source_type = InlineAgent.PLATFORM
         self.agent2.save()
 
     def test_get_official_agents(self):
@@ -132,24 +125,31 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         self.assertEquals(response.status_code, 200)
-        self.assertEquals(content, [])
+        expected = {
+            "manager": {"external_id": ""},
+            "agents": []
+        }
+        self.assertEquals(content, expected)
 
     def test_get_team_with_agents(self):
-        agent = Agent.objects.create(
-            external_id="AGENTID",
+        agent = InlineAgent.objects.create(
+            name="Test Agent",
             slug="test_agent",
-            display_name="Test Agent",
-            model="model:version",
-            is_official=False,
+            instruction="Test Agent Description",
+            collaboration_instructions="Test Agent Description",
+            foundation_model="model:version",
             project=self.project,
-            metadata={},
-            description="Test Agent Description",
-            created_by=self.user,
         )
-        active_agent = ActiveAgent.objects.create(
+        # Create a version for the agent
+        from nexus.inline_agents.models import Version
+        version = Version.objects.create(
+            skills=[{"name": "test_skill", "description": "test description"}],
+            display_skills=[{"name": "test_skill", "description": "test description"}],
+            agent=agent
+        )
+        integrated_agent = IntegratedAgent.objects.create(
             agent=agent,
-            team=self.team,
-            created_by=self.user,
+            project=self.project,
         )
 
         client = APIClient()
@@ -160,11 +160,9 @@ class TeamViewsetSetTestCase(TestCase):
         content = json.loads(response.content)
 
         self.assertEquals(response.status_code, 200)
-        self.assertEquals(len(content), 1)
-        self.assertEquals(content[0].get("uuid"), str(active_agent.uuid))
-        self.assertEquals(content[0].get("name"), agent.display_name)
-        self.assertEquals(content[0].get("skills"), [])
-        self.assertFalse(content[0].get("is_official"))
+        self.assertEquals(len(content["agents"]), 1)
+        self.assertEquals(content["agents"][0].get("uuid"), str(agent.uuid))
+        self.assertEquals(content["agents"][0].get("name"), agent.name)
 
 
 class TestCommunicateInternallyPermission(TestCase):
