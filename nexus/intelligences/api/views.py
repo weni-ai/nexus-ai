@@ -1966,7 +1966,7 @@ class InstructionsClassificationAPIView(APIView):
             from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
             lambda_usecase = LambdaUseCase()
             
-            classification, reason, suggestion = lambda_usecase.instruction_classify(
+            classification, suggestion = lambda_usecase.instruction_classify(
                 name=name,
                 occupation=occupation,
                 goal=goal,
@@ -1977,7 +1977,6 @@ class InstructionsClassificationAPIView(APIView):
             
             return Response({
                 "classification": classification,
-                "reason": reason,
                 "suggestion": suggestion
             }, status=status.HTTP_200_OK)
             
