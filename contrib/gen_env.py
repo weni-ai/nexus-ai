@@ -227,6 +227,16 @@ def generate_env():
         "LOCKED_FOUNDATION_MODELS": "",
         "DYNAMODB_REGION": "us-east-1",
         "DYNAMODB_MESSAGE_TABLE": "NexusMessages",
+        "SUPERVISOR_SERVICE_AVAILABLE_PROJECTS": "",
+        "SUPERVISOR_SERVICE_AVAILABLE": "False",
+        "REPORT_RECIPIENT_EMAILS": "",
+        "CSRF_TRUSTED_ORIGINS": "",
+        "MULTI_AGENTS_CAN_ACCESS": "",
+        "SKILL_FILE_SIZE_LIMIT": "50",
+        "START_INLINE_AGENTS_ACK_LATE": "False",
+        "CELERY_WORKER_PREFETCH_MULTIPLIER": "1",
+        "PROJECTS_WITH_SPECIAL_SESSION_ID": "",
+        "PROJECTS_WITH_LARGE_DATASOURCE": "",
     }
 
     with open(env_path, "w") as configfile:
