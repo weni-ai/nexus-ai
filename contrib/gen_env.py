@@ -237,6 +237,11 @@ def generate_env():
         "CELERY_WORKER_PREFETCH_MULTIPLIER": "1",
         "PROJECTS_WITH_SPECIAL_SESSION_ID": "",
         "PROJECTS_WITH_LARGE_DATASOURCE": "",
+        "MODELS_WITH_REASONING": "",
+        "GROUNDEDNESS_SCORE_AVG_THRESHOLD": "8",
+        "GROUNDEDNESS_SOURCES_THRESHOLD": "8",
+        "BEDROCK_FILE_SIZE_LIMIT": "50",
+        "TRACE_SUMMARY_DELAY": "False",
     }
 
     with open(env_path, "w") as configfile:
