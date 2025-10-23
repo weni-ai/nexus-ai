@@ -208,6 +208,7 @@ def generate_env():
         "EMAIL_USE_TLS": "False",
         "OPENAI_AGENTS_FOUNDATION_MODEL": "gpt-4o-mini",
         "BEDROCK_CONVERSE_MAX_LENGHT": "4096",
+        "MULTI_AGENTS_PROJECTS": "",
     }
 
     with open(env_path, "w") as configfile:
