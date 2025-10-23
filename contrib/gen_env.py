@@ -209,6 +209,13 @@ def generate_env():
         "OPENAI_AGENTS_FOUNDATION_MODEL": "gpt-4o-mini",
         "BEDROCK_CONVERSE_MAX_LENGHT": "4096",
         "MULTI_AGENTS_PROJECTS": "",
+        "HUMAN_SUPPORT_ACTION_GROUP": "",
+        "APM_DISABLE_SEND": "False",
+        "APM_SECRET_TOKEN": "",
+        "APM_SERVER_URL": "",
+        "APM_SERVICE_DEBUG": "False",
+        "APM_SERVICE_NAME": "",
+        "EMAIL_PORT": "587",
     }
 
     with open(env_path, "w") as configfile:
