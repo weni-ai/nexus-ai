@@ -216,6 +216,17 @@ def generate_env():
         "APM_SERVICE_DEBUG": "False",
         "APM_SERVICE_NAME": "",
         "EMAIL_PORT": "587",
+        "PROJECT_COMPONENTS": "",
+        "REDIS_MESSAGE_CACHE_KEY_DURATION": "604800",
+        "USE_REDIS_CACHE_CONTEXT": "False",
+        "EDA_BROKER_PORT": "5672",
+        "OIDC_RP_SCOPES": "openid email",
+        "LLM_CHAR_LIMIT": "640",
+        "CREDENTIAL_ENCRYPTION_KEY": "",
+        "OFFICIAL_SMART_AGENT_EDITORS": "",
+        "LOCKED_FOUNDATION_MODELS": "",
+        "DYNAMODB_REGION": "us-east-1",
+        "DYNAMODB_MESSAGE_TABLE": "NexusMessages",
     }
 
     with open(env_path, "w") as configfile:
