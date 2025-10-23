@@ -9,7 +9,8 @@ from nexus.celery import app as celery_app
 from nexus.projects.models import Project
 from nexus.intelligences.producer.resolution_producer import ResolutionDTO, resolution_message
 
-from router.tasks.redis_task_manager import RedisTaskManager
+from router.services.message_service import MessageService
+from router.repositories.entities import ResolutionEntities
 
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
 
@@ -84,6 +85,26 @@ class LambdaUseCase():
         project_uuid: str,
         contact_urn: str
     ):
+        # If has_chats_room is True, skip lambda call and set resolution to "Has Chat Room"
+        if has_chats_room:
+            resolution = "Has Chat Room"
+            event_data = {
+                "event_name": "weni_nexus_data",
+                "key": "conversation_classification",
+                "value_type": "string",
+                "value": resolution,
+                "metadata": {
+                    "human_support": has_chats_room,
+                }
+            }
+            self.send_datalake_event(
+                event_data=event_data,
+                project_uuid=project_uuid,
+                contact_urn=contact_urn
+            )
+            return resolution
+
+        # Original logic for when has_chats_room is False
         lambda_conversation = messages
         payload_conversation = {
             "conversation": lambda_conversation
@@ -178,19 +199,10 @@ class LambdaUseCase():
                 return None
         return None
 
-    def _get_task_manager(self):
+    def _get_message_service(self):
         if self.task_manager is None:
-            self.task_manager = RedisTaskManager()
+            self.task_manager = MessageService()
         return self.task_manager
-
-    def _convert_resolution_to_choice_value(self, resolution_string: str) -> str:
-
-        resolution_mapping = {
-            "resolved": "0",
-            "unresolved": "1",
-            "in progress": "2"
-        }
-        return resolution_mapping.get(resolution_string.lower(), "2")  # Default to "2" (In Progress)
 
     def lambda_component_parser(
         self,
@@ -221,21 +233,27 @@ def create_lambda_conversation(
 
     try:
         lambda_usecase = LambdaUseCase()
-        task_manager = lambda_usecase._get_task_manager()
-        messages = task_manager.get_cache_messages(
+        message_service = lambda_usecase._get_message_service()
+
+        # Use new conversation-based message retrieval
+        messages = message_service.get_messages_for_conversation(
             project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn")
+            contact_urn=payload.get("contact_urn"),
+            channel_uuid=payload.get("channel_uuid"),
+            # If any errors happen to an older conversation, we will get all messages for correct conversation
+            start_date=payload.get("start_date"),
+            end_date=payload.get("end_date"),
         )
 
         if not messages:
-            raise ValueError("No messages found")
+            raise ValueError("No unclassified messages found for conversation period")
 
         project = Project.objects.get(uuid=payload.get("project_uuid"))
         conversation_queryset = Conversation.objects.filter(
             project=project,
             contact_urn=payload.get("contact_urn"),
             channel_uuid=payload.get("channel_uuid"),
-            resolution=2
+            resolution=ResolutionEntities.IN_PROGRESS
         )
 
         formated_messages = lambda_usecase.get_lambda_conversation(messages)
@@ -252,7 +270,8 @@ def create_lambda_conversation(
             contact_urn=payload.get("contact_urn")
         )
 
-        resolution_choice_value = lambda_usecase._convert_resolution_to_choice_value(resolution)
+        contact_name = payload.get("name")
+        resolution_choice_value = ResolutionEntities.convert_resolution_string_to_int(resolution)
 
         update_data = {
             "start_date": payload.get("start_date"),
@@ -262,23 +281,11 @@ def create_lambda_conversation(
             "resolution": resolution_choice_value,
             "topic": topic
         }
-
-        if conversation_queryset.exists():
-            conversation_queryset.update(**update_data)
-        else:
-            # TODO: Temp fix for older conversations, remove later
-            Conversation.objects.create(
-                contact_urn=payload.get("contact_urn"),
-                project=project,
-                external_id=payload.get("external_id"),
-                start_date=payload.get("start_date"),
-                end_date=payload.get("end_date"),
-                has_chats_room=payload.get("has_chats_room"),
-                contact_name=payload.get("name"),
-                channel_uuid=payload.get("channel_uuid"),
-                resolution=resolution_choice_value,
-                topic=topic
-            )
+        
+        if contact_name:
+            update_data["contact_name"] = contact_name
+        
+        conversation_queryset.update(**update_data)
 
         resolution_dto = ResolutionDTO(
             resolution=resolution_choice_value,
@@ -288,9 +295,11 @@ def create_lambda_conversation(
         )
         resolution_message(resolution_dto)
 
-        task_manager.clear_message_cache(
+        # Delete messages after processing (instead of updating resolution)
+        message_service.clear_message_cache(
             project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn")
+            contact_urn=payload.get("contact_urn"),
+            channel_uuid=payload.get("channel_uuid")
         )
 
     except Exception as e:

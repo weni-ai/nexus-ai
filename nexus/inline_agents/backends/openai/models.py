@@ -14,7 +14,8 @@ class OpenAISupervisor(models.Model):
     human_support_action_groups = models.JSONField(null=True, blank=True)
 
     components_prompt = models.TextField(null=True, blank=True)
-    components_human_support_prompt = models.TextField(null=True, blank=True)
+    components_human_support_prompt = models.TextField(null=True, blank=True, verbose_name="Formatter agent instructions")  # TODO: rename attribute to formatter_agent_instructions
+    components_instructions_up_prompt = models.TextField(null=True, blank=True, verbose_name="Components Instructions UP")
 
     default_instructions_for_collaborators = models.TextField(null=True, blank=True, help_text="Instructions that will be added to every collaborator")
     max_tokens = models.IntegerField(null=True, blank=True, help_text="Maximum number of tokens to generate", default=2048)

@@ -58,8 +58,8 @@ def _check_project_authorization(
             'You do not have permission to perform this action.'
         )
 
-    except requests.RequestException:
-        return False
+    except requests.RequestException as e:
+        raise e
 
 
 def has_external_general_project_permission(
@@ -71,8 +71,8 @@ def has_external_general_project_permission(
     token = request.headers.get('Authorization')
     try:
         return _check_project_authorization(token, project_uuid, method)
-    except requests.RequestException:
-        # Only fall back to internal check if there was a request error
+    except (requests.RequestException, ProjectAuth.DoesNotExist):
+        # Only fall back to internal check if there was a request error or no external auth
         try:
             project = Project.objects.get(uuid=project_uuid)
             return has_project_permission(request.user, project, method)

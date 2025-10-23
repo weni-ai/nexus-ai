@@ -25,7 +25,8 @@ def call_llm(
     agent: AgentDTO,
     instructions: List[InstructionDTO],
     llm_config: LLMSetupDTO,
-    last_messages: List[ContactMessageDTO]
+    last_messages: List[ContactMessageDTO],
+    project_uuid: str = "",
 ) -> str:
 
     try:
@@ -37,7 +38,8 @@ def call_llm(
             agent=agent.__dict__,
             question=message.text,
             llm_config=llm_config,
-            last_messages=last_messages
+            last_messages=last_messages,
+            project_uuid=project_uuid
         )
     except TokenLimitError:
         model_version = "gpt-4o-mini"

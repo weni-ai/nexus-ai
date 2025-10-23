@@ -14,6 +14,7 @@ from openai.types.shared import Reasoning
 from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
 
+
 class Supervisor(Agent):
     def function_tools(self) -> list:
         return [self.knowledge_base_bedrock]
@@ -29,6 +30,7 @@ class Supervisor(Agent):
         prompt_override_configuration: dict | None = None,
         preview: bool = False,
         max_tokens: int | None = None,
+        use_components: bool = False,
     ):
         tools.extend(self.function_tools())
         if model in settings.MODELS_WITH_REASONING:
@@ -48,6 +50,19 @@ class Supervisor(Agent):
             )
             return
 
+        if use_components:
+            super().__init__(
+                name=name,
+                instructions=instructions,
+                model=model,
+                tools=tools,
+                hooks=hooks,
+                model_settings=ModelSettings(
+                    max_tokens=max_tokens,
+                ),
+            )
+            return
+
         super().__init__(
             name=name,
             instructions=instructions,
@@ -58,6 +73,7 @@ class Supervisor(Agent):
                 max_tokens=max_tokens,
             ),
         )
+
         return
 
     @function_tool

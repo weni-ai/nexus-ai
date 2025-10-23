@@ -121,6 +121,7 @@ def route(
                 instructions=instructions,
                 llm_config=llm_config,
                 last_messages=last_messages,
+                project_uuid=message.project_uuid
             )
 
             llm_response = bad_words_filter(llm_response)

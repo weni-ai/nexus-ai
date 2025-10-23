@@ -81,7 +81,6 @@ class SupervisorAdmin(admin.ModelAdmin):
     )
 
 
-
 @admin.register(OpenAISupervisor)
 class OpenAISupervisorAdmin(admin.ModelAdmin):
     list_display = ('name', 'foundation_model', 'created_on')
@@ -99,14 +98,15 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
             'fields': ('name', 'foundation_model', 'instruction', 'default_instructions_for_collaborators', 'max_tokens')
         }),
         ('Configuration', {
-            'fields': ('prompt_override_configuration', 'action_groups', 'knowledge_bases')
+            'fields': ('prompt_override_configuration', 'action_groups', 'knowledge_bases'),
+            'classes': ('collapse',)
         }),
         ('Human Support', {
             'fields': ('human_support_prompt', 'human_support_action_groups'),
             'classes': ('collapse',)
         }),
         ('Components', {
-            'fields': ('components_prompt', 'components_human_support_prompt'),
+            'fields': ('components_prompt', 'components_human_support_prompt', 'components_instructions_up_prompt'),
             'classes': ('collapse',)
         }),
         ('Metadata', {
@@ -129,6 +129,7 @@ class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
             'fields': ('project', 'agents_backend', 'default_instructions_for_collaborators')
         }),
     )
+
 
 @admin.register(Agent)
 class AgentAdmin(admin.ModelAdmin):

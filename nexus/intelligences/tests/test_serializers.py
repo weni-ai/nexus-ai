@@ -80,7 +80,7 @@ class IntelligencesSerializersTestCase(TestCase):
         serializer_fields = list(data.keys())
         fields = ["file", "extension_file", "uuid", "created_file_name", "status", "file_name", "created_at"]
         self.assertListEqual(serializer_fields, fields)
-        self.assertEquals(data.get("status"), TaskManager.STATUS_FAIL)
+        self.assertEqual(data.get("status"), TaskManager.STATUS_FAIL)
 
     def test_content_base_file_serializer(self):
         content_base_file = ContentBaseFileFactory()
@@ -94,7 +94,7 @@ class IntelligencesSerializersTestCase(TestCase):
         serializer_fields = list(data.keys())
         fields = ["file", "extension_file", "uuid", "created_file_name", "status", "file_name", "created_at"]
         self.assertListEqual(serializer_fields, fields)
-        self.assertEquals(data.get("status"), TaskManager.STATUS_WAITING)
+        self.assertEqual(data.get("status"), TaskManager.STATUS_WAITING)
 
     def test_created_content_base_link_serializer(self):
         serializer = CreatedContentBaseLinkSerializer(self.content_base_link)
@@ -108,7 +108,7 @@ class IntelligencesSerializersTestCase(TestCase):
         serializer_fields = list(data.keys())
         fields = ["uuid", "link", "status", "created_at"]
         self.assertListEqual(serializer_fields, fields)
-        self.assertEquals(data.get("status"), TaskManager.STATUS_FAIL)
+        self.assertEqual(data.get("status"), TaskManager.STATUS_FAIL)
 
     def test_content_base_link_serializer(self):
         content_base_link = ContentBaseLinkFactory()
@@ -120,7 +120,7 @@ class IntelligencesSerializersTestCase(TestCase):
         fields = ["uuid", "link", "status", "created_at"]
 
         self.assertListEqual(serializer_fields, fields)
-        self.assertEquals(data.get("status"), TaskManager.STATUS_WAITING)
+        self.assertEqual(data.get("status"), TaskManager.STATUS_WAITING)
 
     def test_content_base_logs_serializer(self):
         logs = ContentBaseLogs.objects.create(
@@ -176,12 +176,12 @@ class IntelligencesSerializersTestCase(TestCase):
     def test_content_base_personalization_serializer(self):
         serializer = ContentBasePersonalizationSerializer(self.content_base)
         serializer_fields = list(serializer.data.keys())
-        fields = ["agent", "instructions"]
+        fields = ["agent", "instructions", "team"]
         instructions = serializer.get_instructions(self.content_base)
 
         self.assertListEqual(serializer_fields, fields)
         self.assertListEqual(list(instructions[0].keys()), ["id", "instruction"])
-        self.assertEquals(len(instructions), 1)
+        self.assertEqual(len(instructions), 1)
 
     def test_content_base_personalization_update_serializer(self):
         name = "Updated name"
@@ -202,7 +202,7 @@ class IntelligencesSerializersTestCase(TestCase):
             )}
         )
         instance = serializer.update(self.content_base, validated_data=data)
-        self.assertEquals(instance.agent.name, name)
+        self.assertEqual(instance.agent.name, name)
 
     def test_content_base_personalization_update_serializer_agent_dosent_exist(self):
         self.content_base.agent.delete()
@@ -238,4 +238,4 @@ class IntelligencesSerializersTestCase(TestCase):
             context={"request": MockRequest()}
         )
         instance = serializer.update(self.content_base, validated_data=data)
-        self.assertEquals(instance.agent.name, name)
+        self.assertEqual(instance.agent.name, name)
