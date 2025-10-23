@@ -186,6 +186,8 @@ class UpdateContentBaseTextUseCase():
             action_type="U",
         )
 
+        return contentbasetext
+
 
 class UpdateContentBaseFileUseCase():
 

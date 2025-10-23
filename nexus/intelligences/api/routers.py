@@ -9,6 +9,7 @@ from .views import (
     ContentBaseLinkViewset,
     InlineContentBaseFileViewset,
     InlineContentBaseTextViewset,
+    InlineContentBaseLinkViewset,
     SentenxIndexerUpdateFile,
     GenerativeIntelligenceQuestionAPIView,
     QuickTestAIAPIView,
@@ -67,6 +68,12 @@ inline_content_base_router.register(
     r'inline-content-base-text',
     InlineContentBaseTextViewset,
     basename='content-base-text-inline'
+)
+
+inline_content_base_router.register(
+    r'inline-content-base-link',
+    InlineContentBaseLinkViewset,
+    basename='content-base-link-inline'
 )
 
 

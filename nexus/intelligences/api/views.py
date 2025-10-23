@@ -14,6 +14,7 @@ from nexus.events import event_manager
 from nexus.intelligences.models import (
     ContentBase,
     ContentBaseFile,
+    ContentBaseLink,
     ContentBaseText,
     Intelligence,
     Topics,
@@ -655,7 +656,7 @@ class InlineContentBaseTextViewset(
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def create(self, request, project_uuid: str): 
+    def create(self, request, project_uuid: str):
         try:
             user_email = request.user.email
 
@@ -963,10 +964,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
             if file.size > (settings.BEDROCK_FILE_SIZE_LIMIT * (1024**2)):
                 return Response(data={"message": "File size is too large"}, status=http_status.HTTP_400_BAD_REQUEST)
 
-        content_base = self.get_queryset()
-        if not content_base:
-            return Response(data={"message": "No content base found for this project"}, status=http_status.HTTP_404_NOT_FOUND)
-
+        content_base = intelligences.get_by_uuid.get_default_content_base_by_project(self.kwargs.get('project_uuid'))
         content_base_uuid = str(content_base.uuid)
 
         user: User = request.user
@@ -1014,7 +1012,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
             return ContentBaseFile.objects.none()  # pragma: no cover
         project_uuid = self.kwargs.get('project_uuid')
         content_base = intelligences.get_by_uuid.get_default_content_base_by_project(project_uuid)
-        return content_base
+        return ContentBaseFile.objects.filter(content_base=content_base)
 
     def retrieve(self, request, *args, **kwargs):
 
@@ -1030,10 +1028,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
         try:
             contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
 
-            content_base = self.get_queryset()
-            if not content_base:
-                return Response(data={"message": "No content base found for this project"}, status=status.HTTP_404_NOT_FOUND)
-
+            content_base = intelligences.get_by_uuid.get_default_content_base_by_project(self.kwargs.get('project_uuid'))
             content_base_uuid = str(content_base.uuid)
 
             use_case = intelligences.RetrieveContentBaseFileUseCase()
@@ -1171,6 +1166,124 @@ class ContentBaseLinkViewset(ModelViewSet):
                 action_type="D",
                 content_base_link=content_base_link,
                 user=user
+            )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class InlineContentBaseLinkViewset(ModelViewSet):
+
+    serializer_class = ContentBaseLinkSerializer
+    lookup_url_kwarg = "contentbaselink_uuid"
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return ContentBaseLink.objects.none()  # pragma: no cover
+        use_case = intelligences.ListContentBaseLinkUseCase()
+        project_uuid = self.kwargs.get('project_uuid')
+        return use_case.get_inline_contentbase_link(project_uuid=project_uuid)
+
+    def create(self, request, **kwargs):
+        content_base = intelligences.get_default_content_base_by_project(self.kwargs.get('project_uuid'))
+        if not content_base:
+            return Response(data={"message": "No content base found for this project"}, status=status.HTTP_404_NOT_FOUND)
+
+        content_base_uuid = str(content_base.uuid)
+
+        user: User = request.user
+        user_email: str = user.email
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        link = serializer.validated_data.get('link')
+        link_dto = intelligences.ContentBaseLinkDTO(
+            link=link,
+            user_email=user_email,
+            content_base_uuid=content_base_uuid
+        )
+        content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
+
+        try:
+            project = ProjectsUseCase().get_by_uuid(self.kwargs.get('project_uuid'))
+            indexer_database = project.indexer_database
+        except ObjectDoesNotExist:
+            indexer_database = Project.SENTENX
+
+        if indexer_database == Project.BEDROCK:
+            bedrock_send_link.delay(
+                link=link,
+                user_email=user_email,
+                content_base_link_uuid=str(content_base_link.uuid)
+            )
+        else:
+            send_link.delay(
+                link=link,
+                user_email=user_email,
+                content_base_link_uuid=str(content_base_link.uuid)
+            )
+
+        response = CreatedContentBaseLinkSerializer(content_base_link).data
+
+        return Response(response, status=status.HTTP_201_CREATED)
+
+    def retrieve(self, request, *args, **kwargs):
+        contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
+        use_case = intelligences.RetrieveContentBaseLinkUseCase()
+        content_base_link = use_case.get_inline_contentbaselink(
+            contentbaselink_uuid=contentbaselink_uuid
+        )
+        serializer = self.get_serializer(content_base_link)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
+
+            content_base = intelligences.get_default_content_base_by_project(self.kwargs.get('project_uuid'))
+            if not content_base:
+                return Response(data={"message": "No content base found for this project"}, status=status.HTTP_404_NOT_FOUND)
+
+            content_base_uuid = str(content_base.uuid)
+
+            use_case = intelligences.RetrieveContentBaseLinkUseCase()
+            content_base_link = use_case.get_inline_contentbaselink(
+                contentbaselink_uuid=contentbaselink_uuid
+            )
+            project_use_case = ProjectsUseCase()
+            project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
+            indexer = project_use_case.get_indexer_database_by_project(project)
+
+            use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
+            use_case.delete_by_object(
+                content_base_link,
+            )
+
+            if project.indexer_database == Project.BEDROCK:
+                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+
+            event_manager.notify(
+                event="contentbase_link_activity",
+                action_type="D",
+                content_base_link=content_base_link,
+                user=self.request.user
+            )
+
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ObjectDoesNotExist:
+            indexer = SentenXFileDataBase
+            use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
+            use_case.delete_by_object(
+                content_base_link,
+            )
+            event_manager.notify(
+                event="contentbase_link_activity",
+                action_type="D",
+                content_base_link=content_base_link,
+                user=self.request.user
             )
             return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -1689,7 +1802,7 @@ class TopicsViewSet(ModelViewSet):
             project = Project.objects.get(uuid=project_uuid)
         except Project.DoesNotExist:
             return Response(
-                {"error": "Project not found"}, 
+                {"error": "Project not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
 
@@ -1719,7 +1832,7 @@ class SubTopicsViewSet(ModelViewSet):
         topic_uuid = self.kwargs.get('topic_uuid')
         if not topic_uuid:
             return Response(
-                {"error": "topic_uuid is required"}, 
+                {"error": "topic_uuid is required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -1727,7 +1840,7 @@ class SubTopicsViewSet(ModelViewSet):
             topic = Topics.objects.get(uuid=topic_uuid)
         except Topics.DoesNotExist:
             return Response(
-                {"error": "Topic not found"}, 
+                {"error": "Topic not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
 
