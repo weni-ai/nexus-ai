@@ -283,8 +283,3 @@ class Conversation(models.Model):
         indexes = [
             models.Index(fields=["project", "contact_urn", "start_date", "end_date", "channel_uuid"]),
         ]
-
-
-class ConversationMessage(models.Model):
-    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
-    message = models.ManyToManyField(InlineAgentMessage, related_name="conversations")

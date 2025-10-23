@@ -10,7 +10,7 @@ from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.tools import ToolsUseCase
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
-from nexus.intelligences.models import Conversation, ConversationMessage
+from nexus.intelligences.models import Conversation
 from nexus.inline_agents.models import InlineAgentMessage
 
 
@@ -109,11 +109,6 @@ class CreateConversationUseCase():
                 end_date=consumer_message.get("end_date"),
                 contact_name=consumer_message.get("name")
             )
-
-            conversation_message = ConversationMessage.objects.create(
-                conversation=conversation,
-            )
-            conversation_message.message.set(messages)
 
             return conversation
         except Exception as e:
