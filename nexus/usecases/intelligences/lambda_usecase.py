@@ -250,12 +250,20 @@ class LambdaUseCase():
             )
             
             response_data = json.loads(response.get("Payload").read())
-            
-            classification = response_data.get("classification", [])
-            reason = response_data.get("reason", "")
+
+            classification_data = response_data.get("classification", [])
             suggestion = response_data.get("suggestion")
             
-            return classification, reason, suggestion
+            if classification_data and isinstance(classification_data[0], str):
+                reason = response_data.get("reason", "")
+                classification = [
+                    {"name": name, "reason": reason} 
+                    for name in classification_data
+                ]
+            else:
+                classification = classification_data
+            
+            return classification, suggestion
             
         except Exception as e:
             sentry_sdk.capture_exception(e)
