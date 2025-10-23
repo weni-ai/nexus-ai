@@ -8,6 +8,7 @@ from .views import (
     ContentBaseFileViewset,
     ContentBaseLinkViewset,
     InlineContentBaseFileViewset,
+    InlineContentBaseTextViewset,
     SentenxIndexerUpdateFile,
     GenerativeIntelligenceQuestionAPIView,
     QuickTestAIAPIView,
@@ -61,6 +62,13 @@ inline_content_base_router.register(
     InlineContentBaseFileViewset,
     basename='content-base-file-inline'
 )
+
+inline_content_base_router.register(
+    r'inline-content-base-text',
+    InlineContentBaseTextViewset,
+    basename='content-base-text-inline'
+)
+
 
 urlpatterns = [
     path('<org_uuid>/intelligences/', include(org_router.urls)),
