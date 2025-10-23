@@ -966,10 +966,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
             if file.size > (settings.BEDROCK_FILE_SIZE_LIMIT * (1024**2)):
                 return Response(data={"message": "File size is too large"}, status=http_status.HTTP_400_BAD_REQUEST)
 
-        content_base = self.get_queryset()
-        if not content_base:
-            return Response(data={"message": "No content base found for this project"}, status=http_status.HTTP_404_NOT_FOUND)
-
+        content_base = intelligences.get_by_uuid.get_default_content_base_by_project(self.kwargs.get('project_uuid'))
         content_base_uuid = str(content_base.uuid)
 
         user: User = request.user
@@ -1017,7 +1014,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
             return ContentBaseFile.objects.none()  # pragma: no cover
         project_uuid = self.kwargs.get('project_uuid')
         content_base = intelligences.get_by_uuid.get_default_content_base_by_project(project_uuid)
-        return content_base
+        return ContentBaseFile.objects.filter(content_base=content_base)
 
     def retrieve(self, request, *args, **kwargs):
 
@@ -1033,10 +1030,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
         try:
             contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
 
-            content_base = self.get_queryset()
-            if not content_base:
-                return Response(data={"message": "No content base found for this project"}, status=status.HTTP_404_NOT_FOUND)
-
+            content_base = intelligences.get_by_uuid.get_default_content_base_by_project(self.kwargs.get('project_uuid'))
             content_base_uuid = str(content_base.uuid)
 
             use_case = intelligences.RetrieveContentBaseFileUseCase()
