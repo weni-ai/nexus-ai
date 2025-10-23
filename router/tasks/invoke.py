@@ -62,7 +62,7 @@ def handle_product_items(text: str, product_items: list) -> str:
 def complexity_layer(input_text: str) -> str | None:
     if input_text:
         try:
-            payload = { "first_input": input_text }
+            payload = {"first_input": input_text}
             response = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME).invoke(
                 FunctionName=settings.COMPLEXITY_LAYER_LAMBDA,
                 InvocationType="RequestResponse",
@@ -118,6 +118,7 @@ def _preprocess_message_input(message: Dict) -> Tuple[Dict, Optional[str], bool]
     processed_message['text'] = text
     return processed_message, foundation_model, turn_off_rationale
 
+
 def _manage_pending_task(task_manager: RedisTaskManager, message_obj, current_task_id: str) -> str:
     """
     Handles revoking old tasks and concatenating messages for rapid inputs.
@@ -134,6 +135,7 @@ def _manage_pending_task(task_manager: RedisTaskManager, message_obj, current_ta
 
     task_manager.store_pending_task_id(message_obj.project_uuid, message_obj.contact_urn, current_task_id)
     return final_message_text
+
 
 def _handle_task_error(
     exc: Exception,
@@ -187,6 +189,7 @@ def _handle_task_error(
     sentry_sdk.capture_exception(exc)
     raise exc
 
+
 @celery_app.task(
     bind=True,
     soft_time_limit=300,
@@ -207,10 +210,10 @@ def start_inline_agents(
     task_manager: Optional[RedisTaskManager] = None
 ) -> bool:  # pragma: no cover
     task_manager = task_manager or get_task_manager()
-    
+
     try:
         processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(message)
-        
+
         TypingUsecase().send_typing_message(
             contact_urn=processed_message.get("contact_urn"),
             msg_external_id=processed_message.get("msg_event", {}).get("msg_external_id", ""),
@@ -234,8 +237,9 @@ def start_inline_agents(
 
         message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
 
+        # Fetch project once and reuse throughout the flow to avoid redundant DB queries
         project, content_base, inline_agent_configuration = get_project_and_content_base_data(message_obj.project_uuid)
-        
+
         agents_backend = project.agents_backend
         backend = BackendsRegistry.get_backend(agents_backend)
         team = ORMTeamRepository(agents_backend=agents_backend, project=project).get_team(message_obj.project_uuid)
@@ -302,4 +306,3 @@ def start_inline_agents(
 
     except Exception as e:
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
-
