@@ -44,7 +44,6 @@ class VersionFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Version
 
-    version = factory.Sequence(lambda n: n)
     skills = [{"name": "test_skill", "description": "test description"}]
     display_skills = [{"name": "test_skill", "description": "test description"}]
     agent = factory.SubFactory(
@@ -69,6 +68,6 @@ class SupervisorFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: 'test%d' % n)
     instruction = factory.Faker('text')
     foundation_model = "nova-pro"
-    prompt_override_configuration = factory.Faker('json')
-    action_groups = factory.Faker('json')
-    knowledge_bases = factory.Faker('json')
+    prompt_override_configuration = {"default": {}, "components": {}}
+    action_groups = []
+    knowledge_bases = [{"knowledgeBaseId": "test-kb-id"}]

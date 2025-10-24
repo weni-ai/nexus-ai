@@ -13,7 +13,7 @@ class TestBedrockSupervisorRepository(TestCase):
         self.supervisor = SupervisorFactory()
 
     def test_get_supervisor(self):
-        result = BedrockSupervisorRepository.get_supervisor(project_uuid=self.project.uuid)
+        result = BedrockSupervisorRepository.get_supervisor(project=self.project)
 
         # Assert
         self.assertEqual(result["prompt_override_configuration"], self.supervisor.prompt_override_configuration)
@@ -26,7 +26,7 @@ class TestBedrockSupervisorRepository(TestCase):
         self.project.default_supervisor_foundation_model = "custom_foundation_model"
         self.project.save()
 
-        result = BedrockSupervisorRepository.get_supervisor(project_uuid=self.project.uuid)
+        result = BedrockSupervisorRepository.get_supervisor(project=self.project)
 
         # Assert
         self.assertEqual(result["prompt_override_configuration"], self.supervisor.prompt_override_configuration)
@@ -36,7 +36,7 @@ class TestBedrockSupervisorRepository(TestCase):
         self.assertEqual(result["knowledge_bases"], self.supervisor.knowledge_bases)
 
     def test_get_supervisor_with_foundation_model(self):
-        result = BedrockSupervisorRepository.get_supervisor(project_uuid=self.project.uuid, foundation_model="foundation_model")
+        result = BedrockSupervisorRepository.get_supervisor(project=self.project, foundation_model="foundation_model")
 
         # Assert
         self.assertEqual(result["prompt_override_configuration"], self.supervisor.prompt_override_configuration)
@@ -49,7 +49,7 @@ class TestBedrockSupervisorRepository(TestCase):
         self.project.default_supervisor_foundation_model = "custom_foundation_model"
         self.project.save()
 
-        result = BedrockSupervisorRepository.get_supervisor(project_uuid=self.project.uuid, foundation_model="foundation_model")
+        result = BedrockSupervisorRepository.get_supervisor(project=self.project, foundation_model="foundation_model")
 
         # Assert
         self.assertEqual(result["prompt_override_configuration"], self.supervisor.prompt_override_configuration)

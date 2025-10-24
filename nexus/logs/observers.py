@@ -48,7 +48,10 @@ class ZeroShotHealthCheckObserver(EventObserver):  # pragma: no cover
         self.url = os.environ.get("HC_ZEROSHOT_URL")
         self.token = os.environ.get("HC_WENI_TOKEN")
         self.service_name = "zeroshot"
-        self.service_health = Gauge('service_health_zeroshot', 'Health status of services', ['service_name'])
+        # Use class-level metric to avoid duplicate registration
+        if not hasattr(ZeroShotHealthCheckObserver, '_service_health'):
+            ZeroShotHealthCheckObserver._service_health = Gauge('service_health_zeroshot', 'Health status of services', ['service_name'])
+        self.service_health = ZeroShotHealthCheckObserver._service_health
 
     def perform(self):
         if os.environ.get("ENVIRONMENT") == "production":
@@ -69,7 +72,10 @@ class GolfinhoHealthCheckObserver(EventObserver):  # pragma: no cover
         self.url = os.environ.get("HC_GOLFINHO_URL")
         self.token = os.environ.get("HC_WENI_TOKEN")
         self.service_name = "wenigpt_golfinho"
-        self.service_health = Gauge('service_health_golfinho', 'Health status of services', ['service_name'])
+        # Use class-level metric to avoid duplicate registration
+        if not hasattr(GolfinhoHealthCheckObserver, '_service_health'):
+            GolfinhoHealthCheckObserver._service_health = Gauge('service_health_golfinho', 'Health status of services', ['service_name'])
+        self.service_health = GolfinhoHealthCheckObserver._service_health
 
     def perform(self):
         if os.environ.get("ENVIRONMENT") == "production":

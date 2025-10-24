@@ -445,8 +445,7 @@ class LogGroupView(APIView):
 
 
 class MultiAgentView(APIView):
-    permission_classes = [CombinedExternalProjectPermission]
-    authentication_classes = []  # Disable default authentication
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, project_uuid):
         if not project_uuid:
@@ -456,10 +455,18 @@ class MultiAgentView(APIView):
             )
 
         try:
-
             project = Project.objects.get(uuid=project_uuid)
+            
+            # Check if user has permission to view
+            # Only users with explicit ProjectAuth records have access
+            can_view = False
+            if hasattr(request, 'user') and request.user.is_authenticated:
+                from nexus.projects.models import ProjectAuth
+                can_view = ProjectAuth.objects.filter(user=request.user, project=project).exists()
+            
             return Response({
                 "multi_agents": project.inline_agent_switch,
+                "can_view": can_view,
             })
         except Project.DoesNotExist:
             return Response(
@@ -482,6 +489,17 @@ class MultiAgentView(APIView):
 
         try:
             project = Project.objects.get(uuid=project_uuid)
+            
+            # Check if user has permission to modify
+            # Only users with explicit ProjectAuth records have access
+            from nexus.projects.models import ProjectAuth
+            has_permission = ProjectAuth.objects.filter(user=request.user, project=project).exists()
+            if not has_permission:
+                return Response(
+                    {"error": "You do not have permission to modify this project"},
+                    status=403
+                )
+            
             project.inline_agent_switch = multi_agents
             if not project.use_prompt_creation_configurations:
                 project.use_prompt_creation_configurations = True

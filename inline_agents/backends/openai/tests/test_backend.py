@@ -17,8 +17,10 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         result = OpenAISupervisorRepository.get_supervisor(self.project)
 
         expected_keys = [
-            "instruction", "tools", "foundation_model",
-            "knowledge_bases", "prompt_override_configuration", "default_instructions_for_collaborators"
+            "instruction", "use_components", "use_human_support", "components_instructions",
+            "formatter_agent_components_instructions", "components_instructions_up", "human_support_instructions",
+            "tools", "foundation_model", "knowledge_bases", "prompt_override_configuration", 
+            "default_instructions_for_collaborators", "max_tokens"
         ]
         self.assertEqual(set(result.keys()), set(expected_keys))
         self.assertEqual(result["foundation_model"], self.supervisor.foundation_model)
@@ -40,8 +42,13 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         self.project.human_support = False
         self.project.save()
 
-        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, self.supervisor)
-        self.assertEqual(result, self.supervisor.components_prompt)
+        # Create supervisor with specific values
+        supervisor = OpenAISupervisorFactory(
+            components_prompt="Components prompt"
+        )
+
+        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
+        self.assertEqual(result, "Components prompt")
 
     def test_get_supervisor_instructions_human_support_only(self):
         """Test _get_supervisor_instructions when project has human support only."""
@@ -49,8 +56,13 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         self.project.human_support = True
         self.project.save()
 
-        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, self.supervisor)
-        self.assertEqual(result, self.supervisor.human_support_prompt)
+        # Create supervisor with specific values
+        supervisor = OpenAISupervisorFactory(
+            human_support_prompt="Human support prompt"
+        )
+
+        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
+        self.assertEqual(result, "Human support prompt")
 
     def test_get_supervisor_instructions_components_and_human_support(self):
         """Test _get_supervisor_instructions when project has both components and human support."""
@@ -58,8 +70,13 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         self.project.human_support = True
         self.project.save()
 
-        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, self.supervisor)
-        self.assertEqual(result, self.supervisor.components_human_support_prompt)
+        # Create supervisor with specific values
+        supervisor = OpenAISupervisorFactory(
+            components_human_support_prompt="Components + Human support prompt"
+        )
+
+        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
+        self.assertEqual(result, "Components + Human support prompt")
 
     def test_get_supervisor_tools_default_case(self):
         """Test _get_supervisor_tools when project has no human support."""
@@ -90,7 +107,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         self.project.save()
 
         result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
-        self.assertEqual(result, supervisor.components_prompt)  # Should be None
+        self.assertIsNone(result)  # Should be None
 
         # Test human support only with None value
         self.project.use_components = False
@@ -98,7 +115,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         self.project.save()
 
         result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
-        self.assertEqual(result, supervisor.human_support_prompt)  # Should be None
+        self.assertIsNone(result)  # Should be None
 
         # Test both with None value
         self.project.use_components = True
@@ -106,7 +123,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         self.project.save()
 
         result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
-        self.assertEqual(result, supervisor.components_human_support_prompt)  # Should be None
+        self.assertIsNone(result)  # Should be None
 
     def test_get_supervisor_tools_with_none_values(self):
         """Test _get_supervisor_tools when human_support_action_groups is None."""

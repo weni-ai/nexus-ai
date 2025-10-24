@@ -27,6 +27,10 @@ class MultiAgentViewTestCase(TestCase):
         ProjectAuthFactory(project=self.project_2, user=self.user_vtex)
 
     def test_get_multi_agent_with_agent_builder_without_access(self):
+        # Delete the ProjectAuth record for self.user to simulate no access
+        from nexus.projects.models import ProjectAuth
+        ProjectAuth.objects.filter(user=self.user, project=self.project).delete()
+        
         client = APIClient()
         client.force_authenticate(user=self.user)
         url = reverse("multi-agents", kwargs={"project_uuid": str(self.project.uuid)})
@@ -60,6 +64,10 @@ class MultiAgentViewTestCase(TestCase):
         self.assertEquals(content.get("can_view"), True)
 
     def test_update_multi_agent_with_agent_builder_2_without_access(self):
+        # Delete the ProjectAuth record for self.user_inline to simulate no access
+        from nexus.projects.models import ProjectAuth
+        ProjectAuth.objects.filter(user=self.user_inline, project=self.project_2).delete()
+        
         client = APIClient()
         client.force_authenticate(user=self.user_inline)
         url = reverse("multi-agents", kwargs={"project_uuid": str(self.project_2.uuid)})

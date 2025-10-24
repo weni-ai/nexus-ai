@@ -1,6 +1,6 @@
 import json
 from io import BytesIO
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.test import TestCase
@@ -34,7 +34,6 @@ class TestAgentsUsecase(TestCase):
             project=self.project,
             instruction="Lorem Ipsum dolor sit amet",
             foundation_model="claude",
-            created_by=self.user,
         )
         self.agent.versions.create(
             skills=[],
@@ -43,22 +42,21 @@ class TestAgentsUsecase(TestCase):
 
     def test_assing_agent_doesnt_exist(self):
         with self.assertRaises(ValueError):
-            self.usecase.assign_agent("123e4567-e89b-12d3-a456-426614174000", self.project.uuid, self.user)
+            self.usecase.assign_agent("123e4567-e89b-12d3-a456-426614174000", self.project.uuid)
 
     def test_assing_project_doesnt_exist(self):
         with self.assertRaises(ValueError):
-            self.usecase.assign_agent(self.agent.uuid, "123e4567-e89b-12d3-a456-426614174000", self.user)
+            self.usecase.assign_agent(self.agent.uuid, "123e4567-e89b-12d3-a456-426614174000")
 
     def test_assign_agent(self):
-        created, integrated_agent = self.usecase.assign_agent(self.agent.uuid, self.project.uuid, self.user)
+        created, integrated_agent = self.usecase.assign_agent(self.agent.uuid, self.project.uuid)
         self.assertTrue(created)
         self.assertEqual(integrated_agent.agent, self.agent)
         self.assertEqual(integrated_agent.project, self.project)
-        self.assertEqual(integrated_agent.created_by, self.user)
 
     def test_assign_agent_already_exists(self):
-        self.usecase.assign_agent(self.agent.uuid, self.project.uuid, self.user)
-        created, integrated_agent = self.usecase.assign_agent(self.agent.uuid, self.project.uuid, self.user)
+        self.usecase.assign_agent(self.agent.uuid, self.project.uuid)
+        created, integrated_agent = self.usecase.assign_agent(self.agent.uuid, self.project.uuid)
         self.assertFalse(created)
         self.assertEqual(integrated_agent.agent, self.agent)
 
@@ -71,12 +69,12 @@ class TestAgentsUsecase(TestCase):
             self.usecase.unassign_agent(self.agent.uuid, "123e4567-e89b-12d3-a456-426614174000")
 
     def test_unassign_agent(self):
-        self.usecase.assign_agent(self.agent.uuid, self.project.uuid, self.user)
+        self.usecase.assign_agent(self.agent.uuid, self.project.uuid)
         deleted, _ = self.usecase.unassign_agent(self.agent.uuid, self.project.uuid)
         self.assertTrue(deleted)
 
     def test_unassign_agent_already_unassigned(self):
-        self.usecase.assign_agent(self.agent.uuid, self.project.uuid, self.user)
+        self.usecase.assign_agent(self.agent.uuid, self.project.uuid)
         self.usecase.unassign_agent(self.agent.uuid, self.project.uuid)
         deleted, integrated_agent = self.usecase.unassign_agent(self.agent.uuid, self.project.uuid)
         self.assertFalse(deleted)
@@ -164,7 +162,12 @@ class TestPushAgents(TestCase):
         }"""
         self.agents = json.loads(agents)
 
-    def test_push_agents(self):
+    @patch('nexus.usecases.inline_agents.tools.FlowsRESTClient')
+    def test_push_agents(self, mock_flows_client):
+        mock_instance = mock_flows_client.return_value
+        mock_instance.list_project_contact_fields.return_value = {'results': []}
+        mock_instance.create_project_contact_field.return_value = True
+        
         agents = self.agents
         files = MultiValueDict({
             'utility_agent:get_weather': [
