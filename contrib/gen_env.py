@@ -25,13 +25,26 @@ def generate_env():
         print("A .env file already exists, delete it and run again")
         return
 
+    # Detect if we're running in GitHub Actions
+    is_github_actions = os.environ.get('GITHUB_ACTIONS') == 'true'
+    
+    # Use different hostnames based on environment
+    if is_github_actions:
+        db_host = "postgres"
+        redis_host = "redis"
+        print("Detected GitHub Actions environment - using postgres/redis hostnames")
+    else:
+        db_host = "localhost"
+        redis_host = "localhost"
+        print("Detected local environment - using localhost hostnames")
+
     VARIABLES = {
         "DEBUG": True,
         "ALLOWED_HOSTS": "*",
         "SECRET_KEY": get_random_secret_key(),
-        "DEFAULT_DATABASE": "postgres://nexus:nexus@localhost:5432/nexus",
-        "CELERY_BROKER_URL": "redis://localhost:6379/1",
-        "REDIS_CHANNEL_URL": "redis://localhost:6379/1",
+        "DEFAULT_DATABASE": f"postgres://nexus:nexus@{db_host}:5432/nexus",
+        "CELERY_BROKER_URL": f"redis://{redis_host}:6379/1",
+        "REDIS_CHANNEL_URL": f"redis://{redis_host}:6379/1",
         "WENIGPT_FLOWS_CLASSIFY_TOKEN": "",
         "WENIGPT_FLOWS_SEARCH_TOKEN": "",
         "SENTENX_BASE_URL": "",
