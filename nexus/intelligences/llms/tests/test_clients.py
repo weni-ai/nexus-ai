@@ -66,7 +66,7 @@ class WenigptClientTestCase(TestCase):
         self.assertEquals(client.next_question_template_prompt, settings.WENIGPT_SHARK_NEXT_QUESTION_TEMPLATE_PROMPT)
 
     def test_wenigpt_test_prompts(self):
-        client = WeniGPTClient(settings.WENIGPT_SHARK)
+        client = WeniGPTClient(settings.WENIGPT_TEST)
         self.assertEquals(client.prompt_with_context, settings.WENIGPT_TEST_CONTEXT_PROMPT)
         self.assertEquals(client.prompt_without_context, settings.WENIGPT_TEST_NO_CONTEXT_PROMPT)
         self.assertEquals(client.pairs_template_prompt, settings.WENIGPT_TEST_PAIRS_TEMPLATE_PROMPT)
