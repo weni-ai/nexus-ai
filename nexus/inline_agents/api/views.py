@@ -445,7 +445,8 @@ class LogGroupView(APIView):
 
 
 class MultiAgentView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [CombinedExternalProjectPermission]
+    authentication_classes = []  # Disable default authentication
 
     def get(self, request, project_uuid):
         if not project_uuid:
