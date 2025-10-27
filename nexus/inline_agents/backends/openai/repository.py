@@ -41,14 +41,7 @@ class OpenAISupervisorRepository(SupervisorRepository):
 
     @classmethod
     def _get_supervisor_instructions(cls, project, supervisor) -> str:
-        if project.use_components and project.human_support:
-            return supervisor.components_human_support_prompt
-        elif project.use_components:
-            return supervisor.components_prompt
-        elif project.human_support:
-            return supervisor.human_support_prompt
-        else:
-            return supervisor.instruction
+        return supervisor.instruction
 
     @classmethod
     def _get_supervisor_tools(cls, project, supervisor) -> list[dict]:

@@ -45,7 +45,8 @@ class MultiAgentViewTestCase(TestCase):
         content = json.loads(response.content)
         self.assertEquals(response.status_code, 200)
         self.assertEquals(content.get("multi_agents"), False)
-        self.assertEquals(content.get("can_view"), False)
+        # can_view is no longer returned by the view
+        self.assertIsNone(content.get("can_view"))
 
     def test_get_multi_agent_with_agent_builder_with_weni_access(self):
         client = APIClient()
@@ -58,8 +59,8 @@ class MultiAgentViewTestCase(TestCase):
         content = json.loads(response.content)
         self.assertEquals(response.status_code, 200)
         self.assertEquals(content.get("multi_agents"), False)
-        # With external token authentication, can_view is False because there's no user context
-        self.assertEquals(content.get("can_view"), False)
+        # can_view is no longer returned by the view
+        self.assertIsNone(content.get("can_view"))
 
     def test_get_multi_agent_with_agent_builder_with_vtex_access(self):
         client = APIClient()
@@ -72,8 +73,8 @@ class MultiAgentViewTestCase(TestCase):
         content = json.loads(response.content)
         self.assertEquals(response.status_code, 200)
         self.assertEquals(content.get("multi_agents"), False)
-        # With external token authentication, can_view is False because there's no user context
-        self.assertEquals(content.get("can_view"), False)
+        # can_view is no longer returned by the view
+        self.assertIsNone(content.get("can_view"))
 
     def test_update_multi_agent_with_agent_builder_2_without_access(self):
         # Delete the ProjectAuth record for self.user_inline to simulate no access

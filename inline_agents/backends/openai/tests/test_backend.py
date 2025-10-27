@@ -1,4 +1,4 @@
-
+import pytest
 from django.test import TestCase
 
 from inline_agents.backends.openai.backend import OpenAISupervisorRepository
@@ -44,7 +44,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
 
         # Create supervisor with specific values
         supervisor = OpenAISupervisorFactory(
-            components_prompt="Components prompt"
+            instruction="Components prompt"
         )
 
         result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
@@ -58,7 +58,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
 
         # Create supervisor with specific values
         supervisor = OpenAISupervisorFactory(
-            human_support_prompt="Human support prompt"
+            instruction="Human support prompt"
         )
 
         result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
@@ -72,7 +72,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
 
         # Create supervisor with specific values
         supervisor = OpenAISupervisorFactory(
-            components_human_support_prompt="Components + Human support prompt"
+            instruction="Components + Human support prompt"
         )
 
         result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
@@ -94,36 +94,12 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         result = OpenAISupervisorRepository._get_supervisor_tools(self.project, self.supervisor)
         self.assertEqual(result, self.supervisor.human_support_action_groups)
 
+    @pytest.mark.skip(reason="instruction field has NOT NULL constraint in database")
     def test_get_supervisor_instructions_with_none_values(self):
-        """Test _get_supervisor_instructions when some prompt fields are None."""
-        supervisor = OpenAISupervisorFactory(
-            components_prompt=None,
-            human_support_prompt=None,
-            components_human_support_prompt=None
-        )
-
-        self.project.use_components = True
-        self.project.human_support = False
-        self.project.save()
-
-        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
-        self.assertIsNone(result)  # Should be None
-
-        # Test human support only with None value
-        self.project.use_components = False
-        self.project.human_support = True
-        self.project.save()
-
-        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
-        self.assertIsNone(result)  # Should be None
-
-        # Test both with None value
-        self.project.use_components = True
-        self.project.human_support = True
-        self.project.save()
-
-        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
-        self.assertIsNone(result)  # Should be None
+        """Test _get_supervisor_instructions when instruction is None."""
+        # This test is skipped because the instruction field is NOT NULL in the database
+        # and cannot be set to None
+        pass
 
     def test_get_supervisor_tools_with_none_values(self):
         """Test _get_supervisor_tools when human_support_action_groups is None."""
@@ -171,7 +147,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
 
         result = OpenAISupervisorRepository.get_supervisor(self.project)
 
-        self.assertEqual(result["instruction"], "Components + Human support prompt")
+        self.assertEqual(result["instruction"], "Default instruction")
         self.assertEqual(result["tools"], [{"name": "human_support", "type": "action"}])
         self.assertEqual(result["foundation_model"], "gpt-4-turbo")
         self.assertEqual(result["knowledge_bases"], [{"name": "kb1", "type": "knowledge"}])

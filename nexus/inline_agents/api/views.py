@@ -458,16 +458,8 @@ class MultiAgentView(APIView):
         try:
             project = Project.objects.get(uuid=project_uuid)
             
-            # Check if user has permission to view
-            # Only users with explicit ProjectAuth records have access
-            can_view = False
-            if hasattr(request, 'user') and request.user.is_authenticated:
-                from nexus.projects.models import ProjectAuth
-                can_view = ProjectAuth.objects.filter(user=request.user, project=project).exists()
-            
             return Response({
                 "multi_agents": project.inline_agent_switch,
-                "can_view": can_view,
             })
         except Project.DoesNotExist:
             return Response(
