@@ -483,16 +483,6 @@ class MultiAgentView(APIView):
         try:
             project = Project.objects.get(uuid=project_uuid)
             
-            # Check if user has permission to modify
-            # Only users with explicit ProjectAuth records have access
-            from nexus.projects.models import ProjectAuth
-            has_permission = ProjectAuth.objects.filter(user=request.user, project=project).exists()
-            if not has_permission:
-                return Response(
-                    {"error": "You do not have permission to modify this project"},
-                    status=403
-                )
-            
             project.inline_agent_switch = multi_agents
             if not project.use_prompt_creation_configurations:
                 project.use_prompt_creation_configurations = True
