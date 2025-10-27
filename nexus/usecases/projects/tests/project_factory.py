@@ -39,6 +39,7 @@ class ProjectAuthFactory(factory.django.DjangoModelFactory):
         model = ProjectAuth
 
     user = factory.SubFactory(UserFactory)
+    project = factory.SubFactory(ProjectFactory)
     role = ProjectAuthorizationRole.MODERATOR.value
 
 
