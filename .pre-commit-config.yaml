@@ -9,11 +9,6 @@ repos:
     -   id: check-merge-conflict
     -   id: check-toml
 
-  - repo: https://github.com/pycqa/flake8
-    rev: 7.0.0
-    hooks:
-      - id: flake8
-
   - repo: https://github.com/iamthefij/docker-pre-commit
     rev: master
     hooks:
@@ -24,9 +19,29 @@ repos:
     hooks:
     -   id: check-poetry
 
-repos:
   - repo: local
     hooks:
+      - id: ruff-format
+        name: ruff format
+        language: system
+        files: \.py$
+        entry: poetry run ruff format
+        pass_filenames: true
+
+      - id: ruff-lint
+        name: ruff lint
+        language: system
+        files: \.py$
+        entry: poetry run ruff check --fix
+        pass_filenames: true
+
+      - id: pyright
+        name: pyright
+        language: system
+        files: \.py$
+        entry: bash -c 'poetry run pyright'
+        pass_filenames: false
+
       - id: check-coverage
         name: Check code coverage
         entry: coverage run --source='.' manage.py test
