@@ -1,8 +1,9 @@
+# ruff: noqa: E501
 import json
 import logging
 import os
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from django.conf import settings
 from django.template.defaultfilters import slugify
@@ -55,7 +56,15 @@ client = OpenAI()
 logger = logging.getLogger(__name__)
 flows_user_email = settings.FLOW_USER_EMAIL
 
-def improve_rationale_text(rationale_text: str, previous_rationales: list = [], user_input: str = "", is_first_rationale: bool = False) -> str:
+
+def improve_rationale_text(
+    rationale_text: str,
+    previous_rationales: Optional[list] = None,
+    user_input: str = "",
+    is_first_rationale: bool = False,
+) -> str:
+    if previous_rationales is None:
+        previous_rationales = []
     try:
         # Get the Bedrock runtime client
         bedrock_db = BedrockFileDatabase()
@@ -111,21 +120,12 @@ def improve_rationale_text(rationale_text: str, previous_rationales: list = [], 
         # Build conversation with just one user message and an expected assistant response
         conversation = [
             # Single user message with all instructions and the rationale to analyze
-            {
-                "role": "user",
-                "content": [{"text": instruction_content}]
-            }
+            {"role": "user", "content": [{"text": instruction_content}]}
         ]
 
         # Send the request to Amazon Bedrock
         response = bedrock_client.converse(
-            modelId=model_id,
-            messages=conversation,
-            inferenceConfig={
-                "maxTokens": 150,
-                "temperature": 0.5,
-                "topP": 0.9
-            }
+            modelId=model_id, messages=conversation, inferenceConfig={"maxTokens": 150, "temperature": 0.5, "topP": 0.9}
         )
 
         print(f"Improvement Response: {response}")
@@ -138,14 +138,17 @@ def improve_rationale_text(rationale_text: str, previous_rationales: list = [], 
             return "Processando sua solicitação agora."
 
         # Remove any quotes from the response
-        return response_text.strip().strip('"\'')
+        return response_text.strip().strip("\"'")
     except Exception as e:
         logger.error(f"Error improving rationale text: {str(e)}")
         return rationale_text  # Return original text if transformation fails
 
 
-def improve_subsequent_rationale(rationale_text: str, previous_rationales: list = [], user_input: str = "") -> str:
-
+def improve_subsequent_rationale(
+    rationale_text: str, previous_rationales: Optional[list] = None, user_input: str = ""
+) -> str:
+    if previous_rationales is None:
+        previous_rationales = []
     try:
         # Get the Bedrock runtime client
         bedrock_db = BedrockFileDatabase()
@@ -218,27 +221,19 @@ def improve_subsequent_rationale(rationale_text: str, previous_rationales: list 
         # Build conversation with just one user message and an expected assistant response
         conversation = [
             # Single user message with all instructions and the rationale to analyze
-            {
-                "role": "user",
-                "content": [{"text": instruction_content}]
-            }
+            {"role": "user", "content": [{"text": instruction_content}]}
         ]
 
         # Send the request to Amazon Bedrock
         response = bedrock_client.converse(
-            modelId=model_id,
-            messages=conversation,
-            inferenceConfig={
-                "maxTokens": 150,
-                "temperature": 0
-            }
+            modelId=model_id, messages=conversation, inferenceConfig={"maxTokens": 150, "temperature": 0}
         )
 
         # Extract the response text
         response_text = response["output"]["message"]["content"][0]["text"]
 
         # Remove any quotes from the response
-        return response_text.strip().strip('"\'')
+        return response_text.strip().strip("\"'")
     except Exception as e:
         logger.error(f"Error improving subsequent rationale text: {str(e)}")
         return rationale_text  # Return original text if transformation fails
@@ -246,28 +241,13 @@ def improve_subsequent_rationale(rationale_text: str, previous_rationales: list 
 
 @celery_app.task
 def task_send_message_http_client(
-    text: str,
-    urns: list,
-    project_uuid: str,
-    user: str,
-    full_chunks: list[Dict] = None
+    text: str, urns: list, project_uuid: str, user: str, full_chunks: list[Dict] = None
 ) -> None:
     broadcast = SendMessageHTTPClient(
-        os.environ.get(
-            'FLOWS_REST_ENDPOINT'
-        ),
-        os.environ.get(
-            'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
-        )
+        os.environ.get("FLOWS_REST_ENDPOINT"), os.environ.get("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN")
     )
 
-    broadcast.send_direct_message(
-        text=text,
-        urns=urns,
-        project_uuid=project_uuid,
-        user=user,
-        full_chunks=full_chunks
-    )
+    broadcast.send_direct_message(text=text, urns=urns, project_uuid=project_uuid, user=user, full_chunks=full_chunks)
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
@@ -294,12 +274,7 @@ def get_trace_summary(language, trace):
         """
 
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            max_tokens=100,
-            messages=[{
-                "role": "user",
-                "content": prompt
-            }]
+            model="gpt-4o-mini", max_tokens=100, messages=[{"role": "user", "content": prompt}]
         )
 
         return response.choices[0].message.content
@@ -314,40 +289,17 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
     def get_action_clients(preview: bool = False):
         if preview:
             flow_start = SimulateFlowStart(
-                os.environ.get(
-                    'FLOWS_REST_ENDPOINT'
-                ),
-                os.environ.get(
-                    'FLOWS_INTERNAL_TOKEN'
-                )
+                os.environ.get("FLOWS_REST_ENDPOINT"), os.environ.get("FLOWS_INTERNAL_TOKEN")
             )
             broadcast = SimulateBroadcast(
-                os.environ.get(
-                    'FLOWS_REST_ENDPOINT'
-                ),
-                os.environ.get(
-                    'FLOWS_INTERNAL_TOKEN'
-                ),
-                get_file_info
+                os.environ.get("FLOWS_REST_ENDPOINT"), os.environ.get("FLOWS_INTERNAL_TOKEN"), get_file_info
             )
             return broadcast, flow_start
 
         broadcast = SendMessageHTTPClient(
-            os.environ.get(
-                'FLOWS_REST_ENDPOINT'
-            ),
-            os.environ.get(
-                'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
-            )
+            os.environ.get("FLOWS_REST_ENDPOINT"), os.environ.get("FLOWS_SEND_MESSAGE_INTERNAL_TOKEN")
         )
-        flow_start = FlowStartHTTPClient(
-            os.environ.get(
-                'FLOWS_REST_ENDPOINT'
-            ),
-            os.environ.get(
-                'FLOWS_INTERNAL_TOKEN'
-            )
-        )
+        flow_start = FlowStartHTTPClient(os.environ.get("FLOWS_REST_ENDPOINT"), os.environ.get("FLOWS_INTERNAL_TOKEN"))
         return broadcast, flow_start
 
     source = "preview" if preview else "router"
@@ -372,10 +324,8 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
     )
 
     mailroom_msg_event = message.msg_event
-    mailroom_msg_event['attachments'] = mailroom_msg_event.get(
-        'attachments'
-    ) or []
-    mailroom_msg_event['metadata'] = mailroom_msg_event.get('metadata') or {}
+    mailroom_msg_event["attachments"] = mailroom_msg_event.get("attachments") or []
+    mailroom_msg_event["metadata"] = mailroom_msg_event.get("metadata") or {}
 
     log_usecase = CreateLogUsecase()
 
@@ -386,9 +336,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
         broadcast, flow_start = get_action_clients(preview)
 
-        content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(
-            message.project_uuid
-        )
+        content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
         agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
         agent = agent.set_default_if_null()
 
@@ -397,7 +345,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             message=message,
             msg_event=mailroom_msg_event,
             flow_start=flow_start,
-            user_email=flows_user_email
+            user_email=flows_user_email,
         )
 
         pre_classification = pre_classification.pre_classification(source=source)
@@ -409,7 +357,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             message=message,
             msg_event=mailroom_msg_event,
             flow_start=flow_start,
-            user_email=flows_user_email
+            user_email=flows_user_email,
         )
 
         non_custom_actions = classification_handler.non_custom_actions(source=source)
@@ -433,23 +381,15 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             token=llm_model.setup.get("token"),
             max_length=llm_model.setup.get("max_length"),
             max_tokens=llm_model.setup.get("max_tokens"),
-            language=llm_model.setup.get(
-                "language", settings.WENIGPT_DEFAULT_LANGUAGE
-            ),
+            language=llm_model.setup.get("language", settings.WENIGPT_DEFAULT_LANGUAGE),
         )
 
         classifier = ChatGPTFunctionClassifier(agent_goal=agent.goal)
 
-        classification = classification_handler.custom_actions(
-            classifier=classifier,
-            language=llm_config.language
-        )
+        classification = classification_handler.custom_actions(classifier=classifier, language=llm_config.language)
 
         llm_client = LLMClient.get_by_type(llm_config.model)
-        llm_client: LLMClient = list(llm_client)[0](
-            model_version=llm_config.model_version,
-            api_key=llm_config.token
-        )
+        llm_client: LLMClient = list(llm_client)[0](model_version=llm_config.model_version, api_key=llm_config.token)
 
         # Check if there's a pending response for this user
         pending_response_key = f"response:{message.contact_urn}"
@@ -460,10 +400,10 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         if pending_response:
             # Revoke the previous task
             if pending_task_id:
-                celery_app.control.revoke(pending_task_id.decode('utf-8'), terminate=True)
+                celery_app.control.revoke(pending_task_id.decode("utf-8"), terminate=True)
 
             # Concatenate the previous message with the new one
-            previous_message = pending_response.decode('utf-8')
+            previous_message = pending_response.decode("utf-8")
             concatenated_message = f"{previous_message}\n{message.text}"
             message.text = concatenated_message
             redis_client.delete(pending_response_key)  # Remove the pending response
@@ -488,7 +428,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             llm_config=llm_config,
             flows_user_email=flows_user_email,
             log_usecase=log_usecase,
-            message_log=message_log
+            message_log=message_log,
         )
 
         # If response generation completes, remove from Redis
@@ -507,7 +447,9 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
 
 @celery_app.task(bind=True, soft_time_limit=300, time_limit=360)
-def start_multi_agents(self, message: Dict, preview: bool = False, language: str = "en", user_email: str = '') -> bool:  # pragma: no cover
+def start_multi_agents(
+    self, message: Dict, preview: bool = False, language: str = "en", user_email: str = ""
+) -> bool:  # pragma: no cover
     # Initialize Redis client
     redis_client = Redis.from_url(settings.REDIS_URL)
 
@@ -534,10 +476,10 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     if pending_response:
         # Revoke the previous task
         if pending_task_id:
-            celery_app.control.revoke(pending_task_id.decode('utf-8'), terminate=True)
+            celery_app.control.revoke(pending_task_id.decode("utf-8"), terminate=True)
 
         # Concatenate the previous message with the new one
-        previous_message = pending_response.decode('utf-8')
+        previous_message = pending_response.decode("utf-8")
         concatenated_message = f"{previous_message}\n{message.text}"
         message.text = concatenated_message
         redis_client.delete(pending_response_key)  # Remove the pending response
@@ -570,10 +512,10 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
     if pending_response:
         # Revoke the previous task if it exists
         if pending_task_id:
-            celery_app.control.revoke(pending_task_id.decode('utf-8'), terminate=True)
+            celery_app.control.revoke(pending_task_id.decode("utf-8"), terminate=True)
 
         # Concatenate the previous message with the new one
-        previous_message = pending_response.decode('utf-8')
+        previous_message = pending_response.decode("utf-8")
         concatenated_message = f"{previous_message}\n{message.text}"
         message.text = concatenated_message
         redis_client.delete(pending_response_key)
@@ -589,11 +531,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
         send_preview_message_to_websocket(
             project_uuid=str(project.uuid),
             user_email=user_email,
-            message_data={
-                "type": "status",
-                "content": "Starting multi-agent processing",
-                "session_id": session_id
-            }
+            message_data={"type": "status", "content": "Starting multi-agent processing", "session_id": session_id},
         )
 
     project_use_components = message.project_uuid in settings.PROJECT_COMPONENTS
@@ -610,7 +548,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
         first_rationale_text = None
         is_first_rationale = True
-        should_process_rationales = supervisor.metadata.get('rationale', False)
+        should_process_rationales = supervisor.metadata.get("rationale", False)
 
         for event in usecase.invoke_supervisor_stream(
             session_id=session_id,
@@ -619,48 +557,37 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
             message=message,
             content_base=contentbase,
         ):
-            if event['type'] == 'chunk':
-                chunk = event['content']
+            if event["type"] == "chunk":
+                chunk = event["content"]
                 full_response += chunk
                 if user_email:
                     # Send chunk through WebSocket
                     send_preview_message_to_websocket(
                         project_uuid=str(message.project_uuid),
                         user_email=user_email,
-                        message_data={
-                            "type": "chunk",
-                            "content": chunk,
-                            "session_id": session_id
-                        }
+                        message_data={"type": "chunk", "content": chunk, "session_id": session_id},
                     )
-            elif event['type'] == 'trace':
+            elif event["type"] == "trace":
                 if preview:
                     # Get summary from Claude with specified language
-                    event['content']['summary'] = get_trace_summary(language, event['content'])
+                    event["content"]["summary"] = get_trace_summary(language, event["content"])
                     if user_email:
                         # Send trace data through WebSocket
                         send_preview_message_to_websocket(
                             project_uuid=str(message.project_uuid),
                             user_email=user_email,
-                            message_data={
-                                "type": "trace_update",
-                                "trace": event['content'],
-                                "session_id": session_id
-                            }
+                            message_data={"type": "trace_update", "trace": event["content"], "session_id": session_id},
                         )
-                trace_events.append(event['content'])
-                trace_data = event['content']
+                trace_events.append(event["content"])
+                trace_data = event["content"]
                 try:
                     if should_process_rationales:
                         # Handle first rationale for multi-agent scenarios
-                        if first_rationale_text and 'callerChain' in trace_data:
-                            caller_chain = trace_data['callerChain']
+                        if first_rationale_text and "callerChain" in trace_data:
+                            caller_chain = trace_data["callerChain"]
                             if isinstance(caller_chain, list) and len(caller_chain) > 1:
                                 improved_text = improve_rationale_text(
-                                    first_rationale_text,
-                                    rationale_history,
-                                    message.text,
-                                    is_first_rationale=True
+                                    first_rationale_text, rationale_history, message.text, is_first_rationale=True
                                 )
 
                                 if improved_text.lower() != "invalid":
@@ -675,23 +602,20 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
 
                         # Process orchestration trace rationale
                         rationale_text = None
-                        if 'trace' in trace_data:
-                            inner_trace = trace_data['trace']
-                            if 'orchestrationTrace' in inner_trace:
-                                orchestration = inner_trace['orchestrationTrace']
-                                if 'rationale' in orchestration:
-                                    rationale_text = orchestration['rationale'].get('text')
+                        if "trace" in trace_data:
+                            inner_trace = trace_data["trace"]
+                            if "orchestrationTrace" in inner_trace:
+                                orchestration = inner_trace["orchestrationTrace"]
+                                if "rationale" in orchestration:
+                                    rationale_text = orchestration["rationale"].get("text")
 
                         if rationale_text:
                             if is_first_rationale:
                                 first_rationale_text = rationale_text
                                 is_first_rationale = False
                             else:
-
                                 improved_text = improve_subsequent_rationale(
-                                    rationale_text,
-                                    rationale_history,
-                                    message.text
+                                    rationale_text, rationale_history, message.text
                                 )
 
                                 if improved_text.lower() != "invalid":
@@ -704,16 +628,12 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                                     )
 
                     # Get summary from Claude with specified language
-                    event['content']['summary'] = get_trace_summary(language, event['content'])
+                    event["content"]["summary"] = get_trace_summary(language, event["content"])
                     if user_email:
                         send_preview_message_to_websocket(
                             project_uuid=str(message.project_uuid),
                             user_email=user_email,
-                            message_data={
-                                "type": "trace_update",
-                                "trace": event['content'],
-                                "session_id": session_id
-                            }
+                            message_data={"type": "trace_update", "trace": event["content"], "session_id": session_id},
                         )
                 except Exception as e:
                     logger.error(f"Error processing rationale: {str(e)}")
@@ -724,8 +644,8 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
                             message_data={
                                 "type": "error",
                                 "content": f"Error processing rationale: {str(e)}",
-                                "session_id": session_id
-                            }
+                                "session_id": session_id,
+                            },
                         )
 
         save_trace_events.delay(
@@ -743,11 +663,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
             send_preview_message_to_websocket(
                 user_email=user_email,
                 project_uuid=str(project.uuid),
-                message_data={
-                    "type": "status",
-                    "content": "Processing complete",
-                    "session_id": session_id
-                }
+                message_data={"type": "status", "content": "Processing complete", "session_id": session_id},
             )
 
         # Clean up Redis entries after successful processing
@@ -776,11 +692,7 @@ def start_multi_agents(self, message: Dict, preview: bool = False, language: str
             send_preview_message_to_websocket(
                 user_email=user_email,
                 project_uuid=str(project.uuid),
-                message_data={
-                    "type": "error",
-                    "content": str(e),
-                    "session_id": session_id
-                }
+                message_data={"type": "error", "content": str(e), "session_id": session_id},
             )
         raise
 
@@ -798,12 +710,9 @@ def save_trace_events(
     contact_urn: str,
     agent_response: str,
     preview: bool,
-    session_id: str
+    session_id: str,
 ):
-    source = {
-        True: "preview",
-        False: "router"
-    }
+    source = {True: "preview", False: "router"}
     data = ""
     message = AgentMessage.objects.create(
         project_id=project_uuid,
@@ -812,14 +721,14 @@ def save_trace_events(
         agent_response=agent_response,
         contact_urn=contact_urn,
         source=source.get(preview),
-        session_id=session_id
+        session_id=session_id,
     )
 
     filename = f"{message.uuid}.jsonl"
 
     for trace_event in trace_events:
         trace_events_json = trace_events_to_json(trace_event)
-        data += trace_events_json + '\n'
+        data += trace_events_json + "\n"
 
     key = f"traces/{project_uuid}/{filename}"
     BedrockFileDatabase().upload_traces(data, key)
