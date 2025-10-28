@@ -98,72 +98,29 @@ class RationaleObserver(EventObserver):
                 return
 
             session_data = self.redis_task_manager.get_rationale_session_data(session_id)
+            send_message_callback = self._setup_message_callback_if_needed(
+                send_message_callback, message_external_id, contact_urn, project_uuid, preview, user_email
+            )
 
-            if send_message_callback is None:
-                if message_external_id:
-                    self.typing_usecase.send_typing_message(
-                        contact_urn=contact_urn,
-                        msg_external_id=message_external_id,
-                        project_uuid=project_uuid,
-                        preview=preview,
-                    )
-
-                def send_message(text, urns, project_uuid, user, full_chunks=None):
-                    return self.task_send_rationale_message.delay(
-                        text=text,
-                        urns=urns,
-                        project_uuid=project_uuid,
-                        user=user,
-                        full_chunks=full_chunks,
-                        preview=preview,
-                        user_email=user_email,
-                    )
-
-                send_message_callback = send_message
-            if message_external_id:
-                self.typing_usecase.send_typing_message(
-                    contact_urn=contact_urn,
-                    msg_external_id=message_external_id,
-                    project_uuid=project_uuid,
-                    preview=preview,
-                )
+            self._send_typing_if_needed(message_external_id, contact_urn, project_uuid, preview)
 
             rationale_text = self._extract_rationale_text(inline_traces)
 
             if rationale_text:
                 if not session_data["is_first_rationale"]:
-                    improved_text = self._improve_subsequent_rationale(
-                        rationale_text=rationale_text,
-                        previous_rationales=session_data["rationale_history"],
-                        user_input=user_input,
+                    self._handle_subsequent_rationale(
+                        rationale_text,
+                        session_id,
+                        session_data,
+                        user_input,
+                        message_external_id,
+                        contact_urn,
+                        project_uuid,
+                        preview,
+                        contact_name,
+                        send_message_callback,
+                        channel_uuid,
                     )
-
-                    if self._is_valid_rationale(improved_text):
-                        session_data["rationale_history"].append(improved_text)
-                        self.redis_task_manager.save_rationale_session_data(session_id, session_data)
-                        if message_external_id:
-                            self.typing_usecase.send_typing_message(
-                                contact_urn=contact_urn,
-                                msg_external_id=message_external_id,
-                                project_uuid=project_uuid,
-                                preview=preview,
-                            )
-                        self._send_rationale_message(
-                            text=improved_text,
-                            contact_urn=contact_urn,
-                            project_uuid=project_uuid,
-                            session_id=session_id,
-                            contact_name=contact_name,
-                            send_message_callback=send_message_callback,
-                            channel_uuid=channel_uuid,
-                        )
-                        if message_external_id:
-                            self.typing_usecase.send_typing_message(
-                                contact_urn=contact_urn,
-                                msg_external_id=message_external_id,
-                                project_uuid=project_uuid,
-                                preview=preview,
-                            )
                 else:
                     session_data["first_rationale_text"] = rationale_text
                     self.redis_task_manager.save_rationale_session_data(session_id, session_data)
@@ -173,61 +130,127 @@ class RationaleObserver(EventObserver):
                 and self._has_called_agent(inline_traces)
                 and session_data["is_first_rationale"]
             ):
-                if message_external_id:
-                    self.typing_usecase.send_typing_message(
-                        contact_urn=contact_urn,
-                        msg_external_id=message_external_id,
-                        project_uuid=project_uuid,
-                        preview=preview,
-                    )
-                improved_text = self._improve_rationale_text(
-                    rationale_text=session_data["first_rationale_text"], user_input=user_input, is_first_rationale=True
+                self._handle_first_rationale_with_agent(
+                    session_data,
+                    user_input,
+                    message_external_id,
+                    contact_urn,
+                    project_uuid,
+                    preview,
+                    send_message_callback,
+                    contact_name,
+                    channel_uuid,
+                    session_id,
                 )
-                if message_external_id:
-                    self.typing_usecase.send_typing_message(
-                        contact_urn=contact_urn,
-                        msg_external_id=message_external_id,
-                        project_uuid=project_uuid,
-                        preview=preview,
-                    )
-
-                if self._is_valid_rationale(improved_text):
-                    session_data["rationale_history"].append(improved_text)
-                    if message_external_id:
-                        self.typing_usecase.send_typing_message(
-                            contact_urn=contact_urn,
-                            msg_external_id=message_external_id,
-                            project_uuid=project_uuid,
-                            preview=preview,
-                        )
-                    self._send_rationale_message(
-                        text=improved_text,
-                        contact_urn=contact_urn,
-                        project_uuid=project_uuid,
-                        session_id=session_id,
-                        send_message_callback=send_message_callback,
-                        contact_name=contact_name,
-                        channel_uuid=channel_uuid,
-                    )
-                    if message_external_id:
-                        self.typing_usecase.send_typing_message(
-                            contact_urn=contact_urn,
-                            msg_external_id=message_external_id,
-                            project_uuid=project_uuid,
-                            preview=preview,
-                        )
-                if message_external_id:
-                    self.typing_usecase.send_typing_message(
-                        contact_urn=contact_urn,
-                        msg_external_id=message_external_id,
-                        project_uuid=project_uuid,
-                        preview=preview,
-                    )
-                session_data["is_first_rationale"] = False
-                self.redis_task_manager.save_rationale_session_data(session_id, session_data)
 
         except Exception as e:
             logger.error(f"Error processing rationale: {str(e)}", exc_info=True)
+
+    def _setup_message_callback_if_needed(
+        self, send_message_callback, message_external_id, contact_urn, project_uuid, preview, user_email
+    ):
+        if send_message_callback is None:
+            if message_external_id:
+                self.typing_usecase.send_typing_message(
+                    contact_urn=contact_urn,
+                    msg_external_id=message_external_id,
+                    project_uuid=project_uuid,
+                    preview=preview,
+                )
+
+            def send_message(text, urns, project_uuid, user, full_chunks=None):
+                return self.task_send_rationale_message.delay(
+                    text=text,
+                    urns=urns,
+                    project_uuid=project_uuid,
+                    user=user,
+                    full_chunks=full_chunks,
+                    preview=preview,
+                    user_email=user_email,
+                )
+
+            return send_message
+        return send_message_callback
+
+    def _send_typing_if_needed(self, message_external_id, contact_urn, project_uuid, preview):
+        if message_external_id:
+            self.typing_usecase.send_typing_message(
+                contact_urn=contact_urn,
+                msg_external_id=message_external_id,
+                project_uuid=project_uuid,
+                preview=preview,
+            )
+
+    def _handle_subsequent_rationale(
+        self,
+        rationale_text,
+        session_id,
+        session_data,
+        user_input,
+        message_external_id,
+        contact_urn,
+        project_uuid,
+        preview,
+        contact_name,
+        send_message_callback,
+        channel_uuid,
+    ):
+        improved_text = self._improve_subsequent_rationale(
+            rationale_text=rationale_text,
+            previous_rationales=session_data["rationale_history"],
+            user_input=user_input,
+        )
+
+        if self._is_valid_rationale(improved_text):
+            session_data["rationale_history"].append(improved_text)
+            self.redis_task_manager.save_rationale_session_data(session_id, session_data)
+            self._send_typing_if_needed(message_external_id, contact_urn, project_uuid, preview)
+            self._send_rationale_message(
+                text=improved_text,
+                contact_urn=contact_urn,
+                project_uuid=project_uuid,
+                session_id=session_id,
+                contact_name=contact_name,
+                send_message_callback=send_message_callback,
+                channel_uuid=channel_uuid,
+            )
+            self._send_typing_if_needed(message_external_id, contact_urn, project_uuid, preview)
+
+    def _handle_first_rationale_with_agent(
+        self,
+        session_data,
+        user_input,
+        message_external_id,
+        contact_urn,
+        project_uuid,
+        preview,
+        send_message_callback,
+        contact_name,
+        channel_uuid,
+        session_id,
+    ):
+        self._send_typing_if_needed(message_external_id, contact_urn, project_uuid, preview)
+        improved_text = self._improve_rationale_text(
+            rationale_text=session_data["first_rationale_text"], user_input=user_input, is_first_rationale=True
+        )
+        self._send_typing_if_needed(message_external_id, contact_urn, project_uuid, preview)
+
+        if self._is_valid_rationale(improved_text):
+            session_data["rationale_history"].append(improved_text)
+            self._send_typing_if_needed(message_external_id, contact_urn, project_uuid, preview)
+            self._send_rationale_message(
+                text=improved_text,
+                contact_urn=contact_urn,
+                project_uuid=project_uuid,
+                session_id=session_id,
+                send_message_callback=send_message_callback,
+                contact_name=contact_name,
+                channel_uuid=channel_uuid,
+            )
+            self._send_typing_if_needed(message_external_id, contact_urn, project_uuid, preview)
+        self._send_typing_if_needed(message_external_id, contact_urn, project_uuid, preview)
+        session_data["is_first_rationale"] = False
+        self.redis_task_manager.save_rationale_session_data(session_id, session_data)
 
     def _validate_traces(self, inline_traces: Dict) -> bool:
         return inline_traces is not None and "trace" in inline_traces
