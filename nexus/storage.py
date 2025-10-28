@@ -31,7 +31,7 @@ class AttachmentPreviewStorage(S3Boto3Storage):
     def get_available_name(self, name, max_length=None):
         if self.override_available_name:
             ext = name.split(".")[-1]
-            filename = "av_%s.%s" % (uuid.uuid4(), ext)
+            filename = f"av_{uuid.uuid4()}.{ext}"
             return super().get_available_name(filename, max_length)
         return super().get_available_name(name, max_length)
 
