@@ -446,14 +446,8 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         raise
 
 
-@celery_app.task(bind=True, soft_time_limit=300, time_limit=360)
-def start_multi_agents(
-    self, message: Dict, preview: bool = False, language: str = "en", user_email: str = ""
-) -> bool:  # pragma: no cover
-    # Initialize Redis client
+def _initialize_and_handle_pending_response(message, task_id):
     redis_client = Redis.from_url(settings.REDIS_URL)
-
-    # TODO: Logs
     message = message_factory(
         project_uuid=message.get("project_uuid"),
         text=message.get("text"),
@@ -464,67 +458,186 @@ def start_multi_agents(
         contact_fields=message.get("contact_fields", {}),
     )
 
-    # Initialize Redis client
-    redis_client = Redis.from_url(settings.REDIS_URL)
-
-    # Check if there's a pending response for this user
     pending_response_key = f"multi_response:{message.contact_urn}"
     pending_task_key = f"multi_task:{message.contact_urn}"
     pending_response = redis_client.get(pending_response_key)
     pending_task_id = redis_client.get(pending_task_key)
 
     if pending_response:
-        # Revoke the previous task
         if pending_task_id:
             celery_app.control.revoke(pending_task_id.decode("utf-8"), terminate=True)
-
-        # Concatenate the previous message with the new one
-        previous_message = pending_response.decode("utf-8")
-        concatenated_message = f"{previous_message}\n{message.text}"
-        message.text = concatenated_message
-        redis_client.delete(pending_response_key)  # Remove the pending response
-    else:
-        # Store the current message in Redis
-        redis_client.set(pending_response_key, message.text)
-
-    # Store the current task ID in Redis
-    redis_client.set(pending_task_key, self.request.id)
-
-    project = Project.objects.get(uuid=message.project_uuid)
-
-    supervisor = project.team
-    supervisor_version = supervisor.current_version
-
-    contentbase = get_default_content_base_by_project(message.project_uuid)
-
-    usecase = AgentUsecase()
-
-    # Use the sanitized URN in the session ID
-    session_id = f"project-{project.uuid}-session-{message.sanitized_urn}"
-    session_id = slugify(session_id)
-
-    # Check for pending responses
-    pending_response_key = f"response:{message.contact_urn}"
-    pending_task_key = f"task:{message.contact_urn}"
-    pending_response = redis_client.get(pending_response_key)
-    pending_task_id = redis_client.get(pending_task_key)
-
-    if pending_response:
-        # Revoke the previous task if it exists
-        if pending_task_id:
-            celery_app.control.revoke(pending_task_id.decode("utf-8"), terminate=True)
-
-        # Concatenate the previous message with the new one
         previous_message = pending_response.decode("utf-8")
         concatenated_message = f"{previous_message}\n{message.text}"
         message.text = concatenated_message
         redis_client.delete(pending_response_key)
     else:
-        # Store the current message in Redis
         redis_client.set(pending_response_key, message.text)
 
-    # Store the current task ID in Redis
-    redis_client.set(pending_task_key, self.request.id)
+    redis_client.set(pending_task_key, task_id)
+    return redis_client, message
+
+
+def _process_event(
+    event,
+    user_email,
+    session_id,
+    project_uuid,
+    language,
+    preview,
+    full_response,
+    trace_events,
+    first_rationale_text,
+    is_first_rationale,
+    rationale_history,
+    should_process_rationales,
+    message,
+    flows_user_email,
+):
+    if event["type"] == "chunk":
+        chunk = event["content"]
+        full_response += chunk
+        if user_email:
+            send_preview_message_to_websocket(
+                project_uuid=str(project_uuid),
+                user_email=user_email,
+                message_data={"type": "chunk", "content": chunk, "session_id": session_id},
+            )
+    elif event["type"] == "trace":
+        _process_trace_event(
+            event,
+            user_email,
+            session_id,
+            project_uuid,
+            language,
+            preview,
+            trace_events,
+            first_rationale_text,
+            is_first_rationale,
+            rationale_history,
+            should_process_rationales,
+            message,
+            flows_user_email,
+        )
+    return full_response
+
+
+def _process_trace_event(
+    event,
+    user_email,
+    session_id,
+    project_uuid,
+    language,
+    preview,
+    trace_events,
+    first_rationale_text,
+    is_first_rationale,
+    rationale_history,
+    should_process_rationales,
+    message,
+    flows_user_email,
+):
+    if preview:
+        event["content"]["summary"] = get_trace_summary(language, event["content"])
+        if user_email:
+            send_preview_message_to_websocket(
+                project_uuid=str(project_uuid),
+                user_email=user_email,
+                message_data={"type": "trace_update", "trace": event["content"], "session_id": session_id},
+            )
+    trace_events.append(event["content"])
+    trace_data = event["content"]
+    try:
+        if should_process_rationales:
+            _handle_rationale_processing(
+                trace_data,
+                first_rationale_text,
+                is_first_rationale,
+                rationale_history,
+                message,
+                flows_user_email,
+                project_uuid,
+            )
+
+        event["content"]["summary"] = get_trace_summary(language, event["content"])
+        if user_email:
+            send_preview_message_to_websocket(
+                project_uuid=str(project_uuid),
+                user_email=user_email,
+                message_data={"type": "trace_update", "trace": event["content"], "session_id": session_id},
+            )
+    except Exception as e:
+        logger.error(f"Error processing rationale: {str(e)}")
+        if user_email:
+            send_preview_message_to_websocket(
+                project_uuid=str(project_uuid),
+                user_email=user_email,
+                message_data={
+                    "type": "error",
+                    "content": f"Error processing rationale: {str(e)}",
+                    "session_id": session_id,
+                },
+            )
+
+
+def _handle_rationale_processing(
+    trace_data, first_rationale_text, is_first_rationale, rationale_history, message, flows_user_email, project_uuid
+):
+    if first_rationale_text and "callerChain" in trace_data:
+        caller_chain = trace_data["callerChain"]
+        if isinstance(caller_chain, list) and len(caller_chain) > 1:
+            improved_text = improve_rationale_text(
+                first_rationale_text, rationale_history, message.text, is_first_rationale=True
+            )
+            if improved_text.lower() != "invalid":
+                rationale_history.append(improved_text)
+                task_send_message_http_client.delay(
+                    text=improved_text,
+                    urns=[message.contact_urn],
+                    project_uuid=str(project_uuid),
+                    user=flows_user_email,
+                )
+
+    rationale_text = None
+    if "trace" in trace_data:
+        inner_trace = trace_data["trace"]
+        if "orchestrationTrace" in inner_trace:
+            orchestration = inner_trace["orchestrationTrace"]
+            if "rationale" in orchestration:
+                rationale_text = orchestration["rationale"].get("text")
+
+    if rationale_text:
+        if is_first_rationale:
+            first_rationale_text = rationale_text
+            is_first_rationale = False
+        else:
+            improved_text = improve_subsequent_rationale(rationale_text, rationale_history, message.text)
+            if improved_text.lower() != "invalid":
+                rationale_history.append(improved_text)
+                task_send_message_http_client.delay(
+                    text=improved_text,
+                    urns=[message.contact_urn],
+                    project_uuid=str(project_uuid),
+                    user=flows_user_email,
+                )
+
+
+@celery_app.task(bind=True, soft_time_limit=300, time_limit=360)
+def start_multi_agents(
+    self, message: Dict, preview: bool = False, language: str = "en", user_email: str = ""
+) -> bool:  # pragma: no cover
+    redis_client, message = _initialize_and_handle_pending_response(message, self.request.id)
+
+    project = Project.objects.get(uuid=message.project_uuid)
+    supervisor = project.team
+    supervisor_version = supervisor.current_version
+    contentbase = get_default_content_base_by_project(message.project_uuid)
+    usecase = AgentUsecase()
+
+    session_id = f"project-{project.uuid}-session-{message.sanitized_urn}"
+    session_id = slugify(session_id)
+
+    pending_response_key = f"multi_response:{message.contact_urn}"
+    pending_task_key = f"multi_task:{message.contact_urn}"
 
     if user_email:
         # Send initial status through WebSocket
@@ -557,96 +670,22 @@ def start_multi_agents(
             message=message,
             content_base=contentbase,
         ):
-            if event["type"] == "chunk":
-                chunk = event["content"]
-                full_response += chunk
-                if user_email:
-                    # Send chunk through WebSocket
-                    send_preview_message_to_websocket(
-                        project_uuid=str(message.project_uuid),
-                        user_email=user_email,
-                        message_data={"type": "chunk", "content": chunk, "session_id": session_id},
-                    )
-            elif event["type"] == "trace":
-                if preview:
-                    # Get summary from Claude with specified language
-                    event["content"]["summary"] = get_trace_summary(language, event["content"])
-                    if user_email:
-                        # Send trace data through WebSocket
-                        send_preview_message_to_websocket(
-                            project_uuid=str(message.project_uuid),
-                            user_email=user_email,
-                            message_data={"type": "trace_update", "trace": event["content"], "session_id": session_id},
-                        )
-                trace_events.append(event["content"])
-                trace_data = event["content"]
-                try:
-                    if should_process_rationales:
-                        # Handle first rationale for multi-agent scenarios
-                        if first_rationale_text and "callerChain" in trace_data:
-                            caller_chain = trace_data["callerChain"]
-                            if isinstance(caller_chain, list) and len(caller_chain) > 1:
-                                improved_text = improve_rationale_text(
-                                    first_rationale_text, rationale_history, message.text, is_first_rationale=True
-                                )
-
-                                if improved_text.lower() != "invalid":
-                                    rationale_history.append(improved_text)
-                                    task_send_message_http_client.delay(
-                                        text=improved_text,
-                                        urns=[message.contact_urn],
-                                        project_uuid=str(message.project_uuid),
-                                        user=flows_user_email,
-                                    )
-                                first_rationale_text = None
-
-                        # Process orchestration trace rationale
-                        rationale_text = None
-                        if "trace" in trace_data:
-                            inner_trace = trace_data["trace"]
-                            if "orchestrationTrace" in inner_trace:
-                                orchestration = inner_trace["orchestrationTrace"]
-                                if "rationale" in orchestration:
-                                    rationale_text = orchestration["rationale"].get("text")
-
-                        if rationale_text:
-                            if is_first_rationale:
-                                first_rationale_text = rationale_text
-                                is_first_rationale = False
-                            else:
-                                improved_text = improve_subsequent_rationale(
-                                    rationale_text, rationale_history, message.text
-                                )
-
-                                if improved_text.lower() != "invalid":
-                                    rationale_history.append(improved_text)
-                                    task_send_message_http_client.delay(
-                                        text=improved_text,
-                                        urns=[message.contact_urn],
-                                        project_uuid=str(message.project_uuid),
-                                        user=flows_user_email,
-                                    )
-
-                    # Get summary from Claude with specified language
-                    event["content"]["summary"] = get_trace_summary(language, event["content"])
-                    if user_email:
-                        send_preview_message_to_websocket(
-                            project_uuid=str(message.project_uuid),
-                            user_email=user_email,
-                            message_data={"type": "trace_update", "trace": event["content"], "session_id": session_id},
-                        )
-                except Exception as e:
-                    logger.error(f"Error processing rationale: {str(e)}")
-                    if user_email:
-                        send_preview_message_to_websocket(
-                            project_uuid=str(message.project_uuid),
-                            user_email=user_email,
-                            message_data={
-                                "type": "error",
-                                "content": f"Error processing rationale: {str(e)}",
-                                "session_id": session_id,
-                            },
-                        )
+            full_response = _process_event(
+                event,
+                user_email,
+                session_id,
+                message.project_uuid,
+                language,
+                preview,
+                full_response,
+                trace_events,
+                first_rationale_text,
+                is_first_rationale,
+                rationale_history,
+                should_process_rationales,
+                message,
+                flows_user_email,
+            )
 
         save_trace_events.delay(
             trace_events,
