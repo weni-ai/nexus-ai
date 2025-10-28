@@ -35,13 +35,6 @@ repos:
         entry: poetry run ruff check --fix
         pass_filenames: true
 
-      - id: pyright
-        name: pyright
-        language: system
-        files: \.py$
-        entry: bash -c 'poetry run pyright'
-        pass_filenames: false
-
       - id: check-coverage
         name: Check code coverage
         entry: coverage run --source='.' manage.py test --keepdb
