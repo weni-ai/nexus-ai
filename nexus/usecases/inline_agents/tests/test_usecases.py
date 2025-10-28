@@ -1,13 +1,15 @@
+import json
+from io import BytesIO
+from unittest.mock import patch
+
+from django.conf import settings
+from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.test import TestCase
+from django.utils.datastructures import MultiValueDict
+
+from nexus.inline_agents.tests import MockBedrockClient
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
-import json
-from django.utils.datastructures import MultiValueDict
-from django.core.files.uploadedfile import InMemoryUploadedFile
-from io import BytesIO
-from nexus.inline_agents.tests import MockBedrockClient
-from django.conf import settings
-from unittest.mock import patch
 
 
 class TestCreateAgentsUsecase(TestCase):
@@ -22,9 +24,11 @@ class TestCreateAgentsUsecase(TestCase):
         agents = """{
             "utility_agent": {
                 "name": "utility agent",
-                "description": "This agent provides utility functions like getting addresses from CEP, weather information and city search to get IATA codes",
+                "description": "This agent provides utility functions like getting addresses "
+                "from CEP, weather information and city search to get IATA codes",
                 "instructions": [
-                    "This agent provides utility functions like getting addresses from CEP and weather information for cities",
+                    "This agent provides utility functions like getting addresses from CEP "
+                    "and weather information for cities",
                     "For weather requests, inform the user if the requested date is beyond the 7-day forecast limit",
                     "For city searches, provide IATA codes and additional information about matching cities",
                     "If you don't know the answer, don't lie. Tell the user you don't know."
@@ -91,18 +95,14 @@ class TestCreateAgentsUsecase(TestCase):
             }
         )
 
-    @patch('nexus.usecases.inline_agents.tools.FlowsRESTClient')
+    @patch("nexus.usecases.inline_agents.tools.FlowsRESTClient")
     def test_create_agents(self, mock_flows_client):
         mock_instance = mock_flows_client.return_value
-        mock_instance.list_project_contact_fields.return_value = {'results': []}
+        mock_instance.list_project_contact_fields.return_value = {"results": []}
 
         agents = self.agents
         for key in agents:
-            agent = self.usecase.create_agent(
-                key, agents[key], self.project, self.files
-            )
-            self.assertEquals(
-                agent.backend_foundation_models, settings.DEFAULT_FOUNDATION_MODELS
-            )
-        
+            agent = self.usecase.create_agent(key, agents[key], self.project, self.files)
+            self.assertEqual(agent.backend_foundation_models, settings.DEFAULT_FOUNDATION_MODELS)
+
         mock_instance.list_project_contact_fields.assert_called()

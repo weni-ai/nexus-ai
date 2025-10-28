@@ -1,3 +1,4 @@
+# ruff: noqa: E501 - Very long embedded prompt strings
 SIMPLE_TEXT = '<exemplo>{"msg":{"text":"Hi! How can I help you today?" (MAXIMUM 4096 CHARACTERS)}}</exemplo>'
 
 # Quick replies
@@ -18,10 +19,4 @@ def get_all_formats():
 
 
 def get_all_formats_list():
-    return [
-        LIST_MESSAGE,
-        QUICK_REPLIES,
-        SIMPLE_TEXT,
-        CTA_MESSAGE,
-        CATALOG
-    ]
+    return [LIST_MESSAGE, QUICK_REPLIES, SIMPLE_TEXT, CTA_MESSAGE, CATALOG]
