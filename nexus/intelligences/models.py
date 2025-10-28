@@ -224,14 +224,6 @@ class SubTopics(models.Model):
         return f"{self.topic.name} - {self.name}"
 
 
-class ConversationMessage(models.Model):
-    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
-    message = models.ManyToManyField(InlineAgentMessage, related_name="conversations")
-
-    def __str__(self):
-        return f"ConversationMessage - {self.conversation.uuid}"
-
-
 class Conversation(models.Model):
     RESOLUTION_CHOICES = [
         (0, "Resolved"),
@@ -287,3 +279,11 @@ class Conversation(models.Model):
             "topic": self.get_topic(),
             "project": str(self.project.uuid),
         }
+
+
+class ConversationMessage(models.Model):
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
+    message = models.ManyToManyField(InlineAgentMessage, related_name="conversations")
+
+    def __str__(self):
+        return f"ConversationMessage - {self.conversation.uuid}"
