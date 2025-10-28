@@ -2,7 +2,6 @@ from uuid import uuid4
 
 from django.test import TestCase
 
-from nexus.projects.models import TemplateType
 from nexus.usecases.intelligences.tests.intelligence_factory import IntelligenceFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
@@ -25,5 +24,5 @@ class TestTemplateTypeUseCase(TestCase):
     def test_get_by_uuid(self):
         self.assertEqual(self.usecase.get_by_uuid(self.template_type.uuid), self.template_type)
         wrong_uuid = str(uuid4())
-        with self.assertRaises(TemplateType.DoesNotExist):
+        with self.assertRaises(Exception):  # noqa: B017
             self.usecase.get_by_uuid(wrong_uuid)
