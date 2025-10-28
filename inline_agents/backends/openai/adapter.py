@@ -441,7 +441,7 @@ class OpenAITeamAdapter(TeamAdapter):
         """Clean up the schema to ensure it's valid for OpenAI"""
         if isinstance(schema, dict):
             if "properties" in schema:
-                for prop_name, prop_schema in schema["properties"].items():
+                for _, prop_schema in schema["properties"].items():
                     if isinstance(prop_schema, dict) and "type" not in prop_schema:
                         if "items" in prop_schema:
                             prop_schema["type"] = "array"

@@ -707,7 +707,7 @@ class AgentUsecase:
         Compares existing agent data with incoming data to determine what needs to be updated.
         """
         agents_dto = []
-        for agent_key, agent_value in yaml.get("agents", {}).items():
+        for _, agent_value in yaml.get("agents", {}).items():
             agent = Agent.objects.filter(display_name=agent_value.get("name"), project_id=project_uuid).first()
 
             # Convert incoming data to DTO
