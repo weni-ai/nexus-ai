@@ -120,19 +120,19 @@ class AgentsBackendTestCase(TestCase):
 
     def test_set_agents_backend_by_project_invalid_backend(self):
         """Test setting an invalid backend should raise an exception"""
-        with self.assertRaises(Exception) as context:
+        with self.assertRaises(ValueError) as context:
             self.usecase.set_agents_backend_by_project(str(self.project.uuid), "invalid_backend")
 
         self.assertIn("Invalid backend", str(context.exception))
 
     def test_set_agents_backend_by_project_nonexistent_project(self):
         """Test setting backend for non-existent project should raise an exception"""
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             self.usecase.set_agents_backend_by_project(str(uuid4()), "bedrock")
 
     def test_set_agents_backend_by_project_empty_string(self):
         """Test setting empty string as backend should raise an exception"""
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             self.usecase.set_agents_backend_by_project(str(self.project.uuid), "")
 
     def test_get_agents_backend_after_set(self):

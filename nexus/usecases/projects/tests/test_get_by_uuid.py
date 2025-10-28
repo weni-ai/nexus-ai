@@ -28,7 +28,7 @@ class GetByProjectUuidTestCase(TestCase):
             ProjectsUseCase().get_by_uuid(str(uuid4()))
 
     def test_invalid_uuid(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             ProjectsUseCase().get_by_uuid("invalid_uuid")
 
     def test_get_project(self):
