@@ -22,5 +22,7 @@ class TestDeleteIntegratedFeature(TestCase):
             delete_integrated_feature(project_uuid=self.integrated_feature.project.uuid, feature_uuid=uuid4().hex)
 
     def test_delete_integrated_feature_exception(self):
-        with self.assertRaises(ValueError):
+        from django.core.exceptions import ValidationError
+
+        with self.assertRaises(ValidationError):
             delete_integrated_feature(project_uuid="a", feature_uuid="123")
