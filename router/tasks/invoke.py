@@ -1,11 +1,12 @@
+import json
 import os
 from typing import Dict, Optional, Tuple
+
 import boto3
-import json
 import botocore
+import sentry_sdk
 from django.conf import settings
 
-import sentry_sdk
 from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
 from nexus.inline_agents.team.repository import ORMTeamRepository
@@ -13,16 +14,15 @@ from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
 from nexus.usecases.inline_agents.typing import TypingUsecase
-from router.dispatcher import dispatch
-
-from router.tasks.redis_task_manager import RedisTaskManager
-from router.entities import message_factory
-from router.tasks.exceptions import EmptyTextException
-
-from .actions_client import get_action_clients
 from nexus.usecases.intelligences.get_by_uuid import (
     get_project_and_content_base_data,
 )
+from router.dispatcher import dispatch
+from router.entities import message_factory
+from router.tasks.exceptions import EmptyTextException
+from router.tasks.redis_task_manager import RedisTaskManager
+
+from .actions_client import get_action_clients
 
 
 def get_task_manager() -> RedisTaskManager:
@@ -30,10 +30,7 @@ def get_task_manager() -> RedisTaskManager:
     return RedisTaskManager()
 
 
-def handle_attachments(
-    text: str,
-    attachments: list[str]
-) -> tuple[str, bool]:
+def handle_attachments(text: str, attachments: list[str]) -> tuple[str, bool]:
     turn_off_rationale = False
 
     if attachments:
@@ -48,6 +45,7 @@ def handle_attachments(
 
 class ThrottlingException(Exception):
     """Custom exception for AWS Bedrock throttling errors"""
+
     pass
 
 
@@ -70,25 +68,33 @@ def complexity_layer(input_text: str) -> str | None:
             )
 
             if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
-                payload = json.loads(response['Payload'].read().decode('utf-8'))
+                payload = json.loads(response["Payload"].read().decode("utf-8"))
                 classification = payload.get("body").get("classification")
                 print(f"[DEBUG] Message: {input_text} - Classification: {classification}")
                 return classification
             else:
-                error_msg = f"Lambda invocation failed with status code: {response['ResponseMetadata']['HTTPStatusCode']}"
-                sentry_sdk.set_context("extra_data", {
-                    "input_text": input_text,
-                    "response": response,
-                    "status_code": response["ResponseMetadata"]["HTTPStatusCode"]
-                })
+                error_msg = (
+                    f"Lambda invocation failed with status code: {response['ResponseMetadata']['HTTPStatusCode']}"
+                )
+                sentry_sdk.set_context(
+                    "extra_data",
+                    {
+                        "input_text": input_text,
+                        "response": response,
+                        "status_code": response["ResponseMetadata"]["HTTPStatusCode"],
+                    },
+                )
                 sentry_sdk.capture_message(error_msg, level="error")
                 raise Exception(error_msg)
 
         except Exception as e:
-            sentry_sdk.set_context("extra_data", {
-                "input_text": input_text,
-                "response": response if 'response' in locals() else None,
-            })
+            sentry_sdk.set_context(
+                "extra_data",
+                {
+                    "input_text": input_text,
+                    "response": response if "response" in locals() else None,
+                },
+            )
             sentry_sdk.capture_exception(e)
             return None
 
@@ -115,7 +121,7 @@ def _preprocess_message_input(message: Dict) -> Tuple[Dict, Optional[str], bool]
         )
 
     processed_message = message.copy()
-    processed_message['text'] = text
+    processed_message["text"] = text
     return processed_message, foundation_model, turn_off_rationale
 
 
@@ -128,9 +134,7 @@ def _manage_pending_task(task_manager: RedisTaskManager, message_obj, current_ta
         celery_app.control.revoke(pending_task_id, terminate=True)
 
     final_message_text = task_manager.handle_pending_response(
-        project_uuid=message_obj.project_uuid,
-        contact_urn=message_obj.contact_urn,
-        message_text=message_obj.text
+        project_uuid=message_obj.project_uuid, contact_urn=message_obj.contact_urn, message_text=message_obj.text
     )
 
     task_manager.store_pending_task_id(message_obj.project_uuid, message_obj.contact_urn, current_task_id)
@@ -144,7 +148,7 @@ def _handle_task_error(
     task_id: str,
     preview: bool,
     language: str,
-    user_email: str
+    user_email: str,
 ):
     """
     Centralized error handling for the Celery task.
@@ -152,18 +156,21 @@ def _handle_task_error(
     project_uuid = message.get("project_uuid")
     contact_urn = message.get("contact_urn")
 
-    sentry_sdk.set_context("message", {
-        "project_uuid": project_uuid,
-        "contact_urn": contact_urn,
-        "channel_uuid": message.get("channel_uuid"),
-        "contact_name": message.get("contact_name"),
-        "text": message.get("text", ""),
-        "preview": preview,
-        "language": language,
-        "user_email": user_email,
-        "task_id": task_id,
-        "pending_task_id": task_manager.get_pending_task_id(project_uuid, contact_urn) if task_manager else None,
-    })
+    sentry_sdk.set_context(
+        "message",
+        {
+            "project_uuid": project_uuid,
+            "contact_urn": contact_urn,
+            "channel_uuid": message.get("channel_uuid"),
+            "contact_name": message.get("contact_name"),
+            "text": message.get("text", ""),
+            "preview": preview,
+            "language": language,
+            "user_email": user_email,
+            "task_id": task_id,
+            "pending_task_id": task_manager.get_pending_task_id(project_uuid, contact_urn) if task_manager else None,
+        },
+    )
     sentry_sdk.set_tag("preview_mode", preview)
     sentry_sdk.set_tag("project_uuid", project_uuid)
     sentry_sdk.set_tag("task_id", task_id)
@@ -176,14 +183,12 @@ def _handle_task_error(
     print(f"[DEBUG] Error type: {type(exc)}")
     print(f"[DEBUG] Full exception details: {exc.__dict__}")
 
-    if isinstance(exc, botocore.exceptions.EventStreamError) and 'throttlingException' in str(exc):
+    if isinstance(exc, botocore.exceptions.EventStreamError) and "throttlingException" in str(exc):
         raise ThrottlingException(str(exc))
 
     if user_email:
         send_preview_message_to_websocket(
-            user_email=user_email,
-            project_uuid=str(project_uuid),
-            message_data={"type": "error", "content": str(exc)}
+            user_email=user_email, project_uuid=str(project_uuid), message_data={"type": "error", "content": str(exc)}
         )
 
     sentry_sdk.capture_exception(exc)
@@ -199,15 +204,15 @@ def _handle_task_error(
     retry_backoff=True,
     retry_backoff_max=600,
     retry_jitter=True,
-    max_retries=5
+    max_retries=5,
 )
 def start_inline_agents(
     self,
     message: Dict,
     preview: bool = False,
     language: str = "en",
-    user_email: str = '',
-    task_manager: Optional[RedisTaskManager] = None
+    user_email: str = "",
+    task_manager: Optional[RedisTaskManager] = None,
 ) -> bool:  # pragma: no cover
     task_manager = task_manager or get_task_manager()
 
@@ -218,7 +223,7 @@ def start_inline_agents(
             contact_urn=processed_message.get("contact_urn"),
             msg_external_id=processed_message.get("msg_event", {}).get("msg_external_id", ""),
             project_uuid=processed_message.get("project_uuid"),
-            preview=preview
+            preview=preview,
         )
 
         # TODO: Logs
@@ -283,15 +288,12 @@ def start_inline_agents(
                 direct_message=broadcast,
                 user_email=flows_user_email,
                 full_chunks=[],
-                backend=agents_backend
+                backend=agents_backend,
             )
             send_preview_message_to_websocket(
                 project_uuid=message_obj.project_uuid,
                 user_email=user_email,
-                message_data={
-                    "type": "preview",
-                    "content": response_msg
-                }
+                message_data={"type": "preview", "content": response_msg},
             )
             return response_msg
         else:
@@ -301,7 +303,7 @@ def start_inline_agents(
                 direct_message=broadcast,
                 user_email=flows_user_email,
                 full_chunks=[],
-                backend=agents_backend
+                backend=agents_backend,
             )
 
     except Exception as e:

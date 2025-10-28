@@ -7,4 +7,3 @@ __all__ = [
     "UserDoesNotExists",
     "get_by_email",
 ]
-

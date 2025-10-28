@@ -17,10 +17,19 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         result = OpenAISupervisorRepository.get_supervisor(self.project)
 
         expected_keys = [
-            "instruction", "use_components", "use_human_support", "components_instructions",
-            "formatter_agent_components_instructions", "components_instructions_up", "human_support_instructions",
-            "tools", "foundation_model", "knowledge_bases", "prompt_override_configuration", 
-            "default_instructions_for_collaborators", "max_tokens"
+            "instruction",
+            "use_components",
+            "use_human_support",
+            "components_instructions",
+            "formatter_agent_components_instructions",
+            "components_instructions_up",
+            "human_support_instructions",
+            "tools",
+            "foundation_model",
+            "knowledge_bases",
+            "prompt_override_configuration",
+            "default_instructions_for_collaborators",
+            "max_tokens",
         ]
         self.assertEqual(set(result.keys()), set(expected_keys))
         self.assertEqual(result["foundation_model"], self.supervisor.foundation_model)
@@ -43,9 +52,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         self.project.save()
 
         # Create supervisor with specific values
-        supervisor = OpenAISupervisorFactory(
-            instruction="Components prompt"
-        )
+        supervisor = OpenAISupervisorFactory(instruction="Components prompt")
 
         result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
         self.assertEqual(result, "Components prompt")
@@ -57,9 +64,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         self.project.save()
 
         # Create supervisor with specific values
-        supervisor = OpenAISupervisorFactory(
-            instruction="Human support prompt"
-        )
+        supervisor = OpenAISupervisorFactory(instruction="Human support prompt")
 
         result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
         self.assertEqual(result, "Human support prompt")
@@ -71,9 +76,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         self.project.save()
 
         # Create supervisor with specific values
-        supervisor = OpenAISupervisorFactory(
-            instruction="Components + Human support prompt"
-        )
+        supervisor = OpenAISupervisorFactory(instruction="Components + Human support prompt")
 
         result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
         self.assertEqual(result, "Components + Human support prompt")
@@ -103,9 +106,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
 
     def test_get_supervisor_tools_with_none_values(self):
         """Test _get_supervisor_tools when human_support_action_groups is None."""
-        supervisor = OpenAISupervisorFactory(
-            human_support_action_groups=None
-        )
+        supervisor = OpenAISupervisorFactory(human_support_action_groups=None)
 
         self.project.human_support = True
         self.project.save()
@@ -142,7 +143,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
             knowledge_bases=[{"name": "kb1", "type": "knowledge"}],
             prompt_override_configuration={"temperature": 0.8, "max_tokens": 1000},
             default_instructions_for_collaborators="Always be helpful and professional.",
-            max_tokens=4096
+            max_tokens=4096,
         )
 
         result = OpenAISupervisorRepository.get_supervisor(self.project)
@@ -162,23 +163,19 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         )
         self.assertEqual(supervisor.default_instructions_for_collaborators, "Always be helpful and polite to users.")
 
-        supervisor_none = OpenAISupervisorFactory(
-            default_instructions_for_collaborators=None
-        )
+        supervisor_none = OpenAISupervisorFactory(default_instructions_for_collaborators=None)
         self.assertIsNone(supervisor_none.default_instructions_for_collaborators)
 
-        supervisor_empty = OpenAISupervisorFactory(
-            default_instructions_for_collaborators=""
-        )
+        supervisor_empty = OpenAISupervisorFactory(default_instructions_for_collaborators="")
         self.assertEqual(supervisor_empty.default_instructions_for_collaborators, "")
 
     def test_get_supervisor_includes_default_instructions_for_collaborators(self):
         """Test that get_supervisor includes default_instructions_for_collaborators in the result."""
-        OpenAISupervisorFactory(
-            default_instructions_for_collaborators="Be concise and professional in all responses."
-        )
+        OpenAISupervisorFactory(default_instructions_for_collaborators="Be concise and professional in all responses.")
 
         result = OpenAISupervisorRepository.get_supervisor(self.project)
 
         self.assertIn("default_instructions_for_collaborators", result)
-        self.assertEqual(result["default_instructions_for_collaborators"], "Be concise and professional in all responses.")
+        self.assertEqual(
+            result["default_instructions_for_collaborators"], "Be concise and professional in all responses."
+        )

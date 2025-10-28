@@ -2,16 +2,17 @@ from typing import Dict
 from uuid import uuid4
 
 from django.db import models
-from nexus.projects.models import Project
-from nexus.db.models import BaseModel
+
 from nexus.agents.encryption import decrypt_value
 from nexus.agents.exceptions import (
+    CredentialIsConfidentialInvalid,
     CredentialKeyInvalid,
     CredentialLabelInvalid,
-    CredentialValueInvalid,
     CredentialPlaceholderInvalid,
-    CredentialIsConfidentialInvalid,
+    CredentialValueInvalid,
 )
+from nexus.db.models import BaseModel
+from nexus.projects.models import Project
 
 
 class Agent(BaseModel):
@@ -46,11 +47,7 @@ class Agent(BaseModel):
         return self.versions.order_by("created_at")
 
     def create_version(
-        self,
-        agent_alias_id: str,
-        agent_alias_name: str,
-        agent_alias_arn: str,
-        agent_alias_version: str
+        self, agent_alias_id: str, agent_alias_name: str, agent_alias_arn: str, agent_alias_version: str
     ):
         self.versions.create(
             alias_id=agent_alias_id,
@@ -62,6 +59,9 @@ class Agent(BaseModel):
             created_by=self.created_by,
         )
 
+    def __str__(self):
+        return self.display_name
+
 
 class Credential(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="credentials")
@@ -72,6 +72,13 @@ class Credential(models.Model):
     is_confidential = models.BooleanField(default=True)
     metadata = models.JSONField(default=dict)
     agents = models.ManyToManyField(Agent)
+
+    def __str__(self):
+        return self.label
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     def clean(self):
         if not isinstance(self.key, str):
@@ -98,10 +105,6 @@ class Credential(models.Model):
         if not isinstance(self.is_confidential, bool):
             raise CredentialIsConfidentialInvalid(field_name=str(self.key))
 
-    def save(self, *args, **kwargs):
-        self.clean()
-        super().save(*args, **kwargs)
-
     @property
     def decrypted_value(self):
         """Get the decrypted value of the credential"""
@@ -122,6 +125,9 @@ class Team(models.Model):
     human_support = models.BooleanField(default=False)
     human_support_prompt = models.TextField(null=True, blank=True)
 
+    def __str__(self):
+        return f"Team for {self.project}"
+
     def update_metadata(self, metadata: Dict[str, str]):
         self.metadata.update(metadata)
         self.save()
@@ -141,6 +147,9 @@ class TeamVersion(BaseModel):
     alias_id = models.CharField(max_length=255, help_text="Supervisor alias ID")
     alias_name = models.CharField(max_length=255, help_text="Supervisor alias name", null=True)
     metadata = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"TeamVersion {self.uuid}"
 
 
 class ActiveAgent(BaseModel):
@@ -170,11 +179,17 @@ class AgentVersion(BaseModel):
     metadata = models.JSONField(default=dict)
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="versions")
 
+    def __str__(self):
+        return f"AgentVersion {self.uuid}"
+
 
 class AgentSkillVersion(BaseModel):
     uuid = models.UUIDField(default=uuid4, editable=True)
     agent_skill = models.ForeignKey(AgentSkills, on_delete=models.CASCADE, related_name="versions")
     metadata = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"AgentSkillVersion {self.uuid}"
 
 
 class ContactField(models.Model):
@@ -182,6 +197,9 @@ class ContactField(models.Model):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="contact_fields")
     key = models.CharField(max_length=255)
     value_type = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.key}: {self.value_type}"
 
 
 class AgentMessage(models.Model):
@@ -197,6 +215,9 @@ class AgentMessage(models.Model):
     session_id = models.CharField(max_length=255)
     metadata = models.JSONField(default=dict)
     source = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"AgentMessage - {self.contact_urn}"
 
     @property
     def trace_path(self):

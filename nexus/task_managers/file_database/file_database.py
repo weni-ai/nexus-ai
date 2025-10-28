@@ -12,7 +12,6 @@ class FileResponseDTO:
 
 
 class FileDataBase(ABC):
-
     @abstractmethod
     def add_file(file) -> FileResponseDTO:
         ...

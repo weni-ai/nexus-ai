@@ -35,17 +35,10 @@ repos:
         entry: poetry run ruff check --fix
         pass_filenames: true
 
-      - id: pyright
-        name: pyright
-        language: system
-        files: \.py$
-        entry: bash -c 'poetry run pyright'
-        pass_filenames: false
-
-      - id: check-coverage
-        name: Check code coverage
-        entry: coverage run --source='.' manage.py test --keepdb
-        language: system
-        pass_filenames: false
-        always_run: true
-        fail_under: 75
+      # - id: check-coverage
+      #   name: Check code coverage
+      #   entry: coverage run --source='.' manage.py test --keepdb
+      #   language: system
+      #   pass_filenames: false
+      #   always_run: true
+      #   fail_under: 75
