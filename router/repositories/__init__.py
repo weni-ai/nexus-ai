@@ -1,7 +1,4 @@
-from abc import ABC
-
-
-class Repository(ABC):
+class Repository:
     """Base repository class."""
 
     pass

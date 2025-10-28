@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Dict, List
 
 from django.conf import settings
@@ -38,6 +38,7 @@ class LLMClient(ABC):  # pragma: no cover
             return self.replace_vars(self.prompt_with_context, variables)
         return self.replace_vars(self.prompt_without_context, variables)
 
+    @abstractmethod
     def request_gpt(
         self,
         instructions: List,
