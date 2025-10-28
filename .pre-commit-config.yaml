@@ -2,12 +2,12 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v3.2.0
     hooks:
-    -   id: trailing-whitespace
-    -   id: end-of-file-fixer
-    -   id: check-yaml
-    -   id: check-added-large-files
-    -   id: check-merge-conflict
-    -   id: check-toml
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-toml
 
   - repo: https://github.com/iamthefij/docker-pre-commit
     rev: master
@@ -17,7 +17,7 @@ repos:
   - repo: https://gitlab.com/smop/pre-commit-hooks
     rev: df034f88cf92b394e6f00a78fa97a2aa4e270e60
     hooks:
-    -   id: check-poetry
+      - id: check-poetry
 
   - repo: local
     hooks:
@@ -44,7 +44,7 @@ repos:
 
       - id: check-coverage
         name: Check code coverage
-        entry: coverage run --source='.' manage.py test
+        entry: coverage run --source='.' manage.py test --keepdb
         language: system
         pass_filenames: false
         always_run: true
