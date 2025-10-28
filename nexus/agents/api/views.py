@@ -28,6 +28,7 @@ from nexus.usecases.agents import (
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.models import Project
+from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 
 class InternalCommunicationPermission(BasePermission):
@@ -854,3 +855,132 @@ class RationaleView(APIView):
                 "message": "Rationale updated successfully",
                 "rationale": rationale
             })
+
+
+class DeleteAgentView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def delete(self, request, *args, **kwargs):
+        """
+        Delete a custom agent and all its resources.
+
+        For Bedrock agents:
+        - Deletes Lambda functions
+        - Deletes agent aliases
+        - Deletes Bedrock agent
+
+        For OpenAI agents:
+        - Only deletes database records
+
+        Always:
+        - Validates agent is not active
+        - Deletes database records (CASCADE)
+        """
+        logger = logging.getLogger(__name__)
+        agent_uuid = kwargs.get("agent_uuid")
+        project_uuid = kwargs.get("project_uuid")
+
+        # Validate agent exists and belongs to project
+        try:
+            agent = Agent.objects.get(uuid=agent_uuid, project__uuid=project_uuid)
+        except Agent.DoesNotExist:
+            return Response(
+                {"error": "Agent not found"},
+                status=404
+            )
+
+        # Check if agent is currently active
+        active_agents = ActiveAgent.objects.filter(agent=agent)
+        if active_agents.exists():
+            teams = [
+                {
+                    "team_uuid": str(aa.team.uuid),
+                    "project_name": aa.team.project.name
+                }
+                for aa in active_agents
+            ]
+            return Response(
+                {
+                    "error": "Cannot delete active agent. Please unassign it first.",
+                    "active_teams": teams,
+                    "instructions": "Go to Teams section and unassign this agent before deletion"
+                },
+                status=400
+            )
+
+        # Determine backend type
+        usecase = AgentUsecase()
+        is_bedrock = usecase.is_bedrock_agent(agent)
+
+        deletion_summary = {
+            "agent_uuid": str(agent.uuid),
+            "agent_name": agent.display_name,
+            "backend_type": "BEDROCK" if is_bedrock else "OPENAI",
+            "lambdas_deleted": [],
+            "aliases_deleted": [],
+            "warnings": []
+        }
+
+        # Delete Bedrock-specific resources
+        if is_bedrock:
+            # Delete Lambda functions
+            try:
+                bedrock_client = BedrockFileDatabase()
+                for skill in agent.agent_skills.all():
+                    function_name = skill.skill.get('function_name')
+                    if function_name:
+                        try:
+                            bedrock_client.delete_lambda_function(function_name)
+                            deletion_summary["lambdas_deleted"].append(function_name)
+                            logger.info(f"Deleted Lambda: {function_name}")
+                        except Exception as e:
+                            warning = f"Failed to delete Lambda {function_name}: {str(e)}"
+                            deletion_summary["warnings"].append(warning)
+                            logger.warning(warning)
+            except Exception as e:
+                warning = f"Lambda deletion error: {str(e)}"
+                deletion_summary["warnings"].append(warning)
+                logger.error(warning)
+
+            # Delete agent aliases
+            for version in agent.versions.all():
+                if version.alias_id and version.alias_id != "DRAFT":
+                    try:
+                        usecase.external_agent_client.bedrock_agent.delete_agent_alias(
+                            agentId=agent.external_id,
+                            agentAliasId=version.alias_id
+                        )
+                        deletion_summary["aliases_deleted"].append(version.alias_id)
+                        logger.info(f"Deleted alias: {version.alias_id}")
+                    except Exception as e:
+                        warning = f"Failed to delete alias {version.alias_id}: {str(e)}"
+                        deletion_summary["warnings"].append(warning)
+                        logger.warning(warning)
+
+            # Delete Bedrock agent
+            try:
+                usecase.delete_agent(agent.external_id)
+                logger.info(f"Deleted Bedrock agent: {agent.external_id}")
+            except Exception as e:
+                error_msg = f"Failed to delete Bedrock agent: {str(e)}"
+                logger.error(error_msg)
+                return Response(
+                    {
+                        "error": "Failed to delete external Bedrock resources",
+                        "details": str(e),
+                        "partial_deletion": deletion_summary
+                    },
+                    status=500
+                )
+
+        # Delete database records (CASCADE handles related records)
+        agent.delete()
+        logger.info(f"Agent {agent.uuid} ({agent.display_name}) deleted successfully")
+
+        return Response(
+            {
+                "message": "Agent deleted successfully",
+                **deletion_summary
+            },
+            status=200
+        )
