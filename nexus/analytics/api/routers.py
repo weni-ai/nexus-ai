@@ -8,29 +8,28 @@ from .views import (
 )
 
 urlpatterns = [
-    # Average resolution rate
+    # Average resolution rate (global endpoint, project_uuid optional via query param)
     path(
         "analytics/resolution-rate/average/",
         ResolutionRateAverageView.as_view(),
         name="resolution-rate-average",
     ),
-    # Individual resolution rate
+    # Individual resolution rate (global endpoint, project_uuid optional via query param)
     path(
         "analytics/resolution-rate/individual/",
         ResolutionRateIndividualView.as_view(),
         name="resolution-rate-individual",
     ),
-    # Unresolved rate
+    # Unresolved rate (global endpoint, project_uuid optional via query param)
     path(
         "analytics/unresolved-rate/",
         UnresolvedRateView.as_view(),
         name="unresolved-rate",
     ),
-    # Projects by motor
+    # Projects by motor (global, no project_uuid)
     path(
         "analytics/projects/by-motor/",
         ProjectsByMotorView.as_view(),
         name="projects-by-motor",
     ),
 ]
-

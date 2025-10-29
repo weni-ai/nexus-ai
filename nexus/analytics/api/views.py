@@ -2,7 +2,7 @@ import pendulum
 from uuid import UUID
 from django.db.models import Count, Q
 from django.utils.dateparse import parse_date
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.conf import settings
@@ -39,6 +39,7 @@ class InternalCommunicationPermission(BasePermission):
             return user.has_perm("users.can_communicate_internally")
         
         return False
+
 
 # Motor to backend mapping
 MOTOR_BACKEND_MAP = {
@@ -98,7 +99,12 @@ class ResolutionRateAverageView(APIView):
         - end_date (optional, YYYY-MM-DD): End date  
         - motor (optional, "AB 2" | "AB 2.5"): Filter by specific motor
         - min_conversations (optional, int): Minimum conversations to consider project
+        Returns: Average resolution rate metrics
         """
+        # Prevent database access during schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Response({})
+            
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
         motor = request.query_params.get("motor")
@@ -226,6 +232,10 @@ class ResolutionRateIndividualView(APIView):
         - filter_project_name (optional): Filter by project name (partial search, case-insensitive)
         Returns: Array of project-level metrics
         """
+        # Prevent database access during schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Response({})
+            
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
         motor = request.query_params.get("motor")
@@ -361,6 +371,10 @@ class UnresolvedRateView(APIView):
         - min_conversations (optional, int): Minimum conversations to consider project
         Returns: Unresolved rate metrics
         """
+        # Prevent database access during schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Response({})
+            
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
         motor = request.query_params.get("motor")
@@ -472,6 +486,10 @@ class ProjectsByMotorView(APIView):
         - start_date (optional, YYYY-MM-DD): Filter conversations by date
         - end_date (optional, YYYY-MM-DD): Filter conversations by date
         """
+        # Prevent database access during schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Response({})
+            
         motor_param = request.query_params.get("motor", "both")
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
@@ -554,4 +572,3 @@ class ProjectsByMotorView(APIView):
 
         serializer = ProjectsByMotorSerializer(results)
         return Response(serializer.data)
-
