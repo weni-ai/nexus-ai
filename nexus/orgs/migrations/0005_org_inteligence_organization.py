@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('orgs', '0004_alter_org_uuid'),
+        ("orgs", "0004_alter_org_uuid"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='org',
-            name='inteligence_organization',
+            model_name="org",
+            name="inteligence_organization",
             field=models.PositiveIntegerField(default=0),
             preserve_default=False,
         ),

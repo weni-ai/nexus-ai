@@ -6,17 +6,12 @@ from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.test import TestCase
 from django.utils.datastructures import MultiValueDict
 
-from nexus.inline_agents.models import (
-    Agent,
-    IntegratedAgent,
-    AgentCredential
-)
+from nexus.inline_agents.models import Agent, AgentCredential, IntegratedAgent
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
+from nexus.usecases.inline_agents.get import GetInlineCredentialsUsecase, GetLogGroupUsecase
 from nexus.usecases.inline_agents.update import UpdateAgentUseCase
-from nexus.usecases.inline_agents.get import GetInlineCredentialsUsecase
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
-from nexus.usecases.inline_agents.get import GetLogGroupUsecase
 
 
 class TestAgentsUsecase(TestCase):
@@ -108,9 +103,9 @@ class TestPushAgents(TestCase):
         agents = """{
             "utility_agent": {
                 "name": "utility agent",
-                "description": "This agent provides utility functions like getting addresses from CEP, weather information and city search to get IATA codes",
+                "description": "This agent provides utility functions for addresses, weather and city search",
                 "instructions": [
-                    "This agent provides utility functions like getting addresses from CEP and weather information for cities",
+                    "This agent provides utility functions for addresses and weather",
                     "For weather requests, inform the user if the requested date is beyond the 7-day forecast limit",
                     "For city searches, provide IATA codes and additional information about matching cities",
                     "If you don't know the answer, don't lie. Tell the user you don't know."
@@ -162,26 +157,28 @@ class TestPushAgents(TestCase):
         }"""
         self.agents = json.loads(agents)
 
-    @patch('nexus.usecases.inline_agents.tools.FlowsRESTClient')
+    @patch("nexus.usecases.inline_agents.tools.FlowsRESTClient")
     def test_push_agents(self, mock_flows_client):
         mock_instance = mock_flows_client.return_value
-        mock_instance.list_project_contact_fields.return_value = {'results': []}
+        mock_instance.list_project_contact_fields.return_value = {"results": []}
         mock_instance.create_project_contact_field.return_value = True
-        
+
         agents = self.agents
-        files = MultiValueDict({
-            'utility_agent:get_weather': [
-                InMemoryUploadedFile(
-                    field_name='utility_agent:get_weather',
-                    name='utility-agent:get-weather.zip',
-                    content_type='application/zip',
-                    size=1024,
-                    charset=None,
-                    content_type_extra=None,
-                    file=BytesIO(b'mock file content')
-                )
-            ]
-        })
+        files = MultiValueDict(
+            {
+                "utility_agent:get_weather": [
+                    InMemoryUploadedFile(
+                        field_name="utility_agent:get_weather",
+                        name="utility-agent:get-weather.zip",
+                        content_type="application/zip",
+                        size=1024,
+                        charset=None,
+                        content_type_extra=None,
+                        file=BytesIO(b"mock file content"),
+                    )
+                ]
+            }
+        )
 
         agent_usecase = CreateAgentUseCase(agent_backend_client=MockBedrockClient)
         update_agent_usecase = UpdateAgentUseCase(agent_backend_client=MockBedrockClient)
@@ -199,50 +196,54 @@ class TestPushAgents(TestCase):
             if existing_agent:
                 agents[key]["credentials"]["API_KEY"]["is_confidential"] = False
                 agents[key]["credentials"]["NEW_KEY"] = {
-                    'label': 'New Key',
-                    'placeholder': 'new-key-here',
-                    'is_confidential': True
+                    "label": "New Key",
+                    "placeholder": "new-key-here",
+                    "is_confidential": True,
                 }
                 del agents[key]["credentials"]["API_SECRET"]
 
-                agents[key]["tools"].append({
-                    "key": "new_tool",
-                    "slug": "new-tool",
-                    "name": "new_tool",
-                    "source": {
-                        "path": "skills/new_tool",
-                        "entrypoint": "lambda_function.lambda_handler",
-                        "path_test": "test_definition.yaml"
-                    },
-                    "description": "A new test tool",
-                    "display_name": "New Tool",
-                    "parameters": [
-                        {
-                            "newparam": {
-                                "description": "New parameter",
-                                "type": "string",
-                                "required": True,
-                                "contact_field": True
+                agents[key]["tools"].append(
+                    {
+                        "key": "new_tool",
+                        "slug": "new-tool",
+                        "name": "new_tool",
+                        "source": {
+                            "path": "skills/new_tool",
+                            "entrypoint": "lambda_function.lambda_handler",
+                            "path_test": "test_definition.yaml",
+                        },
+                        "description": "A new test tool",
+                        "display_name": "New Tool",
+                        "parameters": [
+                            {
+                                "newparam": {
+                                    "description": "New parameter",
+                                    "type": "string",
+                                    "required": True,
+                                    "contact_field": True,
+                                }
                             }
-                        }
-                    ],
-                })
+                        ],
+                    }
+                )
 
                 files[f"{key}:new_tool"] = InMemoryUploadedFile(
-                    field_name=f'{key}:new_tool',
-                    name=f'{key}-new-tool.zip',
-                    content_type='application/zip',
+                    field_name=f"{key}:new_tool",
+                    name=f"{key}-new-tool.zip",
+                    content_type="application/zip",
                     size=1024,
                     charset=None,
                     content_type_extra=None,
-                    file=BytesIO(b'mock file content')
+                    file=BytesIO(b"mock file content"),
                 )
 
                 print(f"[+ ------------ Updating agent {key} ------------  +]")
                 agent_obj = agent_qs.first()
                 update_agent_usecase.update_agent(agent_obj, agents[key], self.project, files)
 
-                self.assertFalse(AgentCredential.objects.filter(project=self.project).get(key="API_KEY").is_confidential)
+                self.assertFalse(
+                    AgentCredential.objects.filter(project=self.project).get(key="API_KEY").is_confidential
+                )
                 self.assertTrue(AgentCredential.objects.filter(project=self.project, key="NEW_KEY").exists())
                 self.assertFalse(AgentCredential.objects.filter(project=self.project, key="API_SECRET").exists())
 

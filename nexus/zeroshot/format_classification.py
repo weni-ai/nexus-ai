@@ -1,4 +1,5 @@
 import re
+
 from django.conf import settings
 
 
@@ -26,7 +27,7 @@ class FormatClassification:
 
     def _get_number_from_output(self, output):
         output_result = self.const_none_class_id
-        match = re.search(r'-?\d+', output)
+        match = re.search(r"-?\d+", output)
         if match:
             output_result = match.group()
 

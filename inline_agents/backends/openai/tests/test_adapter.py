@@ -1,6 +1,7 @@
-from django.test import TestCase
-from pydantic import BaseModel, Field, ValidationError
 from typing import Optional
+
+from django.test import TestCase
+from pydantic import BaseModel, ValidationError
 
 from inline_agents.backends.openai.adapter import OpenAITeamAdapter
 

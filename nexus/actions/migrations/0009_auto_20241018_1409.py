@@ -11,9 +11,8 @@ def gen_uuid(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('actions', '0008_flow_action_uuid'),
+        ("actions", "0008_flow_action_uuid"),
     ]
 
     operations = [

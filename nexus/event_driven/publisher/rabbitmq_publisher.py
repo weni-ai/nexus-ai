@@ -1,16 +1,14 @@
-import amqp
 import json
 from time import sleep
-
 from typing import Dict
 
+import amqp
 from django.conf import settings
 
 from nexus.event_driven.connection.rabbitmq_connection import RabbitMQConnection
 
 
 class RabbitMQPublisher:
-
     def __init__(self) -> None:
         self.rabbitmq_connection = RabbitMQConnection()
 
@@ -25,7 +23,7 @@ class RabbitMQPublisher:
                         body=json.dumps(body).encode(),
                         properties={"delivery_mode": 2},
                         content_type="application/octet-stream",
-                    )
+                    ),
                 )
                 sended = True
             except Exception as err:

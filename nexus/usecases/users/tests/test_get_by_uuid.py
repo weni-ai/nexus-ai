@@ -1,12 +1,11 @@
 from django.test import TestCase
 
-from ..get_by_email import get_by_email
 from ..exceptions import UserDoesNotExists
+from ..get_by_email import get_by_email
 from .user_factory import UserFactory
 
 
 class TestGetByEmailTestCase(TestCase):
-
     def setUp(self):
         self.user = UserFactory()
 

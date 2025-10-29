@@ -46,7 +46,7 @@ Execute `docker-compose build` to build application
 
 Execute `docker-compose up` to up the server
 
-Very good, your application is running :rocket:                                   
+Very good, your application is running :rocket:
 
 
 ## Contributing

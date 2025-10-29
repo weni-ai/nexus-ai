@@ -1,11 +1,11 @@
 from django.test import TestCase
 
-from ..create import CreateUserUseCase
 from nexus.users.models import User
+
+from ..create import CreateUserUseCase
 
 
 class TestCreateUserUseCase(TestCase):
-
     def setUp(self):
         self.usecase = CreateUserUseCase()
         self.user_email = "test@create.com"

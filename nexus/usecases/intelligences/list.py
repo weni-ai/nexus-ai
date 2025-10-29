@@ -1,24 +1,19 @@
 from nexus.intelligences.models import (
-    Intelligence,
+    LLM,
     ContentBase,
-    ContentBaseText,
     ContentBaseFile,
     ContentBaseLink,
-    LLM,
+    ContentBaseText,
+    Intelligence,
 )
-from nexus.usecases import orgs, users
 from nexus.orgs import permissions
+from nexus.usecases import orgs, users
+
 from .exceptions import IntelligencePermissionDenied
-from nexus.usecases.projects.projects_use_case import ProjectsUseCase
-from .get_by_uuid import (
-    get_by_intelligence_uuid,
-    get_by_contentbase_uuid,
-    get_integrated_intelligence_by_project
-)
+from .get_by_uuid import get_by_contentbase_uuid, get_by_intelligence_uuid, get_integrated_intelligence_by_project
 
 
-class ListIntelligencesUseCase():
-
+class ListIntelligencesUseCase:
     def get_org_intelligences(
         self,
         org_uuid: str,
@@ -36,37 +31,30 @@ class ListIntelligencesUseCase():
         return Intelligence.objects.filter(org=org)
 
 
-class ListAllIntelligenceContentUseCase():
+class ListAllIntelligenceContentUseCase:
+    def get_project_intelligences(self, project_uuid: str, user_email: str = None, is_super_user: bool = False):
+        from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
-    def get_project_intelligences(
-            self,
-            project_uuid: str,
-            user_email: str = None,
-            is_super_user: bool = False
-    ):
         project_usecase = ProjectsUseCase()
         response = []
         project = project_usecase.get_by_uuid(project_uuid)
         intelligences = ListIntelligencesUseCase().get_org_intelligences(
-            project.org.uuid,
-            user_email=user_email,
-            is_super_user=is_super_user
+            project.org.uuid, user_email=user_email, is_super_user=is_super_user
         )
         for intelligence in intelligences:
             cur_data = {"intelligence_name": intelligence.name, "content_bases": []}
             content_bases = ListContentBaseUseCase().get_intelligence_contentbases(
-                intelligence_uuid=str(intelligence.uuid),
-                user_email=user_email,
-                is_super_user=is_super_user
+                intelligence_uuid=str(intelligence.uuid), user_email=user_email, is_super_user=is_super_user
             )
             for content_base in content_bases:
-                cur_data["content_bases"].append({"uuid": str(content_base.uuid), "content_base_name": content_base.title})
+                cur_data["content_bases"].append(
+                    {"uuid": str(content_base.uuid), "content_base_name": content_base.title}
+                )
             response.append(cur_data)
         return response
 
 
-class ListContentBaseUseCase():
-
+class ListContentBaseUseCase:
     def get_intelligence_contentbases(
         self,
         intelligence_uuid: str,
@@ -85,13 +73,8 @@ class ListContentBaseUseCase():
         return ContentBase.objects.filter(intelligence=intelligence)
 
 
-class ListContentBaseTextUseCase():
-
-    def get_contentbase_contentbasetexts(
-        self,
-        contentbase_uuid: str,
-        user_email: str
-    ):
+class ListContentBaseTextUseCase:
+    def get_contentbase_contentbasetexts(self, contentbase_uuid: str, user_email: str):
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         user = users.get_by_email(user_email)
         org = org_use_case.get_org_by_contentbase_uuid(contentbase_uuid)
@@ -114,8 +97,7 @@ class ListContentBaseTextUseCase():
         return ContentBaseText.objects.filter(content_base=content_base)
 
 
-class ListContentBaseFileUseCase():
-
+class ListContentBaseFileUseCase:
     def get_contentbase_file(self, contentbase_uuid: str, user_email: str):
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         org = org_use_case.get_org_by_contentbase_uuid(contentbase_uuid)
@@ -134,7 +116,7 @@ class ListContentBaseFileUseCase():
         return ContentBaseFile.objects.filter(content_base=content_base)
 
 
-class ListContentBaseLinkUseCase():
+class ListContentBaseLinkUseCase:
     def get_contentbase_link(self, contentbase_uuid: str, user_email: str):
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         org = org_use_case.get_org_by_contentbase_uuid(contentbase_uuid)
@@ -162,4 +144,4 @@ def get_llm_config(
 ) -> LLM:
     integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
 
-    return LLM.objects.filter(integrated_intelligence=integrated_intelligence).order_by('created_at').first()
+    return LLM.objects.filter(integrated_intelligence=integrated_intelligence).order_by("created_at").first()

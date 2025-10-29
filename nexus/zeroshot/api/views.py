@@ -1,29 +1,25 @@
 import json
-import traceback
 import logging
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-
-from nexus.zeroshot.client import InvokeModel
-from nexus.zeroshot.api.permissions import ZeroshotTokenPermission
-from nexus.zeroshot.models import ZeroshotLogs
+import traceback
 
 from django.conf import settings
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from nexus.zeroshot.api.permissions import ZeroshotTokenPermission
+from nexus.zeroshot.client import InvokeModel
+from nexus.zeroshot.models import ZeroshotLogs
 
 logger = logging.getLogger(__name__)
 
 
 class ZeroShotFastPredictAPIView(APIView):
-
     authentication_classes = []
     permission_classes = [ZeroshotTokenPermission]
 
     def post(self, request):
         data = request.data
         try:
-
             invoke_model = InvokeModel(data)
             response = invoke_model.invoke()
 
@@ -34,7 +30,7 @@ class ZeroShotFastPredictAPIView(APIView):
                 options=data.get("options"),
                 nlp_log=str(json.dumps(response)),
                 language=data.get("language"),
-                model=settings.DEFAULT_CLASSIFICATION_MODEL
+                model=settings.DEFAULT_CLASSIFICATION_MODEL,
             )
 
             return Response(status=200, data=response if response.get("output") else {"error": response})

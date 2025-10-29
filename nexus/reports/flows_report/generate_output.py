@@ -1,19 +1,17 @@
+import concurrent.futures
 import os
-import sys
 import re
-import pendulum
-import requests
+import sys
+from datetime import datetime
 
 import pandas as pd
-import concurrent.futures
-from datetime import datetime
-from tqdm import tqdm
+import pendulum
+import requests
+from django.conf import settings
+from django.core.mail import EmailMessage
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
-from django.core.mail import EmailMessage
-from django.conf import settings
-
+from tqdm import tqdm
 
 # Constants
 API_VERSION = "v2"
@@ -29,63 +27,163 @@ BASE_URL = settings.FLOWS_REST_ENDPOINT
 # --- Classification Groups ---
 groups = {
     "Cancelamentos/Estorno": [
-        "Cancelamento", "Cancelar para aproveitar outra promoção", "Cancelamento por arrependimento",
-        "Cancelamento por insatisfação", "Chargeback", "Solicitado o estorno", "Estorno do valor do frete",
-        "Estorno realizado", "Cancelou mas não estornou - Estorno solicitado", "Chatbot Retido no Chatbot",
-        "Cliente com dúvidas sobre onde e como comprar?", "Quiosque", "Entrega internacional", "Compras",
-        "Cliente solicita algo impertinente ao SAC?", "Compra realizada em outro site", "E-mail recrutamento",
-        "Cliente solicita devolução", "Insatisfação", "Defeito/Má qualidade - Sem devolução (exceção)",
-        "Prazo excedido para devolução", "Desistiu de devolver", "Arrependimento",
-        "Avaria - Sem devolução (exceção)", "Itens errados - Link de pagamento", "Defeito/Má qualidade - Estorno",
-        "Defeito/Má qualidade - Envio", "Avaria - Envio", "Avaria - Estorno", "Itens errados - Estorno",
+        "Cancelamento",
+        "Cancelar para aproveitar outra promoção",
+        "Cancelamento por arrependimento",
+        "Cancelamento por insatisfação",
+        "Chargeback",
+        "Solicitado o estorno",
+        "Estorno do valor do frete",
+        "Estorno realizado",
+        "Cancelou mas não estornou - Estorno solicitado",
+        "Chatbot Retido no Chatbot",
+        "Cliente com dúvidas sobre onde e como comprar?",
+        "Quiosque",
+        "Entrega internacional",
+        "Compras",
+        "Cliente solicita algo impertinente ao SAC?",
+        "Compra realizada em outro site",
+        "E-mail recrutamento",
+        "Cliente solicita devolução",
+        "Insatisfação",
+        "Defeito/Má qualidade - Sem devolução (exceção)",
+        "Prazo excedido para devolução",
+        "Desistiu de devolver",
+        "Arrependimento",
+        "Avaria - Sem devolução (exceção)",
+        "Itens errados - Link de pagamento",
+        "Defeito/Má qualidade - Estorno",
+        "Defeito/Má qualidade - Envio",
+        "Avaria - Envio",
+        "Avaria - Estorno",
+        "Itens errados - Estorno",
         "Itens errados - Envio",
     ],
     "Dados cadastrais": [
-        "Alteração de e-mail", "Cadastrou endereço de entrega errado", "Erro no cadastro", "Assinatura",
-        "Dados insuficientes", "Cadastro", "Dúvida momento da compra", "Disponibilidade de produto",
-        "Ajuda para comprar", "Valor do frete", "Valor do produto alterado",
-        "Dúvida sobre regulamento da promoção", "Contraindicações", "Composição", "Dúvidas sobre comercial",
-        "Franquias", "Revenda", "Parceria/Publi - Orientada", "Dúvidas sobre utilização? Recomendações de uso",
-        "Encerramento BOT Encerramento BOT", "Erro mensageria", "Disparo recebido", "Erro de disparo",
+        "Alteração de e-mail",
+        "Cadastrou endereço de entrega errado",
+        "Erro no cadastro",
+        "Assinatura",
+        "Dados insuficientes",
+        "Cadastro",
+        "Dúvida momento da compra",
+        "Disponibilidade de produto",
+        "Ajuda para comprar",
+        "Valor do frete",
+        "Valor do produto alterado",
+        "Dúvida sobre regulamento da promoção",
+        "Contraindicações",
+        "Composição",
+        "Dúvidas sobre comercial",
+        "Franquias",
+        "Revenda",
+        "Parceria/Publi - Orientada",
+        "Dúvidas sobre utilização? Recomendações de uso",
+        "Encerramento BOT Encerramento BOT",
+        "Erro mensageria",
+        "Disparo recebido",
+        "Erro de disparo",
     ],
     "Experiência do cliente?": [
-        "Atrito - Envio de presente (exceção)", "Atrito - Cupom de desconto", "Brinde",
-        "Reclamações - Produtos indisponíveis", "Reclamações - Atendimento", "Reclamações - Qualidade do produto",
-        "Reclamações - Mídias Sociais", "Reclamações - Processos", "Reclamações - Quiosques",
-        "Reclamações - Logística", "Falta de interação com cliente? Qual motivo?", "SPAM",
-        "Cliente atendido por outro canal/ Especialista", "Interação", "Fãs/Trote", "Canais de atendimento",
-        "Agradecimentos/Elogios", "Menção instagram", "Término de expediente",
+        "Atrito - Envio de presente (exceção)",
+        "Atrito - Cupom de desconto",
+        "Brinde",
+        "Reclamações - Produtos indisponíveis",
+        "Reclamações - Atendimento",
+        "Reclamações - Qualidade do produto",
+        "Reclamações - Mídias Sociais",
+        "Reclamações - Processos",
+        "Reclamações - Quiosques",
+        "Reclamações - Logística",
+        "Falta de interação com cliente? Qual motivo?",
+        "SPAM",
+        "Cliente atendido por outro canal/ Especialista",
+        "Interação",
+        "Fãs/Trote",
+        "Canais de atendimento",
+        "Agradecimentos/Elogios",
+        "Menção instagram",
+        "Término de expediente",
     ],
     "LIVE": [
         "Interagiu com ação LIVE",
     ],
     "Preventivo Transportes": [
-        "Problemas com a entrega?", "Solicitada reentrega", "Itens faltantes – Estorno", "Devolvido ao remetente",
-        "Aguardando retirada", "Extravio - Envio", "Embalagem violada", "Reenvio", "Atraso com o transportador",
-        "Avaria por transporte", "Resolvido pelo transportador", "Envio", "Solicitado o envio", "Pesagem correta",
-        "Itens faltantes - Envio", "Acareação - Não reconhece entrega", "Pesagem divergente", "Sem movimentação",
-        "Insucesso de entrega", "Em devolução", "Resolvido para devolução", "Extravio - Estorno",
+        "Problemas com a entrega?",
+        "Solicitada reentrega",
+        "Itens faltantes – Estorno",
+        "Devolvido ao remetente",
+        "Aguardando retirada",
+        "Extravio - Envio",
+        "Embalagem violada",
+        "Reenvio",
+        "Atraso com o transportador",
+        "Avaria por transporte",
+        "Resolvido pelo transportador",
+        "Envio",
+        "Solicitado o envio",
+        "Pesagem correta",
+        "Itens faltantes - Envio",
+        "Acareação - Não reconhece entrega",
+        "Pesagem divergente",
+        "Sem movimentação",
+        "Insucesso de entrega",
+        "Em devolução",
+        "Resolvido para devolução",
+        "Extravio - Estorno",
         "Redespacho - Correios",
     ],
     "Promoções": [
-        "Brinde não incluso", "Promoções ativas no momento", "Reações do produto", "Alergia - Com laudo",
-        "Reações do produto", "Alergia", "Resoluções RA", "ACOMPANHAMENTO - RECLAME AQUI", "Resoluções RA",
+        "Brinde não incluso",
+        "Promoções ativas no momento",
+        "Reações do produto",
+        "Alergia - Com laudo",
+        "Reações do produto",
+        "Alergia",
+        "Resoluções RA",
+        "ACOMPANHAMENTO - RECLAME AQUI",
+        "Resoluções RA",
         "Reclame Aqui",
     ],
     "Sem grupo": [
-        "Teste sistema (utilização interna)", "Site fora do ar (Incidente Outubro 2024)", "Site",
-        "WPink Suplementos", "Site Fake", "Produto indisponível no site", "Site", "Plataforma",
-        "Erros no site", "Status de pagamento", "Pagamento pendente", "Erros no pagamento",
+        "Teste sistema (utilização interna)",
+        "Site fora do ar (Incidente Outubro 2024)",
+        "Site",
+        "WPink Suplementos",
+        "Site Fake",
+        "Produto indisponível no site",
+        "Site",
+        "Plataforma",
+        "Erros no site",
+        "Status de pagamento",
+        "Pagamento pendente",
+        "Erros no pagamento",
     ],
     "Status de solicitação": [
-        "Solicitado dados bancários", "Solicitação fora do prazo - Movidesk", "Troquecommerce",
-        "Solicitação fora do prazo - Troquecommerce", "Solicitação dentro do prazo - Troquecommerce",
-        "Não utilizou o código de postagem", "Solicitação dentro do prazo - Movidesk", "Status do pedido",
-        "Pedido não localizado", "Cancelamento automático – Mediador financeiro", "Barragem de entrega",
-        "Dentro do prazo", "Desistiu de cancelar", "Pedido entregue - Consta em sistema", "Fora do prazo",
-        "Fora do prazo - Aguardando estoque", "Fora do prazo - Ruptura", "Troca de um produto por outro",
-        "Informativo de rastreio", "Confirmação de entrega", "Confirmação de compra", "Solicita NF",
-        "Chatbot- Troca do Item", "Chatbot - Desejou aguardar",
+        "Solicitado dados bancários",
+        "Solicitação fora do prazo - Movidesk",
+        "Troquecommerce",
+        "Solicitação fora do prazo - Troquecommerce",
+        "Solicitação dentro do prazo - Troquecommerce",
+        "Não utilizou o código de postagem",
+        "Solicitação dentro do prazo - Movidesk",
+        "Status do pedido",
+        "Pedido não localizado",
+        "Cancelamento automático – Mediador financeiro",
+        "Barragem de entrega",
+        "Dentro do prazo",
+        "Desistiu de cancelar",
+        "Pedido entregue - Consta em sistema",
+        "Fora do prazo",
+        "Fora do prazo - Aguardando estoque",
+        "Fora do prazo - Ruptura",
+        "Troca de um produto por outro",
+        "Informativo de rastreio",
+        "Confirmação de entrega",
+        "Confirmação de compra",
+        "Solicita NF",
+        "Chatbot- Troca do Item",
+        "Chatbot - Desejou aguardar",
     ],
 }
 # --- End Classification Groups ---
@@ -96,15 +194,15 @@ def format_datetime_br(datetime_str):
     if not datetime_str:
         return None
     try:
-        if datetime_str.endswith('Z'):
-            datetime_str = datetime_str[:-1] + '+00:00'
+        if datetime_str.endswith("Z"):
+            datetime_str = datetime_str[:-1] + "+00:00"
         dt_obj = datetime.strptime(datetime_str, DATE_FORMAT_API)
     except ValueError:
         try:
             dt_obj = datetime.strptime(datetime_str, DATE_FORMAT_API_FALLBACK)
         except ValueError:
             try:
-                dt_obj = datetime.strptime(datetime_str.replace('T', ' '), DATE_FORMAT_API_FALLBACK)
+                dt_obj = datetime.strptime(datetime_str.replace("T", " "), DATE_FORMAT_API_FALLBACK)
             except ValueError:
                 print(f"Error: Could not parse date string: {datetime_str}", file=sys.stderr)
                 return None
@@ -118,14 +216,16 @@ def get_paginated_data(url, headers):
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
-        results.extend(data.get('results', []))
-        url = data.get('next')
+        results.extend(data.get("results", []))
+        url = data.get("next")
     return results
 
 
 def get_contact_messages(contact_uuid, base_url, headers):
     """Fetches all messages for a specific contact."""
-    messages_url = f"{base_url}/api/{API_VERSION}/{MESSAGES_ENDPOINT}?contact={contact_uuid}&after=2025-05-15T00:00:00.000Z"
+    messages_url = (
+        f"{base_url}/api/{API_VERSION}/{MESSAGES_ENDPOINT}?contact={contact_uuid}&after=2025-05-15T00:00:00.000Z"
+    )
     return get_paginated_data(messages_url, headers)
 
 
@@ -134,7 +234,7 @@ def classify_conversation(messages_list, groups_dict, similarity_threshold=0.1):
     if not messages_list:
         return "Não Classificado", "Sem Mensagens"
 
-    conversation_text = " ".join([msg.get('text', '') for msg in messages_list if msg.get('text')]).lower()
+    conversation_text = " ".join([msg.get("text", "") for msg in messages_list if msg.get("text")]).lower()
 
     if not conversation_text.strip():
         return "Não Classificado", "Mensagens Sem Texto"
@@ -190,20 +290,25 @@ def process_contact(contact, base_url, headers, groups):
     last_message_date_br = None
 
     if messages is None:
-        print(f"Warning: Failed to fetch messages for contact {contact_uuid}. Skipping classification.", file=sys.stderr)
+        print(
+            f"Warning: Failed to fetch messages for contact {contact_uuid}. Skipping classification.", file=sys.stderr
+        )
     else:
         conversation_group, conversation_tabulation = classify_conversation(messages, groups)
 
         if messages:
             try:
-                valid_messages = [m for m in messages if m.get('created_on')]
-                valid_messages.sort(key=lambda m: m['created_on'], reverse=True)
+                valid_messages = [m for m in messages if m.get("created_on")]
+                valid_messages.sort(key=lambda m: m["created_on"], reverse=True)
                 if valid_messages:
                     last_message = valid_messages[0]
                     last_message_date_str = last_message.get("created_on")
                     last_message_date_br = format_datetime_br(last_message_date_str)
                 else:
-                    print(f"Warning: No valid 'created_on' date found in messages for contact {contact_uuid}.", file=sys.stderr)
+                    print(
+                        f"Warning: No valid 'created_on' date found in messages for contact {contact_uuid}.",
+                        file=sys.stderr,
+                    )
 
             except Exception as e:
                 print(f"Error processing message dates for contact {contact_uuid}: {e}", file=sys.stderr)
@@ -219,7 +324,7 @@ def process_contact(contact, base_url, headers, groups):
             elif first_urn.startswith("tel:"):
                 numero_cliente = first_urn.replace("tel:", "")
             else:
-                numero_cliente = re.sub(r'\D', '', first_urn)
+                numero_cliente = re.sub(r"\D", "", first_urn)
 
     cpf = contact.get("fields", {}).get("document")
     created_on_str = contact.get("created_on")
@@ -233,18 +338,22 @@ def process_contact(contact, base_url, headers, groups):
         "Assuntos da conversa": conversation_group,
         "Tabulação": conversation_tabulation,
         "Data da entrada": data_entrada_br,
-        "Data de fim": last_message_date_br
+        "Data de fim": last_message_date_br,
     }
 
 
 def main(auth_token: str, start_date: str = None, end_date: str = None):
     try:
         if not auth_token:
-            error_message = "Error: flows_token not found in environment variables or .env file. Please ensure a .env file exists in the same directory as the script or the flows_token environment variable is set."
+            error_message = (
+                "Error: flows_token not found in environment variables or .env file. "
+                "Please ensure a .env file exists in the same directory as the script or the "
+                "flows_token environment variable is set."
+            )
             print(error_message, file=sys.stderr)
             raise ValueError(error_message)
 
-        base_url = BASE_URL.rstrip('/')
+        base_url = BASE_URL.rstrip("/")
         headers = {"Authorization": f"Token {auth_token}"}
 
         contacts_url = f"{base_url}/api/{API_VERSION}/{CONTACTS_ENDPOINT}"
@@ -253,12 +362,15 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
             start_date = pendulum.parse(start_date)
             end_date = pendulum.parse(end_date)
             contacts_url += f"?after={start_date.to_iso8601_string()}&before={end_date.to_iso8601_string()}"
-            email_body = f'The attached file contains the report from {start_date.format("DD/MM/YYYY HH:mm")} to {end_date.format("DD/MM/YYYY HH:mm")}.'
+            email_body = (
+                f'The attached file contains the report from {start_date.format("DD/MM/YYYY HH:mm")} '
+                f'to {end_date.format("DD/MM/YYYY HH:mm")}.'
+            )
         else:
             now = pendulum.now()
             yesterday = now.subtract(days=1)
             contacts_url += f"?after={yesterday.to_iso8601_string()}&before={now.to_iso8601_string()}"
-            email_body = 'The attached file contains the report from the last 24 hours.'
+            email_body = "The attached file contains the report from the last 24 hours."
 
         print(f"Fetching contacts from {contacts_url}...")
         all_contacts = get_paginated_data(contacts_url, headers)
@@ -279,7 +391,9 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
                 for contact in all_contacts
             }
 
-            for future in tqdm(concurrent.futures.as_completed(future_to_contact), total=total_contacts, desc="Processing contacts"):
+            for future in tqdm(
+                concurrent.futures.as_completed(future_to_contact), total=total_contacts, desc="Processing contacts"
+            ):
                 contact = future_to_contact[future]
                 try:
                     result = future.result()
@@ -294,29 +408,34 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
             return []
 
         columns_order = [
-            "UUID", "Cliente", "Número do Cliente", "CPF",
-            "Assuntos da conversa", "Tabulação",
-            "Data da entrada", "Data de fim"
+            "UUID",
+            "Cliente",
+            "Número do Cliente",
+            "CPF",
+            "Assuntos da conversa",
+            "Tabulação",
+            "Data da entrada",
+            "Data de fim",
         ]
 
         filename = f"contacts_report-{pendulum.yesterday().format('DD-MM-YYYY')}.csv"
-        filepath = os.path.join('/tmp', filename)
+        filepath = os.path.join("/tmp", filename)
 
         print(f"\nGenerating CSV report: {filename}...")
         df = pd.DataFrame(report_data, columns=columns_order)
 
-        df.to_csv(filepath, index=False, encoding='utf-8')
+        df.to_csv(filepath, index=False, encoding="utf-8")
         print(f"Successfully generated {filepath}")
 
         email = EmailMessage(
-            subject='Contacts Report',
+            subject="Contacts Report",
             body=email_body,
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=settings.REPORT_RECIPIENT_EMAILS,
         )
 
-        with open(filepath, 'rb') as file:
-            email.attach(filename, file.read(), 'text/csv')
+        with open(filepath, "rb") as file:
+            email.attach(filename, file.read(), "text/csv")
 
         email.send()
         print(f"Successfully sent {filename} via email")
@@ -325,28 +444,34 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
 
     except Exception as e:
         if "401 Client Error" in str(e):
-            body = 'An error occurred while generating or sending the contacts report: Invalid or expired authentication token. Please provide a valid token'
+            body = (
+                "An error occurred while generating or sending the contacts report: "
+                "Invalid or expired authentication token. Please provide a valid token"
+            )
         else:
-            body = 'An error occurred while generating or sending the contacts report.\n\nPlease try again or contact someone from Weni.'
+            body = (
+                "An error occurred while generating or sending the contacts report.\n\n"
+                "Please try again or contact someone from Weni."
+            )
 
         error_message = f"Error processing or sending report: {e}"
         print(error_message, file=sys.stderr)
         try:
             error_email = EmailMessage(
-                subject='Error in Contacts Report Generation',
+                subject="Error in Contacts Report Generation",
                 body=body,
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 to=settings.REPORT_RECIPIENT_EMAILS,
             )
             error_email.extra_headers = {
-                'From': f'Nexus AI Reports {settings.DEFAULT_FROM_EMAIL}',
+                "From": f"Nexus AI Reports {settings.DEFAULT_FROM_EMAIL}",
             }
             error_email.send()
             print("Sent error notification email", file=sys.stderr)
         except Exception as email_error:
             print(f"Failed to send error notification email: {email_error}", file=sys.stderr)
 
-        raise Exception(error_message)
+        raise Exception(error_message) from None
 
 
 if __name__ == "__main__":

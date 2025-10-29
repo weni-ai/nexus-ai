@@ -1,8 +1,9 @@
+# ruff: noqa: E501
 import asyncio
 from typing import Any, Dict
 
 import pendulum
-from agents import Agent, Runner, trace, ModelSettings
+from agents import Agent, ModelSettings, Runner, trace
 from agents.agent import ToolsToFinalOutputResult
 from django.conf import settings
 from langfuse import get_client
@@ -13,8 +14,8 @@ from inline_agents.backends.openai.adapter import (
     OpenAIDataLakeEventAdapter,
     OpenAITeamAdapter,
 )
-from inline_agents.backends.openai.entities import FinalResponse
 from inline_agents.backends.openai.components_tools import COMPONENT_TOOLS
+from inline_agents.backends.openai.entities import FinalResponse
 from inline_agents.backends.openai.hooks import (
     HooksState,
     RunnerHooks,
@@ -55,15 +56,31 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_client(self):
         return Runner()
 
-    def _get_session(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None) -> tuple[RedisSession, str]:
+    def _get_session(
+        self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None
+    ) -> tuple[RedisSession, str]:
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
-        return RedisSession(session_id=session_id, r=redis_client, project_uuid=project_uuid, sanitized_urn=sanitized_urn, limit=conversation_turns_to_include), session_id
+        return RedisSession(
+            session_id=session_id,
+            r=redis_client,
+            project_uuid=project_uuid,
+            sanitized_urn=sanitized_urn,
+            limit=conversation_turns_to_include,
+        ), session_id
 
-    def _get_session_factory(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None):
+    def _get_session_factory(
+        self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None
+    ):
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
-        return make_session_factory(redis=redis_client, base_id=session_id, project_uuid=project_uuid, sanitized_urn=sanitized_urn, limit=conversation_turns_to_include)
+        return make_session_factory(
+            redis=redis_client,
+            base_id=session_id,
+            project_uuid=project_uuid,
+            sanitized_urn=sanitized_urn,
+            limit=conversation_turns_to_include,
+        )
 
     def end_session(self, project_uuid: str, sanitized_urn: str):
         session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
@@ -72,6 +89,7 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_event_manager_notify(self):
         if self._event_manager_notify is None:
             from nexus.events import async_event_manager
+
             self._event_manager_notify = async_event_manager.notify
         return self._event_manager_notify
 
@@ -96,19 +114,15 @@ class OpenAIBackend(InlineAgentsBackend):
         turn_off_rationale: bool = False,
         event_manager_notify: callable = None,
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
-        **kwargs
+        **kwargs,
     ):
         turns_to_include = None
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
         session_factory = self._get_session_factory(
-            project_uuid=project_uuid,
-            sanitized_urn=sanitized_urn,
-            conversation_turns_to_include=turns_to_include
+            project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
         )
         session, session_id = self._get_session(
-            project_uuid=project_uuid,
-            sanitized_urn=sanitized_urn,
-            conversation_turns_to_include=turns_to_include
+            project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
         )
 
         supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
@@ -124,7 +138,7 @@ class OpenAIBackend(InlineAgentsBackend):
             session_id=session_id,
             source_type="user",
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
         )
 
         supervisor_hooks = SupervisorHooks(
@@ -197,47 +211,60 @@ class OpenAIBackend(InlineAgentsBackend):
                 message_data={
                     "type": "status",
                     "content": "Starting OpenAI agent processing",
-                    "session_id": session_id
-                }
+                    "session_id": session_id,
+                },
             )
 
-        result = asyncio.run(self._invoke_agents_async(
-            client, external_team, session, session_id,
-            input_text, contact_urn, project_uuid, channel_uuid,
-            user_email, preview, rationale_switch, language,
-            turn_off_rationale, msg_external_id, supervisor_hooks, runner_hooks, hooks_state,
-            use_components
-        ))
+        result = asyncio.run(
+            self._invoke_agents_async(
+                client,
+                external_team,
+                session,
+                session_id,
+                input_text,
+                contact_urn,
+                project_uuid,
+                channel_uuid,
+                user_email,
+                preview,
+                rationale_switch,
+                language,
+                turn_off_rationale,
+                msg_external_id,
+                supervisor_hooks,
+                runner_hooks,
+                hooks_state,
+                use_components,
+            )
+        )
         return result
 
-    async def _run_formatter_agent_async(self, final_response: str, session, supervisor_hooks, context, formatter_instructions=""):
+    async def _run_formatter_agent_async(
+        self, final_response: str, session, supervisor_hooks, context, formatter_instructions=""
+    ):
         """Run the formatter agent asynchronously within the trace context"""
         # Create formatter agent to process the final response
         formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions)
 
         # Run the formatter agent with the final response
-        formatter_result = await self._run_formatter_agent(
-            formatter_agent, final_response, session, context
-        )
+        formatter_result = await self._run_formatter_agent(formatter_agent, final_response, session, context)
 
         return formatter_result
 
     def _create_formatter_agent(self, supervisor_hooks, formatter_instructions=""):
         """Create the formatter agent with component tools"""
+
         def custom_tool_handler(context, tool_results):
             if tool_results:
                 first_result = tool_results[0]
-                return ToolsToFinalOutputResult(
-                    is_final_output=True,
-                    final_output=first_result.output
-                )
-            return ToolsToFinalOutputResult(
-                is_final_output=False,
-                final_output=None
-            )
+                return ToolsToFinalOutputResult(is_final_output=True, final_output=first_result.output)
+            return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
 
         # Use custom instructions if provided, otherwise use default
-        instructions = formatter_instructions or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
+        instructions = (
+            formatter_instructions
+            or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
+        )
 
         formatter_agent = Agent(
             name="Response Formatter Agent",
@@ -246,10 +273,7 @@ class OpenAIBackend(InlineAgentsBackend):
             tools=COMPONENT_TOOLS,
             hooks=supervisor_hooks,
             tool_use_behavior=custom_tool_handler,
-            model_settings=ModelSettings(
-                tool_choice="required",
-                parallel_tool_calls=False
-            )
+            model_settings=ModelSettings(tool_choice="required", parallel_tool_calls=False),
         )
         return formatter_agent
 
@@ -300,17 +324,18 @@ class OpenAIBackend(InlineAgentsBackend):
                 result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
                 async for event in result.stream_events():
                     if event.type == "run_item_stream_event":
-                        if hasattr(event, 'item') and event.item.type == "tool_call_item":
-                            hooks_state.tool_calls.update({
-                                event.item.raw_item.name: event.item.raw_item.arguments
-                            })
+                        if hasattr(event, "item") and event.item.type == "tool_call_item":
+                            hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
                 final_response = self._get_final_response(result)
 
                 # If use_components is True, process the result through the formatter agent
                 if use_components:
                     formatted_response = await self._run_formatter_agent_async(
-                        final_response, session, supervisor_hooks, external_team["context"],
-                        formatter_agent_instructions
+                        final_response,
+                        session,
+                        supervisor_hooks,
+                        external_team["context"],
+                        formatter_agent_instructions,
                     )
                     final_response = formatted_response
 
@@ -322,7 +347,7 @@ class OpenAIBackend(InlineAgentsBackend):
                         "contact_urn": contact_urn,
                         "channel_uuid": channel_uuid,
                         "preview": preview,
-                    }
+                    },
                 )
 
         return final_response

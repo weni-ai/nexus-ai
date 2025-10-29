@@ -1,32 +1,28 @@
 from uuid import uuid4
 
+from django.test import TestCase
+
 from nexus.usecases.actions.create import (
     CreateFlowDTO,
     CreateFlowsUseCase,
     CreateTemplateActionUseCase,
 )
-from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory, IntegratedIntelligenceFactory
 from nexus.usecases.actions.tests.flow_factory import TemplateActionFactory
-
-
-from django.test import TestCase
+from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory, IntegratedIntelligenceFactory
 
 
 class CreateFlowsUseCaseTest(TestCase):
-
     def setUp(self):
         integrated_intelligence = IntegratedIntelligenceFactory()
         self.template_action = TemplateActionFactory()
         self.project = integrated_intelligence.project
-        
+
         # Ensure we have a router content base for this intelligence
-        self.content_base = ContentBaseFactory(
-            intelligence=integrated_intelligence.intelligence,
-            is_router=True
-        )
-        
+        self.content_base = ContentBaseFactory(intelligence=integrated_intelligence.intelligence, is_router=True)
+
         # Get the actual default content base that will be used by the use case
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+
         self.actual_content_base = get_default_content_base_by_project(str(self.project.uuid))
 
     def test_create_flow(self):
@@ -37,15 +33,11 @@ class CreateFlowsUseCaseTest(TestCase):
             name="flow_name",
             action_type="custom",
             prompt="flow_prompt",
-            fallback=False
+            fallback=False,
         )
 
         use_case = CreateFlowsUseCase()
-        flow = use_case.create_flow(
-            user=self.content_base.created_by,
-            project=self.project,
-            create_dto=create_dto
-        )
+        flow = use_case.create_flow(user=self.content_base.created_by, project=self.project, create_dto=create_dto)
 
         self.assertEqual(flow.name, "flow_name")
         self.assertEqual(flow.prompt, "flow_prompt")
@@ -62,16 +54,12 @@ class CreateFlowsUseCaseTest(TestCase):
             name="flow_name",
             action_type="custom",
             prompt=None,
-            fallback=False
+            fallback=False,
         )
 
         use_case = CreateFlowsUseCase()
         with self.assertRaises(ValueError):
-            use_case.create_flow(
-                create_dto=create_dto,
-                project=self.project,
-                user=self.content_base.created_by
-            )
+            use_case.create_flow(create_dto=create_dto, project=self.project, user=self.content_base.created_by)
 
     def test_blank_prompt_for_whatsapp_cart_flow(self):
         flow_uuid = str(uuid4())
@@ -81,15 +69,11 @@ class CreateFlowsUseCaseTest(TestCase):
             name="flow_name",
             action_type="whatsapp_cart",
             prompt=None,
-            fallback=False
+            fallback=False,
         )
 
         use_case = CreateFlowsUseCase()
-        flow = use_case.create_flow(
-            create_dto=create_dto,
-            project=self.project,
-            user=self.content_base.created_by
-        )
+        flow = use_case.create_flow(create_dto=create_dto, project=self.project, user=self.content_base.created_by)
 
         self.assertEqual(flow.name, "flow_name")
         self.assertEqual(flow.prompt, None)
@@ -107,15 +91,11 @@ class CreateFlowsUseCaseTest(TestCase):
             action_type=self.template_action.action_type,
             prompt=self.template_action.prompt,
             fallback=False,
-            template=self.template_action
+            template=self.template_action,
         )
 
         use_case = CreateFlowsUseCase()
-        flow = use_case.create_flow(
-            create_dto=create_dto,
-            project=self.project,
-            user=self.content_base.created_by
-        )
+        flow = use_case.create_flow(create_dto=create_dto, project=self.project, user=self.content_base.created_by)
 
         self.assertEqual(flow.name, self.template_action.name)
         self.assertEqual(flow.prompt, self.template_action.prompt)
@@ -126,7 +106,6 @@ class CreateFlowsUseCaseTest(TestCase):
 
 
 class CreateTemplateActionUseCaseTest(TestCase):
-
     def setUp(self) -> None:
         self.name = "action_name"
         self.prompt = "action_prompt"
@@ -135,12 +114,8 @@ class CreateTemplateActionUseCaseTest(TestCase):
         self.usecase = CreateTemplateActionUseCase()
 
     def test_create_template_action(self):
-
         action = self.usecase.create_template_action(
-            name=self.name,
-            prompt=self.prompt,
-            action_type=self.action_type,
-            group=self.group
+            name=self.name, prompt=self.prompt, action_type=self.action_type, group=self.group
         )
 
         self.assertEqual(action.name, "action_name")
@@ -150,14 +125,13 @@ class CreateTemplateActionUseCaseTest(TestCase):
         self.assertEqual(action.display_prompt, "action_prompt")
 
     def test_create_with_display_prompt(self):
-
         display_prompt = "action_display_prompt"
         action = self.usecase.create_template_action(
             name=self.name,
             prompt=self.prompt,
             action_type=self.action_type,
             group=self.group,
-            display_prompt=display_prompt
+            display_prompt=display_prompt,
         )
 
         self.assertEqual(action.prompt, "action_prompt")

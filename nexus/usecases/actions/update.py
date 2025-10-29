@@ -1,11 +1,10 @@
 from dataclasses import dataclass
 
-from nexus.events import event_manager
-
 from django.forms.models import model_to_dict
 
-from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase
 from nexus.actions.models import Flow, TemplateAction
+from nexus.events import event_manager
+from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase
 from nexus.users.models import User
 
 
@@ -44,29 +43,18 @@ class UpdateTemplateActionDTO:
         return {key: value for key, value in self.__dict__.items() if value is not None}
 
 
-class UpdateFlowsUseCase():
-
-    def __init__(
-        self,
-        event_manager_notify=event_manager.notify
-    ) -> None:
+class UpdateFlowsUseCase:
+    def __init__(self, event_manager_notify=event_manager.notify) -> None:
         self.event_manager_notify = event_manager_notify
 
-    def _save_log(
-        self,
-        user,
-        action: Flow,
-        values_before_update: dict,
-        values_after_update: dict
-    ) -> bool:
-
+    def _save_log(self, user, action: Flow, values_before_update: dict, values_after_update: dict) -> bool:
         self.event_manager_notify(
             event="action_activity",
             action_type="U",
             action=action,
             values_before_update=values_before_update,
             values_after_update=values_after_update,
-            user=user
+            user=user,
         )
 
     def update_flow(
@@ -74,9 +62,7 @@ class UpdateFlowsUseCase():
         flow_dto: UpdateActionFlowDTO,
         user: User = None,
     ) -> Flow:
-        flow: Flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(
-            uuid=flow_dto.uuid
-        )
+        flow: Flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(uuid=flow_dto.uuid)
 
         if flow.editable is False:
             raise ValueError("Flow is not editable")
@@ -96,7 +82,7 @@ class UpdateFlowsUseCase():
                 action=flow,
                 values_before_update=values_before_update,
                 values_after_update=values_after_update,
-                user=user
+                user=user,
             )
 
         return flow
@@ -106,9 +92,7 @@ class UpdateFlowsUseCase():
         flow_dto: UpdateIntegratedFlowDTO,
         user: User = None,
     ) -> Flow:
-        flow: Flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(
-            uuid=flow_dto.flow_uuid
-        )
+        flow: Flow = RetrieveFlowsUseCase().retrieve_flow_by_uuid(uuid=flow_dto.flow_uuid)
 
         if flow.editable is False:
             raise ValueError("Flow is not editable")
@@ -124,30 +108,24 @@ class UpdateFlowsUseCase():
                 action=flow,
                 values_before_update=values_before_update,
                 values_after_update=values_after_update,
-                user=user
+                user=user,
             )
 
         return flow
 
 
-class UpdateTemplateActionUseCase():
-
-    def update_template_action(
-        self,
-        template_action_dto: UpdateTemplateActionDTO
-    ) -> TemplateAction:
+class UpdateTemplateActionUseCase:
+    def update_template_action(self, template_action_dto: UpdateTemplateActionDTO) -> TemplateAction:
         try:
-            template_action = TemplateAction.objects.get(
-                uuid=template_action_dto.template_action_uuid
-            )
+            template_action = TemplateAction.objects.get(uuid=template_action_dto.template_action_uuid)
 
             for attr, value in template_action_dto.dict().items():
                 setattr(template_action, attr, value)
             template_action.save()
 
             return template_action
-        except TemplateAction.DoesNotExist:
-            raise ValueError("Template action not found")
+        except TemplateAction.DoesNotExist as e:
+            raise ValueError("Template action not found") from e
         except Exception as e:
             print("Error updating template action: ", e)
-            raise Exception("Error updating template action")
+            raise Exception("Error updating template action") from e

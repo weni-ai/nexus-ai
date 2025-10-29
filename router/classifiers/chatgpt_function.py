@@ -1,44 +1,31 @@
 import re
-from openai import OpenAI
-
-from typing import List, Dict
+from typing import Dict, List
 
 from django.conf import settings
+from openai import OpenAI
 
 from router.classifiers.interfaces import Classifier, OpenAIClientInterface
-
 from router.entities.flow import FlowDTO
 
 
 class OpenAIClient(OpenAIClientInterface):  # pragma: no cover
-
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.client = OpenAI(api_key=self.api_key)
 
-    def chat_completions_create(
-        self,
-        model,
-        messages,
-        tools,
-        tool_choice="auto"
-    ):
-        return self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=tools,
-            tool_choice=tool_choice
-        )
+    def chat_completions_create(self, model, messages, tools, tool_choice="auto"):
+        return self.client.chat.completions.create(model=model, messages=messages, tools=tools, tool_choice=tool_choice)
 
 
 class ChatGPTFunctionClassifier(Classifier):
-
     def __init__(
         self,
         agent_goal: str,
-        client: OpenAIClientInterface = OpenAIClient(settings.OPENAI_API_KEY),
+        client: OpenAIClientInterface = None,
         chatgpt_model: str = settings.FUNCTION_CALLING_CHATGPT_MODEL,
     ):
+        if client is None:
+            client = OpenAIClient(settings.OPENAI_API_KEY)
         self.chatgpt_model = chatgpt_model
         self.client = client
         self.prompt = settings.FUNCTION_CALLING_CHATGPT_PROMPT
@@ -59,19 +46,12 @@ class ChatGPTFunctionClassifier(Classifier):
             "agent_goal": "".join(self.agent_goal),
         }
 
-        return self.replace_vars(
-            prompt=self.prompt,
-            replace_variables=variable
-        )
+        return self.replace_vars(prompt=self.prompt, replace_variables=variable)
 
-    def tools(
-        self,
-        flows: List[FlowDTO]
-    ) -> List[dict]:
-
+    def tools(self, flows: List[FlowDTO]) -> List[dict]:
         tools = []
         for flow in flows:
-            valid_name = re.sub(r'[^a-zA-Z0-9_-]', '_', flow.name)
+            valid_name = re.sub(r"[^a-zA-Z0-9_-]", "_", flow.name)
             self.flow_name_mapping[valid_name] = flow.name
             tools.append(
                 {
@@ -84,27 +64,12 @@ class ChatGPTFunctionClassifier(Classifier):
             )
         return tools
 
-    def predict(
-        self,
-        message: str,
-        flows: List[FlowDTO],
-        language: str = "por"
-    ) -> str:
-
+    def predict(self, message: str, flows: List[FlowDTO], language: str = "por") -> str:
         print(f"[+ ChatGPT message function classification: {message} ({language}) +]")
 
         formated_prompt = self.get_prompt()
 
-        msg = [
-            {
-                "role": "system",
-                "content": formated_prompt
-            },
-            {
-                "role": "user",
-                "content": message
-            }
-        ]
+        msg = [{"role": "system", "content": formated_prompt}, {"role": "user", "content": message}]
 
         flows_list = self.tools(flows)
         if not flows_list:
@@ -112,10 +77,7 @@ class ChatGPTFunctionClassifier(Classifier):
             return classification
 
         response = self.client.chat_completions_create(
-            model=self.chatgpt_model,
-            messages=msg,
-            tools=flows_list,
-            tool_choice="auto"
+            model=self.chatgpt_model, messages=msg, tools=flows_list, tool_choice="auto"
         )
 
         tool_calls = response.choices[0].message.tool_calls
@@ -127,8 +89,6 @@ class ChatGPTFunctionClassifier(Classifier):
         multiple_classifications = []
         for tool_call in tool_calls:
             original_flow_name = self.flow_name_mapping[tool_call.function.name]
-            multiple_classifications.append(
-                original_flow_name
-            )
+            multiple_classifications.append(original_flow_name)
 
         return multiple_classifications[0]

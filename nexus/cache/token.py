@@ -1,8 +1,6 @@
-import time
-
 import logging
-
-from typing import Optional, Callable
+import time
+from typing import Callable, Optional
 
 from django.core.cache import cache
 
@@ -44,9 +42,7 @@ class TokenCache:
 
         return None
 
-    def set(
-        self, identifier: str, token: str, ttl_seconds: Optional[int] = None
-    ) -> None:
+    def set(self, identifier: str, token: str, ttl_seconds: Optional[int] = None) -> None:
         """
         Stores token in cache.
         """

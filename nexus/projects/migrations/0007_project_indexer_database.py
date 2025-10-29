@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0006_integratedfeature'),
+        ("projects", "0006_integratedfeature"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='project',
-            name='indexer_database',
-            field=models.CharField(choices=[('SENTENX', 'Sentenx'), ('BEDROCK', 'Bedrock')], default='SENTENX', max_length=15),
+            model_name="project",
+            name="indexer_database",
+            field=models.CharField(
+                choices=[("SENTENX", "Sentenx"), ("BEDROCK", "Bedrock")], default="SENTENX", max_length=15
+            ),
         ),
     ]

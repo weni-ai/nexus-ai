@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('logs', '0002_recentactivities'),
+        ("logs", "0002_recentactivities"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='messagelog',
-            name='groundedness_score',
+            model_name="messagelog",
+            name="groundedness_score",
             field=models.IntegerField(null=True),
         ),
         migrations.AddField(
-            model_name='messagelog',
-            name='reflection_data',
+            model_name="messagelog",
+            name="reflection_data",
             field=models.JSONField(null=True),
         ),
     ]

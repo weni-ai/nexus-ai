@@ -1,30 +1,26 @@
-from django.test import TestCase
 from uuid import uuid4
 
-from .project_factory import ProjectFactory
-from ..projects_use_case import ProjectsUseCase
+from django.test import TestCase
 
-from nexus.usecases.users.tests.user_factory import UserFactory
-
-from nexus.usecases.projects.retrieve import get_project
 from nexus.projects.exceptions import (
     ProjectDoesNotExist,
 )
 from nexus.projects.models import ProjectAuth
-
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
+from nexus.usecases.projects.retrieve import get_project
+from nexus.usecases.users.tests.user_factory import UserFactory
+
+from ..projects_use_case import ProjectsUseCase
+from .project_factory import ProjectFactory
 
 
 class GetByProjectUuidTestCase(TestCase):
-
     def setUp(self) -> None:
         self.project = ProjectFactory()
         self.user = UserFactory()
 
     def test_get_by_uuid(self):
-        retrieved_project = ProjectsUseCase().get_by_uuid(
-            self.project.uuid
-        )
+        retrieved_project = ProjectsUseCase().get_by_uuid(self.project.uuid)
         self.assertEqual(self.project, retrieved_project)
 
     def test_non_existent_project(self):
@@ -32,7 +28,7 @@ class GetByProjectUuidTestCase(TestCase):
             ProjectsUseCase().get_by_uuid(str(uuid4()))
 
     def test_invalid_uuid(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception):  # noqa: B017
             ProjectsUseCase().get_by_uuid("invalid_uuid")
 
     def test_get_project(self):

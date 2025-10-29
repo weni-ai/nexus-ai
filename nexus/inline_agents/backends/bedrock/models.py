@@ -15,3 +15,6 @@ class Supervisor(models.Model):
 
     components_prompt = models.TextField(null=True, blank=True)
     components_human_support_prompt = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return self.name

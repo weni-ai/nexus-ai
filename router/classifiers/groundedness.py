@@ -1,18 +1,17 @@
+# ruff: noqa: E501
 import re
+from typing import Dict
+
 import emoji
 import pendulum
-
-from typing import Dict
-from router.classifiers.interfaces import OpenAIClientInterface
+from django.conf import settings
 from openai import OpenAI
 
-from django.conf import settings
-
 from nexus.logs.models import MessageLog
+from router.classifiers.interfaces import OpenAIClientInterface
 
 
 class OpenAIClient(OpenAIClientInterface):  # pragma: no cover
-
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.client = OpenAI(api_key=self.api_key)
@@ -29,7 +28,6 @@ class OpenAIClient(OpenAIClientInterface):  # pragma: no cover
 
 
 class Groundedness:
-
     def __init__(
         self,
         llm_response: str,
@@ -39,7 +37,6 @@ class Groundedness:
         user_prompt: str = settings.GROUNDEDNESS_USER_PROMPT,
         score_avg_threshold: int = settings.GROUNDEDNESS_SCORE_AVG_THRESHOLD,
     ) -> None:
-
         self.client = OpenAIClient(settings.OPENAI_API_KEY)
         self.llm_chunk_used = llm_chunk_used
         self.llm_response = llm_response
@@ -48,23 +45,23 @@ class Groundedness:
         self.user_prompt = user_prompt.replace("\\n", "\n")
         self.score_avg_threshold = score_avg_threshold
 
-    def extract_score_and_sentences(
-        self,
-        response: str
-    ):
+    def extract_score_and_sentences(self, response: str):
         def normalize_text(text):
             pattern = r"(Statement Sentence:|Supporting Evidence:|Score:)"
 
             parts = re.split(pattern, text)
             normalized_parts = [part.strip() if i % 2 == 0 else part for i, part in enumerate(parts)]
-            normalized_text = ''.join(normalized_parts)
+            normalized_text = "".join(normalized_parts)
 
             return normalized_text
 
         pattern = re.compile(
-            # r"Statement Sentence:\s*(?P<sentence>.*?)\.\s*Supporting Evidence:\s*(?P<evidence>.*?)(?:\s*|\.)\s*Score:\s*(?P<score>\d+)"
+            # Original commented patterns (too long):
+            # r"Statement Sentence:\s*(?P<sentence>.*?).\s*
+            # Supporting Evidence:\s*(?P<evidence>.*?)(?:\s*|.)\s*Score:\s*(?P<score>\d+)"
             # r"Statement Sentence:\s*(?P<sentence>.*?[:\.])\s*Supporting Evidence:\s*(?P<evidence>.*?)(?:\s*|[,.])\s*Score:\s*(?P<score>\d+)",
-            r"Statement Sentence:\s*(?P<sentence>.+?)\s*,?Supporting Evidence:\s*(?P<evidence>.+?)\s*Score:\s*(?P<score>\d+)"
+            r"Statement Sentence:\s*(?P<sentence>.+?)\s*,?Supporting Evidence:\s*(?P<evidence>.+?)\s*"
+            r"Score:\s*(?P<score>\d+)"
         )
 
         emojiless_response = emoji.replace_emoji(response, "")
@@ -73,11 +70,7 @@ class Groundedness:
 
         result = []
         for match in matches:
-            result.append({
-                "sentence": match[0],
-                "evidence": match[1].strip(),
-                "score": match[2]
-            })
+            result.append({"sentence": match[0], "evidence": match[1].strip(), "score": match[2]})
         return result
 
     def replace_vars(self, prompt: str, replace_variables: Dict) -> str:
@@ -95,13 +88,9 @@ class Groundedness:
             "hypothesis": self.llm_response,
         }
 
-        return self.replace_vars(
-            prompt=self.user_prompt,
-            replace_variables=variable
-        )
+        return self.replace_vars(prompt=self.user_prompt, replace_variables=variable)
 
     def classify(self):
-
         started_groundedness = pendulum.now()
         formated_prompt = self.get_prompt()
 
@@ -125,9 +114,5 @@ class Groundedness:
             tag = "failed"
             self.log.groundedness_score = 0
 
-        self.log.reflection_data = {
-            "tag": tag,
-            "request_time": usage_time,
-            "sentence_rankings": response_content
-        }
+        self.log.reflection_data = {"tag": tag, "request_time": usage_time, "sentence_rankings": response_content}
         self.log.save()

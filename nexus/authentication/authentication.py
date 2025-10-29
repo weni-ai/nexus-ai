@@ -1,39 +1,33 @@
 import logging
-import jwt
-
-from django.conf import settings
-
-from rest_framework.exceptions import AuthenticationFailed
-
-from urllib.parse import parse_qs
 from urllib.error import HTTPError as UrllibHTTPError
+from urllib.parse import parse_qs
 
-from mozilla_django_oidc.auth import OIDCAuthenticationBackend
-from nexus.usecases.users import CreateUserUseCase
-
-from rest_framework import authentication
-from requests.exceptions import HTTPError as RequestsHTTPError
-
+import jwt
 from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
+from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from mozilla_django_oidc.auth import OIDCAuthenticationBackend
+from requests.exceptions import HTTPError as RequestsHTTPError
+from rest_framework import authentication
+from rest_framework.exceptions import AuthenticationFailed
 
 from nexus.orgs import permissions
-
+from nexus.usecases.users import CreateUserUseCase
 
 LOGGER = logging.getLogger("weni_django_oidc")
 
 
 class WeniOIDCAuthenticationBackend(OIDCAuthenticationBackend):
     def verify_claims(self, claims):
-        verified = super(WeniOIDCAuthenticationBackend, self).verify_claims(claims)
+        verified = super().verify_claims(claims)
         return verified
 
     def get_username(self, claims):
         username = claims.get("preferred_username")
         if username:
             return username
-        return super(WeniOIDCAuthenticationBackend, self).get_username(claims=claims)
+        return super().get_username(claims=claims)
 
     def create_user(self, claims):
         # Override existing create_user method in OIDCAuthenticationBackend
@@ -50,7 +44,7 @@ class WeniOIDCAuthenticationBackend(OIDCAuthenticationBackend):
 
 class ExternalTokenAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
-        authorization_header = request.headers.get('Authorization')
+        authorization_header = request.headers.get("Authorization")
 
         if not authorization_header:
             return None
@@ -91,15 +85,13 @@ class TokenAuthMiddleware(BaseMiddleware):
 
 
 class JWTAuthentication(authentication.BaseAuthentication):
-
     def authenticate(self, request):
-
         public_key = settings.JWT_PUBLIC_KEY
 
         if not public_key:
             raise AuthenticationFailed("JWT public key is not set, please set the JWT_PUBLIC_KEY environment variable")
 
-        auth_header = request.headers.get('Authorization', "")
+        auth_header = request.headers.get("Authorization", "")
 
         if not isinstance(auth_header, str) or not auth_header.startswith("Bearer "):
             raise AuthenticationFailed("Missing or invalid Authorization header.")
@@ -107,16 +99,11 @@ class JWTAuthentication(authentication.BaseAuthentication):
         token = auth_header.split(" ")[1]
 
         try:
-            payload = jwt.decode(
-                token,
-                public_key,
-                algorithms=["RS256"],
-                options={"verify_aud": False}
-            )
-        except jwt.ExpiredSignatureError:
-            raise AuthenticationFailed("Token has expired")
-        except jwt.InvalidTokenError:
-            raise AuthenticationFailed("Invalid token")
+            payload = jwt.decode(token, public_key, algorithms=["RS256"], options={"verify_aud": False})
+        except jwt.ExpiredSignatureError as e:
+            raise AuthenticationFailed("Token has expired") from e
+        except jwt.InvalidTokenError as e:
+            raise AuthenticationFailed("Invalid token") from e
         project_uuid = payload.get("project_uuid")
         if not project_uuid:
             raise AuthenticationFailed("Project UUID is required")

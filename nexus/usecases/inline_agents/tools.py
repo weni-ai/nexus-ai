@@ -1,11 +1,11 @@
+from io import BytesIO
+from typing import Dict, List, Tuple
+
 from django.conf import settings
 
-from io import BytesIO
-
 from nexus.inline_agents.models import Agent, ContactField
-from nexus.projects.models import Project
-from typing import Dict, List, Tuple
 from nexus.internals.flows import FlowsRESTClient
+from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 
 
@@ -25,15 +25,10 @@ class ToolsUseCase:
         lambda_name = tool_name
 
         lambda_arn = self.agent_backend_client.create_lambda_function(
-            lambda_name=lambda_name,
-            lambda_role=lambda_role,
-            skill_handler=skill_handler,
-            zip_buffer=zip_buffer
+            lambda_name=lambda_name, lambda_role=lambda_role, skill_handler=skill_handler, zip_buffer=zip_buffer
         )
 
-        return {
-            "lambda": lambda_arn
-        }
+        return {"lambda": lambda_arn}
 
     def delete_lambda_function(self, function_name: str):
         self.agent_backend_client.delete_lambda_function(function_name)
@@ -42,10 +37,7 @@ class ToolsUseCase:
         zip_buffer = BytesIO(tool_file.read())
         lambda_name = tool_name
 
-        lambda_arn = self.agent_backend_client.update_lambda_function(
-            lambda_name=lambda_name,
-            zip_buffer=zip_buffer
-        )
+        lambda_arn = self.agent_backend_client.update_lambda_function(lambda_name=lambda_name, zip_buffer=zip_buffer)
 
         return lambda_arn
 
@@ -57,28 +49,34 @@ class ToolsUseCase:
         tool_file,
         tool_name: str,
     ) -> Tuple[Dict, Dict]:
-
         project_uuid = str(project.uuid)
-        action_group_executor: Dict[str, str] = self.create_lambda_function(agent_tool, tool_file, project_uuid, tool_name)
+        action_group_executor: Dict[str, str] = self.create_lambda_function(
+            agent_tool, tool_file, project_uuid, tool_name
+        )
         parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool.get("parameters", []), project_uuid)
         response = self._format_tool_response(agent_tool, tool_name, parameters, action_group_executor, str(agent.uuid))
         return response
 
-    def delete_tool(self, agent: Agent, project: Project, agent_tool: Dict, tool_file, tool_name: str) -> Tuple[Dict, Dict]:
+    def delete_tool(
+        self, agent: Agent, project: Project, agent_tool: Dict, tool_file, tool_name: str
+    ) -> Tuple[Dict, Dict]:
         project_uuid = str(project.uuid)
         self.handle_parameters(agent, project, agent_tool.get("parameters", []), project_uuid)
         self.delete_lambda_function(tool_name)
         return
 
-    def update_tool(self, agent: Agent, project: Project, agent_tool: Dict, tool_file, tool_name: str) -> Tuple[Dict, Dict]:
-
+    def update_tool(
+        self, agent: Agent, project: Project, agent_tool: Dict, tool_file, tool_name: str
+    ) -> Tuple[Dict, Dict]:
         project_uuid = str(project.uuid)
         action_group_executor = self.update_lambda_function(agent_tool, tool_file, project_uuid, tool_name)
         parameters: List[Dict] = self.handle_parameters(agent, project, agent_tool.get("parameters", []), project_uuid)
         response = self._format_tool_response(agent_tool, tool_name, parameters, action_group_executor, str(agent.uuid))
         return response
 
-    def create_contact_field(self, agent: Agent, project: Project, field_name: str, parameter: Dict, external_create: bool = True):
+    def create_contact_field(
+        self, agent: Agent, project: Project, field_name: str, parameter: Dict, external_create: bool = True
+    ):
         types = {
             "string": "text",
             "boolean": "text",
@@ -90,58 +88,49 @@ class ToolsUseCase:
         project_uuid = str(project.uuid)
 
         ContactField.objects.create(
-            agent=agent,
-            project=project,
-            key=field_name,
-            value_type=types.get(parameter.get("type"), "text")
+            agent=agent, project=project, key=field_name, value_type=types.get(parameter.get("type"), "text")
         )
         if external_create:
             flows_client = FlowsRESTClient()
             flows_client.create_project_contact_field(
-                project_uuid=project_uuid,
-                key=field_name,
-                value_type=types.get(parameter.get("type"), "text")
+                project_uuid=project_uuid, key=field_name, value_type=types.get(parameter.get("type"), "text")
             )
 
         return parameter
 
     def __format_action_group_name(self, action_group_name: str) -> str:
-        words = action_group_name.replace("_", "-").split('-')
-        pascal_case = ''.join(word.capitalize() for word in words)
+        words = action_group_name.replace("_", "-").split("-")
+        pascal_case = "".join(word.capitalize() for word in words)
         return pascal_case
 
-    def _format_tool_response(self, agent_tool: Dict, tool_name: str, parameters: List[Dict], action_group_executor: Dict[str, str], agent_uuid: str) -> Tuple[Dict, Dict]:
+    def _format_tool_response(
+        self,
+        agent_tool: Dict,
+        tool_name: str,
+        parameters: List[Dict],
+        action_group_executor: Dict[str, str],
+        agent_uuid: str,
+    ) -> Tuple[Dict, Dict]:
         print(f"[DEBUG] Formatting tool response: {tool_name}")
         print(f"[DEBUG] Parameters: {agent_tool}")
-        function = {
-            "name": tool_name,
-            "parameters": parameters,
-            "requireConfirmation": "DISABLED"
-        }
+        function = {"name": tool_name, "parameters": parameters, "requireConfirmation": "DISABLED"}
         skill = {
             "actionGroupExecutor": action_group_executor,
             "actionGroupName": self.__format_action_group_name(agent_tool.get("slug")),
-            "functionSchema": {
-                "functions": [function]
-            },
-            "description": agent_tool.get("description")
+            "functionSchema": {"functions": [function]},
+            "description": agent_tool.get("description"),
         }
-        display_skill = {
-            "icon": "",
-            "name": agent_tool["name"],
-            "unique_name": tool_name,
-            "agent": agent_uuid
-        }
+        display_skill = {"icon": "", "name": agent_tool["name"], "unique_name": tool_name, "agent": agent_uuid}
         return skill, display_skill
 
     def handle_parameters(self, agent_obj: Agent, project: Project, parameters: List[Dict], project_uuid: str) -> Dict:
         flows_client = FlowsRESTClient()
         flows_contact_fields = flows_client.list_project_contact_fields(project_uuid)
-        db_existing_fields = ContactField.objects.filter(agent=agent_obj, project=project).values_list('key', flat=True)
+        db_existing_fields = ContactField.objects.filter(agent=agent_obj, project=project).values_list("key", flat=True)
 
         existing_field_keys = []
         if flows_contact_fields:
-            existing_field_keys = [field['key'] for field in flows_contact_fields.get('results', [])]
+            existing_field_keys = [field["key"] for field in flows_contact_fields.get("results", [])]
 
         fields_to_keep = []
         if parameters:
@@ -186,7 +175,8 @@ class ToolsUseCase:
             self.TOOL_NAME_FORMAT.format(
                 tool_key=skill.get("key"),
                 agent_id=agent.id,
-            ) for skill in agent_tools
+            )
+            for skill in agent_tools
         ]
         skills_to_create = new_skill_names
 

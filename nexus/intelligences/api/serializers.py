@@ -1,52 +1,51 @@
+from django.forms.models import model_to_dict
 from rest_framework import serializers
 
+from nexus.agents.models import Team
 from nexus.events import event_manager
 from nexus.intelligences.models import (
-    Intelligence,
+    LLM,
     ContentBase,
-    ContentBaseText,
+    ContentBaseAgent,
     ContentBaseFile,
+    ContentBaseInstruction,
     ContentBaseLink,
     ContentBaseLogs,
-    LLM,
-    ContentBaseInstruction,
-    ContentBaseAgent,
-    Topics,
+    ContentBaseText,
+    Conversation,
+    Intelligence,
     SubTopics,
+    Topics,
 )
-from nexus.agents.models import Team
 from nexus.projects.models import Project
 from nexus.task_managers.models import (
     ContentBaseFileTaskManager,
     ContentBaseLinkTaskManager,
 )
-from nexus.intelligences.models import Conversation
-
-from django.forms.models import model_to_dict
 
 
 class IntelligenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Intelligence
-        fields = ['name', 'uuid', 'content_bases_count', 'description', 'is_router']
+        fields = ["name", "uuid", "content_bases_count", "description", "is_router"]
 
 
 class ContentBaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBase
-        fields = ['uuid', 'title', 'description', 'language', 'is_router']
+        fields = ["uuid", "title", "description", "language", "is_router"]
 
 
 class RouterContentBaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBase
-        fields = '__all__'
+        fields = "__all__"
 
 
 class ContentBaseTextSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseText
-        fields = ['text', 'uuid']
+        fields = ["text", "uuid"]
 
 
 class ContentBaseFileSerializer(serializers.ModelSerializer):
@@ -116,7 +115,7 @@ class LLMConfigSerializer(serializers.ModelSerializer):
 class ContentBaseInstructionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseInstruction
-        fields = ['instruction']
+        fields = ["instruction"]
 
 
 class ContentBaseAgentSerializer(serializers.ModelSerializer):
@@ -128,7 +127,7 @@ class ContentBaseAgentSerializer(serializers.ModelSerializer):
 class TeamHumanSupportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Team
-        fields = ['human_support', 'human_support_prompt']
+        fields = ["human_support", "human_support_prompt"]
 
 
 class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
@@ -137,8 +136,8 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
         fields = ["agent", "instructions", "team"]
 
     agent = ContentBaseAgentSerializer()
-    instructions = serializers.SerializerMethodField('get_instructions')
-    team = serializers.SerializerMethodField('get_team')
+    instructions = serializers.SerializerMethodField("get_instructions")
+    team = serializers.SerializerMethodField("get_team")
 
     def get_instructions(self, obj):
         instructions = []
@@ -152,8 +151,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
         return instructions
 
     def get_team(self, obj):
-
-        project_uuid = self.context.get('project_uuid')
+        project_uuid = self.context.get("project_uuid")
         if not project_uuid:
             try:
                 project_uuid = str(obj.intelligence.project.uuid)
@@ -163,22 +161,16 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
         try:
             # TODO: Change to Project data after inline update.
             team = Team.objects.get(project__uuid=project_uuid)
-            return {
-                'human_support': team.human_support,
-                'human_support_prompt': team.human_support_prompt
-            }
+            return {"human_support": team.human_support, "human_support_prompt": team.human_support_prompt}
         except Team.DoesNotExist:
             project = Project.objects.get(uuid=project_uuid)
-            return {
-                'human_support': project.human_support,
-                'human_support_prompt': project.human_support_prompt
-            }
+            return {"human_support": project.human_support, "human_support_prompt": project.human_support_prompt}
 
     def update(self, instance, validated_data):
         agent_data = validated_data.get("agent")
-        instructions_data = self.context.get('request').data.get('instructions')
-        team_data = self.context.get('request').data.get('team')
-        project_uuid = self.context.get('project_uuid')
+        instructions_data = self.context.get("request").data.get("instructions")
+        team_data = self.context.get("request").data.get("team")
+        project_uuid = self.context.get("project_uuid")
 
         # Handle team human support update if data and project_uuid are provided
         if team_data and project_uuid:
@@ -188,8 +180,8 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 old_human_support = team.human_support
 
                 # Update team data
-                team.human_support = team_data.get('human_support', team.human_support)
-                team.human_support_prompt = team_data.get('human_support_prompt', team.human_support_prompt)
+                team.human_support = team_data.get("human_support", team.human_support)
+                team.human_support_prompt = team_data.get("human_support_prompt", team.human_support_prompt)
                 team.save()
 
                 project.human_support = team.human_support
@@ -199,17 +191,18 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 # Only trigger add/rollback if human_support boolean changed
                 if old_human_support != team.human_support:
                     from nexus.usecases.agents.agents import AgentUsecase
+
                     agent_usecase = AgentUsecase()
 
                     if team.human_support:
-                        agent_usecase.add_human_support_to_team(team=team, user=self.context.get('request').user)
+                        agent_usecase.add_human_support_to_team(team=team, user=self.context.get("request").user)
                     else:
-                        agent_usecase.rollback_human_support_to_team(team=team, user=self.context.get('request').user)
+                        agent_usecase.rollback_human_support_to_team(team=team, user=self.context.get("request").user)
 
             except Team.DoesNotExist:
                 project = Project.objects.get(uuid=project_uuid)
-                project.human_support = team_data.get('human_support', project.human_support)
-                project.human_support_prompt = team_data.get('human_support_prompt', project.human_support_prompt)
+                project.human_support = team_data.get("human_support", project.human_support)
+                project.human_support_prompt = team_data.get("human_support_prompt", project.human_support_prompt)
                 project.save()
 
         # Handle agent updates
@@ -231,7 +224,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                     action_type="U",
                     old_agent_data=old_agent_data,
                     new_agent_data=new_agent_data,
-                    user=self.context.get('request').user
+                    user=self.context.get("request").user,
                 )
             except ContentBaseAgent.DoesNotExist:
                 ContentBaseAgent.objects.create(
@@ -247,11 +240,11 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
             for instruction_data in instructions_data:
                 serializer = ContentBaseInstructionSerializer(data=instruction_data, partial=True)
                 if serializer.is_valid():
-                    if instruction_data.get('id'):
-                        instruction = instance.instructions.get(id=instruction_data.get('id'))
+                    if instruction_data.get("id"):
+                        instruction = instance.instructions.get(id=instruction_data.get("id"))
                         old_instruction_data = model_to_dict(instruction)
 
-                        instruction.instruction = instruction_data.get('instruction')
+                        instruction.instruction = instruction_data.get("instruction")
                         instruction.save()
                         instruction.refresh_from_db()
 
@@ -262,20 +255,18 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                             action_type="U",
                             old_instruction_data=old_instruction_data,
                             new_instruction_data=new_instruction_data,
-                            user=self.context.get('request').user
+                            user=self.context.get("request").user,
                         )
                     else:
-
-                        created_instruction = instance.instructions.create(instruction=instruction_data.get('instruction'))
+                        created_instruction = instance.instructions.create(
+                            instruction=instruction_data.get("instruction")
+                        )
                         event_manager.notify(
                             event="contentbase_instruction_activity",
                             content_base_instruction=created_instruction,
                             action_type="C",
-                            action_details={
-                                "old": "",
-                                "new": instruction_data.get('instruction')
-                            },
-                            user=self.context.get('request').user
+                            action_details={"old": "", "new": instruction_data.get("instruction")},
+                            user=self.context.get("request").user,
                         )
 
         instance.refresh_from_db()
@@ -285,7 +276,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
 class TopicsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Topics
-        fields = ['name', 'uuid', 'created_at', 'description', 'subtopic']
+        fields = ["name", "uuid", "created_at", "description", "subtopic"]
 
     subtopic = serializers.SerializerMethodField()
 
@@ -296,7 +287,7 @@ class TopicsSerializer(serializers.ModelSerializer):
 class SubTopicsSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubTopics
-        fields = ['name', 'uuid', 'created_at', 'description', 'topic_uuid', 'topic_name']
+        fields = ["name", "uuid", "created_at", "description", "topic_uuid", "topic_name"]
 
     topic_uuid = serializers.SerializerMethodField()
     topic_name = serializers.SerializerMethodField()
@@ -312,28 +303,29 @@ class SupervisorDataSerializer(serializers.ModelSerializer):
     """
     Serializer for supervisor data from Conversation model
     """
-    created_on = serializers.DateTimeField(source='created_at')
-    urn = serializers.CharField(source='contact_urn')
-    topic = serializers.CharField(source='topic.name', allow_null=True, allow_blank=True)
-    name = serializers.CharField(source='contact_name', allow_null=True, allow_blank=True)
+
+    created_on = serializers.DateTimeField(source="created_at")
+    urn = serializers.CharField(source="contact_urn")
+    topic = serializers.CharField(source="topic.name", allow_null=True, allow_blank=True)
+    name = serializers.CharField(source="contact_name", allow_null=True, allow_blank=True)
     start_date = serializers.DateTimeField()
     end_date = serializers.DateTimeField()
 
     class Meta:
         model = Conversation
         fields = [
-            'created_on',
-            'urn',
-            'uuid',
-            'external_id',
-            'csat',
-            'nps',
-            'topic',
-            'has_chats_room',
-            'start_date',
-            'end_date',
-            'resolution',
-            'name',
+            "created_on",
+            "urn",
+            "uuid",
+            "external_id",
+            "csat",
+            "nps",
+            "topic",
+            "has_chats_room",
+            "start_date",
+            "end_date",
+            "resolution",
+            "name",
         ]
 
     def to_representation(self, instance):
@@ -341,33 +333,35 @@ class SupervisorDataSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
 
         # Handle resolution field - convert tuple string to actual value
-        resolution_value = data.get('resolution')
+        resolution_value = data.get("resolution")
         if resolution_value is not None:
-            if isinstance(resolution_value, str) and resolution_value.startswith('('):
+            if isinstance(resolution_value, str) and resolution_value.startswith("("):
                 # Extract the actual value from tuple string like "(0, 'Resolved')"
                 try:
                     import ast
+
                     resolution_tuple = ast.literal_eval(resolution_value)
-                    data['resolution'] = str(resolution_tuple[0])  # Use the numeric value
+                    data["resolution"] = str(resolution_tuple[0])  # Use the numeric value
                 except (ValueError, SyntaxError):
                     pass
             elif isinstance(resolution_value, int):
                 # Convert integer to string (database stores integers)
-                data['resolution'] = str(resolution_value)
+                data["resolution"] = str(resolution_value)
 
         # Handle csat field - convert tuple string to actual value and ensure it's a string
-        csat_value = data.get('csat')
+        csat_value = data.get("csat")
         if csat_value:
-            if isinstance(csat_value, str) and csat_value.startswith('('):
+            if isinstance(csat_value, str) and csat_value.startswith("("):
                 # Extract the actual value from tuple string like "(4, 'Very unsatisfied')"
                 try:
                     import ast
+
                     csat_tuple = ast.literal_eval(csat_value)
-                    data['csat'] = str(csat_tuple[0])  # Use the numeric value
+                    data["csat"] = str(csat_tuple[0])  # Use the numeric value
                 except (ValueError, SyntaxError):
                     pass
             elif isinstance(csat_value, int):
                 # Convert integer to string
-                data['csat'] = str(csat_value)
+                data["csat"] = str(csat_value)
 
         return data

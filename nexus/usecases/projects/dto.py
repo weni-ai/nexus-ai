@@ -1,12 +1,10 @@
 from dataclasses import dataclass, field
-from typing import List, Dict
+from typing import Dict, List
 
-from nexus.projects.models import IntegratedFeature
 from nexus.actions.models import TemplateAction
+from nexus.projects.models import IntegratedFeature
 from nexus.usecases.actions.create import CreateFlowDTO
 from nexus.usecases.actions.update import UpdateIntegratedFlowDTO
-
-
 from nexus.usecases.projects.retrieve import get_integrated_feature
 
 
@@ -38,12 +36,12 @@ class IntegratedFeatureFlowDTO:
         create_flow_dtos = []
         for current_setup_action in self.integrated_feature.current_version_setup:
             matching_flow = next(
-                (flow for flow in self.flows if flow.get('base_uuid') == current_setup_action.get('root_flow_uuid')),
-                None
+                (flow for flow in self.flows if flow.get("base_uuid") == current_setup_action.get("root_flow_uuid")),
+                None,
             )
 
             if matching_flow:
-                template_uuid = current_setup_action.get('type', None)
+                template_uuid = current_setup_action.get("type", None)
                 template_action = None
                 if template_uuid:
                     try:
@@ -55,10 +53,10 @@ class IntegratedFeatureFlowDTO:
                     CreateFlowDTO(
                         flow_uuid=matching_flow.get("uuid"),
                         name=current_setup_action.get("name"),
-                        prompt=current_setup_action.get('prompt'),
+                        prompt=current_setup_action.get("prompt"),
                         project_uuid=self.project_uuid,
                         template=template_action if template_uuid else None,
-                        editable=False
+                        editable=False,
                     )
                 )
 
@@ -72,16 +70,18 @@ class IntegratedFeatureFlowDTO:
         update_flow_dtos = []
         for current_setup_action in self.integrated_feature.current_version_setup:
             matching_flow = next(
-                (flow for flow in self.flows if flow.get('base_uuid') == current_setup_action.get('root_flow_uuid')),
-                None
+                (flow for flow in self.flows if flow.get("base_uuid") == current_setup_action.get("root_flow_uuid")),
+                None,
             )
 
             if matching_flow:
-                update_flow_dtos.append(UpdateIntegratedFlowDTO(
-                    flow_uuid=matching_flow.get("uuid"),
-                    name=current_setup_action.get("name"),
-                    prompt=current_setup_action.get('prompt'),
-                ))
+                update_flow_dtos.append(
+                    UpdateIntegratedFlowDTO(
+                        flow_uuid=matching_flow.get("uuid"),
+                        name=current_setup_action.get("name"),
+                        prompt=current_setup_action.get("prompt"),
+                    )
+                )
 
         return update_flow_dtos
 

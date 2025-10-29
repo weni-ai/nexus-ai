@@ -1,10 +1,7 @@
-import requests
-
 import logging
 
+import requests
 from django.conf import settings
-
-from abc import ABC
 
 from nexus.cache import TokenCache
 
@@ -48,17 +45,15 @@ class InternalAuthentication:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to fetch Keycloak token: {e}")
-            raise InternalAuthenticationTokenError(f"Failed to fetch token: {e}")
+            raise InternalAuthenticationTokenError(f"Failed to fetch token: {e}") from e
 
     def _get_module_token(self):
         """Get token using cache."""
         try:
-            return self.token_cache.get_or_generate(
-                identifier="main", token_factory=self._fetch_token_from_keycloak
-            )
+            return self.token_cache.get_or_generate(identifier="main", token_factory=self._fetch_token_from_keycloak)
         except Exception as e:
             logger.error(f"Error getting token: {e}")
-            raise InternalAuthenticationTokenError(f"Token retrieval failed: {e}")
+            raise InternalAuthenticationTokenError(f"Token retrieval failed: {e}") from e
 
     def invalidate_cache(self):
         """Invalidate token cache - useful for retry in case of 401/403."""
@@ -81,9 +76,7 @@ class InternalAuthentication:
         response = requests.request(method, url, headers=headers, **kwargs)
 
         if response.status_code in (401, 403):
-            logger.warning(
-                f"Auth error (HTTP {response.status_code}), retrying with fresh token"
-            )
+            logger.warning(f"Auth error (HTTP {response.status_code}), retrying with fresh token")
             self.invalidate_cache()
 
             headers.update(self.headers)
@@ -92,5 +85,5 @@ class InternalAuthentication:
         return response
 
 
-class RestClient(ABC):
+class RestClient:
     pass

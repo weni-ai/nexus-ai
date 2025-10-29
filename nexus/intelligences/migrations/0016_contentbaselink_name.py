@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0015_contentbaseinstruction_contentbaseagent'),
+        ("intelligences", "0015_contentbaseinstruction_contentbaseagent"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='contentbaselink',
-            name='name',
-            field=models.CharField(help_text='used to manage file with content from the link in bedrock', max_length=255, null=True),
+            model_name="contentbaselink",
+            name="name",
+            field=models.CharField(
+                help_text="used to manage file with content from the link in bedrock", max_length=255, null=True
+            ),
         ),
     ]

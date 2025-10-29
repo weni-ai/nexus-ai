@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0018_conversation'),
+        ("intelligences", "0018_conversation"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='subtopics',
-            name='description',
+            model_name="subtopics",
+            name="description",
             field=models.TextField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='topics',
-            name='description',
+            model_name="topics",
+            name="description",
             field=models.TextField(blank=True, null=True),
         ),
     ]

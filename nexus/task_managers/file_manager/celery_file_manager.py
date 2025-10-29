@@ -1,28 +1,23 @@
 from django.core.exceptions import ObjectDoesNotExist
-
-from nexus.task_managers import tasks
-from nexus.task_managers import tasks_bedrock
-from nexus.task_managers.file_database.file_database import FileDataBase
-
-from nexus.projects.models import Project
-
-from nexus.usecases.intelligences.intelligences_dto import ContentBaseFileDTO
-from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
-from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from rest_framework import status as http_status
 
+from nexus.projects.models import Project
+from nexus.task_managers import tasks, tasks_bedrock
+from nexus.task_managers.file_database.file_database import FileDataBase
+from nexus.task_managers.tasks_bedrock import start_ingestion_job
+from nexus.usecases.intelligences.create import CreateContentBaseFileUseCase
 from nexus.usecases.intelligences.intelligences_dto import (
+    ContentBaseFileDTO,
     UpdateContentBaseFileDTO,
 )
 from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.usecases.task_managers.celery_task_manager import (
     CeleryTaskManagerUseCase,
 )
-from nexus.task_managers.tasks_bedrock import start_ingestion_job
 
 
 class CeleryFileManager:
-
     def __init__(
         self,
         file_database: FileDataBase = None,
@@ -39,6 +34,7 @@ class CeleryFileManager:
     ):
         from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
         from nexus.task_managers.file_database.file_database import FileResponseDTO
+
         response = FileResponseDTO()
         try:
             content_base_file_dto = ContentBaseFileDTO(
@@ -48,16 +44,15 @@ class CeleryFileManager:
                 content_base_uuid=content_base_uuid,
                 extension_file=extension_file,
             )
-            content_base_file = CreateContentBaseFileUseCase().create_content_base_file(content_base_file=content_base_file_dto)
+            content_base_file = CreateContentBaseFileUseCase().create_content_base_file(
+                content_base_file=content_base_file_dto
+            )
             content_base_file_uuid = str(content_base_file.uuid)
             file_database = BedrockFileDatabase()
             file_name, file_url = file_database.multipart_upload(file, content_base_uuid, content_base_file_uuid)
             file_database.add_metadata_json_file(file_name, content_base_uuid, content_base_file_uuid)
             response = FileResponseDTO(
-                status=0,
-                file_url=file_url,
-                file_name=file_name,
-                content_base_file_uuid=content_base_file_uuid
+                status=0, file_url=file_url, file_name=file_name, content_base_file_uuid=content_base_file_uuid
             )
 
         except Exception as exception:
@@ -74,7 +69,6 @@ class CeleryFileManager:
         extension_file: str,
         user_email: str,
     ) -> tuple[dict, int]:
-
         file_database_response = self.add_file_to_s3(
             file,
             filename,
@@ -89,17 +83,14 @@ class CeleryFileManager:
             return data, status
 
         content_base_file_dto = UpdateContentBaseFileDTO(
-            file_url=file_database_response.file_url,
-            file_name=file_database_response.file_name
+            file_url=file_database_response.file_url, file_name=file_database_response.file_name
         )
         content_base_file = UpdateContentBaseFileUseCase().update_content_base_file(
             content_base_file_uuid=file_database_response.content_base_file_uuid,
             user_email=user_email,
-            update_content_base_file_dto=content_base_file_dto
+            update_content_base_file_dto=content_base_file_dto,
         )
-        task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(
-            content_base_file=content_base_file
-        )
+        task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
 
         try:
             project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
@@ -118,7 +109,6 @@ class CeleryFileManager:
         extension_file: str,
         user_email: str,
     ) -> tuple[dict, int]:
-
         file_database_response = self.add_file_to_s3(
             file,
             filename,
@@ -133,17 +123,14 @@ class CeleryFileManager:
             return data, status
 
         content_base_file_dto = UpdateContentBaseFileDTO(
-            file_url=file_database_response.file_url,
-            file_name=file_database_response.file_name
+            file_url=file_database_response.file_url, file_name=file_database_response.file_name
         )
         content_base_file = UpdateContentBaseFileUseCase().update_inline_content_base_file(
             content_base_file_uuid=file_database_response.content_base_file_uuid,
             user_email=user_email,
-            update_content_base_file_dto=content_base_file_dto
+            update_content_base_file_dto=content_base_file_dto,
         )
-        task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(
-            content_base_file=content_base_file
-        )
+        task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
         try:
             project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
             project_uuid = str(project.uuid)
@@ -160,7 +147,7 @@ class CeleryFileManager:
         extension_file: str,
         user_email: str,
         load_type: str = None,
-        filename: str = None
+        filename: str = None,
     ):
         bytes_file = file.read()
 
@@ -171,7 +158,9 @@ class CeleryFileManager:
             content_base_uuid=content_base_uuid,
             extension_file=extension_file,
         )
-        content_base_file = CreateContentBaseFileUseCase().create_content_base_file(content_base_file=content_base_file_dto)
+        content_base_file = CreateContentBaseFileUseCase().create_content_base_file(
+            content_base_file=content_base_file_dto
+        )
         try:
             project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
             indexer_database = project.indexer_database
@@ -181,11 +170,7 @@ class CeleryFileManager:
         if indexer_database == Project.BEDROCK:
             print("[+ 🦑 Using BEDROCK 🦑 +]")
             tasks_bedrock.bedrock_upload_file.delay(
-                bytes_file,
-                content_base_uuid,
-                user_email,
-                str(content_base_file.uuid),
-                filename=filename
+                bytes_file, content_base_uuid, user_email, str(content_base_file.uuid), filename=filename
             )
             return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}
 
@@ -193,9 +178,10 @@ class CeleryFileManager:
             bytes_file,
             content_base_uuid,
             extension_file,
-            user_email, str(content_base_file.uuid),
+            user_email,
+            str(content_base_file.uuid),
             load_type,
-            filename=filename
+            filename=filename,
         )
         return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}
 
@@ -206,7 +192,7 @@ class CeleryFileManager:
         extension_file: str,
         user_email: str,
         load_type: str = None,
-        filename: str = None
+        filename: str = None,
     ):
         bytes_file = file.read()
 
@@ -217,7 +203,9 @@ class CeleryFileManager:
             content_base_uuid=content_base_uuid,
             extension_file=extension_file,
         )
-        content_base_file = CreateContentBaseFileUseCase().create_content_base_file(content_base_file=content_base_file_dto)
+        content_base_file = CreateContentBaseFileUseCase().create_content_base_file(
+            content_base_file=content_base_file_dto
+        )
         try:
             project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
             indexer_database = project.indexer_database
@@ -227,11 +215,7 @@ class CeleryFileManager:
         if indexer_database == Project.BEDROCK:
             print("[+ 🦑 Using BEDROCK 🦑 +]")
             tasks_bedrock.bedrock_upload_inline_file.delay(
-                bytes_file,
-                content_base_uuid,
-                user_email,
-                str(content_base_file.uuid),
-                filename=filename
+                bytes_file, content_base_uuid, user_email, str(content_base_file.uuid), filename=filename
             )
             return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}
 
@@ -242,6 +226,6 @@ class CeleryFileManager:
             user_email,
             str(content_base_file.uuid),
             load_type,
-            filename=filename
+            filename=filename,
         )
         return {"uuid": str(content_base_file.uuid), "extension_file": extension_file}

@@ -4,15 +4,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0026_intelligence_is_router'),
+        ("intelligences", "0026_intelligence_is_router"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='conversation',
-            name='resolution',
-            field=models.CharField(choices=[(0, 'Resolved'), (1, 'Unresolved'), (2, 'In Progress'), (3, 'Unclassified'), (4, 'Has Chat Room')], default=2, max_length=255),
+            model_name="conversation",
+            name="resolution",
+            field=models.CharField(
+                choices=[
+                    (0, "Resolved"),
+                    (1, "Unresolved"),
+                    (2, "In Progress"),
+                    (3, "Unclassified"),
+                    (4, "Has Chat Room"),
+                ],
+                default=2,
+                max_length=255,
+            ),
         ),
     ]

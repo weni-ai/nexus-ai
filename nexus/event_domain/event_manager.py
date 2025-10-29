@@ -1,17 +1,14 @@
-from nexus.event_domain.event_observer import EventObserver
-from typing import List, Dict, Union
 import asyncio
+from typing import Dict, List, Union
+
+from nexus.event_domain.event_observer import EventObserver
 
 
 class EventManager:
     def __init__(self):
-        self.observers : Dict[str, List[EventObserver]] = {}
+        self.observers: Dict[str, List[EventObserver]] = {}
 
-    def subscribe(
-        self,
-        event: str,
-        observer: Union[EventObserver, List[EventObserver]]
-    ):
+    def subscribe(self, event: str, observer: Union[EventObserver, List[EventObserver]]):
         if event not in self.observers:
             self.observers[event] = []
 
@@ -20,11 +17,7 @@ class EventManager:
         else:
             self.observers[event].append(observer)
 
-    def notify(
-        self,
-        event: str,
-        **kwargs
-    ):
+    def notify(self, event: str, **kwargs):
         observers = self.observers.get(event, [])
         for observer in observers:
             observer.perform(**kwargs)
@@ -32,13 +25,9 @@ class EventManager:
 
 class AsyncEventManager:
     def __init__(self):
-        self.observers : Dict[str, List[EventObserver]] = {}
+        self.observers: Dict[str, List[EventObserver]] = {}
 
-    def subscribe(
-        self,
-        event: str,
-        observer: Union[EventObserver, List[EventObserver]]
-    ):
+    def subscribe(self, event: str, observer: Union[EventObserver, List[EventObserver]]):
         if event not in self.observers:
             self.observers[event] = []
 
@@ -47,14 +36,10 @@ class AsyncEventManager:
         else:
             self.observers[event].append(observer)
 
-    async def notify(
-        self,
-        event: str,
-        **kwargs
-    ):
+    async def notify(self, event: str, **kwargs):
         observers = self.observers.get(event, [])
         for observer in observers:
-            if hasattr(observer, 'perform') and asyncio.iscoroutinefunction(observer.perform):
+            if hasattr(observer, "perform") and asyncio.iscoroutinefunction(observer.perform):
                 await observer.perform(**kwargs)
             else:
                 observer.perform(**kwargs)

@@ -1,8 +1,8 @@
-import uuid
-import logging
-import time
 import base64
 import json
+import logging
+import time
+import uuid
 
 import pendulum
 
@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 class MessageRepository(Repository):
-
     def _convert_to_dynamo_sortable_timestamp(self, created_at: str) -> str:
         """
         Convert timestamp to consistent format for DynamoDB range queries.
@@ -24,11 +23,11 @@ class MessageRepository(Repository):
             # Parse the timestamp (handles all ISO 8601 formats)
             dt = pendulum.parse(created_at)
             # Convert to UTC and format without timezone info for consistent lexicographic sorting
-            return dt.in_timezone('UTC').format('YYYY-MM-DDTHH:mm:ss')
+            return dt.in_timezone("UTC").format("YYYY-MM-DDTHH:mm:ss")
         except Exception as e:
             logger.warning(f"Failed to parse timestamp '{created_at}': {str(e)}. Using original value.")
             # Fallback: remove common timezone suffixes
-            return created_at.replace('Z', '').replace('+00:00', '')
+            return created_at.replace("Z", "").replace("+00:00", "")
 
     def storage_message(
         self,
@@ -37,7 +36,7 @@ class MessageRepository(Repository):
         message_data: dict,
         channel_uuid: str = None,
         resolution_status: int = ResolutionEntities.IN_PROGRESS,
-        ttl_hours: int = 48
+        ttl_hours: int = 48,
     ) -> None:
         """Store message with proper conversation and resolution tracking."""
         conversation_key = f"{project_uuid}#{contact_urn}#{channel_uuid}"
@@ -47,14 +46,13 @@ class MessageRepository(Repository):
         ttl_timestamp = int(time.time()) + (ttl_hours * 3600)
 
         # Convert created_at to DynamoDB sortable format for range queries
-        sortable_timestamp = self._convert_to_dynamo_sortable_timestamp(message_data['created_at'])
+        sortable_timestamp = self._convert_to_dynamo_sortable_timestamp(message_data["created_at"])
 
         with get_message_table() as table:
             item = {
                 # Primary Keys
                 "conversation_key": conversation_key,
                 "message_timestamp": f"{sortable_timestamp}#{message_id}",  # Sortable timestamp + UUID for uniqueness
-
                 # Attributes
                 "conversation_id": conversation_key,
                 "project_uuid": project_uuid,
@@ -70,26 +68,26 @@ class MessageRepository(Repository):
 
             table.put_item(Item=item)
 
-    def get_messages(self, project_uuid: str, contact_urn: str, channel_uuid: str, limit: int = 50, cursor: str = None) -> dict:
+    def get_messages(
+        self, project_uuid: str, contact_urn: str, channel_uuid: str, limit: int = 50, cursor: str = None
+    ) -> dict:
         """Get messages with pagination - optimized for large datasets."""
         conversation_key = f"{project_uuid}#{contact_urn}#{channel_uuid}"
 
         with get_message_table() as table:
             # Build query parameters
             query_params = {
-                'KeyConditionExpression': 'conversation_key = :conv_key',
-                'ExpressionAttributeValues': {
-                    ':conv_key': conversation_key
-                },
-                'Limit': limit,
-                'ScanIndexForward': False  # Get newest messages first
+                "KeyConditionExpression": "conversation_key = :conv_key",
+                "ExpressionAttributeValues": {":conv_key": conversation_key},
+                "Limit": limit,
+                "ScanIndexForward": False,  # Get newest messages first
             }
 
             # Add cursor if provided
             if cursor:
                 try:
-                    exclusive_start_key = json.loads(base64.b64decode(cursor).decode('utf-8'))
-                    query_params['ExclusiveStartKey'] = exclusive_start_key
+                    exclusive_start_key = json.loads(base64.b64decode(cursor).decode("utf-8"))
+                    query_params["ExclusiveStartKey"] = exclusive_start_key
                 except Exception as e:
                     logger.warning(f"Invalid cursor: {str(e)}")
                     # Continue without cursor
@@ -99,21 +97,17 @@ class MessageRepository(Repository):
 
                 # Format messages
                 messages = []
-                for item in response.get('Items', []):
+                for item in response.get("Items", []):
                     messages.append(self._format_message(item))
 
                 # Create next cursor if there are more items
                 next_cursor = None
-                if 'LastEvaluatedKey' in response:
-                    next_cursor = base64.b64encode(
-                        json.dumps(response['LastEvaluatedKey']).encode('utf-8')
-                    ).decode('utf-8')
+                if "LastEvaluatedKey" in response:
+                    next_cursor = base64.b64encode(json.dumps(response["LastEvaluatedKey"]).encode("utf-8")).decode(
+                        "utf-8"
+                    )
 
-                return {
-                    'items': messages,
-                    'next_cursor': next_cursor,
-                    'total_count': len(messages)
-                }
+                return {"items": messages, "next_cursor": next_cursor, "total_count": len(messages)}
 
             except Exception as e:
                 logger.error(f"Error querying messages: {str(e)}")
@@ -126,43 +120,43 @@ class MessageRepository(Repository):
         channel_uuid: str,
         start_date: str = None,
         end_date: str = None,
-        resolution_status: int = None
+        resolution_status: int = None,
     ) -> list:
         """Get messages for a specific conversation, optionally filtered by time range and resolution."""
         conversation_key = f"{project_uuid}#{contact_urn}#{channel_uuid}"
 
         with get_message_table() as table:
             # Build query parameters
-            expression_values = {':conv_key': conversation_key}
+            expression_values = {":conv_key": conversation_key}
 
             # Use KeyConditionExpression for efficient querying
             if start_date and end_date:
                 start_sortable = self._convert_to_dynamo_sortable_timestamp(start_date)
                 end_sortable = self._convert_to_dynamo_sortable_timestamp(end_date)
                 # Use sort key in KeyConditionExpression for better performance
-                key_condition = 'conversation_key = :conv_key AND message_timestamp BETWEEN :start AND :end'
-                expression_values[':start'] = f"{start_sortable}#"
-                expression_values[':end'] = f"{end_sortable}#"
+                key_condition = "conversation_key = :conv_key AND message_timestamp BETWEEN :start AND :end"
+                expression_values[":start"] = f"{start_sortable}#"
+                expression_values[":end"] = f"{end_sortable}#"
             else:
                 # No time range - just query by conversation
-                key_condition = 'conversation_key = :conv_key'
+                key_condition = "conversation_key = :conv_key"
 
             # Build FilterExpression only for non-key attributes
             filter_parts = []
             if resolution_status is not None:
-                filter_parts.append('resolution_status = :resolution')
-                expression_values[':resolution'] = resolution_status
+                filter_parts.append("resolution_status = :resolution")
+                expression_values[":resolution"] = resolution_status
 
             # Build query parameters
             query_params = {
-                'KeyConditionExpression': key_condition,
-                'ExpressionAttributeValues': expression_values,
-                'ScanIndexForward': True  # Chronological order
+                "KeyConditionExpression": key_condition,
+                "ExpressionAttributeValues": expression_values,
+                "ScanIndexForward": True,  # Chronological order
             }
 
             # Only add FilterExpression if we have filters
             if filter_parts:
-                query_params['FilterExpression'] = ' AND '.join(filter_parts)
+                query_params["FilterExpression"] = " AND ".join(filter_parts)
 
             response = table.query(**query_params)
 
@@ -182,10 +176,8 @@ class MessageRepository(Repository):
 
         with get_message_table() as table:
             response = table.query(
-                KeyConditionExpression='conversation_key = :conv_key',
-                ExpressionAttributeValues={
-                    ':conv_key': conversation_key
-                }
+                KeyConditionExpression="conversation_key = :conv_key",
+                ExpressionAttributeValues={":conv_key": conversation_key},
             )
 
             if response["Items"]:
@@ -204,7 +196,8 @@ class MessageRepository(Repository):
         # This is different from Redis where we store as a list
         self.storage_message(project_uuid, contact_urn, message, channel_uuid)
 
-    def store_batch_messages(self, project_uuid: str, contact_urn: str, messages: list, key: str, channel_uuid: str = None) -> None:
-
+    def store_batch_messages(
+        self, project_uuid: str, contact_urn: str, messages: list, key: str, channel_uuid: str = None
+    ) -> None:
         # Not used, future implementation.
         raise NotImplementedError("Store batch messages is not implemented for DynamoDB.")

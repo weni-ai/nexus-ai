@@ -1,28 +1,27 @@
-from typing import List, Dict
-
-import requests
+import ast
 import json
 import re
-import ast
+from typing import Dict, List
+
+import requests
+import sentry_sdk
+
 from nexus.internals.flows import FlowsRESTClient
 from router.direct_message import DirectMessage, exceptions
-import sentry_sdk
 
 
 class SendMessageHTTPClient(DirectMessage):
-
     def __init__(self, host: str, access_token: str) -> None:
         self.__host = host
         self.__access_token = access_token
 
-    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs) -> None:
+    def send_direct_message(
+        self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs
+    ) -> None:
         url = f"{self.__host}/mr/msg/send"
 
         payload = {"user": user, "project_uuid": project_uuid, "urns": urns, "text": text}
-        headers = {
-            "Authorization": f"Token {self.__access_token}",
-            'Content-Type': 'application/json'
-        }
+        headers = {"Authorization": f"Token {self.__access_token}", "Content-Type": "application/json"}
 
         payload = json.dumps(payload).encode("utf-8")
 
@@ -31,11 +30,10 @@ class SendMessageHTTPClient(DirectMessage):
         try:
             response.raise_for_status()
         except Exception as error:
-            raise exceptions.UnableToSendMessage(str(error))
+            raise exceptions.UnableToSendMessage(str(error)) from error
 
 
 class WhatsAppBroadcastHTTPClient(DirectMessage):
-
     def __init__(self, host: str, access_token: str) -> None:
         self.__host = host
         self.__access_token = access_token
@@ -46,21 +44,19 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         """
         # First, escape the quotes inside the text content
         # Look for patterns like: Notebook 15" and escape the quote
-        json_str = re.sub(r'(\w+)(\s*)(\")(\s*\w+)', r'\1\2\\\"\4', json_str)
+        json_str = re.sub(r"(\w+)(\s*)(\")(\s*\w+)", r"\1\2\\\"\4", json_str)
 
         # Remove newlines and whitespace between JSON structural elements
         # This regex finds newlines and spaces between JSON structure parts
         json_str = re.sub(r'{\s*"', '{"', json_str)
         json_str = re.sub(r'",\s*"', '","', json_str)
-        json_str = re.sub(r':\s*{', ':{', json_str)
-        json_str = re.sub(r'}\s*}', '}}', json_str)
+        json_str = re.sub(r":\s*{", ":{", json_str)
+        json_str = re.sub(r"}\s*}", "}}", json_str)
 
         # Preserve newlines in text content by converting them to \\n
         # This will handle the actual text content newlines
         json_str = re.sub(
-            r'(text":\s*")([^"]*?)(")',
-            lambda m: m.group(1) + m.group(2).replace('\n', '\\n') + m.group(3),
-            json_str
+            r'(text":\s*")([^"]*?)(")', lambda m: m.group(1) + m.group(2).replace("\n", "\\n") + m.group(3), json_str
         )
 
         return json_str
@@ -71,7 +67,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
             return obj
         except json.JSONDecodeError:
             try:
-                json_str_escaped = json_str.replace('\n', '\\n')
+                json_str_escaped = json_str.replace("\n", "\\n")
                 obj = json.loads(json_str_escaped)
                 return obj
             except json.JSONDecodeError:
@@ -81,7 +77,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
                     return obj
                 except Exception:
                     try:
-                        json_str_escaped = json_str.replace('\n', '\\n')
+                        json_str_escaped = json_str.replace("\n", "\\n")
                         obj = ast.literal_eval(json_str_escaped)
                         return obj
                     except Exception:
@@ -90,11 +86,11 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
 
     def get_json_strings(self, text):
         marked_text = re.sub(r'(?<=[}\]"])\s*{"msg":', r'SPLIT_HERE{"msg":', text)
-        json_strings = marked_text.split('SPLIT_HERE')
+        json_strings = marked_text.split("SPLIT_HERE")
         result = []
         for json_str in json_strings:
             _, json_str = self.get_json_strings_from_text(json_str)
-            json_str = json_str.strip().strip('\n')
+            json_str = json_str.strip().strip("\n")
             json_str = self.fix_json_string(json_str)
             if json_str.startswith('{"msg":'):
                 try:
@@ -113,7 +109,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         user: str,
         full_chunks: List[Dict] = None,
         backend: str = "BedrockBackend",
-        **kwargs
+        **kwargs,
     ) -> None:
         if backend == "BedrockBackend":
             msgs = self.format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)
@@ -125,15 +121,19 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
             try:
                 response.raise_for_status()
             except Exception as error:
-                raise exceptions.UnableToSendMessage(str(error))
+                raise exceptions.UnableToSendMessage(str(error)) from error
 
-    def format_response_for_bedrock(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> None:
+    def format_response_for_bedrock(
+        self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
+    ) -> None:
         msgs = self.get_json_strings(msg)
         if not msgs:
             msgs = [{"msg": {"text": str(msg)}}]
         return msgs
 
-    def format_message_for_openai(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> Dict:
+    def format_message_for_openai(
+        self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
+    ) -> Dict:
         try:
             msgs = json.loads(msg)
         except Exception as error:
@@ -166,8 +166,4 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         return None, text
 
     def string_to_simple_text(self, text):
-        return {
-            "msg": {
-                "text": text
-            }
-        }
+        return {"msg": {"text": text}}

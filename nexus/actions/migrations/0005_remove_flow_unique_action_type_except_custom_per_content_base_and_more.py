@@ -4,23 +4,36 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('actions', '0004_alter_flow_action_template'),
+        ("actions", "0004_alter_flow_action_template"),
     ]
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='flow',
-            name='unique_action_type_except_custom_per_content_base',
+            model_name="flow",
+            name="unique_action_type_except_custom_per_content_base",
         ),
         migrations.AlterField(
-            model_name='flow',
-            name='action_type',
-            field=models.CharField(choices=[('custom', 'Custom'), ('whatsapp_cart', 'WhatsApp Cart'), ('localization', 'Localization'), ('attachment', 'Attachment'), ('safe_guard', 'Safe Guard')], default='custom', max_length=50),
+            model_name="flow",
+            name="action_type",
+            field=models.CharField(
+                choices=[
+                    ("custom", "Custom"),
+                    ("whatsapp_cart", "WhatsApp Cart"),
+                    ("localization", "Localization"),
+                    ("attachment", "Attachment"),
+                    ("safe_guard", "Safe Guard"),
+                ],
+                default="custom",
+                max_length=50,
+            ),
         ),
         migrations.AddConstraint(
-            model_name='flow',
-            constraint=models.UniqueConstraint(condition=models.Q(('action_type', 'custom'), _negated=True), fields=('content_base', 'action_type'), name='unique_action_type_except_custom_per_content_base'),
+            model_name="flow",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("action_type", "custom"), _negated=True),
+                fields=("content_base", "action_type"),
+                name="unique_action_type_except_custom_per_content_base",
+            ),
         ),
     ]
