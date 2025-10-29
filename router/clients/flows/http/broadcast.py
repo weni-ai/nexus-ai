@@ -6,7 +6,6 @@ from router.direct_message import DirectMessage, exceptions
 
 
 class BroadcastHTTPClient(DirectMessage):
-
     def __init__(self, host: str, access_token: str) -> None:
         self.__host = host
         self.__access_token = access_token
@@ -24,4 +23,4 @@ class BroadcastHTTPClient(DirectMessage):
         try:
             response.raise_for_status()
         except Exception as error:
-            raise exceptions.UnableToSendMessage(str(error))
+            raise exceptions.UnableToSendMessage(str(error)) from error

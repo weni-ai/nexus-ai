@@ -19,22 +19,23 @@ class Role(Enum):
 
 
 class OrgAuth(models.Model):
-    class Meta:
-        unique_together = ['user', 'org']
-
     ROLE_CHOICES = [
-        (Role.NOT_SETTED.value, 'not set'),
-        (Role.VIEWER.value, 'viewer'),
-        (Role.CONTRIBUTOR.value, 'contributor'),
-        (Role.ADMIN.value, 'admin'),
+        (Role.NOT_SETTED.value, "not set"),
+        (Role.VIEWER.value, "viewer"),
+        (Role.CONTRIBUTOR.value, "contributor"),
+        (Role.ADMIN.value, "admin"),
     ]
 
-    org = models.ForeignKey(
-        Org, on_delete=models.CASCADE, related_name='authorizations'
-    )
+    org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name="authorizations")
     user = models.ForeignKey(
-        'users.User',
+        "users.User",
         on_delete=models.CASCADE,
-        related_name='authorizations_user',
+        related_name="authorizations_user",
     )
     role = models.PositiveIntegerField(choices=ROLE_CHOICES)
+
+    class Meta:
+        unique_together = ["user", "org"]
+
+    def __str__(self):
+        return f"{self.user} - {self.org} - {self.role}"

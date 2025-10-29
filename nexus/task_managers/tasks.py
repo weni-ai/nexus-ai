@@ -36,14 +36,11 @@ REDIS_CLIENT = redis.Redis.from_url(settings.REDIS_URL)
 
 
 @app.task
-def add_file(
-    task_manager_uuid: str,
-    file_type: str,
-    load_type: str = None
-) -> bool:
-
+def add_file(task_manager_uuid: str, file_type: str, load_type: str = None) -> bool:
     try:
-        task_manager = CeleryTaskManagerUseCase().get_task_manager_by_uuid(task_uuid=task_manager_uuid, file_type=file_type)
+        task_manager = CeleryTaskManagerUseCase().get_task_manager_by_uuid(
+            task_uuid=task_manager_uuid, file_type=file_type
+        )
         task_manager.update_status(ContentBaseFileTaskManager.STATUS_LOADING)
     except Exception as err:
         print(err)
@@ -52,9 +49,9 @@ def add_file(
     file_database = s3FileDatabase()
     sentenx_file_database = SentenXFileDataBase()
 
-    if file_type == 'text':
+    if file_type == "text":
         status_code, _ = sentenx_file_database.add_text_file(task_manager, file_database)
-    elif file_type == 'link':
+    elif file_type == "link":
         status_code, _ = sentenx_file_database.add_link(task_manager, file_database)
     else:
         status_code, _ = sentenx_file_database.add_file(task_manager, file_database, load_type)
@@ -75,25 +72,21 @@ def upload_file(
     user_email: str,
     content_base_file_uuid: str,
     load_type: str = None,
-    filename: str = None
+    filename: str = None,
 ):
     file_database_response = s3FileDatabase().add_file(file, filename)
 
     if file_database_response.status != 0:
-        return {
-            "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
-            "error": file_database_response.err
-        }
+        return {"task_status": ContentBaseFileTaskManager.STATUS_FAIL, "error": file_database_response.err}
 
     content_base_file_dto = UpdateContentBaseFileDTO(
-        file_url=file_database_response.file_url,
-        file_name=file_database_response.file_name
+        file_url=file_database_response.file_url, file_name=file_database_response.file_name
     )
 
     content_base_file = UpdateContentBaseFileUseCase().update_content_base_file(
         content_base_file_uuid=content_base_file_uuid,
         user_email=user_email,
-        update_content_base_file_dto=content_base_file_dto
+        update_content_base_file_dto=content_base_file_dto,
     )
 
     task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
@@ -105,9 +98,10 @@ def upload_file(
         "content_base": {
             "uuid": content_base_file.uuid,
             "extension_file": content_base_file.extension_file,
-        }
+        },
     }
     return response
+
 
 @app.task
 def upload_sentenx_inline_file(
@@ -117,25 +111,21 @@ def upload_sentenx_inline_file(
     user_email: str,
     content_base_file_uuid: str,
     load_type: str = None,
-    filename: str = None
+    filename: str = None,
 ):
     file_database_response = s3FileDatabase().add_file(file, filename)
 
     if file_database_response.status != 0:
-        return {
-            "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
-            "error": file_database_response.err
-        }
+        return {"task_status": ContentBaseFileTaskManager.STATUS_FAIL, "error": file_database_response.err}
 
     content_base_file_dto = UpdateContentBaseFileDTO(
-        file_url=file_database_response.file_url,
-        file_name=file_database_response.file_name
+        file_url=file_database_response.file_url, file_name=file_database_response.file_name
     )
 
     content_base_file = UpdateContentBaseFileUseCase().update_inline_content_base_file(
         content_base_file_uuid=content_base_file_uuid,
         user_email=user_email,
-        update_content_base_file_dto=content_base_file_dto
+        update_content_base_file_dto=content_base_file_dto,
     )
 
     task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
@@ -147,14 +137,14 @@ def upload_sentenx_inline_file(
         "content_base": {
             "uuid": content_base_file.uuid,
             "extension_file": content_base_file.extension_file,
-        }
+        },
     }
     return response
 
 
 @app.task
 def upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: Dict):
-    content_base_title = content_base_dto.get('title', '').replace("/", "-").replace(" ", "-")
+    content_base_title = content_base_dto.get("title", "").replace("/", "-").replace(" ", "-")
     file_name = f"{content_base_title}.txt"
 
     with open(f"/tmp/{file_name}", "w") as file:
@@ -166,13 +156,10 @@ def upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: 
     content_base_text = ContentBaseText.objects.get(uuid=content_base_text_uuid)
     content_base_text.file = file_database_response.file_url
     content_base_text.file_name = file_database_response.file_name
-    content_base_text.save(update_fields=['file', 'file_name'])
+    content_base_text.save(update_fields=["file", "file_name"])
 
     if file_database_response.status != 0:
-        return {
-            "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
-            "error": file_database_response.err
-        }
+        return {"task_status": ContentBaseFileTaskManager.STATUS_FAIL, "error": file_database_response.err}
 
     task_manager = CeleryTaskManagerUseCase().create_celery_text_file_manager(content_base_text=content_base_text)
     add_file.apply_async(args=[str(task_manager.uuid), "text"])
@@ -181,9 +168,9 @@ def upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: 
         "task_status": task_manager.status,
         "content_base_text": {
             "uuid": content_base_text.uuid,
-            "extension_file": 'txt',
+            "extension_file": "txt",
             "text": content_base_text.text,
-        }
+        },
     }
     return response
 
@@ -198,9 +185,9 @@ def send_link(link: str, user_email: str, content_base_link_uuid: str):
         "task_status": task_manager.status,
         "content_base_text": {
             "uuid": content_base_link.uuid,
-            "extension_file": 'url',
+            "extension_file": "url",
             "link": content_base_link.link,
-        }
+        },
     }
     return response
 
@@ -218,10 +205,7 @@ def create_wenigpt_logs(log: Dict):
             weni_gpt_response=log.get("weni_gpt_response"),
             wenigpt_version=settings.WENIGPT_VERSION,
         )
-        UserQuestion.objects.create(
-            text=log.question,
-            content_base_log=log
-        )
+        UserQuestion.objects.create(text=log.question, content_base_log=log)
         print("[Creating Log]")
         return log
     except Exception as e:
@@ -235,32 +219,32 @@ def log_cleanup_routine():
     usecase.delete_logs_routine(months=1)
 
 
-@app.task(name='delete_old_activities')
+@app.task(name="delete_old_activities")
 def delete_old_activities():
     usecase = DeleteLogUsecase()
     usecase.delete_old_activities(months=3)
 
 
-@app.task(name='healthcheck')
+@app.task(name="healthcheck")
 def update_healthcheck():
     notify = HealthCheck()
     notify.check_service_health()
 
 
-@app.task(name='classification_healthcheck')
+@app.task(name="classification_healthcheck")
 def update_classification_healthcheck():
     classification_notify = ClassificationHealthCheck()
     classification_notify.check_service_health()
 
 
-@app.task(name='delete_attachment_preview_file')
+@app.task(name="delete_attachment_preview_file")
 def delete_file_task(file_name):
     deleter = DeleteStorageFile()
     deleter.delete_file(file_name)
 
 
 @app.task(
-    name='generate_flows_report',
+    name="generate_flows_report",
     soft_time_limit=7000,
     time_limit=7200,
 )

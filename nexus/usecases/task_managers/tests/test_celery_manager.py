@@ -1,13 +1,15 @@
-from django.test import TestCase
 from uuid import uuid4
 
+from django.test import TestCase
+
+from nexus.task_managers.models import TaskManager
 from nexus.usecases.task_managers.exceptions import (
     ContentBaseFileTaskManagerNotExists,
-    ContentBaseTextTaskManagerNotExists
+    ContentBaseTextTaskManagerNotExists,
 )
-from nexus.task_managers.models import TaskManager
-from .task_manager_factory import ContentBaseFileTaskManagerFactory, ContentBaseTextTaskManagerFactory
+
 from ..celery_task_manager import CeleryTaskManagerUseCase
+from .task_manager_factory import ContentBaseFileTaskManagerFactory, ContentBaseTextTaskManagerFactory
 
 
 class CeleryTaskManagerUseCaseTest(TestCase):

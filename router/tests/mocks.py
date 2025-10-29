@@ -1,13 +1,13 @@
-from typing import List, Dict
+from typing import Dict, List
 
-from router.repositories import Repository
 from router.entities import (
     AgentDTO,
-    InstructionDTO,
-    FlowDTO,
-    ContentBaseDTO,
     ContactMessageDTO,
+    ContentBaseDTO,
+    FlowDTO,
+    InstructionDTO,
 )
+from router.repositories import Repository
 
 
 class ContentBaseTestRepository(Repository):
@@ -28,7 +28,7 @@ class ContentBaseTestRepository(Repository):
             role=self.agent.role,
             personality=self.agent.personality,
             goal=self.agent.goal,
-            content_base_uuid=content_base_uuid
+            content_base_uuid=content_base_uuid,
         )
 
     def list_instructions(self, content_base_uuid: str):
@@ -37,8 +37,7 @@ class ContentBaseTestRepository(Repository):
         for instruction in instructions:
             instructions_list.append(
                 InstructionDTO(
-                    instruction=instruction.instruction,
-                    content_base_uuid=str(instruction.content_base.uuid)
+                    instruction=instruction.instruction, content_base_uuid=str(instruction.content_base.uuid)
                 )
             )
 
@@ -58,7 +57,7 @@ class MessageLogsTestRepository(Repository):
                     contact_urn=contact_urn,
                     llm_respose=f"Response {i}",
                     project_uuid=project_uuid,
-                    content_base_uuid=self.content_base_uuid
+                    content_base_uuid=self.content_base_uuid,
                 )
             )
         return messages
@@ -106,16 +105,9 @@ class MockGPTClient:
         question: str,
         llm_config: Dict,
         last_messages: List,
-        project_uuid: str = None
+        project_uuid: str = None,
     ):
-        return {
-            "answers": [
-                {
-                    "text": "LLM Response"
-                }
-            ],
-            "id": "0"
-        }
+        return {"answers": [{"text": "LLM Response"}], "id": "0"}
 
 
 class MockLLMClient:
@@ -143,16 +135,18 @@ class MockIndexer:
                         "file_uuid": self.file_uuid,
                     }
                 ]
-            }
+            },
         }
 
 
-class MockBroadcastHTTPClient():
-    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs):
+class MockBroadcastHTTPClient:
+    def send_direct_message(
+        self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs
+    ):
         print(f"[+ Test: Sending direct message to {urns} +]")
 
 
-class MockFlowStartHTTPClient():
+class MockFlowStartHTTPClient:
     def start_flow(self, flow: str, user: str, urns: List, user_message: str, llm_response: str):
         print(f"[+ Test: Starting flow {flow} +]")
 

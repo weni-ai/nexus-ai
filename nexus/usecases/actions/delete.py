@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from nexus.events import event_manager
 from nexus.actions.models import TemplateAction
+from nexus.events import event_manager
 from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase
 
 
@@ -10,11 +10,8 @@ class DeleteFlowDTO:
     flow_uuid: str
 
 
-class DeleteFlowsUseCase():
-    def __init__(
-        self,
-        event_manager_notify=event_manager.notify
-    ) -> None:
+class DeleteFlowsUseCase:
+    def __init__(self, event_manager_notify=event_manager.notify) -> None:
         self.event_manager_notify = event_manager_notify
 
     def hard_delete_flow(
@@ -32,10 +29,7 @@ class DeleteFlowsUseCase():
             action_type="D",
             user=user,
             project=project,
-            action_details={
-                "old": flow.name,
-                "new": ""
-            },
+            action_details={"old": flow.name, "new": ""},
         )
 
         flow.delete()
@@ -47,8 +41,8 @@ def delete_template_action(template_action_uuid: str) -> bool:
         template_action: TemplateAction = TemplateAction.objects.get(uuid=template_action_uuid)
         template_action.delete()
         return True
-    except TemplateAction.DoesNotExist:
-        raise ValueError("Template action not found")
+    except TemplateAction.DoesNotExist as e:
+        raise ValueError("Template action not found") from e
     except Exception as e:
         print("Error deleting template action: ", e)
-        raise Exception("Error deleting template action")
+        raise Exception("Error deleting template action") from e
