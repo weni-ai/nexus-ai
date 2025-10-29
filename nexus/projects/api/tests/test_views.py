@@ -1,15 +1,13 @@
-from django.test import TestCase
-
 from unittest.mock import patch
-from rest_framework.test import force_authenticate
-from rest_framework.test import APIRequestFactory
+
+from django.test import TestCase
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from nexus.projects.api.views import ProjectUpdateViewset
 from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory
 
 
 class TestProjectUpdateViewSet(TestCase):
-
     def setUp(self):
         integrated_intelligence = IntegratedIntelligenceFactory()
         self.project = integrated_intelligence.project
