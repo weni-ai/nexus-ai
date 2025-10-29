@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     "nexus.actions",
     "corsheaders",
     "router",
+    "calling",
     "nexus.logs",
     "nexus.sentry",
     "nexus.zeroshot",
