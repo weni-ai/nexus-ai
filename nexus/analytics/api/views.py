@@ -1,4 +1,5 @@
 import pendulum
+from uuid import UUID
 from django.db.models import Count, Q
 from django.utils.dateparse import parse_date
 from rest_framework.permissions import IsAuthenticated
@@ -179,13 +180,17 @@ class ResolutionRateIndividualView(APIView):
         """
         GET /api/projects/<project_uuid>/analytics/resolution-rate/individual/
         
-        Query params: Same as average endpoint
+        Query params: Same as average endpoint, plus:
+        - filter_project_uuid (optional): Filtrar por UUID específico do projeto
+        - filter_project_name (optional): Filtrar por nome do projeto (busca parcial, case-insensitive)
         Returns: Array of project-level metrics
         """
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
         motor = request.query_params.get("motor")
         min_conversations_str = request.query_params.get("min_conversations")
+        filter_project_uuid = request.query_params.get("filter_project_uuid")
+        filter_project_name = request.query_params.get("filter_project_name")
 
         # Validate and parse dates
         start_date, end_date, error_response = validate_and_parse_dates(
@@ -241,6 +246,23 @@ class ResolutionRateIndividualView(APIView):
             .order_by("-total")
         )
 
+        # Filter by additional project filters (UUID or name)
+        if filter_project_uuid:
+            try:
+                # Validate UUID format
+                UUID(filter_project_uuid)
+                project_stats = project_stats.filter(project__uuid=filter_project_uuid)
+            except (ValueError, TypeError):
+                return Response(
+                    {"error": "filter_project_uuid must be a valid UUID format"},
+                    status=400,
+                )
+
+        if filter_project_name:
+            project_stats = project_stats.filter(
+                project__name__icontains=filter_project_name
+            )
+
         # Filter by min_conversations
         if min_conversations is not None:
             project_stats = project_stats.filter(total__gte=min_conversations)
@@ -274,6 +296,8 @@ class ResolutionRateIndividualView(APIView):
                 "end_date": str(end_date),
                 "motor": motor,
                 "min_conversations": min_conversations,
+                "filter_project_uuid": filter_project_uuid,
+                "filter_project_name": filter_project_name,
             },
         }
 
