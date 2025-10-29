@@ -16,11 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def log_error_to_sentry(
-    error: Exception,
-    session_id: str,
-    project_uuid: str,
-    sanitized_urn: str,
-    context: Dict[str, Any] = None
+    error: Exception, session_id: str, project_uuid: str, sanitized_urn: str, context: Dict[str, Any] = None
 ):
     try:
         sentry_context = {
@@ -29,7 +25,7 @@ def log_error_to_sentry(
             "error_type": type(error).__name__,
             "error_message": str(error),
             "project_uuid": project_uuid,
-            "sanitized_urn": sanitized_urn
+            "sanitized_urn": sanitized_urn,
         }
 
         if context:
@@ -45,7 +41,6 @@ def log_error_to_sentry(
 
     except Exception as sentry_error:
         logger.error(f"Failed to log error to Sentry: {sentry_error}")
-
 
 
 async def only_turns(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -71,21 +66,12 @@ async def get_watermark(session, ns: str) -> int:
 
 
 async def set_watermark(session, ns: str, cursor: int):
-    await session.add_items([{
-        "type": WATERMARK_TYPE,
-        "ns": ns,
-        "cursor": int(cursor)
-    }])
+    await session.add_items([{"type": WATERMARK_TYPE, "ns": ns, "cursor": int(cursor)}])
 
 
 class RedisSession(Session):
     def __init__(
-        self,
-        session_id: str,
-        r: redis.Redis,
-        project_uuid: str,
-        sanitized_urn: str,
-        limit: Optional[int] = None
+        self, session_id: str, r: redis.Redis, project_uuid: str, sanitized_urn: str, limit: Optional[int] = None
     ):
         print(f"[DEBUG] RedisSession: {session_id}")
         self._key = session_id
@@ -97,7 +83,7 @@ class RedisSession(Session):
         if not self.is_connected():
             logger.error(f"Redis connection failed for session {session_id}")
             raise redis.ConnectionError(f"Redis connection failed for session {session_id}")
-        
+
         self._initialize_key()
 
     def _initialize_key(self):
@@ -149,36 +135,46 @@ class RedisSession(Session):
                             logger.warning(f"Item {i} in session {self._key} is not a dict: {type(parsed_item)}")
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to parse JSON for item {i} in session {self._key}: {e}")
-                    log_error_to_sentry(e, self._key, self.project_uuid, self.sanitized_urn, {
-                        "item_index": i,
-                        "raw_item": str(raw_item)[:100] if raw_item else None,
-                        "operation": "json_parse"
-                    })
+                    log_error_to_sentry(
+                        e,
+                        self._key,
+                        self.project_uuid,
+                        self.sanitized_urn,
+                        {
+                            "item_index": i,
+                            "raw_item": str(raw_item)[:100] if raw_item else None,
+                            "operation": "json_parse",
+                        },
+                    )
                     continue
                 except Exception as e:
                     logger.error(f"Unexpected error parsing item {i} in session {self._key}: {e}")
-                    log_error_to_sentry(e, self._key, self.project_uuid, self.sanitized_urn, {
-                        "item_index": i,
-                        "raw_item": str(raw_item)[:100] if raw_item else None,
-                        "operation": "item_parse"
-                    })
+                    log_error_to_sentry(
+                        e,
+                        self._key,
+                        self.project_uuid,
+                        self.sanitized_urn,
+                        {
+                            "item_index": i,
+                            "raw_item": str(raw_item)[:100] if raw_item else None,
+                            "operation": "item_parse",
+                        },
+                    )
                     continue
             print(f"[DEBUG] Items: {items}")
             return items
-            
+
         except redis.RedisError as e:
             logger.error(f"Redis error retrieving items for session {self._key}: {e}")
-            log_error_to_sentry(e, self._key, self.project_uuid, self.sanitized_urn, {
-                "operation": "redis_operation",
-                "limit": limit
-            })
+            log_error_to_sentry(
+                e, self._key, self.project_uuid, self.sanitized_urn, {"operation": "redis_operation", "limit": limit}
+            )
             return []
         except Exception as e:
             logger.error(f"Unexpected error retrieving items for session {self._key}: {e}")
-            log_error_to_sentry(e, self._key, self.project_uuid, self.sanitized_urn, {
-                "operation": "get_items",
-                "limit": limit
-            })
+            log_error_to_sentry(
+                e, self._key, self.project_uuid, self.sanitized_urn, {"operation": "get_items", "limit": limit}
+            )
             return []
 
     async def add_items(self, items):
@@ -199,4 +195,5 @@ def make_session_factory(redis: redis.Redis, base_id: str, project_uuid: str, sa
     def for_agent(agent_name: str | None = None):
         key = f"{base_id}:{agent_name}"
         return RedisSession(key, redis, project_uuid, sanitized_urn, limit)
+
     return for_agent

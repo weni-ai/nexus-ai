@@ -1,4 +1,5 @@
 from inline_agents.backend import InlineAgentsBackend
+
 from .bedrock.backend import BedrockBackend
 from .exceptions import BackendAlreadyRegistered, UnregisteredBackend
 from .openai.backend import OpenAIBackend

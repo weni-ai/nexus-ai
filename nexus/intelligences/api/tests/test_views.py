@@ -1,92 +1,78 @@
 import json
-from unittest import skip, mock
+from unittest import mock, skip
 
 from django.conf import settings
+from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from django.urls import reverse
+from freezegun import freeze_time
+from rest_framework import status
+from rest_framework.test import APIClient, APIRequestFactory, APITestCase, force_authenticate
 
-from rest_framework.test import (
-    APIRequestFactory,
-    APITestCase,
-    force_authenticate,
-    APIClient
-)
-
+from nexus.agents.models import Team
 from nexus.task_managers.models import ContentBaseLinkTaskManager, TaskManager
-
-from ..views import (
-    IntelligencesViewset,
-    ContentBaseViewset,
-    ContentBaseTextViewset,
-    ContentBaseLinkViewset,
-    SentenxIndexerUpdateFile,
-    ContentBasePersonalizationViewSet,
-    RouterRetailViewSet,
-    TopicsViewSet,
-    SubTopicsViewSet
-)
-
-from nexus.usecases.intelligences.tests.intelligence_factory import (
-    IntelligenceFactory,
-    IntegratedIntelligenceFactory,
-    ContentBaseFactory,
-    ContentBaseTextFactory,
-    ContentBaseLinkFactory,
-    TopicsFactory,
-    SubTopicsFactory,
-    ConversationFactory
-)
-
-from nexus.usecases.projects.tests.project_factory import ProjectFactory
-from nexus.usecases.orgs.tests.org_factory import OrgFactory
-from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
 from nexus.usecases.intelligences.create import create_base_brain_structure
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
-from nexus.agents.models import Team
-
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.auth.models import Permission
+from nexus.usecases.intelligences.tests.intelligence_factory import (
+    ContentBaseFactory,
+    ContentBaseLinkFactory,
+    ContentBaseTextFactory,
+    ConversationFactory,
+    IntegratedIntelligenceFactory,
+    IntelligenceFactory,
+    SubTopicsFactory,
+    TopicsFactory,
+)
+from nexus.usecases.intelligences.tests.mocks import MockFileDataBase
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.users.models import User
 
-from rest_framework import status
-
-from freezegun import freeze_time
+from ..views import (
+    ContentBaseLinkViewset,
+    ContentBasePersonalizationViewSet,
+    ContentBaseTextViewset,
+    ContentBaseViewset,
+    IntelligencesViewset,
+    RouterRetailViewSet,
+    SentenxIndexerUpdateFile,
+    SubTopicsViewSet,
+    TopicsViewSet,
+)
 
 
 @skip("View Testing")
 class TestIntelligencesViewset(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
-        self.view = IntelligencesViewset.as_view({
-            'get': 'list',
-            'post': 'create',
-            'put': 'update',
-            'delete': 'destroy',
-        })
+        self.view = IntelligencesViewset.as_view(
+            {
+                "get": "list",
+                "post": "create",
+                "put": "update",
+                "delete": "destroy",
+            }
+        )
         self.intelligence = IntelligenceFactory()
         self.user = self.intelligence.created_by
         self.org = self.intelligence.org
-        self.url = f'{self.org.uuid}/intelligences/project'
+        self.url = f"{self.org.uuid}/intelligences/project"
 
     def test_get_queryset(self):
-
         request = self.factory.get(self.url)
         force_authenticate(request, user=self.user)
 
-        response = self.view(
-            request,
-            org_uuid=str(self.org.uuid)
-        )
+        response = self.view(request, org_uuid=str(self.org.uuid))
         self.assertEqual(response.status_code, 200)
 
     def test_retrieve(self):
-
-        url_retrieve = f'{self.url}/{self.intelligence.uuid}/'
+        url_retrieve = f"{self.url}/{self.intelligence.uuid}/"
 
         request = self.factory.get(url_retrieve)
         force_authenticate(request, user=self.user)
 
-        response = IntelligencesViewset.as_view({'get': 'retrieve'})(
+        response = IntelligencesViewset.as_view({"get": "retrieve"})(
             request,
             org_uuid=str(self.org.uuid),
             pk=str(self.intelligence.uuid),
@@ -94,11 +80,7 @@ class TestIntelligencesViewset(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_create(self):
-        data = {
-            'name': 'intelligence_name',
-            'description': 'intelligence_description',
-            'language': 'es'
-        }
+        data = {"name": "intelligence_name", "description": "intelligence_description", "language": "es"}
         request = self.factory.post(self.url, data)
         force_authenticate(request, user=self.user)
 
@@ -109,34 +91,25 @@ class TestIntelligencesViewset(TestCase):
         self.assertEqual(response.status_code, 201)
 
     def test_update(self):
-
-        url_put = f'{self.url}/{self.intelligence.uuid}/'
+        url_put = f"{self.url}/{self.intelligence.uuid}/"
         data = {
-            'name': 'intelligence_name',
-            'description': 'intelligence_description',
-            'pk': str(self.intelligence.uuid),
+            "name": "intelligence_name",
+            "description": "intelligence_description",
+            "pk": str(self.intelligence.uuid),
         }
-        request = self.factory.put(
-            url_put,
-            json.dumps(data),
-            content_type='application/json'
-        )
+        request = self.factory.put(url_put, json.dumps(data), content_type="application/json")
         force_authenticate(request, user=self.user)
         response = self.view(request, pk=str(self.intelligence.uuid))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['name'], data['name'])
+        self.assertEqual(response.data["name"], data["name"])
 
     def test_delete(self):
-        url_delete = f'{self.url}/{self.intelligence.uuid}/'
+        url_delete = f"{self.url}/{self.intelligence.uuid}/"
         data = {
-            'pk': str(self.intelligence.uuid),
+            "pk": str(self.intelligence.uuid),
         }
 
-        request = self.factory.delete(
-            url_delete,
-            json.dumps(data),
-            content_type='application/json'
-        )
+        request = self.factory.delete(url_delete, json.dumps(data), content_type="application/json")
         force_authenticate(request, user=self.user)
 
         response = self.view(request, pk=str(self.intelligence.uuid))
@@ -147,46 +120,30 @@ class TestIntelligencesViewset(TestCase):
 class TestContentBaseViewset(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
-        self.view = ContentBaseViewset.as_view({
-            'get': 'list',
-            'post': 'create',
-            'put': 'update',
-            'delete': 'destroy'
-        })
+        self.view = ContentBaseViewset.as_view({"get": "list", "post": "create", "put": "update", "delete": "destroy"})
         self.contentbase = ContentBaseFactory()
         self.user = self.contentbase.created_by
         self.intelligence = self.contentbase.intelligence
 
-        self.url = f'{self.intelligence.uuid}/content-bases'
+        self.url = f"{self.intelligence.uuid}/content-bases"
 
     def test_get_queryset(self):
-
         request = self.factory.get(self.url)
         force_authenticate(request, user=self.user)
-        response = self.view(
-            request,
-            intelligence_uuid=str(self.intelligence.uuid)
-        )
+        response = self.view(request, intelligence_uuid=str(self.intelligence.uuid))
         self.assertEqual(response.status_code, 200)
 
     def test_retrieve(self):
-
-        url_retrieve = f'{self.url}/{self.contentbase.uuid}/'
+        url_retrieve = f"{self.url}/{self.contentbase.uuid}/"
         request = self.factory.get(url_retrieve)
         force_authenticate(request, user=self.user)
-        response = ContentBaseViewset.as_view({'get': 'retrieve'})(
-            request,
-            intelligence_uuid=str(self.intelligence.uuid),
-            contentbase_uuid=str(self.contentbase.uuid)
+        response = ContentBaseViewset.as_view({"get": "retrieve"})(
+            request, intelligence_uuid=str(self.intelligence.uuid), contentbase_uuid=str(self.contentbase.uuid)
         )
         self.assertEqual(response.status_code, 200)
 
     def test_create(self):
-        data = {
-            'title': 'title',
-            'description': 'description',
-            'language': 'pt-br'
-        }
+        data = {"title": "title", "description": "description", "language": "pt-br"}
         request = self.factory.post(self.url, data)
         force_authenticate(request, user=self.user)
         response = self.view(
@@ -196,36 +153,22 @@ class TestContentBaseViewset(TestCase):
         self.assertEqual(response.status_code, 201)
 
     def test_update(self):
-        data = {
-            'title': 'title',
-            'description': 'description',
-            'language': 'pt-br'
-        }
-        url_put = f'{self.url}/{self.contentbase.uuid}/'
-        request = self.factory.put(
-            url_put,
-            json.dumps(data),
-            content_type='application/json'
-        )
+        data = {"title": "title", "description": "description", "language": "pt-br"}
+        url_put = f"{self.url}/{self.contentbase.uuid}/"
+        request = self.factory.put(url_put, json.dumps(data), content_type="application/json")
         force_authenticate(request, user=self.user)
         response = self.view(
-            request,
-            intelligence_uuid=str(self.intelligence.uuid),
-            contentbase_uuid=str(self.contentbase.uuid)
+            request, intelligence_uuid=str(self.intelligence.uuid), contentbase_uuid=str(self.contentbase.uuid)
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['title'], data['title'])
+        self.assertEqual(response.data["title"], data["title"])
 
     def test_delete(self):
         data = {
-            'contentbase_uuid': str(self.contentbase.uuid),
+            "contentbase_uuid": str(self.contentbase.uuid),
         }
-        url_delete = f'{self.url}/{self.contentbase.uuid}/'
-        request = self.factory.delete(
-            url_delete,
-            json.dumps(data),
-            content_type='application/json'
-        )
+        url_delete = f"{self.url}/{self.contentbase.uuid}/"
+        request = self.factory.delete(url_delete, json.dumps(data), content_type="application/json")
         force_authenticate(request, user=self.user)
         response = self.view(
             request,
@@ -236,27 +179,20 @@ class TestContentBaseViewset(TestCase):
 
 
 class TestContentBaseTextViewset(TestCase):
-
     def setUp(self):
         self.factory = APIRequestFactory()
-        self.view = ContentBaseTextViewset.as_view({
-            'get': 'list',
-            'post': 'create',
-            'put': 'update',
-            'delete': 'destroy'
-        })
+        self.view = ContentBaseTextViewset.as_view(
+            {"get": "list", "post": "create", "put": "update", "delete": "destroy"}
+        )
         self.org = OrgFactory()
         self.user = self.org.created_by
-        self.project = self.org.projects.create(
-            name="Project",
-            created_by=self.org.created_by
-        )
+        self.project = self.org.projects.create(name="Project", created_by=self.org.created_by)
         self.project.authorizations.create(user=self.user, role=3)
         self.integrated_intelligence = create_base_brain_structure(self.project)
         self.intelligence = self.integrated_intelligence.intelligence
         self.content_base = get_default_content_base_by_project(str(self.project.uuid))
         self.contentbasetext = self.__create_content_base_text(self.content_base)
-        self.url = f'{self.content_base.uuid}/content-bases-text'
+        self.url = f"{self.content_base.uuid}/content-bases-text"
 
     def __create_content_base_text(self, content_base):
         contentbasetext = ContentBaseTextFactory()
@@ -266,38 +202,28 @@ class TestContentBaseTextViewset(TestCase):
         return contentbasetext
 
     def test_get_queryset(self):
-
         request = self.factory.get(self.url)
         force_authenticate(request, user=self.user)
-        response = self.view(
-            request,
-            content_base_uuid=str(self.content_base.uuid)
-        )
+        response = self.view(request, content_base_uuid=str(self.content_base.uuid))
         self.assertEqual(response.status_code, 200)
 
     def test_retrieve(self):
-
-        url_retrieve = f'{self.url}/{self.contentbasetext.uuid}/'
+        url_retrieve = f"{self.url}/{self.contentbasetext.uuid}/"
         request = self.factory.get(url_retrieve)
         force_authenticate(request, user=self.user)
-        response = ContentBaseTextViewset.as_view({'get': 'retrieve'})(
-            request,
-            contentbase_uuid=str(self.content_base.uuid),
-            contentbasetext_uuid=str(self.contentbasetext.uuid)
+        response = ContentBaseTextViewset.as_view({"get": "retrieve"})(
+            request, contentbase_uuid=str(self.content_base.uuid), contentbasetext_uuid=str(self.contentbasetext.uuid)
         )
         self.assertEqual(response.status_code, 200)
 
     def test_create(self):
         data = {
-            'text': 'text',
-            'intelligence_uuid': str(self.intelligence.uuid),
+            "text": "text",
+            "intelligence_uuid": str(self.intelligence.uuid),
         }
         request = self.factory.post(self.url, data)
         force_authenticate(request, user=self.user)
-        response = self.view(
-            request,
-            content_base_uuid=str(self.content_base.uuid)
-        )
+        response = self.view(request, content_base_uuid=str(self.content_base.uuid))
         self.assertEqual(response.status_code, 201)
 
     @mock.patch("nexus.usecases.intelligences.delete.DeleteContentBaseTextUseCase.delete_content_base_text_from_index")
@@ -307,19 +233,13 @@ class TestContentBaseTextViewset(TestCase):
         mock_file_database()
         text = ""
         data = {
-            'text': text,
+            "text": text,
         }
-        url_put = f'{self.url}/{self.contentbasetext.uuid}/'
-        request = self.factory.put(
-            url_put,
-            json.dumps(data),
-            content_type='application/json'
-        )
+        url_put = f"{self.url}/{self.contentbasetext.uuid}/"
+        request = self.factory.put(url_put, json.dumps(data), content_type="application/json")
         force_authenticate(request, user=self.user)
         response = self.view(
-            request,
-            content_base_uuid=str(self.content_base.uuid),
-            contentbasetext_uuid=str(self.contentbasetext.uuid)
+            request, content_base_uuid=str(self.content_base.uuid), contentbasetext_uuid=str(self.contentbasetext.uuid)
         )
         response.render()
         content = json.loads(response.content)
@@ -333,19 +253,13 @@ class TestContentBaseTextViewset(TestCase):
         mock_file_database()
         text = ""
         data = {
-            'text': text,
+            "text": text,
         }
-        url_put = f'{self.url}/{self.contentbasetext.uuid}/'
-        request = self.factory.put(
-            url_put,
-            json.dumps(data),
-            content_type='application/json'
-        )
+        url_put = f"{self.url}/{self.contentbasetext.uuid}/"
+        request = self.factory.put(url_put, json.dumps(data), content_type="application/json")
         force_authenticate(request, user=self.user)
         response = self.view(
-            request,
-            content_base_uuid=str(self.content_base.uuid),
-            contentbasetext_uuid=str(self.contentbasetext.uuid)
+            request, content_base_uuid=str(self.content_base.uuid), contentbasetext_uuid=str(self.contentbasetext.uuid)
         )
         response.render()
         content = json.loads(response.content)
@@ -354,16 +268,12 @@ class TestContentBaseTextViewset(TestCase):
 
 
 class TestContentBaseLinkViewset(TestCase):
-
     def setUp(self):
         self.factory = APIRequestFactory()
 
         self.org = OrgFactory()
         self.user = self.org.created_by
-        self.project = self.org.projects.create(
-            name="Project",
-            created_by=self.org.created_by
-        )
+        self.project = self.org.projects.create(name="Project", created_by=self.org.created_by)
         self.project.authorizations.create(user=self.user, role=3)
         self.integrated_intelligence = create_base_brain_structure(self.project)
         self.intelligence = self.integrated_intelligence.intelligence
@@ -371,10 +281,9 @@ class TestContentBaseLinkViewset(TestCase):
         self.contentbaselink = self.__create_content_base_link(self.content_base)
 
         self.task_uuid = ContentBaseLinkTaskManager.objects.create(
-            content_base_link=self.contentbaselink,
-            created_by=self.user
+            content_base_link=self.contentbaselink, created_by=self.user
         )
-        self.url = f'{self.content_base.uuid}/content-bases-link'
+        self.url = f"{self.content_base.uuid}/content-bases-link"
 
     def __create_content_base_link(self, content_base):
         contentbaselink = ContentBaseLinkFactory()
@@ -393,74 +302,61 @@ class TestContentBaseLinkViewset(TestCase):
             "Authorization": f"Bearer {settings.SENTENX_UPDATE_TASK_TOKEN}",
         }
         request = self.factory.patch(
-            "/v1/content-base-file",
-            data=json.dumps(data),
-            content_type='application/json',
-            headers=headers
+            "/v1/content-base-file", data=json.dumps(data), content_type="application/json", headers=headers
         )
-        response = SentenxIndexerUpdateFile.as_view()(
-            request
-        )
+        response = SentenxIndexerUpdateFile.as_view()(request)
         self.assertEqual(response.status_code, 200)
 
     def test_list(self):
-        url_retrieve = f'{self.url}'
+        url_retrieve = f"{self.url}"
         request = self.factory.get(url_retrieve)
 
         force_authenticate(request, user=self.user)
 
-        response = ContentBaseLinkViewset.as_view({'get': 'list'})(
-            request,
-            content_base_uuid=str(self.content_base.uuid),
-            contentbaselink_uuid=str(self.contentbaselink.uuid)
+        response = ContentBaseLinkViewset.as_view({"get": "list"})(
+            request, content_base_uuid=str(self.content_base.uuid), contentbaselink_uuid=str(self.contentbaselink.uuid)
         )
         self.assertEqual(response.status_code, 200)
 
     def test_retrieve(self):
-        url_retrieve = f'{self.url}/{self.contentbaselink.uuid}/'
+        url_retrieve = f"{self.url}/{self.contentbaselink.uuid}/"
         request = self.factory.get(url_retrieve)
 
         force_authenticate(request, user=self.user)
 
-        response = ContentBaseLinkViewset.as_view({'get': 'retrieve'})(
-            request,
-            content_base_uuid=str(self.content_base.uuid),
-            contentbaselink_uuid=str(self.contentbaselink.uuid)
+        response = ContentBaseLinkViewset.as_view({"get": "retrieve"})(
+            request, content_base_uuid=str(self.content_base.uuid), contentbaselink_uuid=str(self.contentbaselink.uuid)
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data.get("status"), TaskManager.STATUS_WAITING)
 
-    @mock.patch('nexus.task_managers.tasks.send_link.delay')
+    @mock.patch("nexus.task_managers.tasks.send_link.delay")
     def test_create(self, mock_send_link_delay):
         # Mock the send_link.delay task to run synchronously
         def mock_send_link_sync(link, user_email, content_base_link_uuid):
-            from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
             from nexus.intelligences.models import ContentBaseLink
+            from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
+
             content_base_link = ContentBaseLink.objects.get(uuid=content_base_link_uuid)
             task_manager = CeleryTaskManagerUseCase().create_celery_link_manager(content_base_link=content_base_link)
             return {"task_uuid": task_manager.uuid}
-        
+
         mock_send_link_delay.side_effect = mock_send_link_sync
-        
+
         data = {
-            'link': 'https://example.com/',
+            "link": "https://example.com/",
         }
         request = self.factory.post(self.url, data)
 
         force_authenticate(request, user=self.user)
 
-        response = ContentBaseLinkViewset.as_view({'post': 'create'})(
-            request,
-            content_base_uuid=str(self.content_base.uuid)
+        response = ContentBaseLinkViewset.as_view({"post": "create"})(
+            request, content_base_uuid=str(self.content_base.uuid)
         )
         obj_uuid = response.data.get("uuid")
         content_base_task_manager = ContentBaseLinkTaskManager.objects.get(content_base_link__uuid=obj_uuid)
 
-        self.sentenx_indexer_update_file(
-            task_uuid=str(content_base_task_manager.uuid),
-            status=True,
-            file_type="link"
-        )
+        self.sentenx_indexer_update_file(task_uuid=str(content_base_task_manager.uuid), status=True, file_type="link")
         self.assertEqual(response.status_code, 201)
 
         content_base_task_manager = ContentBaseLinkTaskManager.objects.get(content_base_link__uuid=obj_uuid)
@@ -468,53 +364,48 @@ class TestContentBaseLinkViewset(TestCase):
 
 
 class TestContentBasePersonalizationViewSet(TestCase):
-
     def setUp(self) -> None:
         self.factory = APIRequestFactory()
         self.content_base = ContentBaseFactory(is_router=True)
-        
+
         self.org = self.content_base.intelligence.org
         self.user = self.org.created_by
         self.project = ProjectFactory(
-            brain_on=True,
-            name=self.content_base.intelligence.name,
-            org=self.org,
-            created_by=self.user
+            brain_on=True, name=self.content_base.intelligence.name, org=self.org, created_by=self.user
         )
         # Use the same intelligence as the content_base
         IntegratedIntelligenceFactory(
-            intelligence=self.content_base.intelligence,
-            project=self.project,
-            created_by=self.user
+            intelligence=self.content_base.intelligence, project=self.project, created_by=self.user
         )
-        
+
         # Get the actual content base that the view will use
         from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+
         actual_content_base = get_default_content_base_by_project(str(self.project.uuid))
-        
+
         # Create instruction on the actual content base that will be used
         from nexus.intelligences.models import ContentBaseInstruction
+
         self.instruction_1 = ContentBaseInstruction.objects.create(
-            content_base=actual_content_base,
-            instruction="Test instruction"
+            content_base=actual_content_base, instruction="Test instruction"
         )
-        
+
         # Create a team with human support data
         self.team = Team.objects.create(
             project=self.project,
             external_id="test-supervisor-id",
             human_support=True,
-            human_support_prompt="Test human support prompt"
+            human_support_prompt="Test human support prompt",
         )
-        self.url = f'{self.project.uuid}/customization'
+        self.url = f"{self.project.uuid}/customization"
 
     def test_get_personalization(self):
-        url_retrieve = f'{self.url}/'
+        url_retrieve = f"{self.url}/"
         request = self.factory.get(url_retrieve)
 
         force_authenticate(request, user=self.user)
 
-        response = ContentBasePersonalizationViewSet.as_view({'get': 'list'})(
+        response = ContentBasePersonalizationViewSet.as_view({"get": "list"})(
             request,
             project_uuid=str(self.project.uuid),
         )
@@ -524,23 +415,22 @@ class TestContentBasePersonalizationViewSet(TestCase):
         response.render()
         content = json.loads(response.content)
 
-        self.assertIn('team', content)
-        team_data = content['team']
+        self.assertIn("team", content)
+        team_data = content["team"]
         self.assertIsNotNone(team_data)
-        self.assertEqual(team_data['human_support'], True)
-        self.assertEqual(team_data['human_support_prompt'], "Test human support prompt")
+        self.assertEqual(team_data["human_support"], True)
+        self.assertEqual(team_data["human_support_prompt"], "Test human support prompt")
 
     def test_get_personalization_without_team(self):
-
         # Delete existing team
         Team.objects.all().delete()
 
-        url_retrieve = f'{self.url}/'
+        url_retrieve = f"{self.url}/"
         request = self.factory.get(url_retrieve)
 
         force_authenticate(request, user=self.user)
 
-        response = ContentBasePersonalizationViewSet.as_view({'get': 'list'})(
+        response = ContentBasePersonalizationViewSet.as_view({"get": "list"})(
             request,
             project_uuid=str(self.project.uuid),
         )
@@ -551,19 +441,19 @@ class TestContentBasePersonalizationViewSet(TestCase):
         content = json.loads(response.content)
 
         # Validate team data contains project data when no team exists
-        self.assertIn('team', content)
-        team_data = content['team']
+        self.assertIn("team", content)
+        team_data = content["team"]
         self.assertIsNotNone(team_data)
         # When no team exists, it should return project's human support data
-        self.assertIn('human_support', team_data)
-        self.assertIn('human_support_prompt', team_data)
+        self.assertIn("human_support", team_data)
+        self.assertIn("human_support_prompt", team_data)
 
     def test_get_personalization_external_token(self):
-        url_retrieve = f'{self.url}/'
+        url_retrieve = f"{self.url}/"
         headers = {"Authorization": f"Bearer {settings.WENIGPT_FLOWS_SEARCH_TOKEN}"}
 
         request = self.factory.get(url_retrieve, headers=headers)
-        response = ContentBasePersonalizationViewSet.as_view({'get': 'list'})(
+        response = ContentBasePersonalizationViewSet.as_view({"get": "list"})(
             request,
             project_uuid=str(self.project.uuid),
         )
@@ -572,61 +462,50 @@ class TestContentBasePersonalizationViewSet(TestCase):
         # Validate team data in response
         response.render()
         content = json.loads(response.content)
-        self.assertIn('team', content)
-        team_data = content['team']
+        self.assertIn("team", content)
+        team_data = content["team"]
         self.assertIsNotNone(team_data)
-        self.assertEqual(team_data['human_support'], True)
-        self.assertEqual(team_data['human_support_prompt'], "Test human support prompt")
+        self.assertEqual(team_data["human_support"], True)
+        self.assertEqual(team_data["human_support_prompt"], "Test human support prompt")
 
     def test_update_personalization(self):
-        url_update = f'{self.url}/'
+        url_update = f"{self.url}/"
 
         data = {
-            "agent": {
-                "name": "Doris Update",
-                "role": "Sales",
-                "personality": "Creative",
-                "goal": "Sell"
-            },
-            "instructions": [
-                {
-                    "id": self.instruction_1.id,
-                    "instruction": "Be friendly"
-                }
-            ]
+            "agent": {"name": "Doris Update", "role": "Sales", "personality": "Creative", "goal": "Sell"},
+            "instructions": [{"id": self.instruction_1.id, "instruction": "Be friendly"}],
         }
-        request = self.factory.put(url_update, data=data, format='json')
+        request = self.factory.put(url_update, data=data, format="json")
         force_authenticate(request, user=self.user)
 
-        response = ContentBasePersonalizationViewSet.as_view({'put': 'update'})(
+        response = ContentBasePersonalizationViewSet.as_view({"put": "update"})(
             request,
             data,
             project_uuid=str(self.project.uuid),
-            format='json',
+            format="json",
         )
         self.assertEqual(response.status_code, 200)
 
     def test_delete_personalization(self):
-        url_update = f'{self.url}/?id={self.instruction_1.id}'
-        request = self.factory.delete(url_update, format='json')
+        url_update = f"{self.url}/?id={self.instruction_1.id}"
+        request = self.factory.delete(url_update, format="json")
         force_authenticate(request, user=self.user)
 
-        response = ContentBasePersonalizationViewSet.as_view({'delete': 'destroy'})(
+        response = ContentBasePersonalizationViewSet.as_view({"delete": "destroy"})(
             request,
             project_uuid=str(self.project.uuid),
-            format='json',
+            format="json",
         )
         self.assertEqual(response.status_code, 200)
 
 
 class TestRetailRouterViewset(APITestCase):
-
     def setUp(self):
         self.factory = APIRequestFactory()
         self.ii = IntegratedIntelligenceFactory()
         self.user = self.ii.created_by
         self.project = self.ii.project
-        self.url = reverse('project-commerce-router', kwargs={'project_uuid': str(self.project.uuid)})
+        self.url = reverse("project-commerce-router", kwargs={"project_uuid": str(self.project.uuid)})
         self.view = RouterRetailViewSet.as_view()
 
         content_type = ContentType.objects.get_for_model(self.user)
@@ -637,24 +516,19 @@ class TestRetailRouterViewset(APITestCase):
         )
         self.user.user_permissions.add(permission)
 
-    @mock.patch('django.conf.settings.DEFAULT_RETAIL_INSTRUCTIONS', ['Try to use emojis', 'Dont change the subject'])
+    @mock.patch("django.conf.settings.DEFAULT_RETAIL_INSTRUCTIONS", ["Try to use emojis", "Dont change the subject"])
     def test_list(self):
-
         data = {
             "agent": {
                 "name": "test",
                 "role": "Doubt analyst",
                 "personality": "Friendly",
-                "goal": "Answer user questions"
+                "goal": "Answer user questions",
             },
-            "links": [
-                "https://www.example.org/",
-                "https://www.example2.com/",
-                "https://www.example3.com.br/"
-            ]
+            "links": ["https://www.example.org/", "https://www.example2.com/", "https://www.example3.com.br/"],
         }
 
-        request = self.factory.post(self.url, data=data, format='json')
+        request = self.factory.post(self.url, data=data, format="json")
         force_authenticate(request, user=self.user)
         response = self.view(request, project_uuid=str(self.project.uuid))
         response.render()
@@ -663,25 +537,24 @@ class TestRetailRouterViewset(APITestCase):
 
         response_json = json.loads(response.content)
 
-        instructions = response_json.get('personalization').get('instructions')
+        instructions = response_json.get("personalization").get("instructions")
 
         self.assertEqual(len(instructions), 2)
-        self.assertEqual(instructions[0]['instruction'], 'Try to use emojis')
-        self.assertEqual(instructions[1]['instruction'], 'Dont change the subject')
+        self.assertEqual(instructions[0]["instruction"], "Try to use emojis")
+        self.assertEqual(instructions[1]["instruction"], "Dont change the subject")
 
-    @mock.patch('django.conf.settings.DEFAULT_RETAIL_INSTRUCTIONS', ['Try to use emojis', 'Dont change the subject'])
+    @mock.patch("django.conf.settings.DEFAULT_RETAIL_INSTRUCTIONS", ["Try to use emojis", "Dont change the subject"])
     def test_without_links(self):
-
         data = {
             "agent": {
                 "name": "test",
                 "role": "Doubt analyst",
                 "personality": "Friendly",
-                "goal": "Answer user questions"
+                "goal": "Answer user questions",
             }
         }
 
-        request = self.factory.post(self.url, data=data, format='json')
+        request = self.factory.post(self.url, data=data, format="json")
         force_authenticate(request, user=self.user)
         response = self.view(request, project_uuid=str(self.project.uuid))
         response.render()
@@ -689,21 +562,23 @@ class TestRetailRouterViewset(APITestCase):
         self.assertEqual(response.status_code, 200)
 
         response_json = json.loads(response.content)
-        instructions = response_json.get('personalization').get('instructions')
+        instructions = response_json.get("personalization").get("instructions")
 
         self.assertEqual(len(instructions), 2)
-        self.assertEqual(response_json.get('links'), None)
+        self.assertEqual(response_json.get("links"), None)
 
 
 class TestTopicsViewSet(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
-        self.view = TopicsViewSet.as_view({
-            'get': 'list',
-            'post': 'create',
-            'put': 'update',
-            'delete': 'destroy',
-        })
+        self.view = TopicsViewSet.as_view(
+            {
+                "get": "list",
+                "post": "create",
+                "put": "update",
+                "delete": "destroy",
+            }
+        )
 
         self.topic = TopicsFactory()
         self.project = self.topic.project
@@ -711,30 +586,24 @@ class TestTopicsViewSet(TestCase):
 
         self.external_token = "test-external-token"
 
-        self.url = f'{self.project.uuid}/topics'
+        self.url = f"{self.project.uuid}/topics"
 
     def test_get_queryset_with_valid_project(self):
         request = self.factory.get(self.url)
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=str(self.project.uuid)
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=str(self.project.uuid))
 
         self.assertEqual(response.status_code, 200)
 
     def test_get_queryset_with_invalid_project(self):
         invalid_project_uuid = "00000000-0000-0000-0000-000000000000"
-        request = self.factory.get(f'{invalid_project_uuid}/topics')
+        request = self.factory.get(f"{invalid_project_uuid}/topics")
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=invalid_project_uuid
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=invalid_project_uuid)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 0)
@@ -743,137 +612,108 @@ class TestTopicsViewSet(TestCase):
         request = self.factory.get(self.url)
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=str(self.project.uuid)
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=str(self.project.uuid))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]['name'], self.topic.name)
-        self.assertEqual(response.data[0]['uuid'], str(self.topic.uuid))
-        self.assertEqual(response.data[0]['description'], self.topic.description)
-        self.assertIn('subtopic', response.data[0])
+        self.assertEqual(response.data[0]["name"], self.topic.name)
+        self.assertEqual(response.data[0]["uuid"], str(self.topic.uuid))
+        self.assertEqual(response.data[0]["description"], self.topic.description)
+        self.assertIn("subtopic", response.data[0])
 
     def test_retrieve_topic(self):
-        url_retrieve = f'{self.url}/{self.topic.uuid}/'
+        url_retrieve = f"{self.url}/{self.topic.uuid}/"
         request = self.factory.get(url_retrieve)
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = TopicsViewSet.as_view({'get': 'retrieve'})(
-                request,
-                project_uuid=str(self.project.uuid),
-                uuid=str(self.topic.uuid)
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = TopicsViewSet.as_view({"get": "retrieve"})(
+                request, project_uuid=str(self.project.uuid), uuid=str(self.topic.uuid)
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['name'], self.topic.name)
-        self.assertEqual(response.data['uuid'], str(self.topic.uuid))
-        self.assertEqual(response.data['description'], self.topic.description)
-        self.assertIn('subtopic', response.data)
+        self.assertEqual(response.data["name"], self.topic.name)
+        self.assertEqual(response.data["uuid"], str(self.topic.uuid))
+        self.assertEqual(response.data["description"], self.topic.description)
+        self.assertIn("subtopic", response.data)
 
     def test_create_topic(self):
         data = {
-            'name': 'New Test Topic',
-            'description': 'Test topic description',
+            "name": "New Test Topic",
+            "description": "Test topic description",
         }
-        request = self.factory.post(self.url, data, format='json')
+        request = self.factory.post(self.url, data, format="json")
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=str(self.project.uuid)
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=str(self.project.uuid))
 
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['name'], data['name'])
-        self.assertEqual(response.data['description'], data['description'])
-        self.assertIn('uuid', response.data)
-        self.assertIn('created_at', response.data)
+        self.assertEqual(response.data["name"], data["name"])
+        self.assertEqual(response.data["description"], data["description"])
+        self.assertIn("uuid", response.data)
+        self.assertIn("created_at", response.data)
 
     def test_create_topic_without_project_uuid(self):
         data = {
-            'name': 'New Test Topic',
-            'description': 'Test topic description',
+            "name": "New Test Topic",
+            "description": "Test topic description",
         }
-        request = self.factory.post('/invalid/topics/', data, format='json')
+        request = self.factory.post("/invalid/topics/", data, format="json")
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=None
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=None)
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn('error', response.data)
+        self.assertIn("error", response.data)
 
     def test_create_topic_with_invalid_project(self):
         data = {
-            'name': 'New Test Topic',
-            'description': 'Test topic description',
+            "name": "New Test Topic",
+            "description": "Test topic description",
         }
         invalid_project_uuid = "00000000-0000-0000-0000-000000000000"
-        request = self.factory.post(f'{invalid_project_uuid}/topics/', data, format='json')
+        request = self.factory.post(f"{invalid_project_uuid}/topics/", data, format="json")
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=invalid_project_uuid
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=invalid_project_uuid)
 
         self.assertEqual(response.status_code, 404)
-        self.assertIn('error', response.data)
+        self.assertIn("error", response.data)
 
     def test_update_topic(self):
         data = {
-            'name': 'Updated Topic Name',
-            'description': 'Updated topic description',
+            "name": "Updated Topic Name",
+            "description": "Updated topic description",
         }
-        url_put = f'{self.url}/{self.topic.uuid}/'
-        request = self.factory.put(
-            url_put,
-            json.dumps(data),
-            content_type='application/json'
-        )
+        url_put = f"{self.url}/{self.topic.uuid}/"
+        request = self.factory.put(url_put, json.dumps(data), content_type="application/json")
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=str(self.project.uuid),
-                uuid=str(self.topic.uuid)
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=str(self.project.uuid), uuid=str(self.topic.uuid))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['name'], data['name'])
-        self.assertEqual(response.data['description'], data['description'])
+        self.assertEqual(response.data["name"], data["name"])
+        self.assertEqual(response.data["description"], data["description"])
 
     def test_delete_topic(self):
-        url_delete = f'{self.url}/{self.topic.uuid}/'
+        url_delete = f"{self.url}/{self.topic.uuid}/"
         request = self.factory.delete(url_delete)
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=str(self.project.uuid),
-                uuid=str(self.topic.uuid)
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=str(self.project.uuid), uuid=str(self.topic.uuid))
 
         self.assertEqual(response.status_code, 204)
 
     def test_authentication_required(self):
         request = self.factory.get(self.url)
 
-        response = self.view(
-            request,
-            project_uuid=str(self.project.uuid)
-        )
+        response = self.view(request, project_uuid=str(self.project.uuid))
 
         self.assertEqual(response.status_code, 403)
 
@@ -881,12 +721,14 @@ class TestTopicsViewSet(TestCase):
 class TestSubTopicsViewSet(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
-        self.view = SubTopicsViewSet.as_view({
-            'get': 'list',
-            'post': 'create',
-            'put': 'update',
-            'delete': 'destroy',
-        })
+        self.view = SubTopicsViewSet.as_view(
+            {
+                "get": "list",
+                "post": "create",
+                "put": "update",
+                "delete": "destroy",
+            }
+        )
 
         # Create test data
         self.subtopic = SubTopicsFactory()
@@ -895,34 +737,26 @@ class TestSubTopicsViewSet(TestCase):
 
         self.external_token = "test-external-token"
 
-        self.url = f'{self.project.uuid}/topics/{self.topic.uuid}/subtopics'
+        self.url = f"{self.project.uuid}/topics/{self.topic.uuid}/subtopics"
 
     def test_get_queryset_with_valid_topic(self):
         """Test that get_queryset returns subtopics for a valid topic"""
         request = self.factory.get(self.url)
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=str(self.project.uuid),
-                topic_uuid=str(self.topic.uuid)
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=str(self.project.uuid), topic_uuid=str(self.topic.uuid))
 
         self.assertEqual(response.status_code, 200)
 
     def test_get_queryset_with_invalid_topic(self):
         """Test that get_queryset returns empty for invalid topic"""
         invalid_topic_uuid = "00000000-0000-0000-0000-000000000000"
-        request = self.factory.get(f'{self.project.uuid}/topics/{invalid_topic_uuid}/subtopics')
+        request = self.factory.get(f"{self.project.uuid}/topics/{invalid_topic_uuid}/subtopics")
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=str(self.project.uuid),
-                topic_uuid=invalid_topic_uuid
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=str(self.project.uuid), topic_uuid=invalid_topic_uuid)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 0)
@@ -932,147 +766,127 @@ class TestSubTopicsViewSet(TestCase):
         request = self.factory.get(self.url)
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=str(self.project.uuid),
-                topic_uuid=str(self.topic.uuid)
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=str(self.project.uuid), topic_uuid=str(self.topic.uuid))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]['name'], self.subtopic.name)
-        self.assertEqual(response.data[0]['uuid'], str(self.subtopic.uuid))
-        self.assertEqual(response.data[0]['description'], self.subtopic.description)
-        self.assertEqual(str(response.data[0]['topic_uuid']), str(self.topic.uuid))
-        self.assertEqual(response.data[0]['topic_name'], self.topic.name)
-        self.assertIn('topic_uuid', response.data[0])
-        self.assertIn('topic_name', response.data[0])
+        self.assertEqual(response.data[0]["name"], self.subtopic.name)
+        self.assertEqual(response.data[0]["uuid"], str(self.subtopic.uuid))
+        self.assertEqual(response.data[0]["description"], self.subtopic.description)
+        self.assertEqual(str(response.data[0]["topic_uuid"]), str(self.topic.uuid))
+        self.assertEqual(response.data[0]["topic_name"], self.topic.name)
+        self.assertIn("topic_uuid", response.data[0])
+        self.assertIn("topic_name", response.data[0])
 
     def test_retrieve_subtopic(self):
         """Test retrieving a specific subtopic"""
-        url_retrieve = f'{self.url}/{self.subtopic.uuid}/'
+        url_retrieve = f"{self.url}/{self.subtopic.uuid}/"
         request = self.factory.get(url_retrieve)
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = SubTopicsViewSet.as_view({'get': 'retrieve'})(
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = SubTopicsViewSet.as_view({"get": "retrieve"})(
                 request,
                 project_uuid=str(self.project.uuid),
                 topic_uuid=str(self.topic.uuid),
-                uuid=str(self.subtopic.uuid)
+                uuid=str(self.subtopic.uuid),
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['name'], self.subtopic.name)
-        self.assertEqual(response.data['uuid'], str(self.subtopic.uuid))
-        self.assertEqual(response.data['description'], self.subtopic.description)
-        self.assertEqual(str(response.data['topic_uuid']), str(self.topic.uuid))
-        self.assertEqual(response.data['topic_name'], self.topic.name)
-        self.assertIn('topic_uuid', response.data)
-        self.assertIn('topic_name', response.data)
+        self.assertEqual(response.data["name"], self.subtopic.name)
+        self.assertEqual(response.data["uuid"], str(self.subtopic.uuid))
+        self.assertEqual(response.data["description"], self.subtopic.description)
+        self.assertEqual(str(response.data["topic_uuid"]), str(self.topic.uuid))
+        self.assertEqual(response.data["topic_name"], self.topic.name)
+        self.assertIn("topic_uuid", response.data)
+        self.assertIn("topic_name", response.data)
 
     def test_create_subtopic(self):
         """Test creating a new subtopic"""
         data = {
-            'name': 'New Test Subtopic',
-            'description': 'Test subtopic description',
+            "name": "New Test Subtopic",
+            "description": "Test subtopic description",
         }
-        request = self.factory.post(self.url, data, format='json')
+        request = self.factory.post(self.url, data, format="json")
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=str(self.project.uuid),
-                topic_uuid=str(self.topic.uuid)
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=str(self.project.uuid), topic_uuid=str(self.topic.uuid))
 
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['name'], data['name'])
-        self.assertEqual(response.data['description'], data['description'])
-        self.assertEqual(str(response.data['topic_uuid']), str(self.topic.uuid))
-        self.assertEqual(response.data['topic_name'], self.topic.name)
-        self.assertIn('uuid', response.data)
-        self.assertIn('created_at', response.data)
+        self.assertEqual(response.data["name"], data["name"])
+        self.assertEqual(response.data["description"], data["description"])
+        self.assertEqual(str(response.data["topic_uuid"]), str(self.topic.uuid))
+        self.assertEqual(response.data["topic_name"], self.topic.name)
+        self.assertIn("uuid", response.data)
+        self.assertIn("created_at", response.data)
 
     def test_create_subtopic_without_topic_uuid(self):
         """Test creating a subtopic without topic_uuid should fail"""
         data = {
-            'name': 'New Test Subtopic',
-            'description': 'Test subtopic description',
+            "name": "New Test Subtopic",
+            "description": "Test subtopic description",
         }
-        request = self.factory.post('/invalid/subtopics/', data, format='json')
+        request = self.factory.post("/invalid/subtopics/", data, format="json")
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=str(self.project.uuid),
-                topic_uuid=None
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=str(self.project.uuid), topic_uuid=None)
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn('error', response.data)
+        self.assertIn("error", response.data)
 
     def test_create_subtopic_with_invalid_topic(self):
         """Test creating a subtopic with invalid topic should fail"""
         data = {
-            'name': 'New Test Subtopic',
-            'description': 'Test subtopic description',
+            "name": "New Test Subtopic",
+            "description": "Test subtopic description",
         }
         invalid_topic_uuid = "00000000-0000-0000-0000-000000000000"
-        request = self.factory.post(f'{self.project.uuid}/topics/{invalid_topic_uuid}/subtopics/', data, format='json')
+        request = self.factory.post(f"{self.project.uuid}/topics/{invalid_topic_uuid}/subtopics/", data, format="json")
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=str(self.project.uuid),
-                topic_uuid=invalid_topic_uuid
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=str(self.project.uuid), topic_uuid=invalid_topic_uuid)
 
         self.assertEqual(response.status_code, 404)
-        self.assertIn('error', response.data)
+        self.assertIn("error", response.data)
 
     def test_update_subtopic(self):
         """Test updating a subtopic"""
         data = {
-            'name': 'Updated Subtopic Name',
-            'description': 'Updated subtopic description',
+            "name": "Updated Subtopic Name",
+            "description": "Updated subtopic description",
         }
-        url_put = f'{self.url}/{self.subtopic.uuid}/'
-        request = self.factory.put(
-            url_put,
-            json.dumps(data),
-            content_type='application/json'
-        )
+        url_put = f"{self.url}/{self.subtopic.uuid}/"
+        request = self.factory.put(url_put, json.dumps(data), content_type="application/json")
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
             response = self.view(
                 request,
                 project_uuid=str(self.project.uuid),
                 topic_uuid=str(self.topic.uuid),
-                uuid=str(self.subtopic.uuid)
+                uuid=str(self.subtopic.uuid),
             )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['name'], data['name'])
-        self.assertEqual(response.data['description'], data['description'])
+        self.assertEqual(response.data["name"], data["name"])
+        self.assertEqual(response.data["description"], data["description"])
 
     def test_delete_subtopic(self):
         """Test deleting a subtopic"""
-        url_delete = f'{self.url}/{self.subtopic.uuid}/'
+        url_delete = f"{self.url}/{self.subtopic.uuid}/"
         request = self.factory.delete(url_delete)
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
             response = self.view(
                 request,
                 project_uuid=str(self.project.uuid),
                 topic_uuid=str(self.topic.uuid),
-                uuid=str(self.subtopic.uuid)
+                uuid=str(self.subtopic.uuid),
             )
 
         self.assertEqual(response.status_code, 204)
@@ -1082,11 +896,7 @@ class TestSubTopicsViewSet(TestCase):
         request = self.factory.get(self.url)
         # No Authorization header
 
-        response = self.view(
-            request,
-            project_uuid=str(self.project.uuid),
-            topic_uuid=str(self.topic.uuid)
-        )
+        response = self.view(request, project_uuid=str(self.project.uuid), topic_uuid=str(self.topic.uuid))
 
         self.assertEqual(response.status_code, 403)
 
@@ -1097,53 +907,45 @@ class TestSubTopicsViewSet(TestCase):
 
         # Create a subtopic for the first topic
         subtopic_data = {
-            'name': 'Subtopic for First Topic',
-            'description': 'Test subtopic description',
+            "name": "Subtopic for First Topic",
+            "description": "Test subtopic description",
         }
-        request = self.factory.post(self.url, subtopic_data, format='json')
+        request = self.factory.post(self.url, subtopic_data, format="json")
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
-            response = self.view(
-                request,
-                project_uuid=str(self.project.uuid),
-                topic_uuid=str(self.topic.uuid)
-            )
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
+            response = self.view(request, project_uuid=str(self.project.uuid), topic_uuid=str(self.topic.uuid))
 
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['description'], subtopic_data['description'])
-        self.assertEqual(str(response.data['topic_uuid']), str(self.topic.uuid))
-        self.assertEqual(response.data['topic_name'], self.topic.name)
+        self.assertEqual(response.data["description"], subtopic_data["description"])
+        self.assertEqual(str(response.data["topic_uuid"]), str(self.topic.uuid))
+        self.assertEqual(response.data["topic_name"], self.topic.name)
 
         # Verify the subtopic belongs to the correct topic
         from nexus.intelligences.models import SubTopics
-        created_subtopic = SubTopics.objects.get(uuid=response.data['uuid'])
+
+        created_subtopic = SubTopics.objects.get(uuid=response.data["uuid"])
         self.assertEqual(created_subtopic.topic, self.topic)
         self.assertNotEqual(created_subtopic.topic, another_topic)
 
 
 @freeze_time("2025-01-23 10:00:00")
 class TestSupervisorViewset(TestCase):
-
     def setUp(self):
         """Set up test data and client"""
         # Create test user
-        self.user = User.objects.create_user(
-            email='test@example.com',
-            password='testpass123'
-        )
+        self.user = User.objects.create_user(email="test@example.com", password="testpass123")
 
         # Create test project
         self.project = ProjectFactory(
             created_by=self.user,
         )
-        
+
         # Give the user permission to access the project
         from nexus.projects.models import ProjectAuth, ProjectAuthorizationRole
+
         ProjectAuth.objects.update_or_create(
-            user=self.user,
-            project=self.project,
-            defaults={'role': ProjectAuthorizationRole.MODERATOR.value}
+            user=self.user, project=self.project, defaults={"role": ProjectAuthorizationRole.MODERATOR.value}
         )
 
         # Create test topics
@@ -1158,7 +960,7 @@ class TestSupervisorViewset(TestCase):
             resolution="2",  # In Progress
             has_chats_room=True,
             contact_urn="whatsapp:5511999999999",
-            external_id="12345"
+            external_id="12345",
         )
 
         self.conversation2 = ConversationFactory(
@@ -1168,7 +970,7 @@ class TestSupervisorViewset(TestCase):
             resolution="2",  # In Progress
             has_chats_room=False,
             contact_urn="whatsapp:5511888888888",
-            external_id="67890"
+            external_id="67890",
         )
 
         # Create API client
@@ -1176,13 +978,13 @@ class TestSupervisorViewset(TestCase):
         self.client.force_authenticate(user=self.user)
 
         # Base URL for supervisor endpoints
-        self.base_url = reverse('supervisor', kwargs={'project_uuid': self.project.uuid})
+        self.base_url = reverse("supervisor", kwargs={"project_uuid": self.project.uuid})
 
     def _get_supervisor_list_url(self, **params):
         """Helper method to get supervisor list URL with query parameters"""
         url = self.base_url
         if params:
-            query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+            query_string = "&".join([f"{k}={v}" for k, v in params.items()])
             url = f"{url}?{query_string}"
         return url
 
@@ -1191,59 +993,55 @@ class TestSupervisorViewset(TestCase):
         start_date = "24-12-2024"
         end_date = "24-01-2025"
 
-        url = self._get_supervisor_list_url(
-            start_date=start_date,
-            end_date=end_date
-        )
+        url = self._get_supervisor_list_url(start_date=start_date, end_date=end_date)
         response = self.client.get(url)
 
         # Assertions
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Check pagination structure
-        self.assertIn('count', response.data)
-        self.assertIn('next', response.data)
-        self.assertIn('previous', response.data)
-        self.assertIn('results', response.data)
+        self.assertIn("count", response.data)
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
+        self.assertIn("results", response.data)
 
         # Get the actual data from results
-        results = response.data['results']
+        results = response.data["results"]
         self.assertIsInstance(results, list)
 
         # Should only have conversation data now
         self.assertEqual(len(results), 2)
 
         # Check if conversations are returned
-        conversation_urns = [item['urn'] for item in results]
+        conversation_urns = [item["urn"] for item in results]
         self.assertIn(self.conversation1.contact_urn, conversation_urns)
         self.assertIn(self.conversation2.contact_urn, conversation_urns)
 
         # Verify data format
         for item in results:
             # Check required fields
-            self.assertIn('created_on', item)
-            self.assertIn('urn', item)
-            self.assertIn('uuid', item)
-            self.assertIn('external_id', item)
-            self.assertIn('csat', item)
-            self.assertIn('topic', item)
-            self.assertIn('has_chats_room', item)
-            self.assertIn('start_date', item)
-            self.assertIn('end_date', item)
-            self.assertIn('resolution', item)
-            self.assertIn('name', item)
+            self.assertIn("created_on", item)
+            self.assertIn("urn", item)
+            self.assertIn("uuid", item)
+            self.assertIn("external_id", item)
+            self.assertIn("csat", item)
+            self.assertIn("topic", item)
+            self.assertIn("has_chats_room", item)
+            self.assertIn("start_date", item)
+            self.assertIn("end_date", item)
+            self.assertIn("resolution", item)
+            self.assertIn("name", item)
 
             # Check resolution format (should not be tuple string)
-            if item['resolution']:
+            if item["resolution"]:
                 self.assertFalse(
-                    item['resolution'].startswith('('), 
-                    f"Resolution should not be tuple string: {item['resolution']}"
+                    item["resolution"].startswith("("), f"Resolution should not be tuple string: {item['resolution']}"
                 )
 
             # Check date format
-            self.assertIsInstance(item['created_on'], str)
-            self.assertIsInstance(item['start_date'], str)
-            self.assertIsInstance(item['end_date'], str)
+            self.assertIsInstance(item["created_on"], str)
+            self.assertIsInstance(item["start_date"], str)
+            self.assertIsInstance(item["end_date"], str)
 
     def test_list_supervisor_data_with_topic_filter(self):
         """Test listing supervisor data with topic filter"""
@@ -1251,8 +1049,8 @@ class TestSupervisorViewset(TestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['topic'], "Customer Support")
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["topic"], "Customer Support")
 
     def test_list_supervisor_data_with_csat_filter(self):
         """Test listing supervisor data with csat filter"""
@@ -1260,8 +1058,8 @@ class TestSupervisorViewset(TestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['csat'], "1")
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["csat"], "1")
 
     def test_list_supervisor_data_with_resolution_filter(self):
         """Test listing supervisor data with resolution filter"""
@@ -1270,7 +1068,7 @@ class TestSupervisorViewset(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Both conversations should have resolution=2 (default)
-        self.assertEqual(len(response.data['results']), 2)
+        self.assertEqual(len(response.data["results"]), 2)
 
     def test_list_supervisor_data_with_has_chats_room_filter(self):
         """Test listing supervisor data with has_chats_room filter"""
@@ -1278,8 +1076,8 @@ class TestSupervisorViewset(TestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertTrue(response.data['results'][0]['has_chats_room'])
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertTrue(response.data["results"][0]["has_chats_room"])
 
     def test_list_supervisor_data_with_search_filter(self):
         """Test listing supervisor data with search filter"""
@@ -1287,8 +1085,8 @@ class TestSupervisorViewset(TestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertIn("5511999999999", response.data['results'][0]['urn'])
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertIn("5511999999999", response.data["results"][0]["urn"])
 
     def test_list_supervisor_data_with_nps_filter(self):
         """Test listing supervisor data with nps filter"""
@@ -1300,50 +1098,47 @@ class TestSupervisorViewset(TestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['nps'], 5)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["nps"], 5)
 
     def test_list_supervisor_data_with_multiple_filters(self):
         """Test listing supervisor data with multiple filters"""
-        url = self._get_supervisor_list_url(
-            topics="Customer Support",
-            has_chats_room="true",
-            csat="1"
-        )
+        url = self._get_supervisor_list_url(topics="Customer Support", has_chats_room="true", csat="1")
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['results']), 1)
-        self.assertEqual(response.data['results'][0]['topic'], "Customer Support")
-        self.assertTrue(response.data['results'][0]['has_chats_room'])
-        self.assertEqual(response.data['results'][0]['csat'], "1")
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["topic"], "Customer Support")
+        self.assertTrue(response.data["results"][0]["has_chats_room"])
+        self.assertEqual(response.data["results"][0]["csat"], "1")
 
     def test_list_supervisor_data_invalid_project_uuid(self):
         """Test listing supervisor data with invalid project UUID"""
-        url = reverse('supervisor', kwargs={'project_uuid': 'invalid-uuid'})
+        url = reverse("supervisor", kwargs={"project_uuid": "invalid-uuid"})
         response = self.client.get(url)
-        
+
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('detail', response.data)
+        self.assertIn("detail", response.data)
 
     def test_list_supervisor_data_invalid_date_format(self):
         """Test listing supervisor data with invalid date format"""
         url = self._get_supervisor_list_url(
             start_date="2024-12-24",  # Wrong format, should be DD-MM-YYYY
-            end_date="2025-01-24"
+            end_date="2025-01-24",
         )
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('error', response.data)
+        self.assertIn("error", response.data)
 
     def test_list_supervisor_data_missing_project_uuid(self):
         """Test listing supervisor data without project UUID"""
         # Use a valid UUID format but non-existent one instead of empty string
         import uuid
+
         fake_uuid = str(uuid.uuid4())
-        url = reverse('supervisor', kwargs={'project_uuid': fake_uuid})
+        url = reverse("supervisor", kwargs={"project_uuid": fake_uuid})
         response = self.client.get(url)
-        
+
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertIn('detail', response.data)
+        self.assertIn("detail", response.data)

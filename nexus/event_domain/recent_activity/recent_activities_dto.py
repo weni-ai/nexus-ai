@@ -1,8 +1,9 @@
 from dataclasses import dataclass
+
 from nexus.intelligences.models import Intelligence
+from nexus.orgs.models import Org
 from nexus.projects.models import Project
 from nexus.users.models import User
-from nexus.orgs.models import Org
 
 
 @dataclass

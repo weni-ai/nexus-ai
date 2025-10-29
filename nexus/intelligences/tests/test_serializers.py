@@ -1,31 +1,30 @@
 from django.test import TestCase
 
-from nexus.usecases.intelligences.tests.intelligence_factory import (
-    IntelligenceFactory,
-    ContentBaseFactory,
-    ContentBaseTextFactory,
-    ContentBaseFileFactory,
-    ContentBaseLinkFactory,
-    LLMFactory,
-    ContentBaseInstructionFactory,
-)
 from nexus.intelligences.api.serializers import (
-    IntelligenceSerializer,
-    ContentBaseSerializer,
-    RouterContentBaseSerializer,
-    ContentBaseTextSerializer,
+    ContentBaseAgentSerializer,
     ContentBaseFileSerializer,
-    CreatedContentBaseLinkSerializer,
+    ContentBaseInstructionSerializer,
     ContentBaseLinkSerializer,
     ContentBaseLogsSerializer,
+    ContentBasePersonalizationSerializer,
+    ContentBaseSerializer,
+    ContentBaseTextSerializer,
+    CreatedContentBaseLinkSerializer,
+    IntelligenceSerializer,
     LLMConfigSerializer,
-    ContentBaseInstructionSerializer,
-    ContentBaseAgentSerializer,
-    ContentBasePersonalizationSerializer
+    RouterContentBaseSerializer,
 )
-
-from nexus.task_managers.models import TaskManager
 from nexus.intelligences.models import ContentBaseLogs
+from nexus.task_managers.models import TaskManager
+from nexus.usecases.intelligences.tests.intelligence_factory import (
+    ContentBaseFactory,
+    ContentBaseFileFactory,
+    ContentBaseInstructionFactory,
+    ContentBaseLinkFactory,
+    ContentBaseTextFactory,
+    IntelligenceFactory,
+    LLMFactory,
+)
 
 
 class MockRequest:
@@ -40,10 +39,7 @@ class IntelligencesSerializersTestCase(TestCase):
         integrated_intelligence = self.llm.integrated_intelligence
         self.user = integrated_intelligence.created_by
 
-        self.content_base = ContentBaseFactory(
-            created_by=self.user,
-            intelligence=integrated_intelligence.intelligence
-        )
+        self.content_base = ContentBaseFactory(created_by=self.user, intelligence=integrated_intelligence.intelligence)
         self.intelligence = IntelligenceFactory()
         self.content_base_text = ContentBaseTextFactory()
         self.content_base_file = ContentBaseFileFactory()
@@ -53,25 +49,37 @@ class IntelligencesSerializersTestCase(TestCase):
     def test_intelligence_serializer(self):
         serializer = IntelligenceSerializer(self.intelligence)
         serializer_fields = list(serializer.data.keys())
-        fields = ['name', 'uuid', 'content_bases_count', 'description', 'is_router']
+        fields = ["name", "uuid", "content_bases_count", "description", "is_router"]
         self.assertListEqual(serializer_fields, fields)
 
     def test_content_base_serializer(self):
         serializer = ContentBaseSerializer(self.content_base)
         serializer_fields = list(serializer.data.keys())
-        fields = ['uuid', 'title', 'description', 'language', 'is_router']
+        fields = ["uuid", "title", "description", "language", "is_router"]
         self.assertListEqual(serializer_fields, fields)
 
     def test_router_content_base_serializer(self):
         serializer = RouterContentBaseSerializer(self.content_base)
         serializer_fields = list(serializer.data.keys())
-        fields = ['uuid', 'created_at', 'modified_at', 'is_active', 'title', 'description', 'language', 'is_router', 'created_by', 'modified_by', 'intelligence']
+        fields = [
+            "uuid",
+            "created_at",
+            "modified_at",
+            "is_active",
+            "title",
+            "description",
+            "language",
+            "is_router",
+            "created_by",
+            "modified_by",
+            "intelligence",
+        ]
         self.assertListEqual(serializer_fields, fields)
 
     def test_content_base_text_serializer(self):
         serializer = ContentBaseTextSerializer(self.content_base_text)
         serializer_fields = list(serializer.data.keys())
-        fields = ['text', 'uuid']
+        fields = ["text", "uuid"]
         self.assertListEqual(serializer_fields, fields)
 
     def test_content_base_file_serializer_status_exception(self):
@@ -84,9 +92,7 @@ class IntelligencesSerializersTestCase(TestCase):
 
     def test_content_base_file_serializer(self):
         content_base_file = ContentBaseFileFactory()
-        content_base_file.upload_tasks.create(
-            created_by=self.user
-        )
+        content_base_file.upload_tasks.create(created_by=self.user)
 
         serializer = ContentBaseFileSerializer(content_base_file)
         data = serializer.data
@@ -163,7 +169,7 @@ class IntelligencesSerializersTestCase(TestCase):
     def test_content_base_instruction_serializer(self):
         serializer = ContentBaseInstructionSerializer(self.content_base_instruction)
         serializer_fields = list(serializer.data.keys())
-        fields = ['instruction']
+        fields = ["instruction"]
         self.assertListEqual(serializer_fields, fields)
 
     def test_content_base_agent_serializer(self):
@@ -194,12 +200,7 @@ class IntelligencesSerializersTestCase(TestCase):
             }
         }
         serializer = ContentBasePersonalizationSerializer(
-            self.content_base,
-            data=data,
-            partial=True,
-            context={"request": MockRequest(
-                user=self.user
-            )}
+            self.content_base, data=data, partial=True, context={"request": MockRequest(user=self.user)}
         )
         instance = serializer.update(self.content_base, validated_data=data)
         self.assertEqual(instance.agent.name, name)
@@ -216,26 +217,17 @@ class IntelligencesSerializersTestCase(TestCase):
                 "goal": "Updated goal",
             }
         }
-        request = MockRequest(
-            user=self.user
-        )
+        request = MockRequest(user=self.user)
         request.data.update(
             {
                 "instructions": [
-                    {
-                        "id": self.content_base.instructions.first().id,
-                        "instruction": "Update"
-                    },
-                    {
-                        "instruction": "Create"
-                    }
-                ]}
+                    {"id": self.content_base.instructions.first().id, "instruction": "Update"},
+                    {"instruction": "Create"},
+                ]
+            }
         )
         serializer = ContentBasePersonalizationSerializer(
-            self.content_base,
-            data=data,
-            partial=True,
-            context={"request": MockRequest()}
+            self.content_base, data=data, partial=True, context={"request": MockRequest()}
         )
         instance = serializer.update(self.content_base, validated_data=data)
         self.assertEqual(instance.agent.name, name)

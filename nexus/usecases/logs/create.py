@@ -1,25 +1,20 @@
+from django.conf import settings
+from django.core.cache import cache
+
 from nexus.logs.models import (
     Message,
     MessageLog,
 )
-
-from django.core.cache import cache
-from django.conf import settings
 from nexus.projects.websockets.consumers import send_message_to_websocket
 
 
 class CreateLogUsecase:  # TODO: rename method
-
     def __init__(self, message=None) -> None:
         self.message = message
         if self.message:
             self.log = self.message.messagelog
 
-    def _create_redis_cache(
-        self,
-        message_log: MessageLog,
-        project_uuid: str
-    ):
+    def _create_redis_cache(self, message_log: MessageLog, project_uuid: str):
         message = message_log.message
 
         contact_urn = message.contact_urn
@@ -35,8 +30,8 @@ class CreateLogUsecase:  # TODO: rename method
                 "content_base_uuid": str(message_log.content_base.uuid),
                 "created_at": message.created_at.isoformat(),
                 "uuid": str(message.uuid),
-                "log_id": message_log.id
-            }
+                "log_id": message_log.id,
+            },
         )
 
         if len(last_5_messages) > 5:
@@ -47,11 +42,7 @@ class CreateLogUsecase:  # TODO: rename method
         cache.set(cache_key, last_5_messages, key_expiration)
 
     def create_message(self, text: str, contact_urn: str, status: str = "P") -> Message:
-        self.message = Message.objects.create(
-            text=text,
-            contact_urn=contact_urn,
-            status=status
-        )
+        self.message = Message.objects.create(text=text, contact_urn=contact_urn, status=status)
         return self.message
 
     def create_message_log(
@@ -61,12 +52,8 @@ class CreateLogUsecase:  # TODO: rename method
         source: str,
         status: str = "P",
     ) -> MessageLog:
-
         message = self.create_message(text, contact_urn, status)
-        self.log = MessageLog.objects.create(
-            message=message,
-            source=source
-        )
+        self.log = MessageLog.objects.create(message=message, source=source)
         return self.log
 
     def update_status(self, status: str, exception_text: str = None):

@@ -1,16 +1,12 @@
-from nexus.agents.encryption import encrypt_value
-from nexus.inline_agents.models import Agent, AgentCredential
-
-from nexus.projects.models import Project
-
-from nexus.usecases.inline_agents.bedrock import BedrockClient
-from nexus.usecases.inline_agents.tools import ToolsUseCase
-from nexus.usecases.inline_agents.instructions import InstructionsUseCase
-
-from nexus.intelligences.models import Conversation, ConversationMessage
-from nexus.inline_agents.models import InlineAgentMessage
-
 from typing import Dict
+
+from nexus.agents.encryption import encrypt_value
+from nexus.inline_agents.models import Agent, AgentCredential, InlineAgentMessage
+from nexus.intelligences.models import Conversation, ConversationMessage
+from nexus.projects.models import Project
+from nexus.usecases.inline_agents.bedrock import BedrockClient
+from nexus.usecases.inline_agents.instructions import InstructionsUseCase
+from nexus.usecases.inline_agents.tools import ToolsUseCase
 
 
 class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
@@ -19,9 +15,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
     def update_agent(self, agent_obj: Agent, agent_data: dict, project: Project, files: dict):
         instructions: str = self.handle_instructions(
-            agent_data.get("instructions", []),
-            agent_data.get("guardrails", []),
-            agent_data.get("components", [])
+            agent_data.get("instructions", []), agent_data.get("guardrails", []), agent_data.get("components", [])
         )
 
         agent_obj.name = agent_data["name"]
@@ -36,22 +30,20 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
     def update_credentials(self, agent: Agent, project: Project, credentials: Dict):
         if not credentials:
-            if hasattr(agent, 'inline_credentials'):
+            if hasattr(agent, "inline_credentials"):
                 agent.inline_credentials.all().delete()
             return
 
-        existing_credentials = {
-            cred.key: cred for cred in AgentCredential.objects.filter(project=project)
-        }
+        existing_credentials = {cred.key: cred for cred in AgentCredential.objects.filter(project=project)}
 
         for key, credential in credentials.items():
-            is_confidential = credential.get('is_confidential', True)
+            is_confidential = credential.get("is_confidential", True)
 
             if key in existing_credentials:
                 print(f"[+ 🧠 Updating credential {key} +]")
                 cred = existing_credentials[key]
-                cred.label = credential.get('label', key)
-                cred.placeholder = credential.get('placeholder', '')
+                cred.label = credential.get("label", key)
+                cred.placeholder = credential.get("placeholder", "")
                 cred.is_confidential = is_confidential
                 cred.save()
                 if agent not in cred.agents.all():
@@ -62,9 +54,9 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 cred = AgentCredential.objects.create(
                     project=project,
                     key=key,
-                    label=credential.get('label', key),
-                    placeholder=credential.get('placeholder', ''),
-                    is_confidential=is_confidential
+                    label=credential.get("label", key),
+                    placeholder=credential.get("placeholder", ""),
+                    is_confidential=is_confidential,
                 )
                 cred.agents.add(agent)
 
@@ -90,20 +82,23 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             return False
 
 
-class UpdateConversationUseCase():
-
+class UpdateConversationUseCase:
     def update_conversation(self, consumer_message: dict) -> Conversation:
         messages = InlineAgentMessage.objects.filter(
             created_at__gte=consumer_message.get("start_date"),
             created_at__lte=consumer_message.get("end_date"),
-            contact_urn=consumer_message.get("contact_urn")
+            contact_urn=consumer_message.get("contact_urn"),
         )
 
         if not messages.exists():
             return None
         project = Project.objects.get(uuid=consumer_message.get("project_uuid"))
 
-        conversation = Conversation.objects.filter(project=project, contact_urn=consumer_message.get("contact_urn")).order_by("-created_at").first()
+        conversation = (
+            Conversation.objects.filter(project=project, contact_urn=consumer_message.get("contact_urn"))
+            .order_by("-created_at")
+            .first()
+        )
         conversation.external_id = consumer_message.get("external_id")
         conversation.has_chats_room = consumer_message.get("has_chats_room")
         conversation.start_date = consumer_message.get("start_date")
@@ -119,19 +114,14 @@ class UpdateConversationUseCase():
         return conversation
 
 
-def update_conversation_data(
-    to_update: dict,
-    project_uuid: str,
-    contact_urn: str,
-    channel_uuid: str
-):
+def update_conversation_data(to_update: dict, project_uuid: str, contact_urn: str, channel_uuid: str):
     from nexus.intelligences.models import Conversation
 
-    conversation = Conversation.objects.filter(
-        project__uuid=project_uuid,
-        contact_urn=contact_urn,
-        channel_uuid=channel_uuid
-    ).order_by("-created_at").first()
+    conversation = (
+        Conversation.objects.filter(project__uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid)
+        .order_by("-created_at")
+        .first()
+    )
     if not conversation:
         return
     for field, value in to_update.items():

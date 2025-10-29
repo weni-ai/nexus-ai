@@ -1,15 +1,15 @@
 import json
+from typing import Dict, List
+
 import sentry_sdk
-from typing import List, Dict
 
 from nexus.celery import app as celery_app
-from nexus.inline_agents.models import InlineAgentMessage
 from nexus.event_domain.event_observer import EventObserver
+from nexus.inline_agents.models import InlineAgentMessage
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 
 class SaveTracesObserver(EventObserver):
-
     def perform(
         self,
         trace_events: List[Dict],
@@ -21,7 +21,7 @@ class SaveTracesObserver(EventObserver):
         source_type: str,
         contact_name: str,
         channel_uuid: str,
-        **kwargs
+        **kwargs,
     ):
         print("Start SaveTracesObserver")
 
@@ -29,7 +29,7 @@ class SaveTracesObserver(EventObserver):
 
         for trace_event in trace_events:
             trace_events_json = trace_events_to_json(trace_event)
-            data += trace_events_json + '\n'
+            data += trace_events_json + "\n"
 
         save_inline_trace_events.delay(
             trace_events=trace_events,
@@ -40,7 +40,7 @@ class SaveTracesObserver(EventObserver):
             session_id=session_id,
             source_type=source_type,
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
         )
 
 
@@ -58,7 +58,7 @@ def save_inline_trace_events(
     session_id: str,
     source_type: str,
     contact_name: str,
-    channel_uuid: str
+    channel_uuid: str,
 ):
     try:
         message = save_inline_message_to_database(
@@ -69,7 +69,7 @@ def save_inline_trace_events(
             session_id=session_id,
             source_type=source_type,
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
         )
 
         data = _prepare_trace_data(trace_events)
@@ -91,17 +91,15 @@ def save_inline_trace_events(
                 "session_id": session_id,
                 "source_type": source_type,
                 "contact_name": contact_name,
-                "channel_uuid": channel_uuid
-            }
+                "channel_uuid": channel_uuid,
+            },
         )
-        sentry_sdk.set_context(
-            "trace_events",
-            trace_events
-        )
+        sentry_sdk.set_context("trace_events", trace_events)
 
 
 def _get_message_service():
     from router.services.message_service import MessageService
+
     return MessageService()
 
 
@@ -113,7 +111,7 @@ def save_inline_message_to_database(
     session_id: str,
     source_type: str,
     contact_name: str,
-    channel_uuid: str = None
+    channel_uuid: str = None,
 ) -> InlineAgentMessage:
     message_service = _get_message_service()
     message_service.handle_message_cache(
@@ -123,13 +121,10 @@ def save_inline_message_to_database(
         msg_text=text,
         source=source_type,
         channel_uuid=channel_uuid,
-        preview=preview
+        preview=preview,
     )
 
-    source = {
-        True: "preview",
-        False: "router"
-    }
+    source = {True: "preview", False: "router"}
 
     return InlineAgentMessage.objects.create(
         project_id=project_uuid,
@@ -137,7 +132,7 @@ def save_inline_message_to_database(
         source=source.get(preview),
         contact_urn=contact_urn,
         session_id=session_id,
-        source_type=source_type
+        source_type=source_type,
     )
 
 
@@ -145,7 +140,7 @@ def _prepare_trace_data(trace_events: List[Dict]) -> str:
     data = ""
     for trace_event in trace_events:
         trace_events_json = trace_events_to_json(trace_event)
-        data += trace_events_json + '\n'
+        data += trace_events_json + "\n"
     return data
 
 

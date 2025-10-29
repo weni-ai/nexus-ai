@@ -1,16 +1,16 @@
 import logging
 
+import sentry_sdk
 from weni_datalake_sdk.clients.client import send_event_data
 from weni_datalake_sdk.paths.events_path import EventPath
+
 from nexus.celery import app as celery_app
-import sentry_sdk
 
 logger = logging.getLogger(__name__)
 
+
 @celery_app.task
-def send_data_lake_event(
-    event_data: dict
-):
+def send_data_lake_event(event_data: dict):
     try:
         logger.info(f"Sending event data: {event_data}")
         response = send_event_data(EventPath, event_data)
