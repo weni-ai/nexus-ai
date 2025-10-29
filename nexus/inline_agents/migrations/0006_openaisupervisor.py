@@ -4,27 +4,26 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inline_agents', '0005_alter_agentcredential_unique_together'),
+        ("inline_agents", "0005_alter_agentcredential_unique_together"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='OpenAISupervisor',
+            name="OpenAISupervisor",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_on', models.DateTimeField(auto_now_add=True)),
-                ('name', models.CharField(default='OpenAI Supervisor', max_length=255)),
-                ('instruction', models.TextField()),
-                ('foundation_model', models.CharField(max_length=255)),
-                ('prompt_override_configuration', models.JSONField()),
-                ('action_groups', models.JSONField()),
-                ('knowledge_bases', models.JSONField()),
-                ('human_support_prompt', models.TextField(blank=True, null=True)),
-                ('human_support_action_groups', models.JSONField(blank=True, null=True)),
-                ('components_prompt', models.TextField(blank=True, null=True)),
-                ('components_human_support_prompt', models.TextField(blank=True, null=True)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_on", models.DateTimeField(auto_now_add=True)),
+                ("name", models.CharField(default="OpenAI Supervisor", max_length=255)),
+                ("instruction", models.TextField()),
+                ("foundation_model", models.CharField(max_length=255)),
+                ("prompt_override_configuration", models.JSONField()),
+                ("action_groups", models.JSONField()),
+                ("knowledge_bases", models.JSONField()),
+                ("human_support_prompt", models.TextField(blank=True, null=True)),
+                ("human_support_action_groups", models.JSONField(blank=True, null=True)),
+                ("components_prompt", models.TextField(blank=True, null=True)),
+                ("components_human_support_prompt", models.TextField(blank=True, null=True)),
             ],
         ),
     ]
