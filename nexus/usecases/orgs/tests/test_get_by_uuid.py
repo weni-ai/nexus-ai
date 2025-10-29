@@ -1,14 +1,16 @@
 from uuid import uuid4
-from django.test import TestCase
+
 from django.core.exceptions import ValidationError
-from ..get_by_uuid import get_by_uuid, get_org_by_content_base_uuid
-from ..exceptions import OrgDoesNotExists
+from django.test import TestCase
+
 from nexus.usecases.intelligences.exceptions import ContentBaseDoesNotExist
 from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory
 
+from ..exceptions import OrgDoesNotExists
+from ..get_by_uuid import get_by_uuid, get_org_by_content_base_uuid
+
 
 class GetByUuidTestCase(TestCase):
-
     def setUp(self):
         self.content_base = ContentBaseFactory()
         self.org = self.content_base.intelligence.org

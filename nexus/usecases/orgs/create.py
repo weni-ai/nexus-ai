@@ -1,7 +1,8 @@
 from nexus.orgs.models import Org, Role
-from nexus.usecases import users
-from .create_org_auth import CreateOrgAuthUseCase
 from nexus.orgs.org_dto import OrgCreationDTO
+from nexus.usecases import users
+
+from .create_org_auth import CreateOrgAuthUseCase
 
 
 class CreateOrgUseCase:
@@ -15,16 +16,10 @@ class CreateOrgUseCase:
 
         org_auth_usecase = CreateOrgAuthUseCase()
 
-        org_auth_usecase.create_org_auth(
-            org_uuid=str(org.uuid),
-            user_email=user.email,
-            role=Role.ADMIN.value
-        )
+        org_auth_usecase.create_org_auth(org_uuid=str(org.uuid), user_email=user.email, role=Role.ADMIN.value)
         for authorization in org_dto.authorizations:
             org_auth_usecase.create_org_auth(
-                org_uuid=org.uuid,
-                user_email=authorization.get("user_email"),
-                role=authorization.get("role")
+                org_uuid=org.uuid, user_email=authorization.get("user_email"), role=authorization.get("role")
             )
 
         return org

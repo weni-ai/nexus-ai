@@ -1,14 +1,12 @@
 import amqp
 from sentry_sdk import capture_exception
 
-from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
-
+from nexus.event_driven.parsers import JSONParser
 from nexus.usecases.projects.create import ProjectAuthUseCase
 
 
 class ProjectAuthConsumer(EDAConsumer):
-
     def consume(self, message: amqp.Message):
         print(f"[ProjectConsumer] - Consuming a message. Body: {message.body}")
         try:

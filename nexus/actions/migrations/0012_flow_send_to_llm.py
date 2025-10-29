@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('actions', '0011_alter_flow_uuid'),
+        ("actions", "0011_alter_flow_uuid"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='flow',
-            name='send_to_llm',
+            model_name="flow",
+            name="send_to_llm",
             field=models.BooleanField(default=False),
         ),
     ]

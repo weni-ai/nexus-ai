@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('actions', '0009_auto_20241018_1409'),
+        ("actions", "0009_auto_20241018_1409"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='flow',
-            name='flow_uuid',
+            model_name="flow",
+            name="flow_uuid",
             field=models.UUIDField(unique=False, null=False),
         ),
     ]

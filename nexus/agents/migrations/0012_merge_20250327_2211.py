@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('agents', '0011_agentmessage'),
-        ('agents', '0011_team_human_support_team_human_support_prompt'),
+        ("agents", "0011_agentmessage"),
+        ("agents", "0011_team_human_support_team_human_support_prompt"),
     ]
 
-    operations = [
-    ]
+    operations = []

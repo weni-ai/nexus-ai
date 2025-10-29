@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0006_integratedfeature'),
+        ("projects", "0006_integratedfeature"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='integratedfeature',
-            name='current_version_setup',
+            model_name="integratedfeature",
+            name="current_version_setup",
             field=models.JSONField(default=list),
         ),
     ]

@@ -15,9 +15,11 @@ class ORMTeamRepository(TeamRepository):
 
     def get_team(self, project_uuid: str) -> list[dict]:
         try:
-            orm_team = ORMIntegratedAgent.objects.filter(
-                project__uuid=project_uuid
-            ).select_related('agent').prefetch_related('agent__versions')
+            orm_team = (
+                ORMIntegratedAgent.objects.filter(project__uuid=project_uuid)
+                .select_related("agent")
+                .prefetch_related("agent__versions")
+            )
             agents = []
 
             for integrated_agent in orm_team:
@@ -51,5 +53,5 @@ class ORMTeamRepository(TeamRepository):
 
                 agents.append(agent_dict)
             return agents
-        except ORMIntegratedAgent.DoesNotExist:
-            raise TeamDoesNotExist(f"Team with project uuid: {project_uuid} does not exist")
+        except ORMIntegratedAgent.DoesNotExist as e:
+            raise TeamDoesNotExist(f"Team with project uuid: {project_uuid} does not exist") from e

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0024_alter_conversation_resolution'),
+        ("intelligences", "0024_alter_conversation_resolution"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='conversation',
-            name='external_id',
+            model_name="conversation",
+            name="external_id",
             field=models.CharField(blank=True, max_length=255, null=True),
         ),
     ]

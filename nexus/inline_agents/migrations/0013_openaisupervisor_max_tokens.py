@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inline_agents', '0012_agent_backend_foundation_models'),
+        ("inline_agents", "0012_agent_backend_foundation_models"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='openaisupervisor',
-            name='max_tokens',
-            field=models.IntegerField(blank=True, default=2048, help_text='Maximum number of tokens to generate', null=True),
+            model_name="openaisupervisor",
+            name="max_tokens",
+            field=models.IntegerField(
+                blank=True, default=2048, help_text="Maximum number of tokens to generate", null=True
+            ),
         ),
     ]

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0010_project_human_support_project_human_support_prompt'),
+        ("projects", "0010_project_human_support_project_human_support_prompt"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='project',
-            name='agents_backend',
-            field=models.CharField(default='BedrockBackend', max_length=100),
+            model_name="project",
+            name="agents_backend",
+            field=models.CharField(default="BedrockBackend", max_length=100),
         ),
     ]

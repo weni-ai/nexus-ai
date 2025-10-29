@@ -1,5 +1,9 @@
-
 from typing import List
+
+from django.conf import settings
+
+from nexus.intelligences.llms.client import LLMClient
+from nexus.intelligences.llms.exceptions import TokenLimitError
 from router.entities import (
     AgentDTO,
     ContactMessageDTO,
@@ -7,11 +11,6 @@ from router.entities import (
     LLMSetupDTO,
     Message,
 )
-
-from django.conf import settings
-
-from nexus.intelligences.llms.client import LLMClient
-from nexus.intelligences.llms.exceptions import TokenLimitError
 
 
 class Indexer:
@@ -28,7 +27,6 @@ def call_llm(
     last_messages: List[ContactMessageDTO],
     project_uuid: str = "",
 ) -> str:
-
     try:
         print(f"\n\n[+ Message: {message.text} +]\n\n")
 
@@ -39,14 +37,13 @@ def call_llm(
             question=message.text,
             llm_config=llm_config,
             last_messages=last_messages,
-            project_uuid=project_uuid
+            project_uuid=project_uuid,
         )
     except TokenLimitError:
         model_version = "gpt-4o-mini"
         llm_config.model_version = model_version
         llm_model = list(LLMClient.get_by_type("chatgpt"))[0](
-            model_version=model_version,
-            api_key=settings.OPENAI_API_KEY
+            model_version=model_version, api_key=settings.OPENAI_API_KEY
         )
 
         response = llm_model.request_gpt(
@@ -55,7 +52,7 @@ def call_llm(
             agent=agent.__dict__,
             question=message.text,
             llm_config=llm_config,
-            last_messages=last_messages
+            last_messages=last_messages,
         )
 
     gpt_message = response.get("answers")[0].get("text")

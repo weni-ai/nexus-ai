@@ -4,15 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0006_alter_contentbasetext_file_and_more'),
+        ("intelligences", "0006_alter_contentbasetext_file_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='contentbase',
-            name='language',
-            field=models.CharField(choices=[('en-us', 'English'), ('pt-br', 'Portuguese'), ('es', 'Spanish')], default='pt-br', max_length=10),
+            model_name="contentbase",
+            name="language",
+            field=models.CharField(
+                choices=[("en-us", "English"), ("pt-br", "Portuguese"), ("es", "Spanish")],
+                default="pt-br",
+                max_length=10,
+            ),
         ),
     ]

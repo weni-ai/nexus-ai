@@ -4,19 +4,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0022_conversation_contact_name_conversation_nps_and_more'),
+        ("intelligences", "0022_conversation_contact_name_conversation_nps_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='conversation',
-            name='channel_uuid',
+            model_name="conversation",
+            name="channel_uuid",
             field=models.UUIDField(blank=True, null=True),
         ),
         migrations.AddIndex(
-            model_name='conversation',
-            index=models.Index(fields=['project', 'contact_urn', 'start_date', 'end_date', 'channel_uuid'], name='intelligenc_project_fdb57e_idx'),
+            model_name="conversation",
+            index=models.Index(
+                fields=["project", "contact_urn", "start_date", "end_date", "channel_uuid"],
+                name="intelligenc_project_fdb57e_idx",
+            ),
         ),
     ]
