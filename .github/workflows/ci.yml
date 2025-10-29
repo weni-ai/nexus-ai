@@ -12,7 +12,7 @@ on:
 env:
   SECRET_KEY: "SK"
   ALLOWED_HOSTS: "*,"
-  DJANGO_SETTINGS_MODULE: "nexus.settings"
+  DJANGO_SETTINGS_MODULE: "nexus.settings.nexus"
 
 jobs:
   container-job:
