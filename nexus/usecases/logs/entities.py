@@ -1,5 +1,5 @@
-from typing import Dict, List
 from dataclasses import dataclass
+from typing import Dict, List
 
 
 @dataclass
@@ -19,5 +19,5 @@ class LogMetadata:
                 "personality": self.agent_personality,
                 "goal": self.agent_goal,
             },
-            "instructions": self.instructions
+            "instructions": self.instructions,
         }

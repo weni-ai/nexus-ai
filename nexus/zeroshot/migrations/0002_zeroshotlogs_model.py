@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('zeroshot', '0001_initial'),
+        ("zeroshot", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='zeroshotlogs',
-            name='model',
-            field=models.CharField(default='zeroshot', max_length=64, verbose_name='Model'),
+            model_name="zeroshotlogs",
+            name="model",
+            field=models.CharField(default="zeroshot", max_length=64, verbose_name="Model"),
         ),
     ]

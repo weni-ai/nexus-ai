@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0010_contentbaselogs_correct_answer_and_more'),
+        ("intelligences", "0010_contentbaselogs_correct_answer_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='contentbase',
-            name='is_router',
+            model_name="contentbase",
+            name="is_router",
             field=models.BooleanField(default=False),
         ),
     ]

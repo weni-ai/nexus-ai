@@ -1,35 +1,21 @@
 from typing import List
 
 from nexus.events import event_manager
-from .get_by_uuid import (
-    get_by_intelligence_uuid,
-    get_by_contentbase_uuid,
-    get_by_contentbasetext_uuid
-)
-from nexus.usecases import (
-    users,
-    orgs
-)
-from ...event_domain.recent_activity.msg_handler import recent_activity_message
+from nexus.intelligences.models import ContentBaseFile, ContentBaseLink
 from nexus.orgs import permissions
-from .exceptions import IntelligencePermissionDenied
+from nexus.usecases import orgs, users
 from nexus.usecases.intelligences.retrieve import RetrieveContentBaseLinkUseCase
-from nexus.intelligences.models import ContentBaseLink, ContentBaseFile
+
+from ...event_domain.recent_activity.msg_handler import recent_activity_message
+from .exceptions import IntelligencePermissionDenied
+from .get_by_uuid import get_by_contentbase_uuid, get_by_contentbasetext_uuid, get_by_intelligence_uuid
 
 
-class DeleteIntelligenceUseCase():
-
-    def __init__(
-        self,
-        recent_activity_message=recent_activity_message
-    ) -> None:
+class DeleteIntelligenceUseCase:
+    def __init__(self, recent_activity_message=recent_activity_message) -> None:
         self.recent_activity_message = recent_activity_message
 
-    def delete_intelligences(
-            self,
-            intelligence_uuid: str,
-            user_email: str
-    ):
+    def delete_intelligences(self, intelligence_uuid: str, user_email: str):
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         user = users.get_by_email(user_email)
         org = org_use_case.get_org_by_intelligence_uuid(intelligence_uuid)
@@ -51,19 +37,11 @@ class DeleteIntelligenceUseCase():
         return True
 
 
-class DeleteContentBaseUseCase():
-
-    def __init__(
-        self,
-        event_manager_notify=event_manager.notify
-    ):
+class DeleteContentBaseUseCase:
+    def __init__(self, event_manager_notify=event_manager.notify):
         self.event_manager_notify = event_manager_notify
 
-    def delete_contentbase(
-            self,
-            contentbase_uuid: str,
-            user_email: str
-    ):
+    def delete_contentbase(self, contentbase_uuid: str, user_email: str):
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         user = users.get_by_email(user_email)
         org = org_use_case.get_org_by_contentbase_uuid(contentbase_uuid)
@@ -74,12 +52,7 @@ class DeleteContentBaseUseCase():
 
         contentbase = get_by_contentbase_uuid(contentbase_uuid)
 
-        self.event_manager_notify(
-            event="contentbase_activity",
-            contentbase=contentbase,
-            action_type="D",
-            user=user
-        )
+        self.event_manager_notify(event="contentbase_activity", contentbase=contentbase, action_type="D", user=user)
 
         contentbase.delete()
         contentbase.intelligence.decrease_content_bases_count()
@@ -94,29 +67,19 @@ class DeleteContentBaseUseCase():
                 content_base_instruction=instruction,
                 action_type="D",
                 user=user,
-                action_details={
-                    "old": instruction.instruction,
-                    "new": ""
-                }
+                action_details={"old": instruction.instruction, "new": ""},
             )
             instruction.delete()
         content_base.refresh_from_db()
 
 
-class DeleteContentBaseTextUseCase():
-
+class DeleteContentBaseTextUseCase:
     def __init__(self, file_database) -> None:
         self.file_database = file_database
 
-    def delete_contentbasetext(
-            self,
-            contentbasetext_uuid: str,
-            user_email: str
-    ):
+    def delete_contentbasetext(self, contentbasetext_uuid: str, user_email: str):
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
-        org = org_use_case.get_org_by_contentbasetext_uuid(
-            contentbasetext_uuid
-        )
+        org = org_use_case.get_org_by_contentbasetext_uuid(contentbasetext_uuid)
         user = users.get_by_email(user_email)
 
         has_permission = permissions.can_delete_content_bases(user, org)
@@ -133,8 +96,8 @@ class DeleteContentBaseTextUseCase():
         return True
 
     def delete_inline_contentbasetext(
-            self,
-            contentbasetext_uuid: str,
+        self,
+        contentbasetext_uuid: str,
     ):
         contentbasetext = get_by_contentbasetext_uuid(contentbasetext_uuid)
         contentbasetext.delete()
@@ -145,11 +108,13 @@ class DeleteContentBaseTextUseCase():
         )
         return True
 
-    def delete_content_base_text_from_index(self, contentbasetext_uuid: str, content_base_uuid: str, content_base_file_name: str):
+    def delete_content_base_text_from_index(
+        self, contentbasetext_uuid: str, content_base_uuid: str, content_base_file_name: str
+    ):
         self.file_database.delete(
             content_base_uuid=content_base_uuid,
             content_base_file_uuid=contentbasetext_uuid,
-            filename=content_base_file_name
+            filename=content_base_file_name,
         )
         return True
 
@@ -161,14 +126,13 @@ class DeleteContentBaseLinkUseCase:
     def delete_by_uuid(self, link_uuid: str, user_email: str):
         use_case = RetrieveContentBaseLinkUseCase()
         content_base_link: ContentBaseLink = use_case.get_contentbaselink(
-            contentbaselink_uuid=link_uuid,
-            user_email=user_email
+            contentbaselink_uuid=link_uuid, user_email=user_email
         )
         if self.file_database:
             self.file_database.delete(
                 content_base_uuid=str(content_base_link.content_base.uuid),
                 content_base_file_uuid=str(content_base_link.uuid),
-                filename=content_base_link.link
+                filename=content_base_link.link,
             )
         content_base_link.delete()
 
@@ -178,7 +142,7 @@ class DeleteContentBaseLinkUseCase:
             self.file_database().delete(
                 content_base_uuid=str(content_base_link.content_base.uuid),
                 content_base_file_uuid=str(content_base_link.uuid),
-                filename=filename
+                filename=filename,
             )
         content_base_link.delete()
 
@@ -192,6 +156,6 @@ class DeleteContentBaseFileUseCase:
             self.file_database().delete(
                 content_base_uuid=str(content_base_file.content_base.uuid),
                 content_base_file_uuid=str(content_base_file.uuid),
-                filename=content_base_file.file_name
+                filename=content_base_file.file_name,
             )
         content_base_file.delete()

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0015_project_conversation_turns_to_include_and_more'),
+        ("projects", "0015_project_conversation_turns_to_include_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='project',
-            name='use_prompt_creation_configurations',
+            model_name="project",
+            name="use_prompt_creation_configurations",
             field=models.BooleanField(default=True),
         ),
     ]

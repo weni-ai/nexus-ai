@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inline_agents', '0010_alter_inlineagentsconfiguration_unique_together'),
+        ("inline_agents", "0010_alter_inlineagentsconfiguration_unique_together"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='openaisupervisor',
-            name='default_instructions_for_collaborators',
-            field=models.TextField(blank=True, help_text='Instructions that will be added to every collaborator', null=True),
+            model_name="openaisupervisor",
+            name="default_instructions_for_collaborators",
+            field=models.TextField(
+                blank=True, help_text="Instructions that will be added to every collaborator", null=True
+            ),
         ),
     ]

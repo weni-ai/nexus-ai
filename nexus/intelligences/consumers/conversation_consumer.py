@@ -1,10 +1,9 @@
 import amqp
 from sentry_sdk import capture_exception
 
-from nexus.intelligences.conversation_dto import WindowConversationDTO
-
-from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
+from nexus.event_driven.parsers import JSONParser
+from nexus.intelligences.conversation_dto import WindowConversationDTO
 from nexus.usecases.intelligences.lambda_usecase import create_lambda_conversation
 
 
@@ -22,19 +21,23 @@ class ConversationConsumer(EDAConsumer):
                 end_date=body.get("end"),
                 has_chats_room=body.get("has_chats_room"),
                 external_id=body.get("id"),
-                name=body.get("contact_name")
+                name=body.get("contact_name"),
             )
 
             create_lambda_conversation.delay(window_conversation_dto.dict())
 
             message.channel.basic_ack(message.delivery_tag)
-            print(f"[ ConversationConsumer ] - get conversation: {window_conversation_dto.contact_urn} {window_conversation_dto.start_date} - {window_conversation_dto.end_date}")
-            
+            print(
+                f"[ ConversationConsumer ] - get conversation: "
+                f"{window_conversation_dto.contact_urn} {window_conversation_dto.start_date} - "
+                f"{window_conversation_dto.end_date}"
+            )
+
         except KeyError as e:
             capture_exception(e)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
             print(f"[ ConversationConsumer ] - Message rejected, missing required field: {e}")
-            
+
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)

@@ -5,40 +5,34 @@ from nexus.intelligences.models import Conversation
 
 class ConversationFilter(filters.FilterSet):
     """Filter for Conversation model"""
+
     start_date = filters.DateFilter(
-        field_name='created_at', 
-        lookup_expr='gte', 
-        input_formats=['%d-%m-%Y'],
-        method='filter_start_date'
+        field_name="created_at", lookup_expr="gte", input_formats=["%d-%m-%Y"], method="filter_start_date"
     )
     end_date = filters.DateFilter(
-        field_name='created_at', 
-        lookup_expr='lte', 
-        input_formats=['%d-%m-%Y'],
-        method='filter_end_date'
+        field_name="created_at", lookup_expr="lte", input_formats=["%d-%m-%Y"], method="filter_end_date"
     )
-    csat = filters.BaseInFilter(field_name='csat')
-    resolution = filters.BaseInFilter(field_name='resolution')
-    topics = filters.BaseInFilter(field_name='topic__name')
-    has_chats_room = filters.BooleanFilter(field_name='has_chats_room')
-    nps = filters.NumberFilter(field_name='nps')
-    search = filters.CharFilter(method='search_filter')
+    csat = filters.BaseInFilter(field_name="csat")
+    resolution = filters.BaseInFilter(field_name="resolution")
+    topics = filters.BaseInFilter(field_name="topic__name")
+    has_chats_room = filters.BooleanFilter(field_name="has_chats_room")
+    nps = filters.NumberFilter(field_name="nps")
+    search = filters.CharFilter(method="search_filter")
 
     class Meta:
         model = Conversation
         fields = {
-            'csat': ['exact', 'in'],
-            'resolution': ['exact', 'in'],
-            'has_chats_room': ['exact'],
-            'nps': ['exact'],
+            "csat": ["exact", "in"],
+            "resolution": ["exact", "in"],
+            "has_chats_room": ["exact"],
+            "nps": ["exact"],
         }
 
     def search_filter(self, queryset, name, value):
         """Custom search filter for contact_name and contact_urn"""
         from django.db.models import Q
-        return queryset.filter(
-            Q(contact_name__icontains=value) | Q(contact_urn__icontains=value)
-        )
+
+        return queryset.filter(Q(contact_name__icontains=value) | Q(contact_urn__icontains=value))
 
     def filter_start_date(self, queryset, name, value):
         """Filter by start date with default value if not provided"""
@@ -70,9 +64,9 @@ class ConversationFilter(filters.FilterSet):
             print(f"DEBUG: filter method result count: {result.count()}")
 
             # Debug: Check what resolution values are in the database
-            if 'resolution' in self.data:
+            if "resolution" in self.data:
                 print(f"DEBUG: Resolution filter requested: {self.data['resolution']}")
-                resolutions = list(queryset.values_list('resolution', flat=True))
+                resolutions = list(queryset.values_list("resolution", flat=True))
                 print(f"DEBUG: Available resolutions in DB: {resolutions}")
 
             return result

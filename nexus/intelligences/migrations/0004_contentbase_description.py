@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0003_contentbasetext_file_contentbasetext_file_name'),
+        ("intelligences", "0003_contentbasetext_file_contentbasetext_file_name"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='contentbase',
-            name='description',
+            model_name="contentbase",
+            name="description",
             field=models.TextField(blank=True, null=True),
         ),
     ]

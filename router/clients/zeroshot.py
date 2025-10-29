@@ -1,9 +1,9 @@
-import os
 import json
-
-from typing import List, Dict
+import os
+from typing import Dict, List
 
 import requests
+
 from nexus.zeroshot.client import InvokeModel
 
 
@@ -13,12 +13,7 @@ class NexusZeroshotClient:
 
     def fast_predict(self, message: str, actions: List[Dict], language: str = "por"):
         print("[+ Calling Zeroshot in Nexus +]")
-        zeroshot_data = {
-            'context': self.prompt,
-            'language': language,
-            'text': message,
-            'options': actions
-        }
+        zeroshot_data = {"context": self.prompt, "language": language, "text": message, "options": actions}
         zeroshot = InvokeModel(zeroshot_data)
         response = zeroshot.invoke()
         return response.get("output")
@@ -33,17 +28,9 @@ class ZeroshotClient:
     def fast_predict(self, message: str, actions: List[Dict], language: str = "por"):
         url = f"{self.base_url}/v2/repository/nlp/zeroshot/zeroshot-fast-predict"
 
-        payload = {
-            "context": self.prompt,
-            "language": language,
-            "text": message,
-            "options": actions
-        }
+        payload = {"context": self.prompt, "language": language, "text": message, "options": actions}
 
-        headers = {
-            'Authorization': f'Bearer {self.token}',
-            'Content-Type': 'application/json'
-        }
+        headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
 
         response = requests.request("POST", url, headers=headers, data=json.dumps(payload))
         response.raise_for_status()

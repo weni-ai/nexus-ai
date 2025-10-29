@@ -4,8 +4,8 @@ from django.db import models
 
 from nexus.intelligences.models import (
     ContentBaseFile,
-    ContentBaseText,
     ContentBaseLink,
+    ContentBaseText,
 )
 from nexus.users.models import User
 
@@ -21,7 +21,7 @@ class TaskManager(models.Model):
         (STATUS_LOADING, "Loading"),
         (STATUS_SUCCESS, "Success"),
         (STATUS_FAIL, "Fail"),
-        (STATUS_WAITING, "Wait")
+        (STATUS_WAITING, "Wait"),
     ]
 
     status_map = {
@@ -38,9 +38,17 @@ class TaskManager(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="files")
     ingestion_job_id = models.CharField(null=True)
 
+    def __str__(self):
+        return f"TaskManager - {self.uuid} - {self.status}"
+
 
 class ContentBaseFileTaskManager(TaskManager):
-    content_base_file = models.ForeignKey(ContentBaseFile, on_delete=models.CASCADE, related_name="upload_tasks", blank=True, null=True)
+    content_base_file = models.ForeignKey(
+        ContentBaseFile, on_delete=models.CASCADE, related_name="upload_tasks", blank=True, null=True
+    )
+
+    def __str__(self):
+        return f"ContentBaseFileTaskManager - {self.uuid}"
 
     def update_status(self, new_status):
         self.status = new_status
@@ -48,9 +56,14 @@ class ContentBaseFileTaskManager(TaskManager):
 
 
 class ContentBaseTextTaskManager(TaskManager):
-    content_base_text = models.ForeignKey(ContentBaseText, on_delete=models.CASCADE, related_name="upload_tasks", blank=True, null=True)
+    content_base_text = models.ForeignKey(
+        ContentBaseText, on_delete=models.CASCADE, related_name="upload_tasks", blank=True, null=True
+    )
     file_url = models.URLField()
     file_name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"ContentBaseTextTaskManager - {self.file_name}"
 
     def update_status(self, new_status):
         self.status = new_status
@@ -58,7 +71,12 @@ class ContentBaseTextTaskManager(TaskManager):
 
 
 class ContentBaseLinkTaskManager(TaskManager):
-    content_base_link = models.ForeignKey(ContentBaseLink, on_delete=models.CASCADE, related_name="upload_tasks", blank=True, null=True)
+    content_base_link = models.ForeignKey(
+        ContentBaseLink, on_delete=models.CASCADE, related_name="upload_tasks", blank=True, null=True
+    )
+
+    def __str__(self):
+        return f"ContentBaseLinkTaskManager - {self.uuid}"
 
     def update_status(self, new_status):
         self.status = new_status

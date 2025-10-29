@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('task_managers', '0003_contentbaselinktaskmanager'),
+        ("task_managers", "0003_contentbaselinktaskmanager"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='taskmanager',
-            name='ingestion_job_id',
+            model_name="taskmanager",
+            name="ingestion_job_id",
             field=models.CharField(null=True),
         ),
     ]

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inline_agents', '0011_openaisupervisor_default_instructions_for_collaborators'),
+        ("inline_agents", "0011_openaisupervisor_default_instructions_for_collaborators"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='agent',
-            name='backend_foundation_models',
+            model_name="agent",
+            name="backend_foundation_models",
             field=models.JSONField(default=dict),
         ),
     ]

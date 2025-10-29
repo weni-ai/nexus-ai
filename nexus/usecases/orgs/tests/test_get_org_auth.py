@@ -1,12 +1,12 @@
 from django.test import TestCase
 
-from .org_factory import OrgAuthFactory, OrgFactory
-from ..get_org_auth import GetOrgAuthUseCase
 from nexus.usecases.orgs.exceptions import OrgAuthDoesNotExists
+
+from ..get_org_auth import GetOrgAuthUseCase
+from .org_factory import OrgAuthFactory, OrgFactory
 
 
 class TestGetOrgAuth(TestCase):
-
     def setUp(self) -> None:
         self.org_auth = OrgAuthFactory()
         self.user = self.org_auth.user

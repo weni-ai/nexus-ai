@@ -36,14 +36,10 @@ class TypingUsecase:
         logger.debug(f"Sending typing indicator to {contact_urn}")
 
         try:
-            response = self.auth_client.make_request_with_retry(
-                method="POST", url=url, json=body, timeout=10
-            )
+            response = self.auth_client.make_request_with_retry(method="POST", url=url, json=body, timeout=10)
 
             if not response.status_code == 200:
-                logger.warning(
-                    f"Typing indicator failed with status {response.status_code}"
-                )
+                logger.warning(f"Typing indicator failed with status {response.status_code}")
                 return
 
             logger.debug("Typing indicator sent successfully")

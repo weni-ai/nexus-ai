@@ -1,8 +1,8 @@
 import factory
 
-from nexus.usecases.users.tests.user_factory import UserFactory
-from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFileFactory, ContentBaseTextFactory
 from nexus.task_managers.models import ContentBaseFileTaskManager, ContentBaseTextTaskManager
+from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFileFactory, ContentBaseTextFactory
+from nexus.usecases.users.tests.user_factory import UserFactory
 
 
 class ContentBaseFileTaskManagerFactory(factory.django.DjangoModelFactory):

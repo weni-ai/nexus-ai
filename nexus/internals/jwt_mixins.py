@@ -1,9 +1,9 @@
 from nexus.authentication.authentication import JWTAuthentication
 
+
 class JWTProjectMixin:
     authentication_classes = [JWTAuthentication]
-    permission_classes = ([])
-
+    permission_classes = []
 
     @property
     def get_project_uuid(self):

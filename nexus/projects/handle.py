@@ -1,14 +1,14 @@
 from amqp.channel import Channel
 
-from .consumers.project_consumer import ProjectConsumer
-from .consumers.project_auth_consumer import ProjectAuthConsumer
 from .consumers.flow_consumer import FlowConsumer
 from .consumers.integrated_feature import (
     CreateIntegratedFeatureConsumer,
     DeleteIntegratedFeatureConsumer,
-    UpdateIntegratedFeatureConsumer,
     IntegratedFeatureFlowConsumer,
+    UpdateIntegratedFeatureConsumer,
 )
+from .consumers.project_auth_consumer import ProjectAuthConsumer
+from .consumers.project_consumer import ProjectConsumer
 
 
 def handle_consumers(channel: Channel) -> None:

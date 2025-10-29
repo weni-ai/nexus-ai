@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0009_contentbaselogs'),
+        ("intelligences", "0009_contentbaselogs"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='contentbaselogs',
-            name='wenigpt_version',
-            field=models.CharField(default='2.2.3', max_length=255),
+            model_name="contentbaselogs",
+            name="wenigpt_version",
+            field=models.CharField(default="2.2.3", max_length=255),
         ),
     ]

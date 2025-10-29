@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0004_alter_contentbasefile_file_and_more'),
-        ('intelligences', '0004_contentbase_description'),
+        ("intelligences", "0004_alter_contentbasefile_file_and_more"),
+        ("intelligences", "0004_contentbase_description"),
     ]
 
-    operations = [
-    ]
+    operations = []
