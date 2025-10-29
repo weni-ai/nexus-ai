@@ -456,8 +456,8 @@ class MultiAgentView(APIView):
             )
 
         try:
-
             project = Project.objects.get(uuid=project_uuid)
+            
             return Response({
                 "multi_agents": project.inline_agent_switch,
             })
@@ -482,6 +482,7 @@ class MultiAgentView(APIView):
 
         try:
             project = Project.objects.get(uuid=project_uuid)
+            
             project.inline_agent_switch = multi_agents
             if not project.use_prompt_creation_configurations:
                 project.use_prompt_creation_configurations = True
