@@ -1,8 +1,9 @@
-from nexus.usecases.orgs import get_org_by_content_base_uuid
 from django.conf import settings
+
 from nexus.task_managers.file_database import GPTDatabase
 from nexus.task_managers.file_database.chatgpt import ChatGPTDatabase
 from nexus.task_managers.file_database.wenigpt_database import WeniGPTDatabase
+from nexus.usecases.orgs import get_org_by_content_base_uuid
 
 
 def get_gpt_by_content_base_uuid(content_base_uuid: str) -> GPTDatabase:
