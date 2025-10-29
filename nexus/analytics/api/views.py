@@ -69,10 +69,10 @@ class ResolutionRateAverageView(APIView):
         GET /api/projects/<project_uuid>/analytics/resolution-rate/average/
         
         Query params:
-        - start_date (optional, YYYY-MM-DD): Data inicial
-        - end_date (optional, YYYY-MM-DD): Data final  
-        - motor (optional, "AB 2" | "AB 2.5"): Filtrar por motor específico
-        - min_conversations (optional, int): Mínimo de conversas para considerar projeto
+        - start_date (optional, YYYY-MM-DD): Start date
+        - end_date (optional, YYYY-MM-DD): End date  
+        - motor (optional, "AB 2" | "AB 2.5"): Filter by specific motor
+        - min_conversations (optional, int): Minimum conversations to consider project
         """
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
@@ -181,8 +181,8 @@ class ResolutionRateIndividualView(APIView):
         GET /api/projects/<project_uuid>/analytics/resolution-rate/individual/
         
         Query params: Same as average endpoint, plus:
-        - filter_project_uuid (optional): Filtrar por UUID específico do projeto
-        - filter_project_name (optional): Filtrar por nome do projeto (busca parcial, case-insensitive)
+        - filter_project_uuid (optional): Filter by specific project UUID
+        - filter_project_name (optional): Filter by project name (partial search, case-insensitive)
         Returns: Array of project-level metrics
         """
         start_date_str = request.query_params.get("start_date")
@@ -406,9 +406,9 @@ class ProjectsByMotorView(APIView):
         GET /api/analytics/projects/by-motor/
         
         Query params:
-        - motor ("AB 2" | "AB 2.5" | "both"): Qual motor buscar
-        - start_date (optional, YYYY-MM-DD): Filtrar conversas por data
-        - end_date (optional, YYYY-MM-DD): Filtrar conversas por data
+        - motor ("AB 2" | "AB 2.5" | "both"): Which motor to search
+        - start_date (optional, YYYY-MM-DD): Filter conversations by date
+        - end_date (optional, YYYY-MM-DD): Filter conversations by date
         """
         motor_param = request.query_params.get("motor", "both")
         start_date_str = request.query_params.get("start_date")
