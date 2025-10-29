@@ -4,9 +4,29 @@ import os
 import sys
 
 
+def get_settings_module():
+    default_settings = "nexus.settings.nexus"
+
+    command = sys.argv[1] if len(sys.argv) > 1 else None
+
+    if command is None:
+        return default_settings
+
+    settings_map = {
+        "runserver": default_settings,
+        "runcalling": "nexus.settings.calling",
+        "runapi": "nexus.settings.router",
+    }
+
+    return settings_map.get(command, default_settings)
+
+
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'nexus.settings')
+    settings_module = get_settings_module()
+    print(settings_module)
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", settings_module)
+
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
@@ -18,5 +38,5 @@ def main():
     execute_from_command_line(sys.argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
