@@ -10,11 +10,11 @@ from .views import (
 urlpatterns = [
     # Average resolution rate
     path(
-        "<project_uuid>/analytics/resolution-rate/average/",
+        "analytics/resolution-rate/average/",
         ResolutionRateAverageView.as_view(),
         name="resolution-rate-average",
     ),
-    # Individual resolution rate (global, no project_uuid)
+    # Individual resolution rate
     path(
         "analytics/resolution-rate/individual/",
         ResolutionRateIndividualView.as_view(),
@@ -22,11 +22,11 @@ urlpatterns = [
     ),
     # Unresolved rate
     path(
-        "<project_uuid>/analytics/unresolved-rate/",
+        "analytics/unresolved-rate/",
         UnresolvedRateView.as_view(),
         name="unresolved-rate",
     ),
-    # Projects by motor (global, no project_uuid)
+    # Projects by motor
     path(
         "analytics/projects/by-motor/",
         ProjectsByMotorView.as_view(),

@@ -5,6 +5,8 @@ from nexus.projects.models import Project
 from nexus.analytics.admin import (
     get_average_resolution_rate,
     get_unresolved_rate,
+    get_individual_resolution_rate,
+    get_projects_by_motor,
 )
 
 
@@ -65,7 +67,12 @@ class ProjectAdmin(admin.ModelAdmin):
         ),
     )
 
-    actions = [get_average_resolution_rate, get_unresolved_rate]
+    actions = [
+        get_average_resolution_rate,
+        get_unresolved_rate,
+        get_individual_resolution_rate,
+        get_projects_by_motor,
+    ]
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
