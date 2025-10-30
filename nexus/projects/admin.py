@@ -2,6 +2,10 @@ from django.contrib import admin
 from django.db import models
 
 from nexus.projects.models import Project
+from nexus.analytics.admin import (
+    get_average_resolution_rate,
+    get_unresolved_rate,
+)
 
 
 @admin.register(Project)
@@ -60,6 +64,8 @@ class ProjectAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+    actions = [get_average_resolution_rate, get_unresolved_rate]
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
