@@ -1,5 +1,3 @@
-import os
-
 import uvicorn
 from django.core.management.base import BaseCommand
 
