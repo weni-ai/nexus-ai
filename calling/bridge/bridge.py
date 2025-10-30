@@ -14,6 +14,8 @@ from ..sessions.session import Session
 
 logger = logging.getLogger(__name__)
 
+from calling.events import EventRegistry
+
 
 class RTCBridge:
 
@@ -52,7 +54,8 @@ class RTCBridge:
 
             @dc.on("open")
             async def on_open():
-                print("[OAI][DC] Canal oai-events aberto")
+                await EventRegistry.notify("openai.channel.opened", session)
+
                 tools_session = {
                     "type": "session.update",
                     "session": {
@@ -197,5 +200,8 @@ class RTCBridge:
 
         answer = await wpp_connection.createAnswer()
         await wpp_connection.setLocalDescription(answer)
+        
+        session.set_answer_sdp(answer.sdp)
+        await EventRegistry.notify("whatspp.answer.created", session)
 
         return answer.sdp

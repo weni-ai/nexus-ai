@@ -1,11 +1,10 @@
 import asyncio
 
-from django.conf import settings
 from fastapi import FastAPI, Response
+from sfcommons.logs import LogRegistry
 
 from calling.api_models import CallsModel
-from calling.bridge.answer import get_answer
-from calling.clients.meta import accept_call, pre_accept_call
+from calling.service import CallingService
 from calling.sessions import SessionManager
 
 app = FastAPI()
@@ -25,14 +24,12 @@ async def calls(body: CallsModel):
 
     if call.event == "terminate":
         await SessionManager.close_session(call_id)
+        LogRegistry.export()
         return Response()
 
     if SessionManager.is_session_active(call_id):
         return Response()
 
-    sdp_answer = await get_answer(call.session.sdp, call_id)
-    await pre_accept_call(sdp_answer, call_id, settings.WA_PHONE_NUMBER, settings.WA_ACCESS_TOKEN)
-
-    await accept_call(sdp_answer, call_id, settings.WA_PHONE_NUMBER, settings.WA_ACCESS_TOKEN)
+    asyncio.create_task(CallingService.dispatch(call.session.sdp, call_id))
 
     return Response()

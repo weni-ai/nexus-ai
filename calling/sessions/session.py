@@ -12,16 +12,20 @@ class Session:
     call_id: str
     offer_sdp: str
     wpp_connection: "RTCPeerConnection"
-    agents: dict = None
     openai_connection: "RTCPeerConnection" = None
+    answer_sdp: str = None
+    agents: dict = None
 
-    def set_agents(self, agents: dict):
+    def set_agents(self, agents: dict) -> None:
         self.agents = agents
 
-    def set_wpp_audio_track(self, track: MediaStreamTrack):
+    def set_wpp_audio_track(self, track: MediaStreamTrack) -> None:
         self.wpp_audio_track = track
 
-    async def close(self):
+    def set_answer_sdp(self, sdp: str) -> None:
+        self.answer_sdp = sdp
+
+    async def close(self) -> None:
         await self.wpp_connection.close()
 
         if self.openai_connection is not None:

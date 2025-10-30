@@ -1,7 +1,7 @@
 import uvicorn
 from django.core.management.base import BaseCommand
 
-from calling.main import app
+from calling.server import app
 
 
 class Command(BaseCommand):
