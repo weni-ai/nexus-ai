@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import path
 from django.http import HttpResponse
-from rest_framework.test import APIRequestFactory
+from rest_framework.test import APIRequestFactory, force_authenticate
 import json
 
 from nexus.analytics.api.views import (
@@ -51,7 +51,9 @@ def get_analytics_action(view_class, action_name, description):
 
             # Create Django request (APIRequestFactory returns HttpRequest)
             django_request = factory.get(url_path, query_params)
-            django_request.user = request.user
+            
+            # Force authentication for DRF - this ensures IsAuthenticated permission passes
+            force_authenticate(django_request, user=request.user)
 
             # Call view - DRF will automatically wrap HttpRequest in Request
             response = view(django_request)
@@ -147,7 +149,7 @@ def average_resolution_rate_view(request):
         query_params = {k: v for k, v in query_params.items() if v}
 
         django_request = factory.get("/api/analytics/resolution-rate/average/", query_params)
-        django_request.user = request.user
+        force_authenticate(django_request, user=request.user)
 
         response = view(django_request)
         response_data = response.data if hasattr(response, "data") else {}
@@ -207,7 +209,7 @@ def unresolved_rate_view(request):
         query_params = {k: v for k, v in query_params.items() if v}
 
         django_request = factory.get("/api/analytics/unresolved-rate/", query_params)
-        django_request.user = request.user
+        force_authenticate(django_request, user=request.user)
 
         response = view(django_request)
         response_data = response.data if hasattr(response, "data") else {}
@@ -269,7 +271,7 @@ def individual_resolution_rate_view(request):
             query_params = {k: v for k, v in query_params.items() if v}
 
             django_request = factory.get("/api/analytics/resolution-rate/individual/", query_params)
-            django_request.user = request.user
+            force_authenticate(django_request, user=request.user)
 
             response = view(django_request)
             response_data = response.data if hasattr(response, "data") else {}
@@ -322,7 +324,7 @@ def projects_by_motor_view(request):
             query_params["end_date"] = end_date
 
         django_request = factory.get("/api/analytics/projects/by-motor/", query_params)
-        django_request.user = request.user
+        force_authenticate(django_request, user=request.user)
 
         response = view(django_request)
         response_data = response.data if hasattr(response, "data") else {}
