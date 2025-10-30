@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "nexus.agents",
     "nexus.inline_agents",
     "nexus.reports",
+    "nexus.analytics",
 ]
 
 MIDDLEWARE = [
