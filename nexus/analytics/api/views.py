@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
-from nexus.projects.api.permissions import ProjectPermission
+from nexus.projects.api.permissions import ProjectPermission, CombinedExternalProjectPermission
 
 from .serializers import (
     ResolutionRateSerializer,
@@ -62,13 +62,14 @@ def validate_and_parse_dates(start_date_str, end_date_str):
 
 
 class ResolutionRateAverageView(APIView):
-    permission_classes = [ProjectPermission]
+    permission_classes = [IsAuthenticated]
 
-    def get(self, request, project_uuid=None):
+    def get(self, request):
         """
-        GET /api/projects/<project_uuid>/analytics/resolution-rate/average/
+        GET /api/analytics/resolution-rate/average/
         
         Query params:
+        - project_uuid (optional): Filter by specific project UUID
         - start_date (optional, YYYY-MM-DD): Start date
         - end_date (optional, YYYY-MM-DD): End date  
         - motor (optional, "AB 2" | "AB 2.5"): Filter by specific motor
@@ -78,6 +79,7 @@ class ResolutionRateAverageView(APIView):
         end_date_str = request.query_params.get("end_date")
         motor = request.query_params.get("motor")
         min_conversations_str = request.query_params.get("min_conversations")
+        project_uuid = request.query_params.get("project_uuid")
 
         # Validate and parse dates
         start_date, end_date, error_response = validate_and_parse_dates(
@@ -85,6 +87,16 @@ class ResolutionRateAverageView(APIView):
         )
         if error_response:
             return error_response
+
+        # Validate project_uuid if provided
+        if project_uuid:
+            try:
+                UUID(project_uuid)
+            except (ValueError, TypeError):
+                return Response(
+                    {"error": "project_uuid must be a valid UUID format"},
+                    status=400,
+                )
 
         # Validate motor if provided
         if motor and motor not in MOTOR_BACKEND_MAP:
@@ -108,12 +120,15 @@ class ResolutionRateAverageView(APIView):
                     {"error": "min_conversations must be a valid integer"}, status=400
                 )
 
-        # Build base query
+        # Build base query (across all projects, or filtered by project_uuid)
         conversations = Conversation.objects.filter(
-            project__uuid=project_uuid,
             created_at__date__gte=start_date,
             created_at__date__lte=end_date,
         ).select_related("project")
+
+        # Filter by project_uuid if provided
+        if project_uuid:
+            conversations = conversations.filter(project__uuid=project_uuid)
 
         # Filter by motor if provided
         if motor:
@@ -164,6 +179,7 @@ class ResolutionRateAverageView(APIView):
             "filters": {
                 "start_date": str(start_date),
                 "end_date": str(end_date),
+                "project_uuid": project_uuid,
                 "motor": motor,
                 "min_conversations": min_conversations,
             },
@@ -305,19 +321,25 @@ class ResolutionRateIndividualView(APIView):
 
 
 class UnresolvedRateView(APIView):
-    permission_classes = [ProjectPermission]
+    permission_classes = [IsAuthenticated]
 
-    def get(self, request, project_uuid=None):
+    def get(self, request):
         """
-        GET /api/projects/<project_uuid>/analytics/unresolved-rate/
+        GET /api/analytics/unresolved-rate/
         
-        Query params: Same as average endpoint
+        Query params:
+        - project_uuid (optional): Filter by specific project UUID
+        - start_date (optional, YYYY-MM-DD): Start date
+        - end_date (optional, YYYY-MM-DD): End date  
+        - motor (optional, "AB 2" | "AB 2.5"): Filter by specific motor
+        - min_conversations (optional, int): Minimum conversations to consider project
         Returns: Unresolved rate metrics
         """
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
         motor = request.query_params.get("motor")
         min_conversations_str = request.query_params.get("min_conversations")
+        project_uuid = request.query_params.get("project_uuid")
 
         # Validate and parse dates
         start_date, end_date, error_response = validate_and_parse_dates(
@@ -325,6 +347,16 @@ class UnresolvedRateView(APIView):
         )
         if error_response:
             return error_response
+
+        # Validate project_uuid if provided
+        if project_uuid:
+            try:
+                UUID(project_uuid)
+            except (ValueError, TypeError):
+                return Response(
+                    {"error": "project_uuid must be a valid UUID format"},
+                    status=400,
+                )
 
         # Validate motor if provided
         if motor and motor not in MOTOR_BACKEND_MAP:
@@ -348,12 +380,15 @@ class UnresolvedRateView(APIView):
                     {"error": "min_conversations must be a valid integer"}, status=400
                 )
 
-        # Build base query
+        # Build base query (across all projects, or filtered by project_uuid)
         conversations = Conversation.objects.filter(
-            project__uuid=project_uuid,
             created_at__date__gte=start_date,
             created_at__date__lte=end_date,
         ).select_related("project")
+
+        # Filter by project_uuid if provided
+        if project_uuid:
+            conversations = conversations.filter(project__uuid=project_uuid)
 
         # Filter by motor if provided
         if motor:
@@ -388,6 +423,7 @@ class UnresolvedRateView(APIView):
             "filters": {
                 "start_date": str(start_date),
                 "end_date": str(end_date),
+                "project_uuid": project_uuid,
                 "motor": motor,
                 "min_conversations": min_conversations,
             },

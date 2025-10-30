@@ -1,9 +1,6 @@
 from django.contrib import admin
 from django.urls import path
 from django.http import HttpResponse
-from django.contrib import messages
-from django.utils.html import format_html
-from django.template.loader import render_to_string
 from rest_framework.test import APIRequestFactory
 import json
 
@@ -25,8 +22,24 @@ def get_analytics_action(view_class, action_name, description):
         results = []
 
         for project in queryset:
-            # Build query params from request.GET
+            # Build query params based on view type
             query_params = {}
+            
+            if view_class == ResolutionRateAverageView:
+                query_params["project_uuid"] = str(project.uuid)
+                url_path = "/api/analytics/resolution-rate/average/"
+            elif view_class == UnresolvedRateView:
+                query_params["project_uuid"] = str(project.uuid)
+                url_path = "/api/analytics/unresolved-rate/"
+            elif view_class == ResolutionRateIndividualView:
+                query_params["filter_project_uuid"] = str(project.uuid)
+                url_path = "/api/analytics/resolution-rate/individual/"
+            elif view_class == ProjectsByMotorView:
+                query_params = {"motor": "both"}  # Projects by Motor doesn't filter by project
+                url_path = "/api/analytics/projects/by-motor/"
+            else:
+                continue
+            
             if request.GET.get("start_date"):
                 query_params["start_date"] = request.GET["start_date"]
             if request.GET.get("end_date"):
@@ -36,20 +49,12 @@ def get_analytics_action(view_class, action_name, description):
             if request.GET.get("min_conversations"):
                 query_params["min_conversations"] = request.GET["min_conversations"]
 
-            # Determine URL path based on view class
-            if view_class == ResolutionRateAverageView:
-                url_path = f"/api/projects/{project.uuid}/analytics/resolution-rate/average/"
-            elif view_class == UnresolvedRateView:
-                url_path = f"/api/projects/{project.uuid}/analytics/unresolved-rate/"
-            else:
-                continue
-
             # Create Django request (APIRequestFactory returns HttpRequest)
             django_request = factory.get(url_path, query_params)
             django_request.user = request.user
 
             # Call view - DRF will automatically wrap HttpRequest in Request
-            response = view(django_request, project_uuid=str(project.uuid))
+            response = view(django_request)
 
             if hasattr(response, "data"):
                 results.append(
@@ -85,6 +90,7 @@ def get_analytics_action(view_class, action_name, description):
                     f"Error {result['status_code']} - {error_data}"
                 )
 
+        from django.contrib import messages
         messages.success(
             request,
             f"{description} Results:{''.join(message_parts)}",
@@ -95,7 +101,7 @@ def get_analytics_action(view_class, action_name, description):
     return analytics_action
 
 
-# Create specific actions for project-scoped endpoints
+# Create specific actions for all analytics endpoints
 get_average_resolution_rate = get_analytics_action(
     ResolutionRateAverageView, "get_average_resolution_rate", "Get Average Resolution Rate"
 )
@@ -104,8 +110,136 @@ get_unresolved_rate = get_analytics_action(
     UnresolvedRateView, "get_unresolved_rate", "Get Unresolved Rate"
 )
 
+get_individual_resolution_rate = get_analytics_action(
+    ResolutionRateIndividualView, "get_individual_resolution_rate", "Get Individual Resolution Rate"
+)
+
+get_projects_by_motor = get_analytics_action(
+    ProjectsByMotorView, "get_projects_by_motor", "Get Projects by Motor"
+)
+
 
 # Custom admin views for global endpoints
+def average_resolution_rate_view(request):
+    """Admin view for Average Resolution Rate endpoint"""
+    factory = APIRequestFactory()
+    view = ResolutionRateAverageView.as_view()
+    response_data = None
+    status_code = None
+    query_params = {}
+
+    if request.method == "POST":
+        # Get query params from form
+        start_date = request.POST.get("start_date", "").strip()
+        end_date = request.POST.get("end_date", "").strip()
+        motor = request.POST.get("motor", "").strip()
+        min_conversations = request.POST.get("min_conversations", "").strip()
+        project_uuid = request.POST.get("project_uuid", "").strip()
+
+        query_params = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "motor": motor,
+            "min_conversations": min_conversations,
+            "project_uuid": project_uuid,
+        }
+        # Remove empty params
+        query_params = {k: v for k, v in query_params.items() if v}
+
+        django_request = factory.get("/api/analytics/resolution-rate/average/", query_params)
+        django_request.user = request.user
+
+        response = view(django_request)
+        response_data = response.data if hasattr(response, "data") else {}
+        status_code = response.status_code
+
+    # Build simple HTML response
+    html = f"""
+    <html>
+        <head><title>Average Resolution Rate Analytics</title></head>
+        <body>
+            <h1>Average Resolution Rate Analytics</h1>
+            <form method="post">
+                <p>Project UUID (optional): <input type="text" name="project_uuid" value="{query_params.get('project_uuid', '')}" placeholder="Leave empty for all projects"></p>
+                <p>Start Date (YYYY-MM-DD): <input type="date" name="start_date" value="{query_params.get('start_date', '')}"></p>
+                <p>End Date (YYYY-MM-DD): <input type="date" name="end_date" value="{query_params.get('end_date', '')}"></p>
+                <p>Motor: 
+                    <select name="motor">
+                        <option value="">All</option>
+                        <option value="AB 2" {'selected' if query_params.get('motor') == 'AB 2' else ''}>AB 2</option>
+                        <option value="AB 2.5" {'selected' if query_params.get('motor') == 'AB 2.5' else ''}>AB 2.5</option>
+                    </select>
+                </p>
+                <p>Min Conversations: <input type="number" name="min_conversations" value="{query_params.get('min_conversations', '')}"></p>
+                <p><button type="submit">Run Query</button></p>
+            </form>
+            {f'<h2>Results (Status: {status_code})</h2><pre>{json.dumps(response_data, indent=2)}</pre>' if response_data else ''}
+        </body>
+    </html>
+    """
+    return HttpResponse(html)
+
+
+def unresolved_rate_view(request):
+    """Admin view for Unresolved Rate endpoint"""
+    factory = APIRequestFactory()
+    view = UnresolvedRateView.as_view()
+    response_data = None
+    status_code = None
+    query_params = {}
+
+    if request.method == "POST":
+        # Get query params from form
+        start_date = request.POST.get("start_date", "").strip()
+        end_date = request.POST.get("end_date", "").strip()
+        motor = request.POST.get("motor", "").strip()
+        min_conversations = request.POST.get("min_conversations", "").strip()
+        project_uuid = request.POST.get("project_uuid", "").strip()
+
+        query_params = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "motor": motor,
+            "min_conversations": min_conversations,
+            "project_uuid": project_uuid,
+        }
+        # Remove empty params
+        query_params = {k: v for k, v in query_params.items() if v}
+
+        django_request = factory.get("/api/analytics/unresolved-rate/", query_params)
+        django_request.user = request.user
+
+        response = view(django_request)
+        response_data = response.data if hasattr(response, "data") else {}
+        status_code = response.status_code
+
+    # Build simple HTML response
+    html = f"""
+    <html>
+        <head><title>Unresolved Rate Analytics</title></head>
+        <body>
+            <h1>Unresolved Rate Analytics</h1>
+            <form method="post">
+                <p>Project UUID (optional): <input type="text" name="project_uuid" value="{query_params.get('project_uuid', '')}" placeholder="Leave empty for all projects"></p>
+                <p>Start Date (YYYY-MM-DD): <input type="date" name="start_date" value="{query_params.get('start_date', '')}"></p>
+                <p>End Date (YYYY-MM-DD): <input type="date" name="end_date" value="{query_params.get('end_date', '')}"></p>
+                <p>Motor: 
+                    <select name="motor">
+                        <option value="">All</option>
+                        <option value="AB 2" {'selected' if query_params.get('motor') == 'AB 2' else ''}>AB 2</option>
+                        <option value="AB 2.5" {'selected' if query_params.get('motor') == 'AB 2.5' else ''}>AB 2.5</option>
+                    </select>
+                </p>
+                <p>Min Conversations: <input type="number" name="min_conversations" value="{query_params.get('min_conversations', '')}"></p>
+                <p><button type="submit">Run Query</button></p>
+            </form>
+            {f'<h2>Results (Status: {status_code})</h2><pre>{json.dumps(response_data, indent=2)}</pre>' if response_data else ''}
+        </body>
+    </html>
+    """
+    return HttpResponse(html)
+
+
 def individual_resolution_rate_view(request):
     """Admin view for Individual Resolution Rate endpoint"""
     factory = APIRequestFactory()
@@ -253,10 +387,28 @@ def analytics_dashboard(request):
             <h1>📊 Analytics Resolution Endpoints</h1>
             
             <div class="card">
-                <h2>Global Endpoints</h2>
-                <p class="description">These endpoints work across all projects and don't require selecting specific projects.</p>
+                <h2>All Analytics Endpoints</h2>
+                <p class="description">All endpoints are now global-scoped. Use optional filters to narrow down scraped projects.</p>
                 
-                <div>
+                <div style="margin-top: 15px;">
+                    <a href="/admin/analytics/average-resolution-rate/" class="button">
+                        📊 Average Resolution Rate
+                    </a>
+                    <p style="margin-left: 5px; color: #6c757d; font-size: 14px;">
+                        Get aggregated resolution rate metrics (optionally filter by project)
+                    </p>
+                </div>
+                
+                <div style="margin-top: 15px;">
+                    <a href="/admin/analytics/unresolved-rate/" class="button">
+                        ⚠️ Unresolved Rate
+                    </a>
+                    <p style="margin-left: 5px; color: #6c757d; font-size: 14px;">
+                        Get unresolved conversation rate metrics (optionally filter by project)
+                    </p>
+                </div>
+                
+                <div style="margin-top: 15px;">
                     <a href="/admin/analytics/individual-resolution-rate/" class="button">
                         📈 Individual Resolution Rate
                     </a>
@@ -272,27 +424,6 @@ def analytics_dashboard(request):
                     <p style="margin-left: 5px; color: #6c757d; font-size: 14px;">
                         Get list of projects grouped by motor type (AB 2 or AB 2.5)
                     </p>
-                </div>
-            </div>
-            
-            <div class="card">
-                <h2>Project-Scoped Endpoints</h2>
-                <p class="description">Go to <a href="/admin/projects/project/">Projects</a>, select one or more projects, and choose from the Actions dropdown:</p>
-                
-                <div>
-                    <div style="padding: 10px; background: white; border-left: 4px solid #007bff; margin: 10px 0;">
-                        <strong>Get Average Resolution Rate</strong>
-                        <p style="margin: 5px 0; color: #6c757d; font-size: 14px;">
-                            Get aggregated resolution rate metrics for selected projects
-                        </p>
-                    </div>
-                    
-                    <div style="padding: 10px; background: white; border-left: 4px solid #007bff; margin: 10px 0;">
-                        <strong>Get Unresolved Rate</strong>
-                        <p style="margin: 5px 0; color: #6c757d; font-size: 14px;">
-                            Get unresolved conversation rate metrics for selected projects
-                        </p>
-                    </div>
                 </div>
             </div>
             
@@ -322,7 +453,17 @@ def get_urls_with_analytics():
             admin.site.admin_view(analytics_dashboard),
             name="analytics_dashboard",
         ),
-        # Individual endpoint views
+        # All endpoint views
+        path(
+            "analytics/average-resolution-rate/",
+            admin.site.admin_view(average_resolution_rate_view),
+            name="analytics_average_resolution_rate",
+        ),
+        path(
+            "analytics/unresolved-rate/",
+            admin.site.admin_view(unresolved_rate_view),
+            name="analytics_unresolved_rate",
+        ),
         path(
             "analytics/individual-resolution-rate/",
             admin.site.admin_view(individual_resolution_rate_view),
