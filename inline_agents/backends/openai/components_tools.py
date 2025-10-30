@@ -359,7 +359,7 @@ simple_text_tool = FunctionTool(
 )
 
 quick_replies_tool = FunctionTool(
-    name="create_quick_replies_message", 
+    name="create_quick_replies_message",
     description="Creates a message with 2-3 quick reply options. Use when the user needs to choose between simple options.",
     params_json_schema=QuickRepliesArgs.model_json_schema(),
     on_invoke_tool=create_quick_replies_message,

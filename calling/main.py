@@ -7,6 +7,9 @@ from calling.api_models import CallsModel
 from calling.bridge.answer import get_answer
 from calling.clients.meta import accept_call, pre_accept_call
 from calling.sessions import SessionManager
+from fastapi import FastAPI, Response
+
+from calling.api_models import CallsModel
 
 app = FastAPI()
 
@@ -35,4 +38,5 @@ async def calls(body: CallsModel):
 
     await accept_call(sdp_answer, call_id, settings.WA_PHONE_NUMBER, settings.WA_ACCESS_TOKEN)
 
-    return Response()
+    if call.event == "terminate":
+        print("received the terminate event")

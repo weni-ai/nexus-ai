@@ -1,3 +1,5 @@
+import os
+
 import uvicorn
 from django.core.management.base import BaseCommand
 
@@ -11,6 +13,8 @@ class Command(BaseCommand):
         parser.add_argument("--port", type=int, default=8001, help="Port to run the server on (default: 8000)")
 
     def handle(self, *args, **options):
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings.calling_settings")
+
         port = options["port"]
         self.stdout.write(self.style.SUCCESS(f"Starting server on port {port}"))
         uvicorn.run(app, host="0.0.0.0", port=port)

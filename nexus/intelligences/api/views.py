@@ -8,8 +8,10 @@ from rest_framework import parsers, status, views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
+from rest_framework.views import APIView
 
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.authentication.authentication import ExternalTokenAuthentication
 from nexus.events import event_manager
 from nexus.intelligences.models import (
     ContentBase,
@@ -1921,5 +1923,60 @@ class SupervisorViewset(ModelViewSet):
             print(f"Error retrieving supervisor data: {str(e)}")
             return Response(
                 {"error": f"Error retrieving supervisor data: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class InstructionsClassificationAPIView(APIView):
+    authentication_classes = [ExternalTokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, project_uuid):
+        try:
+            instruction = request.data.get('instruction', '')
+            if not instruction:
+                return Response(
+                    {"error": "Instruction is required"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user = request.user
+            name = user.name or user.email.split('@')[0]
+            occupation = getattr(user, 'occupation', 'Customer Service Agent')
+            
+            from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
+            project, content_base, _ = get_project_and_content_base_data(project_uuid)
+            
+            goal = content_base.agent.goal if content_base.agent else "Provide excellent customer support"
+            adjective = content_base.agent.personality if content_base.agent else "friendly"
+            
+            instructions = []
+            for instruction_obj in content_base.instructions.all():
+                instructions.append({
+                    "instruction": instruction_obj.instruction,
+                    "type": "custom"
+                })
+            
+            from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
+            lambda_usecase = LambdaUseCase()
+            
+            classification, suggestion = lambda_usecase.instruction_classify(
+                name=name,
+                occupation=occupation,
+                goal=goal,
+                adjective=adjective,
+                instructions=instructions,
+                instruction_to_classify=instruction
+            )
+            
+            return Response({
+                "classification": classification,
+                "suggestion": suggestion
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                {"error": str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
