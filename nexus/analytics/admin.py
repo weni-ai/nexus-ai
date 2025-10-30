@@ -5,7 +5,6 @@ from django.contrib import messages
 from django.utils.html import format_html
 from django.template.loader import render_to_string
 from rest_framework.test import APIRequestFactory
-from rest_framework.request import Request
 import json
 
 from nexus.analytics.api.views import (
@@ -45,13 +44,12 @@ def get_analytics_action(view_class, action_name, description):
             else:
                 continue
 
-            # Create DRF request
-            drf_request = factory.get(url_path, query_params)
-            drf_request.user = request.user
-            drf_request = Request(drf_request)
+            # Create Django request (APIRequestFactory returns HttpRequest)
+            django_request = factory.get(url_path, query_params)
+            django_request.user = request.user
 
-            # Call view
-            response = view(drf_request, project_uuid=str(project.uuid))
+            # Call view - DRF will automatically wrap HttpRequest in Request
+            response = view(django_request, project_uuid=str(project.uuid))
 
             if hasattr(response, "data"):
                 results.append(
@@ -136,11 +134,10 @@ def individual_resolution_rate_view(request):
             # Remove empty params
             query_params = {k: v for k, v in query_params.items() if v}
 
-            drf_request = factory.get("/api/analytics/resolution-rate/individual/", query_params)
-            drf_request.user = request.user
-            drf_request = Request(drf_request)
+            django_request = factory.get("/api/analytics/resolution-rate/individual/", query_params)
+            django_request.user = request.user
 
-            response = view(drf_request)
+            response = view(django_request)
             response_data = response.data if hasattr(response, "data") else {}
             status_code = response.status_code
 
@@ -190,11 +187,10 @@ def projects_by_motor_view(request):
             query_params["start_date"] = start_date
             query_params["end_date"] = end_date
 
-        drf_request = factory.get("/api/analytics/projects/by-motor/", query_params)
-        drf_request.user = request.user
-        drf_request = Request(drf_request)
+        django_request = factory.get("/api/analytics/projects/by-motor/", query_params)
+        django_request.user = request.user
 
-        response = view(drf_request)
+        response = view(django_request)
         response_data = response.data if hasattr(response, "data") else {}
         status_code = response.status_code
 
