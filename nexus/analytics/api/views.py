@@ -174,12 +174,12 @@ class ResolutionRateAverageView(APIView):
 
 
 class ResolutionRateIndividualView(APIView):
-    permission_classes = [ProjectPermission]
+    permission_classes = [IsAuthenticated]
 
-    def get(self, request, project_uuid=None):
+    def get(self, request):
         """
-        GET /api/projects/<project_uuid>/analytics/resolution-rate/individual/
-        
+        GET /api/analytics/resolution-rate/individual/
+
         Query params: Same as average endpoint, plus:
         - filter_project_uuid (optional): Filter by specific project UUID
         - filter_project_name (optional): Filter by project name (partial search, case-insensitive)
@@ -221,9 +221,8 @@ class ResolutionRateIndividualView(APIView):
                     {"error": "min_conversations must be a valid integer"}, status=400
                 )
 
-        # Build base query
+        # Build base query across all projects
         conversations = Conversation.objects.filter(
-            project__uuid=project_uuid,
             created_at__date__gte=start_date,
             created_at__date__lte=end_date,
         ).select_related("project")
