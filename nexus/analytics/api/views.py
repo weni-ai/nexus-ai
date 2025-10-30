@@ -2,13 +2,12 @@ import pendulum
 from uuid import UUID
 from django.db.models import Count, Q
 from django.utils.dateparse import parse_date
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
-from nexus.projects.api.permissions import ProjectPermission, CombinedExternalProjectPermission
 
 from .serializers import (
     ResolutionRateSerializer,
@@ -16,6 +15,13 @@ from .serializers import (
     UnresolvedRateSerializer,
     ProjectsByMotorSerializer,
 )
+
+
+class InternalCommunicationPermission(BasePermission):
+    """Permission class for internal service-to-service communication"""
+    def has_permission(self, request, view):
+        user = request.user
+        return user.has_perm("users.can_communicate_internally")
 
 # Motor to backend mapping
 MOTOR_BACKEND_MAP = {
@@ -62,7 +68,7 @@ def validate_and_parse_dates(start_date_str, end_date_str):
 
 
 class ResolutionRateAverageView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
         """
@@ -190,7 +196,7 @@ class ResolutionRateAverageView(APIView):
 
 
 class ResolutionRateIndividualView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
         """
@@ -321,7 +327,7 @@ class ResolutionRateIndividualView(APIView):
 
 
 class UnresolvedRateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
         """
@@ -434,7 +440,7 @@ class UnresolvedRateView(APIView):
 
 
 class ProjectsByMotorView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
         """
