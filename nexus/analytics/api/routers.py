@@ -14,9 +14,9 @@ urlpatterns = [
         ResolutionRateAverageView.as_view(),
         name="resolution-rate-average",
     ),
-    # Individual resolution rate (per project)
+    # Individual resolution rate (global, no project_uuid)
     path(
-        "<project_uuid>/analytics/resolution-rate/individual/",
+        "analytics/resolution-rate/individual/",
         ResolutionRateIndividualView.as_view(),
         name="resolution-rate-individual",
     ),
