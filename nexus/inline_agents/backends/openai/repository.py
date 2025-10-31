@@ -1,5 +1,3 @@
-
-
 from inline_agents.repository import SupervisorRepository
 from nexus.inline_agents.backends.openai.models import (
     OpenAISupervisor as Supervisor,
@@ -15,8 +13,7 @@ class OpenAISupervisorRepository(SupervisorRepository):
         project: Project,
         foundation_model: str = None,
     ) -> Agent:
-
-        supervisor = Supervisor.objects.order_by('id').last()
+        supervisor = Supervisor.objects.order_by("id").last()
 
         if not supervisor:
             raise Supervisor.DoesNotExist()
@@ -30,7 +27,9 @@ class OpenAISupervisorRepository(SupervisorRepository):
             "components_instructions_up": supervisor.components_instructions_up_prompt,
             "human_support_instructions": supervisor.human_support_prompt,
             "tools": cls._get_supervisor_tools(project=project, supervisor=supervisor),
-            "foundation_model": cls.get_foundation_model(project=project, supervisor=supervisor, foundation_model=foundation_model),
+            "foundation_model": cls.get_foundation_model(
+                project=project, supervisor=supervisor, foundation_model=foundation_model
+            ),
             "knowledge_bases": supervisor.knowledge_bases,
             "prompt_override_configuration": supervisor.prompt_override_configuration,
             "default_instructions_for_collaborators": supervisor.default_instructions_for_collaborators,

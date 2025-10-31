@@ -1,4 +1,5 @@
 from nexus.logs.models import RecentActivities
+
 from .recent_activities_dto import CreateRecentActivityDTO
 
 
@@ -12,6 +13,6 @@ def create_recent_activity(
         project=dto.project,
         created_by=dto.created_by,
         intelligence=dto.intelligence,
-        action_details=dto.action_details
+        action_details=dto.action_details,
     )
     return recent_activity
