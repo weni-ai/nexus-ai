@@ -1,5 +1,5 @@
-from typing import List
 from abc import ABC, abstractmethod
+from typing import List
 
 
 class GPTDatabase(ABC):
@@ -10,7 +10,7 @@ class GPTDatabase(ABC):
                 answer = answer.strip()
                 ans = ""
                 for ch in answer:
-                    if ch == '\n':
+                    if ch == "\n":
                         break
                     ans += ch
                 answers.append({"text": ans})

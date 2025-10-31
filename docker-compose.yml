@@ -29,7 +29,7 @@ services:
       - DEFAULT_DATABASE=${DEFAULT_DATABASE:-postgres://nexus:nexus@database:5432/nexus}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
   celery:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
     depends_on:

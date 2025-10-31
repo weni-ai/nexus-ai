@@ -1,11 +1,10 @@
 import amqp
 from sentry_sdk import capture_exception
 
+from nexus.event_driven.consumer.consumers import EDAConsumer
+from nexus.event_driven.parsers import JSONParser
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
-
-from nexus.event_driven.parsers import JSONParser
-from nexus.event_driven.consumer.consumers import EDAConsumer
 
 
 class ProjectConsumer(EDAConsumer):
