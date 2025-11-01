@@ -15,6 +15,7 @@ class Session:
     openai_connection: "RTCPeerConnection" = None
     answer_sdp: str = None
     agents: dict = None
+    openai_datachannel: str = None
 
     def set_agents(self, agents: dict) -> None:
         self.agents = agents
@@ -24,6 +25,9 @@ class Session:
 
     def set_answer_sdp(self, sdp: str) -> None:
         self.answer_sdp = sdp
+
+    def set_openai_datachannel(self, datachannel: str) -> None:
+        self.openai_datachannel = datachannel
 
     async def close(self) -> None:
         await self.wpp_connection.close()

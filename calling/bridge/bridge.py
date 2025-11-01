@@ -117,7 +117,9 @@ class RTCBridge:
                     )
 
         try:
-            _setup_events_channel(openai_connection.createDataChannel("oai-events"))
+            openai_dc = openai_connection.createDataChannel("oai-events")
+            session.set_openai_datachannel(openai_dc)
+            _setup_events_channel(openai_dc)
         except Exception as e:
 
             logger.error("[OAI][DC] Falha ao criar datachannel local:", e)
