@@ -251,17 +251,23 @@ class LambdaUseCase():
             
             response_data = json.loads(response.get("Payload").read())
 
-            classification_data = response_data.get("classification", [])
+            # Support both current format ("classification") and a possible future improvement ("classifications")
+            classification_data = response_data.get("classifications") or response_data.get("classification", [])
             suggestion = response_data.get("suggestion")
             
-            if classification_data and isinstance(classification_data[0], str):
-                reason = response_data.get("reason", "")
-                classification = [
-                    {"name": name, "reason": reason} 
-                    for name in classification_data
-                ]
+            if classification_data and len(classification_data) > 0:
+                # Check if it's already is a list of objects
+                if isinstance(classification_data[0], dict):
+                    classification = classification_data
+                else:
+                    # Transform to a single reason for all classifications
+                    reason = response_data.get("reason", "")
+                    classification = [
+                        {"classification": classification_value, "reason": reason} 
+                        for classification_value in classification_data
+                    ]
             else:
-                classification = classification_data
+                classification = []
             
             return classification, suggestion
             
