@@ -66,16 +66,17 @@ class RTCBridge:
                 }
 
                 cls._dc_send_json(dc, tools_session)
-                await asyncio.sleep(0.5)
-                cls._dc_send_json(
-                    dc,
-                    {
-                        "type": "response.create",
-                        "response": {
-                            "instructions": "Apresente-se, diga seu nome e como pode ajudar o contato. seja breve",
-                        },
-                    },
-                )
+                # TODO: Send presentations
+                # await asyncio.sleep(0.5)
+                # cls._dc_send_json(
+                #     dc,
+                #     {
+                #         "type": "response.create",
+                #         "response": {
+                #             "instructions": "Apresente-se, diga seu nome e como pode ajudar o contato. seja breve",
+                #         },
+                #     },
+                # )
 
             @dc.on("message")
             async def on_message(message):
