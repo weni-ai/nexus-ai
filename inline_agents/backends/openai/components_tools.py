@@ -698,7 +698,7 @@ async def create_simple_text_with_catalog(ctx: RunContextWrapper[Any], args: str
     if parsed.catalog_header_text:
         header = {
             "type": "text",
-            "text": parsed.header_text
+            "text": parsed.catalog_header_text
         }
     else:
         header = {
