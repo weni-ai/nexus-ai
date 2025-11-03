@@ -1,7 +1,6 @@
 import re
 import uuid
 import json
-
 from typing import Optional, List, Any
 from agents import RunContextWrapper, FunctionTool
 from pydantic import BaseModel, Field, field_validator
@@ -330,6 +329,19 @@ async def create_catalog_message(ctx: RunContextWrapper[Any], args: str) -> str:
             "product": product.product,
             "product_retailer_ids": product.product_retailer_ids
         })
+        if len(products) >= 10:
+            break
+
+    if parsed.header_text:
+        header = {
+            "type": "text",
+            "text": parsed.header_text
+        }
+    else:
+        header = {
+            "type": "text",
+            "text": "Saiba mais"
+        }
 
     msg = {
         "text": parsed.text,
@@ -338,10 +350,7 @@ async def create_catalog_message(ctx: RunContextWrapper[Any], args: str) -> str:
             "action_button_text": parsed.action_button_text,
             "products": products
         },
-        "header": {
-            "type": "text",
-            "text": parsed.header_text
-        }
+        "header": header
     }
 
     if parsed.footer:
@@ -443,7 +452,7 @@ class SimpleTextWithListArgs(BaseModel):
     text: str = Field(..., max_length=4096, description="Initial message text, maximum 4096 characters")
     header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
     footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
-
+    
     # list_message fields
     list_text: str = Field(..., max_length=4096, description="Second message text with list, maximum 4096 characters")
     button_text: str = Field(..., max_length=20, description="Button text, maximum 20 characters")
@@ -683,13 +692,23 @@ async def create_simple_text_with_catalog(ctx: RunContextWrapper[Any], args: str
             "product": product.product,
             "product_retailer_ids": product.product_retailer_ids
         })
+        if len(products) >= 10:
+            break
+
+    if parsed.catalog_header_text:
+        header = {
+            "type": "text",
+            "text": parsed.header_text
+        }
+    else:
+        header = {
+            "type": "text",
+            "text": "Saiba mais"
+        }
 
     msg2 = {
         "text": parsed.catalog_text,
-        "header": {
-            "type": "text",
-            "text": parsed.catalog_header_text
-        },
+        "header": header,
         "catalog_message": {
             "send_catalog": False,
             "action_button_text": parsed.action_button_text,
@@ -698,7 +717,7 @@ async def create_simple_text_with_catalog(ctx: RunContextWrapper[Any], args: str
     }
     if parsed.catalog_footer:
         msg2["footer"] = parsed.catalog_footer
-
+    
     response = [{"msg": msg1}, {"msg": msg2}]
     return json.dumps(response, ensure_ascii=False)
 
