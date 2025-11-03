@@ -21,10 +21,9 @@ class TestORMTeamRepository(TestCase):
             project=self.project,
             instruction="Test instruction 1",
             collaboration_instructions="Test collaboration 1",
-            foundation_model="claude-3-sonnet",
             backend_foundation_models={
-                "BedrockBackend": "claude-3-sonnet",
-                "OpenAIBackend": "gpt-4",
+                "BedrockBackend": settings.AWS_BEDROCK_AGENTS_MODEL_ID[0],
+                "OpenAIBackend": settings.OPENAI_AGENTS_FOUNDATION_MODEL,
             },
         )
 
@@ -34,7 +33,6 @@ class TestORMTeamRepository(TestCase):
             project=self.project,
             instruction="Test instruction 2",
             collaboration_instructions="Test collaboration 2",
-            foundation_model="claude-3-haiku",
             backend_foundation_models={
                 "BedrockBackend": "claude-3-haiku",
                 "OpenAIBackend": "gpt-3.5-turbo",
@@ -129,7 +127,7 @@ class TestORMTeamRepository(TestCase):
         self.assertEqual(
             agent1_result["collaborator_configurations"], "Test collaboration 1"
         )
-        self.assertEqual(agent1_result["foundationModel"], "claude-3-sonnet")
+        self.assertEqual(agent1_result["foundationModel"], settings.AWS_BEDROCK_AGENTS_MODEL_ID[0])
 
         # Check skills processing
         self.assertEqual(len(agent1_result["actionGroups"]), 1)
@@ -207,7 +205,7 @@ class TestORMTeamRepository(TestCase):
             agent for agent in result if agent["agentName"] == "test-agent-2"
         )
 
-        self.assertEqual(agent1_result["foundationModel"], "claude-3-sonnet")
+        self.assertEqual(agent1_result["foundationModel"], settings.AWS_BEDROCK_AGENTS_MODEL_ID[0])
         self.assertEqual(agent2_result["foundationModel"], "claude-3-haiku")
 
     def test_get_team_openai_backend(self):
@@ -273,8 +271,7 @@ class TestORMTeamRepository(TestCase):
             project=self.project,
             instruction="Test instruction",
             collaboration_instructions="Test collaboration",
-            foundation_model="claude-3-sonnet",
-            backend_foundation_models={"BedrockBackend": "claude-3-sonnet"},
+            backend_foundation_models={"BedrockBackend": settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]},
         )
 
         # Create version with empty skills
@@ -304,7 +301,6 @@ class TestORMTeamRepository(TestCase):
             project=self.project,
             instruction="Test instruction",
             collaboration_instructions="Test collaboration",
-            foundation_model="claude-3-sonnet",
             backend_foundation_models={},
         )
 
@@ -346,7 +342,7 @@ class TestORMTeamRepository(TestCase):
 
         # Should fallback to foundation_model when backend_foundation_models is empty for BedrockBackend
         self.assertEqual(
-            agent_empty_backend_result["foundationModel"], "claude-3-sonnet"
+            agent_empty_backend_result["foundationModel"], settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]
         )
 
     def test_get_team_agent_with_empty_backend_foundation_models_openai(self):
@@ -363,7 +359,6 @@ class TestORMTeamRepository(TestCase):
             project=openai_project,
             instruction="Test instruction",
             collaboration_instructions="Test collaboration",
-            foundation_model="claude-3-sonnet",
             backend_foundation_models={},
         )
 
@@ -413,7 +408,6 @@ class TestORMTeamRepository(TestCase):
             project=self.project,
             instruction="Test instruction",
             collaboration_instructions="Test collaboration",
-            foundation_model="claude-3-sonnet",
             backend_foundation_models={
                 "OpenAIBackend": "gpt-4"
             },  # Missing BedrockBackend
@@ -455,7 +449,7 @@ class TestORMTeamRepository(TestCase):
 
         # Should fallback to foundation_model for BedrockBackend since it's missing from backend_foundation_models
         self.assertEqual(
-            agent_partial_backend_result["foundationModel"], "claude-3-sonnet"
+            agent_partial_backend_result["foundationModel"], settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]
         )
 
     def test_get_team_agent_with_partial_backend_foundation_models_openai(self):
@@ -472,9 +466,8 @@ class TestORMTeamRepository(TestCase):
             project=openai_project,
             instruction="Test instruction",
             collaboration_instructions="Test collaboration",
-            foundation_model="claude-3-sonnet",
             backend_foundation_models={
-                "BedrockBackend": "claude-3-sonnet"
+                "BedrockBackend": settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]
             },  # Missing OpenAIBackend
         )
 
