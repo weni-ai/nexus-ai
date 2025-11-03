@@ -21,6 +21,7 @@ from nexus.agents.models import (
     Team,
     Credential,
 )
+from nexus.inline_agents.models import Agent as InlineAgent, IntegratedAgent, AgentCredential
 
 from nexus.usecases.agents import (
     AgentUsecase,
@@ -862,33 +863,80 @@ class DeleteAgentView(APIView):
 
     def delete(self, request, *args, **kwargs):
         """
-        Delete a custom agent and all its resources.
+        Delete an agent and all its resources.
+        
+        Supports both:
+        - Legacy agents (nexus.agents.models.Agent)
+        - Inline agents (nexus.inline_agents.models.Agent)
 
-        For Bedrock agents:
+        For Legacy Bedrock agents:
         - Deletes Lambda functions
         - Deletes agent aliases
         - Deletes Bedrock agent
 
-        For OpenAI agents:
-        - Only deletes database records
+        For Inline agents:
+        - Validates agent is not integrated into projects
+        - Deletes database records (CASCADE handles related records)
 
         Always:
-        - Validates agent is not active
-        - Deletes database records (CASCADE)
+        - Validates agent is not active/integrated
+        - Deletes database records
         """
         logger = logging.getLogger(__name__)
         agent_uuid = kwargs.get("agent_uuid")
         project_uuid = kwargs.get("project_uuid")
 
-        # Validate agent exists and belongs to project
+        # Get project to check configuration
         try:
-            agent = Agent.objects.get(uuid=agent_uuid, project__uuid=project_uuid)
+            project = Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return Response(
+                {"error": "Project not found"},
+                status=404
+            )
+
+        # Try to find both agent types
+        legacy_agent = None
+        inline_agent = None
+        
+        try:
+            legacy_agent = Agent.objects.get(uuid=agent_uuid, project__uuid=project_uuid)
         except Agent.DoesNotExist:
+            pass
+
+        try:
+            inline_agent = InlineAgent.objects.get(uuid=agent_uuid, project__uuid=project_uuid)
+        except InlineAgent.DoesNotExist:
+            pass
+
+        if not legacy_agent and not inline_agent:
             return Response(
                 {"error": "Agent not found"},
                 status=404
             )
 
+        if legacy_agent and inline_agent:
+            logger.warning(
+                f"Agent {agent_uuid} exists in both models! "
+                f"Prioritizing based on project inline_agent_switch={project.inline_agent_switch}"
+            )
+
+        # Select agent based on project configuration priority
+        # Priority: inline_agent_switch setting determines which type to prefer
+        should_use_inline = project.inline_agent_switch and inline_agent
+        should_use_legacy = legacy_agent
+        
+        if should_use_inline:
+            return self._delete_inline_agent(inline_agent, project_uuid, logger)
+        if should_use_legacy:
+            return self._delete_legacy_agent(legacy_agent, logger)
+        
+        # Use inline if it exists (should only happen if switch=False but only inline exists)
+        if inline_agent:
+            return self._delete_inline_agent(inline_agent, project_uuid, logger)
+
+    def _delete_legacy_agent(self, agent: Agent, logger):
+        """Delete a legacy agent (nexus.agents.models.Agent)"""
         # Check if agent is currently active
         active_agents = ActiveAgent.objects.filter(agent=agent)
         if active_agents.exists():
@@ -915,6 +963,7 @@ class DeleteAgentView(APIView):
         deletion_summary = {
             "agent_uuid": str(agent.uuid),
             "agent_name": agent.display_name,
+            "agent_type": "LEGACY",
             "backend_type": "BEDROCK" if is_bedrock else "OPENAI",
             "lambdas_deleted": [],
             "aliases_deleted": [],
@@ -974,8 +1023,65 @@ class DeleteAgentView(APIView):
                 )
 
         # Delete database records (CASCADE handles related records)
+        agent_name = agent.display_name
         agent.delete()
-        logger.info(f"Agent {agent.uuid} ({agent.display_name}) deleted successfully")
+        logger.info(f"Legacy agent {agent.uuid} ({agent_name}) deleted successfully")
+
+        return Response(
+            {
+                "message": "Agent deleted successfully",
+                **deletion_summary
+            },
+            status=200
+        )
+
+    def _delete_inline_agent(self, agent: InlineAgent, project_uuid: str, logger):
+        """Delete an inline agent (nexus.inline_agents.models.Agent)"""
+        # Check if agent is integrated into any projects
+        integrated_agents = IntegratedAgent.objects.filter(agent=agent)
+        if integrated_agents.exists():
+            projects = [
+                {
+                    "project_uuid": str(ia.project.uuid),
+                    "project_name": ia.project.name
+                }
+                for ia in integrated_agents
+            ]
+            return Response(
+                {
+                    "error": "Cannot delete agent that is integrated into projects. Please unassign it first.",
+                    "integrated_projects": projects,
+                    "instructions": "Unassign this agent from all projects before deletion"
+                },
+                status=400
+            )
+
+        deletion_summary = {
+            "agent_uuid": str(agent.uuid),
+            "agent_name": agent.name,
+            "agent_type": "INLINE",
+            "warnings": []
+        }
+
+        # Clean up credentials if this is the only agent using them
+        try:
+            # Get all credentials associated with this agent
+            agent_credentials = AgentCredential.objects.filter(agents=agent)
+            for cred in agent_credentials:
+                cred.agents.remove(agent)
+                # If no agents left using this credential, delete it
+                if cred.agents.count() == 0:
+                    cred.delete()
+                    logger.info(f"Deleted unused credential: {cred.key}")
+        except Exception as e:
+            warning = f"Credential cleanup warning: {str(e)}"
+            deletion_summary["warnings"].append(warning)
+            logger.warning(warning)
+
+        # Delete database records (CASCADE handles related records: Version, ContactField, etc.)
+        agent_name = agent.name
+        agent.delete()
+        logger.info(f"Inline agent {agent.uuid} ({agent_name}) deleted successfully")
 
         return Response(
             {
