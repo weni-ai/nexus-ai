@@ -5,9 +5,13 @@ from django.utils.dateparse import parse_date
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.conf import settings
+from mozilla_django_oidc.contrib.drf import OIDCAuthentication
 
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
+from nexus.orgs import permissions as org_permissions
+from nexus.authentication.authentication import ExternalTokenAuthentication
 
 from .serializers import (
     ResolutionRateSerializer,
@@ -18,10 +22,23 @@ from .serializers import (
 
 
 class InternalCommunicationPermission(BasePermission):
-    """Permission class for internal service-to-service communication"""
+    """Permission class for internal service-to-service communication or external tokens"""
     def has_permission(self, request, view):
+        # Check if using external token authentication (superuser token)
+        authorization_header = request.headers.get('Authorization')
+        if authorization_header:
+            try:
+                if org_permissions.is_super_user(authorization_header):
+                    return True
+            except (IndexError, AttributeError):
+                pass
+        
+        # Check if user has internal communication permission
         user = request.user
-        return user.has_perm("users.can_communicate_internally")
+        if user and user.is_authenticated:
+            return user.has_perm("users.can_communicate_internally")
+        
+        return False
 
 
 # Motor to backend mapping
@@ -69,6 +86,7 @@ def validate_and_parse_dates(start_date_str, end_date_str):
 
 
 class ResolutionRateAverageView(APIView):
+    authentication_classes = [ExternalTokenAuthentication, OIDCAuthentication]
     permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
@@ -205,6 +223,7 @@ class ResolutionRateAverageView(APIView):
 
 
 class ResolutionRateIndividualView(APIView):
+    authentication_classes = [ExternalTokenAuthentication, OIDCAuthentication]
     permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
@@ -343,6 +362,7 @@ class ResolutionRateIndividualView(APIView):
 
 
 class UnresolvedRateView(APIView):
+    authentication_classes = [ExternalTokenAuthentication, OIDCAuthentication]
     permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
@@ -463,7 +483,8 @@ class UnresolvedRateView(APIView):
 
 
 class ProjectsByMotorView(APIView):
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [ExternalTokenAuthentication, OIDCAuthentication]
+    permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
         # Prevent database access during schema generation
