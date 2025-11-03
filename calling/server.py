@@ -1,7 +1,6 @@
 import asyncio
 
 from fastapi import FastAPI, Response
-from sfcommons.logs import LogRegistry
 
 from calling.api_models import CallsModel
 from calling.service import CallingService
@@ -24,7 +23,6 @@ async def calls(body: CallsModel):
 
     if call.event == "terminate":
         await SessionManager.close_session(call_id)
-        LogRegistry.export()
         return Response()
 
     if SessionManager.is_session_active(call_id):
