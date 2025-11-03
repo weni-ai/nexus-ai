@@ -14,11 +14,7 @@ urlpatterns = [
         ResolutionRateAverageView.as_view(),
         name="resolution-rate-average",
     ),
-<<<<<<< HEAD
     # Individual resolution rate (global endpoint, project_uuid optional via query param)
-=======
-    # Individual resolution rate
->>>>>>> 2cd4d5b4 (change endpoints to be global scoped)
     path(
         "analytics/resolution-rate/individual/",
         ResolutionRateIndividualView.as_view(),
