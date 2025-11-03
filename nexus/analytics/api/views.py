@@ -89,6 +89,9 @@ class ResolutionRateAverageView(APIView):
     permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
+        # Prevent database access during schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Response({})
         """
         GET /api/analytics/resolution-rate/average/
         
@@ -218,6 +221,9 @@ class ResolutionRateIndividualView(APIView):
     permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
+        # Prevent database access during schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Response({})
         """
         GET /api/analytics/resolution-rate/individual/
 
@@ -350,6 +356,9 @@ class UnresolvedRateView(APIView):
     permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
+        # Prevent database access during schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Response({})
         """
         GET /api/analytics/unresolved-rate/
         
@@ -464,6 +473,9 @@ class ProjectsByMotorView(APIView):
     permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
+        # Prevent database access during schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Response({})
         """
         GET /api/analytics/projects/by-motor/
         
