@@ -14,7 +14,6 @@ from nexus.intelligences.models import (
     Topics,
     SubTopics,
     Conversation,
-    ConversationMessage,
     InlineAgentMessage
 )
 
@@ -200,11 +199,3 @@ class ConversationFactory(factory.django.DjangoModelFactory):
         SubTopicsFactory,
         topic=factory.SelfAttribute('..topic')
     )
-
-
-class ConversationMessageFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = ConversationMessage
-
-    conversation = factory.SubFactory(ConversationFactory)
-    message = factory.SubFactory(InlineAgentMessageFactory)
