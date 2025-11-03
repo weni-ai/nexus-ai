@@ -70,7 +70,7 @@ class DeleteAgentTestCase(TestCase):
 
     def test_delete_nonexistent_agent(self):
         """Test deleting an agent that doesn't exist"""
-        url = f"/api/project/{self.project.uuid}/agents/nonexistent-uuid/delete"
+        url = f"/api/project/{self.project.uuid}/agents/nonexistent-uuid"
         response = self.client.delete(url)
         
         self.assertEqual(response.status_code, 404)
@@ -88,7 +88,7 @@ class DeleteAgentTestCase(TestCase):
             created_by=self.user
         )
         
-        url = f"/api/project/{self.project.uuid}/agents/{other_agent.uuid}/delete"
+        url = f"/api/project/{self.project.uuid}/agents/{other_agent.uuid}"
         response = self.client.delete(url)
         
         self.assertEqual(response.status_code, 404)
@@ -102,7 +102,7 @@ class DeleteAgentTestCase(TestCase):
             created_by=self.user
         )
         
-        url = f"/api/project/{self.project.uuid}/agents/{self.bedrock_agent.uuid}/delete"
+        url = f"/api/project/{self.project.uuid}/agents/{self.bedrock_agent.uuid}"
         response = self.client.delete(url)
         
         self.assertEqual(response.status_code, 400)
@@ -114,7 +114,7 @@ class DeleteAgentTestCase(TestCase):
     @patch('nexus.task_managers.file_database.bedrock.BedrockFileDatabase.delete_lambda_function')
     def test_delete_bedrock_agent_success(self, mock_delete_lambda, mock_delete_agent):
         """Test successful deletion of Bedrock agent with Lambda cleanup"""
-        url = f"/api/project/{self.project.uuid}/agents/{self.bedrock_agent.uuid}/delete"
+        url = f"/api/project/{self.project.uuid}/agents/{self.bedrock_agent.uuid}"
         response = self.client.delete(url)
         
         self.assertEqual(response.status_code, 200)
@@ -136,7 +136,7 @@ class DeleteAgentTestCase(TestCase):
         """Test that Lambda deletion failure doesn't block agent deletion"""
         mock_delete_lambda.side_effect = Exception("Lambda deletion failed")
         
-        url = f"/api/project/{self.project.uuid}/agents/{self.bedrock_agent.uuid}/delete"
+        url = f"/api/project/{self.project.uuid}/agents/{self.bedrock_agent.uuid}"
         response = self.client.delete(url)
         
         self.assertEqual(response.status_code, 200)
@@ -148,7 +148,7 @@ class DeleteAgentTestCase(TestCase):
 
     def test_delete_openai_agent_success(self):
         """Test successful deletion of OpenAI agent (no Lambda cleanup)"""
-        url = f"/api/project/{self.project.uuid}/agents/{self.openai_agent.uuid}/delete"
+        url = f"/api/project/{self.project.uuid}/agents/{self.openai_agent.uuid}"
         response = self.client.delete(url)
         
         self.assertEqual(response.status_code, 200)
@@ -206,7 +206,7 @@ class DeleteAgentTestCase(TestCase):
         skill_id = self.skill.id
         version_id = version.id
         
-        url = f"/api/project/{self.project.uuid}/agents/{self.bedrock_agent.uuid}/delete"
+        url = f"/api/project/{self.project.uuid}/agents/{self.bedrock_agent.uuid}"
         response = self.client.delete(url)
         
         self.assertEqual(response.status_code, 200)
