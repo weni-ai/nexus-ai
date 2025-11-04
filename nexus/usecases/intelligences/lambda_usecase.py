@@ -371,12 +371,36 @@ def create_lambda_conversation(
         )
 
     except Exception as e:
+        agent_uuid = None
+        try:
+            from nexus.inline_agents.models import IntegratedAgent
+            
+            project_uuid = payload.get("project_uuid")
+            if project_uuid:
+                integrated_agent = IntegratedAgent.objects.filter(
+                    project__uuid=project_uuid
+                ).select_related('agent').first()
+                
+                if integrated_agent:
+                    agent_uuid = str(integrated_agent.agent.uuid)
+        except Exception:
+            pass
+        
+        sentry_context = {
+            "payload": payload
+        }
+        
+        if agent_uuid:
+            sentry_context["agent_uuid"] = agent_uuid
+        
         sentry_sdk.set_context(
             "conversation_context",
-            {
-                "payload": payload
-            }
+            sentry_context
         )
         sentry_sdk.set_tag("project_uuid", payload.get("project_uuid"))
         sentry_sdk.set_tag("contact_urn", payload.get("contact_urn"))
+        
+        if agent_uuid:
+            sentry_sdk.set_tag("agent_uuid", agent_uuid)
+        
         sentry_sdk.capture_exception(e)
