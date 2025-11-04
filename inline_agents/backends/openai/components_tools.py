@@ -452,7 +452,7 @@ class SimpleTextWithListArgs(BaseModel):
     text: str = Field(..., max_length=4096, description="Initial message text, maximum 4096 characters")
     header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
     footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
-    
+
     # list_message fields
     list_text: str = Field(..., max_length=4096, description="Second message text with list, maximum 4096 characters")
     button_text: str = Field(..., max_length=20, description="Button text, maximum 20 characters")
@@ -698,7 +698,7 @@ async def create_simple_text_with_catalog(ctx: RunContextWrapper[Any], args: str
     if parsed.catalog_header_text:
         header = {
             "type": "text",
-            "text": parsed.header_text
+            "text": parsed.catalog_header_text
         }
     else:
         header = {
@@ -717,7 +717,7 @@ async def create_simple_text_with_catalog(ctx: RunContextWrapper[Any], args: str
     }
     if parsed.catalog_footer:
         msg2["footer"] = parsed.catalog_footer
-    
+
     response = [{"msg": msg1}, {"msg": msg2}]
     return json.dumps(response, ensure_ascii=False)
 
