@@ -1943,7 +1943,7 @@ class SupervisorViewset(ModelViewSet):
 
 
 class InstructionsClassificationAPIView(APIView):
-    authentication_classes = [ExternalTokenAuthentication]
+    authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated]
 
     def post(self, request, project_uuid):

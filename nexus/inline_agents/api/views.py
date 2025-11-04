@@ -483,7 +483,18 @@ class MultiAgentView(APIView):
         try:
             project = Project.objects.get(uuid=project_uuid)
             
+            # AB 1.0 projects have inline_agent_switch=False and use BedrockBackend
+            is_legacy_project_enabling = (
+                not project.inline_agent_switch and 
+                multi_agents and 
+                project.agents_backend == "BedrockBackend"
+            )
+            
             project.inline_agent_switch = multi_agents
+            # Migrate legacy projects (AB 1.0) to AB 2.5 (OpenAI)
+            if is_legacy_project_enabling:
+                project.agents_backend = "OpenAIBackend"
+            
             if not project.use_prompt_creation_configurations:
                 project.use_prompt_creation_configurations = True
             project.save()
