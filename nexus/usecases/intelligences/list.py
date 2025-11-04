@@ -102,6 +102,17 @@ class ListContentBaseTextUseCase():
         contentbase = get_by_contentbase_uuid(contentbase_uuid)
         return ContentBaseText.objects.filter(content_base=contentbase)
 
+    def get_inline_contentbasetext(
+        self,
+        project_uuid: str,
+    ):
+        integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
+        intelligence = integrated_intelligence.intelligence
+
+        # Integrated intelligence by default has only one content base
+        content_base = intelligence.contentbases.first()
+        return ContentBaseText.objects.filter(content_base=content_base)
+
 
 class ListContentBaseFileUseCase():
 
@@ -135,6 +146,14 @@ class ListContentBaseLinkUseCase():
             raise IntelligencePermissionDenied()
 
         content_base = get_by_contentbase_uuid(contentbase_uuid=contentbase_uuid)
+        return ContentBaseLink.objects.filter(content_base=content_base)
+
+    def get_inline_contentbase_link(self, project_uuid: str):
+        integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
+        intelligence = integrated_intelligence.intelligence
+
+        # Integrated intelligence by default has only one content base
+        content_base = intelligence.contentbases.first()
         return ContentBaseLink.objects.filter(content_base=content_base)
 
 

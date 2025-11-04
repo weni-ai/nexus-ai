@@ -85,6 +85,26 @@ class LambdaUseCase():
         project_uuid: str,
         contact_urn: str
     ):
+        # If has_chats_room is True, skip lambda call and set resolution to "Has Chat Room"
+        if has_chats_room:
+            resolution = "Has Chat Room"
+            event_data = {
+                "event_name": "weni_nexus_data",
+                "key": "conversation_classification",
+                "value_type": "string",
+                "value": resolution,
+                "metadata": {
+                    "human_support": has_chats_room,
+                }
+            }
+            self.send_datalake_event(
+                event_data=event_data,
+                project_uuid=project_uuid,
+                contact_urn=contact_urn
+            )
+            return resolution
+
+        # Original logic for when has_chats_room is False
         lambda_conversation = messages
         payload_conversation = {
             "conversation": lambda_conversation
@@ -205,6 +225,50 @@ class LambdaUseCase():
         parsed_final_response = response.get("postProcessingParsedResponse").get("responseText")
         return parsed_final_response
 
+    def instruction_classify(
+        self,
+        name: str,
+        occupation: str,
+        goal: str,
+        adjective: str,
+        instructions: list,
+        instruction_to_classify: str
+    ):
+        try:
+            instructions_payload = {
+                "name": name,
+                "occupation": occupation,
+                "goal": goal,
+                "adjective": adjective,
+                "instructions": instructions,
+                "instruction_to_classify": instruction_to_classify
+            }
+            
+            response = self.invoke_lambda(
+                lambda_name=str(settings.INSTRUCTION_CLASSIFY_NAME),
+                payload=instructions_payload
+            )
+            
+            response_data = json.loads(response.get("Payload").read())
+
+            classification_data = response_data.get("classification", [])
+            suggestion = response_data.get("suggestion")
+            
+            if classification_data and isinstance(classification_data[0], str):
+                reason = response_data.get("reason", "")
+                classification = [
+                    {"name": name, "reason": reason} 
+                    for name in classification_data
+                ]
+            else:
+                classification = classification_data
+            
+            return classification, suggestion
+            
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            raise e
+
 
 @celery_app.task
 def create_lambda_conversation(
@@ -250,9 +314,8 @@ def create_lambda_conversation(
             contact_urn=payload.get("contact_urn")
         )
 
-        resolution_choice_value = ResolutionEntities.resolution_mapping(
-            ResolutionEntities.convert_resolution_string_to_int(resolution)
-        )
+        contact_name = payload.get("name")
+        resolution_choice_value = ResolutionEntities.convert_resolution_string_to_int(resolution)
 
         update_data = {
             "start_date": payload.get("start_date"),
@@ -262,23 +325,11 @@ def create_lambda_conversation(
             "resolution": resolution_choice_value,
             "topic": topic
         }
-
-        if conversation_queryset.exists():
-            conversation_queryset.update(**update_data)
-        else:
-            # TODO: Temp fix for older conversations, remove later
-            Conversation.objects.create(
-                contact_urn=payload.get("contact_urn"),
-                project=project,
-                external_id=payload.get("external_id"),
-                start_date=payload.get("start_date"),
-                end_date=payload.get("end_date"),
-                has_chats_room=payload.get("has_chats_room"),
-                contact_name=payload.get("name"),
-                channel_uuid=payload.get("channel_uuid"),
-                resolution=resolution_choice_value,
-                topic=topic
-            )
+        
+        if contact_name:
+            update_data["contact_name"] = contact_name
+        
+        conversation_queryset.update(**update_data)
 
         resolution_dto = ResolutionDTO(
             resolution=resolution_choice_value,

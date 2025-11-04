@@ -1,5 +1,3 @@
-from django.conf import settings
-
 from nexus.agents.encryption import encrypt_value
 from nexus.inline_agents.models import Agent, AgentCredential
 
@@ -9,7 +7,7 @@ from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.tools import ToolsUseCase
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 
-from nexus.intelligences.models import Conversation, ConversationMessage
+from nexus.intelligences.models import Conversation
 from nexus.inline_agents.models import InlineAgentMessage
 
 from typing import Dict
@@ -113,11 +111,6 @@ class UpdateConversationUseCase():
         conversation.contact_name = consumer_message.get("name")
         conversation.save()
 
-        conversation_message = ConversationMessage.objects.create(
-            conversation=conversation,
-        )
-        conversation_message.message.set(messages)
-
         return conversation
 
 
@@ -128,9 +121,6 @@ def update_conversation_data(
     channel_uuid: str
 ):
     from nexus.intelligences.models import Conversation
-
-    if project_uuid not in settings.CUSTOM_LAMBDA_CONVERSATION_PROJECTS:
-        return
 
     conversation = Conversation.objects.filter(
         project__uuid=project_uuid,

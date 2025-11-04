@@ -8,6 +8,7 @@ from .get_by_uuid import (
     get_by_content_base_file_uuid,
     get_default_content_base_by_project,
     get_by_content_base_link_uuid,
+    get_integrated_intelligence_by_project,
 )
 from nexus.usecases import orgs, users, projects
 from nexus.orgs import permissions
@@ -18,7 +19,7 @@ from .exceptions import (
     ContentBaseLinkDoesNotExist,
 )
 from nexus.projects.permissions import has_project_permission
-from nexus.intelligences.models import ContentBaseLink, Conversation
+from nexus.intelligences.models import ContentBaseLink, Conversation, ContentBaseText
 from nexus.projects.models import Project
 
 
@@ -94,6 +95,12 @@ class RetrieveContentBaseTextUseCase():
             raise IntelligencePermissionDenied()
         return get_by_contentbasetext_uuid(contentbasetext_uuid)
 
+    def get_inline_contentbasetext(self, project_uuid: str):
+        integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
+        intelligence = integrated_intelligence.intelligence
+        content_base = intelligence.contentbases.first()
+        return ContentBaseText.objects.get(content_base=content_base)
+
 
 class RetrieveContentBaseFileUseCase():
 
@@ -127,6 +134,9 @@ class RetrieveContentBaseLinkUseCase():
 
         if not has_permission:
             raise IntelligencePermissionDenied()
+        return get_by_content_base_link_uuid(contentbaselink_uuid)
+
+    def get_inline_contentbaselink(self, contentbaselink_uuid: str):
         return get_by_content_base_link_uuid(contentbaselink_uuid)
 
     def get_content_base_link_by_link(self, link: str, content_base_uuid: str):

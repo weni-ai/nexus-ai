@@ -194,7 +194,7 @@ class MessageHistoryViewset(
                 status_value = status.get(tag_param)
                 if status_value:
                     queryset = queryset.filter(
-                        message__response_status=status_value
+                        message__response_status_cache=status_value
                     ).exclude(
                         reflection_data__tag="action_started"
                     )
@@ -281,7 +281,7 @@ class RecentActivitiesViewset(
         project = self.kwargs.get('project_uuid')
 
         filter_params = {
-            'project': project
+            'project__uuid': project
         }
 
         start_date_str = settings.RECENT_ACTIVITIES_START_DATE

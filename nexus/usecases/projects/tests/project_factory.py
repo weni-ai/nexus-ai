@@ -28,7 +28,8 @@ class ProjectFactory(factory.django.DjangoModelFactory):
     project_auth = factory.RelatedFactory(
         'nexus.usecases.projects.tests.project_factory.ProjectAuthFactory',
         'project',
-        user=factory.SelfAttribute('..created_by')
+        user=factory.SelfAttribute('..created_by'),
+        role=ProjectAuthorizationRole.MODERATOR.value
     )
 
 
@@ -37,8 +38,8 @@ class ProjectAuthFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = ProjectAuth
 
-    project = factory.SubFactory(ProjectFactory)
     user = factory.SubFactory(UserFactory)
+    project = factory.SubFactory(ProjectFactory)
     role = ProjectAuthorizationRole.MODERATOR.value
 
 

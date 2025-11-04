@@ -33,6 +33,8 @@ class BedrockTeamAdapter(TeamAdapter):
         auth_token: str = "",
         sanitized_urn: str = "",
         classification_foundation_model: str = None,
+        project=None,
+        content_base=None,
         **kwargs
     ) -> dict:
         # TODO: change self to cls
@@ -40,11 +42,13 @@ class BedrockTeamAdapter(TeamAdapter):
         from nexus.usecases.intelligences.get_by_uuid import (
             get_default_content_base_by_project,
         )
-        content_base = get_default_content_base_by_project(project_uuid)
+        if content_base is None:
+            content_base = get_default_content_base_by_project(project_uuid)
         instructions = content_base.instructions.all()
         agent_data = content_base.agent
 
-        project = Project.objects.get(uuid=project_uuid)
+        if project is None:
+            project = Project.objects.get(uuid=project_uuid)
         business_rules = project.human_support_prompt
         supervisor_instructions = list(instructions.values_list("instruction", flat=True))
         supervisor_instructions = "\n".join(supervisor_instructions)
@@ -131,9 +135,9 @@ class BedrockTeamAdapter(TeamAdapter):
         session_id_length = len(session_id)
 
         if session_id_length > 100:
-            session_length = 100 - (len(session_id)-len(sanitized))
+            session_length = 100 - (len(session_id) - len(sanitized))
 
-            if project_uuid in settings.PROJECTS_WITH_SPECIAL_SESSION_ID:    
+            if project_uuid in settings.PROJECTS_WITH_SPECIAL_SESSION_ID:
                 session_id = f"project-{project_uuid}-session-{sanitized[-session_length:]}"
             else:
                 session_id = session_id[:100]
@@ -307,6 +311,9 @@ class BedrockTeamAdapter(TeamAdapter):
             guardrails = Guardrail.objects.get(project__uuid=project_uuid)
         except Guardrail.DoesNotExist:
             guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
+
+        if guardrails is None:
+            return None
 
         return {
             'guardrailIdentifier': guardrails.identifier,

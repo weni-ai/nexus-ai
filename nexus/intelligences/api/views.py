@@ -8,12 +8,15 @@ from rest_framework import parsers, status, views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
+from rest_framework.views import APIView
 
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.authentication.authentication import ExternalTokenAuthentication
 from nexus.events import event_manager
 from nexus.intelligences.models import (
     ContentBase,
     ContentBaseFile,
+    ContentBaseLink,
     ContentBaseText,
     Intelligence,
     Topics,
@@ -616,6 +619,206 @@ class ContentBaseTextViewset(
             )
 
 
+class InlineContentBaseTextViewset(
+    ModelViewSet
+):
+
+    pagination_class = CustomCursorPagination
+    serializer_class = ContentBaseTextSerializer
+    lookup_url_kwarg = "contentbasetext_uuid"
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return ContentBaseText.objects.none()  # pragma: no cover
+        use_case = intelligences.ListContentBaseTextUseCase()
+        project_uuid = self.kwargs.get('project_uuid')
+        content_base_text_objects = use_case.get_inline_contentbasetext(
+            project_uuid,
+        )
+        return content_base_text_objects
+
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def retrieve(self, request, *args, **kwargs):
+        try:
+            project_uuid = kwargs.get('project_uuid')
+
+            use_case = intelligences.RetrieveContentBaseTextUseCase()
+            contentbasetext = use_case.get_inline_contentbasetext(
+                project_uuid=project_uuid,
+            )
+
+            serializer = ContentBaseTextSerializer(contentbasetext)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+    def create(self, request, project_uuid: str):
+        try:
+            user_email = request.user.email
+
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+
+            text = serializer.validated_data.get('text')
+            content_base = intelligences.get_default_content_base_by_project(project_uuid)
+            cb_dto = intelligences.ContentBaseDTO(
+                uuid=content_base.uuid,
+                title=content_base.title,
+                intelligence_uuid=content_base.intelligence.uuid,
+                created_by_email=content_base.created_by.email,
+            )
+            cbt_dto = intelligences.ContentBaseTextDTO(
+                text=text,
+                content_base_uuid=content_base.uuid,
+                user_email=user_email
+            )
+            content_base_text = intelligences.CreateContentBaseTextUseCase().create_contentbasetext(
+                content_base_dto=cb_dto,
+                content_base_text_dto=cbt_dto
+            )
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base.uuid)
+            if project.indexer_database == Project.BEDROCK:
+                bedrock_upload_text_file.delay(
+                    content_base_dto=cb_dto.__dict__,
+                    content_base_text_uuid=str(content_base_text.uuid),
+                    text=text
+                )
+
+            else:
+                upload_text_file.delay(
+                    content_base_dto=cb_dto.__dict__,
+                    content_base_text_uuid=content_base_text.uuid,
+                    text=text
+                )
+
+            response = ContentBaseTextSerializer(content_base_text).data
+
+            return Response(
+                response,
+                status=status.HTTP_201_CREATED
+            )
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ObjectDoesNotExist:
+            upload_text_file.delay(
+                content_base_dto=cb_dto.__dict__,
+                content_base_text_uuid=content_base_text.uuid,
+                text=text
+            )
+            response = ContentBaseTextSerializer(content_base_text).data
+
+            return Response(
+                response,
+                status=status.HTTP_201_CREATED
+            )
+
+    def update(self, request, **kwargs):
+        try:
+            user_email = request.user.email
+            text = request.data.get('text')
+            project_uuid = kwargs.get('project_uuid')
+
+            content_base = intelligences.get_default_content_base_by_project(project_uuid)
+            content_base_uuid = content_base.uuid
+            content_base_text_uuid = kwargs.get('contentbasetext_uuid')
+            content_base_text = intelligences.get_by_contentbasetext_uuid(content_base_text_uuid)
+            cb_dto = intelligences.ContentBaseDTO(
+                uuid=content_base.uuid,
+                title=content_base.title,
+                intelligence_uuid=content_base.intelligence.uuid,
+                created_by_email=content_base.created_by.email,
+            )
+            content_base_text = intelligences.UpdateContentBaseTextUseCase().update_inline_contentbasetext(
+                contentbasetext=content_base_text,
+                user_email=user_email,
+                text=text
+            )
+            project = ProjectsUseCase().get_project_by_content_base_uuid(content_base.uuid)
+            file_database = ProjectsUseCase().get_indexer_database_by_project(project)
+
+            delete_use_case = intelligences.DeleteContentBaseTextUseCase(file_database())
+            delete_use_case.delete_content_base_text_from_index(
+                content_base_text_uuid,
+                content_base_uuid,
+                content_base_text.file_name
+            )
+
+            if project.indexer_database == Project.BEDROCK:
+                bedrock_upload_text_file.delay(
+                    content_base_dto=cb_dto.__dict__,
+                    content_base_text_uuid=str(content_base_text.uuid),
+                    text=text
+                )
+            else:
+                upload_text_file.delay(
+                    content_base_dto=cb_dto.__dict__,
+                    content_base_text_uuid=content_base_text.uuid,
+                    text=text,
+                )
+
+            response = ContentBaseTextSerializer(content_base_text).data
+
+            return Response(
+                response,
+                status=status.HTTP_200_OK
+            )
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except ObjectDoesNotExist:
+            file_database = SentenXFileDataBase
+            delete_use_case = intelligences.DeleteContentBaseTextUseCase(file_database())
+            delete_use_case.delete_content_base_text_from_index(
+                content_base_text_uuid,
+                content_base_uuid,
+                content_base_text.file_name
+            )
+            upload_text_file.delay(
+                content_base_dto=cb_dto.__dict__,
+                content_base_text_uuid=content_base_text.uuid,
+                text=text,
+            )
+            response = ContentBaseTextSerializer(content_base_text).data
+            return Response(
+                response,
+                status=status.HTTP_200_OK
+            )
+
+    def destroy(self, request, **kwargs):
+        try:
+            project_uuid = kwargs.get('project_uuid')
+            content_base = intelligences.get_default_content_base_by_project(project_uuid)
+            project_use_case = ProjectsUseCase()
+            project = project_use_case.get_project_by_content_base_uuid(content_base.uuid)
+            indexer = project_use_case.get_indexer_database_by_project(project)
+            use_case = intelligences.DeleteContentBaseTextUseCase(indexer())
+
+            contentbasetext_uuid = kwargs.get('contentbasetext_uuid')
+            use_case.delete_inline_contentbasetext(
+                contentbasetext_uuid=contentbasetext_uuid,
+            )
+
+            return Response(
+                status=status.HTTP_204_NO_CONTENT
+            )
+        except ObjectDoesNotExist:
+            indexer = SentenXFileDataBase
+            use_case = intelligences.DeleteContentBaseTextUseCase(indexer())
+
+            contentbasetext_uuid = kwargs.get('contentbasetext_uuid')
+            use_case.delete_inline_contentbasetext(
+                contentbasetext_uuid=contentbasetext_uuid,
+            )
+            return Response(
+                status=status.HTTP_204_NO_CONTENT
+            )
+
+
 class ContentBaseFileViewset(ModelViewSet):
 
     serializer_class = ContentBaseFileSerializer
@@ -763,10 +966,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
             if file.size > (settings.BEDROCK_FILE_SIZE_LIMIT * (1024**2)):
                 return Response(data={"message": "File size is too large"}, status=http_status.HTTP_400_BAD_REQUEST)
 
-        content_base = self.get_queryset()
-        if not content_base:
-            return Response(data={"message": "No content base found for this project"}, status=http_status.HTTP_404_NOT_FOUND)
-
+        content_base = intelligences.get_by_uuid.get_default_content_base_by_project(self.kwargs.get('project_uuid'))
         content_base_uuid = str(content_base.uuid)
 
         user: User = request.user
@@ -814,7 +1014,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
             return ContentBaseFile.objects.none()  # pragma: no cover
         project_uuid = self.kwargs.get('project_uuid')
         content_base = intelligences.get_by_uuid.get_default_content_base_by_project(project_uuid)
-        return content_base
+        return ContentBaseFile.objects.filter(content_base=content_base)
 
     def retrieve(self, request, *args, **kwargs):
 
@@ -830,10 +1030,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
         try:
             contentbasefile_uuid: str = kwargs.get('contentbase_file_uuid')
 
-            content_base = self.get_queryset()
-            if not content_base:
-                return Response(data={"message": "No content base found for this project"}, status=status.HTTP_404_NOT_FOUND)
-
+            content_base = intelligences.get_by_uuid.get_default_content_base_by_project(self.kwargs.get('project_uuid'))
             content_base_uuid = str(content_base.uuid)
 
             use_case = intelligences.RetrieveContentBaseFileUseCase()
@@ -971,6 +1168,124 @@ class ContentBaseLinkViewset(ModelViewSet):
                 action_type="D",
                 content_base_link=content_base_link,
                 user=user
+            )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class InlineContentBaseLinkViewset(ModelViewSet):
+
+    serializer_class = ContentBaseLinkSerializer
+    lookup_url_kwarg = "contentbaselink_uuid"
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return ContentBaseLink.objects.none()  # pragma: no cover
+        use_case = intelligences.ListContentBaseLinkUseCase()
+        project_uuid = self.kwargs.get('project_uuid')
+        return use_case.get_inline_contentbase_link(project_uuid=project_uuid)
+
+    def create(self, request, **kwargs):
+        content_base = intelligences.get_default_content_base_by_project(self.kwargs.get('project_uuid'))
+        if not content_base:
+            return Response(data={"message": "No content base found for this project"}, status=status.HTTP_404_NOT_FOUND)
+
+        content_base_uuid = str(content_base.uuid)
+
+        user: User = request.user
+        user_email: str = user.email
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        link = serializer.validated_data.get('link')
+        link_dto = intelligences.ContentBaseLinkDTO(
+            link=link,
+            user_email=user_email,
+            content_base_uuid=content_base_uuid
+        )
+        content_base_link = intelligences.CreateContentBaseLinkUseCase().create_content_base_link(link_dto)
+
+        try:
+            project = ProjectsUseCase().get_by_uuid(self.kwargs.get('project_uuid'))
+            indexer_database = project.indexer_database
+        except ObjectDoesNotExist:
+            indexer_database = Project.SENTENX
+
+        if indexer_database == Project.BEDROCK:
+            bedrock_send_link.delay(
+                link=link,
+                user_email=user_email,
+                content_base_link_uuid=str(content_base_link.uuid)
+            )
+        else:
+            send_link.delay(
+                link=link,
+                user_email=user_email,
+                content_base_link_uuid=str(content_base_link.uuid)
+            )
+
+        response = CreatedContentBaseLinkSerializer(content_base_link).data
+
+        return Response(response, status=status.HTTP_201_CREATED)
+
+    def retrieve(self, request, *args, **kwargs):
+        contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
+        use_case = intelligences.RetrieveContentBaseLinkUseCase()
+        content_base_link = use_case.get_inline_contentbaselink(
+            contentbaselink_uuid=contentbaselink_uuid
+        )
+        serializer = self.get_serializer(content_base_link)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            contentbaselink_uuid: str = kwargs.get('contentbaselink_uuid')
+
+            content_base = intelligences.get_default_content_base_by_project(self.kwargs.get('project_uuid'))
+            if not content_base:
+                return Response(data={"message": "No content base found for this project"}, status=status.HTTP_404_NOT_FOUND)
+
+            content_base_uuid = str(content_base.uuid)
+
+            use_case = intelligences.RetrieveContentBaseLinkUseCase()
+            content_base_link = use_case.get_inline_contentbaselink(
+                contentbaselink_uuid=contentbaselink_uuid
+            )
+            project_use_case = ProjectsUseCase()
+            project = project_use_case.get_project_by_content_base_uuid(content_base_uuid)
+            indexer = project_use_case.get_indexer_database_by_project(project)
+
+            use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
+            use_case.delete_by_object(
+                content_base_link,
+            )
+
+            if project.indexer_database == Project.BEDROCK:
+                start_ingestion_job.delay("", post_delete=True, project_uuid=str(project.uuid))
+
+            event_manager.notify(
+                event="contentbase_link_activity",
+                action_type="D",
+                content_base_link=content_base_link,
+                user=self.request.user
+            )
+
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ObjectDoesNotExist:
+            indexer = SentenXFileDataBase
+            use_case = intelligences.DeleteContentBaseLinkUseCase(indexer)
+            use_case.delete_by_object(
+                content_base_link,
+            )
+            event_manager.notify(
+                event="contentbase_link_activity",
+                action_type="D",
+                content_base_link=content_base_link,
+                user=self.request.user
             )
             return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -1489,7 +1804,7 @@ class TopicsViewSet(ModelViewSet):
             project = Project.objects.get(uuid=project_uuid)
         except Project.DoesNotExist:
             return Response(
-                {"error": "Project not found"}, 
+                {"error": "Project not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
 
@@ -1519,7 +1834,7 @@ class SubTopicsViewSet(ModelViewSet):
         topic_uuid = self.kwargs.get('topic_uuid')
         if not topic_uuid:
             return Response(
-                {"error": "topic_uuid is required"}, 
+                {"error": "topic_uuid is required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -1527,7 +1842,7 @@ class SubTopicsViewSet(ModelViewSet):
             topic = Topics.objects.get(uuid=topic_uuid)
         except Topics.DoesNotExist:
             return Response(
-                {"error": "Topic not found"}, 
+                {"error": "Topic not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
 
@@ -1547,7 +1862,7 @@ class SupervisorViewset(ModelViewSet):
     filterset_class = ConversationFilter
     search_fields = ['contact_name', 'contact_urn']
     ordering_fields = ['created_at', 'start_date', 'end_date']
-    ordering = ['-created_at']
+    ordering = ['-start_date']
 
     def get_queryset(self):
         project_uuid = self.kwargs.get('project_uuid')
@@ -1608,5 +1923,60 @@ class SupervisorViewset(ModelViewSet):
             print(f"Error retrieving supervisor data: {str(e)}")
             return Response(
                 {"error": f"Error retrieving supervisor data: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class InstructionsClassificationAPIView(APIView):
+    authentication_classes = [ExternalTokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, project_uuid):
+        try:
+            instruction = request.data.get('instruction', '')
+            if not instruction:
+                return Response(
+                    {"error": "Instruction is required"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user = request.user
+            name = user.name or user.email.split('@')[0]
+            occupation = getattr(user, 'occupation', 'Customer Service Agent')
+            
+            from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
+            project, content_base, _ = get_project_and_content_base_data(project_uuid)
+            
+            goal = content_base.agent.goal if content_base.agent else "Provide excellent customer support"
+            adjective = content_base.agent.personality if content_base.agent else "friendly"
+            
+            instructions = []
+            for instruction_obj in content_base.instructions.all():
+                instructions.append({
+                    "instruction": instruction_obj.instruction,
+                    "type": "custom"
+                })
+            
+            from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
+            lambda_usecase = LambdaUseCase()
+            
+            classification, suggestion = lambda_usecase.instruction_classify(
+                name=name,
+                occupation=occupation,
+                goal=goal,
+                adjective=adjective,
+                instructions=instructions,
+                instruction_to_classify=instruction
+            )
+            
+            return Response({
+                "classification": classification,
+                "suggestion": suggestion
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                {"error": str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

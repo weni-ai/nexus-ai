@@ -126,6 +126,11 @@ class ProjectsUseCase:
     ) -> Project:
         user = get_by_email(user_email=user_email)
         org = orgs.get_by_uuid(org_uuid=project_dto.org_uuid)
+
+        backend = "OpenAIBackend" # Default
+        if project_dto.indexer_database == Project.BEDROCK:
+            backend = "BedrockBackend"
+
         template_type = None
         if project_dto.is_template:
             from nexus.usecases.template_type.template_type_usecase import TemplateTypeUseCase
@@ -138,7 +143,8 @@ class ProjectsUseCase:
             is_template=project_dto.is_template,
             created_by=user,
             brain_on=project_dto.brain_on,
-            indexer_database=project_dto.indexer_database
+            indexer_database=project_dto.indexer_database,
+            agents_backend=backend
         )
 
         self.create_brain_project_base(
@@ -146,6 +152,19 @@ class ProjectsUseCase:
             user_email=user_email,
             project=project
         )
+        
+        if project.brain_on:
+            supervisor_name = f"Supervisor for {project.name}"
+            supervisor_description = "Default supervisor description."
+            supervisor_instructions = "Default supervisor instructions."
+
+            self.create_multi_agents_base(
+                project_uuid=str(project.uuid),
+                supervisor_name=supervisor_name,
+                supervisor_description=supervisor_description,
+                supervisor_instructions=supervisor_instructions,
+                user=user,
+            )
 
         auths = project_dto.authorizations
         auth_usecase = ProjectAuthUseCase()

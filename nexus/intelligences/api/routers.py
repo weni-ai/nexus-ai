@@ -8,6 +8,8 @@ from .views import (
     ContentBaseFileViewset,
     ContentBaseLinkViewset,
     InlineContentBaseFileViewset,
+    InlineContentBaseTextViewset,
+    InlineContentBaseLinkViewset,
     SentenxIndexerUpdateFile,
     GenerativeIntelligenceQuestionAPIView,
     QuickTestAIAPIView,
@@ -23,7 +25,8 @@ from .views import (
     CommerceHasAgentBuilder,
     TopicsViewSet,
     SubTopicsViewSet,
-    SupervisorViewset
+    SupervisorViewset,
+    InstructionsClassificationAPIView
 )
 
 
@@ -62,6 +65,19 @@ inline_content_base_router.register(
     basename='content-base-file-inline'
 )
 
+inline_content_base_router.register(
+    r'inline-content-base-text',
+    InlineContentBaseTextViewset,
+    basename='content-base-text-inline'
+)
+
+inline_content_base_router.register(
+    r'inline-content-base-link',
+    InlineContentBaseLinkViewset,
+    basename='content-base-link-inline'
+)
+
+
 urlpatterns = [
     path('<org_uuid>/intelligences/', include(org_router.urls)),
     path('<intelligence_uuid>/', include(intelligence_router.urls)),
@@ -86,5 +102,6 @@ urlpatterns = [
     path('commerce/check-exists-agent-builder', CommerceHasAgentBuilder.as_view(), name='check-exists-agent-builder'),
     path('<project_uuid>/supervisor/', SupervisorViewset.as_view({
         'get': 'list'
-    }), name='supervisor')
+    }), name='supervisor'),
+    path('<project_uuid>/instructions-classification/', InstructionsClassificationAPIView.as_view(), name='instructions-classification')
 ]

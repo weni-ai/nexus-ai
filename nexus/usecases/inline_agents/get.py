@@ -18,10 +18,18 @@ class GetInlineCredentialsUsecase:
         credentials = AgentCredential.objects.filter(
             project__uuid=project_uuid,
             agents__in=active_agent_ids
-        )
+        ).distinct()
 
-        official_credentials = credentials.filter(agents__is_official=True).distinct()
-        custom_credentials = credentials.filter(agents__is_official=False).distinct()
+        official_credentials = []
+        custom_credentials = []
+        
+        for credential in credentials:
+            # Check if any agent associated with this credential is official
+            has_official_agent = credential.agents.filter(is_official=True).exists()
+            if has_official_agent:
+                official_credentials.append(credential)
+            else:
+                custom_credentials.append(credential)
 
         return official_credentials, custom_credentials
 
