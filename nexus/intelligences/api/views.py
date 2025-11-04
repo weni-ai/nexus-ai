@@ -56,6 +56,8 @@ from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
 from nexus.intelligences.api.filters import ConversationFilter
+from drf_yasg.utils import swagger_auto_schema, no_body
+from drf_yasg import openapi
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -1863,8 +1865,18 @@ class SupervisorViewset(ModelViewSet):
     search_fields = ['contact_name', 'contact_urn']
     ordering_fields = ['created_at', 'start_date', 'end_date']
     ordering = ['-start_date']
-
+    
+    def get_filter_backends(self):
+        """Disable filter backends during schema generation to avoid duplicate parameters"""
+        if getattr(self, "swagger_fake_view", False):
+            return []  # Return empty list to prevent filter backend from adding parameters
+        return [filters.DjangoFilterBackend, SearchFilter, OrderingFilter]
+    
     def get_queryset(self):
+        # Prevent database access during schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Conversation.objects.none()
+            
         project_uuid = self.kwargs.get('project_uuid')
         if not project_uuid:
             return Conversation.objects.none()
@@ -1875,6 +1887,9 @@ class SupervisorViewset(ModelViewSet):
         except ProjectDoesNotExist:
             return Conversation.objects.none()
 
+    @swagger_auto_schema(
+        auto_schema=None  # Exclude from schema generation to avoid duplicate parameters
+    )
     def list(self, request, *args, **kwargs):
         project_uuid = kwargs.get('project_uuid')
         if not project_uuid:
