@@ -225,6 +225,56 @@ class LambdaUseCase():
         parsed_final_response = response.get("postProcessingParsedResponse").get("responseText")
         return parsed_final_response
 
+    def instruction_classify(
+        self,
+        name: str,
+        occupation: str,
+        goal: str,
+        adjective: str,
+        instructions: list,
+        instruction_to_classify: str
+    ):
+        try:
+            instructions_payload = {
+                "name": name,
+                "occupation": occupation,
+                "goal": goal,
+                "adjective": adjective,
+                "instructions": instructions,
+                "instruction_to_classify": instruction_to_classify
+            }
+            
+            response = self.invoke_lambda(
+                lambda_name=str(settings.INSTRUCTION_CLASSIFY_NAME),
+                payload=instructions_payload
+            )
+            
+            response_data = json.loads(response.get("Payload").read())
+
+            # Support both current format ("classification") and a possible future improvement ("classifications")
+            classification_data = response_data.get("classifications") or response_data.get("classification", [])
+            suggestion = response_data.get("suggestion")
+            
+            if classification_data and len(classification_data) > 0:
+                # Check if it's already is a list of objects
+                if isinstance(classification_data[0], dict):
+                    classification = classification_data
+                else:
+                    # Transform to a single reason for all classifications
+                    reason = response_data.get("reason", "")
+                    classification = [
+                        {"classification": classification_value, "reason": reason} 
+                        for classification_value in classification_data
+                    ]
+            else:
+                classification = []
+            
+            return classification, suggestion
+            
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            raise e
+
 
 @celery_app.task
 def create_lambda_conversation(

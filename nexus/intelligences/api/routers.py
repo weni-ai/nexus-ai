@@ -25,7 +25,8 @@ from .views import (
     CommerceHasAgentBuilder,
     TopicsViewSet,
     SubTopicsViewSet,
-    SupervisorViewset
+    SupervisorViewset,
+    InstructionsClassificationAPIView
 )
 
 
@@ -101,5 +102,6 @@ urlpatterns = [
     path('commerce/check-exists-agent-builder', CommerceHasAgentBuilder.as_view(), name='check-exists-agent-builder'),
     path('<project_uuid>/supervisor/', SupervisorViewset.as_view({
         'get': 'list'
-    }), name='supervisor')
+    }), name='supervisor'),
+    path('<project_uuid>/instructions-classification/', InstructionsClassificationAPIView.as_view(), name='instructions-classification')
 ]
