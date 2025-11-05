@@ -1,5 +1,6 @@
 import boto3
 import json
+import logging
 import sentry_sdk
 
 from django.conf import settings
@@ -293,6 +294,17 @@ def create_lambda_conversation(
             contact_urn=payload.get("contact_urn"),
             external_id=payload.get("external_id")
         )
+        
+        # Log when sending unclassified conversations to billing
+        if resolution_choice_value == ResolutionEntities.UNCLASSIFIED:
+            logging.info(
+                f"[Billing] Sending unclassified conversation to billing - "
+                f"project_uuid: {payload.get('project_uuid')}, "
+                f"contact_urn: {payload.get('contact_urn')}, "
+                f"external_id: {payload.get('external_id')}, "
+                f"resolution: {resolution_choice_value}"
+            )
+        
         resolution_message(resolution_dto)
 
         # Delete messages after processing (instead of updating resolution)
