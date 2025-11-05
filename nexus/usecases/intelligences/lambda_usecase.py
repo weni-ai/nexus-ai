@@ -311,4 +311,5 @@ def create_lambda_conversation(
         )
         sentry_sdk.set_tag("project_uuid", payload.get("project_uuid"))
         sentry_sdk.set_tag("contact_urn", payload.get("contact_urn"))
+        sentry_sdk.set_tag("channel_uuid", payload.get("channel_uuid"))
         sentry_sdk.capture_exception(e)

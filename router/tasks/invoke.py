@@ -168,6 +168,7 @@ def _handle_task_error(
     sentry_sdk.set_tag("project_uuid", project_uuid)
     sentry_sdk.set_tag("task_id", task_id)
     sentry_sdk.set_tag("contact_urn", contact_urn)
+    sentry_sdk.set_tag("channel_uuid", message.get("channel_uuid"))
 
     if task_manager:
         task_manager.clear_pending_tasks(project_uuid, contact_urn)
