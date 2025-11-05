@@ -102,10 +102,16 @@ class RTCBridge:
                         return
 
                     try:
-                        response = await run_agent(session, name, args.get("question"))
+                        response = await run_agent(session, name, args)
                     except Exception:
                         traceback.print_exc()
                         response = "Erro ao executar a chamada de tool"
+
+                    await EventRegistry.notify(
+                        "agent.run.completed",
+                        session,
+                        response=response,
+                    )
 
                     cls._dc_send_json(
                         dc,

@@ -84,9 +84,10 @@ async def invoke_specific_lambda(ctx: RunContextWrapper[Context], args: str) -> 
     args = json.loads(args)
 
     session = context.get("session")
-    function_name = context.get("function_name")
-    lambda_arn = context.get("lambda_arn")
-    session = context.get("session")
+
+    function_name = ctx.tool_name
+    tool = session.agents["functions"].get(function_name)
+    lambda_arn = tool.function_arn
 
     await EventRegistry.notify(
         "lambda.invocation.started",
@@ -110,30 +111,45 @@ async def invoke_specific_lambda(ctx: RunContextWrapper[Context], args: str) -> 
     return result
 
 
-async def run_agent(session: "Session", agent_name, question):
+async def run_agent(session: "Session", agent_name: str, args: dict):
+    print("Rodando um agente/function", agent_name, args)
     await EventRegistry.notify(
         "agent.run.started",
         session,
         agent_name=agent_name,
-        input=question,
+        args=args,
     )
 
-    agent = session.agents.get("team", {}).get(agent_name)
-    agent.hooks = None
-    
-    # TODO pegar o lambda ARN
+    context = {"session": session, **session.agents.get("context", {})}
 
-    result = await Runner.run(
-        starting_agent=agent,
-        input=question,
-        context={"session": session},
-    )
+    agent: Agent = session.agents.get("team", {}).get(agent_name)
 
-    await EventRegistry.notify(
-        "agent.run.completed",
-        session,
-        agent_name=agent_name,
-        output=result.final_output,
-    )
+    if agent is not None:
+        agent.hooks = None
+        
+        for tool in agent.tools:
+            tool.on_invoke_tool = invoke_specific_lambda
 
-    return result.final_output
+        # print(agent.tools[0].function_arn)
+        # TODO pegar o lambda ARN
+
+        print("Executando agente")
+        result = await Runner.run(
+            starting_agent=agent,
+            input=args.get("question"),
+            context=context,
+        )
+
+        return result.final_output
+
+    manager_functions_arns = session.agents.get("manager_functions_arns")
+    lambda_arn = manager_functions_arns.get(agent_name)
+    print("Lambda selecionada:", lambda_arn)
+
+    if not lambda_arn:
+        return "Agente não encontrado"
+
+    print("Executando Lambda")
+    result = await call_lambda(context, agent_name, lambda_arn, args)
+    print("Result:", result)
+    return result

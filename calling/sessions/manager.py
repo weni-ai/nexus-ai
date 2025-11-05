@@ -30,8 +30,9 @@ class SessionManager:
         return cls._active_sessions.get(call_id)
 
     @classmethod
-    async def close_session(cls, call_id: str) -> None:
-        session = cls.get_session(call_id)
+    async def close_session(cls, call_id: str, session: Session = None) -> None:
+        if session is None:
+            session = cls.get_session(call_id)
 
         if session is not None:
             cls._active_sessions.pop(call_id)

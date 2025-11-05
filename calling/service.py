@@ -55,7 +55,18 @@ class CallingService:
         }
 
         agents = await get_agents(message_dict)
-        agents["team"] = temp_decode_agents(agents["team"])
+
+        team = temp_decode_agents(agents["team"])
+        agents["team"] = team
+        agents["functions"] = {}
+
+        for agent in team.values():
+            for tool in agent.tools:
+                agents["functions"][tool.name] = tool
+
+        allowed_tools = ["utility_agent", "open-ticket"]
+
+        agents["tools"] = list(filter(lambda tool: tool.get("name") in allowed_tools, agents["tools"]))
 
         session = SessionManager.setup_session(call_id, sdp)
         session.set_agents(agents)
