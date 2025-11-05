@@ -1,18 +1,16 @@
-from typing import Any, Union, Literal
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List, Dict, Any
-from agents import RunContextWrapper, FunctionTool
-import json
-import uuid
 import re
-
+import uuid
+import json
+from typing import Optional, List, Any
+from agents import RunContextWrapper, FunctionTool
+from pydantic import BaseModel, Field, field_validator
 
 class SimpleTextArgs(BaseModel):
     """Arguments for simple text component"""
     text: str = Field(..., max_length=4096, description="Message text, maximum 4096 characters")
     header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
     footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
-    
+
     @field_validator('header_text')
     @classmethod
     def clean_header(cls, v):
@@ -25,7 +23,7 @@ class SimpleTextArgs(BaseModel):
         if not v:
             return None
         return v
-    
+
     @field_validator('footer')
     @classmethod
     def clean_footer(cls, v):
@@ -45,7 +43,7 @@ class QuickRepliesArgs(BaseModel):
     quick_replies: List[str] = Field(..., min_length=2, max_length=3, description="List of 2-3 quick reply options, maximum 20 characters each")
     header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
     footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
-    
+
     @field_validator('quick_replies')
     @classmethod
     def validate_quick_replies(cls, v):
@@ -54,7 +52,7 @@ class QuickRepliesArgs(BaseModel):
             if len(option) > 20:
                 v[i] = option[:20]
         return v
-    
+
     @field_validator('header_text')
     @classmethod
     def clean_header(cls, v):
@@ -67,7 +65,7 @@ class QuickRepliesArgs(BaseModel):
         if not v:
             return None
         return v
-    
+
     @field_validator('footer')
     @classmethod
     def clean_footer(cls, v):
@@ -93,7 +91,7 @@ class ListMessageArgs(BaseModel):
     list_items: List[ListItemArgs] = Field(..., min_length=2, max_length=10, description="List of 2-10 items with title and description")
     header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
     footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
-    
+
     @field_validator('header_text')
     @classmethod
     def clean_header(cls, v):
@@ -106,7 +104,7 @@ class ListMessageArgs(BaseModel):
         if not v:
             return None
         return v
-    
+
     @field_validator('footer')
     @classmethod
     def clean_footer(cls, v):
@@ -127,7 +125,7 @@ class CtaMessageArgs(BaseModel):
     display_text: str = Field(..., max_length=20, description="Button text, maximum 20 characters")
     header_text: Optional[str] = Field(None, max_length=60, description="Optional header text, maximum 60 characters")
     footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
-    
+
     @field_validator('header_text')
     @classmethod
     def clean_header(cls, v):
@@ -140,7 +138,7 @@ class CtaMessageArgs(BaseModel):
         if not v:
             return None
         return v
-    
+
     @field_validator('footer')
     @classmethod
     def clean_footer(cls, v):
@@ -166,7 +164,7 @@ class CatalogMessageArgs(BaseModel):
     products: List[ProductArgs] = Field(..., min_length=1, description="List of products with names and SKU IDs")
     header_text: str = Field(..., max_length=60, description="Header text, maximum 60 characters")
     footer: Optional[str] = Field(None, max_length=60, description="Optional footer, maximum 60 characters")
-    
+
     @field_validator('header_text')
     @classmethod
     def clean_header(cls, v):
@@ -179,7 +177,7 @@ class CatalogMessageArgs(BaseModel):
         if not v:
             return None
         return v
-    
+
     @field_validator('footer')
     @classmethod
     def clean_footer(cls, v):
@@ -194,14 +192,13 @@ class CatalogMessageArgs(BaseModel):
         return v
 
 
-
 async def create_simple_text_message(ctx: RunContextWrapper[Any], args: str) -> str:
     """
     Creates a simple text message without interactive elements.
     Use when: Pure informational responses, open questions, no products/links/explicit options.
     """
     parsed = SimpleTextArgs.model_validate_json(args)
-    
+
     msg = {
         "text": parsed.text
     }
@@ -214,7 +211,7 @@ async def create_simple_text_message(ctx: RunContextWrapper[Any], args: str) -> 
 
     if parsed.footer:
         msg["footer"] = parsed.footer
-    
+
     response = [{"msg": msg}]
     return json.dumps(response, ensure_ascii=False)
 
@@ -224,7 +221,7 @@ async def create_quick_replies_message(ctx: RunContextWrapper[Any], args: str) -
     Use when: Explicit directive + 2-3 options + no descriptions + all options ≤20 chars.
     """
     parsed = QuickRepliesArgs.model_validate_json(args)
-    
+
     msg = {
         "text": parsed.text,
         "quick_replies": parsed.quick_replies
@@ -235,10 +232,10 @@ async def create_quick_replies_message(ctx: RunContextWrapper[Any], args: str) -
             "type": "text",
             "text": parsed.header_text
         }
-    
+
     if parsed.footer:
         msg["footer"] = parsed.footer
-    
+
     response = [{"msg": msg}]
     return json.dumps(response, ensure_ascii=False)
 
@@ -248,7 +245,7 @@ async def create_list_message(ctx: RunContextWrapper[Any], args: str) -> str:
     Use when: 4+ options (MANDATORY) OR 2-3 options with descriptions OR long options >20 chars.
     """
     parsed = ListMessageArgs.model_validate_json(args)
-    
+
     list_items = []
 
     for item in parsed.list_items:
@@ -258,7 +255,7 @@ async def create_list_message(ctx: RunContextWrapper[Any], args: str) -> str:
             "description": item.description,
             "uuid": item_uuid
         })
-    
+
     msg = {
         "text": parsed.text,
         "interaction_type": "list",
@@ -267,13 +264,13 @@ async def create_list_message(ctx: RunContextWrapper[Any], args: str) -> str:
             "list_items": list_items
         }
     }
-    
+
     if parsed.header_text:
         msg["header"] = {
             "type": "text",
             "text": parsed.header_text
         }
-    
+
     if parsed.footer:
         msg["footer"] = parsed.footer
 
@@ -286,7 +283,7 @@ async def create_cta_message(ctx: RunContextWrapper[Any], args: str) -> str:
     Use when: Message contains 1 URL that should be clicked. NEVER leave URLs in text field.
     """
     parsed = CtaMessageArgs.model_validate_json(args)
-    
+
     msg = {
         "text": parsed.text,
         "interaction_type": "cta_url",
@@ -301,10 +298,10 @@ async def create_cta_message(ctx: RunContextWrapper[Any], args: str) -> str:
             "type": "text",
             "text": parsed.header_text
         }
-    
+
     if parsed.footer:
         msg["footer"] = parsed.footer
-    
+
     response = [{"msg": msg}]
     return json.dumps(response, ensure_ascii=False)
 
@@ -314,7 +311,7 @@ async def create_catalog_message(ctx: RunContextWrapper[Any], args: str) -> str:
     Use when: Products with SKUs present. Text = brief intro, catalog = auto-displays products.
     """
     parsed = CatalogMessageArgs.model_validate_json(args)
-    
+
     products = []
     for product in parsed.products:
         products.append({
