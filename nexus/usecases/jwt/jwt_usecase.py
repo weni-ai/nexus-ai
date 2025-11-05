@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from django.conf import settings
 
+
 class JWTUsecase:
 
     def generate_jwt_token(self, project_uuid: str):
