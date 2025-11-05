@@ -83,6 +83,7 @@ def save_inline_trace_events(
         print(f"Error saving inline trace events: {e}")
         sentry_sdk.set_tag("project_uuid", project_uuid)
         sentry_sdk.set_tag("contact_urn", contact_urn)
+        sentry_sdk.set_tag("channel_uuid", channel_uuid)
         sentry_sdk.set_context(
             "extra_data",
             {

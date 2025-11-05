@@ -403,4 +403,5 @@ def create_lambda_conversation(
         if agent_uuid:
             sentry_sdk.set_tag("agent_uuid", agent_uuid)
         
+        sentry_sdk.set_tag("channel_uuid", payload.get("channel_uuid"))
         sentry_sdk.capture_exception(e)
