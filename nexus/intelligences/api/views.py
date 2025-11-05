@@ -1616,7 +1616,7 @@ class SupervisorViewset(ModelViewSet):
 
 class InstructionsClassificationAPIView(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ProjectPermission]
 
     def post(self, request, project_uuid):
         try:
