@@ -232,6 +232,11 @@ def create_lambda_conversation(
 ):
 
     try:
+        project = Project.objects.get(uuid=payload.get("project_uuid"))
+        
+        if not project.brain_on:
+            return
+
         lambda_usecase = LambdaUseCase()
         message_service = lambda_usecase._get_message_service()
 
@@ -247,8 +252,6 @@ def create_lambda_conversation(
 
         if not messages:
             raise ValueError("No unclassified messages found for conversation period")
-
-        project = Project.objects.get(uuid=payload.get("project_uuid"))
         conversation_queryset = Conversation.objects.filter(
             project=project,
             contact_urn=payload.get("contact_urn"),
