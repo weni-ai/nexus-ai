@@ -4,19 +4,10 @@ import json
 import requests
 from django.conf import settings
 
+from calling.agent import agent
 
-async def get_realtime_answer(offer_sdp: str, instructions: str) -> str:
-    session_config = {
-        "instructions": instructions,
-        "type": "realtime",
-        "model": "gpt-realtime",
-        "audio": {
-            "output": {
-                "voice": "verse",
-            },
-        },
-    }
 
+async def get_realtime_answer(offer_sdp: str) -> str:
     url = f"https://api.openai.com/v1/realtime/calls?model=gpt-realtime"
 
     headers = {
@@ -26,7 +17,7 @@ async def get_realtime_answer(offer_sdp: str, instructions: str) -> str:
 
     files = {
         "sdp": (None, offer_sdp),
-        "session": (None, json.dumps(session_config)),
+        "session": (None, json.dumps(agent)),
     }
 
     def _do_post():

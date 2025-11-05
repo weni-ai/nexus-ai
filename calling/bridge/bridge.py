@@ -6,6 +6,8 @@ import traceback
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
 
+from calling.agent import tool
+from calling.clients.nexus import invoke_agents
 from calling.clients.openai import get_realtime_answer
 from calling.rtc_config import RTC_CONFIG
 from calling.team import run_agent
@@ -13,6 +15,8 @@ from calling.team import run_agent
 from ..sessions.session import Session
 
 logger = logging.getLogger(__name__)
+
+from sfcommons.logs import LogRegistry
 
 from calling.events import EventRegistry
 
@@ -60,7 +64,7 @@ class RTCBridge:
                     "type": "session.update",
                     "session": {
                         "type": "realtime",
-                        "tools": session.agents.get("tools"),
+                        "tools": [tool],
                         "tool_choice": "auto",
                     },
                 }
@@ -83,8 +87,7 @@ class RTCBridge:
                 data = json.loads(message)
 
                 message_type = data.get("type")
-
-                # LogRegistry.log(f"OpenAI message: {message_type}", data)
+                LogRegistry.log(f"OAI Message received, {message_type}", data, True)
 
                 if message_type == "session.updated":
                     return
@@ -94,34 +97,55 @@ class RTCBridge:
 
                 if message_type == "response.function_call_arguments.done":
                     name = data["name"]
-                    call_id = data["call_id"]
                     args = json.loads(data.get("arguments", {}))
+                    
+                    print("Função Chamada", name, args)
 
-                    if args is None:
-                        raise Exception("Args está none")
-                        return
+                    # if args is None:
+                    #     raise Exception("Args está none")
 
-                    try:
-                        response = await run_agent(session, name, args)
-                    except Exception:
-                        traceback.print_exc()
-                        response = "Erro ao executar a chamada de tool"
+                    # try:
+                    #     response = await run_agent(session, name, args)
+                    # except Exception:
+                    #     traceback.print_exc()
+                    #     response = "Erro ao executar a chamada de tool"
 
-                    await EventRegistry.notify(
-                        "agent.run.completed",
-                        session,
-                        response=response,
-                    )
+                    # await EventRegistry.notify(
+                    #     "agent.run.completed",
+                    #     session,
+                    #     response=response,
+                    # )
+                    input_text = args.get("relevantContextFromLastUserMessage")
+                    response = await invoke_agents(input_text)
 
-                    cls._dc_send_json(
-                        dc,
-                        {
-                            "type": "response.create",
-                            "response": {
-                                "instructions": response,
+                    output_text = response.get("output")
+
+                    response = {
+                        "type": "response.create",
+                        "response": {
+                            "instructions": "Provide a concise answer.",
+                            "tools": [],
+                            "conversation": "none",
+                            "output_modalities": ["audio"],
+                            "metadata": {
+                            "response_purpose": "summarization"
                             },
-                        },
-                    )
+                            "input": [
+                                {
+                                    "type": "message",
+                                    "role": "user",
+                                    "content": [
+                                        {
+                                            "type": "input_text",
+                                            "text": output_text
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+
+                    cls._dc_send_json(dc, response)
 
         try:
             openai_dc = openai_connection.createDataChannel("oai-events")
@@ -173,13 +197,12 @@ class RTCBridge:
         logger.debug("[OAI] Open AI Offer:\n", openai_connection.localDescription.sdp)
 
         try:
-            answer_sdp = await get_realtime_answer(
-                openai_connection.localDescription.sdp, session.agents.get("instructions")
-            )
+            answer_sdp = await get_realtime_answer(openai_connection.localDescription.sdp)
+
             await openai_connection.setRemoteDescription(RTCSessionDescription(answer_sdp, "answer"))
             print("[OAI] Answer da OpenAI aplicado (tamanho)", len(answer_sdp or ""))
         except Exception as e:
-            logger.error("[OAI] Falha ao negociar com OpenAI:", e)
+            logger.error("Erro:", e)
             try:
                 await openai_connection.close()
             except Exception:
