@@ -7,6 +7,7 @@ from aiortc.rtcdtlstransport import (
     RTCDtlsFingerprint,
     certificate_digest,
 )
+from sfcommons.logs import LogRegistry
 
 from calling.bridge import RTCBridge
 from calling.clients.nexus import get_agents
@@ -54,21 +55,8 @@ class CallingService:
             "contact_name": "Sample Name",
         }
 
-        agents = await get_agents(message_dict)
-
-        team = temp_decode_agents(agents["team"])
-        agents["team"] = team
-        agents["functions"] = {}
-
-        for agent in team.values():
-            for tool in agent.tools:
-                agents["functions"][tool.name] = tool
-
-        allowed_tools = ["utility_agent", "open-ticket"]
-
-        agents["tools"] = list(filter(lambda tool: tool.get("name") in allowed_tools, agents["tools"]))
+        await get_agents(message_dict)
 
         session = SessionManager.setup_session(call_id, sdp)
-        session.set_agents(agents)
 
         await RTCBridge.handle_offer(session)
