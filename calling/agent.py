@@ -21,6 +21,11 @@ agent = {
     "type": "realtime",
     "model": "gpt-realtime",
     "audio": {
+        "input": {
+            "transcription": {
+                "model": "gpt-4o-mini-transcribe"
+            }
+        },
         "output": {
             "voice": "verse",
         },
