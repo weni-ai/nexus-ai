@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field, create_model
 
 from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.data_lake import send_data_lake_event
+from inline_agents.data_lake.event_service import DataLakeEventService
+from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.entities import Context, HooksState
 from inline_agents.backends.openai.hooks import (
     CollaboratorHooks,
@@ -36,11 +38,9 @@ from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
 from nexus.inline_agents.models import (
     AgentCredential,
     InlineAgentsConfiguration,
-    IntegratedAgent,
 )
 from nexus.intelligences.models import ContentBase
 from nexus.projects.models import Project
-from nexus.usecases.inline_agents.update import update_conversation_data
 
 logger = logging.getLogger(__name__)
 
@@ -505,7 +505,7 @@ class OpenAITeamAdapter(TeamAdapter):
             human_support_template = Template(human_support_instructions)
             human_support_context = TemplateContext(general_context_data)
             human_support_instructions = human_support_template.render(human_support_context)
-        
+
         if use_components:
             components_template = Template(components_instructions)
             components_context = TemplateContext(general_context_data)
@@ -517,7 +517,7 @@ class OpenAITeamAdapter(TeamAdapter):
 
         template_string = instruction
         template = Template(template_string)
-    
+
         prompt_control_context_data = {
             "USE_HUMAN_SUPPORT": use_human_support,
             "HUMAN_SUPPORT_INSTRUCTIONS": human_support_instructions,
@@ -649,6 +649,8 @@ def process_openai_trace(event):
 
 
 class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
+    """Adapter for transforming OpenAI traces to data lake event format."""
+
     def __init__(
         self,
         send_data_lake_event_task: callable = None
@@ -656,6 +658,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         self.send_data_lake_event_task = send_data_lake_event_task
         if self.send_data_lake_event_task is None:
             self.send_data_lake_event_task = self._get_send_data_lake_event_task()
+        self._event_service = DataLakeEventService(self.send_data_lake_event_task)
 
     def _get_send_data_lake_event_task(
         self
@@ -693,15 +696,21 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                 event_data["metadata"]["tool_call"] = tool_call_data
                 event_data["key"] = "tool_call"
                 event_data["value"] = tool_call_data["tool_name"]
-                self.send_data_lake_event_task(event_data)
-                return event_data
+                validated_event = self._event_service.send_validated_event(
+                    event_data=event_data,
+                    use_delay=False
+                )
+                return validated_event
 
             if agent_data:
                 event_data["metadata"]["agent_collaboration"] = agent_data
                 event_data["key"] = "agent_invocation"
                 event_data["value"] = agent_data["agent_name"]
-                self.send_data_lake_event_task.delay(event_data)
-                return event_data
+                validated_event = self._event_service.send_validated_event(
+                    event_data=event_data,
+                    use_delay=True
+                )
+                return validated_event
 
         except Exception as e:
             logger.error(f"Error processing data lake event: {str(e)}")
@@ -718,58 +727,17 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         preview: bool = False,
         agent_name: str = ""
     ):
-        if preview:
-            return None
-
-        for event_to_send in event_data:
-            if not event_to_send.get("metadata"):
-                team_agent = IntegratedAgent.objects.get(
-                    agent__slug=agent_name,
-                    project__uuid=project_uuid
-                )
-                agent_uuid = team_agent.agent.uuid
-                event_to_send["metadata"] = {
-                    "agent_uuid": agent_uuid
-                }
-            if event_to_send.get("key") == "weni_csat":
-                event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
-                to_update = {'csat': event_to_send.get("value")}
-                update_conversation_data(
-                    to_update=to_update,
-                    project_uuid=project_uuid,
-                    contact_urn=contact_urn,
-                    channel_uuid=channel_uuid
-                )
-            if event_to_send.get("key") == "weni_nps":
-                event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_NPS
-                to_update = {'nps': event_to_send.get("value")}
-                update_conversation_data(
-                    to_update=to_update,
-                    project_uuid=project_uuid,
-                    contact_urn=contact_urn,
-                    channel_uuid=channel_uuid
-                )
-
-            self.to_data_lake_custom_event(
-                event_data=event_to_send,
-                project_uuid=project_uuid,
-                contact_urn=contact_urn
-            )
-
-    def to_data_lake_custom_event(
-        self,
-        event_data: dict,
-        project_uuid: str,
-        contact_urn: str
-    ) -> Optional[dict]:
-        try:
-            event_data["project"] = project_uuid
-            event_data["contact_urn"] = contact_urn
-            self.send_data_lake_event_task.delay(event_data)
-            return event_data
-        except Exception as e:
-            logger.error(f"Error getting trace summary data lake event: {str(e)}")
-            sentry_sdk.set_context("custom event to data lake", {"event_data": event_data})
-            sentry_sdk.set_tag("project_uuid", project_uuid)
-            sentry_sdk.capture_exception(e)
-            return None
+        """Delegate custom event processing to the service."""
+        trace_data = {
+            "project_uuid": project_uuid,
+            "contact_urn": contact_urn
+        }
+        extractor = OpenAIEventExtractor(event_data=event_data, agent_name=agent_name)
+        self._event_service.process_custom_events(
+            trace_data=trace_data,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            extractor=extractor,
+            preview=preview
+        )
