@@ -655,10 +655,9 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         self,
         send_data_lake_event_task: callable = None
     ):
-        self.send_data_lake_event_task = send_data_lake_event_task
-        if self.send_data_lake_event_task is None:
-            self.send_data_lake_event_task = self._get_send_data_lake_event_task()
-        self._event_service = DataLakeEventService(self.send_data_lake_event_task)
+        if send_data_lake_event_task is None:
+            send_data_lake_event_task = self._get_send_data_lake_event_task()
+        self._event_service = DataLakeEventService(send_data_lake_event_task)
 
     def _get_send_data_lake_event_task(
         self
