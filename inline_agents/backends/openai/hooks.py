@@ -286,6 +286,7 @@ class CollaboratorHooks(AgentHooks):
                 except json.JSONDecodeError as e:
                     sentry_sdk.set_context("custom event to data lake", {"event_data": events})
                     sentry_sdk.set_tag("project_uuid", project_uuid)
+                    sentry_sdk.set_tag("channel_uuid", context_data.contact.get("channel_uuid"))
                     sentry_sdk.capture_exception(e)
                     events = {}
 
@@ -493,6 +494,7 @@ class SupervisorHooks(AgentHooks):
                     except json.JSONDecodeError as e:
                         sentry_sdk.set_context("custom event to data lake", {"event_data": events})
                         sentry_sdk.set_tag("project_uuid", project_uuid)
+                        sentry_sdk.set_tag("channel_uuid", context_data.contact.get("channel_uuid"))
                         sentry_sdk.capture_exception(e)
                         events = {}
 
