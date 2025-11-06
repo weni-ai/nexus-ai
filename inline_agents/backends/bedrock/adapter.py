@@ -534,6 +534,19 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             preview=preview
         )
 
+    def to_data_lake_custom_event(
+        self,
+        event_data: dict,
+        project_uuid: str,
+        contact_urn: str
+    ) -> Optional[dict]:
+        """Send a single custom event to data lake (for direct event sending, not from traces)."""
+        return self._event_service.send_custom_event(
+            event_data=event_data,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn
+        )
+
 
 @celery_app.task
 def send_data_lake_event(

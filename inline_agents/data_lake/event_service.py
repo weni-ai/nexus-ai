@@ -91,11 +91,12 @@ class DataLakeEventService:
                             level="warning"
                         )
 
-                self._send_custom_event(
+                self.send_custom_event(
                     event_data=event_to_send,
                     project_uuid=project_uuid,
                     contact_urn=contact_urn
                 )
+
             except Exception as e:
                 logger.error(
                     f"Error processing custom event: {str(e)}. "
@@ -108,9 +109,8 @@ class DataLakeEventService:
                     "agent_identifier": agent_identifier
                 })
                 sentry_sdk.capture_exception(e)
-                # Continue processing other events even if one fails
 
-    def _send_custom_event(
+    def send_custom_event(
         self,
         event_data: dict,
         project_uuid: str,
