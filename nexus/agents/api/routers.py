@@ -2,6 +2,7 @@ from django.urls import path
 from nexus.agents.api.views import (
     AgentTracesView,
     RationaleView,
+    DeleteAgentView,
 )
 
 from nexus.inline_agents.api.views import PushAgents as PushInlineAgents
@@ -42,4 +43,5 @@ urlpatterns = [
     path('project/<project_uuid>/end-session', AgentEndSessionView.as_view(), name="end-session"),
     path('agents/log-group', LogGroupView.as_view(), name="agents-log-group"),
     path('reports', ReportView.as_view(), name="reports"),
+    path('project/<project_uuid>/agents/<str:agent_uuid>', DeleteAgentView.as_view(), name="delete-agent"),
 ]

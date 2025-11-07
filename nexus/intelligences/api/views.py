@@ -8,8 +8,10 @@ from rest_framework import parsers, status, views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
+from rest_framework.views import APIView
 
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.authentication.authentication import ExternalTokenAuthentication
 from nexus.events import event_manager
 from nexus.intelligences.models import (
     ContentBase,
@@ -54,6 +56,8 @@ from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
 from nexus.intelligences.api.filters import ConversationFilter
+from drf_yasg.utils import swagger_auto_schema, no_body
+from drf_yasg import openapi
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -1861,8 +1865,18 @@ class SupervisorViewset(ModelViewSet):
     search_fields = ['contact_name', 'contact_urn']
     ordering_fields = ['created_at', 'start_date', 'end_date']
     ordering = ['-start_date']
-
+    
+    def get_filter_backends(self):
+        """Disable filter backends during schema generation to avoid duplicate parameters"""
+        if getattr(self, "swagger_fake_view", False):
+            return []  # Return empty list to prevent filter backend from adding parameters
+        return [filters.DjangoFilterBackend, SearchFilter, OrderingFilter]
+    
     def get_queryset(self):
+        # Prevent database access during schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Conversation.objects.none()
+            
         project_uuid = self.kwargs.get('project_uuid')
         if not project_uuid:
             return Conversation.objects.none()
@@ -1873,6 +1887,9 @@ class SupervisorViewset(ModelViewSet):
         except ProjectDoesNotExist:
             return Conversation.objects.none()
 
+    @swagger_auto_schema(
+        auto_schema=None  # Exclude from schema generation to avoid duplicate parameters
+    )
     def list(self, request, *args, **kwargs):
         project_uuid = kwargs.get('project_uuid')
         if not project_uuid:
@@ -1921,5 +1938,60 @@ class SupervisorViewset(ModelViewSet):
             print(f"Error retrieving supervisor data: {str(e)}")
             return Response(
                 {"error": f"Error retrieving supervisor data: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class InstructionsClassificationAPIView(APIView):
+    authentication_classes = AUTHENTICATION_CLASSES
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def post(self, request, project_uuid):
+        try:
+            instruction = request.data.get('instruction', '')
+            if not instruction:
+                return Response(
+                    {"error": "Instruction is required"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user = request.user
+            name = user.name or user.email.split('@')[0]
+            occupation = getattr(user, 'occupation', 'Customer Service Agent')
+            
+            from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
+            project, content_base, _ = get_project_and_content_base_data(project_uuid)
+            
+            goal = content_base.agent.goal if content_base.agent else "Provide excellent customer support"
+            adjective = content_base.agent.personality if content_base.agent else "friendly"
+            
+            instructions = []
+            for instruction_obj in content_base.instructions.all():
+                instructions.append({
+                    "instruction": instruction_obj.instruction,
+                    "type": "custom"
+                })
+            
+            from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
+            lambda_usecase = LambdaUseCase()
+            
+            classification, suggestion = lambda_usecase.instruction_classify(
+                name=name,
+                occupation=occupation,
+                goal=goal,
+                adjective=adjective,
+                instructions=instructions,
+                instruction_to_classify=instruction
+            )
+            
+            return Response({
+                "classification": classification,
+                "suggestion": suggestion
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                {"error": str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

@@ -225,6 +225,76 @@ class LambdaUseCase():
         parsed_final_response = response.get("postProcessingParsedResponse").get("responseText")
         return parsed_final_response
 
+    def instruction_classify(
+        self,
+        name: str,
+        occupation: str,
+        goal: str,
+        adjective: str,
+        instructions: list,
+        instruction_to_classify: str
+    ):
+        try:
+            instructions_payload = {
+                "name": name,
+                "occupation": occupation,
+                "goal": goal,
+                "adjective": adjective,
+                "instructions": instructions,
+                "instruction_to_classify": instruction_to_classify
+            }
+            
+            response = self.invoke_lambda(
+                lambda_name=str(settings.INSTRUCTION_CLASSIFY_NAME),
+                payload=instructions_payload
+            )
+            
+            if 'FunctionError' in response:
+                error_payload = json.loads(response.get("Payload").read())
+                error_type = error_payload.get("errorType", "Unknown")
+                error_message = error_payload.get("errorMessage", "Unknown error")
+
+                sentry_sdk.set_context("lambda_error", {
+                    "lambda_name": str(settings.INSTRUCTION_CLASSIFY_NAME),
+                    "full_error_payload": error_payload,
+                    "error_type": error_type    ,
+                    "error_message": error_message,
+                    "stack_trace": error_payload.get("stackTrace", []),
+                    "request_payload": instructions_payload
+                })
+                sentry_sdk.capture_message(
+                    f"Lambda FunctionError in instruction_classify: {error_payload}",
+                    level="error"
+                )
+                
+                raise Exception(f"Lambda error ({error_type}): {error_message}")
+            
+            response_data = json.loads(response.get("Payload").read())
+
+            # Support both current format ("classification") and a possible future improvement ("classifications")
+            classification_data = response_data.get("classifications") or response_data.get("classification", [])
+            suggestion = response_data.get("suggestion")
+            
+            if classification_data and len(classification_data) > 0:
+                # Check if it's already is a list of objects
+                if isinstance(classification_data[0], dict):
+                    classification = classification_data
+                else:
+                    # Transform to a single reason for all classifications
+                    reason = response_data.get("reason", "")
+                    classification = [
+                        {"classification": classification_value, "reason": reason} 
+                        for classification_value in classification_data
+                    ]
+            else:
+                classification = []
+            
+            return classification, suggestion
+            
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            raise e
+
 
 @celery_app.task
 def create_lambda_conversation(

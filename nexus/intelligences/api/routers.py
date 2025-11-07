@@ -25,7 +25,8 @@ from .views import (
     CommerceHasAgentBuilder,
     TopicsViewSet,
     SubTopicsViewSet,
-    SupervisorViewset
+    SupervisorViewset,
+    InstructionsClassificationAPIView
 )
 
 
@@ -89,7 +90,8 @@ urlpatterns = [
     path('<project_uuid>/document-preview/', ContentBaseFilePreview.as_view(), name="document-preview"),
     path('<project_uuid>/topics/', TopicsViewSet.as_view({'get': 'list', 'post': 'create'}), name='topics'),
     path('<project_uuid>/topics/<uuid>/', TopicsViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='topic-detail'),
-    path('<project_uuid>/topics/<topic_uuid>/subtopics/', SubTopicsViewSet.as_view({'get': 'list', 'post': 'create', 'put': 'update', 'delete': 'destroy'}), name='subtopics'),
+    path('<project_uuid>/topics/<topic_uuid>/subtopics/', SubTopicsViewSet.as_view({'get': 'list', 'post': 'create'}), name='subtopics'),
+    path('<project_uuid>/topics/<topic_uuid>/subtopics/<uuid>/', SubTopicsViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='subtopic-detail'),
     path('v1/intelligences/content_bases/<project_uuid>/', FlowsIntelligencesApiView.as_view(), name="project-intelligences"),
     path('v1/content-base-file', SentenxIndexerUpdateFile.as_view(), name="sentenx-content-base-file"),
     path('v1/wenigpt_question', GenerativeIntelligenceQuestionAPIView.as_view(), name="wenigpt-question"),
@@ -101,5 +103,6 @@ urlpatterns = [
     path('commerce/check-exists-agent-builder', CommerceHasAgentBuilder.as_view(), name='check-exists-agent-builder'),
     path('<project_uuid>/supervisor/', SupervisorViewset.as_view({
         'get': 'list'
-    }), name='supervisor')
+    }), name='supervisor'),
+    path('<project_uuid>/instructions-classification/', InstructionsClassificationAPIView.as_view(), name='instructions-classification')
 ]
