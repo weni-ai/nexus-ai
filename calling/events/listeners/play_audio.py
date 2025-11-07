@@ -3,7 +3,7 @@ from aiortc.contrib.media import MediaPlayer
 from calling.events.listener import EventListener
 from calling.sessions.session import Session
 
-audio_file = "calling/media/Calling1.mp3"
+audio_file = "calling/sounds/waiting_sound.mp3"
 
 
 class PlayAudioListener(EventListener):
