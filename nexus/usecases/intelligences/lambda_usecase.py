@@ -333,6 +333,19 @@ def create_lambda_conversation(
             project_uuid=payload.get("project_uuid"),
             contact_urn=payload.get("contact_urn")
         )
+
+        contact_name = payload.get("name")
+        resolution_choice_value = ResolutionEntities.convert_resolution_string_to_int(resolution)
+
+        resolution_dto = ResolutionDTO(
+            resolution=resolution_choice_value,
+            project_uuid=payload.get("project_uuid"),
+            contact_urn=payload.get("contact_urn"),
+            external_id=payload.get("external_id")
+        )
+        resolution_message(resolution_dto)
+        
+        # Get topic after billing message is sent
         topic = lambda_usecase.lambda_conversation_topics(
             messages=formated_messages,
             has_chats_room=payload.get("has_chats_room"),
@@ -340,8 +353,6 @@ def create_lambda_conversation(
             contact_urn=payload.get("contact_urn")
         )
 
-        contact_name = payload.get("name")
-        resolution_choice_value = ResolutionEntities.convert_resolution_string_to_int(resolution)
 
         update_data = {
             "start_date": payload.get("start_date"),
@@ -357,15 +368,6 @@ def create_lambda_conversation(
         
         conversation_queryset.update(**update_data)
 
-        resolution_dto = ResolutionDTO(
-            resolution=resolution_choice_value,
-            project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn"),
-            external_id=payload.get("external_id")
-        )
-        resolution_message(resolution_dto)
-
-        # Delete messages after processing (instead of updating resolution)
         message_service.clear_message_cache(
             project_uuid=payload.get("project_uuid"),
             contact_urn=payload.get("contact_urn"),
