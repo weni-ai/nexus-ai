@@ -237,7 +237,7 @@ class LambdaUseCase():
         try:
             instructions_payload = {
                 "name": name,
-                "occupation": occupation,
+                "ocupation": occupation,
                 "goal": goal,
                 "adjective": adjective,
                 "instructions": instructions,
@@ -270,6 +270,32 @@ class LambdaUseCase():
                 raise Exception(f"Lambda error ({error_type}): {error_message}")
             
             response_data = json.loads(response.get("Payload").read())
+            
+            # Check if response has a body wrapper
+            if "body" in response_data:
+                body_data = response_data.get("body")
+                if isinstance(body_data, str):
+                    body_data = json.loads(body_data)
+                response_data = body_data
+            
+            # Check for error responses from lambda
+            status_code = response_data.get("statusCode")
+            if status_code and status_code >= 400:
+                error_message = response_data.get("error") or response_data.get("message", "Unknown error from lambda")
+                
+                sentry_sdk.set_context("lambda_error", {
+                    "lambda_name": str(settings.INSTRUCTION_CLASSIFY_NAME),
+                    "status_code": status_code,
+                    "error_message": error_message,
+                    "full_response": response_data,
+                    "request_payload": instructions_payload
+                })
+                sentry_sdk.capture_message(
+                    f"Lambda returned error status {status_code} in instruction_classify: {error_message}",
+                    level="error"
+                )
+                
+                raise Exception(f"Lambda error (status {status_code}): {error_message}")
 
             # Support both current format ("classification") and a possible future improvement ("classifications")
             classification_data = response_data.get("classifications") or response_data.get("classification", [])
