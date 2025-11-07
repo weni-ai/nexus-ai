@@ -7,7 +7,6 @@ from aiortc.rtcdtlstransport import (
     RTCDtlsFingerprint,
     certificate_digest,
 )
-from sfcommons.logs import LogRegistry
 
 from calling.bridge import RTCBridge
 from calling.clients.nexus import get_agents

@@ -15,8 +15,6 @@ from ..sessions.session import Session
 
 logger = logging.getLogger(__name__)
 
-from sfcommons.logs import LogRegistry
-
 from calling.events import EventRegistry
 
 
@@ -86,7 +84,6 @@ class RTCBridge:
                 data = json.loads(message)
 
                 message_type = data.get("type")
-                LogRegistry.log(f"OAI Message received, {message_type}", data, True)
 
                 if message_type == "session.updated":
                     return
