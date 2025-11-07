@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import pendulum
 import sentry_sdk
@@ -75,7 +75,9 @@ class TraceHandler:
             channel_uuid=channel_uuid
         )
 
+
 class RunnerHooks(RunHooks):
+
     def __init__(
         self,
         supervisor_name: str,
@@ -164,6 +166,7 @@ class CollaboratorHooks(AgentHooks):
         session_id: str = None,
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
+        conversation: Optional[object] = None,
     ):
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
@@ -180,6 +183,7 @@ class CollaboratorHooks(AgentHooks):
         self.data_lake_event_adapter = data_lake_event_adapter
         self.hooks_state = hooks_state
         self.preview = preview
+        self.conversation = conversation
 
     async def on_start(self, context, agent):
         print(f"\033[34m[HOOK] Atribuindo tarefa ao agente '{agent.name}'.\033[0m")
@@ -218,6 +222,8 @@ class CollaboratorHooks(AgentHooks):
             },
             foundation_model=agent.model,
             backend="openai",
+            channel_uuid=context_data.contact.get("channel_uuid"),
+            conversation=self.conversation,
         )
 
     async def tool_started(self, context, agent, tool):
@@ -259,6 +265,8 @@ class CollaboratorHooks(AgentHooks):
             },
             foundation_model=agent.model,
             backend="openai",
+            channel_uuid=context_data.contact.get("channel_uuid"),
+            conversation=self.conversation,
         )
 
     async def on_tool_end(self, context, agent, tool, result):
@@ -358,6 +366,7 @@ class SupervisorHooks(AgentHooks):
         session_id: Optional[str] = None,
         msg_external_id: Optional[str] = None,
         turn_off_rationale: bool = False,
+        conversation: Optional[object] = None,
         **kwargs
     ):
         self.trace_handler = TraceHandler(
@@ -402,6 +411,7 @@ class SupervisorHooks(AgentHooks):
                 tool_call_data=tool_call_data,
                 foundation_model=agent.model,
                 backend="openai",
+                channel_uuid=context_data.contact.get("channel_uuid"),
             )
             trace_data = {
                 "eventTime": pendulum.now().to_iso8601_string(),
@@ -449,6 +459,7 @@ class SupervisorHooks(AgentHooks):
                 },
                 foundation_model=agent.model,
                 backend="openai",
+                channel_uuid=context_data.contact.get("channel_uuid"),
             )
 
     async def on_tool_end(self, context, agent, tool, result):
