@@ -1,8 +1,6 @@
 from aiortc import RTCPeerConnection
 from aiortc.rtcconfiguration import RTCConfiguration, RTCIceServer
 
-from calling.rtc_config import RTC_CONFIG
-
 from .session import Session
 
 
@@ -15,7 +13,7 @@ class SessionManager:
 
     @classmethod
     def setup_session(cls, call_id: str, sdp: str) -> Session:
-        wpp_connection = RTCPeerConnection(configuration=RTC_CONFIG)
+        wpp_connection = RTCPeerConnection()
         session = Session(call_id, sdp, wpp_connection)
         cls._add_active_session(session)
 

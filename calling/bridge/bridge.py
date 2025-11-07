@@ -9,7 +9,6 @@ from aiortc.contrib.media import MediaRelay
 from calling.agent import tool
 from calling.clients.nexus import invoke_agents
 from calling.clients.openai import get_realtime_answer
-from calling.rtc_config import RTC_CONFIG
 from calling.team import run_agent
 
 from ..sessions.session import Session
@@ -46,7 +45,7 @@ class RTCBridge:
                 logger.error("[OAI] Falha ao anexar track adicional:", e)
             return
 
-        openai_connection = RTCPeerConnection(configuration=RTC_CONFIG)
+        openai_connection = RTCPeerConnection()
         session.openai_connection = openai_connection
         print("[OAI] Criando PeerConnection para OpenAI")
 

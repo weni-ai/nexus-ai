@@ -12,7 +12,7 @@ async def pre_accept_call(sdp: str, call_id: str, phone_number_id: str, access_t
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
 
     async with httpx.AsyncClient() as client:
-        response = await client.post(url, headers=headers, json=payload)
+        response = await client.post(url, headers=headers, json=payload, timeout=30.0)
 
     return response.json()
 
@@ -28,6 +28,6 @@ async def accept_call(sdp: str, call_id: str, phone_number_id: str, access_token
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
 
     async with httpx.AsyncClient() as client:
-        response = await client.post(url, headers=headers, json=payload)
+        response = await client.post(url, headers=headers, json=payload, timeout=30.0)
 
     return response.json()
