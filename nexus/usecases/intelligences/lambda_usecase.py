@@ -270,6 +270,26 @@ class LambdaUseCase():
                 payload=instructions_payload
             )
             
+            if 'FunctionError' in response:
+                error_payload = json.loads(response.get("Payload").read())
+                error_type = error_payload.get("errorType", "Unknown")
+                error_message = error_payload.get("errorMessage", "Unknown error")
+
+                sentry_sdk.set_context("lambda_error", {
+                    "lambda_name": str(settings.INSTRUCTION_CLASSIFY_NAME),
+                    "full_error_payload": error_payload,
+                    "error_type": error_type    ,
+                    "error_message": error_message,
+                    "stack_trace": error_payload.get("stackTrace", []),
+                    "request_payload": instructions_payload
+                })
+                sentry_sdk.capture_message(
+                    f"Lambda FunctionError in instruction_classify: {error_payload}",
+                    level="error"
+                )
+                
+                raise Exception(f"Lambda error ({error_type}): {error_message}")
+            
             response_data = json.loads(response.get("Payload").read())
 
             # Support both current format ("classification") and a possible future improvement ("classifications")
@@ -380,30 +400,9 @@ def create_lambda_conversation(
             project_uuid=project_uuid,
             contact_urn=contact_urn
         )
-        
-        topic = lambda_usecase.lambda_conversation_topics(
-            messages=formated_messages,
-            has_chats_room=payload.get("has_chats_room"),
-            project_uuid=project_uuid,
-            contact_urn=contact_urn
-        )
 
         contact_name = payload.get("name")
         resolution_choice_value = ResolutionEntities.convert_resolution_string_to_int(resolution)
-
-        update_data = {
-            "start_date": payload.get("start_date"),
-            "end_date": payload.get("end_date"),
-            "has_chats_room": payload.get("has_chats_room"),
-            "external_id": external_id,
-            "resolution": resolution_choice_value,
-            "topic": topic
-        }
-        
-        if contact_name:
-            update_data["contact_name"] = contact_name
-        
-        conversation_queryset.update(**update_data)
 
         resolution_dto = ResolutionDTO(
             resolution=resolution_choice_value,
@@ -416,9 +415,9 @@ def create_lambda_conversation(
         if resolution_choice_value == ResolutionEntities.UNCLASSIFIED:
             logging.info(
                 f"[Billing] Sending unclassified conversation to billing - "
-                f"project_uuid: {payload.get('project_uuid')}, "
-                f"contact_urn: {payload.get('contact_urn')}, "
-                f"external_id: {payload.get('external_id')}, "
+                f"project_uuid: {project_uuid}, "
+                f"contact_urn: {contact_urn}, "
+                f"external_id: {external_id}, "
                 f"resolution: {resolution_choice_value}"
             )
         logger.info(
@@ -436,8 +435,30 @@ def create_lambda_conversation(
         )
         
         resolution_message(resolution_dto)
+        
+        # Get topic after billing message is sent
+        topic = lambda_usecase.lambda_conversation_topics(
+            messages=formated_messages,
+            has_chats_room=payload.get("has_chats_room"),
+            project_uuid=project_uuid,
+            contact_urn=contact_urn
+        )
 
-        # Delete messages after processing (instead of updating resolution)
+
+        update_data = {
+            "start_date": payload.get("start_date"),
+            "end_date": payload.get("end_date"),
+            "has_chats_room": payload.get("has_chats_room"),
+            "external_id": external_id,
+            "resolution": resolution_choice_value,
+            "topic": topic
+        }
+        
+        if contact_name:
+            update_data["contact_name"] = contact_name
+        
+        conversation_queryset.update(**update_data)
+
         message_service.clear_message_cache(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
