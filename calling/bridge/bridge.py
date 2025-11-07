@@ -91,42 +91,34 @@ class RTCBridge:
                 if message_type == "error":
                     logger.error(f"[on_message] Error message: {data}")
 
-                # if message_type == "conversation.item.input_audio_transcription.completed":
-                #     print(time.time() - session.start)
-                #     print(data)
-                # if message_type == "response.function_call_arguments.done":
-                #     name = data["name"]
-                #     args = json.loads(data.get("arguments", {}))
-                    
-                #     print("Função Chamada", name, args)
+                if message_type == "conversation.item.input_audio_transcription.completed":
+                    input_text = data.get("transcript")
+                    print("Input:", input_text)
 
-                #     await EventRegistry.notify(
-                #         "agent.run.started",
-                #         session
-                #     )
+                    await EventRegistry.notify(
+                        "agent.run.started",
+                        session
+                    )
 
-                    # input_text = args.get("relevantContextFromLastUserMessage")
-                    # response = await invoke_agents(input_text)
-                    
-                    # response = {"output": "Oi"}
+                    response = await invoke_agents(input_text)
 
-                    # await EventRegistry.notify(
-                    #     "agent.run.completed",
-                    #     session,
-                    #     response=response,
-                    # )
+                    await EventRegistry.notify(
+                        "agent.run.completed",
+                        session,
+                        response=response,
+                    )
 
-                    # print("Resposta:", response)
+                    print("Resposta:", response)
 
-                    # cls._dc_send_json(
-                    #     dc,
-                    #     {
-                    #         "type": "response.create",
-                    #         "response": {
-                    #             "instructions": response.get("output"),
-                    #         },
-                    #     },
-                    # )
+                    cls._dc_send_json(
+                        dc,
+                        {
+                            "type": "response.create",
+                            "response": {
+                                "instructions": response.get("output"),
+                            },
+                        },
+                    )
 
         try:
             openai_dc = openai_connection.createDataChannel("oai-events")
