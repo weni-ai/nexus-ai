@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -5,6 +6,15 @@ from aiortc.contrib.media import MediaStreamTrack
 
 if TYPE_CHECKING:
     from aiortc import RTCPeerConnection
+
+from enum import Enum
+
+
+class Status(Enum):
+    WAITING_CONTACT = 0
+    WAITING_RESPONSE = 1
+    ORCHESTRATION_INTERRUPTED = 2
+    RESPONDING = 3
 
 
 @dataclass
@@ -17,6 +27,10 @@ class Session:
     agents: dict = None
     openai_datachannel: str = None
 
+    input_text: str = ""
+    current_task: asyncio.Task = None
+    status: Status = Status.WAITING_CONTACT
+
     def set_agents(self, agents: dict) -> None:
         self.agents = agents
 
@@ -28,6 +42,19 @@ class Session:
 
     def set_openai_datachannel(self, datachannel: str) -> None:
         self.openai_datachannel = datachannel
+        
+    def set_status(self, status: Status):
+        if status == Status.RESPONDING:
+            self.input_text = ""
+
+        self.status = status
+
+    def interrupt_response(self, input_text: str):
+        self.input_text += "\n" + input_text
+        self.set_status(Status.ORCHESTRATION_INTERRUPTED)
+        
+        if self.current_task and not self.current_task.done():
+            self.current_task.cancel()
 
     async def close(self) -> None:
         await self.wpp_connection.close()

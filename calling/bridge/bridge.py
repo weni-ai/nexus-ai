@@ -7,15 +7,35 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
 
 from calling.agent import tool
-from calling.clients.nexus import invoke_agents
+from calling.clients.nexus import invoke_agents, mock_invoke
 from calling.clients.openai import get_realtime_answer
-from calling.team import run_agent
 
-from ..sessions.session import Session
+from ..sessions.session import Session, Status
 
 logger = logging.getLogger(__name__)
 
 from calling.events import EventRegistry
+
+
+async def handle_input(input_text: str, session: Session) -> dict:
+    if session.input_text == "":
+        session.input_text = input_text
+
+    if session.current_task and not session.current_task.done():
+        session.interrupt_response(input_text)
+
+    session.set_status(Status.WAITING_RESPONSE)
+    session.current_task = asyncio.create_task(asyncio.to_thread(mock_invoke, session.input_text))
+
+    try:
+        response = await session.current_task
+        session.status = Status.RESPONDING
+        session.current_task = None
+        session.input_text = ""
+
+        return response
+    except Exception as e:
+        return {}
 
 
 class RTCBridge:
@@ -61,29 +81,28 @@ class RTCBridge:
                     "type": "session.update",
                     "session": {
                         "type": "realtime",
+                        "audio": {
+                            "input": {
+                                "turn_detection": {
+                                    "type": "server_vad",
+                                    "create_response": False
+                                }
+                            }
+                        },
                         "tools": [tool],
                         "tool_choice": "auto",
                     },
                 }
 
                 cls._dc_send_json(dc, tools_session)
-                # TODO: Send presentations
-                # await asyncio.sleep(0.5)
-                # cls._dc_send_json(
-                #     dc,
-                #     {
-                #         "type": "response.create",
-                #         "response": {
-                #             "instructions": "Apresente-se, diga seu nome e como pode ajudar o contato. seja breve",
-                #         },
-                #     },
-                # )
 
             @dc.on("message")
             async def on_message(message):
                 data = json.loads(message)
 
                 message_type = data.get("type")
+
+                print(message_type)
 
                 if message_type == "session.updated":
                     return
@@ -93,20 +112,24 @@ class RTCBridge:
 
                 if message_type == "conversation.item.input_audio_transcription.completed":
                     input_text = data.get("transcript")
-                    print("Input:", input_text)
 
-                    await EventRegistry.notify(
-                        "agent.run.started",
-                        session
-                    )
+                    # await EventRegistry.notify(
+                    #     "agent.run.started",
+                    #     session
+                    # )
 
-                    response = await invoke_agents(input_text)
+                    response = await handle_input(input_text, session)
 
-                    await EventRegistry.notify(
-                        "agent.run.completed",
-                        session,
-                        response=response,
-                    )
+                    if response == None:
+                        return
+
+                    # response = await invoke_agents(input_text)
+
+                    # await EventRegistry.notify(
+                    #     "agent.run.completed",
+                    #     session,
+                    #     response=response,
+                    # )
 
                     print("Resposta:", response)
 
@@ -125,36 +148,22 @@ class RTCBridge:
             session.set_openai_datachannel(openai_dc)
             _setup_events_channel(openai_dc)
         except Exception as e:
-
             logger.error("[OAI][DC] Falha ao criar datachannel local:", e)
 
         @openai_connection.on("track")
         async def on_oai_track(track):
-            logger.debug("[OAI] Track recebida:", track.kind)
-            if track.kind == "audio":
+            print("[OAI] Track recebida:", track.kind)
+            if not track.kind == "audio":
+                return
+
+            send_proxy = cls.relay.subscribe(track)
+            audio_sender = getattr(session, "wpp_audio_sender", None)
+
+            if audio_sender is not None:
                 try:
-                    send_proxy = cls.relay.subscribe(track)
-                    if getattr(session, "wpp_audio_sender", None) is not None:
-                        try:
-                            session.wpp_audio_sender.replaceTrack(send_proxy)
-                            logger.debug("[BRIDGE] Áudio da OpenAI encaminhado para WhatsApp (replaceTrack)")
-                        except Exception as e:
-                            logger.error("[BRIDGE] Falha ao replaceTrack para WA:", e)
-                            try:
-                                wpp_connection.addTrack(send_proxy)
-                                session.set_wpp_audio_track(send_proxy)
-                                logger.debug("[BRIDGE] Fallback: addTrack usado")
-                            except Exception as ex:
-                                logger.error("[BRIDGE] Fallback addTrack falhou:", ex)
-                    else:
-                        try:
-                            wpp_connection.addTrack(send_proxy)
-                            session.set_wpp_audio_track(send_proxy)
-                            logger.debug("[BRIDGE] addTrack usado (não havia sender salvo)")
-                        except Exception as e:
-                            logger.error("[BRIDGE] Falha ao addTrack:", e)
-                except Exception as e:
-                    logger.error("[BRIDGE] Falha ao encaminhar áudio da OpenAI->WA:", e)
+                    audio_sender.replaceTrack(send_proxy)
+                except Exception as error:
+                    logger.error(error)
 
         try:
             wa_to_oai = cls.relay.subscribe(incoming_wa_track)
