@@ -147,61 +147,77 @@ class ResolutionRateAverageView(APIView):
                     {"error": "min_conversations must be a valid integer"}, status=400
                 )
 
-        # Build base query (across all projects, or filtered by project_uuid)
+        # Convert date objects to timezone-aware datetime objects for start_date filtering
+        start_datetime = pendulum.datetime(
+            start_date.year, start_date.month, start_date.day
+        )
+        end_datetime = pendulum.datetime(
+            end_date.year, end_date.month, end_date.day
+        )
+
         conversations = Conversation.objects.filter(
-            created_at__date__gte=start_date,
-            created_at__date__lte=end_date,
+            start_date__gte=start_datetime,
+            start_date__lt=end_datetime,
+            resolution__in=['0', '1', '4']
+        ).exclude(
+            resolution__isnull=True
         ).select_related("project")
 
-        # Filter by project_uuid if provided
         if project_uuid:
             conversations = conversations.filter(project__uuid=project_uuid)
 
-        # Filter by motor if provided
         if motor:
             backend_value = MOTOR_BACKEND_MAP[motor]
             conversations = conversations.filter(project__agents_backend=backend_value)
 
-        # Filter by min_conversations (count per project first)
-        if min_conversations is not None:
-            project_counts = (
-                conversations.values("project__uuid")
-                .annotate(count=Count("uuid"))
-                .filter(count__gte=min_conversations)
+        project_stats = (
+            conversations.values("project__uuid")
+            .annotate(
+                total_conversations=Count("uuid"),
+                resolved_cnt=Count("uuid", filter=Q(resolution="0")),
+                unresolved_cnt=Count("uuid", filter=Q(resolution="1")),
+                has_chat_cnt=Count("uuid", filter=Q(resolution="4")),
             )
-            project_uuids = [pc["project__uuid"] for pc in project_counts]
-            conversations = conversations.filter(project__uuid__in=project_uuids)
-
-        # Aggregate statistics
-        stats = conversations.aggregate(
-            total=Count("uuid"),
-            resolved=Count("uuid", filter=Q(resolution="0")),
-            unresolved=Count("uuid", filter=Q(resolution="1")),
-            in_progress=Count("uuid", filter=Q(resolution="2")),
-            unclassified=Count("uuid", filter=Q(resolution="3")),
-            has_chat_room=Count("uuid", filter=Q(resolution="4")),
         )
 
-        # Calculate rates (handle division by zero)
-        total = stats["total"]
-        resolved = stats["resolved"]
-        unresolved = stats["unresolved"]
+        if min_conversations is not None:
+            project_stats = project_stats.filter(total_conversations__gte=min_conversations)
 
-        resolution_rate = float(resolved / total) if total > 0 else 0.0
-        unresolved_rate = float(unresolved / total) if total > 0 else 0.0
+        project_rates = []
+        total_resolved = 0
+        total_unresolved = 0
+        total_has_chat = 0
+        total_conversations_all = 0
+
+        for ps in project_stats:
+            total_considered = ps["resolved_cnt"] + ps["unresolved_cnt"] + ps["has_chat_cnt"]
+            if total_considered > 0:
+                resolution_rate_pct = 100.0 * ps["resolved_cnt"] / total_considered
+                project_rates.append(resolution_rate_pct)
+                total_resolved += ps["resolved_cnt"]
+                total_unresolved += ps["unresolved_cnt"]
+                total_has_chat += ps["has_chat_cnt"]
+                total_conversations_all += ps["total_conversations"]
+
+        if project_rates:
+            resolution_rate = sum(project_rates) / len(project_rates) / 100.0
+            total_considered = total_resolved + total_unresolved + total_has_chat
+            unresolved_rate = float(total_unresolved / total_considered) if total_considered > 0 else 0.0
+        else:
+            resolution_rate = 0.0
+            unresolved_rate = 0.0
+            total_considered = 0
 
         response_data = {
             "resolution_rate": round(resolution_rate, 4),
             "unresolved_rate": round(unresolved_rate, 4),
-            "total_conversations": total,
-            "resolved_conversations": resolved,
-            "unresolved_conversations": unresolved,
+            "total_conversations": total_considered,
+            "resolved_conversations": total_resolved,
+            "unresolved_conversations": total_unresolved,
             "breakdown": {
-                "resolved": stats["resolved"],
-                "unresolved": stats["unresolved"],
-                "in_progress": stats["in_progress"],
-                "unclassified": stats["unclassified"],
-                "has_chat_room": stats["has_chat_room"],
+                "resolved": total_resolved,
+                "unresolved": total_unresolved,
+                "has_chat_room": total_has_chat,
             },
             "filters": {
                 "start_date": str(start_date),
