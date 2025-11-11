@@ -127,12 +127,14 @@ class AgentsBackendTestCase(TestCase):
 
     def test_set_agents_backend_by_project_nonexistent_project(self):
         """Test setting backend for non-existent project should raise an exception"""
-        with self.assertRaises(Exception):
+        from nexus.projects.exceptions import ProjectDoesNotExist
+
+        with self.assertRaises(ProjectDoesNotExist):
             self.usecase.set_agents_backend_by_project(str(uuid4()), "bedrock")
 
     def test_set_agents_backend_by_project_empty_string(self):
         """Test setting empty string as backend should raise an exception"""
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception):  # noqa: B017
             self.usecase.set_agents_backend_by_project(str(self.project.uuid), "")
 
     def test_get_agents_backend_after_set(self):

@@ -111,9 +111,9 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         """Test custom_event_data method with invalid JSON in text field"""
         custom_trace = CustomEventTraceFactory()
 
-        custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"][
-            "text"
-        ] = "invalid json"
+        custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"]["text"] = (
+            "invalid json"
+        )
 
         self.adapter.custom_event_data(
             inline_trace=custom_trace,
@@ -143,9 +143,9 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         """Test custom_event_data method with empty events list"""
         custom_trace = CustomEventTraceFactory()
 
-        custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"][
-            "text"
-        ] = '{"events": []}'
+        custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"]["text"] = (
+            '{"events": []}'
+        )
 
         self.adapter.custom_event_data(
             inline_trace=custom_trace,

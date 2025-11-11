@@ -566,14 +566,13 @@ class AgentUsecase:
         return Team.objects.get(**kwargs)
 
     def invoke_supervisor_stream(self, session_id, supervisor_id, supervisor_alias_id, content_base, message):
-        for chunk in self.external_agent_client.invoke_supervisor_stream(
+        yield from self.external_agent_client.invoke_supervisor_stream(
             supervisor_id=supervisor_id,
             supervisor_alias_id=supervisor_alias_id,
             session_id=session_id,
             content_base=content_base,
             message=message,
-        ):
-            yield chunk
+        )
 
     def prepare_agent(self, agent_id: str):
         self.external_agent_client.prepare_agent(agent_id)
@@ -707,7 +706,7 @@ class AgentUsecase:
         Compares existing agent data with incoming data to determine what needs to be updated.
         """
         agents_dto = []
-        for agent_key, agent_value in yaml.get("agents", {}).items():
+        for _, agent_value in yaml.get("agents", {}).items():
             agent = Agent.objects.filter(display_name=agent_value.get("name"), project_id=project_uuid).first()
 
             # Convert incoming data to DTO

@@ -18,7 +18,6 @@ def run_reflection_task(
 
 
 class Reflection:
-
     """
     Reflection classification will always occur after llm responses are received.
     It should reflect on the overall llm performance and improve the quality of the responses.

@@ -103,11 +103,9 @@ class TestPushAgents(TestCase):
         agents = """{
             "utility_agent": {
                 "name": "utility agent",
-                "description": "This agent provides utility functions like getting addresses "
-                "from CEP, weather information and city search to get IATA codes",
+                "description": "This agent provides utility functions for addresses, weather and city search",
                 "instructions": [
-                    "This agent provides utility functions like getting addresses from CEP "
-                    "and weather information for cities",
+                    "This agent provides utility functions for addresses and weather",
                     "For weather requests, inform the user if the requested date is beyond the 7-day forecast limit",
                     "For city searches, provide IATA codes and additional information about matching cities",
                     "If you don't know the answer, don't lie. Tell the user you don't know."
