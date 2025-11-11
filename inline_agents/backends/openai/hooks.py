@@ -263,6 +263,7 @@ class CollaboratorHooks(AgentHooks):
                 "parameters": parameters,
                 "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name")
             },
+            agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
             foundation_model=agent.model,
             backend="openai",
             channel_uuid=context_data.contact.get("channel_uuid"),
@@ -307,7 +308,8 @@ class CollaboratorHooks(AgentHooks):
                 contact_urn=context_data.contact.get("urn"),
                 channel_uuid=context_data.contact.get("channel_uuid"),
                 agent_name=agent.name,
-                preview=self.preview
+                preview=self.preview,
+                conversation=self.conversation
             )
 
         trace_data = {
@@ -386,7 +388,7 @@ class SupervisorHooks(AgentHooks):
         self.knowledge_base_tool = knowledge_base_tool
         self.data_lake_event_adapter = data_lake_event_adapter
         self.hooks_state = hooks_state
-        self.preview = preview
+        self.conversation = conversation
 
         super().__init__()
 
@@ -409,9 +411,11 @@ class SupervisorHooks(AgentHooks):
                 project_uuid=context_data.project.get("uuid"),
                 contact_urn=context_data.contact.get("urn"),
                 tool_call_data=tool_call_data,
+                agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
                 foundation_model=agent.model,
                 backend="openai",
                 channel_uuid=context_data.contact.get("channel_uuid"),
+                conversation=self.conversation,
             )
             trace_data = {
                 "eventTime": pendulum.now().to_iso8601_string(),
@@ -457,9 +461,11 @@ class SupervisorHooks(AgentHooks):
                     "parameters": parameters,
                     "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name")
                 },
+                agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
                 foundation_model=agent.model,
                 backend="openai",
                 channel_uuid=context_data.contact.get("channel_uuid"),
+                conversation=self.conversation,
             )
 
     async def on_tool_end(self, context, agent, tool, result):
@@ -516,7 +522,8 @@ class SupervisorHooks(AgentHooks):
                     contact_urn=context_data.contact.get("urn"),
                     channel_uuid=context_data.contact.get("channel_uuid"),
                     agent_name=agent.name,
-                    preview=self.preview
+                    preview=self.preview,
+                    conversation=self.conversation
                 )
 
             trace_data = {
