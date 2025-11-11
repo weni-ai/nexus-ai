@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from aiortc.contrib.media import MediaStreamTrack
+from aiortc.rtcrtpsender import RTCRtpSender
 
 if TYPE_CHECKING:
     from aiortc import RTCPeerConnection
@@ -27,6 +28,9 @@ class Session:
     agents: dict = None
     openai_datachannel: str = None
 
+    wpp_audio_sender: RTCRtpSender = None
+    wpp_audio_track: MediaStreamTrack = None
+
     input_text: str = ""
     current_task: asyncio.Task = None
     status: Status = Status.WAITING_CONTACT
@@ -49,11 +53,14 @@ class Session:
 
         self.status = status
 
+    def has_pending_task(self) -> bool:
+        return self.current_task and not self.current_task.done()
+
     def interrupt_response(self, input_text: str):
         self.input_text += "\n" + input_text
         self.set_status(Status.ORCHESTRATION_INTERRUPTED)
         
-        if self.current_task and not self.current_task.done():
+        if self.has_pending_task:
             self.current_task.cancel()
 
     async def close(self) -> None:

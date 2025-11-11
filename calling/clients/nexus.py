@@ -1,6 +1,7 @@
 
 
 import httpx
+import requests
 from django.conf import settings
 
 
@@ -12,11 +13,10 @@ async def get_agents(data: dict):
         response = await client.get(url, params=params, timeout=60.0)
 
 
-async def invoke_agents(input_text: str):
+def invoke_agents(input_text: str):
     params = {"token": settings.GATEWAY_VERIFICATION_TOKEN}
     url = settings.GATEWAY_URL + "/invoke-agents"
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, params=params, json={"input_text": input_text}, timeout=60.0)
-    
+    response = requests.post(url, params=params, json={"input_text": input_text})
+
     return response.json()

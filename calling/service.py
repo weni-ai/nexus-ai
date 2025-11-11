@@ -22,6 +22,7 @@ from calling.sessions import SessionManager
 
 EventRegistry.subscribe("agent.run.started", PlayAudioListener())
 EventRegistry.subscribe("agent.run.completed", StopAudioListener())
+EventRegistry.subscribe("contact.speech.started", StopAudioListener())
 EventRegistry.subscribe("whatspp.answer.created", PreAcceptCallListener())
 EventRegistry.subscribe("openai.channel.opened", AcceptCallListener())
 EventRegistry.subscribe("whatsapp.remote.connected", SendWelcomeListener())

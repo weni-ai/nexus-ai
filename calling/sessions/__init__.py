@@ -1,3 +1,4 @@
-from .manager import Session, SessionManager
+from .manager import SessionManager
+from .session import Session, Status
 
-__all__ = ("SessionManager", "Session")
+__all__ = ("Status", "SessionManager", "Session")

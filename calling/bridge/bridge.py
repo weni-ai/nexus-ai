@@ -21,11 +21,11 @@ async def handle_input(input_text: str, session: Session) -> dict:
     if session.input_text == "":
         session.input_text = input_text
 
-    if session.current_task and not session.current_task.done():
+    if session.has_pending_task():
         session.interrupt_response(input_text)
 
     session.set_status(Status.WAITING_RESPONSE)
-    session.current_task = asyncio.create_task(asyncio.to_thread(mock_invoke, session.input_text))
+    session.current_task = asyncio.create_task(asyncio.to_thread(invoke_agents, session.input_text))
 
     try:
         response = await session.current_task
@@ -102,34 +102,39 @@ class RTCBridge:
 
                 message_type = data.get("type")
 
-                print(message_type)
-
                 if message_type == "session.updated":
                     return
 
                 if message_type == "error":
                     logger.error(f"[on_message] Error message: {data}")
+                    
+                # if message_type == "input_audio_buffer.speech_started":
+                #     await EventRegistry.notify("contact.speech.started", session)
+
+                if message_type == "input_audio_buffer.committed":
+                    # stop audio
+                    pass
 
                 if message_type == "conversation.item.input_audio_transcription.completed":
                     input_text = data.get("transcript")
 
-                    # await EventRegistry.notify(
-                    #     "agent.run.started",
-                    #     session
-                    # )
+                    await EventRegistry.notify(
+                        "agent.run.started",
+                        session
+                    )
 
                     response = await handle_input(input_text, session)
-
+                    print(response)
                     if response == None:
                         return
 
                     # response = await invoke_agents(input_text)
 
-                    # await EventRegistry.notify(
-                    #     "agent.run.completed",
-                    #     session,
-                    #     response=response,
-                    # )
+                    await EventRegistry.notify(
+                        "agent.run.completed",
+                        session,
+                        response=response,
+                    )
 
                     print("Resposta:", response)
 
@@ -138,7 +143,7 @@ class RTCBridge:
                         {
                             "type": "response.create",
                             "response": {
-                                "instructions": response.get("output"),
+                                "instructions": "Essa é a SUA resposta, você responderá como se você mesmo a tivesse gerado. Responda 100% fiel ao seguinte texto: " + response.get("output"),
                             },
                         },
                     )
