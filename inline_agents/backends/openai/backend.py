@@ -2,7 +2,7 @@ import asyncio
 from typing import Any, Dict
 
 import pendulum
-from agents import Agent, Runner, trace, ModelSettings
+from agents import Agent, ModelSettings, Runner, trace
 from agents.agent import ToolsToFinalOutputResult
 from django.conf import settings
 from langfuse import get_client
@@ -13,15 +13,17 @@ from inline_agents.backends.openai.adapter import (
     OpenAIDataLakeEventAdapter,
     OpenAITeamAdapter,
 )
-from inline_agents.backends.openai.entities import FinalResponse
 from inline_agents.backends.openai.components_tools import COMPONENT_TOOLS
+from inline_agents.backends.openai.entities import FinalResponse
 from inline_agents.backends.openai.hooks import (
     HooksState,
     RunnerHooks,
     SupervisorHooks,
 )
 from inline_agents.backends.openai.sessions import (
+    MemorySession,
     RedisSession,
+    make_memory_session_factory,
     make_session_factory,
 )
 from nexus.inline_agents.backends.openai.repository import (
@@ -60,10 +62,18 @@ class OpenAIBackend(InlineAgentsBackend):
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         return RedisSession(session_id=session_id, r=redis_client, project_uuid=project_uuid, sanitized_urn=sanitized_urn, limit=conversation_turns_to_include), session_id
 
+    def _get_memory_session(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None) -> tuple[MemorySession, str]:
+        session_id = f"project-{project_uuid}-session-{sanitized_urn}"
+        return MemorySession(session_id=session_id, project_uuid=project_uuid, sanitized_urn=sanitized_urn, limit=conversation_turns_to_include), session_id
+
     def _get_session_factory(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None):
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         return make_session_factory(redis=redis_client, base_id=session_id, project_uuid=project_uuid, sanitized_urn=sanitized_urn, limit=conversation_turns_to_include)
+
+    def _get_memory_session_factory(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None):
+        session_id = f"project-{project_uuid}-session-{sanitized_urn}"
+        return make_memory_session_factory(base_id=session_id, project_uuid=project_uuid, sanitized_urn=sanitized_urn, limit=conversation_turns_to_include)
 
     def end_session(self, project_uuid: str, sanitized_urn: str):
         session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
@@ -301,9 +311,10 @@ class OpenAIBackend(InlineAgentsBackend):
                 async for event in result.stream_events():
                     if event.type == "run_item_stream_event":
                         if hasattr(event, 'item') and event.item.type == "tool_call_item":
-                            hooks_state.tool_calls.update({
-                                event.item.raw_item.name: event.item.raw_item.arguments
-                            })
+                            if hooks_state:
+                                hooks_state.tool_calls.update({
+                                    event.item.raw_item.name: event.item.raw_item.arguments
+                                })
                 final_response = self._get_final_response(result)
 
                 # If use_components is True, process the result through the formatter agent

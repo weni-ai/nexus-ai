@@ -172,19 +172,22 @@ class OpenAITeamAdapter(TeamAdapter):
 
             agent_name = agent.get("agentName")
 
-            hooks = CollaboratorHooks(
-                agent_name=agent_name,
-                data_lake_event_adapter=data_lake_event_adapter,
-                hooks_state=hooks_state,
-                event_manager_notify=event_manager_notify,
-                preview=preview,
-                rationale_switch=rationale_switch,
-                language=language,
-                user_email=user_email,
-                session_id=session_id,
-                msg_external_id=msg_external_id,
-                turn_off_rationale=turn_off_rationale
-            )
+            if hooks_state:
+                hooks = CollaboratorHooks(
+                    agent_name=agent_name,
+                    data_lake_event_adapter=data_lake_event_adapter,
+                    hooks_state=hooks_state,
+                    event_manager_notify=event_manager_notify,
+                    preview=preview,
+                    rationale_switch=rationale_switch,
+                    language=language,
+                    user_email=user_email,
+                    session_id=session_id,
+                    msg_external_id=msg_external_id,
+                    turn_off_rationale=turn_off_rationale
+                )
+            else:
+                hooks = None
 
             openai_agent = Agent[Context](
                 name=agent_name,
@@ -221,7 +224,8 @@ class OpenAITeamAdapter(TeamAdapter):
             use_components=use_components,
         )
 
-        supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
+        if isinstance(supervisor_hooks, SupervisorHooks):
+            supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
 
         return {
             "starting_agent": supervisor_agent,
@@ -315,18 +319,13 @@ class OpenAITeamAdapter(TeamAdapter):
                     "name": key,
                     "value": value
                 })
-            # ctx.context.hooks_state.add_tool_call(
-            #     {
-            #         function_name: parameters
-            #     }
-            # )
-
-            ctx.context.hooks_state.add_tool_info(
-                function_name,
-                {
-                    "parameters": parameters
-                }
-            )
+            if ctx.context.hooks_state:
+                ctx.context.hooks_state.add_tool_info(
+                    function_name,
+                    {
+                        "parameters": parameters
+                    }
+                )
 
             session_attributes = {
                 "credentials": json.dumps(credentials),
@@ -366,10 +365,11 @@ class OpenAITeamAdapter(TeamAdapter):
                     "error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"
                 })
 
-            ctx.context.hooks_state.add_tool_info(
-                function_name,
-                result["response"].get("sessionAttributes", {})
-            )
+            if ctx.context.hooks_state:
+                ctx.context.hooks_state.add_tool_info(
+                    function_name,
+                    result["response"].get("sessionAttributes", {})
+                )
 
             return result["response"]["functionResponse"]["responseBody"]["TEXT"]["body"]
         except Exception as e:

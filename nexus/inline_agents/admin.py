@@ -1,11 +1,16 @@
+import json
+
 from django.contrib import admin
 from django.db import models
 from django.forms import Textarea
 
-import json
-from nexus.inline_agents.models import Guardrail, InlineAgentsConfiguration, Agent
 from nexus.inline_agents.backends.bedrock.models import Supervisor
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor
+from nexus.inline_agents.models import (
+    Agent,
+    Guardrail,
+    InlineAgentsConfiguration,
+)
 
 
 class PrettyJSONWidget(Textarea):
@@ -126,7 +131,7 @@ class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-            'fields': ('project', 'agents_backend', 'default_instructions_for_collaborators')
+            'fields': ('project', 'agents_backend', 'default_instructions_for_collaborators', 'text_orchestration_exclusive_tools', 'audio_orchestration_exclusive_tools')
         }),
     )
 
@@ -141,6 +146,6 @@ class AgentAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-            'fields': ('name', 'project', 'is_official', 'instruction', 'collaboration_instructions', 'foundation_model', 'backend_foundation_models', 'source_type')
+            'fields': ('name', 'project', 'is_official', 'instruction', 'collaboration_instructions', 'foundation_model', 'backend_foundation_models', 'source_type', 'audio_orchestration', 'text_orchestration')
         }),
     )
