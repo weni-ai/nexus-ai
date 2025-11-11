@@ -5,12 +5,12 @@ class FlowDoesNotExist(Exception):
     pass
 
 
-class RetrieveFlowsUseCase():
+class RetrieveFlowsUseCase:
     def retrieve_flow_by_uuid(self, uuid: str) -> Flow:
         try:
             return Flow.objects.get(uuid=uuid)
-        except Flow.DoesNotExist:
-            raise FlowDoesNotExist
+        except Flow.DoesNotExist as e:
+            raise FlowDoesNotExist from e
 
 
 def get_flow_by_action_type(
@@ -18,9 +18,6 @@ def get_flow_by_action_type(
     action_type: str,
 ) -> Flow:
     try:
-        return Flow.objects.get(
-            action_type=action_type,
-            content_base__uuid=content_base_uuid
-        )
-    except Flow.DoesNotExist:
-        raise FlowDoesNotExist
+        return Flow.objects.get(action_type=action_type, content_base__uuid=content_base_uuid)
+    except Flow.DoesNotExist as e:
+        raise FlowDoesNotExist from e

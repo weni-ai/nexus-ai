@@ -1,11 +1,10 @@
 from typing import List
 
-from router.classifiers.interfaces import Classifier
-from router.clients.zeroshot import ZeroshotClient, NexusZeroshotClient
-
-from router.entities.flow import FlowDTO
-
 from django.conf import settings
+
+from router.classifiers.interfaces import Classifier
+from router.clients.zeroshot import NexusZeroshotClient, ZeroshotClient
+from router.entities.flow import FlowDTO
 
 
 class ZeroshotException(Exception):
@@ -13,12 +12,8 @@ class ZeroshotException(Exception):
 
 
 class ZeroshotClassifier(Classifier):
-
     def __init__(
-        self,
-        version: str = None,
-        client=NexusZeroshotClient,
-        chatbot_goal: str = settings.DEFAULT_AGENT_GOAL
+        self, version: str = None, client=NexusZeroshotClient, chatbot_goal: str = settings.DEFAULT_AGENT_GOAL
     ) -> None:
         self.__version = version
         self.chatbot_goal = chatbot_goal
@@ -47,7 +42,7 @@ class ZeroshotClassifier(Classifier):
         except Exception as e:
             message = f"Zeroshot Error: {e}"
             print(message)
-            raise ZeroshotException(message)
+            raise ZeroshotException(message) from e
 
 
 if __name__ == "__main__":  # pragma: no cover

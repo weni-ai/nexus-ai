@@ -4,20 +4,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('logs', '0007_messagelog_groundedness_details'),
+        ("logs", "0007_messagelog_groundedness_details"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='message',
-            name='groundedness_details_cache',
+            model_name="message",
+            name="groundedness_details_cache",
             field=models.JSONField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='message',
-            name='response_status_cache',
-            field=models.CharField(blank=True, choices=[('F', 'fail'), ('P', 'processing'), ('S', 'success')], max_length=1, null=True),
+            model_name="message",
+            name="response_status_cache",
+            field=models.CharField(
+                blank=True, choices=[("F", "fail"), ("P", "processing"), ("S", "success")], max_length=1, null=True
+            ),
         ),
     ]

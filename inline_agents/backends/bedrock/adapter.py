@@ -35,13 +35,14 @@ class BedrockTeamAdapter(TeamAdapter):
         classification_foundation_model: str = None,
         project=None,
         content_base=None,
-        **kwargs
+        **kwargs,
     ) -> dict:
         # TODO: change self to cls
         from nexus.projects.models import Project
         from nexus.usecases.intelligences.get_by_uuid import (
             get_default_content_base_by_project,
         )
+
         if content_base is None:
             content_base = get_default_content_base_by_project(project_uuid)
         instructions = content_base.instructions.all()
@@ -69,7 +70,7 @@ class BedrockTeamAdapter(TeamAdapter):
             project_id=project_uuid,
             contact_id=contact_urn,
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
         )
 
         print(f"[ + DEBUG + ] auth_token: {auth_token}")
@@ -107,7 +108,7 @@ class BedrockTeamAdapter(TeamAdapter):
                 use_components=use_components,
                 prompt_override_configuration=supervisor["prompt_override_configuration"],
             ),
-            "idleSessionTTLInSeconds": settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS
+            "idleSessionTTLInSeconds": settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS,
         }
 
         print(f"[ + DEBUG + ] external_team: {external_team}")
@@ -126,7 +127,7 @@ class BedrockTeamAdapter(TeamAdapter):
     def _get_session_id(cls, contact_urn: str, project_uuid: str) -> str:
         sanitized = ""
         for char in contact_urn:
-            if not char.isalnum() and char not in '-_.:':
+            if not char.isalnum() and char not in "-_.:":
                 sanitized += f"_{ord(char)}"
             else:
                 sanitized += char
@@ -159,7 +160,7 @@ class BedrockTeamAdapter(TeamAdapter):
         session_attributes = {}
 
         if credentials:
-            session_attributes['credentials'] = json.dumps(credentials, default=str)
+            session_attributes["credentials"] = json.dumps(credentials, default=str)
 
         if contact:
             session_attributes["contact"] = json.dumps(contact, default=str)
@@ -179,7 +180,6 @@ class BedrockTeamAdapter(TeamAdapter):
     def _get_collaborators(cls, agents: list[dict], date_time_now: str) -> list:
         collaborators = []
         for agent in agents:
-
             instruction = agent["instruction"]
             if settings.COLLABORATORS_DEFAULT_INSTRUCTIONS:
                 instruction = instruction + "\n\n" + settings.COLLABORATORS_DEFAULT_INSTRUCTIONS
@@ -203,47 +203,25 @@ class BedrockTeamAdapter(TeamAdapter):
             collaboratorConfigurations.append(
                 {
                     "collaboratorInstruction": agent["collaborator_configurations"],
-                    "collaboratorName": slugify(agent["agentName"])
+                    "collaboratorName": slugify(agent["agentName"]),
                 }
             )
         return collaboratorConfigurations
 
     @classmethod
-    def _get_knowledge_bases(
-        cls,
-        supervisor: dict,
-        content_base_uuid: str,
-        project_uuid: str
-    ) -> list[dict]:
-
+    def _get_knowledge_bases(cls, supervisor: dict, content_base_uuid: str, project_uuid: str) -> list[dict]:
         combined_filter = {
             "andAll": [
-                {
-                    "equals": {
-                        "key": "contentBaseUuid",
-                        "value": str(content_base_uuid)
-                    }
-                },
-                {
-                    "equals": {
-                        "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": get_datasource_id(project_uuid)
-                    }
-                }
+                {"equals": {"key": "contentBaseUuid", "value": str(content_base_uuid)}},
+                {"equals": {"key": "x-amz-bedrock-kb-data-source-id", "value": get_datasource_id(project_uuid)}},
             ]
         }
 
-        retrieval_configuration = {
-            "vectorSearchConfiguration": {
-                "filter": combined_filter
-            }
-        }
+        retrieval_configuration = {"vectorSearchConfiguration": {"filter": combined_filter}}
 
         knowledge = supervisor["knowledge_bases"][0]
 
-        knowledge.update(
-            {"retrievalConfiguration": retrieval_configuration}
-        )
+        knowledge.update({"retrievalConfiguration": retrieval_configuration})
 
         return [knowledge]
 
@@ -262,9 +240,8 @@ class BedrockTeamAdapter(TeamAdapter):
         project_id: str,
         contact_id: str,
         contact_name: str = "",
-        channel_uuid: str = ""
+        channel_uuid: str = "",
     ) -> str:
-
         instruction = instruction or ""
         date_time_now = date_time_now or ""
         contact_fields = contact_fields or ""
@@ -277,31 +254,21 @@ class BedrockTeamAdapter(TeamAdapter):
         project_id = str(project_id) if project_id else ""
         contact_id = str(contact_id) if contact_id else ""
 
-        instruction = instruction.replace(
-            "{{DATE_TIME_NOW}}", date_time_now
-        ).replace(
-            "{{CONTACT_FIELDS}}", contact_fields
-        ).replace(
-            "{{SUPERVISOR_NAME}}", supervisor_name
-        ).replace(
-            "{{SUPERVISOR_ROLE}}", supervisor_role
-        ).replace(
-            "{{SUPERVISOR_GOAL}}", supervisor_goal
-        ).replace(
-            "{{SUPERVISOR_ADJECTIVE}}", supervisor_adjective
-        ).replace(
-            "{{SUPERVISOR_INSTRUCTIONS}}", supervisor_instructions
-        ).replace(
-            "{{BUSINESS_RULES}}", business_rules
-        ).replace(
-            "{{PROJECT_ID}}", project_id
-        ).replace(
-            "{{CONTACT_ID}}", contact_id
-        ).replace(
-            "{{CONTACT_NAME}}", contact_name
-        ).replace(
-            "{{CHANNEL_UUID}}", channel_uuid
-        ).replace("\r\n", "\n")
+        instruction = (
+            instruction.replace("{{DATE_TIME_NOW}}", date_time_now)
+            .replace("{{CONTACT_FIELDS}}", contact_fields)
+            .replace("{{SUPERVISOR_NAME}}", supervisor_name)
+            .replace("{{SUPERVISOR_ROLE}}", supervisor_role)
+            .replace("{{SUPERVISOR_GOAL}}", supervisor_goal)
+            .replace("{{SUPERVISOR_ADJECTIVE}}", supervisor_adjective)
+            .replace("{{SUPERVISOR_INSTRUCTIONS}}", supervisor_instructions)
+            .replace("{{BUSINESS_RULES}}", business_rules)
+            .replace("{{PROJECT_ID}}", project_id)
+            .replace("{{CONTACT_ID}}", contact_id)
+            .replace("{{CONTACT_NAME}}", contact_name)
+            .replace("{{CHANNEL_UUID}}", channel_uuid)
+            .replace("\r\n", "\n")
+        )
 
         return instruction
 
@@ -315,10 +282,7 @@ class BedrockTeamAdapter(TeamAdapter):
         if guardrails is None:
             return None
 
-        return {
-            'guardrailIdentifier': guardrails.identifier,
-            'guardrailVersion': str(guardrails.version)
-        }
+        return {"guardrailIdentifier": guardrails.identifier, "guardrailVersion": str(guardrails.version)}
 
     @classmethod
     def __get_prompt_override_configuration(self, prompt_override_configuration, use_components: bool) -> dict:
@@ -329,117 +293,92 @@ class BedrockTeamAdapter(TeamAdapter):
     @classmethod
     def __get_collaborator_prompt_override_configuration(self) -> dict:
         return {
-            'promptConfigurations': [
+            "promptConfigurations": [
                 {
-                    'promptType': 'KNOWLEDGE_BASE_RESPONSE_GENERATION',
-                    'promptState': 'DISABLED',
-                    'promptCreationMode': 'DEFAULT',
-                    'parserMode': 'DEFAULT'
+                    "promptType": "KNOWLEDGE_BASE_RESPONSE_GENERATION",
+                    "promptState": "DISABLED",
+                    "promptCreationMode": "DEFAULT",
+                    "parserMode": "DEFAULT",
                 },
                 {
-                    'promptType': 'PRE_PROCESSING',
-                    'promptState': 'DISABLED',
-                    'promptCreationMode': 'DEFAULT',
-                    'parserMode': 'DEFAULT'
+                    "promptType": "PRE_PROCESSING",
+                    "promptState": "DISABLED",
+                    "promptCreationMode": "DEFAULT",
+                    "parserMode": "DEFAULT",
                 },
                 {
-                    'promptType': 'POST_PROCESSING',
-                    'promptState': 'DISABLED',
-                    'promptCreationMode': 'DEFAULT',
-                    'parserMode': 'DEFAULT'
-                }
+                    "promptType": "POST_PROCESSING",
+                    "promptState": "DISABLED",
+                    "promptCreationMode": "DEFAULT",
+                    "parserMode": "DEFAULT",
+                },
             ]
         }
 
 
 class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
-
-    def __init__(
-        self,
-        send_data_lake_event_task: callable = None
-    ):
+    def __init__(self, send_data_lake_event_task: callable = None):
         self.send_data_lake_event_task = send_data_lake_event_task
         if self.send_data_lake_event_task is None:
             self.send_data_lake_event_task = self._get_send_data_lake_event_task()
 
-    def _get_send_data_lake_event_task(
-        self
-    ) -> callable:
+    def _get_send_data_lake_event_task(self) -> callable:
         return send_data_lake_event
 
-    def _has_called_agent(
-        self,
-        inline_traces: dict
-    ) -> bool:
+    def _has_called_agent(self, inline_traces: dict) -> bool:
         try:
-            trace = inline_traces.get('trace', {})
-            orchestration = trace.get('orchestrationTrace', {})
-            invocation = orchestration.get('invocationInput', {})
-            agent_collaboration = invocation.get('agentCollaboratorInvocationInput', {})
+            trace = inline_traces.get("trace", {})
+            orchestration = trace.get("orchestrationTrace", {})
+            invocation = orchestration.get("invocationInput", {})
+            agent_collaboration = invocation.get("agentCollaboratorInvocationInput", {})
             if agent_collaboration:
                 return self.metadata_agent_collaboration(agent_collaboration)
             return False
         except (KeyError, AttributeError) as e:
             logger.warning(f"Error checking agent call: {str(e)}")
-            sentry_sdk.set_tag("project_uuid", inline_traces.get('project_uuid', 'unknown'))
+            sentry_sdk.set_tag("project_uuid", inline_traces.get("project_uuid", "unknown"))
             sentry_sdk.capture_exception(e)
             return False
 
-    def _has_called_action_group(
-        self,
-        inline_traces: dict
-    ) -> bool:
+    def _has_called_action_group(self, inline_traces: dict) -> bool:
         try:
-            trace = inline_traces.get('trace', {})
-            orchestration = trace.get('orchestrationTrace', {})
-            invocation = orchestration.get('invocationInput', {})
-            action_group = invocation.get('actionGroupInvocationInput')
+            trace = inline_traces.get("trace", {})
+            orchestration = trace.get("orchestrationTrace", {})
+            invocation = orchestration.get("invocationInput", {})
+            action_group = invocation.get("actionGroupInvocationInput")
             if action_group:
                 return self.metadata_action_group(action_group)
             return False
         except (KeyError, AttributeError) as e:
             logger.warning(f"Error checking action group call: {str(e)}")
-            sentry_sdk.set_tag("project_uuid", inline_traces.get('project_uuid', 'unknown'))
+            sentry_sdk.set_tag("project_uuid", inline_traces.get("project_uuid", "unknown"))
             sentry_sdk.capture_exception(e)
             return False
 
-    def metadata_agent_collaboration(
-        self,
-        agent_collaboration_invocation_input: dict
-    ) -> dict:
+    def metadata_agent_collaboration(self, agent_collaboration_invocation_input: dict) -> dict:
         try:
             return {
-                "agent_name": agent_collaboration_invocation_input['agentCollaboratorName'],
-                "input_text": agent_collaboration_invocation_input['input']['text'],
+                "agent_name": agent_collaboration_invocation_input["agentCollaboratorName"],
+                "input_text": agent_collaboration_invocation_input["input"]["text"],
             }
         except (KeyError, AttributeError) as e:
             logger.error(f"Error extracting agent collaboration metadata: {str(e)}")
-            sentry_sdk.set_tag("project_uuid", agent_collaboration_invocation_input.get('project_uuid', 'unknown'))
+            sentry_sdk.set_tag("project_uuid", agent_collaboration_invocation_input.get("project_uuid", "unknown"))
             sentry_sdk.capture_exception(e)
-            return {
-                "agent_name": "unknown",
-                "input_text": "unknown"
-            }
+            return {"agent_name": "unknown", "input_text": "unknown"}
 
-    def metadata_action_group(
-        self,
-        action_group_invocation_input: dict
-    ) -> dict:
+    def metadata_action_group(self, action_group_invocation_input: dict) -> dict:
         try:
             return {
-                "tool_name": action_group_invocation_input['actionGroupName'],
-                "function_name": action_group_invocation_input['function'],
-                "parameters": action_group_invocation_input['parameters']
+                "tool_name": action_group_invocation_input["actionGroupName"],
+                "function_name": action_group_invocation_input["function"],
+                "parameters": action_group_invocation_input["parameters"],
             }
         except (KeyError, AttributeError) as e:
             logger.error(f"Error extracting action group metadata: {str(e)}")
-            sentry_sdk.set_tag("project_uuid", action_group_invocation_input.get('project_uuid', 'unknown'))
+            sentry_sdk.set_tag("project_uuid", action_group_invocation_input.get("project_uuid", "unknown"))
             sentry_sdk.capture_exception(e)
-            return {
-                "tool_name": "unknown",
-                "function_name": "unknown",
-                "parameters": []
-            }
+            return {"tool_name": "unknown", "function_name": "unknown", "parameters": []}
 
     def to_data_lake_event(
         self,
@@ -450,7 +389,6 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         backend: str = "bedrock",
         foundation_model: str = "",
     ) -> Optional[dict]:
-
         if preview:
             return None
 
@@ -468,10 +406,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                 "project": project_uuid,
                 "contact_urn": contact_urn,
                 "value_type": "string",
-                "metadata": {
-                    "backend": backend,
-                    "foundation_model": foundation_model
-                }
+                "metadata": {"backend": backend, "foundation_model": foundation_model},
             }
 
             if has_action_group:
@@ -501,21 +436,22 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         contact_urn: str,
         channel_uuid: str,
         collaborator_name: str = "",
-        preview: bool = False
+        preview: bool = False,
     ):
         from nexus.inline_agents.models import IntegratedAgent
         from nexus.usecases.inline_agents.update import (
             update_conversation_data,
         )
+
         if preview:
             return None
 
         orchestration_trace = inline_trace.get("trace", {}).get("orchestrationTrace", {})
 
-        action_group_data = orchestration_trace.get('observation', {}).get("actionGroupInvocationOutput", {})
-        if action_group_data.get('text'):
+        action_group_data = orchestration_trace.get("observation", {}).get("actionGroupInvocationOutput", {})
+        if action_group_data.get("text"):
             try:
-                event_data = json.loads(action_group_data.get('text'))
+                event_data = json.loads(action_group_data.get("text"))
             except Exception as e:
                 print(f"[ + DEBUG error + ] error: {e}")
                 event_data = {}
@@ -525,45 +461,33 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                 event_data = []
             for event_to_send in event_data:
                 if "metadata" not in event_to_send or event_to_send.get("metadata") is None:
-                    team_agent = IntegratedAgent.objects.get(
-                        agent__slug=collaborator_name,
-                        project__uuid=project_uuid
-                    )
+                    team_agent = IntegratedAgent.objects.get(agent__slug=collaborator_name, project__uuid=project_uuid)
                     agent_uuid = team_agent.agent.uuid
-                    event_to_send["metadata"] = {
-                        "agent_uuid": agent_uuid
-                    }
+                    event_to_send["metadata"] = {"agent_uuid": agent_uuid}
                 if event_to_send.get("key") == "weni_csat":
                     event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
-                    to_update = {'csat': event_to_send.get("value")}
+                    to_update = {"csat": event_to_send.get("value")}
                     update_conversation_data(
                         to_update=to_update,
                         project_uuid=project_uuid,
                         contact_urn=contact_urn,
-                        channel_uuid=channel_uuid
+                        channel_uuid=channel_uuid,
                     )
                 if event_to_send.get("key") == "weni_nps":
                     event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_NPS
-                    to_update = {'nps': event_to_send.get("value")}
+                    to_update = {"nps": event_to_send.get("value")}
                     update_conversation_data(
                         to_update=to_update,
                         project_uuid=project_uuid,
                         contact_urn=contact_urn,
-                        channel_uuid=channel_uuid
+                        channel_uuid=channel_uuid,
                     )
 
                 self.to_data_lake_custom_event(
-                    event_data=event_to_send,
-                    project_uuid=project_uuid,
-                    contact_urn=contact_urn
+                    event_data=event_to_send, project_uuid=project_uuid, contact_urn=contact_urn
                 )
 
-    def to_data_lake_custom_event(
-        self,
-        event_data: dict,
-        project_uuid: str,
-        contact_urn: str
-    ) -> Optional[dict]:
+    def to_data_lake_custom_event(self, event_data: dict, project_uuid: str, contact_urn: str) -> Optional[dict]:
         try:
             event_data["project"] = project_uuid
             event_data["contact_urn"] = contact_urn
@@ -578,9 +502,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
 
 
 @celery_app.task
-def send_data_lake_event(
-    event_data: dict
-):
+def send_data_lake_event(event_data: dict):
     try:
         logger.info(f"Sending event data: {event_data}")
         response = send_event_data(EventPath, event_data)
