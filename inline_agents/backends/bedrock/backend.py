@@ -82,6 +82,15 @@ class BedrockBackend(InlineAgentsBackend):
         stream: bool = False,
         **kwargs,
     ):
+        # Input validation
+        if not input_text or not input_text.strip():
+            raise ValueError("input_text cannot be empty")
+        if not project_uuid:
+            raise ValueError("project_uuid is required")
+        if not contact_urn:
+            raise ValueError("contact_urn is required")
+        if conversation_turns_to_include < 0:
+            raise ValueError("conversation_turns_to_include must be non-negative")
         if stream:
             return self._invoke_agents_streaming(
                 team=team,
@@ -231,10 +240,14 @@ class BedrockBackend(InlineAgentsBackend):
             full_response=full_response,
         )
 
-        post_message_handler = PostMessageHandler()
-        full_response = post_message_handler.handle_post_message(full_response)
+            post_message_handler = PostMessageHandler()
+            full_response = post_message_handler.handle_post_message(full_response)
 
-        return full_response
+            return full_response
+            
+        except Exception as e:
+            logger.error(f"Error in blocking mode for project {project_uuid}: {str(e)}", exc_info=True)
+            raise
 
     def _invoke_agents_streaming(
         self,
@@ -263,136 +276,170 @@ class BedrockBackend(InlineAgentsBackend):
         **kwargs,
     ):
         """Streaming version that yields chunks in real-time"""
-        supervisor = self.supervisor_repository.get_supervisor(project=project, foundation_model=foundation_model)
+        try:
+            supervisor = self.supervisor_repository.get_supervisor(project=project, foundation_model=foundation_model)
+            if not supervisor:
+                raise ValueError(f"Supervisor not found for project {project_uuid}")
 
-        # Set dependencies
-        self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
-        self._data_lake_event_adapter = data_lake_event_adapter or self._get_data_lake_event_adapter()
+            # Set dependencies
+            self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
+            self._data_lake_event_adapter = data_lake_event_adapter or self._get_data_lake_event_adapter()
 
-        typing_usecase = TypingUsecase()
-        typing_usecase.send_typing_message(
-            contact_urn=contact_urn,
-            msg_external_id=msg_external_id,
-            project_uuid=project_uuid,
-            preview=preview
-        )
-
-        jwt_usecase = JWTUsecase()
-        auth_token = jwt_usecase.generate_jwt_token(project_uuid)
-
-        external_team = self.team_adapter.to_external(
-            supervisor=supervisor,
-            agents=team,
-            input_text=input_text,
-            contact_urn=contact_urn,
-            project_uuid=project_uuid,
-            use_components=use_components,
-            contact_fields=contact_fields,
-            contact_name=contact_name,
-            channel_uuid=channel_uuid,
-            auth_token=auth_token,
-            sanitized_urn=sanitized_urn,
-            project=project,
-            content_base=kwargs.get('content_base')
-        )
-
-        if use_prompt_creation_configurations:
-            external_team["promptCreationConfigurations"] = {
-                "excludePreviousThinkingSteps": exclude_previous_thinking_steps,
-                "previousConversationTurnsToInclude": conversation_turns_to_include,
-            }
-
-        client = self._get_client()
-
-        # Generate a session ID for websocket communication
-        session_id = f"project-{project_uuid}-session-{sanitized_urn}"
-        session_id = slugify(session_id)
-        log = save_inline_message_to_database(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            text=input_text,
-            preview=preview,
-            session_id=session_id,
-            source_type="user",
-            contact_name=contact_name,
-            channel_uuid=channel_uuid
-        )
-        print(f"[DEBUG] Session ID: {session_id}")
-        print(f"[DEBUG] Log: {log}")
-        print(f"[DEBUG] External team: {external_team}")
-
-        # Send initial status message if in preview mode and user_email is provided
-        if preview and user_email:
-            send_preview_message_to_websocket(
-                project_uuid=str(project_uuid),
-                user_email=user_email,
-                message_data={
-                    "type": "status",
-                    "content": "Starting Bedrock agent processing",
-                    "session_id": session_id
-                }
+            typing_usecase = TypingUsecase()
+            typing_usecase.send_typing_message(
+                contact_urn=contact_urn,
+                msg_external_id=msg_external_id,
+                project_uuid=project_uuid,
+                preview=preview
             )
 
-        response = client.invoke_inline_agent(**external_team)
+            jwt_usecase = JWTUsecase()
+            auth_token = jwt_usecase.generate_jwt_token(project_uuid)
 
-        completion = response["completion"]
-        trace_events = []
-        rationale_traces = []
+            external_team = self.team_adapter.to_external(
+                supervisor=supervisor,
+                agents=team,
+                input_text=input_text,
+                contact_urn=contact_urn,
+                project_uuid=project_uuid,
+                use_components=use_components,
+                contact_fields=contact_fields,
+                contact_name=contact_name,
+                channel_uuid=channel_uuid,
+                auth_token=auth_token,
+                sanitized_urn=sanitized_urn,
+                project=project,
+                content_base=kwargs.get('content_base')
+            )
 
-        for event in completion:
-            if 'chunk' in event:
-                chunk = event['chunk']['bytes'].decode()
-                
-                # Yield chunk data
-                yield {
-                    'type': 'chunk',
-                    'content': chunk,
-                    'session_id': session_id
+            if use_prompt_creation_configurations:
+                external_team["promptCreationConfigurations"] = {
+                    "excludePreviousThinkingSteps": exclude_previous_thinking_steps,
+                    "previousConversationTurnsToInclude": conversation_turns_to_include,
                 }
-                
-                self._process_chunk_events(chunk, event, preview, user_email, project_uuid, session_id)
 
-            if 'trace' in event:
-                trace_data = event['trace']
-                trace_events.append(trace_data)
-                
-                # Yield trace data
-                yield {
-                    'type': 'trace',
-                    'data': trace_data,
-                    'session_id': session_id
-                }
-                
-                self._process_trace_events(
-                    trace_data, event, rationale_traces, supervisor, project_uuid, 
-                    contact_urn, channel_uuid, preview, input_text, rationale_switch,
-                    language, user_email, session_id, msg_external_id, turn_off_rationale,
-                    typing_usecase
+            client = self._get_client()
+
+            # Generate a session ID for websocket communication
+            session_id = f"project-{project_uuid}-session-{sanitized_urn}"
+            session_id = slugify(session_id)
+            log = save_inline_message_to_database(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                text=input_text,
+                preview=preview,
+                session_id=session_id,
+                source_type="user",
+                contact_name=contact_name,
+                channel_uuid=channel_uuid
+            )
+            print(f"[DEBUG] Session ID: {session_id}")
+            print(f"[DEBUG] Log: {log}")
+            print(f"[DEBUG] External team: {external_team}")
+
+            # Send initial status message if in preview mode and user_email is provided
+            if preview and user_email:
+                send_preview_message_to_websocket(
+                    project_uuid=str(project_uuid),
+                    user_email=user_email,
+                    message_data={
+                        "type": "status",
+                        "content": "Starting Bedrock agent processing",
+                        "session_id": session_id
+                    }
                 )
 
-        # Final processing and cleanup
-        yield {
-            'type': 'complete',
-            'trace_events': trace_events,
-            'rationale_traces': rationale_traces,
-            'session_id': session_id
-        }
+            response = client.invoke_inline_agent(**external_team)
+            
+            if not response or "completion" not in response:
+                raise ValueError("Invalid response from Bedrock client")
+
+            completion = response["completion"]
+            trace_events = []
+            rationale_traces = []
+
+            for event in completion:
+                try:
+                    if 'chunk' in event:
+                        chunk_bytes = event.get('chunk', {}).get('bytes')
+                        if not chunk_bytes:
+                            logger.warning(f"Empty chunk received for session {session_id}")
+                            continue
+                            
+                        chunk = chunk_bytes.decode('utf-8')
+                        
+                        # Yield chunk data
+                        yield {
+                            'type': 'chunk',
+                            'content': chunk,
+                            'session_id': session_id
+                        }
+                        
+                        self._process_chunk_events(chunk, event, preview, user_email, project_uuid, session_id)
+
+                    if 'trace' in event:
+                        trace_data = event.get('trace')
+                        if not trace_data:
+                            logger.warning(f"Empty trace received for session {session_id}")
+                            continue
+                            
+                        trace_events.append(trace_data)
+                        
+                        # Yield trace data
+                        yield {
+                            'type': 'trace',
+                            'data': trace_data,
+                            'session_id': session_id
+                        }
+                        
+                        self._process_trace_events(
+                            trace_data, event, rationale_traces, supervisor, project_uuid, 
+                            contact_urn, channel_uuid, preview, input_text, rationale_switch,
+                            language, user_email, session_id, msg_external_id, turn_off_rationale,
+                            typing_usecase
+                        )
+                except Exception as e:
+                    logger.error(f"Error processing event in streaming: {str(e)}", exc_info=True)
+                    yield {
+                        'type': 'error',
+                        'error': str(e),
+                        'session_id': session_id
+                    }
+
+            # Final processing and cleanup
+            yield {
+                'type': 'complete',
+                'trace_events': trace_events,
+                'rationale_traces': rationale_traces,
+                'session_id': session_id
+            }
+            
+        except Exception as e:
+            logger.error(f"Critical error in streaming for session {session_id}: {str(e)}", exc_info=True)
+            yield {
+                'type': 'error',
+                'error': f"Streaming failed: {str(e)}",
+                'session_id': session_id or 'unknown'
+            }
 
     def _process_chunk_events(self, chunk, event, preview, user_email, project_uuid, session_id):
         """Process chunk events for WebSocket and logging"""
-        if preview and user_email:
-            send_preview_message_to_websocket(
-                project_uuid=str(project_uuid),
-                user_email=user_email,
-                message_data={
-                    "type": "chunk",
-                    "content": chunk,
-                    "session_id": session_id
-                }
-            )
-        print("------------------------------------------")
-        print("Chunk: ", event)
-        print("------------------------------------------")
+        try:
+            if preview and user_email:
+                send_preview_message_to_websocket(
+                    project_uuid=str(project_uuid),
+                    user_email=user_email,
+                    message_data={
+                        "type": "chunk",
+                        "content": chunk,
+                        "session_id": session_id
+                    }
+                )
+            print("------------------------------------------")
+            print("Chunk: ", event)
+            print("------------------------------------------")
+        except Exception as e:
+            logger.error(f"Error processing chunk events: {str(e)}", exc_info=True)
 
     def _process_trace_events(self, trace_data, event, rationale_traces, supervisor, 
                             project_uuid, contact_urn, channel_uuid, preview, input_text,
