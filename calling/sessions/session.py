@@ -14,6 +14,11 @@ from enum import Enum
 if TYPE_CHECKING:
     from aiortc import RTCPeerConnection
 
+from agents import Runner
+from agents.memory import Session as OpenAISession
+
+from inline_agents.backend import InlineAgentsBackend
+
 
 class Status(Enum):
     WAITING_CONTACT = 0
