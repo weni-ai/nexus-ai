@@ -83,6 +83,8 @@ from .serializers import (
     TopicsSerializer,
     SubTopicsSerializer,
     SupervisorDataSerializer,
+    InstructionClassificationRequestSerializer,
+    InstructionClassificationResponseSerializer,
 )
 
 from django_filters import rest_framework as filters
@@ -1946,6 +1948,115 @@ class InstructionsClassificationAPIView(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated, ProjectPermission]
 
+    @swagger_auto_schema(
+        operation_id="instruction_classify",
+        operation_description="""
+        Classify an instruction against existing instructions in a content base.
+        
+        This endpoint analyzes a given instruction text and classifies it based on similarity
+        to existing instructions in the project's content base. It uses AI/ML models to determine
+        how the instruction should be categorized and provides suggestions for improvement.
+        
+        The classification process considers:
+        - The agent's goal and personality from the content base
+        - Existing custom instructions in the content base
+        - User context (name, occupation)
+        
+        **Authentication Required**: Yes (JWT Token)
+        **Permissions Required**: User must have access to the specified project
+        """,
+        request_body=InstructionClassificationRequestSerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'project_uuid',
+                openapi.IN_PATH,
+                description="UUID of the project containing the content base",
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_UUID,
+                required=True
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Successful classification",
+                schema=InstructionClassificationResponseSerializer,
+                examples={
+                    "application/json": {
+                        "classification": [
+                            {
+                                "name": "customer_support",
+                                "reason": "This instruction relates to handling customer inquiries"
+                            },
+                            {
+                                "name": "product_information",
+                                "reason": "The instruction involves providing product details"
+                            }
+                        ],
+                        "suggestion": "Consider making this instruction more specific to improve clarity"
+                    }
+                }
+            ),
+            400: openapi.Response(
+                description="Bad Request - Missing or invalid instruction",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Error message describing what went wrong"
+                        )
+                    }
+                ),
+                examples={
+                    "application/json": {
+                        "error": "Instruction is required"
+                    }
+                }
+            ),
+            401: openapi.Response(
+                description="Unauthorized - Authentication required",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "detail": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Authentication error message"
+                        )
+                    }
+                )
+            ),
+            403: openapi.Response(
+                description="Forbidden - User does not have access to this project",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "detail": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Permission error message"
+                        )
+                    }
+                )
+            ),
+            500: openapi.Response(
+                description="Internal Server Error",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Error message describing the server error"
+                        )
+                    }
+                ),
+                examples={
+                    "application/json": {
+                        "error": "An error occurred while processing the classification"
+                    }
+                }
+            ),
+        },
+        tags=['Instructions']
+    )
     def post(self, request, project_uuid):
         try:
             instruction = request.data.get('instruction', '')

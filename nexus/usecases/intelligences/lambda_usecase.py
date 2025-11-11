@@ -225,6 +225,40 @@ class LambdaUseCase():
         parsed_final_response = response.get("postProcessingParsedResponse").get("responseText")
         return parsed_final_response
 
+    def _transform_classification_item(self, item: dict) -> dict:
+        """
+        Transform a classification item to use 'name' instead of 'classification' key.
+        """
+        transformed_item = item.copy()
+        
+        if "classification" in transformed_item:
+            transformed_item["name"] = transformed_item.pop("classification")
+        elif "name" not in transformed_item:
+            pass
+        
+        return transformed_item
+
+    def _normalize_classification_data(self, classification_data: list, default_reason: str = "") -> list:
+        """
+        Normalize classification data to a consistent format with 'name' and 'reason' fields.
+        Handles both list of dicts and list of strings.
+        """
+        if not classification_data:
+            return []
+        
+        # If first item is a dict, transform all dict items
+        if isinstance(classification_data[0], dict):
+            return [
+                self._transform_classification_item(item) if isinstance(item, dict) else item
+                for item in classification_data
+            ]
+        
+        # If it's a list of strings/values, convert to list of dicts
+        return [
+            {"name": classification_value, "reason": default_reason}
+            for classification_value in classification_data
+        ]
+
     def instruction_classify(
         self,
         name: str,
@@ -297,23 +331,12 @@ class LambdaUseCase():
                 
                 raise Exception(f"Lambda error (status {status_code}): {error_message}")
 
-            # Support both current format ("classification") and a possible future improvement ("classifications")
             classification_data = response_data.get("classifications") or response_data.get("classification", [])
             suggestion = response_data.get("suggestion")
+            reason = response_data.get("reason", "")
             
-            if classification_data and len(classification_data) > 0:
-                # Check if it's already is a list of objects
-                if isinstance(classification_data[0], dict):
-                    classification = classification_data
-                else:
-                    # Transform to a single reason for all classifications
-                    reason = response_data.get("reason", "")
-                    classification = [
-                        {"classification": classification_value, "reason": reason} 
-                        for classification_value in classification_data
-                    ]
-            else:
-                classification = []
+            # Normalize classification data to consistent format
+            classification = self._normalize_classification_data(classification_data, reason)
             
             return classification, suggestion
             
