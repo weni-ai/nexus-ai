@@ -7,7 +7,7 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
 
 from calling.agent import tool
-from calling.clients.nexus import invoke_agents, mock_invoke
+from calling.clients.nexus import invoke_agents
 from calling.clients.openai import get_realtime_answer
 
 from ..sessions.session import Session, Status
@@ -117,11 +117,12 @@ class RTCBridge:
 
                 if message_type == "conversation.item.input_audio_transcription.completed":
                     input_text = data.get("transcript")
+                    print("Entrada:", input_text)
 
-                    await EventRegistry.notify(
-                        "agent.run.started",
-                        session
-                    )
+                    # await EventRegistry.notify(
+                    #     "agent.run.started",
+                    #     session
+                    # )
 
                     response = await handle_input(input_text, session)
                     print(response)
@@ -130,11 +131,11 @@ class RTCBridge:
 
                     # response = await invoke_agents(input_text)
 
-                    await EventRegistry.notify(
-                        "agent.run.completed",
-                        session,
-                        response=response,
-                    )
+                    # await EventRegistry.notify(
+                    #     "agent.run.completed",
+                    #     session,
+                    #     response=response,
+                    # )
 
                     print("Resposta:", response)
 
