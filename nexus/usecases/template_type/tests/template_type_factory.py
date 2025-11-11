@@ -1,7 +1,7 @@
 import json
-import factory
 from uuid import uuid4
 
+import factory
 
 from nexus.projects.models import TemplateType
 
