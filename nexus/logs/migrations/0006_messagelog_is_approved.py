@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('logs', '0005_messagelog_chunks_json'),
+        ("logs", "0005_messagelog_chunks_json"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='messagelog',
-            name='is_approved',
+            model_name="messagelog",
+            name="is_approved",
             field=models.BooleanField(null=True),
         ),
     ]

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('actions', '0007_flow_editable'),
+        ("actions", "0007_flow_editable"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='flow',
-            name='flow_uuid',
+            model_name="flow",
+            name="flow_uuid",
             field=models.UUIDField(null=True),
         ),
     ]

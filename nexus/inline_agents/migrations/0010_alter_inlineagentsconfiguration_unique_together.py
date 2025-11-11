@@ -4,15 +4,14 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0018_alter_project_guardrail'),
-        ('inline_agents', '0009_inlineagentsconfiguration'),
+        ("projects", "0018_alter_project_guardrail"),
+        ("inline_agents", "0009_inlineagentsconfiguration"),
     ]
 
     operations = [
         migrations.AlterUniqueTogether(
-            name='inlineagentsconfiguration',
-            unique_together={('project', 'agents_backend')},
+            name="inlineagentsconfiguration",
+            unique_together={("project", "agents_backend")},
         ),
     ]

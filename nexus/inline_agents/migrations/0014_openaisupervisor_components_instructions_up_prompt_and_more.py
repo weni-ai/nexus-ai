@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inline_agents', '0013_openaisupervisor_max_tokens'),
+        ("inline_agents", "0013_openaisupervisor_max_tokens"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='openaisupervisor',
-            name='components_instructions_up_prompt',
-            field=models.TextField(blank=True, null=True, verbose_name='Components Instructions UP'),
+            model_name="openaisupervisor",
+            name="components_instructions_up_prompt",
+            field=models.TextField(blank=True, null=True, verbose_name="Components Instructions UP"),
         ),
         migrations.AlterField(
-            model_name='openaisupervisor',
-            name='components_human_support_prompt',
-            field=models.TextField(blank=True, null=True, verbose_name='Formatter agent instructions'),
+            model_name="openaisupervisor",
+            name="components_human_support_prompt",
+            field=models.TextField(blank=True, null=True, verbose_name="Formatter agent instructions"),
         ),
     ]
