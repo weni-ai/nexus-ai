@@ -1,7 +1,6 @@
 import pendulum
 
 from router.repositories import Repository
-from router.services.conversation_service import ConversationService
 
 
 class MessageService:
@@ -13,7 +12,6 @@ class MessageService:
             message_repository = DynamoMessageRepository()
 
         self.message_repository = message_repository
-        self.conversation_service = ConversationService()
 
     def handle_message_cache(
         self,
@@ -25,8 +23,10 @@ class MessageService:
         channel_uuid: str,
         preview: bool = False
     ) -> None:
-        """Handle message cache logic - matches original RedisTaskManager.handle_message_cache."""
         if preview:
+            return
+
+        if not channel_uuid:
             return
 
         current_conversation_response = self.message_repository.get_messages(project_uuid, contact_urn, channel_uuid, limit=1)
@@ -74,14 +74,6 @@ class MessageService:
             ttl_hours=ttl_hours
         )
 
-        # Create conversation only if channel_uuid is not None
-        self.conversation_service.create_conversation_if_channel_exists(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            contact_name=contact_name,
-            channel_uuid=channel_uuid
-        )
-
     def add_message_to_cache(
         self,
         project_uuid: str,
@@ -98,14 +90,6 @@ class MessageService:
             "created_at": self._get_current_timestamp()
         }
         self.message_repository.add_message(project_uuid, contact_urn, message, channel_uuid)
-
-        # Ensure conversation exists only if channel_uuid is not None
-        self.conversation_service.ensure_conversation_exists(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            contact_name=contact_name,
-            channel_uuid=channel_uuid
-        )
 
     def get_cache_messages(self, project_uuid: str, contact_urn: str, channel_uuid: str, limit: int = 50, cursor: str = None) -> dict:
         """Get messages from cache with pagination - optimized for large datasets."""
