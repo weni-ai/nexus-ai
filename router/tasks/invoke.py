@@ -1,28 +1,33 @@
-import os
-from typing import Dict, Optional, Tuple
-import boto3
+import asyncio
 import json
+import os
+from typing import Any, Dict, Optional, Tuple
+
+import boto3
 import botocore
+import sentry_sdk
 from django.conf import settings
 
-import sentry_sdk
+from calling.sessions.session import Session
 from inline_agents.backends import BackendsRegistry
+from inline_agents.backends.openai.hooks import SupervisorHooksForCalling
 from nexus.celery import app as celery_app
 from nexus.inline_agents.team.repository import ORMTeamRepository
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
 from nexus.usecases.inline_agents.typing import TypingUsecase
-from router.dispatcher import dispatch
-
-from router.tasks.redis_task_manager import RedisTaskManager
-from router.entities import message_factory
-from router.tasks.exceptions import EmptyTextException
-
-from .actions_client import get_action_clients
 from nexus.usecases.intelligences.get_by_uuid import (
     get_project_and_content_base_data,
 )
+from nexus.usecases.jwt.jwt_usecase import JWTUsecase
+from router.dispatcher import dispatch
+from router.entities import message_factory
+from router.entities.mailroom import Message
+from router.tasks.exceptions import EmptyTextException
+from router.tasks.redis_task_manager import RedisTaskManager
+
+from .actions_client import get_action_clients
 
 
 def get_task_manager() -> RedisTaskManager:
@@ -306,3 +311,151 @@ def start_inline_agents(
 
     except Exception as e:
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
+
+
+def invoke_audio_agents(session: Session, message_obj: Message) -> str:
+    client = session.orchestration_client
+    backend = session.backend
+
+    result = asyncio.run(backend._invoke_agents_async(
+        client=client,
+        external_team=session.agents,
+        session=session.orchestration_session,
+        session_id=session.orchestration_session_id,
+        input_text=message_obj.text,
+        contact_urn=message_obj.contact_urn,
+        project_uuid=message_obj.project_uuid,
+        channel_uuid=message_obj.channel_uuid,
+        preview=False,
+        rationale_switch=False,
+        language="en",
+        turn_off_rationale=True,
+        msg_external_id=None,
+        supervisor_hooks=None,
+        runner_hooks=None,
+        hooks_state=None,
+        use_components=False,
+        user_email=None,
+    ))
+
+    return result
+
+
+def _initialize_session_agents(
+    session: Session,
+    message_obj: Message,
+    backend,
+    project,
+    content_base,
+    team: list[dict]
+) -> None:
+    """
+    Initialize session agents if not already initialized.
+    Sets up the orchestration session, client, and external team.
+    """
+    if session.agents is not None:
+        return
+
+    session_factory = backend._get_memory_session_factory(
+        project_uuid=message_obj.project_uuid,
+        sanitized_urn=message_obj.sanitized_urn,
+        conversation_turns_to_include=None
+    )
+    orchestration_session, session_id = backend._get_memory_session(
+        project_uuid=message_obj.project_uuid,
+        sanitized_urn=message_obj.sanitized_urn,
+        conversation_turns_to_include=None
+    )
+
+    supervisor: Dict[str, Any] = backend.supervisor_repository.get_supervisor(project=project)
+    jwt_usecase = JWTUsecase()
+    auth_token = jwt_usecase.generate_jwt_token(message_obj.project_uuid)
+
+    supervisor_hooks = SupervisorHooksForCalling(
+        human_support_tool_name="open-ticket",
+        session=session
+    )
+
+    external_team = backend.team_adapter.to_external(
+        supervisor=supervisor,
+        agents=team,
+        input_text=message_obj.text,
+        project_uuid=message_obj.project_uuid,
+        contact_fields=message_obj.contact_fields_as_json,
+        contact_urn=message_obj.contact_urn,
+        contact_name=message_obj.contact_name,
+        channel_uuid=message_obj.channel_uuid,
+        auth_token=auth_token,
+        supervisor_hooks=supervisor_hooks,
+        runner_hooks=None,
+        content_base=content_base,
+        project=project,
+        session_factory=session_factory,
+        session=orchestration_session,
+        data_lake_event_adapter=backend._get_data_lake_event_adapter(),
+        event_manager_notify=backend._get_event_manager_notify(),
+    )
+
+    session.set_agents(external_team)
+    session.set_orchestration_client(backend._get_client())
+    session.set_backend(backend)
+    session.set_orchestration_session_id(session_id)
+    session.set_orchestration_session(orchestration_session)
+
+
+def _get_calling_backend_and_team(project_uuid: str) -> tuple:
+    """
+    Get backend, project, content_base, and team for calling operations.
+    Returns: (backend, project, content_base, inline_agent_configuration, team)
+    """
+    project, content_base, inline_agent_configuration = get_project_and_content_base_data(
+        project_uuid
+    )
+    agents_backend = project.agents_backend
+    backend = BackendsRegistry.get_backend(agents_backend)
+    team = ORMTeamRepository(
+        agents_backend=agents_backend,
+        project=project
+    ).get_team(project_uuid)
+
+    return backend, project, content_base, inline_agent_configuration, team
+
+
+def start_calling(session: Session, message: Dict, input_text: str) -> str:
+    """
+    Initialize calling session and invoke audio agents.
+
+    Args:
+        session: The calling session
+        message: Message dictionary with project and contact info
+        input_text: The input text to process
+
+    Returns:
+        The result from invoking audio agents
+    """
+
+    message_obj: Message = message_factory(
+        project_uuid=message.get("project_uuid"),
+        text=input_text,
+        contact_urn=message.get("contact_urn"),
+        metadata=message.get("metadata"),
+        attachments=message.get("attachments", []),
+        msg_event=message.get("msg_event"),
+        contact_fields=message.get("contact_fields", {}),
+        contact_name=message.get("contact_name", ""),
+        channel_uuid=message.get("channel_uuid", ""),
+    )
+
+    if session.agents is None:
+        backend, project, content_base, _, team = _get_calling_backend_and_team(message_obj.project_uuid)
+        _initialize_session_agents(
+            session=session,
+            message_obj=message_obj,
+            backend=backend,
+            project=project,
+            content_base=content_base,
+            team=team
+        )
+
+    session.agents.update({"input": input_text})
+    return invoke_audio_agents(session, message_obj)

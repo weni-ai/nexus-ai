@@ -13,11 +13,17 @@ class ORMTeamRepository(TeamRepository):
         self.agents_backend = agents_backend
         self.project = project
 
-    def get_team(self, project_uuid: str) -> list[dict]:
+    def get_team(self, project_uuid: str, audio_orchestration: bool = True, text_orchestration: bool = True) -> list[dict]:
         try:
             orm_team = ORMIntegratedAgent.objects.filter(
                 project__uuid=project_uuid
             ).select_related('agent').prefetch_related('agent__versions')
+
+            if not audio_orchestration:
+                orm_team = orm_team.exclude(agent__audio_orchestration=True)
+            if not text_orchestration:
+                orm_team = orm_team.exclude(agent__text_orchestration=True)
+
             agents = []
 
             for integrated_agent in orm_team:

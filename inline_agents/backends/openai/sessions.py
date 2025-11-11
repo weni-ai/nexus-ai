@@ -47,7 +47,6 @@ def log_error_to_sentry(
         logger.error(f"Failed to log error to Sentry: {sentry_error}")
 
 
-
 async def only_turns(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out = []
     for item in items:
@@ -97,7 +96,7 @@ class RedisSession(Session):
         if not self.is_connected():
             logger.error(f"Redis connection failed for session {session_id}")
             raise redis.ConnectionError(f"Redis connection failed for session {session_id}")
-        
+
         self._initialize_key()
 
     def _initialize_key(self):
@@ -165,7 +164,7 @@ class RedisSession(Session):
                     continue
             print(f"[DEBUG] Items: {items}")
             return items
-            
+
         except redis.RedisError as e:
             logger.error(f"Redis error retrieving items for session {self._key}: {e}")
             log_error_to_sentry(e, self._key, self.project_uuid, self.sanitized_urn, {
@@ -199,4 +198,116 @@ def make_session_factory(redis: redis.Redis, base_id: str, project_uuid: str, sa
     def for_agent(agent_name: str | None = None):
         key = f"{base_id}:{agent_name}"
         return RedisSession(key, redis, project_uuid, sanitized_urn, limit)
+    return for_agent
+
+
+class MemorySession(Session):
+    """Session implementation using in-memory storage."""
+    _storage: Dict[str, List[str]] = {}
+
+    def __init__(
+        self,
+        session_id: str,
+        project_uuid: str,
+        sanitized_urn: str,
+        limit: Optional[int] = None
+    ):
+        print(f"[DEBUG] MemorySession: {session_id}")
+        self._key = session_id
+        self.project_uuid = project_uuid
+        self.sanitized_urn = sanitized_urn
+        self.limit = limit
+
+        self._initialize_key()
+
+    def _initialize_key(self):
+        if self._key not in self._storage:
+            self._storage[self._key] = []
+
+    def get_session_id(self):
+        return self._key
+
+    def is_connected(self) -> bool:
+        """Always returns True for in-memory storage."""
+        return True
+
+    async def get_items(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        limit = limit or self.limit
+        try:
+            if self._key not in self._storage:
+                return []
+
+            data = self._storage[self._key]
+
+            # apply limit if specified
+            if limit is not None and limit > 0:
+                data = data[-limit:]
+            elif limit is None or limit <= 0:
+                data = data[:]
+
+            items = []
+
+            for i, raw_item in enumerate(data):
+                try:
+                    if raw_item:
+                        parsed_item = json.loads(raw_item)
+                        if isinstance(parsed_item, dict):
+                            items.append(parsed_item)
+                        else:
+                            logger.warning(f"Item {i} in session {self._key} is not a dict: {type(parsed_item)}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse JSON for item {i} in session {self._key}: {e}")
+                    log_error_to_sentry(e, self._key, self.project_uuid, self.sanitized_urn, {
+                        "item_index": i,
+                        "raw_item": str(raw_item)[:100] if raw_item else None,
+                        "operation": "json_parse"
+                    })
+                    continue
+                except Exception as e:
+                    logger.error(f"Unexpected error parsing item {i} in session {self._key}: {e}")
+                    log_error_to_sentry(e, self._key, self.project_uuid, self.sanitized_urn, {
+                        "item_index": i,
+                        "raw_item": str(raw_item)[:100] if raw_item else None,
+                        "operation": "item_parse"
+                    })
+                    continue
+
+            print(f"[DEBUG] Memory Session Items: {items}")
+            return items
+
+        except Exception as e:
+            logger.error(f"Unexpected error retrieving items for session {self._key}: {e}")
+            log_error_to_sentry(e, self._key, self.project_uuid, self.sanitized_urn, {
+                "operation": "get_items",
+                "limit": limit
+            })
+            return []
+
+    async def add_items(self, items):
+        """Add items to the session storage."""
+        if self._key not in self._storage:
+            self._storage[self._key] = []
+
+        for item in items:
+            self._storage[self._key].append(json.dumps(item))
+
+    async def pop_item(self):
+        """Remove and return the last item from the session."""
+        if self._key not in self._storage or not self._storage[self._key]:
+            return None
+
+        raw = self._storage[self._key].pop()
+        return json.loads(raw) if raw else None
+
+    def clear_session(self):
+        """Clear all items from the session."""
+        if self._key in self._storage:
+            del self._storage[self._key]
+
+
+def make_memory_session_factory(base_id: str, project_uuid: str, sanitized_urn: str, limit: int):
+    """Factory function to create memory session instances."""
+    def for_agent(agent_name: str | None = None):
+        key = f"{base_id}:{agent_name}"
+        return MemorySession(key, project_uuid, sanitized_urn, limit)
     return for_agent

@@ -1,11 +1,12 @@
 import json
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import pendulum
 import sentry_sdk
 from agents import AgentHooks, RunHooks
 from django.conf import settings
 
+from calling.sessions.session import Session as CallingSession
 from inline_agents.adapter import DataLakeEventAdapter
 from inline_agents.backends.openai.entities import FinalResponse, HooksState
 
@@ -74,6 +75,7 @@ class TraceHandler:
             contact_name=contact_name,
             channel_uuid=channel_uuid
         )
+
 
 class RunnerHooks(RunHooks):
     def __init__(
@@ -474,7 +476,7 @@ class SupervisorHooks(AgentHooks):
                 }
             }
             await self.trace_handler.send_trace(context_data, agent.name, "search_result_received", trace_data)
-        elif tool.name not in self.hooks_state.agents_names:
+        elif self.hooks_state and tool.name not in self.hooks_state.agents_names:
             if isinstance(result, str):
                 try:
                     result_json = json.loads(result)
@@ -559,3 +561,14 @@ class SupervisorHooks(AgentHooks):
             contact_name=context_data.contact.get("name"),
             channel_uuid=context_data.contact.get("channel_uuid")
         )
+
+
+class SupervisorHooksForCalling(AgentHooks):
+    def __init__(self, human_support_tool_name: str, session: CallingSession):
+        self.human_support_tool_name = human_support_tool_name
+        self.session = session
+        super().__init__()
+
+    async def on_tool_end(self, context, agent, tool, result):
+        if tool.name == self.human_support_tool_name:
+            self.session.started_human_support = True
