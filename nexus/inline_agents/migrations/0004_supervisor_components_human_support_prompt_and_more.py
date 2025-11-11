@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inline_agents', '0003_agent_source_type_inlineagentmessage_contactfield_and_more'),
+        ("inline_agents", "0003_agent_source_type_inlineagentmessage_contactfield_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='supervisor',
-            name='components_human_support_prompt',
+            model_name="supervisor",
+            name="components_human_support_prompt",
             field=models.TextField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='supervisor',
-            name='components_prompt',
+            model_name="supervisor",
+            name="components_prompt",
             field=models.TextField(blank=True, null=True),
         ),
     ]

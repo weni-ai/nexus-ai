@@ -1,80 +1,54 @@
 import factory
 import pendulum
 
+from nexus.logs.models import Message, MessageLog, RecentActivities
+from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFactory, IntelligenceFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
-from nexus.usecases.intelligences.tests.intelligence_factory import (
-    ContentBaseFactory,
-    IntelligenceFactory
-)
-from nexus.logs.models import (
-    Message,
-    MessageLog,
-    RecentActivities
-)
 
 
 class MessageFactory(factory.django.DjangoModelFactory):
-
     class Meta:
         model = Message
 
-    text = factory.Sequence(lambda n: f'Text {n}')
-    contact_urn = 'whatsapp:+1234567890'
-    status = 'S'
-    groundedness_details_cache = {
-        "sentence": "Test sentence",
-        "sources": [],
-        "score": 0.8
-    }
+    text = factory.Sequence(lambda n: f"Text {n}")
+    contact_urn = "whatsapp:+1234567890"
+    status = "S"
+    groundedness_details_cache = {"sentence": "Test sentence", "sources": [], "score": 0.8}
 
 
 class MessageLogFactory(factory.django.DjangoModelFactory):
-
     class Meta:
         model = MessageLog
 
     message = factory.SubFactory(MessageFactory)
-    prompt = 'prompt'
-    llm_response = 'response'
-    content_base = factory.SubFactory(
-        ContentBaseFactory
-    )
+    prompt = "prompt"
+    llm_response = "response"
+    content_base = factory.SubFactory(ContentBaseFactory)
     project = factory.SubFactory(
-        ProjectFactory,
-        created_by=factory.SelfAttribute('..content_base.intelligence.created_by')
+        ProjectFactory, created_by=factory.SelfAttribute("..content_base.intelligence.created_by")
     )
-    created_at = factory.LazyFunction(lambda: pendulum.now('UTC'))
+    created_at = factory.LazyFunction(lambda: pendulum.now("UTC"))
     groundedness_score = 10
-    groundedness_details = {
-        "sentence": "Test sentence",
-        "sources": [],
-        "score": 0.8
-    }
-    reflection_data = {
-        "tag": "action"
-    }
+    groundedness_details = {"sentence": "Test sentence", "sources": [], "score": 0.8}
+    reflection_data = {"tag": "action"}
     classification = "test_classification"
     is_approved = True
-    source = 'router'
+    source = "router"
 
 
 class RecentActivitiesFactory(factory.django.DjangoModelFactory):
-
     class Meta:
         model = RecentActivities
 
-    action_model = 'Flow'
-    action_type = 'C'
-    action_details = {
-        "old": "",
-        "new": "model.name"
-    }
+    action_model = "Flow"
+    action_type = "C"
+    action_details = {"old": "", "new": "model.name"}
     created_by = factory.SubFactory(UserFactory)
     project = factory.SubFactory(ProjectFactory)
     intelligence = factory.SubFactory(
         IntelligenceFactory,
-        created_by=factory.SelfAttribute('..project.created_by'),
-        org=factory.SelfAttribute('..project.org')
+        created_by=factory.SelfAttribute("..project.created_by"),
+        org=factory.SelfAttribute("..project.org"),
     )
-    created_at = factory.LazyFunction(lambda: pendulum.now('UTC'))
+    created_at = factory.LazyFunction(lambda: pendulum.now("UTC"))

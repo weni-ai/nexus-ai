@@ -99,7 +99,7 @@ def route(
 
             chunks: List[str] = []
             for chunk in full_chunks:
-                full_page = chunk.get("full_page").replace("\x00", "\uFFFD")
+                full_page = chunk.get("full_page").replace("\x00", "\ufffd")
                 try:
                     full_page.encode("latin-1")
                     chunks.append(full_page)
