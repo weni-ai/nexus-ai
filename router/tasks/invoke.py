@@ -313,34 +313,6 @@ def start_inline_agents(
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
 
 
-def invoke_audio_agents(session: Session, message_obj: Message) -> str:
-    client = session.orchestration_client
-    backend = session.backend
-
-    result = asyncio.run(backend._invoke_agents_async(
-        client=client,
-        external_team=session.agents,
-        session=session.orchestration_session,
-        session_id=session.orchestration_session_id,
-        input_text=message_obj.text,
-        contact_urn=message_obj.contact_urn,
-        project_uuid=message_obj.project_uuid,
-        channel_uuid=message_obj.channel_uuid,
-        preview=False,
-        rationale_switch=False,
-        language="en",
-        turn_off_rationale=True,
-        msg_external_id=None,
-        supervisor_hooks=None,
-        runner_hooks=None,
-        hooks_state=None,
-        use_components=False,
-        user_email=None,
-    ))
-
-    return result
-
-
 def _initialize_session_agents(
     session: Session,
     message_obj: Message,
@@ -401,6 +373,7 @@ def _initialize_session_agents(
     session.set_backend(backend)
     session.set_orchestration_session_id(session_id)
     session.set_orchestration_session(orchestration_session)
+    session.set_message_obj(message_obj)
 
 
 def _get_calling_backend_and_team(project_uuid: str) -> tuple:
@@ -421,41 +394,68 @@ def _get_calling_backend_and_team(project_uuid: str) -> tuple:
     return backend, project, content_base, inline_agent_configuration, team
 
 
-def start_calling(session: Session, message: Dict, input_text: str) -> str:
+def start_calling(session: Session, data: Dict) -> None:
     """
     Initialize calling session and invoke audio agents.
 
     Args:
         session: The calling session
-        message: Message dictionary with project and contact info
-        input_text: The input text to process
+        data: Message dictionary with project and contact info
 
     Returns:
         The result from invoking audio agents
     """
 
     message_obj: Message = message_factory(
-        project_uuid=message.get("project_uuid"),
-        text=input_text,
-        contact_urn=message.get("contact_urn"),
-        metadata=message.get("metadata"),
-        attachments=message.get("attachments", []),
-        msg_event=message.get("msg_event"),
-        contact_fields=message.get("contact_fields", {}),
-        contact_name=message.get("contact_name", ""),
-        channel_uuid=message.get("channel_uuid", ""),
+        project_uuid=data.get("project_uuid"),
+        text=data.get("text"),
+        contact_urn=data.get("contact_urn"),
+        metadata=data.get("metadata"),
+        attachments=data.get("attachments", []),
+        msg_event=data.get("msg_event"),
+        contact_fields=data.get("contact_fields", {}),
+        contact_name=data.get("contact_name", ""),
+        channel_uuid=data.get("channel_uuid", ""),
     )
 
-    if session.agents is None:
-        backend, project, content_base, _, team = _get_calling_backend_and_team(message_obj.project_uuid)
-        _initialize_session_agents(
-            session=session,
-            message_obj=message_obj,
-            backend=backend,
-            project=project,
-            content_base=content_base,
-            team=team
-        )
+    backend, project, content_base, _, team = _get_calling_backend_and_team(message_obj.project_uuid)
+    _initialize_session_agents(
+        session=session,
+        message_obj=message_obj,
+        backend=backend,
+        project=project,
+        content_base=content_base,
+        team=team
+    )
+    return None
 
+
+def invoke_audio_agents(session: Session, input_text: str) -> str:
+    message_obj = session.message_obj
     session.agents.update({"input": input_text})
-    return invoke_audio_agents(session, message_obj)
+
+    client = session.orchestration_client
+    backend = session.backend
+
+    result = asyncio.run(backend._invoke_agents_async(
+        client=client,
+        external_team=session.agents,
+        session=session.orchestration_session,
+        session_id=session.orchestration_session_id,
+        input_text=message_obj.text,
+        contact_urn=message_obj.contact_urn,
+        project_uuid=message_obj.project_uuid,
+        channel_uuid=message_obj.channel_uuid,
+        preview=False,
+        rationale_switch=False,
+        language="en",
+        turn_off_rationale=True,
+        msg_external_id=None,
+        supervisor_hooks=None,
+        runner_hooks=None,
+        hooks_state=None,
+        use_components=False,
+        user_email=None,
+    ))
+
+    return result

@@ -18,6 +18,7 @@ from agents import Runner
 from agents.memory import Session as OpenAISession
 
 from inline_agents.backend import InlineAgentsBackend
+from router.entities.mailroom import Message
 
 
 class Status(Enum):
@@ -41,6 +42,7 @@ class Session:
     orchestration_session: OpenAISession = None
     orchestration_session_id: str = None
     started_human_support: bool = False
+    message_obj: Message = None
 
     wpp_audio_sender: RTCRtpSender = None
     wpp_audio_track: MediaStreamTrack = None
@@ -54,6 +56,9 @@ class Session:
 
     def set_wpp_audio_track(self, track: MediaStreamTrack) -> None:
         self.wpp_audio_track = track
+    
+    def set_message_obj(self, message_obj: Message) -> None:
+        self.message_obj = message_obj
 
     def set_answer_sdp(self, sdp: str) -> None:
         self.answer_sdp = sdp
