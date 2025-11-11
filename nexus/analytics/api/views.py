@@ -1,9 +1,7 @@
 import pendulum
-from datetime import datetime
 from uuid import UUID
 from django.db.models import Count, Q
 from django.utils.dateparse import parse_date
-from django.utils import timezone
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -150,11 +148,11 @@ class ResolutionRateAverageView(APIView):
                 )
 
         # Convert date objects to timezone-aware datetime objects for start_date filtering
-        start_datetime = timezone.make_aware(
-            datetime.combine(start_date, datetime.min.time())
+        start_datetime = pendulum.datetime(
+            start_date.year, start_date.month, start_date.day
         )
-        end_datetime = timezone.make_aware(
-            datetime.combine(end_date, datetime.min.time())
+        end_datetime = pendulum.datetime(
+            end_date.year, end_date.month, end_date.day
         )
 
         conversations = Conversation.objects.filter(
