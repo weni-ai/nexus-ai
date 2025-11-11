@@ -8,7 +8,6 @@ from nexus.intelligences.models import (
 )
 from nexus.orgs import permissions
 from nexus.usecases import orgs, users
-from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
 from .exceptions import IntelligencePermissionDenied
 from .get_by_uuid import get_by_contentbase_uuid, get_by_intelligence_uuid, get_integrated_intelligence_by_project
@@ -34,6 +33,8 @@ class ListIntelligencesUseCase:
 
 class ListAllIntelligenceContentUseCase:
     def get_project_intelligences(self, project_uuid: str, user_email: str = None, is_super_user: bool = False):
+        from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+
         project_usecase = ProjectsUseCase()
         response = []
         project = project_usecase.get_by_uuid(project_uuid)

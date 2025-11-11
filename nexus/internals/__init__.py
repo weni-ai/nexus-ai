@@ -1,5 +1,4 @@
 import logging
-from abc import ABC
 
 import requests
 from django.conf import settings
@@ -86,5 +85,5 @@ class InternalAuthentication:
         return response
 
 
-class RestClient(ABC):
+class RestClient:
     pass

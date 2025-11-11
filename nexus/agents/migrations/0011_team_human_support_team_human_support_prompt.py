@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('agents', '0010_contactfield'),
+        ("agents", "0010_contactfield"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='team',
-            name='human_support',
+            model_name="team",
+            name="human_support",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='team',
-            name='human_support_prompt',
+            model_name="team",
+            name="human_support_prompt",
             field=models.TextField(blank=True, null=True),
         ),
     ]

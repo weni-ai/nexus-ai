@@ -24,5 +24,5 @@ class TestTemplateTypeUseCase(TestCase):
     def test_get_by_uuid(self):
         self.assertEqual(self.usecase.get_by_uuid(self.template_type.uuid), self.template_type)
         wrong_uuid = str(uuid4())
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception):  # noqa: B017
             self.usecase.get_by_uuid(wrong_uuid)
