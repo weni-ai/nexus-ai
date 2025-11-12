@@ -430,32 +430,37 @@ def start_calling(session: Session, data: Dict) -> None:
     return None
 
 
-def invoke_audio_agents(session: Session, input_text: str) -> str:
+def invoke_audio_agents(session: Session, input_text: str, use_langfuse: bool = False) -> str:
     message_obj = session.message_obj
     session.agents.update({"input": input_text})
 
     client = session.orchestration_client
     backend = session.backend
 
-    result = asyncio.run(backend._invoke_agents_async(
-        client=client,
-        external_team=session.agents,
-        session=session.orchestration_session,
-        session_id=session.orchestration_session_id,
-        input_text=message_obj.text,
-        contact_urn=message_obj.contact_urn,
-        project_uuid=message_obj.project_uuid,
-        channel_uuid=message_obj.channel_uuid,
-        preview=False,
-        rationale_switch=False,
-        language="en",
-        turn_off_rationale=True,
-        msg_external_id=None,
-        supervisor_hooks=None,
-        runner_hooks=None,
-        hooks_state=None,
-        use_components=False,
-        user_email=None,
-    ))
+    kwargs = {
+        "client": client,
+        "external_team": session.agents,
+        "session": session.orchestration_session,
+        "session_id": session.orchestration_session_id,
+        "input_text": message_obj.text,
+        "contact_urn": message_obj.contact_urn,
+        "project_uuid": message_obj.project_uuid,
+        "channel_uuid": message_obj.channel_uuid,
+        "preview": False,
+        "rationale_switch": False,
+        "language": "en",
+        "turn_off_rationale": True,
+        "msg_external_id": None,
+        "supervisor_hooks": None,
+        "runner_hooks": None,
+        "hooks_state": None,
+        "use_components": False,
+        "user_email": None,
+    }
+
+    if use_langfuse:
+        result = asyncio.run(backend._invoke_agents_async(**kwargs))
+    else:
+        result = asyncio.run(backend._invoke_agents_async_raw(**kwargs))
 
     return result
