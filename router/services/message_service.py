@@ -12,6 +12,7 @@ class MessageService:
             message_repository = DynamoMessageRepository()
 
         self.message_repository = message_repository
+        self._conversation_service = None
 
     def handle_message_cache(
         self,
@@ -74,6 +75,12 @@ class MessageService:
             ttl_hours=ttl_hours
         )
 
+        # Ensure conversation exists (checks before creating to avoid duplicates)
+        # channel_uuid is already validated in handle_message_cache, so it's guaranteed to be not None here
+        self._get_conversation_service().ensure_conversation_exists(
+            project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
+        )
+
     def add_message_to_cache(
         self,
         project_uuid: str,
@@ -90,6 +97,11 @@ class MessageService:
             "created_at": self._get_current_timestamp()
         }
         self.message_repository.add_message(project_uuid, contact_urn, message, channel_uuid)
+
+        # Ensure conversation exists (checks before creating to avoid duplicates)
+        self._get_conversation_service().ensure_conversation_exists(
+            project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
+        )
 
     def get_cache_messages(self, project_uuid: str, contact_urn: str, channel_uuid: str, limit: int = 50, cursor: str = None) -> dict:
         """Get messages from cache with pagination - optimized for large datasets."""
@@ -118,6 +130,13 @@ class MessageService:
         return self.message_repository.get_messages_for_conversation(
             project_uuid, contact_urn, channel_uuid, start_date, end_date, resolution_status
         )
+
+    def _get_conversation_service(self):
+        """Get conversation service instance, creating it if it doesn't exist."""
+        if self._conversation_service is None:
+            from router.services.conversation_service import ConversationService
+            self._conversation_service = ConversationService()
+        return self._conversation_service
 
     def _get_current_timestamp(self) -> str:
         """Get current timestamp in ISO format."""
