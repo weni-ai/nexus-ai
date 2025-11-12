@@ -6,11 +6,14 @@ import traceback
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
 
-from calling.agent import tool
+from router.tasks.invoke import invoke_audio_agents
+
 from calling.clients.nexus import invoke_agents
 from calling.clients.openai import get_realtime_answer
 
 from ..sessions.session import Session, Status
+
+from calling.agent import response_instructions
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +28,7 @@ async def handle_input(input_text: str, session: Session) -> dict:
         session.interrupt_response(input_text)
 
     session.set_status(Status.WAITING_RESPONSE)
-    session.current_task = asyncio.create_task(asyncio.to_thread(invoke_agents, session.input_text))
+    session.current_task = asyncio.create_task(asyncio.to_thread(invoke_audio_agents, session, session.input_text))
 
     try:
         response = await session.current_task
@@ -89,8 +92,6 @@ class RTCBridge:
                                 }
                             }
                         },
-                        "tools": [tool],
-                        "tool_choice": "auto",
                     },
                 }
 
@@ -106,7 +107,7 @@ class RTCBridge:
                     return
 
                 if message_type == "error":
-                    logger.error(f"[on_message] Error message: {data}")
+                    print(f"[on_message] Error message: {data}")
                     
                 # if message_type == "input_audio_buffer.speech_started":
                 #     await EventRegistry.notify("contact.speech.started", session)
@@ -117,25 +118,28 @@ class RTCBridge:
 
                 if message_type == "conversation.item.input_audio_transcription.completed":
                     input_text = data.get("transcript")
-                    print("Entrada:", input_text)
+                    print("============-==============")
+                    print(input_text)
+                    print("============-==============")
 
-                    # await EventRegistry.notify(
-                    #     "agent.run.started",
-                    #     session
-                    # )
+                    await EventRegistry.notify(
+                        "agent.run.started",
+                        session
+                    )
 
-                    response = await handle_input(input_text, session)
-                    print(response)
+                    # response = await handle_input(input_text, session)
+                    response = await asyncio.to_thread(invoke_audio_agents, session, input_text)
+
                     if response == None:
                         return
 
                     # response = await invoke_agents(input_text)
 
-                    # await EventRegistry.notify(
-                    #     "agent.run.completed",
-                    #     session,
-                    #     response=response,
-                    # )
+                    await EventRegistry.notify(
+                        "agent.run.completed",
+                        session,
+                        response=response,
+                    )
 
                     print("Resposta:", response)
 
@@ -144,9 +148,22 @@ class RTCBridge:
                         {
                             "type": "response.create",
                             "response": {
-                                "instructions": "Essa é a SUA resposta, você responderá como se você mesmo a tivesse gerado. Responda 100% fiel ao seguinte texto: " + response.get("output"),
-                            },
-                        },
+                                "conversation": "none",
+                                # "input": [
+                                #     {
+                                #         "type": "message",
+                                #         "role": "user",
+                                #         "content": [
+                                #             {
+                                #                 "type": "input_text",
+                                #                 "text": input_text
+                                #             }
+                                #         ]
+                                #     }
+                                # ],
+                                "instructions": response_instructions.format(input_text=input_text, response=response),
+                            }
+                        }
                     )
 
         try:
