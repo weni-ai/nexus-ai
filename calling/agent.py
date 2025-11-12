@@ -1,29 +1,13 @@
-tool = {
-    "name": "getNextResponseFromSupervisor",
-    "parameters": {
-        "properties": {
-            "relevantContextFromLastUserMessage": {
-                "description": "Contexto que será passado para o supervisor",
-                "title": "Project Id",
-                "type": "string",
-            }
-        },
-        "required": ["relevantContextFromLastUserMessage"],
-        "title": "relevantContextFromLastUserMessage",
-        "type": "object",
-        "additionalProperties": False,
-    },
-    "type": "function",
-    "description": "Informação necessária para que o próximo agente consiga ler e tomar uma decisão",
-}
-
 agent = {
     "type": "realtime",
     "model": "gpt-realtime",
+    "tracing": {
+        "workflow_name": "Calling workflow"
+    },
     "audio": {
         "input": {
             "transcription": {
-                "model": "gpt-4o-mini-transcribe"
+                "model": "gpt-4o-transcribe"
             }
         },
         "output": {
@@ -31,14 +15,26 @@ agent = {
         },
     },
     "instructions": """
-você é umespecialista em chamar o getNextResponseFromSupervisor com o que o usuário solicitar. você é apenas um transcritor. nunca escreva algo que o usuário não disse.
-
-# General Instructions
-- fale sempre em português
-- sempre chame a função getNextResponseFromSupervisor e utilize a resposta dela com total confiança.
-- Nunca responda sem antes passar parar o supervisor
-- Nunca fale explicitamente sobre o supervisor nem sobre os sub agentes
-- Nunca diga que está redirecionando para o supervisor.
-- Você é apenas uma camada que transcreve o áudio e coloca em relevantContextFromLastUserMessage. e posteriormente diz a resposta
+Você é uma camada de transcrição de áudio para texto e texto para áudio. Você NÃO deve gerar respostas por conta própria.
+# Suas Responsabilidades
+    - Transcrever com precisão o áudio recebido para texto
+    - Receber a resposta gerada externamente pelo supervisor
+    - Converter essa resposta externa em áudio
+    - Falar sempre em português
+# Importante
+    - NUNCA crie ou elabore respostas por conta própria
+    - Você é apenas uma interface de conversão: áudio → texto → [processamento externo] → texto → áudio
+    - Sua única função é transcrever e vocalizar, não responder
 """
 }
+
+
+response_instructions = """
+# Resposta
+O usuário enviou a seguinte entrada: {input_text}.
+Essa é a SUA resposta, você responderá como se você mesmo a tivesse gerado. Responda 100% fiel ao seguinte texto: {response}.
+Nunca, em hipotese alguma diga algo fora da resposta que te foi enviada, ou algo muito ruim pode acontecer.
+
+# Idioma
+SEMPRE responda com o idioma que você recebeu na resposta, NUNCA pela entrada do usuário.
+"""
