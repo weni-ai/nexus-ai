@@ -1,28 +1,28 @@
 from time import sleep
-from typing import List, Dict
+from typing import Dict, List, Optional
 
 from botocore.exceptions import ClientError
+from langchain_community.document_loaders import AsyncChromiumLoader
+from langchain_community.document_transformers import Html2TextTransformer
 
 from nexus.agents.models import Agent
-
 from nexus.celery import app
-
-from nexus.task_managers.models import ContentBaseFileTaskManager, TaskManager
+from nexus.intelligences.models import ContentBaseLink, ContentBaseText
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
-
-from nexus.intelligences.models import ContentBaseText, ContentBaseLink
-
+from nexus.task_managers.models import ContentBaseFileTaskManager, TaskManager
 from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO
 from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 
-from langchain_community.document_loaders import AsyncChromiumLoader
-from langchain_community.document_transformers import Html2TextTransformer
-
 
 @app.task
-def check_ingestion_job_status(celery_task_manager_uuid: str, ingestion_job_id: str, waiting_time: int = 10, file_type: str = "file", project_uuid: str | None = None):
-
+def check_ingestion_job_status(
+    celery_task_manager_uuid: str,
+    ingestion_job_id: str,
+    waiting_time: int = 10,
+    file_type: str = "file",
+    project_uuid: str | None = None,
+):
     if waiting_time:
         sleep(waiting_time)
 
@@ -38,13 +38,17 @@ def check_ingestion_job_status(celery_task_manager_uuid: str, ingestion_job_id: 
     print(f"[+ 🦑 BEDROCK: Ingestion Job {ingestion_job_id} Status: {status} +]")
 
     if ingestion_job_status not in ["COMPLETE", "FAILED"]:
-        check_ingestion_job_status.delay(celery_task_manager_uuid, ingestion_job_id, file_type=file_type, project_uuid=project_uuid)
+        check_ingestion_job_status.delay(
+            celery_task_manager_uuid, ingestion_job_id, file_type=file_type, project_uuid=project_uuid
+        )
 
     return True
 
 
 @app.task
-def start_ingestion_job(celery_task_manager_uuid: str, file_type: str = "file", post_delete: bool = False, project_uuid: str | None = None):
+def start_ingestion_job(
+    celery_task_manager_uuid: str, file_type: str = "file", post_delete: bool = False, project_uuid: str | None = None
+):
     try:
         print("[+ 🦑 BEDROCK: Starting Ingestion Job +]")
 
@@ -68,24 +72,26 @@ def start_ingestion_job(celery_task_manager_uuid: str, file_type: str = "file", 
 
         status = TaskManager.status_map.get("IN_PROGRESS")
         task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
-        return check_ingestion_job_status.delay(celery_task_manager_uuid, ingestion_job_id, file_type=file_type, project_uuid=project_uuid)
+        return check_ingestion_job_status.delay(
+            celery_task_manager_uuid, ingestion_job_id, file_type=file_type, project_uuid=project_uuid
+        )
 
     except ClientError as e:
         if e.response["Error"]["Code"] == "ConflictException":
-            print("[+ 🦑 BEDROCK: Filter didn't catch in progress Ingestion Job. \n Waiting to start new IngestionJob ... +]")
+            print(
+                "[+ 🦑 BEDROCK: Filter didn't catch in progress Ingestion Job. "
+                "\\n Waiting to start new IngestionJob ... +]"
+            )
             sleep(15)
             return start_ingestion_job.delay(celery_task_manager_uuid, file_type=file_type, project_uuid=project_uuid)
 
 
 @app.task
 def bedrock_upload_file(
-    file: bytes,
-    content_base_uuid: str,
-    user_email: str,
-    content_base_file_uuid: str,
-    filename: str
+    file: bytes, content_base_uuid: str, user_email: str, content_base_file_uuid: str, filename: str
 ):
     from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+
     project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
     print("[+ 🦑 BEDROCK: Task to Upload File +]")
 
@@ -94,25 +100,19 @@ def bedrock_upload_file(
 
     if file_database_response.status != 0:
         file_database.delete_file_and_metadata(content_base_uuid, file_database_response.file_name)
-        return {
-            "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
-            "error": file_database_response.err
-        }
+        return {"task_status": ContentBaseFileTaskManager.STATUS_FAIL, "error": file_database_response.err}
 
     print("[+ 🦑 BEDROCK: File was added +]")
 
     content_base_file_dto = UpdateContentBaseFileDTO(
-        file_url=file_database_response.file_url,
-        file_name=file_database_response.file_name
+        file_url=file_database_response.file_url, file_name=file_database_response.file_name
     )
     content_base_file = UpdateContentBaseFileUseCase().update_content_base_file(
         content_base_file_uuid=content_base_file_uuid,
         user_email=user_email,
-        update_content_base_file_dto=content_base_file_dto
+        update_content_base_file_dto=content_base_file_dto,
     )
-    task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(
-        content_base_file=content_base_file
-    )
+    task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
 
     start_ingestion_job(str(task_manager.uuid), project_uuid=str(project.uuid))
 
@@ -122,20 +122,17 @@ def bedrock_upload_file(
         "content_base": {
             "uuid": content_base_file.uuid,
             "extension_file": content_base_file.extension_file,
-        }
+        },
     }
     return response
 
 
 @app.task
 def bedrock_upload_inline_file(
-    file: bytes,
-    content_base_uuid: str,
-    user_email: str,
-    content_base_file_uuid: str,
-    filename: str
+    file: bytes, content_base_uuid: str, user_email: str, content_base_file_uuid: str, filename: str
 ):
     from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+
     print("[+ 🦑 BEDROCK: Task to Upload Inline File +]")
 
     project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
@@ -144,25 +141,19 @@ def bedrock_upload_inline_file(
 
     if file_database_response.status != 0:
         file_database.delete_file_and_metadata(content_base_uuid, file_database_response.file_name)
-        return {
-            "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
-            "error": file_database_response.err
-        }
+        return {"task_status": ContentBaseFileTaskManager.STATUS_FAIL, "error": file_database_response.err}
 
     print("[+ 🦑 BEDROCK: Inline File was added +]")
 
     content_base_file_dto = UpdateContentBaseFileDTO(
-        file_url=file_database_response.file_url,
-        file_name=file_database_response.file_name
+        file_url=file_database_response.file_url, file_name=file_database_response.file_name
     )
     content_base_file = UpdateContentBaseFileUseCase().update_inline_content_base_file(
         content_base_file_uuid=content_base_file_uuid,
         user_email=user_email,
-        update_content_base_file_dto=content_base_file_dto
+        update_content_base_file_dto=content_base_file_dto,
     )
-    task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(
-        content_base_file=content_base_file
-    )
+    task_manager = CeleryTaskManagerUseCase().create_celery_task_manager(content_base_file=content_base_file)
 
     start_ingestion_job(str(task_manager.uuid), project_uuid=str(project.uuid))
 
@@ -172,13 +163,13 @@ def bedrock_upload_inline_file(
         "content_base": {
             "uuid": content_base_file.uuid,
             "extension_file": content_base_file.extension_file,
-        }
+        },
     }
     return response
 
 
 def create_txt_from_text(text, content_base_dto) -> str:
-    content_base_title = content_base_dto.get('title', '').replace("/", "-").replace(" ", "-")
+    content_base_title = content_base_dto.get("title", "").replace("/", "-").replace(" ", "-")
     file_name = f"{content_base_title}.txt"
     with open(f"/tmp/{file_name}", "w") as file:
         file.write(text)
@@ -188,6 +179,7 @@ def create_txt_from_text(text, content_base_dto) -> str:
 @app.task
 def bedrock_upload_text_file(text: str, content_base_dto: Dict, content_base_text_uuid: Dict):
     from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+
     file_name = create_txt_from_text(text, content_base_dto)
     content_base_uuid = str(content_base_dto.get("uuid"))
     project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
@@ -200,14 +192,11 @@ def bedrock_upload_text_file(text: str, content_base_dto: Dict, content_base_tex
     content_base_text = ContentBaseText.objects.get(uuid=content_base_text_uuid)
     content_base_text.file = file_database_response.file_url
     content_base_text.file_name = file_database_response.file_name
-    content_base_text.save(update_fields=['file', 'file_name'])
+    content_base_text.save(update_fields=["file", "file_name"])
 
     if file_database_response.status != 0:
         file_database.delete_file_and_metadata(content_base_uuid, file_database_response.file_name)
-        return {
-            "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
-            "error": file_database_response.err
-        }
+        return {"task_status": ContentBaseFileTaskManager.STATUS_FAIL, "error": file_database_response.err}
 
     print("[+ 🦑 BEDROCK: Text File was added +}")
 
@@ -219,9 +208,9 @@ def bedrock_upload_text_file(text: str, content_base_dto: Dict, content_base_tex
         "task_status": task_manager.status,
         "content_base_text": {
             "uuid": content_base_text.uuid,
-            "extension_file": 'txt',
+            "extension_file": "txt",
             "text": content_base_text.text,
-        }
+        },
     }
     return response
 
@@ -247,6 +236,7 @@ def url_to_markdown(link: str, link_uuid: str) -> str:
 @app.task
 def bedrock_send_link(link: str, user_email: str, content_base_link_uuid: str):
     from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+
     print("[+ 🦑 BEDROCK: Task to Upload Link +]")
     content_base_link = ContentBaseLink.objects.get(uuid=content_base_link_uuid)
     content_base_uuid = str(content_base_link.content_base.uuid)
@@ -262,14 +252,11 @@ def bedrock_send_link(link: str, user_email: str, content_base_link_uuid: str):
 
     if file_database_response.status != 0:
         file_database.delete_file_and_metadata(content_base_uuid, file_database_response.file_name)
-        return {
-            "task_status": ContentBaseFileTaskManager.STATUS_FAIL,
-            "error": file_database_response.err
-        }
+        return {"task_status": ContentBaseFileTaskManager.STATUS_FAIL, "error": file_database_response.err}
 
     # TODO: usecase
     content_base_link.name = file_database_response.file_name
-    content_base_link.save(update_fields=['name'])
+    content_base_link.save(update_fields=["name"])
 
     print("[+ 🦑 BEDROCK: Link File was added +}")
     start_ingestion_job(str(task_manager.uuid), "link", project_uuid=str(project.uuid))
@@ -279,9 +266,9 @@ def bedrock_send_link(link: str, user_email: str, content_base_link_uuid: str):
         "task_status": task_manager.status,
         "content_base_text": {
             "uuid": content_base_link.uuid,
-            "extension_file": 'url',
+            "extension_file": "url",
             "link": content_base_link.link,
-        }
+        },
     }
 
     return response
@@ -295,9 +282,11 @@ def run_create_lambda_function(
     agent_version: str,
     skill_handler: str,
     agent: Agent,
-    function_schema: List[Dict] = [],
+    function_schema: Optional[List[Dict]] = None,
     file_database=BedrockFileDatabase,
 ):
+    if function_schema is None:
+        function_schema = []
     return file_database().create_lambda_function(
         lambda_name=lambda_name,
         agent_external_id=agent_external_id,
@@ -305,7 +294,7 @@ def run_create_lambda_function(
         source_code_file=zip_content,
         function_schema=function_schema,
         agent=agent,
-        skill_handler=skill_handler
+        skill_handler=skill_handler,
     )
 
 

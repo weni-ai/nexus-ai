@@ -1,8 +1,7 @@
-from nexus.orgs.models import Org
-from nexus.users.models import User
-
 from nexus.event_domain.recent_activity.external_activities import intelligence_activity_message
 from nexus.event_domain.recent_activity.recent_activities_dto import RecentActivitiesDTO
+from nexus.orgs.models import Org
+from nexus.users.models import User
 
 
 def recent_activity_message(
@@ -12,7 +11,6 @@ def recent_activity_message(
     action: str,
     intelligence_activity_message=intelligence_activity_message,
 ):  # pragma: no cover
-
     action_type_mapping = {
         "C": "CREATE",
         "U": "UPDATE",

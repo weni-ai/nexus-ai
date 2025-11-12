@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from django.conf import settings
 
 
 @dataclass
@@ -9,7 +8,7 @@ class ConversationCreationDTO:
     topic: str
     project: str
     csat: str
-    created_at: str 
+    created_at: str
 
 
 @dataclass

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('logs', '0006_messagelog_is_approved'),
+        ("logs", "0006_messagelog_is_approved"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='messagelog',
-            name='groundedness_details',
+            model_name="messagelog",
+            name="groundedness_details",
             field=models.JSONField(null=True),
         ),
     ]

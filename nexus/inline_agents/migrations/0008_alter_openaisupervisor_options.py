@@ -4,14 +4,13 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inline_agents', '0007_merge_20250813_2118'),
+        ("inline_agents", "0007_merge_20250813_2118"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='openaisupervisor',
-            options={'verbose_name': 'OpenAI Supervisor', 'verbose_name_plural': 'OpenAI Supervisors'},
+            name="openaisupervisor",
+            options={"verbose_name": "OpenAI Supervisor", "verbose_name_plural": "OpenAI Supervisors"},
         ),
     ]

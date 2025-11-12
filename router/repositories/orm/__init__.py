@@ -1,33 +1,22 @@
-from __future__ import absolute_import, unicode_literals
 import os
-import django
-
 from typing import List
 
+import django
+from django.core.cache import cache
+
+from nexus.actions.models import Flow
 from nexus.intelligences.models import (
     ContentBase,
     ContentBaseAgent,
 )
-from nexus.actions.models import Flow
 from nexus.logs.models import MessageLog
+from nexus.usecases.actions.retrieve import FlowDoesNotExist
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
-
-from router.repositories import Repository
-from router.entities import (
-    AgentDTO,
-    FlowDTO,
-    InstructionDTO,
-    ContentBaseDTO,
-    ContactMessageDTO,
-    ProjectDTO
-)
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
-from nexus.usecases.actions.retrieve import FlowDoesNotExist
-
-
-from django.core.cache import cache
+from router.entities import AgentDTO, ContactMessageDTO, ContentBaseDTO, FlowDTO, InstructionDTO, ProjectDTO
+from router.repositories import Repository
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
@@ -39,7 +28,6 @@ class ContentBaseORMRepository(Repository):
         return ContentBase.objects.get(uuid=content_base_uuid)
 
     def get_content_base_by_project(self, project_uuid: str) -> ContentBaseDTO:
-
         content_base = get_default_content_base_by_project(project_uuid)
 
         return ContentBaseDTO(
@@ -49,7 +37,6 @@ class ContentBaseORMRepository(Repository):
         )
 
     def get_agent(self, content_base_uuid: str) -> AgentDTO:
-
         content_base = ContentBase.objects.get(uuid=content_base_uuid)
         agent: ContentBaseAgent = content_base.agent
 
@@ -58,7 +45,7 @@ class ContentBaseORMRepository(Repository):
             role=agent.role,
             personality=agent.personality,
             goal=agent.goal,
-            content_base_uuid=content_base_uuid
+            content_base_uuid=content_base_uuid,
         )
 
     def list_instructions(self, content_base_uuid: str) -> List[InstructionDTO]:
@@ -71,8 +58,7 @@ class ContentBaseORMRepository(Repository):
         for instruction in instructions:
             instructions_list.append(
                 InstructionDTO(
-                    instruction=instruction.instruction,
-                    content_base_uuid=str(instruction.content_base.uuid)
+                    instruction=instruction.instruction, content_base_uuid=str(instruction.content_base.uuid)
                 )
             )
 
@@ -80,7 +66,6 @@ class ContentBaseORMRepository(Repository):
 
 
 class FlowsORMRepository(Repository):
-
     def __init__(
         self,
         project_uuid: str,
@@ -88,11 +73,7 @@ class FlowsORMRepository(Repository):
         self.content_base = get_default_content_base_by_project(project_uuid)
         self.flows = Flow.objects.filter(content_base=self.content_base)
 
-    def get_project_flow_by_name(
-        self,
-        name: str
-    ):
-
+    def get_project_flow_by_name(self, name: str):
         flow = self.flows.filter(name__iexact=name).first()
 
         if not flow:
@@ -108,11 +89,7 @@ class FlowsORMRepository(Repository):
             send_to_llm=flow.send_to_llm,
         )
 
-    def project_flow_fallback(
-        self,
-        fallback: bool
-    ) -> FlowDTO:
-
+    def project_flow_fallback(self, fallback: bool) -> FlowDTO:
         flow = self.flows.filter(fallback=fallback).first()
 
         if flow:
@@ -122,15 +99,10 @@ class FlowsORMRepository(Repository):
                 name=flow.name,
                 prompt=flow.prompt,
                 fallback=flow.fallback,
-                content_base_uuid=str(flow.content_base.uuid)
+                content_base_uuid=str(flow.content_base.uuid),
             )
 
-    def project_flows(
-        self,
-        fallback: bool = False,
-        action_type: str = "custom"
-    ) -> List[FlowDTO]:
-
+    def project_flows(self, fallback: bool = False, action_type: str = "custom") -> List[FlowDTO]:
         flows = self.flows.filter(fallback=fallback, action_type=action_type)
 
         flows_list = []
@@ -142,7 +114,7 @@ class FlowsORMRepository(Repository):
                     name=flow.name,
                     prompt=flow.prompt,
                     fallback=flow.fallback,
-                    content_base_uuid=str(flow.content_base.uuid)
+                    content_base_uuid=str(flow.content_base.uuid),
                 )
             )
 
@@ -151,7 +123,6 @@ class FlowsORMRepository(Repository):
     def get_classifier_flow_list(
         self,
     ) -> List[FlowDTO]:
-
         flows = self.flows.exclude(action_type="custom")
         flows_list = []
         for flow in flows:
@@ -162,17 +133,13 @@ class FlowsORMRepository(Repository):
                     name=flow.name,
                     prompt=flow.prompt,
                     fallback=flow.fallback,
-                    content_base_uuid=str(flow.content_base.uuid)
+                    content_base_uuid=str(flow.content_base.uuid),
                 )
             )
 
         return flows_list
 
-    def get_classifier_flow_by_action_type(
-        self,
-        action_type: str
-    ) -> FlowDTO:
-
+    def get_classifier_flow_by_action_type(self, action_type: str) -> FlowDTO:
         flow = self.flows.filter(action_type=action_type).first()
 
         if flow is None:
@@ -184,17 +151,12 @@ class FlowsORMRepository(Repository):
             name=flow.name,
             prompt=flow.prompt,
             fallback=flow.fallback,
-            content_base_uuid=str(flow.content_base.uuid)
+            content_base_uuid=str(flow.content_base.uuid),
         )
 
 
 class MessageLogsRepository(Repository):
-
-    def list_cached_messages(
-        self,
-        project_uuid: str,
-        contact_urn: str
-    ):
+    def list_cached_messages(self, project_uuid: str, contact_urn: str):
         cache_key = f"last_5_messages_{project_uuid}_{contact_urn}"
         cache_data: list = cache.get(cache_key)
 
@@ -205,11 +167,11 @@ class MessageLogsRepository(Repository):
         for message in cache_data:
             contact_messages.append(
                 ContactMessageDTO(
-                    contact_urn=message['contact_urn'],
-                    text=message['text'],
-                    llm_respose=message['llm_respose'],
-                    content_base_uuid=message['content_base_uuid'],
-                    project_uuid=message['project_uuid']
+                    contact_urn=message["contact_urn"],
+                    text=message["text"],
+                    llm_respose=message["llm_respose"],
+                    content_base_uuid=message["content_base_uuid"],
+                    project_uuid=message["project_uuid"],
                 )
             )
 
@@ -219,10 +181,7 @@ class MessageLogsRepository(Repository):
         content_base = get_default_content_base_by_project(project_uuid)
         contact_messages = []
         messages = MessageLog.objects.filter(
-            message__contact_urn=contact_urn,
-            content_base=content_base,
-            message__status="S",
-            classification="other"
+            message__contact_urn=contact_urn, content_base=content_base, message__status="S", classification="other"
         ).order_by("-message__created_at")[:number_of_messages]
 
         messages = list(messages)[::-1]
@@ -234,7 +193,7 @@ class MessageLogsRepository(Repository):
                     text=message.message.text,
                     llm_respose=message.llm_response,
                     content_base_uuid=str(message.content_base.uuid),
-                    project_uuid=project_uuid
+                    project_uuid=project_uuid,
                 )
             )
 
@@ -244,8 +203,4 @@ class MessageLogsRepository(Repository):
 class ProjectORMRepository(Repository):
     def get_project(self, project_uuid) -> ProjectDTO:
         project = get_project_by_uuid(project_uuid)
-        return ProjectDTO(
-            uuid=str(project.uuid),
-            name=project.name,
-            indexer_database=project.indexer_database
-        )
+        return ProjectDTO(uuid=str(project.uuid), name=project.name, indexer_database=project.indexer_database)

@@ -3,10 +3,9 @@ import logging
 import uuid
 from sentry_sdk import capture_exception
 
-from nexus.intelligences.conversation_dto import WindowConversationDTO
-
-from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
+from nexus.event_driven.parsers import JSONParser
+from nexus.intelligences.conversation_dto import WindowConversationDTO
 from nexus.usecases.intelligences.lambda_usecase import create_lambda_conversation
 
 logger = logging.getLogger(__name__)
