@@ -119,6 +119,7 @@ class OpenAITeamAdapter(TeamAdapter):
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
         use_components: bool = False,
+        audio_orchestration: bool = False,
         **kwargs
     ) -> list[dict]:
         agents_as_tools = []
@@ -157,6 +158,8 @@ class OpenAITeamAdapter(TeamAdapter):
             components_instructions=supervisor.get("components_instructions", ""),
             components_instructions_up=supervisor.get("components_instructions_up", ""),
             human_support_instructions=supervisor.get("human_support_instructions", ""),
+            use_transcription=audio_orchestration,
+            transcription_instructions=supervisor.get("transcription_instructions", ""),
         )
 
         for agent in agents:
@@ -209,7 +212,12 @@ class OpenAITeamAdapter(TeamAdapter):
                 )
             )
 
-        supervisor_tools = cls._get_tools(supervisor["tools"])
+        supervisor_tools = cls._get_tools(
+            supervisor["tools"],
+            audio_orchestration=audio_orchestration,
+            exclude_tools_from_audio_orchestration=supervisor.get("exclude_tools_from_audio_orchestration", []),
+            exclude_tools_from_text_orchestration=supervisor.get("exclude_tools_from_text_orchestration", []),
+        )
         supervisor_tools.extend(agents_as_tools)
 
         supervisor_agent = SupervisorAgent(
@@ -283,9 +291,12 @@ class OpenAITeamAdapter(TeamAdapter):
         return credentials
 
     @classmethod
-    def _get_tools(cls, action_groups: list[dict]) -> list[dict]:
+    def _get_tools(cls, action_groups: list[dict], audio_orchestration: bool = False, exclude_tools_from_audio_orchestration: list[str] = [], exclude_tools_from_text_orchestration: list[str] = []) -> list[dict]:
         tools = []
         for action_group in action_groups:
+            if audio_orchestration:
+                if action_group.get("actionGroupName") in exclude_tools_from_audio_orchestration:
+                    continue
             group_executor = action_group.get("actionGroupExecutor")
             if not group_executor:
                 continue
@@ -483,6 +494,8 @@ class OpenAITeamAdapter(TeamAdapter):
         components_instructions,
         components_instructions_up,
         human_support_instructions,
+        use_transcription,
+        transcription_instructions,
     ) -> str:
         template_string = instruction
         template = Template(template_string)
@@ -506,6 +519,8 @@ class OpenAITeamAdapter(TeamAdapter):
             "USE_COMPONENTS": use_components,
             "COMPONENTS_INSTRUCTIONS": components_instructions,
             "COMPONENTS_INSTRUCTIONS_UP": components_instructions_up,
+            "USE_TRANSCRIPTION": use_transcription,
+            "TRANSCRIPTION_INSTRUCTIONS": transcription_instructions,
         }
 
         context_object = TemplateContext(context_data)

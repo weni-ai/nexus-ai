@@ -26,7 +26,6 @@ from router.entities import message_factory
 from router.entities.mailroom import Message
 from router.tasks.exceptions import EmptyTextException
 from router.tasks.redis_task_manager import RedisTaskManager
-
 from .actions_client import get_action_clients
 
 
@@ -366,6 +365,7 @@ def _initialize_session_agents(
         session=orchestration_session,
         data_lake_event_adapter=backend._get_data_lake_event_adapter(),
         event_manager_notify=backend._get_event_manager_notify(),
+        audio_orchestration=True,
     )
 
     session.set_agents(external_team)

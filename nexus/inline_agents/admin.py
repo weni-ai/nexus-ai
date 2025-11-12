@@ -11,6 +11,7 @@ from nexus.inline_agents.models import (
     Guardrail,
     InlineAgentsConfiguration,
 )
+from django.contrib.postgres.fields import ArrayField
 
 
 class PrettyJSONWidget(Textarea):
@@ -96,11 +97,16 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
 
     formfield_overrides = {
         models.JSONField: {'widget': PrettyJSONWidget(attrs={'rows': 20, 'cols': 80, 'class': 'vLargeTextField'})},
+        ArrayField: {'widget': PrettyJSONWidget(attrs={'rows': 20, 'cols': 40, 'class': 'vLargeTextField'})},
     }
 
     fieldsets = (
         (None, {
-            'fields': ('name', 'foundation_model', 'instruction', 'default_instructions_for_collaborators', 'max_tokens')
+            'fields': ('name', 'foundation_model', 'instruction', 'default_instructions_for_collaborators', 'max_tokens', 'exclude_tools_from_audio_orchestration', 'exclude_tools_from_text_orchestration')
+        }),
+        ('Transcription', {
+            'fields': ('transcription_prompt',),
+            'classes': ('collapse',)
         }),
         ('Configuration', {
             'fields': ('prompt_override_configuration', 'action_groups', 'knowledge_bases'),
