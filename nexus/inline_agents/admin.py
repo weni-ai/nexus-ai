@@ -1,12 +1,17 @@
 import json
 
 from django.contrib import admin
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.forms import Textarea
 
 from nexus.inline_agents.backends.bedrock.models import Supervisor
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor
-from nexus.inline_agents.models import Agent, Guardrail, InlineAgentsConfiguration
+from nexus.inline_agents.models import (
+    Agent,
+    Guardrail,
+    InlineAgentsConfiguration,
+)
 
 
 class PrettyJSONWidget(Textarea):
@@ -74,38 +79,34 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
     ordering = ("-created_on",)
 
     formfield_overrides = {
-        models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 20, "cols": 80, "class": "vLargeTextField"})},
+        models.JSONField: {'widget': PrettyJSONWidget(attrs={'rows': 20, 'cols': 80, 'class': 'vLargeTextField'})},
+        ArrayField: {'widget': PrettyJSONWidget(attrs={'rows': 10, 'cols': 80, 'class': 'aLargeTextField'})},
     }
 
     fieldsets = (
-        (
-            None,
-            {
-                "fields": (
-                    "name",
-                    "foundation_model",
-                    "instruction",
-                    "default_instructions_for_collaborators",
-                    "max_tokens",
-                )
-            },
-        ),
-        (
-            "Configuration",
-            {"fields": ("prompt_override_configuration", "action_groups", "knowledge_bases"), "classes": ("collapse",)},
-        ),
-        (
-            "Human Support",
-            {"fields": ("human_support_prompt", "human_support_action_groups"), "classes": ("collapse",)},
-        ),
-        (
-            "Components",
-            {
-                "fields": ("components_prompt", "components_human_support_prompt", "components_instructions_up_prompt"),
-                "classes": ("collapse",),
-            },
-        ),
-        ("Metadata", {"fields": ("created_on",), "classes": ("collapse",)}),
+        (None, {
+            'fields': ('name', 'foundation_model', 'instruction', 'default_instructions_for_collaborators', 'max_tokens', 'exclude_tools_from_audio_orchestration', 'exclude_tools_from_text_orchestration')
+        }),
+        ('Transcription', {
+            'fields': ('transcription_prompt',),
+            'classes': ('collapse',)
+        }),
+        ('Configuration', {
+            'fields': ('prompt_override_configuration', 'action_groups', 'knowledge_bases'),
+            'classes': ('collapse',)
+        }),
+        ('Human Support', {
+            'fields': ('human_support_prompt', 'human_support_action_groups'),
+            'classes': ('collapse',)
+        }),
+        ('Components', {
+            'fields': ('components_prompt', 'components_human_support_prompt', 'components_instructions_up_prompt'),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('created_on',),
+            'classes': ('collapse',)
+        }),
     )
 
 
