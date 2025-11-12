@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from aiortc.contrib.media import MediaStreamTrack
+from aiortc.contrib.media import MediaPlayer, MediaStreamTrack
 from aiortc.rtcrtpsender import RTCRtpSender
 
 from agents import Runner
@@ -46,6 +46,7 @@ class Session:
 
     wpp_audio_sender: RTCRtpSender = None
     wpp_audio_track: MediaStreamTrack = None
+    audio_player: MediaPlayer = None 
 
     input_text: str = ""
     current_task: asyncio.Task = None
