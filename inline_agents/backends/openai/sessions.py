@@ -128,8 +128,38 @@ class RedisSession(Session):
             for i, raw_item in enumerate(data):
                 try:
                     if raw_item:
+                        raw_str = raw_item.decode('utf-8') if isinstance(raw_item, bytes) else str(raw_item)
+                        null_count = raw_str.count('\u0000') + raw_str.count('\x00')
+                        
+                        if null_count > 0:
+                            logger.warning(
+                                f"Item {i} in session {self._key} contains {null_count} null characters. "
+                                f"Project: {self.project_uuid}, Contact: {self.sanitized_urn}"
+                            )
+                            log_error_to_sentry(
+                                Exception(f"Session item contains {null_count} null characters"),
+                                self._key,
+                                self.project_uuid,
+                                self.sanitized_urn,
+                                {
+                                    "item_index": i,
+                                    "null_count": null_count,
+                                    "raw_item_preview": raw_str[:200] if raw_str else None,
+                                    "operation": "null_detection"
+                                }
+                            )
+                        
                         parsed_item = json.loads(raw_item)
                         if isinstance(parsed_item, dict):
+                            content = str(parsed_item.get('content', ''))
+                            if content:
+                                content_nulls = content.count('\u0000') + content.count('\x00')
+                                if content_nulls > 0:
+                                    logger.warning(
+                                        f"Content of item {i} in session {self._key} contains {content_nulls} null characters. "
+                                        f"Project: {self.project_uuid}, Contact: {self.sanitized_urn}"
+                                    )
+                            
                             items.append(parsed_item)
                         else:
                             logger.warning(f"Item {i} in session {self._key} is not a dict: {type(parsed_item)}")
