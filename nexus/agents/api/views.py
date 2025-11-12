@@ -992,8 +992,7 @@ class DeleteAgentView(APIView):
         return Response(
             {
                 "message": "Agent deleted successfully",
-                **deletion_summary
+                **deletion_summary,
             },
-            status=200
+            status=200,
         )
->>>>>>> origin/main
