@@ -6,7 +6,6 @@ from django.conf import settings
 import pendulum
 import json
 from router.repositories.redis.message import MessageRepository as RedisMessageRepository
-from router.services.conversation_service import ConversationService
 
 
 class TaskManager(ABC):
@@ -50,7 +49,6 @@ class RedisTaskManager(TaskManager):
     def __init__(self, redis_client: Optional[Redis] = None):
         self.redis_client = redis_client or Redis.from_url(settings.REDIS_URL)
         self.message_repository = RedisMessageRepository(self.redis_client)
-        self.conversation_service = ConversationService()
 
     def get_pending_response(self, project_uuid: str, contact_urn: str) -> Optional[str]:
         """Get the pending response for a contact."""
@@ -147,14 +145,6 @@ class RedisTaskManager(TaskManager):
         }
         self.message_repository.storage_message(project_uuid, contact_urn, message_data)
 
-        # Create conversation only if channel_uuid is not None
-        self.conversation_service.create_conversation_if_channel_exists(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            contact_name=contact_name,
-            channel_uuid=channel_uuid
-        )
-
     def get_cache_messages(
         self,
         project_uuid: str,
@@ -180,14 +170,6 @@ class RedisTaskManager(TaskManager):
         }
         self.message_repository.add_message(project_uuid, contact_urn, message)
 
-        # Ensure conversation exists only if channel_uuid is not None
-        self.conversation_service.ensure_conversation_exists(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            contact_name=contact_name,
-            channel_uuid=channel_uuid
-        )
-
     def handle_message_cache(
         self,
         contact_urn: str,
@@ -198,14 +180,19 @@ class RedisTaskManager(TaskManager):
         channel_uuid: str = None,
         preview: bool = False
     ) -> None:
+        """Handle message cache logic - stores message in cache.
 
+        Note: Conversation is already ensured to exist by the backend before
+        this method is called (via Celery task), so no need to check/create it here.
+        """
         if preview:
             return
-        
+
         if channel_uuid is None:
             print(f"[RedisTaskManager] - Skipping message cache: channel_uuid is None for contact {contact_urn}.")
             return
 
+        # Check if there are existing cached messages to decide storage method
         cached_messages = self.get_cache_messages(project_uuid, contact_urn)
         if cached_messages:
             self.add_message_to_cache(

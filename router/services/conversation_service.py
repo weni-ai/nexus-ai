@@ -1,4 +1,5 @@
 from typing import Optional
+import sentry_sdk
 from nexus.usecases.intelligences.create import ConversationUseCase
 
 
@@ -20,7 +21,21 @@ class ConversationService:
         Returns the conversation object if created, None otherwise.
         """
         if channel_uuid is None:
-            # Temp fix for conversations from flows.
+            # Log to Sentry for debugging (expected but we want to track it)
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_tag("contact_urn", contact_urn)
+            sentry_sdk.set_context("conversation_creation", {
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "contact_name": contact_name,
+                "channel_uuid": None,
+                "method": "create_conversation_if_channel_exists",
+                "reason": "channel_uuid is None"
+            })
+            sentry_sdk.capture_message(
+                "Conversation not created: channel_uuid is None (create_conversation_if_channel_exists)",
+                level="info"
+            )
             return None
 
         return self.conversation_usecase.create_conversation_base_structure(
@@ -36,18 +51,44 @@ class ConversationService:
         contact_urn: str,
         contact_name: str,
         channel_uuid: str = None
-    ) -> bool:
-        """
-        Ensure conversation exists only if channel_uuid is not None.
-        Returns True if conversation exists or was created, False if channel_uuid is None.
-        """
-        if channel_uuid is None:
-            # Temp fix for conversations from flows.
-            return False
+    ) -> Optional[object]:
 
-        return self.conversation_usecase.conversation_in_progress_exists(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            channel_uuid=channel_uuid,
-            contact_name=contact_name
-        )
+        if channel_uuid is None:
+            # Log to Sentry for debugging (expected but we want to track it)
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_tag("contact_urn", contact_urn)
+            sentry_sdk.set_context("conversation_creation", {
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "contact_name": contact_name,
+                "channel_uuid": None,
+                "method": "ensure_conversation_exists",
+                "reason": "channel_uuid is None"
+            })
+            sentry_sdk.capture_message(
+                "Conversation not created: channel_uuid is None (ensure_conversation_exists)",
+                level="info"
+            )
+            return None
+
+        try:
+            return self.conversation_usecase.conversation_in_progress_exists(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                channel_uuid=channel_uuid,
+                contact_name=contact_name
+            )
+        except Exception as e:
+            # Log conversation creation/lookup failures to Sentry
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_tag("contact_urn", contact_urn)
+            sentry_sdk.set_tag("channel_uuid", channel_uuid)
+            sentry_sdk.set_context("conversation_creation", {
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "contact_name": contact_name,
+                "channel_uuid": channel_uuid,
+                "method": "ensure_conversation_exists"
+            })
+            sentry_sdk.capture_exception(e)
+            raise

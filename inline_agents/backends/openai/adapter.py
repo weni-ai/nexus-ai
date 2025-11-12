@@ -673,6 +673,8 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         preview: bool = False,
         backend: str = "openai",
         foundation_model: str = "",
+        channel_uuid: Optional[str] = None,
+        conversation: Optional[object] = None,
     ) -> Optional[dict]:
 
         if preview or (not agent_data and not tool_call_data):
@@ -691,13 +693,23 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                 }
             }
 
+            # Extract agent_identifier for agent_uuid lookup
+            agent_identifier = None
+            if agent_data:
+                agent_identifier = agent_data.get("agent_name")
+
             if tool_call_data:
                 event_data["metadata"]["tool_call"] = tool_call_data
                 event_data["key"] = "tool_call"
                 event_data["value"] = tool_call_data["tool_name"]
                 validated_event = self._event_service.send_validated_event(
                     event_data=event_data,
-                    use_delay=False
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    use_delay=False,
+                    channel_uuid=channel_uuid,
+                    agent_identifier=agent_identifier,
+                    conversation=conversation
                 )
                 return validated_event
 
@@ -707,7 +719,12 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                 event_data["value"] = agent_data["agent_name"]
                 validated_event = self._event_service.send_validated_event(
                     event_data=event_data,
-                    use_delay=True
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    use_delay=True,
+                    channel_uuid=channel_uuid,
+                    agent_identifier=agent_identifier,
+                    conversation=conversation
                 )
                 return validated_event
 
@@ -724,7 +741,8 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         channel_uuid: str,
         event_data: list,
         preview: bool = False,
-        agent_name: str = ""
+        agent_name: str = "",
+        conversation: Optional[object] = None
     ):
         """Delegate custom event processing to the service."""
         trace_data = {
@@ -738,18 +756,21 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
             extractor=extractor,
-            preview=preview
+            preview=preview,
+            conversation=conversation
         )
 
     def to_data_lake_custom_event(
         self,
         event_data: dict,
         project_uuid: str,
-        contact_urn: str
+        contact_urn: str,
+        channel_uuid: Optional[str] = None
     ) -> Optional[dict]:
         """Send a single custom event to data lake (for direct event sending, not from traces)."""
         return self._event_service.send_custom_event(
             event_data=event_data,
             project_uuid=project_uuid,
-            contact_urn=contact_urn
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid
         )

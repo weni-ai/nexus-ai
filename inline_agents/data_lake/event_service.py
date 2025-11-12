@@ -31,6 +31,132 @@ class DataLakeEventService:
     def __init__(self, send_data_lake_event_task: callable):
         self.send_data_lake_event_task = send_data_lake_event_task
 
+    def _get_conversation_uuid(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: Optional[str] = None,
+        conversation: Optional[object] = None
+    ) -> Optional[str]:
+        """Get conversation UUID from Conversation model or provided conversation object."""
+        # If conversation object is provided, use it directly
+        if conversation:
+            return str(conversation.uuid)
+
+        # Otherwise, query for it (channel_uuid is required for querying)
+        if not channel_uuid:
+            return None
+
+        try:
+            from nexus.intelligences.models import Conversation
+
+            conversation_obj = Conversation.objects.filter(
+                project__uuid=project_uuid,
+                contact_urn=contact_urn,
+                channel_uuid=channel_uuid
+            ).order_by("-created_at").first()
+
+            if conversation_obj:
+                return str(conversation_obj.uuid)
+            return None
+        except Exception as e:
+            logger.warning(
+                f"Error retrieving conversation_uuid: {str(e)}. "
+                f"Project: {project_uuid}, Contact: {contact_urn}, Channel: {channel_uuid}"
+            )
+            # Log to Sentry for debugging
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_tag("contact_urn", contact_urn)
+            sentry_sdk.set_tag("channel_uuid", channel_uuid)
+            sentry_sdk.set_context("conversation_lookup", {
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "channel_uuid": channel_uuid,
+                "method": "_get_conversation_uuid"
+            })
+            sentry_sdk.capture_exception(e)
+            return None
+
+    def _enrich_metadata(
+        self,
+        event_data: dict,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: Optional[str] = None,
+        agent_identifier: Optional[str] = None,
+        conversation: Optional[object] = None
+    ) -> None:
+        """Enrich event metadata with agent_uuid and conversation_uuid."""
+        event_data.setdefault("metadata", {})
+        metadata = event_data["metadata"]
+
+        # Add conversation_uuid if missing
+        if "conversation_uuid" not in metadata:
+            conversation_uuid = self._get_conversation_uuid(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                channel_uuid=channel_uuid,
+                conversation=conversation
+            )
+            if conversation_uuid:
+                metadata["conversation_uuid"] = conversation_uuid
+
+        # Add agent_uuid if missing and agent_identifier is provided
+        if "agent_uuid" not in metadata and agent_identifier:
+            try:
+                from nexus.inline_agents.models import IntegratedAgent
+
+                team_agent = IntegratedAgent.objects.get(
+                    agent__slug=agent_identifier,
+                    project__uuid=project_uuid
+                )
+                metadata["agent_uuid"] = str(team_agent.agent.uuid)
+            except IntegratedAgent.DoesNotExist:
+                logger.warning(
+                    f"IntegratedAgent not found for agent_identifier={agent_identifier}, "
+                    f"project_uuid={project_uuid}. Event will be sent without agent_uuid."
+                )
+                sentry_sdk.set_tag("project_uuid", project_uuid)
+                sentry_sdk.set_context("agent_lookup", {
+                    "agent_identifier": agent_identifier,
+                    "project_uuid": project_uuid
+                })
+                sentry_sdk.capture_message(
+                    f"IntegratedAgent not found: {agent_identifier}",
+                    level="warning"
+                )
+
+    def _prepare_and_validate_event(
+        self,
+        event_data: dict,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: Optional[str] = None,
+        agent_identifier: Optional[str] = None,
+        conversation: Optional[object] = None
+    ) -> dict:
+        """Prepare event data, enrich metadata, and validate using DTO."""
+        # Set required fields (will be validated by DTO)
+        event_data.setdefault("project", project_uuid)
+        event_data.setdefault("contact_urn", contact_urn)
+        event_data.setdefault("date", pendulum.now("America/Sao_Paulo").to_iso8601_string())
+        event_data.setdefault("event_name", "weni_nexus_data")
+
+        # Enrich metadata with agent_uuid and conversation_uuid
+        self._enrich_metadata(
+            event_data=event_data,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            agent_identifier=agent_identifier,
+            conversation=conversation
+        )
+
+        # Validate using DTO (will raise ValueError if validation fails)
+        event_dto = DataLakeEventDTO(**event_data)
+        event_dto.validate()
+        return event_dto.dict()
+
     def process_custom_events(
         self,
         trace_data: dict,
@@ -38,11 +164,10 @@ class DataLakeEventService:
         contact_urn: str,
         channel_uuid: str,
         extractor: EventExtractor,
-        preview: bool = False
+        preview: bool = False,
+        conversation: Optional[object] = None
     ) -> None:
         """Process custom events using backend-specific extractor."""
-        from nexus.inline_agents.models import IntegratedAgent
-
         if preview:
             return None
 
@@ -52,10 +177,6 @@ class DataLakeEventService:
 
         for event_to_send in events:
             try:
-                # Ensure metadata exists
-                if "metadata" not in event_to_send or event_to_send.get("metadata") is None:
-                    event_to_send["metadata"] = {}
-
                 event_key = event_to_send.get("key")
                 special_handlers = get_special_event_handlers()
 
@@ -67,34 +188,14 @@ class DataLakeEventService:
                         contact_urn,
                         channel_uuid
                     )
-                # For regular events, add agent_uuid if missing and agent_identifier is provided
-                elif "agent_uuid" not in event_to_send.get("metadata", {}) and agent_identifier:
-                    try:
-                        team_agent = IntegratedAgent.objects.get(
-                            agent__slug=agent_identifier,
-                            project__uuid=project_uuid
-                        )
-                        agent_uuid = team_agent.agent.uuid
-                        event_to_send["metadata"]["agent_uuid"] = agent_uuid
-                    except IntegratedAgent.DoesNotExist:
-                        logger.warning(
-                            f"IntegratedAgent not found for agent_identifier={agent_identifier}, "
-                            f"project_uuid={project_uuid}. Event will be sent without agent_uuid."
-                        )
-                        sentry_sdk.set_tag("project_uuid", project_uuid)
-                        sentry_sdk.set_context("custom_event", {
-                            "agent_identifier": agent_identifier,
-                            "event_key": event_to_send.get("key")
-                        })
-                        sentry_sdk.capture_message(
-                            f"IntegratedAgent not found for custom event: {agent_identifier}",
-                            level="warning"
-                        )
 
                 self.send_custom_event(
                     event_data=event_to_send,
                     project_uuid=project_uuid,
-                    contact_urn=contact_urn
+                    contact_urn=contact_urn,
+                    channel_uuid=channel_uuid,
+                    agent_identifier=agent_identifier,
+                    conversation=conversation
                 )
 
             except Exception as e:
@@ -114,49 +215,43 @@ class DataLakeEventService:
         self,
         event_data: dict,
         project_uuid: str,
-        contact_urn: str
+        contact_urn: str,
+        channel_uuid: Optional[str] = None,
+        agent_identifier: Optional[str] = None,
+        conversation: Optional[object] = None
     ) -> Optional[dict]:
         """Send a custom event to data lake after validation."""
         try:
-            # Ensure required fields are set
-            event_data["project"] = project_uuid
-            event_data["contact_urn"] = contact_urn
+            # Extract agent_identifier from metadata if not provided
+            if not agent_identifier:
+                agent_identifier = event_data.get("metadata", {}).get("agent_name")
 
-            # Set date if not present
-            if "date" not in event_data or not event_data.get("date"):
-                event_data["date"] = pendulum.now("America/Sao_Paulo").to_iso8601_string()
+            validated_event = self._prepare_and_validate_event(
+                event_data=event_data,
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                channel_uuid=channel_uuid,
+                agent_identifier=agent_identifier,
+                conversation=conversation
+            )
 
-            # Ensure event_name is set
-            if "event_name" not in event_data:
-                event_data["event_name"] = "weni_nexus_data"
-
-            # Validate event using DTO
-            try:
-                event_dto = DataLakeEventDTO(**event_data)
-                event_dto.validate()
-                validated_event = event_dto.dict()
-            except (ValueError, TypeError) as e:
-                logger.error(
-                    f"Event validation failed: {str(e)}. "
-                    f"Event key: {event_data.get('key', 'unknown')}, "
-                    f"Project: {project_uuid}, Contact: {contact_urn}"
-                )
-                sentry_sdk.set_context("custom event validation error", {
-                    "event_data": event_data,
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "validation_error": str(e)
-                })
-                sentry_sdk.set_tag("project_uuid", project_uuid)
-                sentry_sdk.capture_message(
-                    f"Event validation failed: {str(e)}",
-                    level="error"
-                )
-                return None
-
-            # Send validated event to data lake
             self.send_data_lake_event_task.delay(validated_event)
             return validated_event
+        except (ValueError, TypeError) as e:
+            logger.error(
+                f"Event validation failed: {str(e)}. "
+                f"Event key: {event_data.get('key', 'unknown')}, "
+                f"Project: {project_uuid}, Contact: {contact_urn}"
+            )
+            sentry_sdk.set_context("custom event validation error", {
+                "event_data": event_data,
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "validation_error": str(e)
+            })
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.capture_exception(e)
+            return None
         except Exception as e:
             logger.error(f"Error processing custom event for data lake: {str(e)}")
             sentry_sdk.set_context("custom event to data lake", {"event_data": event_data})
@@ -167,13 +262,29 @@ class DataLakeEventService:
     def send_validated_event(
         self,
         event_data: dict,
-        use_delay: bool = True
+        project_uuid: str,
+        contact_urn: str,
+        use_delay: bool = True,
+        channel_uuid: Optional[str] = None,
+        agent_identifier: Optional[str] = None,
+        conversation: Optional[object] = None
     ) -> Optional[dict]:
         """Send a validated event to data lake."""
         try:
-            event_dto = DataLakeEventDTO(**event_data)
-            event_dto.validate()
-            validated_event = event_dto.dict()
+            # Extract agent_identifier from event_data if not provided
+            if not agent_identifier:
+                metadata = event_data.get("metadata", {})
+                if "agent_collaboration" in metadata:
+                    agent_identifier = metadata["agent_collaboration"].get("agent_name")
+
+            validated_event = self._prepare_and_validate_event(
+                event_data=event_data,
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                channel_uuid=channel_uuid,
+                agent_identifier=agent_identifier,
+                conversation=conversation
+            )
 
             if use_delay:
                 self.send_data_lake_event_task.delay(validated_event)
