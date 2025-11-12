@@ -365,3 +365,43 @@ class SupervisorDataSerializer(serializers.ModelSerializer):
                 data["csat"] = str(csat_value)
 
         return data
+
+
+class InstructionClassificationRequestSerializer(serializers.Serializer):
+    """
+    Serializer for instruction classification request body
+    """
+    instruction = serializers.CharField(
+        required=True,
+        help_text="The instruction text to classify. This instruction will be analyzed against existing instructions in the content base."
+    )
+
+
+class ClassificationItemSerializer(serializers.Serializer):
+    """
+    Serializer for a single classification item
+    """
+    name = serializers.CharField(
+        help_text="The classification category or type assigned to the instruction"
+    )
+    reason = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="The reason or explanation for this classification"
+    )
+
+
+class InstructionClassificationResponseSerializer(serializers.Serializer):
+    """
+    Serializer for instruction classification response
+    """
+    classification = ClassificationItemSerializer(
+        many=True,
+        help_text="List of classifications assigned to the instruction. Each classification includes a category and optional reason."
+    )
+    suggestion = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        help_text="Optional suggestion for improving or modifying the instruction"
+    )

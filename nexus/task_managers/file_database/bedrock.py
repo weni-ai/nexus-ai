@@ -1054,6 +1054,35 @@ class BedrockFileDatabase(FileDataBase):
             print(f"Error deleting action group: {e}")
             raise
 
+    def delete_lambda_function(self, function_name: str):
+        """Delete Lambda function and all its aliases"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # List and delete all aliases first
+            list_aliases = self.lambda_client.list_aliases(FunctionName=function_name)
+            aliases = list_aliases.get("Aliases", [])
+
+            for alias in aliases:
+                try:
+                    self.lambda_client.delete_alias(
+                        FunctionName=function_name,
+                        Name=alias.get("Name")
+                    )
+                    logger.info(f"Deleted Lambda alias: {alias.get('Name')}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete alias {alias.get('Name')}: {e}")
+
+            # Delete the function itself
+            self.lambda_client.delete_function(FunctionName=function_name)
+            logger.info(f"Successfully deleted Lambda: {function_name}")
+        except self.lambda_client.exceptions.ResourceNotFoundException:
+            logger.warning(f"Lambda {function_name} not found - already deleted")
+        except Exception as e:
+            logger.error(f"Error deleting Lambda {function_name}: {e}")
+            raise
+
     def list_agent_action_groups(self, agent_id: str, agent_version: str) -> Dict:
         try:
             response = self.bedrock_agent.list_agent_action_groups(agentId=agent_id, agentVersion=agent_version)

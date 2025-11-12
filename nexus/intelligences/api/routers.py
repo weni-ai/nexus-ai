@@ -25,6 +25,7 @@ from .views import (
     SentenxIndexerUpdateFile,
     SubTopicsViewSet,
     SupervisorViewset,
+    InstructionsClassificationAPIView,
     TopicsViewSet,
     UploadFileView,
 )
@@ -56,6 +57,7 @@ inline_content_base_router.register(
 
 
 urlpatterns = [
+<<<<<<< HEAD
     path("<org_uuid>/intelligences/", include(org_router.urls)),
     path("<intelligence_uuid>/", include(intelligence_router.urls)),
     path("<content_base_uuid>/", include(content_base_router.urls)),
@@ -94,4 +96,5 @@ urlpatterns = [
     path("<project_uuid>/upload-file", UploadFileView.as_view(), name="upload-file"),
     path("commerce/check-exists-agent-builder", CommerceHasAgentBuilder.as_view(), name="check-exists-agent-builder"),
     path("<project_uuid>/supervisor/", SupervisorViewset.as_view({"get": "list"}), name="supervisor"),
+    path("<project_uuid>/instructions-classification/", InstructionsClassificationAPIView.as_view(), name="instructions-classification"),
 ]

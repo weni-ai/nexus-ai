@@ -42,7 +42,7 @@ class Agent(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_agents")
     instruction = models.TextField()
     collaboration_instructions = models.TextField()
-    foundation_model = models.CharField(max_length=255)  # will be deprecated
+    foundation_model = models.CharField(max_length=255, null=True, blank=True, default="")  # will be deprecated
     backend_foundation_models = models.JSONField(default=dict)
     source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
 

@@ -106,11 +106,6 @@ class UpdateConversationUseCase:
         conversation.contact_name = consumer_message.get("name")
         conversation.save()
 
-        conversation_message = ConversationMessage.objects.create(
-            conversation=conversation,
-        )
-        conversation_message.message.set(messages)
-
         return conversation
 
 

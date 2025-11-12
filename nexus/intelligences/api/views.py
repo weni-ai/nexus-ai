@@ -11,8 +11,10 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
+from rest_framework.views import APIView
 
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.authentication.authentication import ExternalTokenAuthentication
 from nexus.events import event_manager
 from nexus.intelligences.api.filters import ConversationFilter
 from nexus.intelligences.models import (
@@ -58,6 +60,9 @@ from nexus.usecases.intelligences.exceptions import (
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
+from nexus.intelligences.api.filters import ConversationFilter
+from drf_yasg.utils import swagger_auto_schema, no_body
+from drf_yasg import openapi
 from nexus.usecases.orgs.get_by_uuid import get_org_by_content_base_uuid
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -81,6 +86,8 @@ from .serializers import (
     RouterContentBaseSerializer,
     SubTopicsSerializer,
     SupervisorDataSerializer,
+    InstructionClassificationRequestSerializer,
+    InstructionClassificationResponseSerializer,
     TopicsSerializer,
 )
 
@@ -1620,7 +1627,17 @@ class SupervisorViewset(ModelViewSet):
     ordering_fields = ["created_at", "start_date", "end_date"]
     ordering = ["-start_date"]
 
+    def get_filter_backends(self):
+        """Disable filter backends during schema generation to avoid duplicate parameters"""
+        if getattr(self, "swagger_fake_view", False):
+            return []  # Return empty list to prevent filter backend from adding parameters
+        return [filters.DjangoFilterBackend, SearchFilter, OrderingFilter]
+
     def get_queryset(self):
+        # Prevent database access during schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Conversation.objects.none()
+
         project_uuid = self.kwargs.get("project_uuid")
         if not project_uuid:
             return Conversation.objects.none()
@@ -1631,6 +1648,9 @@ class SupervisorViewset(ModelViewSet):
         except ProjectDoesNotExist:
             return Conversation.objects.none()
 
+    @swagger_auto_schema(
+        auto_schema=None  # Exclude from schema generation to avoid duplicate parameters
+    )
     def list(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         if not project_uuid:
@@ -1670,4 +1690,168 @@ class SupervisorViewset(ModelViewSet):
             print(f"Error retrieving supervisor data: {str(e)}")
             return Response(
                 {"error": f"Error retrieving supervisor data: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class InstructionsClassificationAPIView(APIView):
+    authentication_classes = AUTHENTICATION_CLASSES
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    @swagger_auto_schema(
+        operation_id="instruction_classify",
+        operation_description="""
+        Classify an instruction against existing instructions in a content base.
+        
+        This endpoint analyzes a given instruction text and classifies it based on similarity
+        to existing instructions in the project's content base. It uses AI/ML models to determine
+        how the instruction should be categorized and provides suggestions for improvement.
+        
+        The classification process considers:
+        - The agent's goal and personality from the content base
+        - Existing custom instructions in the content base
+        - User context (name, occupation)
+        
+        **Authentication Required**: Yes (JWT Token)
+        **Permissions Required**: User must have access to the specified project
+        """,
+        request_body=InstructionClassificationRequestSerializer,
+        manual_parameters=[
+            openapi.Parameter(
+                'project_uuid',
+                openapi.IN_PATH,
+                description="UUID of the project containing the content base",
+                type=openapi.TYPE_STRING,
+                format=openapi.FORMAT_UUID,
+                required=True
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Successful classification",
+                schema=InstructionClassificationResponseSerializer,
+                examples={
+                    "application/json": {
+                        "classification": [
+                            {
+                                "name": "customer_support",
+                                "reason": "This instruction relates to handling customer inquiries"
+                            },
+                            {
+                                "name": "product_information",
+                                "reason": "The instruction involves providing product details"
+                            }
+                        ],
+                        "suggestion": "Consider making this instruction more specific to improve clarity"
+                    }
+                }
+            ),
+            400: openapi.Response(
+                description="Bad Request - Missing or invalid instruction",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Error message describing what went wrong"
+                        )
+                    }
+                ),
+                examples={
+                    "application/json": {
+                        "error": "Instruction is required"
+                    }
+                }
+            ),
+            401: openapi.Response(
+                description="Unauthorized - Authentication required",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "detail": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Authentication error message"
+                        )
+                    }
+                )
+            ),
+            403: openapi.Response(
+                description="Forbidden - User does not have access to this project",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "detail": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Permission error message"
+                        )
+                    }
+                )
+            ),
+            500: openapi.Response(
+                description="Internal Server Error",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            description="Error message describing the server error"
+                        )
+                    }
+                ),
+                examples={
+                    "application/json": {
+                        "error": "An error occurred while processing the classification"
+                    }
+                }
+            ),
+        },
+        tags=['Instructions']
+    )
+    def post(self, request, project_uuid):
+        try:
+            instruction = request.data.get('instruction', '')
+            if not instruction:
+                return Response(
+                    {"error": "Instruction is required"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user = request.user
+            name = user.name or user.email.split('@')[0]
+            occupation = getattr(user, 'occupation', 'Customer Service Agent')
+            
+            from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
+            project, content_base, _ = get_project_and_content_base_data(project_uuid)
+            
+            goal = content_base.agent.goal if content_base.agent else "Provide excellent customer support"
+            adjective = content_base.agent.personality if content_base.agent else "friendly"
+            
+            instructions = []
+            for instruction_obj in content_base.instructions.all():
+                instructions.append({
+                    "instruction": instruction_obj.instruction,
+                    "type": "custom"
+                })
+            
+            from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
+            lambda_usecase = LambdaUseCase()
+            
+            classification, suggestion = lambda_usecase.instruction_classify(
+                name=name,
+                occupation=occupation,
+                goal=goal,
+                adjective=adjective,
+                instructions=instructions,
+                instruction_to_classify=instruction
+            )
+            
+            return Response({
+                "classification": classification,
+                "suggestion": suggestion
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                {"error": str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

@@ -481,10 +481,8 @@ class OpenAITeamAdapter(TeamAdapter):
         components_instructions_up,
         human_support_instructions,
     ) -> str:
-        template_string = instruction
-        template = Template(template_string)
 
-        context_data = {
+        general_context_data = {
             "PROJECT_ID": project_id,
             "CONTACT_ID": contact_id,
             "CONTACT_NAME": contact_name,
@@ -498,12 +496,34 @@ class OpenAITeamAdapter(TeamAdapter):
             "SUPERVISOR_ADJECTIVE": supervisor_adjective,
             "SUPERVISOR_INSTRUCTIONS": supervisor_instructions,
             "BUSINESS_RULES": business_rules,
+        }
+
+        if use_human_support:
+            human_support_template = Template(human_support_instructions)
+            human_support_context = TemplateContext(general_context_data)
+            human_support_instructions = human_support_template.render(human_support_context)
+        
+        if use_components:
+            components_template = Template(components_instructions)
+            components_context = TemplateContext(general_context_data)
+            components_instructions = components_template.render(components_context)
+
+            components_template_up = Template(components_instructions_up)
+            components_context_up = TemplateContext(general_context_data)
+            components_instructions_up = components_template_up.render(components_context_up)
+
+        template_string = instruction
+        template = Template(template_string)
+    
+        prompt_control_context_data = {
             "USE_HUMAN_SUPPORT": use_human_support,
             "HUMAN_SUPPORT_INSTRUCTIONS": human_support_instructions,
             "USE_COMPONENTS": use_components,
             "COMPONENTS_INSTRUCTIONS": components_instructions,
             "COMPONENTS_INSTRUCTIONS_UP": components_instructions_up,
         }
+
+        context_data = {**general_context_data, **prompt_control_context_data}
 
         context_object = TemplateContext(context_data)
 

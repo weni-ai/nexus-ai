@@ -7,6 +7,7 @@ from rest_framework import permissions
 
 from nexus.actions.api.routers import urlpatterns as actions_routes
 from nexus.agents.api.routers import urlpatterns as agent_routes
+from nexus.analytics.api.routers import urlpatterns as analytics_routes
 from nexus.intelligences.api.routers import urlpatterns as intelligence_routes
 from nexus.logs.api.routers import urlpatterns as logs_routes
 from nexus.projects.api.routers import urlpatterns as projects_routes
@@ -31,6 +32,7 @@ url_api += projects_routes
 url_api += logs_routes
 url_api += agent_routes
 url_api += users_routes
+url_api += analytics_routes
 
 urlpatterns = [
     path("", lambda _: HttpResponse()),

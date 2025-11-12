@@ -47,6 +47,13 @@ class CustomPageNumberPagination(PageNumberPagination):
 
 class TagPercentageViewSet(ListModelMixin, GenericViewSet):
     permission_classes = [ProjectPermission]
+    
+    def get_serializer_class(self):
+        """Return serializer class for schema generation"""
+        if getattr(self, "swagger_fake_view", False):
+            from rest_framework import serializers
+            return serializers.Serializer  # Use base serializer for schema generation
+        return None
 
     def list(self, request, *args, **kwargs):
         project_uuid = self.kwargs.get("project_uuid")
@@ -309,7 +316,13 @@ class MessageDetailViewSet(views.APIView):
 
 class ConversationContextViewset(ListModelMixin, GenericViewSet):
     permission_classes = [ProjectPermission]
-    # serializer_class = MessageDetailSerializer
+
+    def get_serializer_class(self):
+        """Return serializer class for schema generation"""
+        if getattr(self, "swagger_fake_view", False):
+            from .serializers import AgentMessageDetailSerializer
+            return AgentMessageDetailSerializer
+        return None
 
     def list(self, request, *args, **kwargs):
         project_uuid = self.kwargs.get("project_uuid")

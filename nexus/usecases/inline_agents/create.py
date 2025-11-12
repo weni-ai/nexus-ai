@@ -102,11 +102,6 @@ class CreateConversationUseCase:
                 contact_name=consumer_message.get("name"),
             )
 
-            conversation_message = ConversationMessage.objects.create(
-                conversation=conversation,
-            )
-            conversation_message.message.set(messages)
-
             return conversation
         except Exception as e:
             sentry_sdk.set_context("conversation_context", {"consumer_message": consumer_message})
