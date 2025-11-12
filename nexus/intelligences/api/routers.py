@@ -57,7 +57,6 @@ inline_content_base_router.register(
 
 
 urlpatterns = [
-<<<<<<< HEAD
     path("<org_uuid>/intelligences/", include(org_router.urls)),
     path("<intelligence_uuid>/", include(intelligence_router.urls)),
     path("<content_base_uuid>/", include(content_base_router.urls)),
