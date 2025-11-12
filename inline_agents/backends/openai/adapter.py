@@ -45,32 +45,6 @@ from nexus.usecases.inline_agents.update import update_conversation_data
 logger = logging.getLogger(__name__)
 
 
-def sanitize_history(history: str) -> str:
-    """
-    Remove null and control characters from history before sending to Lambda.
-    
-    Args:
-        history: History string that may contain corrupted characters
-        
-    Returns:
-        Clean string without null and control characters
-    """
-    if not isinstance(history, str):
-        history = str(history)
-    
-    # Remove common null and control characters
-    cleaned = history.replace('\u0000', '').replace('\x00', '')
-    cleaned = cleaned.replace('\u007f', '').replace('\u000f', '')
-    
-    # Remove other non-printable control characters (except line breaks and tabs)
-    cleaned = ''.join(
-        char for char in cleaned 
-        if char.isprintable() or char in '\n\r\t'
-    )
-    
-    return cleaned.strip()
-
-
 def make_agent_proxy_tool(
     agent: Agent[Context],
     tool_name: str,
@@ -337,39 +311,6 @@ class OpenAITeamAdapter(TeamAdapter):
             lambda_client = boto3.client("lambda", region_name="us-east-1")
             parameters = []
             for key, value in payload.items():
-                if key == 'history':
-                    original_value = str(value) if value else ''
-                    null_count = original_value.count('\u0000') + original_value.count('\x00')
-                    
-                    if null_count > 0:
-                        logger.warning(
-                            f"Corrupted history detected for function '{function_name}': "
-                            f"{null_count} null characters found. "
-                            f"Original size: {len(original_value)} chars, "
-                            f"Contact: {contact.get('urn', 'unknown')}, "
-                            f"Project: {project.get('uuid', 'unknown')}"
-                        )
-                        sentry_sdk.set_context("corrupted_history", {
-                            "function_name": function_name,
-                            "null_count": null_count,
-                            "original_length": len(original_value),
-                            "contact_urn": contact.get('urn', 'unknown'),
-                            "project_uuid": project.get('uuid', 'unknown'),
-                            "preview": original_value[:200]
-                        })
-                        sentry_sdk.capture_message(
-                            f"Corrupted history detected: {null_count} nulls in {function_name}",
-                            level="warning"
-                        )
-                    
-                    value = sanitize_history(original_value)
-                    
-                    if null_count > 0:
-                        logger.info(
-                            f"History sanitized: {len(original_value)} -> {len(value)} chars "
-                            f"for function '{function_name}'"
-                        )
-                
                 parameters.append({
                     "name": key,
                     "value": value
@@ -431,16 +372,20 @@ class OpenAITeamAdapter(TeamAdapter):
 
             session_attributes = result.get("response", {}).get("sessionAttributes", {})
             
-            events = session_attributes.get("events", [])
+            events = []
+            if isinstance(session_attributes, dict):
+                events = session_attributes.get("events", [])
+            elif isinstance(session_attributes, str):
+                try:
+                    session_attrs_parsed = json.loads(session_attributes)
+                    events = session_attrs_parsed.get("events", [])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # Fallback: check top-level response for events
             if not events:
                 events = result.get("response", {}).get("events", [])
-                if not events and isinstance(session_attributes, str):
-                    try:
-                        session_attrs_parsed = json.loads(session_attributes)
-                        events = session_attrs_parsed.get("events", [])
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-            
+
             if not events:
                 logger.warning(
                     f"No events returned by Lambda '{function_name}'. "
