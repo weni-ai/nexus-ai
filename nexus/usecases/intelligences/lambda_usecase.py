@@ -1,7 +1,8 @@
 import json
+import logging
+import sentry_sdk
 
 import boto3
-import sentry_sdk
 from django.conf import settings
 
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
@@ -11,6 +12,8 @@ from nexus.intelligences.producer.resolution_producer import ResolutionDTO, reso
 from nexus.projects.models import Project
 from router.repositories.entities import ResolutionEntities
 from router.services.message_service import MessageService
+
+logger = logging.getLogger(__name__)
 
 
 class LambdaUseCase:
@@ -292,18 +295,37 @@ class LambdaUseCase:
             raise e
 
 
-@celery_app.task
+@celery_app.task(bind=True)
 def create_lambda_conversation(
+    self,
     payload: dict,
 ):
+    task_id = self.request.id
+    correlation_id = payload.get("correlation_id", "unknown")
+    project_uuid = payload.get("project_uuid")
+    contact_urn = payload.get("contact_urn")
+    external_id = payload.get("external_id")
+    
+    logger.info(
+        "[create_lambda_conversation] Task started",
+        extra={
+            "task_id": task_id,
+            "correlation_id": correlation_id,
+            "project_uuid": project_uuid,
+            "contact_urn": contact_urn,
+            "external_id": external_id,
+            "task_name": "create_lambda_conversation"
+        }
+    )
+
     try:
         lambda_usecase = LambdaUseCase()
         message_service = lambda_usecase._get_message_service()
 
         # Use new conversation-based message retrieval
         messages = message_service.get_messages_for_conversation(
-            project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn"),
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
             channel_uuid=payload.get("channel_uuid"),
             # If any errors happen to an older conversation, we will get all messages for correct conversation
             start_date=payload.get("start_date"),
@@ -311,28 +333,52 @@ def create_lambda_conversation(
         )
 
         if not messages:
+            logger.warning(
+                "[create_lambda_conversation] No messages found",
+                extra={
+                    "task_id": task_id,
+                    "correlation_id": correlation_id,
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "task_name": "create_lambda_conversation"
+                }
+            )
             raise ValueError("No unclassified messages found for conversation period")
 
-        project = Project.objects.get(uuid=payload.get("project_uuid"))
+        project = Project.objects.get(uuid=project_uuid)
         conversation_queryset = Conversation.objects.filter(
             project=project,
-            contact_urn=payload.get("contact_urn"),
+            contact_urn=contact_urn,
             channel_uuid=payload.get("channel_uuid"),
             resolution=ResolutionEntities.IN_PROGRESS,
         )
 
         formated_messages = lambda_usecase.get_lambda_conversation(messages)
+        
+        logger.info(
+            "[create_lambda_conversation] Invoking resolution lambda",
+            extra={
+                "task_id": task_id,
+                "correlation_id": correlation_id,
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "messages_count": len(messages),
+                "task_name": "create_lambda_conversation"
+            }
+        )
+        
         resolution = lambda_usecase.lambda_conversation_resolution(
             messages=formated_messages,
             has_chats_room=payload.get("has_chats_room"),
-            project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn"),
+            project_uuid=project_uuid,
+            contact_urn=contact_urn
         )
+        
         topic = lambda_usecase.lambda_conversation_topics(
             messages=formated_messages,
             has_chats_room=payload.get("has_chats_room"),
-            project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn"),
+            project_uuid=project_uuid,
+            contact_urn=contact_urn
         )
 
         contact_name = payload.get("name")
@@ -342,7 +388,7 @@ def create_lambda_conversation(
             "start_date": payload.get("start_date"),
             "end_date": payload.get("end_date"),
             "has_chats_room": payload.get("has_chats_room"),
-            "external_id": payload.get("external_id"),
+            "external_id": external_id,
             "resolution": resolution_choice_value,
             "topic": topic,
         }
@@ -354,21 +400,72 @@ def create_lambda_conversation(
 
         resolution_dto = ResolutionDTO(
             resolution=resolution_choice_value,
-            project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn"),
-            external_id=payload.get("external_id"),
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            external_id=external_id
         )
+        
+        logger.info(
+            "[create_lambda_conversation] Sending resolution to billing",
+            extra={
+                "task_id": task_id,
+                "correlation_id": correlation_id,
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "external_id": external_id,
+                "resolution": resolution_choice_value,
+                "resolution_name": ResolutionEntities.resolution_mapping(resolution_choice_value)[1],
+                "task_name": "create_lambda_conversation"
+            }
+        )
+        
         resolution_message(resolution_dto)
 
         # Delete messages after processing (instead of updating resolution)
         message_service.clear_message_cache(
-            project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn"),
-            channel_uuid=payload.get("channel_uuid"),
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=payload.get("channel_uuid")
+        )
+        
+        logger.info(
+            "[create_lambda_conversation] Task completed successfully",
+            extra={
+                "task_id": task_id,
+                "correlation_id": correlation_id,
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "external_id": external_id,
+                "resolution": resolution_choice_value,
+                "task_name": "create_lambda_conversation"
+            }
         )
 
     except Exception as e:
-        sentry_sdk.set_context("conversation_context", {"payload": payload})
-        sentry_sdk.set_tag("project_uuid", payload.get("project_uuid"))
-        sentry_sdk.set_tag("contact_urn", payload.get("contact_urn"))
+        logger.error(
+            "[create_lambda_conversation] Task failed",
+            extra={
+                "task_id": task_id,
+                "correlation_id": correlation_id,
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "external_id": external_id,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "task_name": "create_lambda_conversation"
+            },
+            exc_info=True
+        )
+        sentry_sdk.set_context(
+            "conversation_context",
+            {
+                "payload": payload,
+                "task_id": task_id,
+                "correlation_id": correlation_id
+            }
+        )
+        sentry_sdk.set_tag("project_uuid", project_uuid)
+        sentry_sdk.set_tag("contact_urn", contact_urn)
+        sentry_sdk.set_tag("task_id", task_id)
+        sentry_sdk.set_tag("correlation_id", correlation_id)
         sentry_sdk.capture_exception(e)
