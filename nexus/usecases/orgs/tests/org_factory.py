@@ -8,12 +8,10 @@ class OrgFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Org
 
-    name = factory.Sequence(lambda n: 'test%d' % n)
+    name = factory.Sequence(lambda n: "test%d" % n)
     created_by = factory.SubFactory(UserFactory)
     org_auth = factory.RelatedFactory(
-        'nexus.usecases.orgs.tests.org_factory.OrgAuthFactory',
-        'org',
-        user=factory.SelfAttribute('..created_by')
+        "nexus.usecases.orgs.tests.org_factory.OrgAuthFactory", "org", user=factory.SelfAttribute("..created_by")
     )
 
 

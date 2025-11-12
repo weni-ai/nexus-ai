@@ -1,24 +1,21 @@
-import boto3
 import json
-import sentry_sdk
 
+import boto3
+import sentry_sdk
 from django.conf import settings
 
-from nexus.intelligences.models import Conversation
-from nexus.celery import app as celery_app
-from nexus.projects.models import Project
-from nexus.intelligences.producer.resolution_producer import ResolutionDTO, resolution_message
-
-from router.services.message_service import MessageService
-from router.repositories.entities import ResolutionEntities
-
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter
+from nexus.celery import app as celery_app
+from nexus.intelligences.models import Conversation
+from nexus.intelligences.producer.resolution_producer import ResolutionDTO, resolution_message
+from nexus.projects.models import Project
+from router.repositories.entities import ResolutionEntities
+from router.services.message_service import MessageService
 
 
-class LambdaUseCase():
-
+class LambdaUseCase:
     def __init__(self):
-        self.boto_client = boto3.client('lambda', region_name=settings.AWS_BEDROCK_REGION_NAME)
+        self.boto_client = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME)
         self.adapter = None
         self.task_manager = None
 
@@ -29,62 +26,47 @@ class LambdaUseCase():
 
     def invoke_lambda(self, lambda_name: str, payload: dict):
         response = self.boto_client.invoke(
-            FunctionName=lambda_name,
-            InvocationType='RequestResponse',
-            Payload=json.dumps(payload)
+            FunctionName=lambda_name, InvocationType="RequestResponse", Payload=json.dumps(payload)
         )
         return response
 
     def get_lambda_topics(self, project_uuid: str):
         from nexus.intelligences.models import Topics
+
         topics = Topics.objects.filter(project__uuid=project_uuid)
         topics_payload = []
 
         for topic in topics:
             subtopics_payload = []
             for subtopic in topic.subtopics.all():
-                subtopics_payload.append({
-                    "subtopic_uuid": str(subtopic.uuid),
-                    "name": subtopic.name,
-                    "description": subtopic.description
-                })
-            topics_payload.append({
-                "topic_uuid": str(topic.uuid),
-                "name": topic.name,
-                "description": topic.description,
-                "subtopics": subtopics_payload
-            })
+                subtopics_payload.append(
+                    {"subtopic_uuid": str(subtopic.uuid), "name": subtopic.name, "description": subtopic.description}
+                )
+            topics_payload.append(
+                {
+                    "topic_uuid": str(topic.uuid),
+                    "name": topic.name,
+                    "description": topic.description,
+                    "subtopics": subtopics_payload,
+                }
+            )
 
         return topics_payload
 
     def get_lambda_conversation(self, messages):
-        conversation_payload = {
-            "messages": []
-        }
+        conversation_payload = {"messages": []}
 
         for message in messages:
-            conversation_payload["messages"].append({
-                "sender": message['source'],
-                "timestamp": str(message['created_at']),
-                "content": message['text']
-            })
+            conversation_payload["messages"].append(
+                {"sender": message["source"], "timestamp": str(message["created_at"]), "content": message["text"]}
+            )
         return conversation_payload
 
     def send_datalake_event(self, event_data: dict, project_uuid: str, contact_urn: str):
         adapter = self._get_data_lake_event_adapter()
-        adapter.to_data_lake_custom_event(
-            event_data=event_data,
-            project_uuid=project_uuid,
-            contact_urn=contact_urn
-        )
+        adapter.to_data_lake_custom_event(event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn)
 
-    def lambda_conversation_resolution(
-        self,
-        messages,
-        has_chats_room: bool,
-        project_uuid: str,
-        contact_urn: str
-    ):
+    def lambda_conversation_resolution(self, messages, has_chats_room: bool, project_uuid: str, contact_urn: str):
         # If has_chats_room is True, skip lambda call and set resolution to "Has Chat Room"
         if has_chats_room:
             resolution = "Has Chat Room"
@@ -95,23 +77,16 @@ class LambdaUseCase():
                 "value": resolution,
                 "metadata": {
                     "human_support": has_chats_room,
-                }
+                },
             }
-            self.send_datalake_event(
-                event_data=event_data,
-                project_uuid=project_uuid,
-                contact_urn=contact_urn
-            )
+            self.send_datalake_event(event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn)
             return resolution
 
         # Original logic for when has_chats_room is False
         lambda_conversation = messages
-        payload_conversation = {
-            "conversation": lambda_conversation
-        }
+        payload_conversation = {"conversation": lambda_conversation}
         conversation_resolution = self.invoke_lambda(
-            lambda_name=str(settings.CONVERSATION_RESOLUTION_NAME),
-            payload=payload_conversation
+            lambda_name=str(settings.CONVERSATION_RESOLUTION_NAME), payload=payload_conversation
         )
         conversation_resolution_response = json.loads(conversation_resolution.get("Payload").read()).get("body")
         resolution = conversation_resolution_response.get("result")
@@ -122,32 +97,19 @@ class LambdaUseCase():
             "value": resolution,
             "metadata": {
                 "human_support": has_chats_room,
-            }
+            },
         }
-        self.send_datalake_event(
-            event_data=event_data,
-            project_uuid=project_uuid,
-            contact_urn=contact_urn
-        )
+        self.send_datalake_event(event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn)
 
         return conversation_resolution_response.get("result")
 
-    def lambda_conversation_topics(
-        self,
-        messages,
-        has_chats_room: bool,
-        project_uuid: str,
-        contact_urn: str
-    ):
+    def lambda_conversation_topics(self, messages, has_chats_room: bool, project_uuid: str, contact_urn: str):
         from nexus.intelligences.models import Topics
 
         lambda_topics = self.get_lambda_topics(project_uuid)
         lambda_conversation = messages
 
-        payload_topics = {
-            "topics": lambda_topics,
-            "conversation": lambda_conversation
-        }
+        payload_topics = {"topics": lambda_topics, "conversation": lambda_conversation}
         event_data = {
             "event_name": "weni_nexus_data",
             "key": "topics",
@@ -158,12 +120,11 @@ class LambdaUseCase():
                 "subtopic_uuid": "",
                 "subtopic": "",
                 "human_support": has_chats_room,
-            }
+            },
         }
         if len(lambda_topics) > 0:
             conversation_topics = self.invoke_lambda(
-                lambda_name=str(settings.CONVERSATION_TOPIC_CLASSIFIER_NAME),
-                payload=payload_topics
+                lambda_name=str(settings.CONVERSATION_TOPIC_CLASSIFIER_NAME), payload=payload_topics
             )
             conversation_topics = json.loads(conversation_topics.get("Payload").read())
             conversation_topics = conversation_topics.get("body")
@@ -179,14 +140,10 @@ class LambdaUseCase():
                         "subtopic_uuid": str(conversation_topics.get("subtopic_uuid")),
                         "subtopic": conversation_topics.get("subtopic_name"),
                         "human_support": has_chats_room,
-                    }
+                    },
                 }
 
-        self.send_datalake_event(
-            event_data=event_data,
-            project_uuid=project_uuid,
-            contact_urn=contact_urn
-        )
+        self.send_datalake_event(event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn)
 
         topic_uuid = event_data.get("metadata").get("topic_uuid")
 
@@ -204,11 +161,7 @@ class LambdaUseCase():
             self.task_manager = MessageService()
         return self.task_manager
 
-    def lambda_component_parser(
-        self,
-        final_response: str,
-        use_components: bool
-    ) -> str:
+    def lambda_component_parser(self, final_response: str, use_components: bool) -> str:
         if not use_components:
             return final_response
 
@@ -217,10 +170,7 @@ class LambdaUseCase():
             "invokeModelRawResponse": f"<final_response>{final_response}</final_response>",
             "promptType": prompt_type,
         }
-        response = self.invoke_lambda(
-            lambda_name=str(settings.AWS_COMPONENTS_FUNCTION_ARN),
-            payload=data
-        )
+        response = self.invoke_lambda(lambda_name=str(settings.AWS_COMPONENTS_FUNCTION_ARN), payload=data)
         response = json.loads(response.get("Payload").read())
         parsed_final_response = response.get("postProcessingParsedResponse").get("responseText")
         return parsed_final_response
@@ -230,12 +180,12 @@ class LambdaUseCase():
         Transform a classification item to use 'name' instead of 'classification' key.
         """
         transformed_item = item.copy()
-        
+
         if "classification" in transformed_item:
             transformed_item["name"] = transformed_item.pop("classification")
         elif "name" not in transformed_item:
             pass
-        
+
         return transformed_item
 
     def _normalize_classification_data(self, classification_data: list, default_reason: str = "") -> list:
@@ -245,28 +195,21 @@ class LambdaUseCase():
         """
         if not classification_data:
             return []
-        
+
         # If first item is a dict, transform all dict items
         if isinstance(classification_data[0], dict):
             return [
                 self._transform_classification_item(item) if isinstance(item, dict) else item
                 for item in classification_data
             ]
-        
+
         # If it's a list of strings/values, convert to list of dicts
         return [
-            {"name": classification_value, "reason": default_reason}
-            for classification_value in classification_data
+            {"name": classification_value, "reason": default_reason} for classification_value in classification_data
         ]
 
     def instruction_classify(
-        self,
-        name: str,
-        occupation: str,
-        goal: str,
-        adjective: str,
-        instructions: list,
-        instruction_to_classify: str
+        self, name: str, occupation: str, goal: str, adjective: str, instructions: list, instruction_to_classify: str
     ):
         try:
             instructions_payload = {
@@ -275,71 +218,75 @@ class LambdaUseCase():
                 "goal": goal,
                 "adjective": adjective,
                 "instructions": instructions,
-                "instruction_to_classify": instruction_to_classify
+                "instruction_to_classify": instruction_to_classify,
             }
-            
+
             response = self.invoke_lambda(
-                lambda_name=str(settings.INSTRUCTION_CLASSIFY_NAME),
-                payload=instructions_payload
+                lambda_name=str(settings.INSTRUCTION_CLASSIFY_NAME), payload=instructions_payload
             )
-            
-            if 'FunctionError' in response:
+
+            if "FunctionError" in response:
                 error_payload = json.loads(response.get("Payload").read())
                 error_type = error_payload.get("errorType", "Unknown")
                 error_message = error_payload.get("errorMessage", "Unknown error")
 
-                sentry_sdk.set_context("lambda_error", {
-                    "lambda_name": str(settings.INSTRUCTION_CLASSIFY_NAME),
-                    "full_error_payload": error_payload,
-                    "error_type": error_type    ,
-                    "error_message": error_message,
-                    "stack_trace": error_payload.get("stackTrace", []),
-                    "request_payload": instructions_payload
-                })
-                sentry_sdk.capture_message(
-                    f"Lambda FunctionError in instruction_classify: {error_payload}",
-                    level="error"
+                sentry_sdk.set_context(
+                    "lambda_error",
+                    {
+                        "lambda_name": str(settings.INSTRUCTION_CLASSIFY_NAME),
+                        "full_error_payload": error_payload,
+                        "error_type": error_type,
+                        "error_message": error_message,
+                        "stack_trace": error_payload.get("stackTrace", []),
+                        "request_payload": instructions_payload,
+                    },
                 )
-                
+                sentry_sdk.capture_message(
+                    f"Lambda FunctionError in instruction_classify: {error_payload}", level="error"
+                )
+
                 raise Exception(f"Lambda error ({error_type}): {error_message}")
-            
+
             response_data = json.loads(response.get("Payload").read())
-            
+
             # Check if response has a body wrapper
             if "body" in response_data:
                 body_data = response_data.get("body")
                 if isinstance(body_data, str):
                     body_data = json.loads(body_data)
                 response_data = body_data
-            
+
             # Check for error responses from lambda
             status_code = response_data.get("statusCode")
             if status_code and status_code >= 400:
                 error_message = response_data.get("error") or response_data.get("message", "Unknown error from lambda")
-                
-                sentry_sdk.set_context("lambda_error", {
-                    "lambda_name": str(settings.INSTRUCTION_CLASSIFY_NAME),
-                    "status_code": status_code,
-                    "error_message": error_message,
-                    "full_response": response_data,
-                    "request_payload": instructions_payload
-                })
+
+                sentry_sdk.set_context(
+                    "lambda_error",
+                    {
+                        "lambda_name": str(settings.INSTRUCTION_CLASSIFY_NAME),
+                        "status_code": status_code,
+                        "error_message": error_message,
+                        "full_response": response_data,
+                        "request_payload": instructions_payload,
+                    },
+                )
                 sentry_sdk.capture_message(
                     f"Lambda returned error status {status_code} in instruction_classify: {error_message}",
-                    level="error"
+                    level="error",
                 )
-                
+
                 raise Exception(f"Lambda error (status {status_code}): {error_message}")
 
             classification_data = response_data.get("classifications") or response_data.get("classification", [])
             suggestion = response_data.get("suggestion")
             reason = response_data.get("reason", "")
-            
+
             # Normalize classification data to consistent format
             classification = self._normalize_classification_data(classification_data, reason)
-            
+
             return classification, suggestion
-            
+
         except Exception as e:
             sentry_sdk.capture_exception(e)
             raise e
@@ -349,7 +296,6 @@ class LambdaUseCase():
 def create_lambda_conversation(
     payload: dict,
 ):
-
     try:
         lambda_usecase = LambdaUseCase()
         message_service = lambda_usecase._get_message_service()
@@ -372,7 +318,7 @@ def create_lambda_conversation(
             project=project,
             contact_urn=payload.get("contact_urn"),
             channel_uuid=payload.get("channel_uuid"),
-            resolution=ResolutionEntities.IN_PROGRESS
+            resolution=ResolutionEntities.IN_PROGRESS,
         )
 
         formated_messages = lambda_usecase.get_lambda_conversation(messages)
@@ -380,13 +326,13 @@ def create_lambda_conversation(
             messages=formated_messages,
             has_chats_room=payload.get("has_chats_room"),
             project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn")
+            contact_urn=payload.get("contact_urn"),
         )
         topic = lambda_usecase.lambda_conversation_topics(
             messages=formated_messages,
             has_chats_room=payload.get("has_chats_room"),
             project_uuid=payload.get("project_uuid"),
-            contact_urn=payload.get("contact_urn")
+            contact_urn=payload.get("contact_urn"),
         )
 
         contact_name = payload.get("name")
@@ -398,19 +344,19 @@ def create_lambda_conversation(
             "has_chats_room": payload.get("has_chats_room"),
             "external_id": payload.get("external_id"),
             "resolution": resolution_choice_value,
-            "topic": topic
+            "topic": topic,
         }
-        
+
         if contact_name:
             update_data["contact_name"] = contact_name
-        
+
         conversation_queryset.update(**update_data)
 
         resolution_dto = ResolutionDTO(
             resolution=resolution_choice_value,
             project_uuid=payload.get("project_uuid"),
             contact_urn=payload.get("contact_urn"),
-            external_id=payload.get("external_id")
+            external_id=payload.get("external_id"),
         )
         resolution_message(resolution_dto)
 
@@ -418,16 +364,11 @@ def create_lambda_conversation(
         message_service.clear_message_cache(
             project_uuid=payload.get("project_uuid"),
             contact_urn=payload.get("contact_urn"),
-            channel_uuid=payload.get("channel_uuid")
+            channel_uuid=payload.get("channel_uuid"),
         )
 
     except Exception as e:
-        sentry_sdk.set_context(
-            "conversation_context",
-            {
-                "payload": payload
-            }
-        )
+        sentry_sdk.set_context("conversation_context", {"payload": payload})
         sentry_sdk.set_tag("project_uuid", payload.get("project_uuid"))
         sentry_sdk.set_tag("contact_urn", payload.get("contact_urn"))
         sentry_sdk.capture_exception(e)
