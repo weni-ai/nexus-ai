@@ -3,6 +3,7 @@ import json
 import sentry_sdk
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 
 from nexus.intelligences.models import Conversation
 from nexus.celery import app as celery_app
@@ -132,6 +133,18 @@ class LambdaUseCase():
 
         return conversation_resolution_response.get("result")
 
+    def _is_valid_topic_uuid(self, topic_uuid_raw) -> bool:
+        """
+        Check if topic_uuid is valid (not None, not empty, not "None" string).
+        """
+        if not topic_uuid_raw:
+            return False
+        
+        topic_uuid_str = str(topic_uuid_raw)
+        invalid_values = {"", "None"}
+        
+        return topic_uuid_str not in invalid_values
+
     def lambda_conversation_topics(
         self,
         messages,
@@ -167,15 +180,17 @@ class LambdaUseCase():
             )
             conversation_topics = json.loads(conversation_topics.get("Payload").read())
             conversation_topics = conversation_topics.get("body")
-
-            if conversation_topics.get("topic_uuid") != "":
+            topic_uuid_raw = conversation_topics.get("topic_uuid")
+            
+            # Update event_data if topic_uuid is valid
+            if self._is_valid_topic_uuid(topic_uuid_raw):
                 event_data = {
                     "event_name": "weni_nexus_data",
                     "key": "topics",
                     "value_type": "string",
                     "value": conversation_topics.get("topic_name"),
                     "metadata": {
-                        "topic_uuid": str(conversation_topics.get("topic_uuid")),
+                        "topic_uuid": str(topic_uuid_raw),
                         "subtopic_uuid": str(conversation_topics.get("subtopic_uuid")),
                         "subtopic": conversation_topics.get("subtopic_name"),
                         "human_support": has_chats_room,
@@ -190,12 +205,15 @@ class LambdaUseCase():
 
         topic_uuid = event_data.get("metadata").get("topic_uuid")
 
-        # Only try to get the topic if topic_uuid is not empty
-        if topic_uuid and topic_uuid != "":
+        # Only try to get the topic if topic_uuid is valid
+        if self._is_valid_topic_uuid(topic_uuid):
             try:
                 topic = Topics.objects.get(uuid=topic_uuid)
                 return topic
             except Topics.DoesNotExist:
+                return None
+            except ValidationError:
+                # Invalid UUID format - return None instead of raising
                 return None
         return None
 

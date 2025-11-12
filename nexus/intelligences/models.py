@@ -267,7 +267,7 @@ class Conversation(models.Model):
     )
 
     def get_topic(self):
-        return self.topic.name
+        return self.topic.name if self.topic else None
 
     @property
     def to_json(self):
