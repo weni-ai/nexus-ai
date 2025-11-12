@@ -1,17 +1,15 @@
-import sentry_sdk
 from typing import Dict
 
+import sentry_sdk
 from django.conf import settings
 
 from nexus.agents.encryption import encrypt_value
-
-from nexus.inline_agents.models import Agent, AgentCredential
+from nexus.inline_agents.models import Agent, AgentCredential, InlineAgentMessage
+from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
-from nexus.usecases.inline_agents.tools import ToolsUseCase
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
-from nexus.intelligences.models import Conversation
-from nexus.inline_agents.models import InlineAgentMessage
+from nexus.usecases.inline_agents.tools import ToolsUseCase
 
 
 class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
@@ -21,9 +19,7 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
     def create_agent(self, agent_key: str, agent: dict, project: Project, files: dict):
         print(f"[+ 🧠 Creating agent {agent_key} +]")
         instructions: str = self.handle_instructions(
-            agent.get("instructions", []),
-            agent.get("guardrails", []),
-            agent.get("components", [])
+            agent.get("instructions", []), agent.get("guardrails", []), agent.get("components", [])
         )
         agent_obj = Agent.objects.create(
             name=agent["name"],
@@ -45,20 +41,17 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
         for key, credential in credentials.items():
             print(f"[+ 🧠 Creating credential {key} +]")
-            is_confidential = credential.get('is_confidential', True)
+            is_confidential = credential.get("is_confidential", True)
 
-            existing_credential = AgentCredential.objects.filter(
-                project=project,
-                key=key
-            )
+            existing_credential = AgentCredential.objects.filter(project=project, key=key)
 
-            credential_value = encrypt_value(credential.get('value')) if is_confidential else credential.get('value')
+            credential_value = encrypt_value(credential.get("value")) if is_confidential else credential.get("value")
 
             if existing_credential.exists():
                 existing_credential = existing_credential.first()
                 print(f"[+ 🧠 Updating existing credential {key} +]")
-                existing_credential.label = credential.get('label', key)
-                existing_credential.placeholder = credential.get('placeholder', '')
+                existing_credential.label = credential.get("label", key)
+                existing_credential.placeholder = credential.get("placeholder", "")
                 existing_credential.is_confidential = is_confidential
 
                 if credential_value:
@@ -71,8 +64,8 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 new_credential = AgentCredential.objects.create(
                     project=project,
                     key=key,
-                    label=credential.get('label', key),
-                    placeholder=credential.get('placeholder', ''),
+                    label=credential.get("label", key),
+                    placeholder=credential.get("placeholder", ""),
                     is_confidential=is_confidential,
                     value=credential_value if credential_value else "",
                 )
@@ -83,8 +76,7 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         return created_credentials
 
 
-class CreateConversationUseCase():
-
+class CreateConversationUseCase:
     def create_conversation(self, consumer_message: dict) -> Conversation:
         try:
             project = Project.objects.get(uuid=consumer_message.get("project_uuid"))
@@ -93,7 +85,7 @@ class CreateConversationUseCase():
                 created_at__gte=consumer_message.get("start_date"),
                 created_at__lte=consumer_message.get("end_date"),
                 contact_urn=consumer_message.get("contact_urn"),
-                project=project
+                project=project,
             )
 
             if not messages.exists():
@@ -106,15 +98,10 @@ class CreateConversationUseCase():
                 contact_urn=consumer_message.get("contact_urn"),
                 start_date=consumer_message.get("start_date"),
                 end_date=consumer_message.get("end_date"),
-                contact_name=consumer_message.get("name")
+                contact_name=consumer_message.get("name"),
             )
 
             return conversation
         except Exception as e:
-            sentry_sdk.set_context(
-                "conversation_context",
-                {
-                    "consumer_message": consumer_message
-                }
-            )
+            sentry_sdk.set_context("conversation_context", {"consumer_message": consumer_message})
             sentry_sdk.capture_exception(e)

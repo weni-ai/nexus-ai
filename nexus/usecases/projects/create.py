@@ -1,25 +1,19 @@
-from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
+from django.db import IntegrityError
 
-from nexus.projects.models import ProjectAuth, IntegratedFeature
+from nexus.projects.exceptions import ProjectDoesNotExist
+from nexus.projects.models import IntegratedFeature, ProjectAuth
 from nexus.projects.project_dto import (
     ProjectAuthCreationDTO,
 )
-from django.db import IntegrityError
 from nexus.usecases.actions.create import CreateFlowsUseCase
 from nexus.usecases.actions.update import UpdateFlowsUseCase
-from nexus.usecases.projects.dto import IntegratedFeatureFlowDTO, IntegratedFeatureDTO
-
+from nexus.usecases.projects.dto import IntegratedFeatureDTO, IntegratedFeatureFlowDTO
+from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 from nexus.users.models import User
-
-from nexus.projects.exceptions import ProjectDoesNotExist
 
 
 class ProjectAuthUseCase:
-
-    def auth_dto_from_dict(
-        self,
-        consumer_msg: dict
-    ) -> ProjectAuthCreationDTO:
+    def auth_dto_from_dict(self, consumer_msg: dict) -> ProjectAuthCreationDTO:
         role = consumer_msg.get("role")
         user_email = consumer_msg.get("user")
         project_uuid = consumer_msg.get("project")
@@ -36,25 +30,14 @@ class ProjectAuthUseCase:
         except Exception as e:
             raise e
 
-        return ProjectAuthCreationDTO(
-            user=user,
-            project=project,
-            role=role
-        )
+        return ProjectAuthCreationDTO(user=user, project=project, role=role)
 
-    def create_project_auth(
-        self,
-        consumer_msg: dict
-    ) -> ProjectAuth:
-
+    def create_project_auth(self, consumer_msg: dict) -> ProjectAuth:
         try:
             auth_dto = self.auth_dto_from_dict(consumer_msg)
             action = consumer_msg.get("action")  # create, update, delete
 
-            project_auth = ProjectAuth.objects.get(
-                project=auth_dto.project,
-                user=auth_dto.user
-            )
+            project_auth = ProjectAuth.objects.get(project=auth_dto.project, user=auth_dto.user)
 
             if action == "delete":
                 project_auth.delete()
@@ -70,25 +53,19 @@ class ProjectAuthUseCase:
         except ProjectDoesNotExist as e:
             raise e
 
-        except ProjectAuth.DoesNotExist:
+        except ProjectAuth.DoesNotExist as e:
             if action != "delete":
                 project_auth = ProjectAuth.objects.create(
-                    project=auth_dto.project,
-                    user=auth_dto.user,
-                    role=auth_dto.role
+                    project=auth_dto.project, user=auth_dto.user, role=auth_dto.role
                 )
                 return project_auth
-            raise ValueError("Project auth does not exists")
+            raise ValueError("Project auth does not exists") from e
         except Exception as exception:
-            raise exception
+            raise exception from None
 
 
 class CreateIntegratedFeatureUseCase:
-    def create_integrated_feature(
-        self,
-        integrated_feature_dto: IntegratedFeatureDTO
-    ) -> IntegratedFeature:
-
+    def create_integrated_feature(self, integrated_feature_dto: IntegratedFeatureDTO) -> IntegratedFeature:
         project_uuid = integrated_feature_dto.project_uuid
         feature_uuid = integrated_feature_dto.feature_uuid
         action_list = integrated_feature_dto.current_version_setup
@@ -98,25 +75,21 @@ class CreateIntegratedFeatureUseCase:
 
         try:
             project = get_project_by_uuid(project_uuid=project_uuid)
-            
+
             integrated_feature = IntegratedFeature.objects.create(
-                project=project,
-                feature_uuid=feature_uuid,
-                current_version_setup=action_list
+                project=project, feature_uuid=feature_uuid, current_version_setup=action_list
             )
             return integrated_feature
 
         except ProjectDoesNotExist as e:
             raise e
-        
-        except IntegrityError:
-            raise ValueError(f"Integrated feature for project `{project_uuid}` and feature `{feature_uuid}` already exists.")
 
-    def integrate_feature_flows(
-        self,
-        integrated_feature_flow_dto: IntegratedFeatureFlowDTO
-    ):
+        except IntegrityError as e:
+            raise ValueError(
+                f"Integrated feature for project `{project_uuid}` and feature `{feature_uuid}` already exists."
+            ) from e
 
+    def integrate_feature_flows(self, integrated_feature_flow_dto: IntegratedFeatureFlowDTO):
         flows = integrated_feature_flow_dto.flows
         existing_integration = integrated_feature_flow_dto.integrated_feature
 
@@ -136,7 +109,6 @@ class CreateIntegratedFeatureUseCase:
         return updated_flows
 
     def _update_flow(self, flow, integrated_feature_flow_dto):
-
         update_flow_dtos = integrated_feature_flow_dto.update_dto
 
         if not update_flow_dtos:
@@ -161,10 +133,7 @@ class CreateIntegratedFeatureUseCase:
 
         created_flows = []
         for create_flow_dto in create_flow_dtos:
-            created_flow = usecase.create_flow(
-                create_dto=create_flow_dto,
-                project=project
-            )
+            created_flow = usecase.create_flow(create_dto=create_flow_dto, project=project)
             created_flows.append(created_flow)
 
         integrated_feature = integrated_feature_flow_dto.integrated_feature

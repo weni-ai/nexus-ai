@@ -3,10 +3,9 @@ import logging
 import uuid
 from sentry_sdk import capture_exception
 
-from nexus.intelligences.conversation_dto import WindowConversationDTO
-
-from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
+from nexus.event_driven.parsers import JSONParser
+from nexus.intelligences.conversation_dto import WindowConversationDTO
 from nexus.usecases.intelligences.lambda_usecase import create_lambda_conversation
 
 logger = logging.getLogger(__name__)
@@ -45,15 +44,15 @@ class ConversationConsumer(EDAConsumer):
                 end_date=body.get("end"),
                 has_chats_room=body.get("has_chats_room"),
                 external_id=external_id,
-                name=body.get("contact_name")
+                name=body.get("contact_name"),
             )
-            
+
             payload = window_conversation_dto.dict()
             payload["correlation_id"] = correlation_id
-            
+
             task_result = create_lambda_conversation.delay(payload)
             task_id = task_result.id
-            
+
             logger.info(
                 "[ConversationConsumer] Message dispatched to Celery task",
                 extra={
@@ -64,12 +63,12 @@ class ConversationConsumer(EDAConsumer):
                     "contact_urn": contact_urn,
                     "external_id": external_id,
                     "channel_uuid": channel_uuid,
-                    "consumer": "ConversationConsumer"
-                }
+                    "consumer": "ConversationConsumer",
+                },
             )
-            
+
             message.channel.basic_ack(delivery_tag)
-            
+
             logger.info(
                 "[ConversationConsumer] Message acknowledged successfully",
                 extra={
@@ -80,10 +79,9 @@ class ConversationConsumer(EDAConsumer):
                     "contact_urn": contact_urn,
                     "start_date": window_conversation_dto.start_date,
                     "end_date": window_conversation_dto.end_date,
-                    "consumer": "ConversationConsumer"
-                }
+                    "consumer": "ConversationConsumer",
+                },
             )
-            
         except KeyError as e:
             logger.error(
                 "[ConversationConsumer] Message rejected - missing required field",
@@ -98,7 +96,6 @@ class ConversationConsumer(EDAConsumer):
             )
             capture_exception(e)
             message.channel.basic_reject(delivery_tag, requeue=False)
-            
         except Exception as exception:
             logger.error(
                 "[ConversationConsumer] Message rejected - unexpected error",

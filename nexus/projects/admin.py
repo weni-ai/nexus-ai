@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django.db import models
 
 from nexus.projects.models import Project
 from nexus.analytics.admin import (

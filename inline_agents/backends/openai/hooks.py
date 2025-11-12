@@ -11,7 +11,18 @@ from inline_agents.backends.openai.entities import FinalResponse, HooksState
 
 
 class TraceHandler:
-    def __init__(self, event_manager_notify, preview, rationale_switch, language, user_email, session_id, msg_external_id, turn_off_rationale, hooks_state):
+    def __init__(
+        self,
+        event_manager_notify,
+        preview,
+        rationale_switch,
+        language,
+        user_email,
+        session_id,
+        msg_external_id,
+        turn_off_rationale,
+        hooks_state,
+    ):
         self.event_manager_notify = event_manager_notify
         self.preview = preview
         self.rationale_switch = rationale_switch
@@ -22,7 +33,9 @@ class TraceHandler:
         self.turn_off_rationale = turn_off_rationale
         self.hooks_state = hooks_state
 
-    async def send_trace(self, context_data, agent_name, trace_type, trace_data={}, tool_name=""):
+    async def send_trace(self, context_data, agent_name, trace_type, trace_data=None, tool_name=""):
+        if trace_data is None:
+            trace_data = {}
         standardized_event = {
             "config": {
                 "agentName": agent_name,
@@ -59,10 +72,10 @@ class TraceHandler:
         preview: bool,
         session_id: str,
         contact_name: str,
-        channel_uuid: str
+        channel_uuid: str,
     ):
         await self.event_manager_notify(
-            event='save_inline_trace_events',
+            event="save_inline_trace_events",
             trace_events=trace_events,
             project_uuid=project_uuid,
             user_input=input_text,
@@ -72,7 +85,7 @@ class TraceHandler:
             session_id=session_id,
             source_type="agent",  # If user message, source_type="user"
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
         )
 
 
@@ -101,7 +114,7 @@ class RunnerHooks(RunHooks):
             session_id=session_id,
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
-            hooks_state=hooks_state
+            hooks_state=hooks_state,
         )
         self.agents = agents
         self.supervisor_name = supervisor_name
@@ -131,21 +144,21 @@ class RunnerHooks(RunHooks):
     async def on_llm_end(self, context, agent, response, **kwargs):
         context_data = context.context
         for reasoning_item in response.output:
-            if getattr(reasoning_item, "type", None) == "reasoning" and hasattr(reasoning_item, "summary") and reasoning_item.summary:
+            if (
+                getattr(reasoning_item, "type", None) == "reasoning"
+                and hasattr(reasoning_item, "summary")
+                and reasoning_item.summary
+            ):
                 print("\033[34m[HOOK] Pensando.\033[0m")
                 for summary in reasoning_item.summary:
-                    summary.text
                     trace_data = {
                         "collaboratorName": "",
                         "eventTime": pendulum.now().to_iso8601_string(),
                         "trace": {
                             "orchestrationTrace": {
-                                "rationale": {
-                                    "text": summary.text,
-                                    "reasoningId": reasoning_item.id
-                                }
+                                "rationale": {"text": summary.text, "reasoningId": reasoning_item.id}
                             }
-                        }
+                        },
                     }
                     await self.trace_handler.send_trace(context_data, agent.name, "thinking", trace_data)
         print("\033[34m[HOOK] Resposta do modelo recebida.\033[0m")
@@ -177,7 +190,7 @@ class CollaboratorHooks(AgentHooks):
             session_id=session_id,
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
-            hooks_state=hooks_state
+            hooks_state=hooks_state,
         )
         self.agent_name = agent_name
         self.data_lake_event_adapter = data_lake_event_adapter
@@ -210,9 +223,7 @@ class CollaboratorHooks(AgentHooks):
             }
         }
         context_data = context.context
-        await self.trace_handler.send_trace(
-            context_data, agent.name, "delegating_to_agent", trace_data
-        )
+        await self.trace_handler.send_trace(context_data, agent.name, "delegating_to_agent", trace_data)
         self.data_lake_event_adapter.to_data_lake_event(
             project_uuid=context_data.project.get("uuid"),
             contact_urn=context_data.contact.get("urn"),
@@ -243,11 +254,11 @@ class CollaboratorHooks(AgentHooks):
                             "actionGroupName": tool.name,
                             "executionType": "LAMBDA",
                             "function": tool.name,
-                            "parameters": parameters
+                            "parameters": parameters,
                         },
                     }
                 }
-            }
+            },
         }
         print("==============tool_calls================")
         print(tool.name)
@@ -261,7 +272,7 @@ class CollaboratorHooks(AgentHooks):
             tool_call_data={
                 "tool_name": tool.name,
                 "parameters": parameters,
-                "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name")
+                "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
             },
             agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
             foundation_model=agent.model,
@@ -287,8 +298,7 @@ class CollaboratorHooks(AgentHooks):
         elif isinstance(result, dict):
             events = self.hooks_state.get_events(result, tool.name)
 
-        if events and events != '[]' and events != []:
-
+        if events and events != "[]" and events != []:
             if isinstance(events, str):
                 try:
                     events = json.loads(events)
@@ -310,7 +320,7 @@ class CollaboratorHooks(AgentHooks):
                 channel_uuid=context_data.contact.get("channel_uuid"),
                 agent_name=agent.name,
                 preview=self.preview,
-                conversation=self.conversation
+                conversation=self.conversation,
             )
 
         trace_data = {
@@ -325,9 +335,11 @@ class CollaboratorHooks(AgentHooks):
                         },
                     }
                 }
-            }
+            },
         }
-        await self.trace_handler.send_trace(context_data, agent.name, "tool_result_received", trace_data, tool_name=tool.name)
+        await self.trace_handler.send_trace(
+            context_data, agent.name, "tool_result_received", trace_data, tool_name=tool.name
+        )
 
     async def on_end(self, context, agent, output):
         print(f"\033[34m[HOOK] Enviando resposta ao manager. {output}\033[0m")
@@ -340,15 +352,12 @@ class CollaboratorHooks(AgentHooks):
                     "observation": {
                         "agentCollaboratorInvocationOutput": {
                             "agentCollaboratorName": agent.name,
-                            "output": {
-                                "text": output,
-                                "type": "TEXT"
-                            }
+                            "output": {"text": output, "type": "TEXT"},
                         },
-                        "type": "AGENT_COLLABORATOR"
+                        "type": "AGENT_COLLABORATOR",
                     }
                 }
-            }
+            },
         }
         await self.trace_handler.send_trace(context_data, agent.name, "forwarding_to_manager", trace_data)
 
@@ -370,7 +379,7 @@ class SupervisorHooks(AgentHooks):
         msg_external_id: Optional[str] = None,
         turn_off_rationale: bool = False,
         conversation: Optional[object] = None,
-        **kwargs
+        **kwargs,
     ):
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
@@ -381,7 +390,7 @@ class SupervisorHooks(AgentHooks):
             session_id=session_id,
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
-            hooks_state=hooks_state
+            hooks_state=hooks_state,
         )
         self.agent_name = agent_name
         self.preview = preview
@@ -402,10 +411,7 @@ class SupervisorHooks(AgentHooks):
     async def tool_started(self, context, agent, tool):
         context_data = context.context
         parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", {})
-        tool_call_data = {
-            "tool_name": tool.name,
-            "parameters": parameters
-        }
+        tool_call_data = {"tool_name": tool.name, "parameters": parameters}
 
         if tool.name == self.knowledge_base_tool:
             self.data_lake_event_adapter.to_data_lake_event(
@@ -427,11 +433,11 @@ class SupervisorHooks(AgentHooks):
                             "invocationType": "KNOWLEDGE_BASE",
                             "knowledgeBaseLookupInput": {
                                 "knowledgeBaseId": settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID,
-                                "text": context_data.input_text
+                                "text": context_data.input_text,
                             },
                         }
                     }
-                }
+                },
             }
             await self.trace_handler.send_trace(context_data, agent.name, "searching_knowledge_base", trace_data)
         elif tool.name not in self.hooks_state.agents_names:
@@ -447,20 +453,22 @@ class SupervisorHooks(AgentHooks):
                                 "actionGroupName": tool.name,
                                 "executionType": "LAMBDA",
                                 "function": tool.name,
-                                "parameters": parameters
+                                "parameters": parameters,
                             },
                         }
                     }
-                }
+                },
             }
-            await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data, tool_name=tool.name)
+            await self.trace_handler.send_trace(
+                context_data, agent.name, "executing_tool", trace_data, tool_name=tool.name
+            )
             self.data_lake_event_adapter.to_data_lake_event(
                 project_uuid=context_data.project.get("uuid"),
                 contact_urn=context_data.contact.get("urn"),
                 tool_call_data={
                     "tool_name": tool.name,
                     "parameters": parameters,
-                    "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name")
+                    "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
                 },
                 agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
                 foundation_model=agent.model,
@@ -484,12 +492,10 @@ class SupervisorHooks(AgentHooks):
                 "trace": {
                     "orchestrationTrace": {
                         "observation": {
-                            "knowledgeBaseLookupOutput": {
-                                "retrievedReferences": result
-                            },
+                            "knowledgeBaseLookupOutput": {"retrievedReferences": result},
                         }
                     }
-                }
+                },
             }
             await self.trace_handler.send_trace(context_data, agent.name, "search_result_received", trace_data)
         elif tool.name not in self.hooks_state.agents_names:
@@ -502,7 +508,7 @@ class SupervisorHooks(AgentHooks):
             elif isinstance(result, dict):
                 events = self.hooks_state.get_events(result, tool.name)
 
-            if events and events != '[]' and events != []:
+            if events and events != "[]" and events != []:
                 print(f"\033[34m[HOOK] Eventos da ferramenta '{tool.name}': {events}\033[0m")
 
                 if isinstance(events, str):
@@ -525,7 +531,7 @@ class SupervisorHooks(AgentHooks):
                     channel_uuid=context_data.contact.get("channel_uuid"),
                     agent_name=agent.name,
                     preview=self.preview,
-                    conversation=self.conversation
+                    conversation=self.conversation,
                 )
 
             trace_data = {
@@ -540,9 +546,11 @@ class SupervisorHooks(AgentHooks):
                             },
                         }
                     }
-                }
+                },
             }
-            await self.trace_handler.send_trace(context_data, agent.name, "tool_result_received", trace_data, tool_name=tool.name)
+            await self.trace_handler.send_trace(
+                context_data, agent.name, "tool_result_received", trace_data, tool_name=tool.name
+            )
 
     async def on_end(self, context, agent, output):
         print(f"\033[34m[HOOK] Enviando resposta final {output}.\033[0m")
@@ -557,15 +565,8 @@ class SupervisorHooks(AgentHooks):
             "eventTime": pendulum.now().to_iso8601_string(),
             "sessionId": context_data.session.get_session_id(),
             "trace": {
-                "orchestrationTrace": {
-                    "observation": {
-                        "finalResponse": {
-                            "text": final_response
-                        },
-                        "type": "FINISH"
-                    }
-                }
-            }
+                "orchestrationTrace": {"observation": {"finalResponse": {"text": final_response}, "type": "FINISH"}}
+            },
         }
         await self.trace_handler.send_trace(context_data, agent.name, "sending_response", trace_data)
         await self.trace_handler.save_trace_data(
@@ -577,5 +578,5 @@ class SupervisorHooks(AgentHooks):
             preview=self.preview,
             session_id=context_data.session.get_session_id(),
             contact_name=context_data.contact.get("name"),
-            channel_uuid=context_data.contact.get("channel_uuid")
+            channel_uuid=context_data.contact.get("channel_uuid"),
         )

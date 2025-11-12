@@ -1,43 +1,44 @@
-import pendulum
 from uuid import UUID
+
+import pendulum
 from django.db.models import Count, Q
 from django.utils.dateparse import parse_date
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from mozilla_django_oidc.contrib.drf import OIDCAuthentication
+from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.conf import settings
-from mozilla_django_oidc.contrib.drf import OIDCAuthentication
 
-from nexus.intelligences.models import Conversation
-from nexus.projects.models import Project
-from nexus.orgs import permissions as org_permissions
 from nexus.authentication.authentication import ExternalTokenAuthentication
+from nexus.intelligences.models import Conversation
+from nexus.orgs import permissions as org_permissions
+from nexus.projects.models import Project
 
 from .serializers import (
-    ResolutionRateSerializer,
     IndividualResolutionRateSerializer,
-    UnresolvedRateSerializer,
     ProjectsByMotorSerializer,
+    ResolutionRateSerializer,
+    UnresolvedRateSerializer,
 )
 
 
 class InternalCommunicationPermission(BasePermission):
     """Permission class for internal service-to-service communication or external tokens"""
+
     def has_permission(self, request, view):
         # Check if using external token authentication (superuser token)
-        authorization_header = request.headers.get('Authorization')
+        authorization_header = request.headers.get("Authorization")
         if authorization_header:
             try:
                 if org_permissions.is_super_user(authorization_header):
                     return True
             except (IndexError, AttributeError):
                 pass
-        
+
         # Check if user has internal communication permission
         user = request.user
         if user and user.is_authenticated:
             return user.has_perm("users.can_communicate_internally")
-        
+
         return False
 
 
@@ -64,23 +65,17 @@ def validate_and_parse_dates(start_date_str, end_date_str):
     else:
         start_date = parse_date(start_date_str)
         if not start_date:
-            return None, None, Response(
-                {"error": "Invalid start_date format. Use YYYY-MM-DD"}, status=400
-            )
+            return None, None, Response({"error": "Invalid start_date format. Use YYYY-MM-DD"}, status=400)
 
     if not end_date_str:
         end_date = pendulum.now().date()
     else:
         end_date = parse_date(end_date_str)
         if not end_date:
-            return None, None, Response(
-                {"error": "Invalid end_date format. Use YYYY-MM-DD"}, status=400
-            )
+            return None, None, Response({"error": "Invalid end_date format. Use YYYY-MM-DD"}, status=400)
 
     if start_date > end_date:
-        return None, None, Response(
-            {"error": "start_date must be before or equal to end_date"}, status=400
-        )
+        return None, None, Response({"error": "start_date must be before or equal to end_date"}, status=400)
 
     return start_date, end_date, None
 
@@ -95,11 +90,11 @@ class ResolutionRateAverageView(APIView):
             return Response({})
         """
         GET /api/analytics/resolution-rate/average/
-        
+
         Query params:
         - project_uuid (optional): Filter by specific project UUID
         - start_date (optional, YYYY-MM-DD): Start date
-        - end_date (optional, YYYY-MM-DD): End date  
+        - end_date (optional, YYYY-MM-DD): End date
         - motor (optional, "AB 2" | "AB 2.5"): Filter by specific motor
         - min_conversations (optional, int): Minimum conversations to consider project
         Returns: Average resolution rate metrics
@@ -115,9 +110,7 @@ class ResolutionRateAverageView(APIView):
         project_uuid = request.query_params.get("project_uuid")
 
         # Validate and parse dates
-        start_date, end_date, error_response = validate_and_parse_dates(
-            start_date_str, end_date_str
-        )
+        start_date, end_date, error_response = validate_and_parse_dates(start_date_str, end_date_str)
         if error_response:
             return error_response
 
@@ -149,25 +142,19 @@ class ResolutionRateAverageView(APIView):
                         status=400,
                     )
             except ValueError:
-                return Response(
-                    {"error": "min_conversations must be a valid integer"}, status=400
-                )
+                return Response({"error": "min_conversations must be a valid integer"}, status=400)
 
         # Convert date objects to timezone-aware datetime objects for start_date filtering
-        start_datetime = pendulum.datetime(
-            start_date.year, start_date.month, start_date.day
-        )
-        end_datetime = pendulum.datetime(
-            end_date.year, end_date.month, end_date.day
-        )
+        start_datetime = pendulum.datetime(start_date.year, start_date.month, start_date.day)
+        end_datetime = pendulum.datetime(end_date.year, end_date.month, end_date.day)
 
-        conversations = Conversation.objects.filter(
-            start_date__gte=start_datetime,
-            start_date__lt=end_datetime,
-            resolution__in=['0', '1', '4']
-        ).exclude(
-            resolution__isnull=True
-        ).select_related("project")
+        conversations = (
+            Conversation.objects.filter(
+                start_date__gte=start_datetime, start_date__lt=end_datetime, resolution__in=["0", "1", "4"]
+            )
+            .exclude(resolution__isnull=True)
+            .select_related("project")
+        )
 
         if project_uuid:
             conversations = conversations.filter(project__uuid=project_uuid)
@@ -176,14 +163,11 @@ class ResolutionRateAverageView(APIView):
             backend_value = MOTOR_BACKEND_MAP[motor]
             conversations = conversations.filter(project__agents_backend=backend_value)
 
-        project_stats = (
-            conversations.values("project__uuid")
-            .annotate(
-                total_conversations=Count("uuid"),
-                resolved_cnt=Count("uuid", filter=Q(resolution="0")),
-                unresolved_cnt=Count("uuid", filter=Q(resolution="1")),
-                has_chat_cnt=Count("uuid", filter=Q(resolution="4")),
-            )
+        project_stats = conversations.values("project__uuid").annotate(
+            total_conversations=Count("uuid"),
+            resolved_cnt=Count("uuid", filter=Q(resolution="0")),
+            unresolved_cnt=Count("uuid", filter=Q(resolution="1")),
+            has_chat_cnt=Count("uuid", filter=Q(resolution="4")),
         )
 
         if min_conversations is not None:
@@ -266,9 +250,7 @@ class ResolutionRateIndividualView(APIView):
         filter_project_name = request.query_params.get("filter_project_name")
 
         # Validate and parse dates
-        start_date, end_date, error_response = validate_and_parse_dates(
-            start_date_str, end_date_str
-        )
+        start_date, end_date, error_response = validate_and_parse_dates(start_date_str, end_date_str)
         if error_response:
             return error_response
 
@@ -290,9 +272,7 @@ class ResolutionRateIndividualView(APIView):
                         status=400,
                     )
             except ValueError:
-                return Response(
-                    {"error": "min_conversations must be a valid integer"}, status=400
-                )
+                return Response({"error": "min_conversations must be a valid integer"}, status=400)
 
         # Build base query across all projects
         conversations = Conversation.objects.filter(
@@ -307,9 +287,7 @@ class ResolutionRateIndividualView(APIView):
 
         # Group by project and calculate metrics
         project_stats = (
-            conversations.values(
-                "project__uuid", "project__name", "project__agents_backend"
-            )
+            conversations.values("project__uuid", "project__name", "project__agents_backend")
             .annotate(
                 total=Count("uuid"),
                 resolved=Count("uuid", filter=Q(resolution="0")),
@@ -331,9 +309,7 @@ class ResolutionRateIndividualView(APIView):
                 )
 
         if filter_project_name:
-            project_stats = project_stats.filter(
-                project__name__icontains=filter_project_name
-            )
+            project_stats = project_stats.filter(project__name__icontains=filter_project_name)
 
         # Filter by min_conversations
         if min_conversations is not None:
@@ -387,11 +363,11 @@ class UnresolvedRateView(APIView):
             return Response({})
         """
         GET /api/analytics/unresolved-rate/
-        
+
         Query params:
         - project_uuid (optional): Filter by specific project UUID
         - start_date (optional, YYYY-MM-DD): Start date
-        - end_date (optional, YYYY-MM-DD): End date  
+        - end_date (optional, YYYY-MM-DD): End date
         - motor (optional, "AB 2" | "AB 2.5"): Filter by specific motor
         - min_conversations (optional, int): Minimum conversations to consider project
         Returns: Unresolved rate metrics
@@ -407,9 +383,7 @@ class UnresolvedRateView(APIView):
         project_uuid = request.query_params.get("project_uuid")
 
         # Validate and parse dates
-        start_date, end_date, error_response = validate_and_parse_dates(
-            start_date_str, end_date_str
-        )
+        start_date, end_date, error_response = validate_and_parse_dates(start_date_str, end_date_str)
         if error_response:
             return error_response
 
@@ -441,9 +415,7 @@ class UnresolvedRateView(APIView):
                         status=400,
                     )
             except ValueError:
-                return Response(
-                    {"error": "min_conversations must be a valid integer"}, status=400
-                )
+                return Response({"error": "min_conversations must be a valid integer"}, status=400)
 
         # Build base query (across all projects, or filtered by project_uuid)
         conversations = Conversation.objects.filter(
@@ -463,9 +435,7 @@ class UnresolvedRateView(APIView):
         # Filter by min_conversations
         if min_conversations is not None:
             project_counts = (
-                conversations.values("project__uuid")
-                .annotate(count=Count("uuid"))
-                .filter(count__gte=min_conversations)
+                conversations.values("project__uuid").annotate(count=Count("uuid")).filter(count__gte=min_conversations)
             )
             project_uuids = [pc["project__uuid"] for pc in project_counts]
             conversations = conversations.filter(project__uuid__in=project_uuids)
@@ -508,7 +478,7 @@ class ProjectsByMotorView(APIView):
             return Response({})
         """
         GET /api/analytics/projects/by-motor/
-        
+
         Query params:
         - motor ("AB 2" | "AB 2.5" | "both"): Which motor to search
         - start_date (optional, YYYY-MM-DD): Filter conversations by date
@@ -532,9 +502,7 @@ class ProjectsByMotorView(APIView):
         # Validate and parse dates if provided
         date_filter = Q()
         if start_date_str and end_date_str:
-            start_date, end_date, error_response = validate_and_parse_dates(
-                start_date_str, end_date_str
-            )
+            start_date, end_date, error_response = validate_and_parse_dates(start_date_str, end_date_str)
             if error_response:
                 return error_response
             date_filter = Q(
@@ -552,15 +520,11 @@ class ProjectsByMotorView(APIView):
 
         # Get AB 2 projects (BedrockBackend)
         if motor_param in ["AB 2", "both"]:
-            ab2_query = Project.objects.filter(
-                agents_backend="BedrockBackend", is_active=True
-            )
+            ab2_query = Project.objects.filter(agents_backend="BedrockBackend", is_active=True)
 
             if date_filter:
                 ab2_projects = (
-                    ab2_query.annotate(
-                        conversation_count=Count("conversations", filter=date_filter)
-                    )
+                    ab2_query.annotate(conversation_count=Count("conversations", filter=date_filter))
                     .values("uuid", "name", "conversation_count")
                     .order_by("-conversation_count")
                 )
@@ -576,15 +540,11 @@ class ProjectsByMotorView(APIView):
 
         # Get AB 2.5 projects (OpenAIBackend)
         if motor_param in ["AB 2.5", "both"]:
-            ab2_5_query = Project.objects.filter(
-                agents_backend="OpenAIBackend", is_active=True
-            )
+            ab2_5_query = Project.objects.filter(agents_backend="OpenAIBackend", is_active=True)
 
             if date_filter:
                 ab2_5_projects = (
-                    ab2_5_query.annotate(
-                        conversation_count=Count("conversations", filter=date_filter)
-                    )
+                    ab2_5_query.annotate(conversation_count=Count("conversations", filter=date_filter))
                     .values("uuid", "name", "conversation_count")
                     .order_by("-conversation_count")
                 )

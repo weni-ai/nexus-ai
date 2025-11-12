@@ -1,18 +1,15 @@
+from django.conf import settings
 from django.test import TestCase
 from django.utils.text import slugify
-from django.conf import settings
 
 from nexus.inline_agents.models import Agent, IntegratedAgent, Version
 from nexus.inline_agents.team.repository import ORMTeamRepository
-from nexus.inline_agents.team.exceptions import TeamDoesNotExist
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
 class TestORMTeamRepository(TestCase):
     def setUp(self):
-        self.project = ProjectFactory(
-            name="Test Project", brain_on=True, agents_backend="BedrockBackend"
-        )
+        self.project = ProjectFactory(name="Test Project", brain_on=True, agents_backend="BedrockBackend")
         self.user = self.project.created_by
 
         self.agent1 = Agent.objects.create(
@@ -102,13 +99,9 @@ class TestORMTeamRepository(TestCase):
             display_skills=[],
         )
 
-        self.integrated_agent1 = IntegratedAgent.objects.create(
-            agent=self.agent1, project=self.project
-        )
+        self.integrated_agent1 = IntegratedAgent.objects.create(agent=self.agent1, project=self.project)
 
-        self.integrated_agent2 = IntegratedAgent.objects.create(
-            agent=self.agent2, project=self.project
-        )
+        self.integrated_agent2 = IntegratedAgent.objects.create(agent=self.agent2, project=self.project)
 
     def test_get_team_success_with_multiple_agents(self):
         """Test get_team method with multiple agents successfully"""
@@ -118,15 +111,11 @@ class TestORMTeamRepository(TestCase):
         self.assertEqual(len(result), 2)
 
         # Check first agent
-        agent1_result = next(
-            agent for agent in result if agent["agentName"] == "test-agent-1"
-        )
+        agent1_result = next(agent for agent in result if agent["agentName"] == "test-agent-1")
         self.assertEqual(agent1_result["agentName"], "test-agent-1")
         self.assertEqual(agent1_result["instruction"], "Test instruction 1")
         self.assertEqual(agent1_result["agentCollaboration"], "DISABLED")
-        self.assertEqual(
-            agent1_result["collaborator_configurations"], "Test collaboration 1"
-        )
+        self.assertEqual(agent1_result["collaborator_configurations"], "Test collaboration 1")
         self.assertEqual(agent1_result["foundationModel"], settings.AWS_BEDROCK_AGENTS_MODEL_ID[0])
 
         # Check skills processing
@@ -145,9 +134,7 @@ class TestORMTeamRepository(TestCase):
         self.assertEqual(function["parameters"], expected_params)
 
         # Check second agent
-        agent2_result = next(
-            agent for agent in result if agent["agentName"] == "test-agent-2"
-        )
+        agent2_result = next(agent for agent in result if agent["agentName"] == "test-agent-2")
         self.assertEqual(agent2_result["agentName"], "test-agent-2")
         self.assertEqual(agent2_result["instruction"], "Test instruction 2")
         self.assertEqual(agent2_result["foundationModel"], "claude-3-haiku")
@@ -161,9 +148,7 @@ class TestORMTeamRepository(TestCase):
     def test_get_team_skills_processing_with_none_parameters(self):
         repository = ORMTeamRepository()
         result = repository.get_team(self.project.uuid)
-        agent2_result = next(
-            agent for agent in result if agent["agentName"] == "test-agent-2"
-        )
+        agent2_result = next(agent for agent in result if agent["agentName"] == "test-agent-2")
         skills = agent2_result["actionGroups"]
 
         function_with_none = None
@@ -198,12 +183,8 @@ class TestORMTeamRepository(TestCase):
         result = repository.get_team(self.project.uuid)
 
         # Should use foundation_models based on agents_backend
-        agent1_result = next(
-            agent for agent in result if agent["agentName"] == "test-agent-1"
-        )
-        agent2_result = next(
-            agent for agent in result if agent["agentName"] == "test-agent-2"
-        )
+        agent1_result = next(agent for agent in result if agent["agentName"] == "test-agent-1")
+        agent2_result = next(agent for agent in result if agent["agentName"] == "test-agent-2")
 
         self.assertEqual(agent1_result["foundationModel"], settings.AWS_BEDROCK_AGENTS_MODEL_ID[0])
         self.assertEqual(agent2_result["foundationModel"], "claude-3-haiku")
@@ -285,9 +266,7 @@ class TestORMTeamRepository(TestCase):
         result = repository.get_team(self.project.uuid)
 
         # Find the agent with empty skills
-        agent_empty_skills_result = next(
-            agent for agent in result if agent["agentName"] == "agent-empty-skills"
-        )
+        agent_empty_skills_result = next(agent for agent in result if agent["agentName"] == "agent-empty-skills")
 
         # Should have empty actionGroups
         self.assertEqual(agent_empty_skills_result["actionGroups"], [])
@@ -336,22 +315,16 @@ class TestORMTeamRepository(TestCase):
         result = repository.get_team(self.project.uuid)
 
         # Find the agent with empty backend_foundation_models
-        agent_empty_backend_result = next(
-            agent for agent in result if agent["agentName"] == "agent-empty-backend"
-        )
+        agent_empty_backend_result = next(agent for agent in result if agent["agentName"] == "agent-empty-backend")
 
         # Should fallback to foundation_model when backend_foundation_models is empty for BedrockBackend
-        self.assertEqual(
-            agent_empty_backend_result["foundationModel"], settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]
-        )
+        self.assertEqual(agent_empty_backend_result["foundationModel"], settings.AWS_BEDROCK_AGENTS_MODEL_ID[0])
 
     def test_get_team_agent_with_empty_backend_foundation_models_openai(self):
         """Test get_team method with agent that has empty backend_foundation_models for OpenAIBackend"""
 
         # Create project with OpenAIBackend
-        openai_project = ProjectFactory(
-            name="OpenAI Project", brain_on=True, agents_backend="OpenAIBackend"
-        )
+        openai_project = ProjectFactory(name="OpenAI Project", brain_on=True, agents_backend="OpenAIBackend")
 
         agent_empty_backend = Agent.objects.create(
             name="Agent Empty Backend OpenAI",
@@ -381,21 +354,18 @@ class TestORMTeamRepository(TestCase):
             display_skills=[],
         )
 
-        IntegratedAgent.objects.create(
-            agent=agent_empty_backend, project=openai_project
-        )
+        IntegratedAgent.objects.create(agent=agent_empty_backend, project=openai_project)
 
         repository = ORMTeamRepository(agents_backend="OpenAIBackend")
         result = repository.get_team(openai_project.uuid)
 
         # Find the agent with empty backend_foundation_models
         agent_empty_backend_result = next(
-            agent
-            for agent in result
-            if agent["agentName"] == "agent-empty-backend-openai"
+            agent for agent in result if agent["agentName"] == "agent-empty-backend-openai"
         )
 
-        # Should fallback to settings.OPENAI_AGENTS_FOUNDATION_MODEL when backend_foundation_models is empty for OpenAIBackend
+        # Should fallback to settings.OPENAI_AGENTS_FOUNDATION_MODEL when backend_foundation_models
+        # is empty for OpenAIBackend
         expected_model = getattr(settings, "OPENAI_AGENTS_FOUNDATION_MODEL", "gpt-4")
         self.assertEqual(agent_empty_backend_result["foundationModel"], expected_model)
 
@@ -408,9 +378,7 @@ class TestORMTeamRepository(TestCase):
             project=self.project,
             instruction="Test instruction",
             collaboration_instructions="Test collaboration",
-            backend_foundation_models={
-                "OpenAIBackend": "gpt-4"
-            },  # Missing BedrockBackend
+            backend_foundation_models={"OpenAIBackend": "gpt-4"},  # Missing BedrockBackend
         )
 
         # Create version with skills
@@ -433,31 +401,23 @@ class TestORMTeamRepository(TestCase):
             display_skills=[],
         )
 
-        IntegratedAgent.objects.create(
-            agent=agent_partial_backend, project=self.project
-        )
+        IntegratedAgent.objects.create(agent=agent_partial_backend, project=self.project)
 
         repository = ORMTeamRepository(agents_backend="BedrockBackend")
         result = repository.get_team(self.project.uuid)
 
         # Find the agent with partial backend_foundation_models
         agent_partial_backend_result = next(
-            agent
-            for agent in result
-            if agent["agentName"] == "agent-partial-backend-bedrock"
+            agent for agent in result if agent["agentName"] == "agent-partial-backend-bedrock"
         )
 
         # Should fallback to foundation_model for BedrockBackend since it's missing from backend_foundation_models
-        self.assertEqual(
-            agent_partial_backend_result["foundationModel"], settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]
-        )
+        self.assertEqual(agent_partial_backend_result["foundationModel"], settings.AWS_BEDROCK_AGENTS_MODEL_ID[0])
 
     def test_get_team_agent_with_partial_backend_foundation_models_openai(self):
         """Test get_team method with agent that has partial backend_foundation_models for OpenAIBackend"""
         # Create project with OpenAIBackend
-        openai_project = ProjectFactory(
-            name="OpenAI Project Partial", brain_on=True, agents_backend="OpenAIBackend"
-        )
+        openai_project = ProjectFactory(name="OpenAI Project Partial", brain_on=True, agents_backend="OpenAIBackend")
 
         # Create agent with partial backend_foundation_models (missing OpenAIBackend)
         agent_partial_backend = Agent.objects.create(
@@ -466,9 +426,7 @@ class TestORMTeamRepository(TestCase):
             project=openai_project,
             instruction="Test instruction",
             collaboration_instructions="Test collaboration",
-            backend_foundation_models={
-                "BedrockBackend": settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]
-            },  # Missing OpenAIBackend
+            backend_foundation_models={"BedrockBackend": settings.AWS_BEDROCK_AGENTS_MODEL_ID[0]},  # Missing OpenAIBackend
         )
 
         # Create version with skills
@@ -491,30 +449,25 @@ class TestORMTeamRepository(TestCase):
             display_skills=[],
         )
 
-        IntegratedAgent.objects.create(
-            agent=agent_partial_backend, project=openai_project
-        )
+        IntegratedAgent.objects.create(agent=agent_partial_backend, project=openai_project)
 
         repository = ORMTeamRepository(agents_backend="OpenAIBackend")
         result = repository.get_team(openai_project.uuid)
 
         # Find the agent with partial backend_foundation_models
         agent_partial_backend_result = next(
-            agent
-            for agent in result
-            if agent["agentName"] == "agent-partial-backend-openai"
+            agent for agent in result if agent["agentName"] == "agent-partial-backend-openai"
         )
 
-        # Should fallback to settings.OPENAI_AGENTS_FOUNDATION_MODEL for OpenAIBackend since it's missing from backend_foundation_models
+        # Should fallback to settings.OPENAI_AGENTS_FOUNDATION_MODEL for OpenAIBackend
+        # since it's missing from backend_foundation_models
         expected_model = getattr(settings, "OPENAI_AGENTS_FOUNDATION_MODEL", "gpt-4")
-        self.assertEqual(
-            agent_partial_backend_result["foundationModel"], expected_model
-        )
+        self.assertEqual(agent_partial_backend_result["foundationModel"], expected_model)
 
     def test_get_team_complex_skills_structure(self):
         """Test get_team with complex skills structure"""
         # Create a more complex version
-        complex_version = Version.objects.create(
+        Version.objects.create(
             agent=self.agent1,
             skills=[
                 {
@@ -579,27 +532,19 @@ class TestORMTeamRepository(TestCase):
         repository = ORMTeamRepository()
         result = repository.get_team(self.project.uuid)
 
-        agent1_result = next(
-            agent for agent in result if agent["agentName"] == "test-agent-1"
-        )
+        agent1_result = next(agent for agent in result if agent["agentName"] == "test-agent-1")
         skills = agent1_result["actionGroups"]
 
         # Should have 2 action groups
         self.assertEqual(len(skills), 2)
 
         # Check first action group
-        first_group = next(
-            skill
-            for skill in skills
-            if skill["actionGroupName"] == "complex-action-group"
-        )
+        first_group = next(skill for skill in skills if skill["actionGroupName"] == "complex-action-group")
         self.assertEqual(len(first_group["functionSchema"]["functions"]), 2)
 
         # Check complex function parameters
         complex_function = next(
-            f
-            for f in first_group["functionSchema"]["functions"]
-            if f["name"] == "complex_function"
+            f for f in first_group["functionSchema"]["functions"] if f["name"] == "complex_function"
         )
         expected_params = {
             "param1": {"type": "string", "description": "Param 1"},
@@ -609,19 +554,11 @@ class TestORMTeamRepository(TestCase):
         self.assertEqual(complex_function["parameters"], expected_params)
 
         # Check simple function parameters
-        simple_function = next(
-            f
-            for f in first_group["functionSchema"]["functions"]
-            if f["name"] == "simple_function"
-        )
+        simple_function = next(f for f in first_group["functionSchema"]["functions"] if f["name"] == "simple_function")
         self.assertEqual(simple_function["parameters"], {})
 
         # Check second action group
-        second_group = next(
-            skill
-            for skill in skills
-            if skill["actionGroupName"] == "another-action-group"
-        )
+        second_group = next(skill for skill in skills if skill["actionGroupName"] == "another-action-group")
         self.assertEqual(len(second_group["functionSchema"]["functions"]), 1)
 
         another_function = second_group["functionSchema"]["functions"][0]

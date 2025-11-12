@@ -1,7 +1,7 @@
 from nexus.intelligences.models import ContentBase
 
 
-class IntelligenceGenerativeSearchUseCase():
+class IntelligenceGenerativeSearchUseCase:
     def __init__(self, search_file_database, generative_ai_database, testing: bool = False) -> None:
         self.search_file_database = search_file_database
         self.generative_ai_database = generative_ai_database
@@ -11,15 +11,7 @@ class IntelligenceGenerativeSearchUseCase():
         if language == "base":
             language = ContentBase.objects.get(uuid=content_base_uuid).language
 
-        codes = {
-            "por": "pt",
-            "pt-br": "pt",
-            "eng": "en",
-            "en-us": "en",
-            "spa": "es",
-            "es": "es"
-
-        }
+        codes = {"por": "pt", "pt-br": "pt", "eng": "en", "en-us": "en", "spa": "es", "es": "es"}
         return codes.get(language, "pt")
 
     def search(self, content_base_uuid: str, text: str, language: str):
@@ -33,9 +25,5 @@ class IntelligenceGenerativeSearchUseCase():
         language = self._language_code(language.lower(), content_base_uuid)
 
         return self.generative_ai_database.request_gpt(
-            contexts=chunks,
-            question=text,
-            language=language,
-            content_base_uuid=content_base_uuid,
-            testing=self.testing
+            contexts=chunks, question=text, language=language, content_base_uuid=content_base_uuid, testing=self.testing
         )

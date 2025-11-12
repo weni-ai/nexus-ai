@@ -13,7 +13,7 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer,
 )
 from nexus.inline_agents.models import Agent
-from nexus.projects.api.permissions import ProjectPermission, CombinedExternalProjectPermission
+from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
@@ -35,6 +35,7 @@ class PushAgents(APIView):
 
     def _validate_request(self, request):
         """Validate request data and return processed inputs"""
+
         def validate_file_size(files):
             for file in files:
                 if files[file].size > SKILL_FILE_SIZE_LIMIT * (1024**2):
@@ -44,6 +45,7 @@ class PushAgents(APIView):
         validate_file_size(files)
 
         import json
+
         print(json.dumps(request.data, indent=4, default=str))
 
         agents = json.loads(request.data.get("agents"))
@@ -76,7 +78,15 @@ class PushAgents(APIView):
         print(files)
         official_agent_key = self._check_can_edit_official_agent(agents=agents, user_email=request.user.email)
         if official_agent_key is not None:
-            return Response({"error": f"Permission Error: You are not authorized to edit an official AI Agent {official_agent_key}"}, status=403)
+            return Response(
+                {
+                    "error": (
+                        f"Permission Error: You are not authorized to edit an official "
+                        f"AI Agent {official_agent_key}"
+                    )
+                },
+                status=403,
+            )
 
         try:
             project = Project.objects.get(uuid=project_uuid)
@@ -128,29 +138,22 @@ class AgentsView(APIView):
 
         if search:
             query_filter = Q(name__icontains=search)
-            agents = agents.filter(query_filter).distinct('uuid')
+            agents = agents.filter(query_filter).distinct("uuid")
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
 
 
 class TeamView(APIView):
-
     permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, *args, **kwargs):
-
         project_uuid = kwargs.get("project_uuid")
         usecase = GetInlineAgentsUsecase()
         agents = usecase.get_active_agents(project_uuid)
         serializer = IntegratedAgentSerializer(agents, many=True)
 
-        data = {
-            "manager": {
-                "external_id": ""
-            },
-            "agents": serializer.data
-        }
+        data = {"manager": {"external_id": ""}, "agents": serializer.data}
         return Response(data)
 
 
@@ -166,7 +169,7 @@ class OfficialAgentsView(APIView):
 
         if search:
             query_filter = Q(name__icontains=search)
-            agents = agents.filter(query_filter).distinct('uuid')
+            agents = agents.filter(query_filter).distinct("uuid")
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
@@ -178,10 +181,12 @@ class ProjectCredentialsView(APIView):
     def get(self, request, project_uuid):
         usecase = GetInlineCredentialsUsecase()
         official_credentials, custom_credentials = usecase.get_credentials_by_project(project_uuid)
-        return Response({
-            "official_agents_credentials": ProjectCredentialsListSerializer(official_credentials, many=True).data,
-            "my_agents_credentials": ProjectCredentialsListSerializer(custom_credentials, many=True).data
-        })
+        return Response(
+            {
+                "official_agents_credentials": ProjectCredentialsListSerializer(official_credentials, many=True).data,
+                "my_agents_credentials": ProjectCredentialsListSerializer(custom_credentials, many=True).data,
+            }
+        )
 
     def patch(self, request, project_uuid):
         credentials_data = request.data
@@ -193,46 +198,38 @@ class ProjectCredentialsView(APIView):
             if updated:
                 updated_credentials.append(key)
 
-        return Response({
-            "message": "Credentials updated successfully",
-            "updated_credentials": updated_credentials
-        })
+        return Response({"message": "Credentials updated successfully", "updated_credentials": updated_credentials})
 
     def post(self, request, project_uuid):
-        credentials_data = request.data.get('credentials', [])
-        agent_uuid = request.data.get('agent_uuid')
+        credentials_data = request.data.get("credentials", [])
+        agent_uuid = request.data.get("agent_uuid")
 
         if not agent_uuid or not credentials_data:
-            return Response(
-                {"error": "agent_uuid and credentials are required"},
-                status=400
-            )
+            return Response({"error": "agent_uuid and credentials are required"}, status=400)
 
         try:
             agent = Agent.objects.get(uuid=agent_uuid)
         except Agent.DoesNotExist:
-            return Response(
-                {"error": "Agent not found"},
-                status=404
-            )
+            return Response({"error": "Agent not found"}, status=404)
 
         credentials = {}
         for cred_item in credentials_data:
-            credentials.update({
-                cred_item.get('name'): {
-                    'label': cred_item.get('label'),
-                    'placeholder': cred_item.get('placeholder'),
-                    'is_confidential': cred_item.get('is_confidential', True),
-                    'value': cred_item.get('value')
-                },
-            })
+            credentials.update(
+                {
+                    cred_item.get("name"): {
+                        "label": cred_item.get("label"),
+                        "placeholder": cred_item.get("placeholder"),
+                        "is_confidential": cred_item.get("is_confidential", True),
+                        "value": cred_item.get("value"),
+                    },
+                }
+            )
 
-        created_credentials = CreateAgentUseCase().create_credentials(agent, Project.objects.get(uuid=project_uuid), credentials)
+        created_credentials = CreateAgentUseCase().create_credentials(
+            agent, Project.objects.get(uuid=project_uuid), credentials
+        )
 
-        return Response({
-            "message": "Credentials created successfully",
-            "created_credentials": created_credentials
-        })
+        return Response({"message": "Credentials created successfully", "created_credentials": created_credentials})
 
 
 class InternalCommunicationPermission(BasePermission):
@@ -273,7 +270,7 @@ class VtexAppAgentsView(APIView):
 
         if search:
             query_filter = Q(name__icontains=search)
-            agents = agents.filter(query_filter).distinct('uuid')
+            agents = agents.filter(query_filter).distinct("uuid")
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
@@ -291,29 +288,22 @@ class VtexAppOfficialAgentsView(APIView):
 
         if search:
             query_filter = Q(name__icontains=search)
-            agents = agents.filter(query_filter).distinct('uuid')
+            agents = agents.filter(query_filter).distinct("uuid")
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
 
 
 class VTexAppTeamView(APIView):
-
     permission_classes = [InternalCommunicationPermission]
 
     def get(self, request, *args, **kwargs):
-
         project_uuid = kwargs.get("project_uuid")
         usecase = GetInlineAgentsUsecase()
         agents = usecase.get_active_agents(project_uuid)
         serializer = IntegratedAgentSerializer(agents, many=True)
 
-        data = {
-            "manager": {
-                "external_id": ""
-            },
-            "agents": serializer.data
-        }
+        data = {"manager": {"external_id": ""}, "agents": serializer.data}
         return Response(data)
 
 
@@ -323,10 +313,12 @@ class VtexAppProjectCredentialsView(APIView):
     def get(self, request, project_uuid):
         usecase = GetInlineCredentialsUsecase()
         official_credentials, custom_credentials = usecase.get_credentials_by_project(project_uuid)
-        return Response({
-            "official_agents_credentials": ProjectCredentialsListSerializer(official_credentials, many=True).data,
-            "my_agents_credentials": ProjectCredentialsListSerializer(custom_credentials, many=True).data
-        })
+        return Response(
+            {
+                "official_agents_credentials": ProjectCredentialsListSerializer(official_credentials, many=True).data,
+                "my_agents_credentials": ProjectCredentialsListSerializer(custom_credentials, many=True).data,
+            }
+        )
 
     def patch(self, request, project_uuid):
         credentials_data = request.data
@@ -338,46 +330,38 @@ class VtexAppProjectCredentialsView(APIView):
             if updated:
                 updated_credentials.append(key)
 
-        return Response({
-            "message": "Credentials updated successfully",
-            "updated_credentials": updated_credentials
-        })
+        return Response({"message": "Credentials updated successfully", "updated_credentials": updated_credentials})
 
     def post(self, request, project_uuid):
-        credentials_data = request.data.get('credentials', [])
-        agent_uuid = request.data.get('agent_uuid')
+        credentials_data = request.data.get("credentials", [])
+        agent_uuid = request.data.get("agent_uuid")
 
         if not agent_uuid or not credentials_data:
-            return Response(
-                {"error": "agent_uuid and credentials are required"},
-                status=400
-            )
+            return Response({"error": "agent_uuid and credentials are required"}, status=400)
 
         try:
             agent = Agent.objects.get(uuid=agent_uuid)
         except Agent.DoesNotExist:
-            return Response(
-                {"error": "Agent not found"},
-                status=404
-            )
+            return Response({"error": "Agent not found"}, status=404)
 
         credentials = {}
         for cred_item in credentials_data:
-            credentials.update({
-                cred_item.get('name'): {
-                    'label': cred_item.get('label'),
-                    'placeholder': cred_item.get('placeholder'),
-                    'is_confidential': cred_item.get('is_confidential', True),
-                    'value': cred_item.get('value')
-                },
-            })
+            credentials.update(
+                {
+                    cred_item.get("name"): {
+                        "label": cred_item.get("label"),
+                        "placeholder": cred_item.get("placeholder"),
+                        "is_confidential": cred_item.get("is_confidential", True),
+                        "value": cred_item.get("value"),
+                    },
+                }
+            )
 
-        created_credentials = CreateAgentUseCase().create_credentials(agent, Project.objects.get(uuid=project_uuid), credentials)
+        created_credentials = CreateAgentUseCase().create_credentials(
+            agent, Project.objects.get(uuid=project_uuid), credentials
+        )
 
-        return Response({
-            "message": "Credentials created successfully",
-            "created_credentials": created_credentials
-        })
+        return Response({"message": "Credentials created successfully", "created_credentials": created_credentials})
 
 
 class ProjectComponentsView(APIView):
@@ -386,60 +370,40 @@ class ProjectComponentsView(APIView):
     def get(self, request, project_uuid):
         try:
             project = Project.objects.get(uuid=project_uuid)
-            return Response({
-                "use_components": project.use_components
-            })
+            return Response({"use_components": project.use_components})
         except Project.DoesNotExist:
-            return Response(
-                {"error": "Project not found"},
-                status=404
-            )
+            return Response({"error": "Project not found"}, status=404)
 
     def patch(self, request, project_uuid):
-        use_components = request.data.get('use_components')
+        use_components = request.data.get("use_components")
 
         if use_components is None:
-            return Response(
-                {"error": "use_components field is required"},
-                status=400
-            )
+            return Response({"error": "use_components field is required"}, status=400)
 
         try:
             project = Project.objects.get(uuid=project_uuid)
             project.use_components = use_components
             project.save()
-            return Response({
-                "message": "Project updated successfully",
-                "use_components": use_components
-            })
+            return Response({"message": "Project updated successfully", "use_components": use_components})
         except Project.DoesNotExist:
-            return Response(
-                {"error": "Project not found"},
-                status=404
-            )
+            return Response({"error": "Project not found"}, status=404)
 
 
 class LogGroupView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
 
     def get(self, request, *args, **kwargs):
-        project_uuid = request.query_params.get('project')
-        agent_key = request.query_params.get('agent_key')
-        tool_key = request.query_params.get('tool_key')
+        project_uuid = request.query_params.get("project")
+        agent_key = request.query_params.get("agent_key")
+        tool_key = request.query_params.get("tool_key")
 
         if not project_uuid or not agent_key or not tool_key:
-            return Response(
-                {"error": "project, agent_key and tool_key are required"},
-                status=400
-            )
+            return Response({"error": "project, agent_key and tool_key are required"}, status=400)
         try:
             usecase = GetLogGroupUsecase()
             log_group = usecase.get_log_group(project_uuid, agent_key, tool_key)
         except Agent.DoesNotExist:
-            return Response(
-                {"error": f"Agent {agent_key} not found in project {project_uuid}"},
-                status=404
-            )
+            return Response({"error": f"Agent {agent_key} not found in project {project_uuid}"}, status=404)
 
         return Response({"log_group": log_group})
 
@@ -450,85 +414,58 @@ class MultiAgentView(APIView):
 
     def get(self, request, project_uuid):
         if not project_uuid:
-            return Response(
-                {"error": "project is required"},
-                status=400
-            )
+            return Response({"error": "project is required"}, status=400)
 
         try:
             project = Project.objects.get(uuid=project_uuid)
-            
-            return Response({
-                "multi_agents": project.inline_agent_switch,
-            })
+
+            return Response(
+                {
+                    "multi_agents": project.inline_agent_switch,
+                }
+            )
         except Project.DoesNotExist:
-            return Response(
-                {"error": "Project not found"},
-                status=404
-            )
+            return Response({"error": "Project not found"}, status=404)
         except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=500
-            )
+            return Response({"error": str(e)}, status=500)
 
     def patch(self, request, project_uuid):
-        multi_agents = request.data.get('multi_agents')
+        multi_agents = request.data.get("multi_agents")
         if multi_agents is None:
-            return Response(
-                {"error": "multi_agents field is required"},
-                status=400
-            )
+            return Response({"error": "multi_agents field is required"}, status=400)
 
         try:
             project = Project.objects.get(uuid=project_uuid)
-            
+
             # AB 1.0 projects have inline_agent_switch=False and use BedrockBackend
             is_legacy_project_enabling = (
-                not project.inline_agent_switch and 
-                multi_agents and 
-                project.agents_backend == "BedrockBackend"
+                not project.inline_agent_switch and multi_agents and project.agents_backend == "BedrockBackend"
             )
-            
             project.inline_agent_switch = multi_agents
             # Migrate legacy projects (AB 1.0) to AB 2.5 (OpenAI)
             if is_legacy_project_enabling:
                 project.agents_backend = "OpenAIBackend"
-            
+
             if not project.use_prompt_creation_configurations:
                 project.use_prompt_creation_configurations = True
             project.save()
-            return Response(
-                {"message": "Project updated successfully", "multi_agents": multi_agents}, status=200
-            )
+            return Response({"message": "Project updated successfully", "multi_agents": multi_agents}, status=200)
         except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=500
-            )
+            return Response({"error": str(e)}, status=500)
 
 
 class AgentEndSessionView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
 
     def post(self, request, project_uuid):
-        contact_urn = request.data.get('contact_urn')
+        contact_urn = request.data.get("contact_urn")
         if not contact_urn:
-            return Response(
-                {"error": "contact_urn is required"},
-                status=400
-            )
+            return Response({"error": "contact_urn is required"}, status=400)
 
-        message_obj = message_factory(
-            text="",
-            project_uuid=project_uuid,
-            contact_urn=contact_urn
-        )
-    
+        message_obj = message_factory(text="", project_uuid=project_uuid, contact_urn=contact_urn)
+
         projects_use_case = ProjectsUseCase()
         agents_backend = projects_use_case.get_agents_backend_by_project(project_uuid)
         backend = BackendsRegistry.get_backend(agents_backend)
         backend.end_session(message_obj.project_uuid, message_obj.sanitized_urn)
-        return Response({
-            "message": "Agent session ended successfully"
-        })
+        return Response({"message": "Agent session ended successfully"})

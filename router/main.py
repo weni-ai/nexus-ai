@@ -1,4 +1,5 @@
 import os
+
 from fastapi import FastAPI, HTTPException, Request
 
 from nexus.event_driven.signals import message_finished, message_started
@@ -27,7 +28,7 @@ def healthcheck():
     return {}
 
 
-@app.post('/messages')
+@app.post("/messages")
 def messages(request: Request, message: MessageHTTPBody):
     message_started.send(sender=DBCon)
 

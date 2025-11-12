@@ -1,36 +1,35 @@
-import uuid
+# ruff: noqa: E501
 import json
 import time
-
-from typing import Dict, List, Tuple
+import uuid
 from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
+
 from django.conf import settings
 from django.template.defaultfilters import slugify
 
-from nexus.internals.flows import FlowsRESTClient
-
-from nexus.users.models import User
 from nexus.agents.models import (
     ActiveAgent,
     Agent,
+    AgentMessage,
     AgentSkills,
+    AgentSkillVersion,
+    AgentVersion,
     ContactField,
     Team,
-    AgentVersion,
-    AgentSkillVersion,
-    TeamVersion
+    TeamVersion,
 )
+from nexus.internals.flows import FlowsRESTClient
 from nexus.projects.models import Project
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase, BedrockSubAgent
 from nexus.task_managers.tasks_bedrock import run_create_lambda_function, run_update_lambda_function
-
 from nexus.usecases.agents.exceptions import (
+    AgentAttributeNotAllowed,
     AgentInstructionsTooShort,
     AgentNameTooLong,
     SkillNameTooLong,
-    AgentAttributeNotAllowed
 )
-from nexus.agents.models import AgentMessage
+from nexus.users.models import User
 
 
 @dataclass
@@ -77,11 +76,7 @@ class UpdateAgentDTO:
 
 
 class AgentUsecase:
-    def __init__(
-        self,
-        external_agent_client=BedrockFileDatabase,
-        flows_client=FlowsRESTClient
-    ):
+    def __init__(self, external_agent_client=BedrockFileDatabase, flows_client=FlowsRESTClient):
         self.external_agent_client = external_agent_client()
         self.flows_client = flows_client()
 
@@ -111,10 +106,7 @@ class AgentUsecase:
                 key = contact_field.key
                 value_type = contact_field.value_type
                 print(f"Contact field: {key} {value_type}")
-                fields.append({
-                    "key": key,
-                    "value_type": value_type
-                })
+                fields.append({"key": key, "value_type": value_type})
             self.create_contact_fields(project_uuid, fields, agent=agent, convert_fields=False)
 
         sub_agent = BedrockSubAgent(
@@ -132,8 +124,7 @@ class AgentUsecase:
         self.external_agent_client.wait_agent_status_update(agent.external_id)
 
         agent_collaborator_id = self.external_agent_client.associate_sub_agents(
-            supervisor_id=team.external_id,
-            agents_list=[sub_agent]
+            supervisor_id=team.external_id, agents_list=[sub_agent]
         )
 
         active_agent, created = ActiveAgent.objects.get_or_create(
@@ -141,7 +132,7 @@ class AgentUsecase:
             team=team,
             is_official=agent.is_official,
             created_by=created_by,
-            metadata={"agent_collaborator_id": agent_collaborator_id}
+            metadata={"agent_collaborator_id": agent_collaborator_id},
         )
         return active_agent
 
@@ -170,7 +161,9 @@ class AgentUsecase:
 
         return external_id
 
-    def create_contact_fields(self, project_uuid: str, fields: List[Dict[str, str]], agent, convert_fields: bool = True):
+    def create_contact_fields(
+        self, project_uuid: str, fields: List[Dict[str, str]], agent, convert_fields: bool = True
+    ):
         types = {
             "string": "text",
             "boolean": "text",
@@ -185,27 +178,27 @@ class AgentUsecase:
 
         flows_client = FlowsRESTClient()
         flows_contact_fields = flows_client.list_project_contact_fields(project_uuid)
-        results = flows_contact_fields.get('results', []) if isinstance(flows_contact_fields, dict) else flows_contact_fields
-        existing_keys = set(field.get('key', '') for field in results)
+        results = (
+            flows_contact_fields.get("results", []) if isinstance(flows_contact_fields, dict) else flows_contact_fields
+        )
+        existing_keys = set(field.get("key", "") for field in results)
 
         for contact_field in fields:
-            if contact_field.get('key') not in existing_keys:
+            if contact_field.get("key") not in existing_keys:
                 if convert_fields:
-                    value_type = types.get(contact_field.get('value_type'))
+                    value_type = types.get(contact_field.get("value_type"))
                 else:
-                    value_type = contact_field.get('value_type')
+                    value_type = contact_field.get("value_type")
 
                 print(f"Creating contact field: {contact_field.get('key')} {value_type}")
                 ContactField.objects.create(
                     project_id=project_uuid,
-                    key=contact_field.get('key'),
+                    key=contact_field.get("key"),
                     value_type=value_type,
                     agent=agent,
                 )
                 flows_client.create_project_contact_field(
-                    project_uuid=project_uuid,
-                    key=contact_field.get('key'),
-                    value_type=value_type
+                    project_uuid=project_uuid, key=contact_field.get("key"), value_type=value_type
                 )
 
     def create_external_agent(
@@ -213,12 +206,18 @@ class AgentUsecase:
         agent_name: str,
         agent_description: str,
         agent_instructions: str,
-        model_id: str = None,
+        model_id: Optional[str] = None,
         idle_session_tll_in_seconds: int = 1800,
-        memory_configuration: Dict = {},
-        tags: Dict = {},
-        prompt_override_configuration: List[Dict] = []
+        memory_configuration: Optional[Dict] = None,
+        tags: Optional[Dict] = None,
+        prompt_override_configuration: Optional[List[Dict]] = None,
     ):
+        if memory_configuration is None:
+            memory_configuration = {}
+        if tags is None:
+            tags = {}
+        if prompt_override_configuration is None:
+            prompt_override_configuration = []
         return self.external_agent_client.create_agent(
             agent_name,
             agent_description,
@@ -249,11 +248,7 @@ class AgentUsecase:
         is_single_agent: bool,
     ):
         external_id, alias_name, _ = self.create_external_supervisor(
-            project_uuid,
-            supervisor_name,
-            supervisor_description,
-            supervisor_instructions,
-            is_single_agent
+            project_uuid, supervisor_name, supervisor_description, supervisor_instructions, is_single_agent
         )
 
         self.external_agent_client.wait_agent_status_update(external_id)
@@ -263,7 +258,7 @@ class AgentUsecase:
             metadata={
                 "supervisor_name": supervisor_name,
                 "is_single_agent": is_single_agent,
-            }
+            },
         )
         self.prepare_agent(team.external_id)
         return team
@@ -277,11 +272,7 @@ class AgentUsecase:
         is_single_agent: bool,
     ) -> Tuple[str, str]:
         return self.external_agent_client.create_supervisor(
-            project_uuid,
-            supervisor_name,
-            supervisor_description,
-            supervisor_instructions,
-            is_single_agent
+            project_uuid, supervisor_name, supervisor_description, supervisor_instructions, is_single_agent
         )
 
     def create_agent_version(self, agent_external_id, user, agent, team):
@@ -348,7 +339,7 @@ class AgentUsecase:
         function_schema: List[Dict],
         user: User,
         agent: Agent,
-        skill_handler: str
+        skill_handler: str,
     ):
         """
         Creates a new Lambda function for an agent skill and creates its alias.
@@ -370,21 +361,21 @@ class AgentUsecase:
             zip_content=file,
             function_schema=function_schema,
             agent=agent,
-            skill_handler=skill_handler
+            skill_handler=skill_handler,
         )
 
         # Create the 'live' alias pointing to $LATEST version
         alias_response = self.create_skill_alias(
             function_name=file_name,
-            version='$LATEST',  # Point to latest version
-            alias_name='live'
+            version="$LATEST",  # Point to latest version
+            alias_name="live",
         )
 
         # Get the agent instance
         agent = Agent.objects.get(external_id=agent_external_id)
 
         # Extract the original skill name from the file_name (remove the agent_external_id suffix)
-        original_skill_name = file_name.rsplit('-', 1)[0]
+        original_skill_name = file_name.rsplit("-", 1)[0]
 
         # Save skill information to AgentSkills model
         AgentSkills.objects.create(
@@ -392,30 +383,30 @@ class AgentUsecase:
             unique_name=file_name,
             agent=agent,
             skill={
-                'function_name': file_name,
-                'function_arn': lambda_response['FunctionArn'],
-                'runtime': 'python3.12',
-                'role': lambda_response['Role'],
-                'handler': 'lambda_function.lambda_handler',
-                'code_size': lambda_response['CodeSize'],
-                'description': f"Skill function for agent {agent.display_name}",
-                'last_modified': lambda_response['LastModified'],
-                'version': lambda_response['Version'],
-                'alias_name': 'live',
-                'alias_arn': alias_response['AliasArn'],
-                'agent_version': agent_version,
-                'function_schema': function_schema,
-                'skill_handler': skill_handler
+                "function_name": file_name,
+                "function_arn": lambda_response["FunctionArn"],
+                "runtime": "python3.12",
+                "role": lambda_response["Role"],
+                "handler": "lambda_function.lambda_handler",
+                "code_size": lambda_response["CodeSize"],
+                "description": f"Skill function for agent {agent.display_name}",
+                "last_modified": lambda_response["LastModified"],
+                "version": lambda_response["Version"],
+                "alias_name": "live",
+                "alias_arn": alias_response["AliasArn"],
+                "agent_version": agent_version,
+                "function_schema": function_schema,
+                "skill_handler": skill_handler,
             },
-            created_by=user
+            created_by=user,
         )
 
     def create_skill_alias(
         self,
         function_name: str,
         version: str,
-        alias_name: str = 'live',
-        description: str = 'Production alias for the skill'
+        alias_name: str = "live",
+        description: str = "Production alias for the skill",
     ):
         """
         Creates an alias for a Lambda function skill.
@@ -428,10 +419,7 @@ class AgentUsecase:
         """
         try:
             response = self.external_agent_client.lambda_client.create_alias(
-                FunctionName=function_name,
-                Name=alias_name,
-                FunctionVersion=version,
-                Description=description
+                FunctionName=function_name, Name=alias_name, FunctionVersion=version, Description=description
             )
             print(f"Created alias {alias_name} for function {function_name}")
             return response
@@ -439,10 +427,7 @@ class AgentUsecase:
             # If alias already exists, update it
             print(f"Alias {alias_name} already exists for function {function_name}, updating...")
             response = self.external_agent_client.lambda_client.update_alias(
-                FunctionName=function_name,
-                Name=alias_name,
-                FunctionVersion=version,
-                Description=description
+                FunctionName=function_name, Name=alias_name, FunctionVersion=version, Description=description
             )
             return response
         except Exception as e:
@@ -460,7 +445,7 @@ class AgentUsecase:
         file: bytes,
         function_schema: List[Dict],
         user: User,
-        skill_handler: str
+        skill_handler: str,
     ):
         """
         Updates the code for an existing Lambda function associated with an agent skill.
@@ -472,10 +457,10 @@ class AgentUsecase:
         skill_object = AgentSkills.objects.get(unique_name=file_name, agent=agent)
 
         # Check if any parameter in the function schema has contact_field=True
-        if function_schema and function_schema[0].get('parameters'):
-            parameters = function_schema[0]['parameters']
+        if function_schema and function_schema[0].get("parameters"):
+            parameters = function_schema[0]["parameters"]
             has_contact_field = any(
-                isinstance(param_data, dict) and param_data.get('contact_field') is True
+                isinstance(param_data, dict) and param_data.get("contact_field") is True
                 for param_data in parameters.values()
             )
             if has_contact_field:
@@ -485,29 +470,29 @@ class AgentUsecase:
         AgentSkillVersion.objects.create(
             agent_skill=skill_object,
             metadata={
-                'function_name': skill_object.skill['function_name'],
-                'function_arn': skill_object.skill['function_arn'],
-                'runtime': skill_object.skill['runtime'],
-                'role': skill_object.skill['role'],
-                'handler': skill_object.skill['handler'],
-                'code_size': skill_object.skill['code_size'],
-                'description': skill_object.skill['description'],
-                'version': skill_object.skill['version'],
-                'alias_name': skill_object.skill['alias_name'],
-                'alias_arn': skill_object.skill['alias_arn'],
-                'agent_version': skill_object.skill['agent_version'],
-                'function_schema': skill_object.skill['function_schema'],
-                'lambda_version': skill_object.skill.get('lambda_version', '$LATEST'),
-                'skill_handler': skill_object.skill['skill_handler']
+                "function_name": skill_object.skill["function_name"],
+                "function_arn": skill_object.skill["function_arn"],
+                "runtime": skill_object.skill["runtime"],
+                "role": skill_object.skill["role"],
+                "handler": skill_object.skill["handler"],
+                "code_size": skill_object.skill["code_size"],
+                "description": skill_object.skill["description"],
+                "version": skill_object.skill["version"],
+                "alias_name": skill_object.skill["alias_name"],
+                "alias_arn": skill_object.skill["alias_arn"],
+                "agent_version": skill_object.skill["agent_version"],
+                "function_schema": skill_object.skill["function_schema"],
+                "lambda_version": skill_object.skill.get("lambda_version", "$LATEST"),
+                "skill_handler": skill_object.skill["skill_handler"],
             },
-            created_by=user
+            created_by=user,
         )
 
         # Use the stored skill data for the update
         lambda_response = run_update_lambda_function(
             agent_external_id=agent_external_id,
-            lambda_name=skill_object.skill['function_name'],
-            lambda_arn=skill_object.skill['function_arn'],
+            lambda_name=skill_object.skill["function_name"],
+            lambda_arn=skill_object.skill["function_arn"],
             agent_version=agent_version,
             zip_content=file,
             function_schema=function_schema,
@@ -516,46 +501,48 @@ class AgentUsecase:
         # Get the action group for the agent
         action_group = self.external_agent_client.get_agent_action_group(
             agent_id=agent.external_id,
-            action_group_id=agent.metadata.get('action_group').get('actionGroupId'),
-            agent_version=agent.current_version.metadata.get("agent_alias_version")
+            action_group_id=agent.metadata.get("action_group").get("actionGroupId"),
+            agent_version=agent.current_version.metadata.get("agent_alias_version"),
         )
 
         # Update the action group
         self.external_agent_client.update_agent_action_group(
             agent_external_id=agent.external_id,
-            action_group_name=action_group['agentActionGroup']['actionGroupName'],
-            lambda_arn=lambda_response['FunctionArn'],
+            action_group_name=action_group["agentActionGroup"]["actionGroupName"],
+            lambda_arn=lambda_response["FunctionArn"],
             agent_version=agent.current_version.metadata.get("agent_alias_version"),
-            action_group_id=action_group['agentActionGroup']['actionGroupId'],
-            function_schema=function_schema
+            action_group_id=action_group["agentActionGroup"]["actionGroupId"],
+            function_schema=function_schema,
         )
 
         print("----------- UPDATED LAMBDA FUNCTION ---------")
 
         # Update skill information with new data while preserving existing fields
-        skill_object.skill.update({
-            'code_size': lambda_response['CodeSize'],
-            'last_modified': lambda_response['LastModified'],
-            'version': lambda_response['Version'],
-            'agent_version': agent_version,
-            'lambda_version': lambda_response['Version'],  # Store Lambda version number
-            # Preserve other important fields from the original skill data
-            'function_name': skill_object.skill['function_name'],
-            'function_arn': skill_object.skill['function_arn'],
-            'runtime': skill_object.skill['runtime'],
-            'role': skill_object.skill['role'],
-            'handler': skill_object.skill['handler'],
-            'description': skill_object.skill['description'],
-            'alias_name': skill_object.skill['alias_name'],
-            'alias_arn': skill_object.skill['alias_arn']
-        })
+        skill_object.skill.update(
+            {
+                "code_size": lambda_response["CodeSize"],
+                "last_modified": lambda_response["LastModified"],
+                "version": lambda_response["Version"],
+                "agent_version": agent_version,
+                "lambda_version": lambda_response["Version"],  # Store Lambda version number
+                # Preserve other important fields from the original skill data
+                "function_name": skill_object.skill["function_name"],
+                "function_arn": skill_object.skill["function_arn"],
+                "runtime": skill_object.skill["runtime"],
+                "role": skill_object.skill["role"],
+                "handler": skill_object.skill["handler"],
+                "description": skill_object.skill["description"],
+                "alias_name": skill_object.skill["alias_name"],
+                "alias_arn": skill_object.skill["alias_arn"],
+            }
+        )
         skill_object.modified_by = user
         skill_object.save()
 
         print(f"Updated skill {skill_object.display_name} for agent {agent.display_name}")
 
         warnings = []
-        if skill_object.skill['skill_handler'] != skill_handler:
+        if skill_object.skill["skill_handler"] != skill_handler:
             warnings.append(f"Skill handler changed from {skill_object.skill['handler']} to {skill_handler}")
 
         return warnings
@@ -579,14 +566,13 @@ class AgentUsecase:
         return Team.objects.get(**kwargs)
 
     def invoke_supervisor_stream(self, session_id, supervisor_id, supervisor_alias_id, content_base, message):
-        for chunk in self.external_agent_client.invoke_supervisor_stream(
+        yield from self.external_agent_client.invoke_supervisor_stream(
             supervisor_id=supervisor_id,
             supervisor_alias_id=supervisor_alias_id,
             session_id=session_id,
             content_base=content_base,
-            message=message
-        ):
-            yield chunk
+            message=message,
+        )
 
     def prepare_agent(self, agent_id: str):
         self.external_agent_client.prepare_agent(agent_id)
@@ -599,8 +585,7 @@ class AgentUsecase:
 
         supervisor_id: str = team.external_id
         collaborators = BedrockFileDatabase().bedrock_agent.list_agent_collaborators(
-            agentId=supervisor_id,
-            agentVersion='DRAFT'
+            agentId=supervisor_id, agentVersion="DRAFT"
         )
         summaries = collaborators["agentCollaboratorSummaries"]
         for agent_descriptor in summaries:
@@ -610,7 +595,7 @@ class AgentUsecase:
         if sub_agent_id:
             self.external_agent_client.disassociate_sub_agent(
                 supervisor_id=supervisor_id,
-                supervisor_version='DRAFT',
+                supervisor_version="DRAFT",
                 sub_agent_id=sub_agent_id,
             )
             active_agent = team.team_agents.get(agent=agent)
@@ -644,7 +629,7 @@ class AgentUsecase:
         self,
         agent_dto: AgentDTO,
         user_email: str,
-        allowed_users: List[str] = settings.AGENT_CONFIGURATION_ALLOWED_USERS
+        allowed_users: List[str] = settings.AGENT_CONFIGURATION_ALLOWED_USERS,
     ):
         """Validate the AgentDTO fields"""
         if agent_dto.slug is not None:
@@ -659,7 +644,7 @@ class AgentUsecase:
 
         if agent_dto.skills:
             for skill in agent_dto.skills:
-                if len(skill.get('slug')) > 53:
+                if len(skill.get("slug")) > 53:
                     raise SkillNameTooLong
 
         agent_attributes = agent_dto.prompt_override_configuration or agent_dto.memory_configuration
@@ -673,14 +658,10 @@ class AgentUsecase:
 
         return agent_dto
 
-    def update_dict_to_dto(
-        self,
-        agent_value: dict,
-        user_email: str
-    ) -> AgentDTO:
+    def update_dict_to_dto(self, agent_value: dict, user_email: str) -> AgentDTO:
         """Convert update dictionary to AgentDTO"""
         agent_dto = AgentDTO(
-            slug=slugify(agent_value.get('name')),
+            slug=slugify(agent_value.get("name")),
             name=agent_value.get("name"),
             description=agent_value.get("description"),
             instructions=agent_value.get("instructions", []),
@@ -692,19 +673,15 @@ class AgentUsecase:
             idle_session_ttl_in_seconds=agent_value.get("idle_session_ttl_in_seconds"),
             guardrail_configuration=agent_value.get("guardrail_configuration"),
             foundation_model=agent_value.get("foundation_model"),
-            is_update=True  # Mark as update
+            is_update=True,  # Mark as update
         )
         validate_agents = self.validate_agent_dto(agent_dto, user_email)
         return validate_agents
 
-    def create_dict_to_dto(
-        self,
-        agent_value: dict,
-        user_email: str
-    ) -> AgentDTO:
+    def create_dict_to_dto(self, agent_value: dict, user_email: str) -> AgentDTO:
         """Convert dictionary to AgentDTO for creation or update"""
         agent_dto = AgentDTO(
-            slug=slugify(agent_value.get('name')),
+            slug=slugify(agent_value.get("name")),
             name=agent_value.get("name"),
             description=agent_value.get("description"),
             instructions=agent_value.get("instructions", []),
@@ -723,28 +700,17 @@ class AgentUsecase:
         validate_agents = self.validate_agent_dto(agent_dto, user_email)
         return validate_agents
 
-    def agent_dto_handler(
-        self,
-        project_uuid: str,
-        yaml: dict,
-        user_email: str
-    ):
+    def agent_dto_handler(self, project_uuid: str, yaml: dict, user_email: str):
         """
         Handles both creation and updates of agents using the same DTO structure.
         Compares existing agent data with incoming data to determine what needs to be updated.
         """
         agents_dto = []
-        for agent_key, agent_value in yaml.get("agents", {}).items():
-            agent = Agent.objects.filter(
-                display_name=agent_value.get("name"),
-                project_id=project_uuid
-            ).first()
+        for _, agent_value in yaml.get("agents", {}).items():
+            agent = Agent.objects.filter(display_name=agent_value.get("name"), project_id=project_uuid).first()
 
             # Convert incoming data to DTO
-            agent_dto = self.create_dict_to_dto(
-                agent_value=agent_value,
-                user_email=user_email
-            )
+            agent_dto = self.create_dict_to_dto(agent_value=agent_value, user_email=user_email)
 
             if agent:
                 # If agent exists, compare and mark fields that need updating
@@ -766,22 +732,22 @@ class AgentUsecase:
         updates = {}
 
         if existing_agent.description != new_dto.description:
-            updates['description'] = new_dto.description
+            updates["description"] = new_dto.description
 
         if new_dto.instructions:
-            current_instructions = "\n".join(existing_agent.metadata.get('instructions', []))
+            current_instructions = "\n".join(existing_agent.metadata.get("instructions", []))
             new_instructions = "\n".join(new_dto.instructions)
             if current_instructions != new_instructions:
-                updates['instructions'] = new_dto.instructions
+                updates["instructions"] = new_dto.instructions
 
         if new_dto.guardrails:
-            current_guardrails = "\n".join(existing_agent.metadata.get('guardrails', []))
+            current_guardrails = "\n".join(existing_agent.metadata.get("guardrails", []))
             new_guardrails = "\n".join(new_dto.guardrails)
             if current_guardrails != new_guardrails:
-                updates['guardrails'] = new_dto.guardrails
+                updates["guardrails"] = new_dto.guardrails
 
         if new_dto.model and existing_agent.model != new_dto.model:
-            updates['model'] = new_dto.model
+            updates["model"] = new_dto.model
 
         return updates
 
@@ -794,24 +760,21 @@ class AgentUsecase:
 
         for skill in new_skills:
             skill_name = f"{skill['slug']}-{existing_agent.external_id}"
-            existing_skill = AgentSkills.objects.filter(
-                unique_name=skill_name,
-                agent=existing_agent
-            ).first()
+            existing_skill = AgentSkills.objects.filter(unique_name=skill_name, agent=existing_agent).first()
 
             if existing_skill:
                 # Mark skill for update and include existing data
-                skill['is_update'] = True
-                skill['existing_data'] = {
-                    'function_name': existing_skill.skill['function_name'],
-                    'function_arn': existing_skill.skill['function_arn'],
-                    'runtime': existing_skill.skill['runtime'],
-                    'handler': existing_skill.skill['handler'],
-                    'role': existing_skill.skill['role']
+                skill["is_update"] = True
+                skill["existing_data"] = {
+                    "function_name": existing_skill.skill["function_name"],
+                    "function_arn": existing_skill.skill["function_arn"],
+                    "runtime": existing_skill.skill["runtime"],
+                    "handler": existing_skill.skill["handler"],
+                    "role": existing_skill.skill["role"],
                 }
             else:
                 # Mark as new skill
-                skill['is_update'] = False
+                skill["is_update"] = False
 
             processed_skills.append(skill)
 
@@ -820,14 +783,7 @@ class AgentUsecase:
     def wait_agent_status_update(self, external_id: str):
         self.external_agent_client.wait_agent_status_update(external_id)
 
-    def handle_agent_skills(
-        self,
-        agent: Agent,
-        skills: List[Dict],
-        files: Dict,
-        user: User,
-        project_uuid: str
-    ):
+    def handle_agent_skills(self, agent: Agent, skills: List[Dict], files: Dict, user: User, project_uuid: str):
         # deprecated
         """
         Handle creation or update of agent skills.
@@ -840,7 +796,7 @@ class AgentUsecase:
         """
         for skill in skills:
             skill_handler = skill.get("source").get("entrypoint")
-            slug = skill.get('slug')
+            slug = skill.get("slug")
             skill_file = files[f"{agent.slug}:{slug}"]
             skill_file = skill_file.read()
             skill_parameters = skill.get("parameters")
@@ -852,10 +808,7 @@ class AgentUsecase:
                 for param in skill_parameters:
                     for key, value in param.items():
                         if value.get("contact_field"):
-                            fields.append({
-                                "key": key,
-                                "value_type": value.get("type")
-                            })
+                            fields.append({"key": key, "value_type": value.get("type")})
                         param[key].pop("contact_field", None)
                     params.update(param)
                 skill_parameters = params
@@ -881,7 +834,7 @@ class AgentUsecase:
                     file=skill_file,
                     function_schema=function_schema,
                     user=user,
-                    skill_handler=skill_handler
+                    skill_handler=skill_handler,
                 )
                 return warnings
             except AgentSkills.DoesNotExist:
@@ -894,7 +847,7 @@ class AgentUsecase:
                     function_schema=function_schema,
                     user=user,
                     agent=agent,
-                    skill_handler=skill_handler
+                    skill_handler=skill_handler,
                 )
 
     def delete_agent_version(self, agent_id: str, version, team, user):
@@ -914,8 +867,7 @@ class AgentUsecase:
                     self.prepare_agent(agent_id)
                     self.prepare_agent(team.external_id)
                     self.external_agent_client.bedrock_agent.delete_agent_alias(
-                        agentId=agent_id,
-                        agentAliasId=version.alias_id
+                        agentId=agent_id, agentAliasId=version.alias_id
                     )
                 if reasign_agent:
                     self.assign_agent(str(agent.uuid), project_uuid, user)
@@ -938,9 +890,11 @@ class AgentUsecase:
 
         alias_name = f"{supervisor_name}-multi-agent"
 
-        supervisor_agent_alias_id, supervisor_agent_alias_arn, supervisor_alias_version = self.external_agent_client.create_agent_alias(
-            alias_name=alias_name, agent_id=supervisor_id
-        )
+        (
+            supervisor_agent_alias_id,
+            supervisor_agent_alias_arn,
+            supervisor_alias_version,
+        ) = self.external_agent_client.create_agent_alias(alias_name=alias_name, agent_id=supervisor_id)
         team.versions.create(
             alias_id=supervisor_agent_alias_id,
             alias_name=alias_name,
@@ -954,12 +908,10 @@ class AgentUsecase:
     def delete_supervisor_version(self, agent_id: str, version):
         try:
             response = self.external_agent_client.bedrock_agent.delete_agent_alias(
-                agentId=agent_id,
-                agentAliasId=version.alias_id
+                agentId=agent_id, agentAliasId=version.alias_id
             )
             self.external_agent_client.bedrock_agent.delete_agent_version(
-                agentId=agent_id,
-                agentVersion=version.metadata["supervisor_alias_version"]
+                agentId=agent_id, agentVersion=version.metadata["supervisor_alias_version"]
             )
             print(response)
             version.delete()
@@ -975,31 +927,35 @@ class AgentUsecase:
         Handler for skills that have contact field functionality.
         Checks parameters for contact_field flag and creates corresponding contact fields.
         """
-        parameters = skill_object.skill['function_schema'][0]['parameters']
+        parameters = skill_object.skill["function_schema"][0]["parameters"]
 
         contact_field_params = []
         for param_key, param_data in parameters.items():
-            if isinstance(param_data, dict) and param_data.get('contact_field') is True:
-                contact_field_params.append({
-                    'key': param_key,  # Use the parameter key as the contact field key
-                    'value_type': param_data.get('type', 'text').lower()  # Convert type to value_type
-                })
+            if isinstance(param_data, dict) and param_data.get("contact_field") is True:
+                contact_field_params.append(
+                    {
+                        "key": param_key,  # Use the parameter key as the contact field key
+                        "value_type": param_data.get("type", "text").lower(),  # Convert type to value_type
+                    }
+                )
 
         if contact_field_params:
-            flows_contact_fields = self.flows_client.list_project_contact_fields(
-                str(skill_object.agent.project.uuid)
-            )
+            flows_contact_fields = self.flows_client.list_project_contact_fields(str(skill_object.agent.project.uuid))
 
             # Handle both list and dict responses
-            results = flows_contact_fields.get('results', []) if isinstance(flows_contact_fields, dict) else flows_contact_fields
-            existing_keys = set(field.get('key', '') for field in results)
+            results = (
+                flows_contact_fields.get("results", [])
+                if isinstance(flows_contact_fields, dict)
+                else flows_contact_fields
+            )
+            existing_keys = set(field.get("key", "") for field in results)
 
             for param in contact_field_params:
-                if param['key'] not in existing_keys:
+                if param["key"] not in existing_keys:
                     self.flows_client.create_project_contact_field(
                         project_uuid=str(skill_object.agent.project.uuid),
-                        key=param['key'],
-                        value_type=param['value_type']
+                        key=param["key"],
+                        value_type=param["value_type"],
                     )
 
         return True
@@ -1010,14 +966,14 @@ class AgentUsecase:
         response = self.external_agent_client.bedrock_agent.get_agent_collaborator(
             agentId=team.external_id,
             agentVersion=team.current_version.metadata.get("supervisor_alias_version"),
-            collaboratorId=team.team_agents.get(agent__external_id=agent.external_id).metadata.get("agent_collaborator_id")
+            collaboratorId=team.team_agents.get(agent__external_id=agent.external_id).metadata.get(
+                "agent_collaborator_id"
+            ),
         )
         current_agent_collaborator = response["agentCollaborator"]
 
         response = self.external_agent_client.bedrock_agent.update_agent_collaborator(
-            agentDescriptor={
-                'aliasArn': agent.current_version.metadata["agent_alias"]
-            },
+            agentDescriptor={"aliasArn": agent.current_version.metadata["agent_alias"]},
             agentId=current_agent_collaborator["agentId"],
             agentVersion="DRAFT",
             collaborationInstruction=agent.description,
@@ -1051,7 +1007,7 @@ class AgentUsecase:
             source=source,
             contact_urn=contact_urn,
             session_id=log.session_id,
-            created_at__lt=created_at
+            created_at__lt=created_at,
         ).order_by("-created_at")[:message_count]
 
         logs = list(logs)[::-1]
@@ -1096,15 +1052,12 @@ class AgentUsecase:
 
         supervisor = self.external_agent_client.bedrock_agent.get_agent(agentId=supervisor_id)
         print("--- Got supervisor agent ---- ")
-        current_instructions = supervisor['agent'].get('instruction', '')
+        current_instructions = supervisor["agent"].get("instruction", "")
         new_instructions = self._insert_human_support_instructions(current_instructions)
         if not new_instructions:
             return
 
-        self._update_agent_instructions(
-            supervisor_id=supervisor_id,
-            new_instructions=new_instructions
-        )
+        self._update_agent_instructions(supervisor_id=supervisor_id, new_instructions=new_instructions)
 
     def _insert_human_support_instructions(self, current_instructions: str) -> str | None:
         """Inserts human support instructions after principles tag"""
@@ -1133,21 +1086,11 @@ class AgentUsecase:
         end_pos = start_pos + len(self.human_support_instructions.strip())
 
         # Remove the instructions and any extra whitespace
-        return (
-            f"{current_instructions[:start_pos].rstrip()}"
-            f"{current_instructions[end_pos:].lstrip()}"
-        )
+        return f"{current_instructions[:start_pos].rstrip()}" f"{current_instructions[end_pos:].lstrip()}"
 
-    def _update_agent_instructions(
-        self,
-        supervisor_id: str,
-        new_instructions: str
-    ) -> None:
+    def _update_agent_instructions(self, supervisor_id: str, new_instructions: str) -> None:
         """Updates agent with new instructions"""
-        self.external_agent_client.update_agent_instructions(
-            agent_id=supervisor_id,
-            instructions=new_instructions
-        )
+        self.external_agent_client.update_agent_instructions(agent_id=supervisor_id, instructions=new_instructions)
         self.external_agent_client.wait_agent_status_update(supervisor_id)
 
     def _add_human_support_actions(self, supervisor_id: str, team: Agent) -> None:
@@ -1173,53 +1116,46 @@ class AgentUsecase:
                 continue
 
             function_schema = self._prepare_function_schema(action_data)
-            lambda_arn = action_data['agentActionGroup']['actionGroupExecutor']['lambda']
-            action_group_name = action_data['agentActionGroup']['actionGroupName']
+            lambda_arn = action_data["agentActionGroup"]["actionGroupExecutor"]["lambda"]
+            action_group_name = action_data["agentActionGroup"]["actionGroupName"]
 
             response = self._attach_action_to_agent(
                 agent_id=supervisor_id,
                 action_group_name=action_group_name,
                 lambda_arn=lambda_arn,
                 function_schema=function_schema,
-                team=team
+                team=team,
             )
 
-            if response and 'agentActionGroup' in response:
-                created_action_group_id = response['agentActionGroup']['actionGroupId']
+            if response and "agentActionGroup" in response:
+                created_action_group_id = response["agentActionGroup"]["actionGroupId"]
                 created_action_groups.append(created_action_group_id)
                 print(f"Created action group with ID: {created_action_group_id}")
 
         # Update team metadata with created action groups
         if created_action_groups:
             print(f"Saving action groups to team metadata: {created_action_groups}")
-            if 'human_support_action_groups' in team.metadata:
-                team.metadata['human_support_action_groups'].extend(created_action_groups)
+            if "human_support_action_groups" in team.metadata:
+                team.metadata["human_support_action_groups"].extend(created_action_groups)
             else:
-                team.metadata['human_support_action_groups'] = created_action_groups
+                team.metadata["human_support_action_groups"] = created_action_groups
             team.save()
 
     def _get_action_group_data(self, agent_id: str, action_group_id: str) -> dict | None:
         """Gets action group data from Bedrock"""
         return self.external_agent_client.get_agent_action_group(
-            agent_id=agent_id,
-            action_group_id=action_group_id,
-            agent_version="DRAFT"
+            agent_id=agent_id, action_group_id=action_group_id, agent_version="DRAFT"
         )
 
     def _prepare_function_schema(self, action_data: dict) -> list:
         """Prepares function schema by sanitizing function names"""
-        function_schema = action_data['agentActionGroup']['functionSchema']['functions']
+        function_schema = action_data["agentActionGroup"]["functionSchema"]["functions"]
         for function in function_schema:
-            function['name'] = ''.join(c for c in function['name'] if c.isalnum() or c in '_-')
+            function["name"] = "".join(c for c in function["name"] if c.isalnum() or c in "_-")
         return function_schema
 
     def _attach_action_to_agent(
-        self,
-        agent_id: str,
-        action_group_name: str,
-        lambda_arn: str,
-        function_schema: list,
-        team: Team
+        self, agent_id: str, action_group_name: str, lambda_arn: str, function_schema: list, team: Team
     ) -> dict:
         """Attaches an action group to an agent and sets up necessary permissions"""
         response = self.external_agent_client.attach_supervisor_lambda_function(
@@ -1227,19 +1163,12 @@ class AgentUsecase:
             action_group_name=action_group_name,
             lambda_arn=lambda_arn,
             function_schema=function_schema,
-            team=team
+            team=team,
         )
 
-        self.external_agent_client.allow_agent_lambda(
-            agent_id=agent_id,
-            lambda_function_name=lambda_arn
-        )
+        self.external_agent_client.allow_agent_lambda(agent_id=agent_id, lambda_function_name=lambda_arn)
 
-        self.create_skill_alias(
-            function_name=lambda_arn,
-            version='$LATEST',
-            alias_name='live'
-        )
+        self.create_skill_alias(function_name=lambda_arn, version="$LATEST", alias_name="live")
 
         return response
 
@@ -1249,14 +1178,11 @@ class AgentUsecase:
 
         # Step 1: Remove human support instructions
         supervisor = self.external_agent_client.bedrock_agent.get_agent(agentId=supervisor_id)
-        current_instructions = supervisor['agent'].get('instruction', '')
+        current_instructions = supervisor["agent"].get("instruction", "")
         new_instructions = self._remove_human_support_instructions(current_instructions)
 
         if new_instructions:
-            self._update_agent_instructions(
-                supervisor_id=supervisor_id,
-                new_instructions=new_instructions
-            )
+            self._update_agent_instructions(supervisor_id=supervisor_id, new_instructions=new_instructions)
 
         # Step 2: Remove human support action groups
         self._remove_human_support_actions(team=team)
@@ -1266,7 +1192,7 @@ class AgentUsecase:
 
     def _remove_human_support_actions(self, team: Team) -> None:
         """Removes human support action groups from the supervisor"""
-        action_groups = team.metadata.get('human_support_action_groups', [])
+        action_groups = team.metadata.get("human_support_action_groups", [])
 
         if not action_groups:
             print("No human support action groups found to remove")
@@ -1279,24 +1205,22 @@ class AgentUsecase:
                 print(f"Disabling action group: {action_group_id}")
                 # First get the action group details
                 action_group = self.external_agent_client.get_agent_action_group(
-                    agent_id=team.external_id,
-                    action_group_id=action_group_id,
-                    agent_version="DRAFT"
+                    agent_id=team.external_id, action_group_id=action_group_id, agent_version="DRAFT"
                 )
 
                 # Extract just the functions list from the schema
-                function_schema = action_group['agentActionGroup']['functionSchema']['functions']
+                function_schema = action_group["agentActionGroup"]["functionSchema"]["functions"]
                 print(f"Function schema for update: {function_schema}")
 
                 # Disable the action group
                 self.external_agent_client.update_agent_action_group(
                     agent_external_id=team.external_id,
-                    lambda_arn=action_group['agentActionGroup']['actionGroupExecutor']['lambda'],
+                    lambda_arn=action_group["agentActionGroup"]["actionGroupExecutor"]["lambda"],
                     agent_version="DRAFT",
                     action_group_id=action_group_id,
-                    action_group_name=action_group['agentActionGroup']['actionGroupName'],
+                    action_group_name=action_group["agentActionGroup"]["actionGroupName"],
                     action_group_state="DISABLED",
-                    function_schema=function_schema
+                    function_schema=function_schema,
                 )
 
                 # Wait a moment for the state change to take effect
@@ -1304,14 +1228,12 @@ class AgentUsecase:
 
                 self.external_agent_client.remove_agent_lambda(
                     agent_id=team.external_id,
-                    lambda_function_name=action_group['agentActionGroup']['actionGroupExecutor']['lambda']
+                    lambda_function_name=action_group["agentActionGroup"]["actionGroupExecutor"]["lambda"],
                 )
                 # Now delete the disabled action group
                 print(f"Deleting action group: {action_group_id}")
                 self.external_agent_client.delete_agent_action_group(
-                    agent_id=team.external_id,
-                    agent_version="DRAFT",
-                    action_group_id=action_group_id
+                    agent_id=team.external_id, agent_version="DRAFT", action_group_id=action_group_id
                 )
 
                 # Add to successfully removed list only if both disable and delete succeeded
@@ -1326,26 +1248,26 @@ class AgentUsecase:
         if successfully_removed:
             remaining_groups = [ag_id for ag_id in action_groups if ag_id not in successfully_removed]
             if remaining_groups:
-                team.metadata['human_support_action_groups'] = remaining_groups
+                team.metadata["human_support_action_groups"] = remaining_groups
             else:
-                team.metadata.pop('human_support_action_groups', None)
-            team.save(update_fields=['metadata'])
+                team.metadata.pop("human_support_action_groups", None)
+            team.save(update_fields=["metadata"])
             print(f"Removed {len(successfully_removed)} action groups from metadata")
 
     def is_bedrock_agent(self, agent: Agent) -> bool:
         """Determine if agent uses Bedrock or OpenAI backend"""
         # Method 1: Check metadata (most reliable)
-        if agent.metadata.get('engine') == 'BEDROCK':
+        if agent.metadata.get("engine") == "BEDROCK":
             return True
 
         # Method 2: Check for Lambda functions (Bedrock signature)
         if agent.agent_skills.exists():
             first_skill = agent.agent_skills.first()
-            if first_skill.skill.get('function_name') or first_skill.skill.get('function_arn'):
+            if first_skill.skill.get("function_name") or first_skill.skill.get("function_arn"):
                 return True
 
         # Method 3: Check project backend
-        if agent.project.agents_backend and 'bedrock' in agent.project.agents_backend.lower():
+        if agent.project.agents_backend and "bedrock" in agent.project.agents_backend.lower():
             return True
 
         # Default: Not Bedrock
