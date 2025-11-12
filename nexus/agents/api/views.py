@@ -770,7 +770,7 @@ class DeleteAgentView(APIView):
     def delete(self, request, *args, **kwargs):
         """
         Delete an agent and all its resources.
-        
+
         Supports both:
         - Legacy agents (nexus.agents.models.Agent)
         - Inline agents (nexus.inline_agents.models.Agent)
@@ -804,7 +804,7 @@ class DeleteAgentView(APIView):
         # Try to find both agent types
         legacy_agent = None
         inline_agent = None
-        
+
         try:
             legacy_agent = Agent.objects.get(uuid=agent_uuid, project__uuid=project_uuid)
         except Agent.DoesNotExist:
@@ -831,12 +831,12 @@ class DeleteAgentView(APIView):
         # Priority: inline_agent_switch setting determines which type to prefer
         should_use_inline = project.inline_agent_switch and inline_agent
         should_use_legacy = legacy_agent
-        
+
         if should_use_inline:
             return self._delete_inline_agent(inline_agent, project_uuid, logger)
         if should_use_legacy:
             return self._delete_legacy_agent(legacy_agent, logger)
-        
+
         # Use inline if it exists (should only happen if switch=False but only inline exists)
         if inline_agent:
             return self._delete_inline_agent(inline_agent, project_uuid, logger)

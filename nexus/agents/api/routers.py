@@ -2,8 +2,8 @@ from django.urls import path
 
 from nexus.agents.api.views import (
     AgentTracesView,
-    RationaleView,
     DeleteAgentView,
+    RationaleView,
 )
 from nexus.inline_agents.api.views import ActiveAgentsView as ActiveInlineAgentsView
 from nexus.inline_agents.api.views import AgentEndSessionView, LogGroupView, MultiAgentView

@@ -1057,8 +1057,9 @@ class BedrockFileDatabase(FileDataBase):
     def delete_lambda_function(self, function_name: str):
         """Delete Lambda function and all its aliases"""
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         try:
             # List and delete all aliases first
             list_aliases = self.lambda_client.list_aliases(FunctionName=function_name)
@@ -1066,10 +1067,7 @@ class BedrockFileDatabase(FileDataBase):
 
             for alias in aliases:
                 try:
-                    self.lambda_client.delete_alias(
-                        FunctionName=function_name,
-                        Name=alias.get("Name")
-                    )
+                    self.lambda_client.delete_alias(FunctionName=function_name, Name=alias.get("Name"))
                     logger.info(f"Deleted Lambda alias: {alias.get('Name')}")
                 except Exception as e:
                     logger.warning(f"Failed to delete alias {alias.get('Name')}: {e}")

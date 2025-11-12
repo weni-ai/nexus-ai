@@ -1257,17 +1257,17 @@ class AgentUsecase:
     def is_bedrock_agent(self, agent: Agent) -> bool:
         """Determine if agent uses Bedrock or OpenAI backend"""
         # Method 1: Check metadata (most reliable)
-        if agent.metadata.get('engine') == 'BEDROCK':
+        if agent.metadata.get("engine") == "BEDROCK":
             return True
 
         # Method 2: Check for Lambda functions (Bedrock signature)
         if agent.agent_skills.exists():
             first_skill = agent.agent_skills.first()
-            if first_skill.skill.get('function_name') or first_skill.skill.get('function_arn'):
+            if first_skill.skill.get("function_name") or first_skill.skill.get("function_arn"):
                 return True
 
         # Method 3: Check project backend
-        if agent.project.agents_backend and 'bedrock' in agent.project.agents_backend.lower():
+        if agent.project.agents_backend and "bedrock" in agent.project.agents_backend.lower():
             return True
 
         # Default: Not Bedrock

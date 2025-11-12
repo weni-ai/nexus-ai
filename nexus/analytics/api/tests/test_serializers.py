@@ -1,14 +1,13 @@
 from django.test import TestCase
-from rest_framework import serializers
 
 from nexus.analytics.api.serializers import (
-    ResolutionRateSerializer,
-    IndividualResolutionRateSerializer,
     IndividualProjectResolutionSerializer,
-    UnresolvedRateSerializer,
-    ProjectsByMotorSerializer,
+    IndividualResolutionRateSerializer,
     MotorProjectsSerializer,
     ProjectByMotorSerializer,
+    ProjectsByMotorSerializer,
+    ResolutionRateSerializer,
+    UnresolvedRateSerializer,
 )
 
 
@@ -251,4 +250,3 @@ class AnalyticsSerializersTestCase(TestCase):
         representation = serializer.to_representation(data)
         self.assertIn("AB 2", representation)
         self.assertNotIn("AB_2", representation)  # Should use space, not underscore
-

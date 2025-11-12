@@ -930,76 +930,72 @@ class TestSubTopicsViewSet(TestCase):
 
     def test_retrieve_subtopic_with_url_pattern(self):
         """Test retrieving a subtopic using the actual URL pattern (not hitting 404)"""
-        url_retrieve = f'{self.url}/{self.subtopic.uuid}/'
+        url_retrieve = f"{self.url}/{self.subtopic.uuid}/"
         request = self.factory.get(url_retrieve)
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
             # Use the actual view with URL kwargs as they would come from the router
-            response = SubTopicsViewSet.as_view({'get': 'retrieve'})(
+            response = SubTopicsViewSet.as_view({"get": "retrieve"})(
                 request,
                 project_uuid=str(self.project.uuid),
                 topic_uuid=str(self.topic.uuid),
-                uuid=str(self.subtopic.uuid)
+                uuid=str(self.subtopic.uuid),
             )
 
         self.assertEqual(response.status_code, 200, "Retrieve should not return 404")
-        self.assertEqual(response.data['name'], self.subtopic.name)
-        self.assertEqual(response.data['uuid'], str(self.subtopic.uuid))
-        self.assertEqual(response.data['description'], self.subtopic.description)
+        self.assertEqual(response.data["name"], self.subtopic.name)
+        self.assertEqual(response.data["uuid"], str(self.subtopic.uuid))
+        self.assertEqual(response.data["description"], self.subtopic.description)
 
     def test_delete_subtopic_with_url_pattern(self):
         """Test deleting a subtopic using the actual URL pattern (not hitting 404)"""
         # Create a subtopic to delete
         subtopic_to_delete = SubTopicsFactory(topic=self.topic)
-        url_delete = f'{self.url}/{subtopic_to_delete.uuid}/'
+        url_delete = f"{self.url}/{subtopic_to_delete.uuid}/"
         request = self.factory.delete(url_delete)
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
             # Use the actual view with URL kwargs as they would come from the router
-            response = SubTopicsViewSet.as_view({'delete': 'destroy'})(
+            response = SubTopicsViewSet.as_view({"delete": "destroy"})(
                 request,
                 project_uuid=str(self.project.uuid),
                 topic_uuid=str(self.topic.uuid),
-                uuid=str(subtopic_to_delete.uuid)
+                uuid=str(subtopic_to_delete.uuid),
             )
 
         self.assertEqual(response.status_code, 204, "Delete should not return 404")
 
         # Verify the subtopic was actually deleted
         from nexus.intelligences.models import SubTopics
+
         self.assertFalse(
-            SubTopics.objects.filter(uuid=subtopic_to_delete.uuid).exists(),
-            "Subtopic should be deleted from database"
+            SubTopics.objects.filter(uuid=subtopic_to_delete.uuid).exists(), "Subtopic should be deleted from database"
         )
 
     def test_update_subtopic_with_url_pattern(self):
         """Test updating a subtopic using the actual URL pattern (not hitting 404)"""
         data = {
-            'name': 'Updated Subtopic Name via URL',
-            'description': 'Updated subtopic description via URL',
+            "name": "Updated Subtopic Name via URL",
+            "description": "Updated subtopic description via URL",
         }
-        url_put = f'{self.url}/{self.subtopic.uuid}/'
-        request = self.factory.put(
-            url_put,
-            json.dumps(data),
-            content_type='application/json'
-        )
+        url_put = f"{self.url}/{self.subtopic.uuid}/"
+        request = self.factory.put(url_put, json.dumps(data), content_type="application/json")
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
-        with mock.patch('django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS', [self.external_token]):
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
             # Use the actual view with URL kwargs as they would come from the router
-            response = SubTopicsViewSet.as_view({'put': 'update'})(
+            response = SubTopicsViewSet.as_view({"put": "update"})(
                 request,
                 project_uuid=str(self.project.uuid),
                 topic_uuid=str(self.topic.uuid),
-                uuid=str(self.subtopic.uuid)
+                uuid=str(self.subtopic.uuid),
             )
 
         self.assertEqual(response.status_code, 200, "Update should not return 404")
-        self.assertEqual(response.data['name'], data['name'])
-        self.assertEqual(response.data['description'], data['description'])
+        self.assertEqual(response.data["name"], data["name"])
+        self.assertEqual(response.data["description"], data["description"])
 
 
 @freeze_time("2025-01-23 10:00:00")

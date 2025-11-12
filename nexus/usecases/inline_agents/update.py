@@ -2,7 +2,7 @@ from typing import Dict
 
 from nexus.agents.encryption import encrypt_value
 from nexus.inline_agents.models import Agent, AgentCredential, InlineAgentMessage
-from nexus.intelligences.models import Conversation, ConversationMessage
+from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase

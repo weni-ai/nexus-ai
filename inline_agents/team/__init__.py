@@ -4,4 +4,3 @@ __all__ = [
     "Team",
     "team_factory",
 ]
-

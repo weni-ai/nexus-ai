@@ -439,9 +439,7 @@ class MultiAgentView(APIView):
 
             # AB 1.0 projects have inline_agent_switch=False and use BedrockBackend
             is_legacy_project_enabling = (
-                not project.inline_agent_switch
-                and multi_agents
-                and project.agents_backend == "BedrockBackend"
+                not project.inline_agent_switch and multi_agents and project.agents_backend == "BedrockBackend"
             )
             project.inline_agent_switch = multi_agents
             # Migrate legacy projects (AB 1.0) to AB 2.5 (OpenAI)

@@ -481,7 +481,6 @@ class OpenAITeamAdapter(TeamAdapter):
         components_instructions_up,
         human_support_instructions,
     ) -> str:
-
         general_context_data = {
             "PROJECT_ID": project_id,
             "CONTACT_ID": contact_id,
@@ -502,7 +501,7 @@ class OpenAITeamAdapter(TeamAdapter):
             human_support_template = Template(human_support_instructions)
             human_support_context = TemplateContext(general_context_data)
             human_support_instructions = human_support_template.render(human_support_context)
-        
+
         if use_components:
             components_template = Template(components_instructions)
             components_context = TemplateContext(general_context_data)
@@ -514,7 +513,7 @@ class OpenAITeamAdapter(TeamAdapter):
 
         template_string = instruction
         template = Template(template_string)
-    
+
         prompt_control_context_data = {
             "USE_HUMAN_SUPPORT": use_human_support,
             "HUMAN_SUPPORT_INSTRUCTIONS": human_support_instructions,
