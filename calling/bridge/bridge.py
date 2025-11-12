@@ -92,9 +92,9 @@ class RTCBridge:
                                     
                                     # "eagerness": "low", # auto, low, medium, high
                                 },
-                                "noise_reduction": {
-                                    "type": "near_field",
-                                },
+                                # "noise_reduction": {
+                                #     "type": "near_field",
+                                # },
                             }
                         },
                     },
@@ -128,10 +128,10 @@ class RTCBridge:
                     print(input_text)
                     print("============-==============")
 
-                    await EventRegistry.notify(
-                        "agent.run.started",
-                        session
-                    )
+                    # await EventRegistry.notify(
+                    #     "agent.run.started",
+                    #     session
+                    # )
 
                     # response = await handle_input(input_text, session)
                     response = await asyncio.to_thread(invoke_audio_agents, session, input_text)
@@ -141,11 +141,11 @@ class RTCBridge:
 
                     # response = await invoke_agents(input_text)
 
-                    await EventRegistry.notify(
-                        "agent.run.completed",
-                        session,
-                        response=response,
-                    )
+                    # await EventRegistry.notify(
+                    #     "agent.run.completed",
+                    #     session,
+                    #     response=response,
+                    # )
 
                     print("Resposta:", response)
 
@@ -154,7 +154,16 @@ class RTCBridge:
                         {
                             "type": "response.create",
                             "response": {
-                                # "conversation": "none",
+                                # "prompt":{
+                                #     "id": "pmpt_6914a4c305ec8190b6a870c57952c5670db69342cf489557",
+                                #     "version": "3",
+                                #     "variables": {
+                                #         "input_text": {"type": "input_text", "text": input_text},
+                                #         "response": {"type": "input_text", "text": response},
+                                #     }
+                                # },
+                                # "output_modalities": ["text"],
+                                "conversation": "none",
                                 # "input": [
                                 #     {
                                 #         "type": "message",
@@ -162,10 +171,10 @@ class RTCBridge:
                                 #         "content": [
                                 #             {
                                 #                 "type": "input_text",
-                                #                 "text": input_text
+                                #                 "text": response
                                 #             }
                                 #         ]
-                                #     }
+                                #     },
                                 # ],
                                 "instructions": response_instructions.format(input_text=input_text, response=response),
                             }
@@ -186,13 +195,26 @@ class RTCBridge:
                 return
 
             send_proxy = cls.relay.subscribe(track)
-            audio_sender = getattr(session, "wpp_audio_sender", None)
 
-            if audio_sender is not None:
+            output_transceiver = None
+            for t in wpp_connection.getTransceivers():
+                if t.kind == "audio" and t.direction in ["sendonly", "sendrecv"]:
+                    # Verificar se não é o transceiver de entrada
+                    if t.sender != session.wpp_audio_sender:
+                        output_transceiver = t
+                        break
+            
+            if output_transceiver:
                 try:
-                    audio_sender.replaceTrack(send_proxy)
+                    await output_transceiver.sender.replaceTrack(send_proxy)
                 except Exception as error:
-                    logger.error(error)
+                    logger.error(f"Erro ao substituir track de saída: {error}")
+            else:
+                # Fallback: adicionar novo sender se necessário
+                try:
+                    wpp_connection.addTrack(send_proxy)
+                except Exception as error:
+                    logger.error(f"Erro ao adicionar track: {error}")
 
         try:
             wa_to_oai = cls.relay.subscribe(incoming_wa_track)
