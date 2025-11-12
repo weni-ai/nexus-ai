@@ -344,3 +344,50 @@ class OpenAIBackend(InlineAgentsBackend):
         else:
             final_response = result.final_output
         return final_response
+
+    async def _invoke_agents_async_raw(
+        self,
+        client,
+        external_team,
+        session,
+        session_id,
+        input_text,
+        contact_urn,
+        project_uuid,
+        channel_uuid,
+        user_email,
+        preview,
+        rationale_switch,
+        language,
+        turn_off_rationale,
+        msg_external_id,
+        supervisor_hooks,
+        runner_hooks,
+        hooks_state,
+        use_components,
+    ):
+        trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
+        print(f"[+ DEBUG +] Trace ID: {trace_id}")
+
+        with trace(workflow_name=project_uuid, trace_id=trace_id):
+            # Extract formatter_agent_instructions before passing to Runner.run_streamed
+            formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
+            result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
+            async for event in result.stream_events():
+                if event.type == "run_item_stream_event":
+                    if hasattr(event, 'item') and event.item.type == "tool_call_item":
+                        if hooks_state:
+                            hooks_state.tool_calls.update({
+                                event.item.raw_item.name: event.item.raw_item.arguments
+                            })
+            final_response = self._get_final_response(result)
+
+            # If use_components is True, process the result through the formatter agent
+            if use_components:
+                formatted_response = await self._run_formatter_agent_async(
+                    final_response, session, supervisor_hooks, external_team["context"],
+                    formatter_agent_instructions
+                )
+                final_response = formatted_response
+
+        return final_response
