@@ -87,9 +87,14 @@ class RTCBridge:
                         "audio": {
                             "input": {
                                 "turn_detection": {
-                                    "type": "server_vad",
-                                    "create_response": False
-                                }
+                                    "type": "semantic_vad",
+                                    "create_response": False,
+                                    
+                                    # "eagerness": "low", # auto, low, medium, high
+                                },
+                                "noise_reduction": {
+                                    "type": "near_field",
+                                },
                             }
                         },
                     },
@@ -117,6 +122,7 @@ class RTCBridge:
                     pass
 
                 if message_type == "conversation.item.input_audio_transcription.completed":
+                    print(data)
                     input_text = data.get("transcript")
                     print("============-==============")
                     print(input_text)
@@ -148,7 +154,7 @@ class RTCBridge:
                         {
                             "type": "response.create",
                             "response": {
-                                "conversation": "none",
+                                # "conversation": "none",
                                 # "input": [
                                 #     {
                                 #         "type": "message",

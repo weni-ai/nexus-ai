@@ -1,13 +1,14 @@
 agent = {
     "type": "realtime",
-    "model": "gpt-realtime",
+    "model": "gpt-4o-realtime-preview",
     "tracing": {
         "workflow_name": "Calling workflow"
     },
     "audio": {
         "input": {
             "transcription": {
-                "model": "gpt-4o-transcribe"
+                "model": "gpt-4o-transcribe",
+                "language": "pt" # TODO: Remover após apresentação
             }
         },
         "output": {
@@ -36,5 +37,5 @@ Essa é a SUA resposta, você responderá como se você mesmo a tivesse gerado. 
 Nunca, em hipotese alguma diga algo fora da resposta que te foi enviada, ou algo muito ruim pode acontecer.
 
 # Idioma
-SEMPRE responda com o idioma que você recebeu na resposta, NUNCA pela entrada do usuário.
+Responda SEMPRE em português.
 """
