@@ -277,6 +277,8 @@ class CollaboratorHooks(AgentHooks):
                 events = {}
         elif isinstance(result, dict):
             events = self.hooks_state.get_events(result, tool.name)
+        else:
+            events = {}
 
         if events and events != '[]' and events != []:
 
@@ -287,20 +289,22 @@ class CollaboratorHooks(AgentHooks):
                     sentry_sdk.set_context("custom event to data lake", {"event_data": events})
                     sentry_sdk.set_tag("project_uuid", project_uuid)
                     sentry_sdk.capture_exception(e)
-                    events = {}
+                    events = []
 
-            elif not isinstance(events, {}):
-                events = {}
-
-            print(f"\033[34m[HOOK] Eventos da ferramenta '{tool.name}': {events}\033[0m")
-            self.data_lake_event_adapter.custom_event_data(
-                event_data=events,
-                project_uuid=project_uuid,
-                contact_urn=context_data.contact.get("urn"),
-                channel_uuid=context_data.contact.get("channel_uuid"),
-                agent_name=agent.name,
-                preview=self.preview
-            )
+            if isinstance(events, dict):
+                events = events.get("events", [])
+            
+            # Only proceed if we have a non-empty list
+            if isinstance(events, list) and len(events) > 0:
+                print(f"\033[34m[HOOK] Eventos da ferramenta '{tool.name}': {events}\033[0m")
+                self.data_lake_event_adapter.custom_event_data(
+                    event_data=events,
+                    project_uuid=project_uuid,
+                    contact_urn=context_data.contact.get("urn"),
+                    channel_uuid=context_data.contact.get("channel_uuid"),
+                    agent_name=agent.name,
+                    preview=self.preview
+                )
 
         trace_data = {
             "collaboratorName": agent.name,
@@ -483,6 +487,8 @@ class SupervisorHooks(AgentHooks):
                     events = {}
             elif isinstance(result, dict):
                 events = self.hooks_state.get_events(result, tool.name)
+            else:
+                events = {}
 
             if events and events != '[]' and events != []:
                 print(f"\033[34m[HOOK] Eventos da ferramenta '{tool.name}': {events}\033[0m")
@@ -494,19 +500,21 @@ class SupervisorHooks(AgentHooks):
                         sentry_sdk.set_context("custom event to data lake", {"event_data": events})
                         sentry_sdk.set_tag("project_uuid", project_uuid)
                         sentry_sdk.capture_exception(e)
-                        events = {}
+                        events = []
 
-                elif not isinstance(events, {}):
-                    events = {}
-
-                self.data_lake_event_adapter.custom_event_data(
-                    event_data=events,
-                    project_uuid=project_uuid,
-                    contact_urn=context_data.contact.get("urn"),
-                    channel_uuid=context_data.contact.get("channel_uuid"),
-                    agent_name=agent.name,
-                    preview=self.preview
-                )
+                if isinstance(events, dict):
+                    events = events.get("events", [])
+                
+                # Only proceed if we have a non-empty list
+                if isinstance(events, list) and len(events) > 0:
+                    self.data_lake_event_adapter.custom_event_data(
+                        event_data=events,
+                        project_uuid=project_uuid,
+                        contact_urn=context_data.contact.get("urn"),
+                        channel_uuid=context_data.contact.get("channel_uuid"),
+                        agent_name=agent.name,
+                        preview=self.preview
+                    )
 
             trace_data = {
                 "collaboratorName": agent.name,
