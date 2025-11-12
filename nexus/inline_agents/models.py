@@ -45,6 +45,9 @@ class Agent(models.Model):
     backend_foundation_models = models.JSONField(default=dict)
     source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
 
+    audio_orchestration = models.BooleanField(default=True)
+    text_orchestration = models.BooleanField(default=True)
+
     @property
     def current_version(self):
         return self.versions.order_by('created_on').last()
@@ -171,6 +174,9 @@ class InlineAgentsConfiguration(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_agent_configurations")
     agents_backend = models.CharField(max_length=100)
     default_instructions_for_collaborators = models.TextField(null=True, blank=True)
+
+    text_orchestration_exclusive_tools = ArrayField(models.CharField(max_length=255), default=list, blank=True)
+    audio_orchestration_exclusive_tools = ArrayField(models.CharField(max_length=255), default=list, blank=True)
 
     def __str__(self):
         return f"Project: {self.project.name} - Agents backend: {self.agents_backend}"
