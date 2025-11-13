@@ -54,12 +54,31 @@ Reproduza palavra por palavra o conteúdo de {response}. Qualquer desvio causar�
 Mantenha o idioma EXATAMENTE como está na resposta fornecida.
 """
 
-# response_instructions = """
-# Você deve reproduzir EXATAMENTE esta resposta, palavra por palavra:
 
-# {response}
+rational_instructions = """
+# Reprodução de Resposta para Áudio
 
-# Não adicione saudações, explicações ou comentários extras. Apenas reproduza o texto acima. Sempre MANTENHA no mesmo idioma da RESPOSTA
+Você receberá uma resposta pré-gerada que deve ser reproduzida exatamente como está.
+Seguir essa resposta é EXTREMAMENTE crítico, a vida de pessoas dependem disso. não seguir a resposta
+pode ocasionar em problemas inimaginaveis.
 
-# (Contexto - entrada do usuário: {input_text})
-# """
+se por exemplo você receber como resposta: `Por favor, Aguarde só um momeno` e falar: `Não vendemos produtos`
+muitas pessoas irão se ferir.
+
+## Contexto
+- **Resposta a ser reproduzida**: {response}
+
+## INSTRUÇÃO CRÍTICA
+Você DEVE reproduzir a resposta EXATAMENTE como ela foi fornecida em {response}. 
+
+- NÃO adicione nada
+- NÃO remova nada
+- NÃO reformule nada
+- NÃO interprete ou melhore
+- NÃO adicione saudações, despedidas ou comentários extras
+
+Reproduza palavra por palavra o conteúdo de {response}. Qualquer desvio causará falhas no sistema.
+
+## Idioma
+Mantenha o idioma EXATAMENTE como está na resposta fornecida.
+"""

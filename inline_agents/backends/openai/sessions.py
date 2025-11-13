@@ -212,7 +212,6 @@ class MemorySession(Session):
         sanitized_urn: str,
         limit: Optional[int] = None
     ):
-        print(f"[DEBUG] MemorySession: {session_id}")
         self._key = session_id
         self.project_uuid = project_uuid
         self.sanitized_urn = sanitized_urn
@@ -272,7 +271,6 @@ class MemorySession(Session):
                     })
                     continue
 
-            print(f"[DEBUG] Memory Session Items: {items}")
             return items
 
         except Exception as e:
