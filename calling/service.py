@@ -8,6 +8,8 @@ from aiortc.rtcdtlstransport import (
     certificate_digest,
 )
 
+from router.tasks.invoke import start_calling
+
 from calling.bridge import RTCBridge
 from calling.clients.nexus import get_agents
 from calling.events import EventRegistry
@@ -19,6 +21,7 @@ from calling.events.listeners import (
     StopAudioListener,
 )
 from calling.sessions import SessionManager
+
 
 EventRegistry.subscribe("agent.run.started", PlayAudioListener())
 EventRegistry.subscribe("agent.run.completed", StopAudioListener())
@@ -55,8 +58,9 @@ class CallingService:
             "contact_name": "Sample Name",
         }
 
-        await get_agents(message_dict)
+        # await get_agents(message_dict)
 
         session = SessionManager.setup_session(call_id, sdp)
+        start_calling(session, message_dict)
 
         await RTCBridge.handle_offer(session)
