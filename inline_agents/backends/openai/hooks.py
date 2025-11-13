@@ -139,7 +139,7 @@ class RunnerHooks(RunHooks):
         super().__init__()
 
     async def on_llm_start(self, context, agent, system_prompt, input_items) -> None:
-        print("\033[34m[HOOK] Acionando o modelo.\033[0m")
+        logger.info("[HOOK] Acionando o modelo.")
         context_data = context.context
         await self.trace_handler.send_trace(context_data, agent.name, "invoking_model")
 
@@ -151,7 +151,7 @@ class RunnerHooks(RunHooks):
                 and hasattr(reasoning_item, "summary")
                 and reasoning_item.summary
             ):
-                print("\033[34m[HOOK] Pensando.\033[0m")
+                logger.info("[HOOK] Pensando.")
                 for summary in reasoning_item.summary:
                     trace_data = {
                         "collaboratorName": "",
@@ -163,7 +163,7 @@ class RunnerHooks(RunHooks):
                         },
                     }
                     await self.trace_handler.send_trace(context_data, agent.name, "thinking", trace_data)
-        print("\033[34m[HOOK] Resposta do modelo recebida.\033[0m")
+        logger.info("[HOOK] Resposta do modelo recebida.")
         await self.trace_handler.send_trace(context_data, agent.name, "model_response_received")
 
 
@@ -199,7 +199,7 @@ class CollaboratorHooks(AgentHooks):
         self.preview = preview
 
     async def on_start(self, context, agent):
-        print(f"\033[34m[HOOK] Atribuindo tarefa ao agente '{agent.name}'.\033[0m")
+        logger.info(f"[HOOK] Atribuindo tarefa ao agente '{agent.name}'.")
         input_text = self.hooks_state.tool_calls.get(agent.name, {})
         if isinstance(input_text, str):
             try:
@@ -239,8 +239,8 @@ class CollaboratorHooks(AgentHooks):
         context_data = context.context
         parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", {})
 
-        print(f"\033[34m[HOOK] Executando ferramenta '{tool.name}'.\033[0m")
-        print(f"\033[33m[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.\033[0m")
+        logger.info(f"[HOOK] Executando ferramenta '{tool.name}'.")
+        logger.info(f"[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.")
         trace_data = {
             "collaboratorName": agent.name,
             "eventTime": pendulum.now().to_iso8601_string(),
@@ -258,11 +258,11 @@ class CollaboratorHooks(AgentHooks):
                 }
             },
         }
-        print("==============tool_calls================")
-        print(tool.name)
-        print(self.hooks_state.tool_info)
-        print(trace_data)
-        print("==========================================")
+        logger.debug("==============tool_calls================")
+        logger.debug(f"Tool name: {tool.name}")
+        logger.debug(f"Tool info: {self.hooks_state.tool_info}")
+        logger.debug(f"Trace data: {trace_data}")
+        logger.debug("==========================================")
         await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data, tool_name=tool.name)
         self.data_lake_event_adapter.to_data_lake_event(
             project_uuid=context_data.project.get("uuid"),
@@ -279,7 +279,7 @@ class CollaboratorHooks(AgentHooks):
     async def on_tool_end(self, context, agent, tool, result):
         await self.tool_started(context, agent, tool)
 
-        print(f"\033[34m[HOOK] Resultado da ferramenta '{tool.name}' recebido {result}.\033[0m")
+        logger.info(f"[HOOK] Resultado da ferramenta '{tool.name}' recebido {result}.")
 
         context_data = context.context
         project_uuid = context_data.project.get("uuid")
@@ -292,6 +292,8 @@ class CollaboratorHooks(AgentHooks):
                 events = {}
         elif isinstance(result, dict):
             events = self.hooks_state.get_events(result, tool.name)
+        else:
+            events = {}
 
         if events and events != "[]" and events != []:
             if isinstance(events, str):
@@ -301,27 +303,29 @@ class CollaboratorHooks(AgentHooks):
                     sentry_sdk.set_context("custom event to data lake", {"event_data": events})
                     sentry_sdk.set_tag("project_uuid", project_uuid)
                     sentry_sdk.capture_exception(e)
-                    events = {}
+                    events = []
 
-            elif not isinstance(events, {}):
-                events = {}
+            if isinstance(events, dict):
+                events = events.get("events", [])
 
-            print(f"\033[34m[HOOK] Eventos da ferramenta '{tool.name}': {events}\033[0m")
-            self.data_lake_event_adapter.custom_event_data(
-                event_data=events,
-                project_uuid=project_uuid,
-                contact_urn=context_data.contact.get("urn"),
-                channel_uuid=context_data.contact.get("channel_uuid"),
-                agent_name=agent.name,
-                preview=self.preview,
-            )
-        else:
-            if "human" in tool.name.lower() or "support" in tool.name.lower():
-                logger.warning(
-                    f"No events found for tool '{tool.name}'. "
-                    f"This may result in missing record in contact history. "
-                    f"Project: {project_uuid}, Contact: {context_data.contact.get('urn', 'unknown')}"
+            # Only proceed if we have a non-empty list
+            if isinstance(events, list) and len(events) > 0:
+                logger.info(f"[HOOK] Eventos da ferramenta '{tool.name}': {events}")
+                self.data_lake_event_adapter.custom_event_data(
+                    event_data=events,
+                    project_uuid=project_uuid,
+                    contact_urn=context_data.contact.get("urn"),
+                    channel_uuid=context_data.contact.get("channel_uuid"),
+                    agent_name=agent.name,
+                    preview=self.preview,
                 )
+            else:
+                if "human" in tool.name.lower() or "support" in tool.name.lower():
+                    logger.warning(
+                        f"No events found for tool '{tool.name}'. "
+                        f"This may result in missing record in contact history. "
+                        f"Project: {project_uuid}, Contact: {context_data.contact.get('urn', 'unknown')}"
+                    )
 
         trace_data = {
             "collaboratorName": agent.name,
@@ -342,7 +346,7 @@ class CollaboratorHooks(AgentHooks):
         )
 
     async def on_end(self, context, agent, output):
-        print(f"\033[34m[HOOK] Enviando resposta ao manager. {output}\033[0m")
+        logger.info(f"[HOOK] Enviando resposta ao manager. {output}")
         context_data = context.context
         trace_data = {
             "eventTime": pendulum.now().to_iso8601_string(),
@@ -405,7 +409,7 @@ class SupervisorHooks(AgentHooks):
         self.knowledge_base_tool = knowledge_base_tool
 
     async def on_start(self, context, agent):
-        print(f"\033[34m[HOOK] Agente '{agent.name}' iniciado.\033[0m")
+        logger.info(f"[HOOK] Agente '{agent.name}' iniciado.")
 
     async def tool_started(self, context, agent, tool):
         context_data = context.context
@@ -437,7 +441,7 @@ class SupervisorHooks(AgentHooks):
             }
             await self.trace_handler.send_trace(context_data, agent.name, "searching_knowledge_base", trace_data)
         elif tool.name not in self.hooks_state.agents_names:
-            print(f"\033[34m[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.\033[0m")
+            logger.info(f"[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.")
             trace_data = {
                 "collaboratorName": agent.name,
                 "eventTime": pendulum.now().to_iso8601_string(),
@@ -473,7 +477,7 @@ class SupervisorHooks(AgentHooks):
     async def on_tool_end(self, context, agent, tool, result):
         # calling tool_started here instead of on_tool_start so we can get the parameters from tool execution
         await self.tool_started(context, agent, tool)
-        print(f"\033[34m[HOOK] Encaminhando para o manager. {result}\033[0m")
+        logger.info(f"[HOOK] Encaminhando para o manager. {result}")
 
         context_data = context.context
         project_uuid = context_data.project.get("uuid")
@@ -500,10 +504,10 @@ class SupervisorHooks(AgentHooks):
                     events = {}
             elif isinstance(result, dict):
                 events = self.hooks_state.get_events(result, tool.name)
+            else:
+                events = {}
 
             if events and events != "[]" and events != []:
-                print(f"\033[34m[HOOK] Eventos da ferramenta '{tool.name}': {events}\033[0m")
-
                 if isinstance(events, str):
                     try:
                         events = json.loads(events)
@@ -511,19 +515,22 @@ class SupervisorHooks(AgentHooks):
                         sentry_sdk.set_context("custom event to data lake", {"event_data": events})
                         sentry_sdk.set_tag("project_uuid", project_uuid)
                         sentry_sdk.capture_exception(e)
-                        events = {}
+                        events = []
 
-                elif not isinstance(events, {}):
-                    events = {}
+                if isinstance(events, dict):
+                    events = events.get("events", [])
 
-                self.data_lake_event_adapter.custom_event_data(
-                    event_data=events,
-                    project_uuid=project_uuid,
-                    contact_urn=context_data.contact.get("urn"),
-                    channel_uuid=context_data.contact.get("channel_uuid"),
-                    agent_name=agent.name,
-                    preview=self.preview,
-                )
+                # Only proceed if we have a non-empty list
+                if isinstance(events, list) and len(events) > 0:
+                    logger.info(f"[HOOK] Eventos da ferramenta '{tool.name}': {events}")
+                    self.data_lake_event_adapter.custom_event_data(
+                        event_data=events,
+                        project_uuid=project_uuid,
+                        contact_urn=context_data.contact.get("urn"),
+                        channel_uuid=context_data.contact.get("channel_uuid"),
+                        agent_name=agent.name,
+                        preview=self.preview,
+                    )
 
             trace_data = {
                 "collaboratorName": agent.name,
@@ -544,7 +551,7 @@ class SupervisorHooks(AgentHooks):
             )
 
     async def on_end(self, context, agent, output):
-        print(f"\033[34m[HOOK] Enviando resposta final {output}.\033[0m")
+        logger.info(f"[HOOK] Enviando resposta final {output}.")
 
         if isinstance(output, FinalResponse):
             final_response = output.final_response
