@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import traceback
+import re
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
@@ -18,6 +19,10 @@ from calling.agent import response_instructions
 logger = logging.getLogger(__name__)
 
 from calling.events import EventRegistry
+
+
+def clean_response(response: str):
+    return re.sub(r'[^\w\s.,;:!?()/-]', '', response, flags=re.UNICODE)
 
 
 async def handle_input(input_text: str, session: Session) -> dict:
@@ -138,6 +143,10 @@ class RTCBridge:
 
                     if response == None:
                         return
+                    
+                    print("Resposta:", response)
+                    response = clean_response(response)
+                    print("Resposta limpa:", response)
 
                     # response = await invoke_agents(input_text)
 
@@ -147,7 +156,6 @@ class RTCBridge:
                     #     response=response,
                     # )
 
-                    print("Resposta:", response)
 
                     cls._dc_send_json(
                         dc,

@@ -12,7 +12,7 @@ agent = {
             }
         },
         "output": {
-            "voice": "verse",
+            "voice": "sage",
         },
     },
     "instructions": """
