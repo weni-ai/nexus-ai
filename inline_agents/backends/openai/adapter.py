@@ -359,16 +359,74 @@ class OpenAITeamAdapter(TeamAdapter):
 
             if "FunctionError" in response:
                 error_details = json.loads(lambda_result)
-                print(f"FunctionError on lambda '{function_name}': {error_details}")
-                return json.dumps(
-                    {"error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"}
+                logger.error(
+                    f"FunctionError on lambda '{function_name}': {error_details}. "
+                    f"Contact: {contact.get('urn', 'unknown')}, "
+                    f"Project: {project.get('uuid', 'unknown')}"
+                )
+                return json.dumps({
+                    "error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"
+                })
+
+            session_attributes = result.get("response", {}).get("sessionAttributes", {})
+            
+            events = []
+            if isinstance(session_attributes, dict):
+                events = session_attributes.get("events", [])
+            elif isinstance(session_attributes, str):
+                try:
+                    session_attrs_parsed = json.loads(session_attributes)
+                    events = session_attrs_parsed.get("events", [])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            # Fallback: check top-level response for events
+            if not events:
+                events = result.get("response", {}).get("events", [])
+
+            if not events:
+                logger.warning(
+                    f"No events returned by Lambda '{function_name}'. "
+                    f"This may indicate that the record will not be created in contact history. "
+                    f"Contact: {contact.get('urn', 'unknown')}, "
+                    f"Project: {project.get('uuid', 'unknown')}"
+                )
+                sentry_sdk.set_context("missing_lambda_events", {
+                    "function_name": function_name,
+                    "contact_urn": contact.get('urn', 'unknown'),
+                    "project_uuid": project.get('uuid', 'unknown'),
+                    "response_keys": list(result.get("response", {}).keys()) if isinstance(result.get("response"), dict) else []
+                })
+                sentry_sdk.capture_message(
+                    f"Lambda '{function_name}' did not return events",
+                    level="warning"
+                )
+            else:
+                logger.info(
+                    f"Lambda '{function_name}' returned {len(events)} event(s). "
+                    f"Contact: {contact.get('urn', 'unknown')}"
                 )
 
-            ctx.context.hooks_state.add_tool_info(function_name, result["response"].get("sessionAttributes", {}))
+            ctx.context.hooks_state.add_tool_info(
+                function_name,
+                session_attributes
+            )
 
             return result["response"]["functionResponse"]["responseBody"]["TEXT"]["body"]
         except Exception as e:
-            print(f"Error on lambda '{function_name}': {e}")
+            logger.error(
+                f"Error on lambda '{function_name}': {e}. "
+                f"Contact: {contact.get('urn', 'unknown')}, "
+                f"Project: {project.get('uuid', 'unknown')}"
+            )
+            sentry_sdk.set_context("lambda_invocation_error", {
+                "function_name": function_name,
+                "function_arn": function_arn,
+                "contact_urn": contact.get('urn', 'unknown'),
+                "project_uuid": project.get('uuid', 'unknown'),
+                "error": str(e)
+            })
+            sentry_sdk.capture_exception(e)
             return json.dumps({"error": f"Error on lambda: {str(e)}"})
 
     @classmethod

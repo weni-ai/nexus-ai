@@ -69,6 +69,25 @@ async def set_watermark(session, ns: str, cursor: int):
     await session.add_items([{"type": WATERMARK_TYPE, "ns": ns, "cursor": int(cursor)}])
 
 
+def sanitize_redis_item(item_str: str) -> str:
+    """
+    Sanitize Redis item by removing null characters before JSON parsing.
+
+    Args:
+        item_str: Raw string item from Redis that may contain null characters
+
+    Returns:
+        Clean string without null characters
+    """
+    if not isinstance(item_str, str):
+        item_str = str(item_str)
+
+    # Remove null characters that can cause JSON parsing issues
+    sanitized = item_str.replace('\u0000', '').replace('\x00', '')
+
+    return sanitized
+
+
 class RedisSession(Session):
     def __init__(
         self, session_id: str, r: redis.Redis, project_uuid: str, sanitized_urn: str, limit: Optional[int] = None
@@ -128,8 +147,41 @@ class RedisSession(Session):
             for i, raw_item in enumerate(data):
                 try:
                     if raw_item:
-                        parsed_item = json.loads(raw_item)
+                        raw_str = raw_item.decode('utf-8', errors='ignore') if isinstance(raw_item, bytes) else str(raw_item)
+                        
+                        # Sanitize string to remove null characters before JSON parsing
+                        sanitized_str = sanitize_redis_item(raw_str)
+                        
+                        if len(raw_str) != len(sanitized_str):
+                            null_count = raw_str.count('\u0000') + raw_str.count('\x00')
+                            logger.warning(
+                                f"Item {i} in session {self._key} contains {null_count} null characters. Sanitizing before parsing. "
+                                f"Project: {self.project_uuid}, Contact: {self.sanitized_urn}"
+                            )
+                            log_error_to_sentry(
+                                Exception(f"Session item contains {null_count} null characters"),
+                                self._key,
+                                self.project_uuid,
+                                self.sanitized_urn,
+                                {
+                                    "item_index": i,
+                                    "null_count": null_count,
+                                    "raw_item_preview": raw_str[:200] if raw_str else None,
+                                    "operation": "null_detection_and_sanitization"
+                                }
+                            )
+                        
+                        parsed_item = json.loads(sanitized_str)
                         if isinstance(parsed_item, dict):
+                            content = str(parsed_item.get('content', ''))
+                            if content:
+                                content_nulls = content.count('\u0000') + content.count('\x00')
+                                if content_nulls > 0:
+                                    logger.warning(
+                                        f"Content of item {i} in session {self._key} contains {content_nulls} null characters. "
+                                        f"Project: {self.project_uuid}, Contact: {self.sanitized_urn}"
+                                    )
+                            
                             items.append(parsed_item)
                         else:
                             logger.warning(f"Item {i} in session {self._key} is not a dict: {type(parsed_item)}")
