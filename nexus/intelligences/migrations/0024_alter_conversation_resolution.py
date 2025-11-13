@@ -4,15 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0023_conversation_channel_uuid_and_more'),
+        ("intelligences", "0023_conversation_channel_uuid_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='conversation',
-            name='resolution',
-            field=models.CharField(choices=[(0, 'Resolved'), (1, 'Unresolved'), (2, 'In Progress'), (3, 'Unclassified')], default=2, max_length=255),
+            model_name="conversation",
+            name="resolution",
+            field=models.CharField(
+                choices=[(0, "Resolved"), (1, "Unresolved"), (2, "In Progress"), (3, "Unclassified")],
+                default=2,
+                max_length=255,
+            ),
         ),
     ]

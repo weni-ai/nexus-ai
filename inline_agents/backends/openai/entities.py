@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from agents import Session
 from pydantic import BaseModel, Field
@@ -24,7 +24,7 @@ class HooksState:
                     function_names.append(function_name)
                 self.lambda_names[action_group_name] = {
                     "function_name": function_names[0],
-                    "function_arn": action_group.get("actionGroupExecutor", {}).get("lambda")
+                    "function_arn": action_group.get("actionGroupExecutor", {}).get("lambda"),
                 }
 
     def add_tool_info(self, tool_name: str, info: Dict[str, Any]):
@@ -59,4 +59,5 @@ class Context:
 
 class FinalResponse(BaseModel):
     """Modelo para a resposta final formatada"""
+
     final_response: str = Field(description="O resultado final da resposta que ira ser formatado")

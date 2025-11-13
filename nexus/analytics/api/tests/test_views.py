@@ -1,10 +1,10 @@
 from datetime import datetime
+
 from django.test import TestCase
 from django.urls import reverse
 from freezegun import freeze_time
 from rest_framework.test import APIClient
 
-from nexus.intelligences.models import Conversation
 from nexus.projects.models import ProjectAuth, ProjectAuthorizationRole
 from nexus.usecases.intelligences.tests.intelligence_factory import (
     ConversationFactory,
@@ -110,9 +110,7 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
 
     def test_resolution_rate_with_ab2_project(self):
         """Test average resolution rate for AB 2 project"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 200)
@@ -126,9 +124,7 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
 
     def test_resolution_rate_with_ab2_5_project(self):
         """Test average resolution rate for AB 2.5 project"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2_5.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2_5.uuid})
         response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 200)
@@ -140,9 +136,7 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
 
     def test_resolution_rate_with_motor_filter_ab2(self):
         """Test filtering by motor AB 2"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(
             url,
             {"start_date": "2024-01-01", "end_date": "2024-01-31", "motor": "AB 2"},
@@ -154,9 +148,7 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
 
     def test_resolution_rate_with_motor_filter_ab2_5(self):
         """Test filtering by motor AB 2.5"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2_5.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2_5.uuid})
         response = self.client.get(
             url,
             {"start_date": "2024-01-01", "end_date": "2024-01-31", "motor": "AB 2.5"},
@@ -168,9 +160,7 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
 
     def test_resolution_rate_with_date_filtering(self):
         """Test date range filtering"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
         # Create conversation outside date range
         conv_outside = ConversationFactory(
             project=self.project_ab2,
@@ -180,9 +170,7 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
         conv_outside.created_at = datetime(2024, 2, 15, 12, 0, 0)
         conv_outside.save(update_fields=["created_at"])
 
-        response = self.client.get(
-            url, {"start_date": "2024-01-01", "end_date": "2024-01-31"}
-        )
+        response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -212,9 +200,7 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
         conv_small.created_at = datetime(2024, 1, 15, 12, 0, 0)
         conv_small.save(update_fields=["created_at"])
 
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": project_small.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": project_small.uuid})
         response = self.client.get(
             url,
             {
@@ -242,12 +228,8 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
             role=ProjectAuthorizationRole.MODERATOR.value,
         )
 
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": project_empty.uuid}
-        )
-        response = self.client.get(
-            url, {"start_date": "2024-01-01", "end_date": "2024-01-31"}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": project_empty.uuid})
+        response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -310,9 +292,7 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
         conv5.save(update_fields=["created_at"])
 
         url = reverse("resolution-rate-average", kwargs={"project_uuid": project.uuid})
-        response = self.client.get(
-            url, {"start_date": "2024-01-01", "end_date": "2024-01-31"}
-        )
+        response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -326,9 +306,7 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
 
     def test_invalid_date_format(self):
         """Test with invalid date format"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(url, {"start_date": "invalid-date"})
 
         self.assertEqual(response.status_code, 400)
@@ -336,9 +314,7 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
 
     def test_invalid_motor_value(self):
         """Test with invalid motor value"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(
             url,
             {
@@ -356,30 +332,22 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
         unauthorized_user = UserFactory()
         self.client.force_authenticate(user=unauthorized_user)
 
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 403)
 
     def test_start_date_after_end_date(self):
         """Test validation when start_date > end_date"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
-        response = self.client.get(
-            url, {"start_date": "2024-01-31", "end_date": "2024-01-01"}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
+        response = self.client.get(url, {"start_date": "2024-01-31", "end_date": "2024-01-01"})
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("error", response.json())
 
     def test_response_structure(self):
         """Test that response has all required fields"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 200)
@@ -398,9 +366,7 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
 
     def test_default_dates(self):
         """Test that default dates are used when not provided"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 200)
@@ -413,9 +379,7 @@ class ResolutionRateIndividualViewTestCase(BaseAnalyticsTestCase):
 
     def test_individual_resolution_rate_single_project(self):
         """Test individual resolution rate for single project"""
-        url = reverse(
-            "resolution-rate-individual", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-individual", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 200)
@@ -429,9 +393,7 @@ class ResolutionRateIndividualViewTestCase(BaseAnalyticsTestCase):
 
     def test_individual_resolution_rate_with_motor_filter(self):
         """Test filtering by motor"""
-        url = reverse(
-            "resolution-rate-individual", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-individual", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(
             url,
             {
@@ -448,9 +410,7 @@ class ResolutionRateIndividualViewTestCase(BaseAnalyticsTestCase):
 
     def test_individual_resolution_rate_with_min_conversations(self):
         """Test min_conversations filter"""
-        url = reverse(
-            "resolution-rate-individual", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-individual", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(
             url,
             {
@@ -478,12 +438,8 @@ class ResolutionRateIndividualViewTestCase(BaseAnalyticsTestCase):
             role=ProjectAuthorizationRole.MODERATOR.value,
         )
 
-        url = reverse(
-            "resolution-rate-individual", kwargs={"project_uuid": project_empty.uuid}
-        )
-        response = self.client.get(
-            url, {"start_date": "2024-01-01", "end_date": "2024-01-31"}
-        )
+        url = reverse("resolution-rate-individual", kwargs={"project_uuid": project_empty.uuid})
+        response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -494,9 +450,7 @@ class ResolutionRateIndividualViewTestCase(BaseAnalyticsTestCase):
         unauthorized_user = UserFactory()
         self.client.force_authenticate(user=unauthorized_user)
 
-        url = reverse(
-            "resolution-rate-individual", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-individual", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 403)
@@ -733,9 +687,7 @@ class AnalyticsEdgeCasesTestCase(BaseAnalyticsTestCase):
             role=ProjectAuthorizationRole.MODERATOR.value,
         )
 
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": project_empty.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": project_empty.uuid})
         response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 200)
@@ -745,20 +697,14 @@ class AnalyticsEdgeCasesTestCase(BaseAnalyticsTestCase):
 
     def test_very_large_date_range(self):
         """Test with very large date range"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
-        response = self.client.get(
-            url, {"start_date": "2020-01-01", "end_date": "2024-12-31"}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
+        response = self.client.get(url, {"start_date": "2020-01-01", "end_date": "2024-12-31"})
 
         self.assertEqual(response.status_code, 200)
 
     def test_min_conversations_boundary(self):
         """Test min_conversations equal to actual count"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(
             url,
             {
@@ -775,9 +721,7 @@ class AnalyticsEdgeCasesTestCase(BaseAnalyticsTestCase):
 
     def test_negative_min_conversations(self):
         """Test with negative min_conversations"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(
             url,
             {
@@ -791,9 +735,7 @@ class AnalyticsEdgeCasesTestCase(BaseAnalyticsTestCase):
 
     def test_invalid_min_conversations(self):
         """Test with non-integer min_conversations"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(
             url,
             {
@@ -811,19 +753,15 @@ class QueryOptimizationTestCase(BaseAnalyticsTestCase):
 
     def test_select_related_used(self):
         """Test that select_related is used to avoid N+1 queries"""
-        from django.test.utils import override_settings
         from django.db import connection
+        from django.test.utils import override_settings
 
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
 
         with override_settings(DEBUG=True):
             initial_queries = len(connection.queries)
 
-            response = self.client.get(
-                url, {"start_date": "2024-01-01", "end_date": "2024-01-31"}
-            )
+            response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
             final_queries = len(connection.queries)
             # Should not have excessive queries (select_related should help)
@@ -832,9 +770,7 @@ class QueryOptimizationTestCase(BaseAnalyticsTestCase):
 
     def test_aggregate_in_database(self):
         """Test that aggregation happens in database, not Python"""
-        url = reverse(
-            "resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid}
-        )
+        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
         response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 200)
@@ -843,4 +779,3 @@ class QueryOptimizationTestCase(BaseAnalyticsTestCase):
         # Verify calculation is correct
         expected_rate = data["resolved_conversations"] / data["total_conversations"]
         self.assertAlmostEqual(data["resolution_rate"], expected_rate, places=4)
-

@@ -4,25 +4,37 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('actions', '0002_templateaction_flow_action_type_alter_flow_prompt_and_more'),
+        ("actions", "0002_templateaction_flow_action_type_alter_flow_prompt_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='flow',
-            name='group',
-            field=models.CharField(choices=[('support', 'Support'), ('interactions', 'Interactions'), ('shopping', 'Shopping'), ('custom', 'Custom')], default='custom', max_length=255),
+            model_name="flow",
+            name="group",
+            field=models.CharField(
+                choices=[
+                    ("support", "Support"),
+                    ("interactions", "Interactions"),
+                    ("shopping", "Shopping"),
+                    ("custom", "Custom"),
+                ],
+                default="custom",
+                max_length=255,
+            ),
         ),
         migrations.AddField(
-            model_name='templateaction',
-            name='display_prompt',
+            model_name="templateaction",
+            name="display_prompt",
             field=models.CharField(blank=True, max_length=255, null=True),
         ),
         migrations.AddField(
-            model_name='templateaction',
-            name='language',
-            field=models.CharField(choices=[('en-us', 'English'), ('pt-br', 'Portuguese'), ('es', 'Spanish')], default='pt-br', max_length=10),
+            model_name="templateaction",
+            name="language",
+            field=models.CharField(
+                choices=[("en-us", "English"), ("pt-br", "Portuguese"), ("es", "Spanish")],
+                default="pt-br",
+                max_length=10,
+            ),
         ),
     ]

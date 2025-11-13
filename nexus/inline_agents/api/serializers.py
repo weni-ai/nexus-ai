@@ -1,16 +1,16 @@
 from rest_framework import serializers
-from nexus.inline_agents.models import Agent, IntegratedAgent, AgentCredential
+
+from nexus.inline_agents.models import Agent, AgentCredential, IntegratedAgent
 
 
 class IntegratedAgentSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = IntegratedAgent
-        fields = ['uuid', 'id', 'name', 'skills', 'is_official', 'description']
+        fields = ["uuid", "id", "name", "skills", "is_official", "description"]
 
-    uuid = serializers.UUIDField(source='agent.uuid')
-    name = serializers.SerializerMethodField('get_name')
-    id = serializers.SerializerMethodField('get_id')
+    uuid = serializers.UUIDField(source="agent.uuid")
+    name = serializers.SerializerMethodField("get_name")
+    id = serializers.SerializerMethodField("get_id")
     skills = serializers.SerializerMethodField("get_skills")
     description = serializers.SerializerMethodField("get_description")
     is_official = serializers.SerializerMethodField("get_is_official")
@@ -33,7 +33,6 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
 
 
 class AgentSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Agent
         fields = [
@@ -50,8 +49,8 @@ class AgentSerializer(serializers.ModelSerializer):
             "credentials",
         ]
 
-    description = serializers.CharField(source='collaboration_instructions')
-    model = serializers.CharField(source='foundation_model')
+    description = serializers.CharField(source="collaboration_instructions")
+    model = serializers.CharField(source="foundation_model")
     skills = serializers.SerializerMethodField("get_skills")
     assigned = serializers.SerializerMethodField("get_is_assigned")
 
@@ -88,14 +87,7 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AgentCredential
-        fields = [
-            "name",
-            "label",
-            "placeholder",
-            "is_confidential",
-            "value",
-            "agents_using"
-        ]
+        fields = ["name", "label", "placeholder", "is_confidential", "value", "agents_using"]
 
     def get_agents_using(self, obj):
         return [

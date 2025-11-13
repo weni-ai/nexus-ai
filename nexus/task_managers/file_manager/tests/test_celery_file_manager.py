@@ -16,8 +16,6 @@ The test below shows what the test would look like once the circular import is r
 """
 
 import unittest
-from io import BytesIO
-from unittest.mock import patch, MagicMock
 
 # These imports would work once circular import is resolved
 # from nexus.task_managers.file_manager.celery_file_manager import CeleryFileManager
@@ -26,6 +24,7 @@ from unittest.mock import patch, MagicMock
 
 class MockFileDataBase:
     """Mock implementation of FileDataBase for testing"""
+
     def add_file(self, file):
         return {"status": 200, "file_url": "mock_url", "err": None, "file_name": "mock_file_name"}
 
@@ -33,7 +32,7 @@ class MockFileDataBase:
 class TestCeleryFileManager(unittest.TestCase):
     """
     Test for CeleryFileManager
-    
+
     This test is currently disabled due to circular import issues in the codebase.
     Once the circular import is resolved, uncomment the test methods below.
     """
@@ -47,7 +46,7 @@ class TestCeleryFileManager(unittest.TestCase):
         self.assertTrue(True, "This is a placeholder test")
 
     # Uncomment these tests once circular import is resolved:
-    
+
     # @patch('nexus.task_managers.file_manager.celery_file_manager.CreateContentBaseFileUseCase')
     # @patch('nexus.task_managers.file_manager.celery_file_manager.ProjectsUseCase')
     # @patch('nexus.task_managers.file_manager.celery_file_manager.tasks')
@@ -56,28 +55,28 @@ class TestCeleryFileManager(unittest.TestCase):
     #     mock_content_base_file = MagicMock()
     #     mock_content_base_file.uuid = 'test-uuid-123'
     #     mock_create_use_case.return_value.create_content_base_file.return_value = mock_content_base_file
-    #     
+    #
     #     mock_project = MagicMock()
     #     mock_project.indexer_database = 'SENTENX'  # Use SENTENX to avoid Bedrock path
     #     mock_projects_use_case.return_value.get_project_by_content_base_uuid.return_value = mock_project
-    #     
+    #
     #     # Create a file-like object from bytes
     #     file_content = b'file content for testing'
     #     file = BytesIO(file_content)
-    #     
+    #
     #     content_base_uuid = 'test-content-base-uuid'
     #     extension_file = 'txt'
     #     user_email = 'test@example.com'
-    #     
+    #
     #     response = self.celery_file_manager.upload_file(file, content_base_uuid, extension_file, user_email)
-    #     
+    #
     #     self.assertIsInstance(response, dict)
     #     self.assertEqual(response['uuid'], 'test-uuid-123')
     #     self.assertEqual(response['extension_file'], 'txt')
-    #     
+    #
     #     # Verify that the Celery task was called
     #     mock_tasks.upload_file.delay.assert_called_once()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
