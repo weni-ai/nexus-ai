@@ -107,6 +107,23 @@ class RTCBridge:
 
                 cls._dc_send_json(dc, tools_session)
 
+                await EventRegistry.notify("openai.session.updated", session)
+
+                welcome_response = "Olá, tudo bem? Eu sou a Nic, assistente virtual do Prezunic. Estou aqui para te ajudar com o que precisar! Como posso te ajudar hoje?"
+
+                await asyncio.sleep(1)
+
+                cls._dc_send_json(
+                    dc,
+                    {
+                        "type": "response.create",
+                        "response": {
+                            "conversation": "none",
+                            "instructions": response_instructions.format(input_text="oi", response=welcome_response),
+                        }
+                    }
+                )
+
             @dc.on("message")
             async def on_message(message):
                 data = json.loads(message)
@@ -127,9 +144,9 @@ class RTCBridge:
                     pass
 
                 if message_type == "conversation.item.input_audio_transcription.completed":
-                    print(data)
                     input_text = data.get("transcript")
-                    print("============-==============")
+
+                    print("========[ENTRADA]==========")
                     print(input_text)
                     print("============-==============")
 
@@ -137,16 +154,15 @@ class RTCBridge:
                     #     "agent.run.started",
                     #     session
                     # )
-
                     # response = await handle_input(input_text, session)
-                    response = await asyncio.to_thread(invoke_audio_agents, session, input_text)
 
-                    if response == None:
-                        return
-                    
-                    print("Resposta:", response)
+                    response = await asyncio.to_thread(invoke_audio_agents, session, input_text)
+                
                     response = clean_response(response)
-                    print("Resposta limpa:", response)
+
+                    print("############[SAIDA]############")
+                    print(response)
+                    print("###############-###############")
 
                     # response = await invoke_agents(input_text)
 
@@ -162,28 +178,7 @@ class RTCBridge:
                         {
                             "type": "response.create",
                             "response": {
-                                # "prompt":{
-                                #     "id": "pmpt_6914a4c305ec8190b6a870c57952c5670db69342cf489557",
-                                #     "version": "3",
-                                #     "variables": {
-                                #         "input_text": {"type": "input_text", "text": input_text},
-                                #         "response": {"type": "input_text", "text": response},
-                                #     }
-                                # },
-                                # "output_modalities": ["text"],
                                 "conversation": "none",
-                                # "input": [
-                                #     {
-                                #         "type": "message",
-                                #         "role": "user",
-                                #         "content": [
-                                #             {
-                                #                 "type": "input_text",
-                                #                 "text": response
-                                #             }
-                                #         ]
-                                #     },
-                                # ],
                                 "instructions": response_instructions.format(input_text=input_text, response=response),
                             }
                         }

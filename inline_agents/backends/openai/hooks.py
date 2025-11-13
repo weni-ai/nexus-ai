@@ -572,3 +572,6 @@ class SupervisorHooksForCalling(AgentHooks):
     async def on_tool_end(self, context, agent, tool, result):
         if tool.name == self.human_support_tool_name:
             self.session.started_human_support = True
+
+    async def on_tool_start(self, context, agent, tool):
+        self.session.response.send_rational()

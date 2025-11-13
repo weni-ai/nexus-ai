@@ -1,3 +1,5 @@
+import json
+import time
 import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
@@ -19,6 +21,7 @@ from agents.memory import Session as OpenAISession
 
 from inline_agents.backend import InlineAgentsBackend
 from router.entities.mailroom import Message
+from calling.agent import rational_instructions
 
 
 class Status(Enum):
@@ -26,6 +29,45 @@ class Status(Enum):
     WAITING_RESPONSE = 1
     ORCHESTRATION_INTERRUPTED = 2
     RESPONDING = 3
+
+
+@dataclass
+class Response:
+    MIN_RESPONSE_TIME = 7
+
+    session: "Session"
+
+    orchestration_running: bool = False
+    openai_responding: bool = False
+    last_resposne: float = None
+
+    def _dc_send_json(self, data: dict) -> None:
+        if getattr(self.session.openai_datachannel, "readyState", None) == "open":
+            self.session.openai_datachannel.send(json.dumps(data))
+
+    def send_rational(self) -> None:
+        print("Tentando enviar o Racional")
+        if not self.can_send_response():
+            return
+
+        data = {
+            "type": "response.create",
+            "response": {
+                "conversation": "none",
+                "instructions": rational_instructions.format(response="Aguarde só um momeno, estou verificando"),
+            }
+        }
+        self._dc_send_json(data)
+
+        self.last_resposne = time.time()
+
+    def can_send_response(self) -> bool:
+        if self.last_resposne is None:
+            return True
+
+        delta = time.time() - self.last_resposne
+
+        return delta > self.MIN_RESPONSE_TIME
 
 
 @dataclass
@@ -47,10 +89,19 @@ class Session:
     wpp_audio_sender: RTCRtpSender = None
     wpp_audio_track: MediaStreamTrack = None
     audio_player: MediaPlayer = None 
+    audio_player_track: MediaStreamTrack = None
 
     input_text: str = ""
-    current_task: asyncio.Task = None
     status: Status = Status.WAITING_CONTACT
+
+    current_task: asyncio.Task = None
+
+    response: Response = None
+    
+    def __post_init__(self):
+        self.response = Response(self)
+
+        # self.rational_task = asyncio.create_task(self.proccess_rational())
 
     def set_agents(self, agents: dict) -> None:
         self.agents = agents
@@ -100,3 +151,8 @@ class Session:
 
         if self.openai_connection is not None:
             await self.openai_connection.close()
+
+    # async def proccess_rational(self):
+    #     while True:
+    #         await asyncio.sleep(10)
+            
