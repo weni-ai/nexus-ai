@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import pendulum
 import sentry_sdk
@@ -319,6 +319,13 @@ class CollaboratorHooks(AgentHooks):
                     agent_name=agent.name,
                     preview=self.preview,
                 )
+            else:
+                if "human" in tool.name.lower() or "support" in tool.name.lower():
+                    logger.warning(
+                        f"No events found for tool '{tool.name}'. "
+                        f"This may result in missing record in contact history. "
+                        f"Project: {project_uuid}, Contact: {context_data.contact.get('urn', 'unknown')}"
+                    )
 
         trace_data = {
             "collaboratorName": agent.name,
