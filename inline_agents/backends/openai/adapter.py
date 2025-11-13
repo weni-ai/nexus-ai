@@ -440,6 +440,15 @@ class OpenAITeamAdapter(TeamAdapter):
     def _clean_schema(cls, schema: dict):
         """Clean up the schema to ensure it's valid for OpenAI"""
         if isinstance(schema, dict):
+            if "anyOf" in schema:
+                for option in schema["anyOf"]:
+                    if isinstance(option, dict):
+                        cls._clean_schema(option)
+            if "oneOf" in schema:
+                for option in schema["oneOf"]:
+                    if isinstance(option, dict):
+                        cls._clean_schema(option)
+
             if "properties" in schema:
                 for _, prop_schema in schema["properties"].items():
                     if isinstance(prop_schema, dict) and "type" not in prop_schema:
@@ -451,8 +460,12 @@ class OpenAITeamAdapter(TeamAdapter):
                     cls._clean_schema(prop_schema)
 
             if "items" in schema:
-                if not schema["items"] or ("type" not in schema["items"] and isinstance(schema["items"], dict)):
+                if not schema["items"]:
+                    # If items is None or empty, set default
                     schema["items"] = {"type": "string"}
+                elif isinstance(schema["items"], dict) and "type" not in schema["items"]:
+                    # If items is a dict without type, add type while preserving other properties
+                    schema["items"]["type"] = "string"
                 cls._clean_schema(schema["items"])
 
             if "properties" in schema and "required" in schema:
