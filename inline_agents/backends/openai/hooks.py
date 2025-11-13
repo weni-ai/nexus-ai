@@ -234,7 +234,20 @@ class CollaboratorHooks(AgentHooks):
 
     async def tool_started(self, context, agent, tool):
         context_data = context.context
-        parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", {})
+        
+        parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", [])
+        if not parameters:
+            tool_call_args = self.hooks_state.tool_calls.get(tool.name)
+            if tool_call_args:
+                # Convert tool call arguments to parameters format if needed
+                if isinstance(tool_call_args, dict):
+                    parameters = [{"name": k, "value": v} for k, v in tool_call_args.items()]
+                elif isinstance(tool_call_args, str):
+                    try:
+                        args_dict = json.loads(tool_call_args)
+                        parameters = [{"name": k, "value": v} for k, v in args_dict.items()]
+                    except Exception:
+                        parameters = []
 
         print(f"\033[34m[HOOK] Executando ferramenta '{tool.name}'.\033[0m")
         print(f"\033[33m[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.\033[0m")
@@ -274,7 +287,6 @@ class CollaboratorHooks(AgentHooks):
         )
 
     async def on_tool_end(self, context, agent, tool, result):
-        await self.tool_started(context, agent, tool)
 
         print(f"\033[34m[HOOK] Resultado da ferramenta '{tool.name}' recebido {result}.\033[0m")
 
@@ -399,7 +411,21 @@ class SupervisorHooks(AgentHooks):
 
     async def tool_started(self, context, agent, tool):
         context_data = context.context
-        parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", {})
+        
+        parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", [])
+        if not parameters:
+            tool_call_args = self.hooks_state.tool_calls.get(tool.name)
+            if tool_call_args:
+                # Convert tool call arguments to parameters format if needed
+                if isinstance(tool_call_args, dict):
+                    parameters = [{"name": k, "value": v} for k, v in tool_call_args.items()]
+                elif isinstance(tool_call_args, str):
+                    try:
+                        args_dict = json.loads(tool_call_args)
+                        parameters = [{"name": k, "value": v} for k, v in args_dict.items()]
+                    except Exception:
+                        parameters = []
+        
         tool_call_data = {"tool_name": tool.name, "parameters": parameters}
 
         if tool.name == self.knowledge_base_tool:
@@ -461,8 +487,6 @@ class SupervisorHooks(AgentHooks):
             )
 
     async def on_tool_end(self, context, agent, tool, result):
-        # calling tool_started here instead of on_tool_start so we can get the parameters from tool execution
-        await self.tool_started(context, agent, tool)
         print(f"\033[34m[HOOK] Encaminhando para o manager. {result}\033[0m")
 
         context_data = context.context
