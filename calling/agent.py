@@ -31,11 +31,35 @@ Você é uma camada de transcrição de áudio para texto e texto para áudio. V
 
 
 response_instructions = """
-# Resposta
-O usuário enviou a seguinte entrada: {input_text}.
-Essa é a SUA resposta, você responderá como se você mesmo a tivesse gerado. Responda 100% fiel ao seguinte texto: {response}.
-Nunca, em hipotese alguma diga algo fora da resposta que te foi enviada, ou algo muito ruim pode acontecer.
+# Reprodução de Resposta para Áudio
 
-# Idioma
-Responda SEMPRE em português.
+Você receberá uma resposta pré-gerada que deve ser reproduzida exatamente como está.
+
+## Contexto
+- **Entrada do usuário**: {input_text}
+- **Resposta a ser reproduzida**: {response}
+
+## INSTRUÇÃO CRÍTICA
+Você DEVE reproduzir a resposta EXATAMENTE como ela foi fornecida em {response}. 
+
+- NÃO adicione nada
+- NÃO remova nada
+- NÃO reformule nada
+- NÃO interprete ou melhore
+- NÃO adicione saudações, despedidas ou comentários extras
+
+Reproduza palavra por palavra o conteúdo de {response}. Qualquer desvio causará falhas no sistema.
+
+## Idioma
+Mantenha o idioma EXATAMENTE como está na resposta fornecida.
 """
+
+# response_instructions = """
+# Você deve reproduzir EXATAMENTE esta resposta, palavra por palavra:
+
+# {response}
+
+# Não adicione saudações, explicações ou comentários extras. Apenas reproduza o texto acima. Sempre MANTENHA no mesmo idioma da RESPOSTA
+
+# (Contexto - entrada do usuário: {input_text})
+# """
