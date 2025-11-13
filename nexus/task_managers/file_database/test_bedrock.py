@@ -1,34 +1,36 @@
 import json
-import requests
-from uuid import uuid4
-from unittest.mock import patch
 from unittest import skip
+from unittest.mock import patch
+from uuid import uuid4
 
-from django.test import TestCase
+import requests
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
 from django.urls import reverse
-from rest_framework.test import APIRequestFactory
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory
 
-from nexus.usecases.intelligences.create import create_base_brain_structure
-from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
-from nexus.usecases.projects.projects_use_case import ProjectsUseCase
-from nexus.usecases.orgs.tests.org_factory import OrgFactory
-from nexus.usecases.projects.tests.project_factory import ProjectFactory
-from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFileFactory
-from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
+from nexus.intelligences.models import ContentBaseFile, ContentBaseLink, ContentBaseText
 from nexus.projects.models import Project
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 from nexus.task_managers.file_database.file_database import FileResponseDTO
 from nexus.task_managers.file_database.sentenx_file_database import SentenXFileDataBase
-from nexus.task_managers.models import TaskManager, ContentBaseFileTaskManager, ContentBaseTextTaskManager, ContentBaseLinkTaskManager
+from nexus.task_managers.models import (
+    ContentBaseFileTaskManager,
+    ContentBaseLinkTaskManager,
+    ContentBaseTextTaskManager,
+    TaskManager,
+)
 from nexus.task_managers.tasks_bedrock import (
     check_ingestion_job_status,
     start_ingestion_job,
 )
-
-from nexus.intelligences.models import ContentBaseLink, ContentBaseText, ContentBaseFile
-
+from nexus.usecases.intelligences.create import create_base_brain_structure
+from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+from nexus.usecases.intelligences.tests.intelligence_factory import ContentBaseFileFactory
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 from router.entities import ProjectDTO
 from router.repositories.orm import ProjectORMRepository
 
@@ -42,7 +44,7 @@ class BedrockFileDatabaseTestCase(TestCase):
 
     def test_add_file(self):
         with open("/tmp/test_file.txt", "w+b") as f:
-            f.write("This test shouldn't run in CI, is just for development purposes".encode("utf-8"))
+            f.write(b"This test shouldn't run in CI, is just for development purposes")
             f.seek(0)
             response: FileResponseDTO = self.bedrock.add_file(
                 file=f,
@@ -50,7 +52,7 @@ class BedrockFileDatabaseTestCase(TestCase):
                 file_uuid=self.file_uuid,
             )
             print(f"Filename: {response.file_name}")
-            self.assertEquals(response.status, 0)
+            self.assertEqual(response.status, 0)
             self.assertIsNone(response.err)
 
     def test_delete_file_and_metadata(self):
@@ -71,18 +73,15 @@ class BedrockFileDatabaseTestCase(TestCase):
         print(f"Status: {response}")
 
         self.assertIsInstance(response, str)
-        self.assertEquals(response, status)
+        self.assertEqual(response, status)
 
     def test_list_bedrock_ingestion(self):
         response = self.bedrock.list_bedrock_ingestion()
         print(response)
-        self.assertEquals(response, [])
+        self.assertEqual(response, [])
 
     def test_search_data(self):
-        response = self.bedrock.search_data(
-            content_base_uuid=self.content_base_uuid,
-            text="Test"
-        )
+        response = self.bedrock.search_data(content_base_uuid=self.content_base_uuid, text="Test")
         print(response)
         self.assertListEqual(["status", "data"], list(response.keys()))
 
@@ -93,7 +92,7 @@ class BedrockFileDatabaseTestCase(TestCase):
         response = requests.get(url)
         print(response.text)
         self.assertIsInstance(url, str)
-        self.assertEquals(response.status_code, 200)
+        self.assertEqual(response.status_code, 200)
 
 
 @skip("Development tests for bedrock")
@@ -101,22 +100,19 @@ class TestChangesInProjectBedrockTestCase(TestCase):
     def setUp(self) -> None:
         self.org = OrgFactory()
         self.project = self.org.projects.create(
-            name="Bedrock 1",
-            indexer_database=Project.BEDROCK,
-            created_by=self.org.created_by
+            name="Bedrock 1", indexer_database=Project.BEDROCK, created_by=self.org.created_by
         )
         self.project2 = ProjectFactory()
         self.project_uuid = str(self.project.uuid)
         self.project_uuid2 = str(self.project2.uuid)
 
     def test_project_orm_repository(self):
-
         project_dto: ProjectDTO = ProjectORMRepository().get_project(self.project_uuid)
 
         self.assertIsInstance(project_dto, ProjectDTO)
-        self.assertEquals(self.project_uuid, project_dto.uuid)
-        self.assertEquals(self.project.name, project_dto.name)
-        self.assertEquals(self.project.indexer_database, project_dto.indexer_database)
+        self.assertEqual(self.project_uuid, project_dto.uuid)
+        self.assertEqual(self.project.name, project_dto.name)
+        self.assertEqual(self.project.indexer_database, project_dto.indexer_database)
 
     def test_get_indexer_database(self):
         usecase = ProjectsUseCase()
@@ -143,7 +139,7 @@ class TestBedrockTasksTestCase(TestCase):
         self.celery_task_manager_uuid = str(self.task_manager.uuid)
 
     def test_check_ingestion_job_status(self):
-        self.assertEquals(self.task_manager.status, TaskManager.STATUS_WAITING)
+        self.assertEqual(self.task_manager.status, TaskManager.STATUS_WAITING)
         ingestion_job_id = "IRHKH8JT0J"
         file_type = "file"
 
@@ -151,18 +147,18 @@ class TestBedrockTasksTestCase(TestCase):
         self.task_manager.refresh_from_db()
 
         self.assertTrue(response)
-        self.assertEquals(self.task_manager.status, TaskManager.STATUS_SUCCESS)
+        self.assertEqual(self.task_manager.status, TaskManager.STATUS_SUCCESS)
 
     @patch("nexus.task_managers.tasks_bedrock.check_ingestion_job_status")
     def test_start_ingestion_job(self, _):
-        self.assertEquals(self.task_manager.status, TaskManager.STATUS_WAITING)
+        self.assertEqual(self.task_manager.status, TaskManager.STATUS_WAITING)
         file_type = "file"
 
         start_ingestion_job(self.celery_task_manager_uuid, file_type=file_type)
 
         self.task_manager.refresh_from_db()
         print(self.task_manager.ingestion_job_id)
-        self.assertEquals(self.task_manager.status, TaskManager.STATUS_PROCESSING)
+        self.assertEqual(self.task_manager.status, TaskManager.STATUS_PROCESSING)
 
 
 @skip("Development tests for bedrock")
@@ -171,35 +167,33 @@ class TestContentBaseBedrockTestCase(TestCase):
         self.factory = APIRequestFactory()
         self.org = OrgFactory()
         self.project = self.org.projects.create(
-            name="Bedrock 1",
-            indexer_database=Project.BEDROCK,
-            created_by=self.org.created_by
+            name="Bedrock 1", indexer_database=Project.BEDROCK, created_by=self.org.created_by
         )
         self.user = self.org.created_by
         self.project.authorizations.create(user=self.user, role=3)
         self.integrated_intelligence = create_base_brain_structure(self.project)
         self.content_base = get_default_content_base_by_project(str(self.project.uuid))
         self.content_base_uuid = str(self.content_base.uuid)
-        self.url = f'{self.content_base.uuid}/content-bases-file/'
+        self.url = f"{self.content_base.uuid}/content-bases-file/"
 
     def test_view_create_content_base_file(self):
         client = APIClient()
         client.force_authenticate(user=self.user)
         url = reverse("content-base-file-list", kwargs={"content_base_uuid": str(self.content_base.uuid)})
-        file = SimpleUploadedFile("file.txt", "Test File".encode("utf-8"))
+        file = SimpleUploadedFile("file.txt", b"Test File")
 
         data = {
             "file": file,
             "extension_file": "txt",
         }
-        response = client.post(url, data, format='multipart')
+        response = client.post(url, data, format="multipart")
         response.render()
         content = json.loads(response.content)
 
         file_uuid = content.get("uuid")
 
         task_manager = ContentBaseFileTaskManager.objects.get(content_base_file__uuid=file_uuid)
-        self.assertEquals(response.status_code, 201)
+        self.assertEqual(response.status_code, 201)
         self.assertIn(task_manager.status, [TaskManager.STATUS_SUCCESS, TaskManager.STATUS_PROCESSING])
 
     def test_view_create_content_base_text(self):
@@ -207,7 +201,7 @@ class TestContentBaseBedrockTestCase(TestCase):
         client.force_authenticate(user=self.user)
         url = reverse("content-bases-text-list", kwargs={"content_base_uuid": str(self.content_base.uuid)})
         data = {"text": "Just nod if you can hear me"}
-        response = client.post(url, data, format='json')
+        response = client.post(url, data, format="json")
         response.render()
         content = json.loads(response.content)
         print(str(self.content_base.uuid))
@@ -215,7 +209,7 @@ class TestContentBaseBedrockTestCase(TestCase):
         file_uuid = content.get("uuid")
 
         task_manager = ContentBaseTextTaskManager.objects.get(content_base_text__uuid=file_uuid)
-        self.assertEquals(response.status_code, 201)
+        self.assertEqual(response.status_code, 201)
         self.assertIn(task_manager.status, [TaskManager.STATUS_SUCCESS, TaskManager.STATUS_PROCESSING])
 
     def test_view_create_content_base_link(self):
@@ -223,7 +217,7 @@ class TestContentBaseBedrockTestCase(TestCase):
         client.force_authenticate(user=self.user)
         url = reverse("content-base-link-list", kwargs={"content_base_uuid": str(self.content_base.uuid)})
         data = {"link": "https://docs.djangoproject.com/en/5.1/ref/request-response/#django.http.HttpRequest.FILES"}
-        response = client.post(url, data, format='json')
+        response = client.post(url, data, format="json")
         response.render()
         content = json.loads(response.content)
         print(str(self.content_base.uuid))
@@ -231,11 +225,10 @@ class TestContentBaseBedrockTestCase(TestCase):
         file_uuid = content.get("uuid")
 
         task_manager = ContentBaseLinkTaskManager.objects.get(content_base_link__uuid=file_uuid)
-        self.assertEquals(response.status_code, 201)
+        self.assertEqual(response.status_code, 201)
         self.assertIn(task_manager.status, [TaskManager.STATUS_SUCCESS, TaskManager.STATUS_PROCESSING])
 
     def test_view_delete_content_base_link(self):
-
         self.content_base.uuid = "e1c5b03b-d569-4e5d-bbed-0b0e285f15b7"
         self.content_base.save()
 
@@ -245,18 +238,15 @@ class TestContentBaseBedrockTestCase(TestCase):
             link="https://docs.djangoproject.com/en/5.1/ref/request-response/#django.http.HttpRequest.FILES",
             content_base=self.content_base,
             name="a47ded65-1dc4-48b3-a1cd-cb27987cfde9-5113bdc7-53c9-4857-8102-9ca7baea04b6.md",
-            created_by=self.user
+            created_by=self.user,
         )
         content_base_link_uuid = str(content_base_link.uuid)
         client.force_authenticate(user=self.user)
         url = reverse(
             "content-base-link-detail",
-            kwargs={
-                "content_base_uuid": self.content_base_uuid,
-                "contentbaselink_uuid": content_base_link_uuid
-            }
+            kwargs={"content_base_uuid": self.content_base_uuid, "contentbaselink_uuid": content_base_link_uuid},
         )
-        response = client.delete(url, format='json')
+        response = client.delete(url, format="json")
         response.render()
 
         with self.assertRaises(ContentBaseLinkTaskManager.DoesNotExist):
@@ -279,12 +269,9 @@ class TestContentBaseBedrockTestCase(TestCase):
         client.force_authenticate(user=self.user)
         url = reverse(
             "content-bases-text-detail",
-            kwargs={
-                "content_base_uuid": self.content_base_uuid,
-                "contentbasetext_uuid": content_base_text_uuid
-            }
+            kwargs={"content_base_uuid": self.content_base_uuid, "contentbasetext_uuid": content_base_text_uuid},
         )
-        response = client.delete(url, format='json')
+        response = client.delete(url, format="json")
         response.render()
 
         with self.assertRaises(ContentBaseTextTaskManager.DoesNotExist):
@@ -301,23 +288,16 @@ class TestContentBaseBedrockTestCase(TestCase):
         client = APIClient()
 
         content_base_file = ContentBaseFile.objects.create(
-            uuid=file_uuid,
-            content_base=self.content_base,
-            file_name=filename,
-            created_by=self.user,
-            extension_file=ext
+            uuid=file_uuid, content_base=self.content_base, file_name=filename, created_by=self.user, extension_file=ext
         )
         content_base_file_uuid = str(content_base_file.uuid)
         client.force_authenticate(user=self.user)
         url = reverse(
             "content-base-file-detail",
-            kwargs={
-                "content_base_uuid": self.content_base_uuid,
-                "contentbase_file_uuid": content_base_file_uuid
-            }
+            kwargs={"content_base_uuid": self.content_base_uuid, "contentbase_file_uuid": content_base_file_uuid},
         )
 
-        response = client.delete(url, format='json')
+        response = client.delete(url, format="json")
         response.render()
 
         with self.assertRaises(ContentBaseFileTaskManager.DoesNotExist):
@@ -330,10 +310,7 @@ class TestContentBaseBedrockTestCase(TestCase):
 
         client = APIClient()
         content_base_text = ContentBaseText.objects.create(
-            file_name=filename,
-            text="Esse é um texto",
-            content_base=self.content_base,
-            created_by=self.user
+            file_name=filename, text="Esse é um texto", content_base=self.content_base, created_by=self.user
         )
         data = {"text": "Esse é um texto (Atualizado 1)"}
 
@@ -342,11 +319,8 @@ class TestContentBaseBedrockTestCase(TestCase):
 
         url = reverse(
             "content-bases-text-detail",
-            kwargs={
-                "content_base_uuid": str(self.content_base.uuid),
-                "contentbasetext_uuid": content_base_text_uuid
-            }
+            kwargs={"content_base_uuid": str(self.content_base.uuid), "contentbasetext_uuid": content_base_text_uuid},
         )
-        response = client.put(url, data, format='json')
+        response = client.put(url, data, format="json")
         response.render()
         print(response)

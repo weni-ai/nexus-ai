@@ -2,16 +2,16 @@ from typing import List
 
 
 class Components:
-    SIMPLE_TEXT = '''
+    SIMPLE_TEXT = """
     {
     "msg": {
         "text": "Hi! How can I help you today?" #(MAXIMUM 4096 CHARACTERS)
 
     }
     }
-    '''
+    """
 
-    QUICK_REPLIES = '''
+    QUICK_REPLIES = """
     {
     "msg": {
         "text": "How would you like to receive your order?",  #(MAXIMUM 1024 CHARACTERS)
@@ -21,9 +21,9 @@ class Components:
         ]                     #(MAXIMUM 3 ITEMS)
     }
     }
-    '''
+    """
 
-    LIST_MESSAGE = '''
+    LIST_MESSAGE = """
     {
     "msg": {
         "text": "Choose a category:",  #(MAXIMUM 4096 CHARACTERS)
@@ -45,9 +45,9 @@ class Components:
         }
     }
     }
-    '''
+    """
 
-    CTA_URL = '''
+    CTA_URL = """
     {
     "msg": {
         "text": "Click the button below to access more information!",  #(MAXIMUM 1024 CHARACTERS)
@@ -58,9 +58,9 @@ class Components:
         }
     }
     }
-    '''
+    """
 
-    CATALOG = '''
+    CATALOG = """
     {
     "msg": {
         "text": "Confira nossos produtos disponíveis para entrega no seu CEP:", #(MAXIMUM 1024 CHARACTERS)
@@ -109,16 +109,10 @@ class Components:
         }
     }
     }
-    '''
+    """
 
     def get_all_formats(self) -> List[str]:
-        return [
-            self.SIMPLE_TEXT,
-            self.QUICK_REPLIES,
-            self.LIST_MESSAGE,
-            self.CTA_URL,
-            self.CATALOG
-        ]
+        return [self.SIMPLE_TEXT, self.QUICK_REPLIES, self.LIST_MESSAGE, self.CTA_URL, self.CATALOG]
 
     def get_all_formats_string(self) -> str:
         return "\n".join(self.get_all_formats())
@@ -130,27 +124,34 @@ INSTRUCTIONS_QUICK_REPLIES = [
     "ALWAYS send the following sentence at the end of your response: USE THE '<components>QUICK_REPLIES</components>'",
     "Use this component when you want to offer up to 3 quick reply options to the user.",
     "Each quick reply option must have a maximum of 15 characters.",
-    "The main message must be a maximum of 1024 characters."
+    "The main message must be a maximum of 1024 characters.",
 ]
 
 INSTRUCTIONS_CATALOG = [
     "SEMPRE envie a seguinte frase ao final da sua resposta: '<components>CATALOG</components>'",
-    "NUNCA oculte ou omita QUALQUER informação do produto, especialmente: ProductID, SellerID,Especificações completas, Descrições completas, Valores, Códigos de barras, Dimensões e Qualquer outra informação disponível.",
+    (
+        "NUNCA oculte ou omita QUALQUER informação do produto, especialmente: ProductID, SellerID, "
+        "Especificações completas, Descrições completas, Valores, Códigos de barras, Dimensões e "
+        "Qualquer outra informação disponível."
+    ),
     "NUNCA crie um sellerId, SEMPRE chame o action group responsável por buscar o sellerId.",
     "Destaque informações importantes como ProductID e SellerID.",
-    "Sempre apresente todas as informações de forma organizada e clara."
+    "Sempre apresente todas as informações de forma organizada e clara.",
 ]
 
 INSTRUCTIONS_LIST_MESSAGE = [
     "SEMPRE envie a seguinte frase ao final da sua resposta: '<components>LIST_MESSAGE</components>'",
-    "SEMPRE estruture sua resposta como um lista de mensagens, com título(MAXIMUM 20 CHARACTERS), descrição(MAXIMUM 60 CHARACTERS), link e uuid(ordem de exibição)(MAXIMUM 10 ITEMS)"
-    "Fique atento aos limites de caracteres para cada campo, não exceda os limites."
+    (
+        "SEMPRE estruture sua resposta como um lista de mensagens, com título(MAXIMUM 20 CHARACTERS), "
+        "descrição(MAXIMUM 60 CHARACTERS), link e uuid(ordem de exibição)(MAXIMUM 10 ITEMS). "
+        "Fique atento aos limites de caracteres para cada campo, não exceda os limites."
+    ),
 ]
 
 INSTRUCTIONS_CTA_URL = [
     "SEMPRE envie a seguinte frase ao final da sua resposta: USE THE '<components>CTA_URL</components>'",
     "SEMPRE que identificar ou receber links importantes, envie-os de forma clara e direta",
-    "Ao compartilhar links, apresente-os de maneira estruturada e legível para o usuário"
+    "Ao compartilhar links, apresente-os de maneira estruturada e legível para o usuário",
 ]
 
 INSTRUCTIONS = {
@@ -158,5 +159,5 @@ INSTRUCTIONS = {
     "quick_replies": INSTRUCTIONS_QUICK_REPLIES,
     "list_message": INSTRUCTIONS_LIST_MESSAGE,
     "catalog": INSTRUCTIONS_CATALOG,
-    "cta_url": INSTRUCTIONS_CTA_URL
+    "cta_url": INSTRUCTIONS_CTA_URL,
 }

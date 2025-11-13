@@ -1,30 +1,27 @@
 import emoji
-
 from rest_framework import serializers
 
 from nexus.agents.models import (
-    Agent,
     ActiveAgent,
+    Agent,
+    AgentMessage,
     AgentSkills,
     Credential,
-    AgentMessage,
 )
 
 
 class ActiveAgentSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = ActiveAgent
-        fields = ['uuid', 'agent', 'team', 'is_official']
+        fields = ["uuid", "agent", "team", "is_official"]
 
 
 class ActiveAgentTeamSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = ActiveAgent
-        fields = ['uuid', 'name', 'skills', 'is_official', 'external_id', 'description']
+        fields = ["uuid", "name", "skills", "is_official", "external_id", "description"]
 
-    name = serializers.SerializerMethodField('get_name')
+    name = serializers.SerializerMethodField("get_name")
     skills = serializers.SerializerMethodField("get_skills")
     external_id = serializers.SerializerMethodField("get_external_id")
     description = serializers.SerializerMethodField("get_description")
@@ -44,9 +41,8 @@ class ActiveAgentTeamSerializer(serializers.ModelSerializer):
 
 
 class SkillSerializer(serializers.ModelSerializer):
-
-    icon = serializers.SerializerMethodField('get_icon')
-    name = serializers.SerializerMethodField('get_name')
+    icon = serializers.SerializerMethodField("get_icon")
+    name = serializers.SerializerMethodField("get_name")
 
     class Meta:
         model = AgentSkills
@@ -70,7 +66,6 @@ class SkillSerializer(serializers.ModelSerializer):
 
 
 class AgentSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Agent
         fields = [
@@ -88,7 +83,7 @@ class AgentSerializer(serializers.ModelSerializer):
             # "metadata",
         ]
 
-    name = serializers.SerializerMethodField('get_name')
+    name = serializers.SerializerMethodField("get_name")
     skills = serializers.SerializerMethodField("get_skills")
     assigned = serializers.SerializerMethodField("get_is_assigned")
     credentials = serializers.SerializerMethodField("get_credentials")
@@ -126,14 +121,7 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Credential
-        fields = [
-            "name",
-            "label",
-            "placeholder",
-            "is_confidential",
-            "value",
-            "agents_using"
-        ]
+        fields = ["name", "label", "placeholder", "is_confidential", "value", "agents_using"]
 
     def get_agents_using(self, obj):
         return [
@@ -154,15 +142,14 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
 
 
 class AgentMessageHistorySerializer(serializers.ModelSerializer):
-
     class Meta:
         model = AgentMessage
         fields = [
-            'id',
-            'created_at',
-            'message_text',
-            'tag',
-            'classification',
+            "id",
+            "created_at",
+            "message_text",
+            "tag",
+            "classification",
         ]
 
     message_text = serializers.SerializerMethodField()

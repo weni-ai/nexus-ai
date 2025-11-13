@@ -1,4 +1,5 @@
 from typing import Optional
+
 from nexus.usecases.intelligences.create import ConversationUseCase
 
 
@@ -9,11 +10,7 @@ class ConversationService:
         self.conversation_usecase = ConversationUseCase()
 
     def create_conversation_if_channel_exists(
-        self,
-        project_uuid: str,
-        contact_urn: str,
-        contact_name: str,
-        channel_uuid: str = None
+        self, project_uuid: str, contact_urn: str, contact_name: str, channel_uuid: str = None
     ) -> Optional[object]:
         """
         Create a conversation only if channel_uuid is not None.
@@ -24,18 +21,11 @@ class ConversationService:
             return None
 
         return self.conversation_usecase.create_conversation_base_structure(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            contact_name=contact_name,
-            channel_uuid=channel_uuid
+            project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
         )
 
     def ensure_conversation_exists(
-        self,
-        project_uuid: str,
-        contact_urn: str,
-        contact_name: str,
-        channel_uuid: str = None
+        self, project_uuid: str, contact_urn: str, contact_name: str, channel_uuid: str = None
     ) -> bool:
         """
         Ensure conversation exists only if channel_uuid is not None.
@@ -46,8 +36,5 @@ class ConversationService:
             return False
 
         return self.conversation_usecase.conversation_in_progress_exists(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            channel_uuid=channel_uuid,
-            contact_name=contact_name
+            project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, contact_name=contact_name
         )
