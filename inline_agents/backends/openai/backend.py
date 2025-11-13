@@ -211,43 +211,14 @@ class OpenAIBackend(InlineAgentsBackend):
             )
 
         # Initialize gRPC streaming client if enabled
-        grpc_client = None
-        grpc_msg_id = None
-        if is_grpc_enabled() and channel_uuid and contact_urn:
-            try:
-                grpc_host = getattr(settings, 'GRPC_SERVICE_HOST', 'localhost')
-                grpc_port = getattr(settings, 'GRPC_SERVICE_PORT', 50051)
-                grpc_use_tls = getattr(settings, 'GRPC_USE_TLS', False)
-
-                grpc_client = MessageStreamingClient(
-                    host=grpc_host,
-                    port=grpc_port,
-                    use_secure_channel=grpc_use_tls
-                )
-
-                # Generate unique message ID for this session
-                grpc_msg_id = hashlib.sha256(
-                    f"{contact_urn}-{session_id}-{datetime.now().isoformat()}".encode()
-                ).hexdigest()[:16]
-
-                # Send setup message
-                logger.info(f"gRPC: Sending setup message {grpc_msg_id}")
-                for _ in grpc_client.stream_messages_with_setup(
-                    msg_id=grpc_msg_id,
-                    channel_uuid=channel_uuid,
-                    contact_urn=contact_urn,
-                    project_uuid=str(project_uuid),
-                    metadata={
-                        "session_id": session_id,
-                        "preview": str(preview),
-                        "language": language,
-                    }
-                ):
-                    pass  # Consume setup responses
-
-            except Exception as e:
-                logger.error(f"gRPC setup failed: {e}", exc_info=True)
-                grpc_client = None
+        grpc_client, grpc_msg_id = self._initialize_grpc_client(
+            channel_uuid=channel_uuid,
+            contact_urn=contact_urn,
+            session_id=session_id,
+            project_uuid=project_uuid,
+            preview=preview,
+            language=language
+        )
 
         result = asyncio.run(self._invoke_agents_async(
             client, external_team, session, session_id,
@@ -260,10 +231,10 @@ class OpenAIBackend(InlineAgentsBackend):
         # Send completion message if gRPC was used
         if grpc_client and grpc_msg_id:
             try:
-                logger.info(f"gRPC: Sending completion message {grpc_msg_id}")
+                content = result if isinstance(result, str) else str(result)
                 grpc_client.send_completed_message(
                     msg_id=grpc_msg_id,
-                    content=result if isinstance(result, str) else str(result),
+                    content=content,
                     channel_uuid=channel_uuid,
                     contact_urn=contact_urn,
                     project_uuid=str(project_uuid)
@@ -334,6 +305,90 @@ class OpenAIBackend(InlineAgentsBackend):
             # Return the original response if formatter fails
             return final_response
 
+    def _initialize_grpc_client(
+        self,
+        channel_uuid: str,
+        contact_urn: str,
+        session_id: str,
+        project_uuid: str,
+        preview: bool,
+        language: str
+    ) -> tuple[Optional[MessageStreamingClient], Optional[str]]:
+        """
+        Initialize gRPC client and send setup message.
+
+        Returns:
+            Tuple of (grpc_client, grpc_msg_id) or (None, None) if disabled/failed
+        """
+        if not is_grpc_enabled() or not channel_uuid or not contact_urn:
+            return None, None
+
+        try:
+            grpc_host = getattr(settings, 'GRPC_SERVICE_HOST', 'localhost')
+            grpc_port = getattr(settings, 'GRPC_SERVICE_PORT', 50051)
+            grpc_use_tls = getattr(settings, 'GRPC_USE_TLS', False)
+
+            grpc_client = MessageStreamingClient(
+                host=grpc_host,
+                port=grpc_port,
+                use_secure_channel=grpc_use_tls
+            )
+
+            grpc_msg_id = hashlib.sha256(
+                f"{contact_urn}-{session_id}-{datetime.now().isoformat()}".encode()
+            ).hexdigest()[:16]
+
+            logger.info(f"gRPC: Sending setup message {grpc_msg_id}")
+            for _ in grpc_client.stream_messages_with_setup(
+                msg_id=grpc_msg_id,
+                channel_uuid=channel_uuid,
+                contact_urn=contact_urn,
+                project_uuid=str(project_uuid),
+                metadata={
+                    "session_id": session_id,
+                    "preview": str(preview),
+                    "language": language,
+                }
+            ):
+                pass  # Consume setup responses
+
+            return grpc_client, grpc_msg_id
+
+        except Exception as e:
+            logger.error(f"gRPC setup failed: {e}", exc_info=True)
+            return None, None
+
+    def _extract_message_content(self, event) -> Optional[str]:
+        """
+        Extract message content from stream event.
+
+        Args:
+            event: Stream event from agents library
+
+        Returns:
+            Message content string or None if not found
+        """
+        if getattr(event, 'type', None) != "run_item_stream_event":
+            return None
+
+        item = getattr(event, 'item', None)
+        if not item or getattr(item, 'type', None) != "message_output_item":
+            return None
+
+        raw_item = getattr(item, 'raw_item', None)
+        if not raw_item:
+            return None
+
+        # Try to get content from object attribute or dict
+        content = getattr(raw_item, 'content', None)
+        if content is None and isinstance(raw_item, dict):
+            content = raw_item.get('content')
+
+        if content and isinstance(content, str) and content.strip():
+            return content
+
+        return None
+
     async def _invoke_agents_async(
         self,
         client,
@@ -363,33 +418,28 @@ class OpenAIBackend(InlineAgentsBackend):
             trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
             print(f"[+ DEBUG +] Trace ID: {trace_id}")
             with trace(workflow_name=project_uuid, trace_id=trace_id):
-                # Extract formatter_agent_instructions before passing to Runner.run_streamed
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
                 result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
-                async for event in result.stream_events():
-                    if event.type == "run_item_stream_event":
-                        if hasattr(event, 'item') and event.item.type == "tool_call_item":
-                            hooks_state.tool_calls.update({
-                                event.item.raw_item.name: event.item.raw_item.arguments
-                            })
-                        # Capture message output items and stream via gRPC
-                        elif (hasattr(event, 'item') and
-                              event.item.type == "message_output_item" and
-                              grpc_client and grpc_msg_id):
-                            try:
-                                # Extract message content from the event
-                                content = None
-                                if hasattr(event.item, 'raw_item'):
-                                    raw_item = event.item.raw_item
-                                    if hasattr(raw_item, 'content'):
-                                        content = raw_item.content
-                                    elif isinstance(raw_item, dict):
-                                        content = raw_item.get('content')
 
-                                # Send delta message if content is available
-                                if content and isinstance(content, str) and content.strip():
-                                    delta_counter += 1
-                                    logger.debug(f"gRPC: Sending delta {delta_counter} ({len(content)} chars)")
+                async for event in result.stream_events():
+                    if getattr(event, 'type', None) == "run_item_stream_event":
+                        item = getattr(event, 'item', None)
+                        item_type = getattr(item, 'type', None) if item else None
+
+                        # Handle tool calls
+                        if item_type == "tool_call_item":
+                            raw_item = getattr(item, 'raw_item', None)
+                            if raw_item:
+                                hooks_state.tool_calls.update({
+                                    getattr(raw_item, 'name', ''): getattr(raw_item, 'arguments', {})
+                                })
+
+                        # Handle message output and stream via gRPC
+                        elif item_type == "message_output_item" and grpc_client and grpc_msg_id:
+                            content = self._extract_message_content(event)
+                            if content:
+                                delta_counter += 1
+                                try:
                                     grpc_client.send_delta_message(
                                         msg_id=f"{grpc_msg_id}-delta-{delta_counter}",
                                         content=content,
@@ -397,8 +447,9 @@ class OpenAIBackend(InlineAgentsBackend):
                                         contact_urn=contact_urn,
                                         project_uuid=str(project_uuid)
                                     )
-                            except Exception as e:
-                                logger.error(f"gRPC delta send failed: {e}", exc_info=True)
+                                except Exception as e:
+                                    logger.error(f"gRPC delta send failed: {e}", exc_info=True)
+
                 final_response = self._get_final_response(result)
 
                 # If use_components is True, process the result through the formatter agent
