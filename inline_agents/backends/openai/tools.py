@@ -137,10 +137,10 @@ class Supervisor(Agent):
             }
         }
 
-        response = json.dumps({"msg": message},ensure_ascii=False)
+        message =  {"msg": message}
 
         broadcast.send_direct_message(
-            text=response,
+            msg=message,
             urns=[wrapper.context.contact.get("urn")],
             project_uuid=wrapper.context.project.get("uuid"),
             user=None,
