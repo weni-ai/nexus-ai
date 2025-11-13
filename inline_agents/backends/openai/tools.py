@@ -1,3 +1,5 @@
+import json
+import os
 from typing import Any
 
 import boto3
@@ -13,11 +15,17 @@ from openai.types.shared import Reasoning
 
 from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
+from router.clients.flows.http.send_message import WhatsAppBroadcastHTTPClient
 
 
 class Supervisor(Agent):
-    def function_tools(self) -> list:
-        return [self.knowledge_base_bedrock]
+    def function_tools(self, audio_orchestration: bool = False, exclude_tools_from_audio_orchestration: list[str] = [], exclude_tools_from_text_orchestration: list[str] = []) -> list:
+        tools = [self.send_message_with_url_button, self.knowledge_base_bedrock]
+        if audio_orchestration:
+            tools = [tool for tool in tools if tool.name not in exclude_tools_from_audio_orchestration]
+        else:
+            tools = [tool for tool in tools if tool.name not in exclude_tools_from_text_orchestration]
+        return tools
 
     def __init__(
         self,
@@ -31,8 +39,11 @@ class Supervisor(Agent):
         preview: bool = False,
         max_tokens: int | None = None,
         use_components: bool = False,
+        **kwargs
     ):
-        tools.extend(self.function_tools())
+        exclude_tools_from_audio_orchestration = kwargs.get("exclude_tools_from_audio_orchestration", [])
+        exclude_tools_from_text_orchestration = kwargs.get("exclude_tools_from_text_orchestration", [])
+        tools.extend(self.function_tools(audio_orchestration=kwargs.get("audio_orchestration", False), exclude_tools_from_audio_orchestration=exclude_tools_from_audio_orchestration, exclude_tools_from_text_orchestration=exclude_tools_from_text_orchestration))
         if model in settings.MODELS_WITH_REASONING:
             super().__init__(
                 name=name,
@@ -74,6 +85,67 @@ class Supervisor(Agent):
             ),
         )
 
+        return
+
+
+    @function_tool
+    def send_message_with_url_button(
+        wrapper: RunContextWrapper[Context],
+        text: str, 
+        url: str, 
+        display_text: str,
+    ) -> str:
+        """
+        Creates a message with a Call-to-Action (CTA) button linking to a URL.
+
+        WHEN TO USE:
+        - ALWAYS use this tool when sending URLs/links (mandatory for all links)
+        - User needs to access an external page or resource
+
+        IMPORTANT:
+        - If you need to send 2+ URLs, call this tool multiple times (once per link)
+        - Each URL must be sent in a separate call with its own message
+
+        EXTRACTION RULE:
+        - Extract URL from text to url field (don't leave URLs visible in text)
+        - Display_text should be action-oriented and describe the action
+
+        Args:
+            text (str): Message text, maximum 1024 characters. Example: "Click here to view the product"
+            url (str): Valid URL for redirection. Example: "https://www.example.com/products/1234567890"
+            display_text (str): Button text, maximum 20 characters. Example: "View Product"
+        """
+
+        text = text[:1024] if len(text) > 1024 else text
+        display_text = display_text[:20] if len(display_text) > 20 else display_text
+        
+        broadcast = WhatsAppBroadcastHTTPClient(
+            os.environ.get(
+                'FLOWS_REST_ENDPOINT'
+            ),
+            os.environ.get(
+                'FLOWS_SEND_MESSAGE_INTERNAL_TOKEN'
+            )
+        )
+
+        message = {
+            "text": text,
+            "interaction_type": "cta_url",
+            "cta_message": {
+                "display_text": display_text,
+                "url": url
+            }
+        }
+
+        response = json.dumps({"msg": message},ensure_ascii=False)
+
+        broadcast.send_direct_message(
+            text=response,
+            urns=[wrapper.context.contact.get("urn")],
+            project_uuid=wrapper.context.project.get("uuid"),
+            user=None,
+            backend="OpenAIBackend"
+        )
         return
 
     @function_tool

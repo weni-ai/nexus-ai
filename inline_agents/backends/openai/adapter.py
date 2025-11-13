@@ -230,6 +230,9 @@ class OpenAITeamAdapter(TeamAdapter):
             preview=preview,
             max_tokens=max_tokens,
             use_components=use_components,
+            exclude_tools_from_audio_orchestration=supervisor.get("exclude_tools_from_audio_orchestration", []),
+            exclude_tools_from_text_orchestration=supervisor.get("exclude_tools_from_text_orchestration", []),
+            audio_orchestration=audio_orchestration,
         )
 
         if isinstance(supervisor_hooks, SupervisorHooks):
@@ -294,9 +297,14 @@ class OpenAITeamAdapter(TeamAdapter):
     def _get_tools(cls, action_groups: list[dict], audio_orchestration: bool = False, exclude_tools_from_audio_orchestration: list[str] = [], exclude_tools_from_text_orchestration: list[str] = []) -> list[dict]:
         tools = []
         for action_group in action_groups:
+
             if audio_orchestration:
                 if action_group.get("actionGroupName") in exclude_tools_from_audio_orchestration:
                     continue
+            else:
+                if action_group.get("actionGroupName") in exclude_tools_from_text_orchestration:
+                    continue
+
             group_executor = action_group.get("actionGroupExecutor")
             if not group_executor:
                 continue
