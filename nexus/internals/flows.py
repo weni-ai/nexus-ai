@@ -91,7 +91,7 @@ class FlowsRESTClient(RestClient):
         print("Project UUID: ", project_uuid)
 
         jwt_usecase = JWTUsecase()
-        jwt_token = jwt_usecase.generate_jwt_token(project_uuid)
+        jwt_token = jwt_usecase.generate_broadcast_jwt_token()
         headers = {
             "Content-Type": "application/json; charset: utf-8",
             "Authorization": f"Bearer {jwt_token}",
