@@ -1493,6 +1493,7 @@ django = ">=3.0"
 pytz = "*"
 
 [[package]]
+<<<<<<< HEAD
 name = "dnspython"
 version = "2.8.0"
 description = "DNS toolkit"
@@ -1514,29 +1515,28 @@ trio = ["trio (>=0.30)"]
 wmi = ["wmi (>=1.5.1) ; platform_system == \"Windows\""]
 
 [[package]]
-name = "drf-yasg"
-version = "1.21.7"
-description = "Automated generation of real Swagger/OpenAPI 2.0 schemas from Django Rest Framework code."
+name = "drf-spectacular"
+version = "0.27.2"
+description = "Sane and flexible OpenAPI 3 schema generation for Django REST framework"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7"
 groups = ["main"]
 files = [
-    {file = "drf-yasg-1.21.7.tar.gz", hash = "sha256:4c3b93068b3dfca6969ab111155e4dd6f7b2d680b98778de8fd460b7837bdb0d"},
-    {file = "drf_yasg-1.21.7-py3-none-any.whl", hash = "sha256:f85642072c35e684356475781b7ecf5d218fff2c6185c040664dd49f0a4be181"},
+    {file = "drf-spectacular-0.27.2.tar.gz", hash = "sha256:a199492f2163c4101055075ebdbb037d59c6e0030692fc83a1a8c0fc65929981"},
+    {file = "drf_spectacular-0.27.2-py3-none-any.whl", hash = "sha256:b1c04bf8b2fbbeaf6f59414b4ea448c8787aba4d32f76055c3b13335cf7ec37b"},
 ]
 
 [package.dependencies]
-django = ">=2.2.16"
+Django = ">=2.2"
 djangorestframework = ">=3.10.3"
 inflection = ">=0.3.1"
-packaging = ">=21.0"
-pytz = ">=2021.1"
-pyyaml = ">=5.1"
-uritemplate = ">=3.0.0"
+jsonschema = ">=2.6.0"
+PyYAML = ">=5.1"
+uritemplate = ">=2.0.0"
 
 [package.extras]
-coreapi = ["coreapi (>=2.3.3)", "coreschema (>=0.0.4)"]
-validation = ["swagger-spec-validator (>=2.1.0)"]
+offline = ["drf-spectacular-sidecar"]
+sidecar = ["drf-spectacular-sidecar"]
 
 [[package]]
 name = "ecs-logging"
@@ -7388,4 +7388,4 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.12"
-content-hash = "551da6f4bc6b3e1138393af2bfec0d6579901dd46b73823886b0a279cd5186bb"
+content-hash = "761074aac6502f1bbccd575b8ffbde8004a416432736f10ae25d1b2e3725eb79"

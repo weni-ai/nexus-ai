@@ -6,8 +6,8 @@ from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, Validat
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.utils.datastructures import MultiValueDictKeyError
 from django_filters import rest_framework as filters
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse, OpenApiExample
+from drf_spectacular.types import OpenApiTypes
 from rest_framework import parsers, status, views
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
@@ -1668,336 +1668,118 @@ class SupervisorViewset(ModelViewSet):
         except ProjectDoesNotExist:
             return Conversation.objects.none()
 
-    @swagger_auto_schema(
-        operation_id="supervisor_list",
-        filter_inspectors=[],  # Disable automatic filter parameter generation to avoid duplicates
-        operation_description="""
-        Retrieve a paginated list of conversation data for supervisor dashboard.
+    @extend_schema(
+        summary="List supervisor conversations",
+        description="""
+        Retrieve a paginated list of supervisor conversations for a project.
         
-        This endpoint provides comprehensive conversation data including:
-        - Contact information (name, URN)
-        - Conversation metadata (dates, topic, resolution)
-        - Customer satisfaction metrics (CSAT, NPS)
-        - Human support indicators (has_chats_room)
+        This endpoint supports filtering, searching, and ordering of conversations.
         
-        **Filtering Options:**
-        - Filter by date range using `start_date` and `end_date` (format: DD-MM-YYYY)
-        - Filter by CSAT score (1-5)
-        - Filter by resolution status
-        - Filter by topic name
-        - Filter by NPS score
-        - Filter by human support requirement (has_chats_room)
-        - Search by contact name or URN
-        
-        **Pagination:**
-        - Default page size: 12 items
-        - Maximum page size: 50 items
-        - Use `page` parameter to navigate
-        - Use `page_size` to customize results per page
+        **Filters:**
+        - `start_date`: Filter conversations created on or after this date (format: DD-MM-YYYY)
+        - `end_date`: Filter conversations created on or before this date (format: DD-MM-YYYY)
+        - `csat`: Filter by CSAT score (can be multiple values, comma-separated)
+        - `resolution`: Filter by resolution status (can be multiple values, comma-separated)
+        - `topics`: Filter by topic names (can be multiple values, comma-separated)
+        - `has_chats_room`: Filter by whether conversation has chat room (true/false)
+        - `nps`: Filter by NPS score (exact match)
+        - `search`: Search in contact name or URN (case-insensitive)
         
         **Ordering:**
-        - Default ordering: by start_date (descending)
-        - Available fields: created_at, start_date, end_date
-        - Use `ordering` parameter (e.g., `?ordering=created_at` or `?ordering=-start_date`)
+        - Use `ordering` parameter with fields: `created_at`, `start_date`, `end_date`
+        - Prefix with `-` for descending order (e.g., `-start_date`)
+        - Default ordering is by `-start_date` (newest first)
         
-        **Authentication Required**: Yes (JWT Token)
-        **Permissions Required**: User must have access to the specified project
+        **Pagination:**
+        - Results are paginated using SupervisorPagination
         """,
-        manual_parameters=[
-            openapi.Parameter(
-                'project_uuid',
-                openapi.IN_PATH,
-                description="UUID of the project to retrieve supervisor data for",
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_UUID,
-                required=True
+        parameters=[
+            OpenApiParameter(
+                "project_uuid",
+                OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                description="UUID of the project",
+                required=True,
             ),
-            openapi.Parameter(
-                'start_date',
-                openapi.IN_QUERY,
-                description="Filter conversations created on or after this date. Format: DD-MM-YYYY (e.g., 01-11-2024)",
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_DATE,
-                required=False
+            OpenApiParameter(
+                "start_date",
+                OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                description="Filter conversations created on or after this date (format: DD-MM-YYYY)",
+                required=False,
             ),
-            openapi.Parameter(
-                'end_date',
-                openapi.IN_QUERY,
-                description="Filter conversations created on or before this date. Format: DD-MM-YYYY (e.g., 30-11-2024)",
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_DATE,
-                required=False
+            OpenApiParameter(
+                "end_date",
+                OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                description="Filter conversations created on or before this date (format: DD-MM-YYYY)",
+                required=False,
             ),
-            openapi.Parameter(
-                'csat',
-                openapi.IN_QUERY,
-                description="Filter by CSAT (Customer Satisfaction) score. Can be a single value or comma-separated list (e.g., '1,2,3' or '4')",
-                type=openapi.TYPE_STRING,
-                required=False
+            OpenApiParameter(
+                "csat",
+                OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Filter by CSAT score(s). Multiple values can be comma-separated.",
+                required=False,
             ),
-            openapi.Parameter(
-                'resolution',
-                openapi.IN_QUERY,
-                description="Filter by resolution status. Can be a single value or comma-separated list. Values: 0=Resolved, 1=Unresolved, 2=In Progress, etc.",
-                type=openapi.TYPE_STRING,
-                required=False
+            OpenApiParameter(
+                "resolution",
+                OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Filter by resolution status. Multiple values can be comma-separated.",
+                required=False,
             ),
-            openapi.Parameter(
-                'topics',
-                openapi.IN_QUERY,
-                description="Filter by topic name(s). Can be a single topic or comma-separated list (e.g., 'Customer Support' or 'Billing,Technical Support')",
-                type=openapi.TYPE_STRING,
-                required=False
+            OpenApiParameter(
+                "topics",
+                OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Filter by topic name(s). Multiple values can be comma-separated.",
+                required=False,
             ),
-            openapi.Parameter(
-                'has_chats_room',
-                openapi.IN_QUERY,
-                description="Filter by human support requirement. Use 'true' for conversations that required human support, 'false' otherwise",
-                type=openapi.TYPE_BOOLEAN,
-                required=False
+            OpenApiParameter(
+                "has_chats_room",
+                OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                description="Filter by whether conversation has chat room",
+                required=False,
             ),
-            openapi.Parameter(
-                'nps',
-                openapi.IN_QUERY,
-                description="Filter by NPS (Net Promoter Score). Accepts numeric values (0-10)",
-                type=openapi.TYPE_NUMBER,
-                required=False
+            OpenApiParameter(
+                "nps",
+                OpenApiTypes.NUMBER,
+                location=OpenApiParameter.QUERY,
+                description="Filter by NPS score (exact match)",
+                required=False,
             ),
-            openapi.Parameter(
-                'search',
-                openapi.IN_QUERY,
-                description="Search conversations by contact name or URN (phone number). Partial matches are supported",
-                type=openapi.TYPE_STRING,
-                required=False
+            OpenApiParameter(
+                "search",
+                OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Search in contact name or URN (case-insensitive)",
+                required=False,
             ),
-            openapi.Parameter(
-                'ordering',
-                openapi.IN_QUERY,
-                description="Order results by field. Prefix with '-' for descending order. Available fields: created_at, start_date, end_date. Example: '-start_date' or 'created_at'",
-                type=openapi.TYPE_STRING,
-                required=False
-            ),
-            openapi.Parameter(
-                'page',
-                openapi.IN_QUERY,
-                description="Page number for pagination (default: 1)",
-                type=openapi.TYPE_INTEGER,
-                required=False
-            ),
-            openapi.Parameter(
-                'page_size',
-                openapi.IN_QUERY,
-                description="Number of results per page (default: 12, max: 50)",
-                type=openapi.TYPE_INTEGER,
-                required=False
+            OpenApiParameter(
+                "ordering",
+                OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Order results by field. Use '-' prefix for descending. Options: created_at, start_date, end_date",
+                required=False,
             ),
         ],
         responses={
-            200: openapi.Response(
-                description="Successful retrieval of supervisor data",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'count': openapi.Schema(
-                            type=openapi.TYPE_INTEGER,
-                            description="Total number of results"
-                        ),
-                        'next': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            format=openapi.FORMAT_URI,
-                            description="URL to the next page of results (null if last page)",
-                            x_nullable=True
-                        ),
-                        'previous': openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            format=openapi.FORMAT_URI,
-                            description="URL to the previous page of results (null if first page)",
-                            x_nullable=True
-                        ),
-                        'results': openapi.Schema(
-                            type=openapi.TYPE_ARRAY,
-                            items=openapi.Schema(
-                                type=openapi.TYPE_OBJECT,
-                                properties={
-                                    'created_on': openapi.Schema(
-                                        type=openapi.TYPE_STRING,
-                                        format=openapi.FORMAT_DATETIME,
-                                        description="Date and time when the conversation was created"
-                                    ),
-                                    'urn': openapi.Schema(
-                                        type=openapi.TYPE_STRING,
-                                        description="Contact URN (phone number or identifier)"
-                                    ),
-                                    'uuid': openapi.Schema(
-                                        type=openapi.TYPE_STRING,
-                                        format=openapi.FORMAT_UUID,
-                                        description="Unique identifier for the conversation"
-                                    ),
-                                    'external_id': openapi.Schema(
-                                        type=openapi.TYPE_STRING,
-                                        description="External identifier for the conversation",
-                                        x_nullable=True
-                                    ),
-                                    'csat': openapi.Schema(
-                                        type=openapi.TYPE_STRING,
-                                        description="Customer Satisfaction score (1-5)",
-                                        x_nullable=True
-                                    ),
-                                    'nps': openapi.Schema(
-                                        type=openapi.TYPE_INTEGER,
-                                        description="Net Promoter Score (0-10)",
-                                        x_nullable=True
-                                    ),
-                                    'topic': openapi.Schema(
-                                        type=openapi.TYPE_STRING,
-                                        description="Topic name associated with the conversation",
-                                        x_nullable=True
-                                    ),
-                                    'has_chats_room': openapi.Schema(
-                                        type=openapi.TYPE_BOOLEAN,
-                                        description="Whether the conversation required human support"
-                                    ),
-                                    'start_date': openapi.Schema(
-                                        type=openapi.TYPE_STRING,
-                                        format=openapi.FORMAT_DATETIME,
-                                        description="Conversation start date and time"
-                                    ),
-                                    'end_date': openapi.Schema(
-                                        type=openapi.TYPE_STRING,
-                                        format=openapi.FORMAT_DATETIME,
-                                        description="Conversation end date and time"
-                                    ),
-                                    'resolution': openapi.Schema(
-                                        type=openapi.TYPE_STRING,
-                                        description="Resolution status code (0=Resolved, 1=Unresolved, 2=In Progress, etc.)",
-                                        x_nullable=True
-                                    ),
-                                    'name': openapi.Schema(
-                                        type=openapi.TYPE_STRING,
-                                        description="Contact name",
-                                        x_nullable=True
-                                    ),
-                                }
-                            ),
-                            description="List of conversation data"
-                        )
-                    }
-                ),
-                examples={
-                    "application/json": {
-                        "count": 150,
-                        "next": "http://localhost:8000/api/v1/intelligences/123e4567-e89b-12d3-a456-426614174000/supervisor/?page=2",
-                        "previous": None,
-                        "results": [
-                            {
-                                "created_on": "2024-11-01T10:30:00Z",
-                                "urn": "5511999999999",
-                                "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-                                "external_id": "ext-12345",
-                                "csat": "4",
-                                "nps": 8,
-                                "topic": "Customer Support",
-                                "has_chats_room": False,
-                                "start_date": "2024-11-01T10:30:00Z",
-                                "end_date": "2024-11-01T11:15:00Z",
-                                "resolution": "0",
-                                "name": "John Doe"
-                            },
-                            {
-                                "created_on": "2024-11-01T09:15:00Z",
-                                "urn": "5511888888888",
-                                "uuid": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-                                "external_id": "ext-12346",
-                                "csat": "5",
-                                "nps": 9,
-                                "topic": "Billing",
-                                "has_chats_room": True,
-                                "start_date": "2024-11-01T09:15:00Z",
-                                "end_date": "2024-11-01T09:45:00Z",
-                                "resolution": "1",
-                                "name": "Jane Smith"
-                            }
-                        ]
-                    }
-                }
+            200: OpenApiResponse(
+                response=SupervisorDataSerializer(many=True),
+                description="Paginated list of supervisor conversations",
             ),
-            400: openapi.Response(
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
                 description="Bad Request - Invalid parameters or date format",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "error": openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="Error message describing what went wrong"
-                        )
-                    }
-                ),
-                examples={
-                    "application/json": {
-                        "error": "Invalid date format. Expected DD-MM-YYYY format"
-                    }
-                }
             ),
-            401: openapi.Response(
-                description="Unauthorized - Authentication required",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "detail": openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="Authentication error message"
-                        )
-                    }
-                )
-            ),
-            403: openapi.Response(
-                description="Forbidden - User does not have access to this project",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "detail": openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="Permission error message"
-                        )
-                    }
-                )
-            ),
-            404: openapi.Response(
+            404: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
                 description="Not Found - Project not found",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "error": openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="Error message indicating the project was not found"
-                        )
-                    }
-                ),
-                examples={
-                    "application/json": {
-                        "error": "Project with UUID 123e4567-e89b-12d3-a456-426614174000 not found"
-                    }
-                }
-            ),
-            500: openapi.Response(
-                description="Internal Server Error",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "error": openapi.Schema(
-                            type=openapi.TYPE_STRING,
-                            description="Error message describing the server error"
-                        )
-                    }
-                ),
-                examples={
-                    "application/json": {
-                        "error": "Error retrieving supervisor data: <error details>"
-                    }
-                }
             ),
         },
-        tags=['Supervisor']
+        tags=["Supervisor"],
     )
     def list(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
@@ -2045,9 +1827,9 @@ class InstructionsClassificationAPIView(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated, ProjectPermission]
 
-    @swagger_auto_schema(
+    @extend_schema(
         operation_id="instruction_classify",
-        operation_description="""
+        description="""
         Classify an instruction against existing instructions in a content base.
 
         This endpoint analyzes a given instruction text and classifies it based on similarity
@@ -2062,78 +1844,66 @@ class InstructionsClassificationAPIView(APIView):
         **Authentication Required**: Yes (JWT Token)
         **Permissions Required**: User must have access to the specified project
         """,
-        request_body=InstructionClassificationRequestSerializer,
-        manual_parameters=[
-            openapi.Parameter(
+        request=InstructionClassificationRequestSerializer,
+        parameters=[
+            OpenApiParameter(
                 "project_uuid",
-                openapi.IN_PATH,
+                OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
                 description="UUID of the project containing the content base",
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_UUID,
                 required=True,
             ),
         ],
         responses={
-            200: openapi.Response(
+            200: OpenApiResponse(
+                response=InstructionClassificationResponseSerializer,
                 description="Successful classification",
-                schema=InstructionClassificationResponseSerializer,
-                examples={
-                    "application/json": {
-                        "classification": [
-                            {
-                                "name": "customer_support",
-                                "reason": "This instruction relates to handling customer inquiries",
-                            },
-                            {
-                                "name": "product_information",
-                                "reason": "The instruction involves providing product details",
-                            },
-                        ],
-                        "suggestion": "Consider making this instruction more specific to improve clarity",
-                    }
-                },
+                examples=[
+                    OpenApiExample(
+                        "example_response",
+                        value={
+                            "classification": [
+                                {
+                                    "name": "customer_support",
+                                    "reason": "This instruction relates to handling customer inquiries",
+                                },
+                                {
+                                    "name": "product_information",
+                                    "reason": "The instruction involves providing product details",
+                                },
+                            ],
+                            "suggestion": "Consider making this instruction more specific to improve clarity",
+                        },
+                    )
+                ],
             ),
-            400: openapi.Response(
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
                 description="Bad Request - Missing or invalid instruction",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "error": openapi.Schema(
-                            type=openapi.TYPE_STRING, description="Error message describing what went wrong"
-                        )
-                    },
-                ),
-                examples={"application/json": {"error": "Instruction is required"}},
+                examples=[
+                    OpenApiExample(
+                        "error_example",
+                        value={"error": "Instruction is required"},
+                    )
+                ],
             ),
-            401: openapi.Response(
+            401: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
                 description="Unauthorized - Authentication required",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "detail": openapi.Schema(type=openapi.TYPE_STRING, description="Authentication error message")
-                    },
-                ),
             ),
-            403: openapi.Response(
+            403: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
                 description="Forbidden - User does not have access to this project",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "detail": openapi.Schema(type=openapi.TYPE_STRING, description="Permission error message")
-                    },
-                ),
             ),
-            500: openapi.Response(
+            500: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
                 description="Internal Server Error",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "error": openapi.Schema(
-                            type=openapi.TYPE_STRING, description="Error message describing the server error"
-                        )
-                    },
-                ),
-                examples={"application/json": {"error": "An error occurred while processing the classification"}},
+                examples=[
+                    OpenApiExample(
+                        "error_example",
+                        value={"error": "An error occurred while processing the classification"},
+                    )
+                ],
             ),
         },
         tags=["Instructions"],

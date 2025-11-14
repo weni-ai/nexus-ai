@@ -49,7 +49,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "django_prometheus",
     "rest_framework",
-    "drf_yasg",
+    "drf_spectacular",
     "elasticapm.contrib.django",
     # apps
     "nexus.users",
@@ -201,13 +201,25 @@ CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TASK_SERIALIZER = "json"
 
-# Swagger
+# Spectacular (OpenAPI 3.0 schema generation)
 
-SWAGGER_SETTINGS = {
-    "USE_SESSION_AUTH": False,
-    "DOC_EXPANSION": "list",
-    "APIS_SORTER": "alpha",
-    "SECURITY_DEFINITIONS": {"OIDC": {"type": "apiKey", "name": "Authorization", "in": "header"}},
+SPECTACULAR_SETTINGS = {
+    "TITLE": "API Documentation",
+    "DESCRIPTION": "API Documentation",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SCHEMA_PATH_PREFIX": "/api/",
+    "LICENSE": {
+        "name": "GPL-3.0 License",
+    },
+    "SWAGGER_UI_SETTINGS": {
+        "deepLinking": True,
+        "displayOperationId": False,
+    },
+    "REDOC_UI_SETTINGS": {
+        "hideDownloadButton": False,
+    },
 }
 
 # WENIGPT
@@ -308,6 +320,7 @@ OIDC_RP_EMAIL = env.str("OIDC_RP_EMAIL", default="")
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["mozilla_django_oidc.contrib.drf.OIDCAuthentication"],
     "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 if TESTING:
