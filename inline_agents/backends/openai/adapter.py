@@ -437,20 +437,21 @@ class OpenAITeamAdapter(TeamAdapter):
                     "error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"
                 })
 
-            # Extract sessionAttributes from response
             session_attributes = result.get("response", {}).get("sessionAttributes", {})
+            
+            events = []
+            if isinstance(session_attributes, dict):
+                events = session_attributes.get("events", [])
+            elif isinstance(session_attributes, str):
+                try:
+                    session_attrs_parsed = json.loads(session_attributes)
+                    events = session_attrs_parsed.get("events", [])
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
-            # Check if there are events in sessionAttributes
-            events = session_attributes.get("events", [])
+            # Fallback: check top-level response for events
             if not events:
-                # Try to find events in other places in the response
                 events = result.get("response", {}).get("events", [])
-                if not events and isinstance(session_attributes, str):
-                    try:
-                        session_attrs_parsed = json.loads(session_attributes)
-                        events = session_attrs_parsed.get("events", [])
-                    except (json.JSONDecodeError, TypeError):
-                        pass
 
             if not events:
                 logger.warning(
