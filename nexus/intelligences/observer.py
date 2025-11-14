@@ -1,5 +1,6 @@
 from typing import Optional
 
+from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver
 from nexus.event_domain.recent_activity.create import create_recent_activity
 from nexus.event_domain.recent_activity.external_activities import intelligence_activity_message
@@ -20,6 +21,7 @@ def _update_comparison_fields(
     return action_details
 
 
+@observer("intelligence_create_activity")
 class IntelligenceCreateObserver(EventObserver):
     def __init__(
         self,
@@ -51,6 +53,7 @@ class IntelligenceCreateObserver(EventObserver):
         )
 
 
+@observer("llm_update_activity")
 class LLMUpdateObserver(EventObserver):
     def perform(
         self,
@@ -66,6 +69,7 @@ class LLMUpdateObserver(EventObserver):
         create_recent_activity(llm, dto=dto)
 
 
+@observer("contentbase_file_activity")
 class ContentBaseFileObserver(EventObserver):
     def perform(
         self,
@@ -106,6 +110,7 @@ class ContentBaseFileObserver(EventObserver):
                 create_recent_activity(content_base_file, dto=dto)
 
 
+@observer("contentbase_agent_activity")
 class ContentBaseAgentObserver(EventObserver):
     def perform(self, user, content_base_agent, action_type: str, **kwargs):
         intelligence = content_base_agent.content_base.intelligence
@@ -130,6 +135,7 @@ class ContentBaseAgentObserver(EventObserver):
             create_recent_activity(content_base_agent, dto=dto)
 
 
+@observer("contentbase_instruction_activity")
 class ContentBaseInstructionObserver(EventObserver):
     def perform(self, user, content_base_instruction, action_type: str = "U", **kwargs):
         intelligence = content_base_instruction.content_base.intelligence
@@ -154,6 +160,7 @@ class ContentBaseInstructionObserver(EventObserver):
             create_recent_activity(content_base_instruction, dto=dto)
 
 
+@observer("contentbase_link_activity")
 class ContentBaseLinkObserver(EventObserver):
     def perform(self, user, content_base_link, action_type: str, **kwargs):
         content_base = content_base_link.content_base
@@ -185,6 +192,7 @@ class ContentBaseLinkObserver(EventObserver):
                 create_recent_activity(content_base_link, dto=dto)
 
 
+@observer("contentbase_text_activity")
 class ContentBaseTextObserver(EventObserver):
     def perform(self, user, content_base_text, action_type: str, **kwargs):
         content_base = content_base_text.content_base
@@ -223,6 +231,7 @@ class ContentBaseTextObserver(EventObserver):
                 create_recent_activity(content_base_text, dto=dto)
 
 
+@observer("contentbase_activity")
 class ContentBaseObserver(EventObserver):
     def __init__(
         self,

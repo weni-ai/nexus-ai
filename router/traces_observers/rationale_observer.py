@@ -8,7 +8,9 @@ from django.conf import settings
 
 from nexus.celery import app as celery_app
 from nexus.environment import env
+from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver
+from nexus.event_domain.observer_factories import create_rationale_observer
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.clients.flows.http.send_message import SendMessageHTTPClient
 from router.clients.preview.simulator.broadcast import SimulateBroadcast
@@ -17,6 +19,7 @@ from router.traces_observers.save_traces import save_inline_message_to_database
 logger = logging.getLogger(__name__)
 
 
+@observer("inline_trace_observers", factory=create_rationale_observer)
 class RationaleObserver(EventObserver):
     CACHE_TIMEOUT = 300  # 5 minutes in seconds
 
