@@ -2,7 +2,7 @@ import os
 
 import sentry_sdk
 from django.conf import settings
-from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.utils.datastructures import MultiValueDictKeyError
 from django_filters import rest_framework as filters
@@ -56,8 +56,10 @@ from nexus.task_managers.tasks_bedrock import (
 )
 from nexus.usecases import intelligences
 from nexus.usecases.intelligences.exceptions import (
+    ContentBaseDoesNotExist,
     IntelligencePermissionDenied,
 )
+from nexus.usecases.users.exceptions import UserDoesNotExists
 from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
@@ -714,7 +716,7 @@ class ContentBaseFileViewset(ModelViewSet):
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def create(self, request, content_base_uuid=str):
+    def create(self, request, **kwargs):
         from rest_framework import status as http_status
 
         def validate_file_size(file):
@@ -723,6 +725,14 @@ class ContentBaseFileViewset(ModelViewSet):
                 return Response(data={"message": "File size is too large"}, status=http_status.HTTP_400_BAD_REQUEST)
 
         try:
+            # Get content_base_uuid from URL kwargs
+            content_base_uuid = self.kwargs.get("content_base_uuid")
+            if not content_base_uuid:
+                return Response(
+                    data={"message": "content_base_uuid is required"}, status=http_status.HTTP_400_BAD_REQUEST
+                )
+
+            # Check permissions by calling get_queryset
             self.get_queryset()
 
             user: User = request.user
@@ -761,6 +771,18 @@ class ContentBaseFileViewset(ModelViewSet):
             return Response(data={"message": "file is required"}, status=http_status.HTTP_400_BAD_REQUEST)
         except IntelligencePermissionDenied:
             return Response(status=http_status.HTTP_401_UNAUTHORIZED)
+        except ContentBaseDoesNotExist as e:
+            return Response(data={"message": str(e)}, status=http_status.HTTP_404_NOT_FOUND)
+        except UserDoesNotExists as e:
+            return Response(data={"message": str(e)}, status=http_status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            return Response(data={"message": f"Invalid UUID: {str(e)}"}, status=http_status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                data={"message": f"An error occurred while uploading the file: {str(e)}"},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
