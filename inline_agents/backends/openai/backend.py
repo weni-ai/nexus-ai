@@ -210,15 +210,16 @@ class OpenAIBackend(InlineAgentsBackend):
                 }
             )
 
-        # Initialize gRPC streaming client if enabled
-        grpc_client, grpc_msg_id = self._initialize_grpc_client(
-            channel_uuid=channel_uuid,
-            contact_urn=contact_urn,
-            session_id=session_id,
-            project_uuid=project_uuid,
-            preview=preview,
-            language=language
-        )
+        # Initialize gRPC streaming client if enabled (disabled for preview)
+        grpc_client, grpc_msg_id = None, None
+        if not preview:
+            grpc_client, grpc_msg_id = self._initialize_grpc_client(
+                channel_uuid=channel_uuid,
+                contact_urn=contact_urn,
+                session_id=session_id,
+                project_uuid=project_uuid,
+                language=language
+            )
 
         result = asyncio.run(self._invoke_agents_async(
             client, external_team, session, session_id,
@@ -246,17 +247,72 @@ class OpenAIBackend(InlineAgentsBackend):
 
         return result
 
-    async def _run_formatter_agent_async(self, final_response: str, session, supervisor_hooks, context, formatter_instructions=""):
-        """Run the formatter agent asynchronously within the trace context"""
-        # Create formatter agent to process the final response
-        formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions)
+    def _send_grpc_delta(
+        self,
+        delta_content: str,
+        grpc_client: MessageStreamingClient,
+        grpc_msg_id: str,
+        delta_counter: int,
+        channel_uuid: str,
+        contact_urn: str,
+        project_uuid: str
+    ) -> bool:
+        """Send a single delta message via gRPC."""
+        try:
+            grpc_client.send_delta_message(
+                msg_id=f"{grpc_msg_id}-delta-{delta_counter}",
+                content=delta_content,
+                channel_uuid=channel_uuid,
+                contact_urn=contact_urn,
+                project_uuid=str(project_uuid)
+            )
+            return True
+        except Exception as e:
+            logger.error(f"gRPC delta send failed: {e}", exc_info=True)
+            return False
 
-        # Run the formatter agent with the final response
-        formatter_result = await self._run_formatter_agent(
+    def _process_delta_event(
+        self,
+        event,
+        grpc_client: Optional[MessageStreamingClient],
+        grpc_msg_id: Optional[str],
+        delta_counter: int,
+        channel_uuid: str,
+        contact_urn: str,
+        project_uuid: str
+    ) -> int:
+        """Process a delta event and stream it via gRPC."""
+        from openai.types.responses import ResponseTextDeltaEvent
+
+        if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+            delta_content = event.data.delta
+            if delta_content and grpc_client and grpc_msg_id:
+                delta_counter += 1
+                self._send_grpc_delta(
+                    delta_content=delta_content,
+                    grpc_client=grpc_client,
+                    grpc_msg_id=grpc_msg_id,
+                    delta_counter=delta_counter,
+                    channel_uuid=channel_uuid,
+                    contact_urn=contact_urn,
+                    project_uuid=project_uuid
+                )
+
+        return delta_counter
+
+    async def _run_formatter_agent_async(
+        self,
+        final_response: str,
+        session,
+        supervisor_hooks,
+        context,
+        formatter_instructions=""
+    ):
+        """Run the formatter agent asynchronously."""
+        formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions)
+        return await self._run_formatter_agent_streamed(
             formatter_agent, final_response, session, context
         )
-
-        return formatter_result
 
     def _create_formatter_agent(self, supervisor_hooks, formatter_instructions=""):
         """Create the formatter agent with component tools"""
@@ -289,20 +345,27 @@ class OpenAIBackend(InlineAgentsBackend):
         )
         return formatter_agent
 
-    async def _run_formatter_agent(self, formatter_agent, final_response, session, context):
-        """Run the formatter agent with the final response"""
+    async def _run_formatter_agent_streamed(
+        self,
+        formatter_agent,
+        final_response,
+        session,
+        context
+    ):
+        """Run the formatter agent."""
         try:
-            # Create a FinalResponse object for the formatter agent
-            result = await Runner.run(
+            client = self._get_client()
+            result = client.run_streamed(
                 starting_agent=formatter_agent,
                 input=final_response,
                 context=context,
                 session=session,
             )
-            return result.final_output
+            async for _ in result.stream_events():
+                pass
+            return self._get_final_response(result)
         except Exception as e:
-            print(f"Error in formatter agent: {e}")
-            # Return the original response if formatter fails
+            logger.error(f"Error in formatter agent: {e}", exc_info=True)
             return final_response
 
     def _initialize_grpc_client(
@@ -311,17 +374,14 @@ class OpenAIBackend(InlineAgentsBackend):
         contact_urn: str,
         session_id: str,
         project_uuid: str,
-        preview: bool,
         language: str
     ) -> tuple[Optional[MessageStreamingClient], Optional[str]]:
-        """
-        Initialize gRPC client and send setup message.
-
-        Returns:
-            Tuple of (grpc_client, grpc_msg_id) or (None, None) if disabled/failed
-        """
-        if not is_grpc_enabled() or not channel_uuid or not contact_urn:
+        """Initialize gRPC client and send setup message."""
+        if not is_grpc_enabled() or not contact_urn:
             return None, None
+
+        if not channel_uuid:
+            channel_uuid = "default-channel-uuid"
 
         try:
             grpc_host = getattr(settings, 'GRPC_SERVICE_HOST', 'localhost')
@@ -338,7 +398,6 @@ class OpenAIBackend(InlineAgentsBackend):
                 f"{contact_urn}-{session_id}-{datetime.now().isoformat()}".encode()
             ).hexdigest()[:16]
 
-            logger.info(f"gRPC: Sending setup message {grpc_msg_id}")
             for _ in grpc_client.stream_messages_with_setup(
                 msg_id=grpc_msg_id,
                 channel_uuid=channel_uuid,
@@ -346,11 +405,10 @@ class OpenAIBackend(InlineAgentsBackend):
                 project_uuid=str(project_uuid),
                 metadata={
                     "session_id": session_id,
-                    "preview": str(preview),
                     "language": language,
                 }
             ):
-                pass  # Consume setup responses
+                pass
 
             return grpc_client, grpc_msg_id
 
@@ -422,6 +480,17 @@ class OpenAIBackend(InlineAgentsBackend):
                 result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
 
                 async for event in result.stream_events():
+                    delta_counter = self._process_delta_event(
+                        event=event,
+                        grpc_client=grpc_client,
+                        grpc_msg_id=grpc_msg_id,
+                        delta_counter=delta_counter,
+                        channel_uuid=channel_uuid,
+                        contact_urn=contact_urn,
+                        project_uuid=project_uuid
+                    )
+
+                    # Handle other event types (tool calls, etc.)
                     if getattr(event, 'type', None) == "run_item_stream_event":
                         item = getattr(event, 'item', None)
                         item_type = getattr(item, 'type', None) if item else None
@@ -434,29 +503,15 @@ class OpenAIBackend(InlineAgentsBackend):
                                     getattr(raw_item, 'name', ''): getattr(raw_item, 'arguments', {})
                                 })
 
-                        # Handle message output and stream via gRPC
-                        elif item_type == "message_output_item" and grpc_client and grpc_msg_id:
-                            content = self._extract_message_content(event)
-                            if content:
-                                delta_counter += 1
-                                try:
-                                    grpc_client.send_delta_message(
-                                        msg_id=f"{grpc_msg_id}-delta-{delta_counter}",
-                                        content=content,
-                                        channel_uuid=channel_uuid,
-                                        contact_urn=contact_urn,
-                                        project_uuid=str(project_uuid)
-                                    )
-                                except Exception as e:
-                                    logger.error(f"gRPC delta send failed: {e}", exc_info=True)
-
                 final_response = self._get_final_response(result)
 
-                # If use_components is True, process the result through the formatter agent
                 if use_components:
                     formatted_response = await self._run_formatter_agent_async(
-                        final_response, session, supervisor_hooks, external_team["context"],
-                        formatter_agent_instructions
+                        final_response=final_response,
+                        session=session,
+                        supervisor_hooks=supervisor_hooks,
+                        context=external_team["context"],
+                        formatter_instructions=formatter_agent_instructions
                     )
                     final_response = formatted_response
 

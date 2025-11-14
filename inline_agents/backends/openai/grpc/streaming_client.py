@@ -4,9 +4,10 @@ gRPC client for streaming messages to external services.
 
 import grpc
 import logging
-import os
 from datetime import datetime
 from typing import Iterator, Optional, List, Dict, Any
+
+from django.conf import settings
 
 from inline_agents.backends.openai.grpc.generated import (
     message_stream_service_pb2,
@@ -17,37 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def is_grpc_enabled() -> bool:
-    """
-    Check if gRPC should be enabled.
-
-    Returns False in test environments to prevent actual gRPC calls.
-    Override with GRPC_ENABLED environment variable.
-
-    Usage:
-        from inline_agents.backends.openai.grpc.streaming_client import is_grpc_enabled
-
-        if is_grpc_enabled():
-            # Make real gRPC call
-        else:
-            # Skip or use mock
-    """
-    # Check explicit setting first
-    grpc_enabled = os.environ.get('GRPC_ENABLED', '').lower()
-    if grpc_enabled == 'false':
-        return False
-    if grpc_enabled == 'true':
-        return True
-
-    # Disable in test environments
-    if os.environ.get('TESTING') == 'true':
-        return False
-    if 'pytest' in os.environ.get('_', ''):
-        return False
-    if 'test' in os.environ.get('DJANGO_SETTINGS_MODULE', ''):
-        return False
-
-    # Enabled by default
-    return True
+    return bool(settings.GRPC_ENABLED)
 
 
 class MessageStreamingClient:
