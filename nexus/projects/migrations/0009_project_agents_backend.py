@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0008_merge_20241010_2217'),
+        ("projects", "0008_merge_20241010_2217"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='project',
-            name='agents_backend',
-            field=models.CharField(choices=[('BedrockBackend', 'BedrockBackend')], default='BedrockBackend', max_length=100),
+            model_name="project",
+            name="agents_backend",
+            field=models.CharField(
+                choices=[("BedrockBackend", "BedrockBackend")], default="BedrockBackend", max_length=100
+            ),
         ),
     ]

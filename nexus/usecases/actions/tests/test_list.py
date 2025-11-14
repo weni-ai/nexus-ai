@@ -1,11 +1,10 @@
 from django.test import TestCase
 
-from nexus.usecases.actions.tests.flow_factory import TemplateActionFactory
 from nexus.usecases.actions.list import ListTemplateActionUseCase
+from nexus.usecases.actions.tests.flow_factory import TemplateActionFactory
 
 
 class TestListTemplateActionUseCase(TestCase):
-
     def setUp(self) -> None:
         self.template_action_factory = TemplateActionFactory()
         self.usecase = ListTemplateActionUseCase()

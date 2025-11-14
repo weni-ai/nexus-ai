@@ -1,13 +1,11 @@
-from router.repositories.orm import FlowsORMRepository
-
-from router.classifiers.safe_guard import SafeGuard
 from router.classifiers.prompt_guard import PromptGuard
-from router.flow_start.interfaces import FlowStart
-
+from router.classifiers.safe_guard import SafeGuard
 from router.entities import (
-    Message,
     FlowDTO,
+    Message,
 )
+from router.flow_start.interfaces import FlowStart
+from router.repositories.orm import FlowsORMRepository
 
 
 class PreClassification:
@@ -18,7 +16,6 @@ class PreClassification:
         msg_event: dict,
         flow_start: FlowStart,
         user_email: str,
-
     ):
         self.flows_repository = flows_repository
         self.message = message
@@ -36,10 +33,7 @@ class PreClassification:
             is_safe = prompt_guard.classify(self.message_text)
             if is_safe:
                 return self.flow_started
-            return self.direct_flows(
-                flow_dto=flow_dto,
-                start_flow=start_flow
-            )
+            return self.direct_flows(flow_dto=flow_dto, start_flow=start_flow)
         return self.flow_started
 
     def safety_check(self, start_flow: bool) -> bool:
@@ -49,10 +43,7 @@ class PreClassification:
             is_safe = safeguard.classify(self.message_text)
             if is_safe:
                 return self.flow_started
-            return self.direct_flows(
-                flow_dto=flow_dto,
-                start_flow=start_flow
-            )
+            return self.direct_flows(flow_dto=flow_dto, start_flow=start_flow)
         return self.flow_started
 
     def direct_flows(self, flow_dto: FlowDTO, start_flow: bool):
@@ -82,31 +73,17 @@ class PreClassification:
         print(f"[+ Pre Classification Preview: {self.message} +]")
 
         if self.message_text:
-
             flow_dto = self.safety_check(start_flow=False)
             if flow_dto:
-                return {
-                    "type": "flowstart",
-                    "uuid": flow_dto.uuid,
-                    "name": flow_dto.name,
-                    "msg_event": None
-                }
+                return {"type": "flowstart", "uuid": flow_dto.uuid, "name": flow_dto.name, "msg_event": None}
 
             flow_dto = self.prompt_guard(start_flow=False)
             if flow_dto:
-                return {
-                    "type": "flowstart",
-                    "uuid": flow_dto.uuid,
-                    "name": flow_dto.name,
-                    "msg_event": None
-                }
+                return {"type": "flowstart", "uuid": flow_dto.uuid, "name": flow_dto.name, "msg_event": None}
 
         return {}
 
-    def pre_classification(
-        self,
-        source: str
-    ):
+    def pre_classification(self, source: str):
         if source == "preview":
             return self.pre_classification_preview()
         return self.pre_classification_route()

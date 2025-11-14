@@ -5,15 +5,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('logs', '0004_messagelog_source'),
+        ("logs", "0004_messagelog_source"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='messagelog',
-            name='chunks_json',
+            model_name="messagelog",
+            name="chunks_json",
             field=django.contrib.postgres.fields.ArrayField(base_field=models.JSONField(), null=True, size=None),
         ),
     ]

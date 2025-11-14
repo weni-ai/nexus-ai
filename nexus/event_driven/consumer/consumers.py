@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 import amqp
 
-from nexus.event_driven.signals import message_started, message_finished
+from nexus.event_driven.signals import message_finished, message_started
 
 
 class EDAConsumer(ABC):  # pragma: no cover

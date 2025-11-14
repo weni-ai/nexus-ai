@@ -1,9 +1,9 @@
 from django.conf import settings
 
 from nexus.orgs.models import Org, OrgAuth, Role
-from nexus.users.models import User
 from nexus.usecases.orgs.exceptions import OrgAuthDoesNotExists
 from nexus.usecases.orgs.get_org_auth import GetOrgAuthUseCase
+from nexus.users.models import User
 
 
 def get_user_auth(user: User, org: Org):
