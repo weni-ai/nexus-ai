@@ -777,24 +777,86 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             return None
 
         for event_to_send in event_data:
-            if not event_to_send.get("metadata"):
-                team_agent = IntegratedAgent.objects.get(agent__slug=agent_name, project__uuid=project_uuid)
-                agent_uuid = team_agent.agent.uuid
-                event_to_send["metadata"] = {"agent_uuid": agent_uuid}
-            if event_to_send.get("key") == "weni_csat":
-                event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
-                to_update = {"csat": event_to_send.get("value")}
-                update_conversation_data(
-                    to_update=to_update, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
-                )
-            if event_to_send.get("key") == "weni_nps":
-                event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_NPS
-                to_update = {"nps": event_to_send.get("value")}
-                update_conversation_data(
-                    to_update=to_update, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
-                )
+            event_copy = event_to_send.copy()
+            
+            try:
+                if not isinstance(event_copy, dict):
+                    logger.warning(f"Invalid event structure: {event_copy}")
+                    continue
+                    
+                if not event_copy.get("metadata"):
+                    try:
+                        team_agent = IntegratedAgent.objects.get(agent__slug=agent_name, project__uuid=project_uuid)
+                        agent_uuid = team_agent.agent.uuid
+                        event_copy["metadata"] = {"agent_uuid": agent_uuid}
+                    except IntegratedAgent.DoesNotExist:
+                        logger.error(
+                            f"IntegratedAgent not found for agent '{agent_name}' in project '{project_uuid}'. "
+                            f"Skipping event: {event_copy}"
+                        )
+                        sentry_sdk.set_context("missing_integrated_agent", {
+                            "agent_name": agent_name,
+                            "project_uuid": project_uuid,
+                            "event": event_copy,
+                        })
+                        sentry_sdk.capture_message(
+                            f"IntegratedAgent not found for agent '{agent_name}'",
+                            level="warning"
+                        )
+                        continue
+                        
+                if event_copy.get("key") == "weni_csat":
+                    event_copy["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
+                    to_update = {"csat": event_copy.get("value")}
+                    try:
+                        update_conversation_data(
+                            to_update=to_update, 
+                            project_uuid=project_uuid, 
+                            contact_urn=contact_urn, 
+                            channel_uuid=channel_uuid
+                        )
+                    except Exception as e:
+                        logger.error(f"Error updating conversation CSAT: {str(e)}")
+                        sentry_sdk.capture_exception(e)
+                        
+                if event_copy.get("key") == "weni_nps":
+                    event_copy["metadata"]["agent_uuid"] = settings.AGENT_UUID_NPS
+                    to_update = {"nps": event_copy.get("value")}
+                    try:
+                        update_conversation_data(
+                            to_update=to_update, 
+                            project_uuid=project_uuid, 
+                            contact_urn=contact_urn, 
+                            channel_uuid=channel_uuid
+                        )
+                    except Exception as e:
+                        logger.error(f"Error updating conversation NPS: {str(e)}")
+                        sentry_sdk.capture_exception(e)
 
-            self.to_data_lake_custom_event(event_data=event_to_send, project_uuid=project_uuid, contact_urn=contact_urn)
+                if not event_copy.get("metadata") or not event_copy.get("metadata").get("agent_uuid"):
+                    logger.warning(f"Event missing required metadata: {event_copy}")
+                    continue
+                    
+                self.to_data_lake_custom_event(
+                    event_data=event_copy, 
+                    project_uuid=project_uuid, 
+                    contact_urn=contact_urn
+                )
+                
+            except Exception as e:
+                logger.error(
+                    f"Error processing custom event data for tool '{agent_name}': {str(e)}. "
+                    f"Project: {project_uuid}, Contact: {contact_urn}, Event: {event_copy}"
+                )
+                sentry_sdk.set_context("custom_event_data_error", {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "agent_name": agent_name,
+                    "event_data": event_copy,
+                })
+                sentry_sdk.set_tag("project_uuid", project_uuid)
+                sentry_sdk.capture_exception(e)
+                continue
 
     def to_data_lake_custom_event(self, event_data: dict, project_uuid: str, contact_urn: str) -> Optional[dict]:
         try:
