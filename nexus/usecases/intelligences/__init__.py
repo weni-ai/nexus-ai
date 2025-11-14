@@ -52,6 +52,7 @@ def __getattr__(name):
         "ListContentBaseTextUseCase",
         "ListContentBaseUseCase",
         "ListIntelligencesUseCase",
+        "get_llm_config",
         # Retrieve
         "RetrieveContentBaseFileUseCase",
         "RetrieveContentBaseLinkUseCase",
@@ -125,6 +126,7 @@ def __getattr__(name):
             "ListContentBaseTextUseCase": ("nexus.usecases.intelligences.list", "ListContentBaseTextUseCase"),
             "ListContentBaseUseCase": ("nexus.usecases.intelligences.list", "ListContentBaseUseCase"),
             "ListIntelligencesUseCase": ("nexus.usecases.intelligences.list", "ListIntelligencesUseCase"),
+            "get_llm_config": ("nexus.usecases.intelligences.list", "get_llm_config"),
             # Retrieve
             "RetrieveContentBaseFileUseCase": (
                 "nexus.usecases.intelligences.retrieve",
@@ -197,6 +199,7 @@ __all__ = [
     "ListContentBaseTextUseCase",
     "ListContentBaseUseCase",
     "ListIntelligencesUseCase",
+    "get_llm_config",
     # Retrieve
     "RetrieveContentBaseFileUseCase",
     "RetrieveContentBaseLinkUseCase",
