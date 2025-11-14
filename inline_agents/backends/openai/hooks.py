@@ -311,14 +311,18 @@ class CollaboratorHooks(AgentHooks):
             # Only proceed if we have a non-empty list
             if isinstance(events, list) and len(events) > 0:
                 logger.info(f"[HOOK] Eventos da ferramenta '{tool.name}': {events}")
-                self.data_lake_event_adapter.custom_event_data(
-                    event_data=events,
-                    project_uuid=project_uuid,
-                    contact_urn=context_data.contact.get("urn"),
-                    channel_uuid=context_data.contact.get("channel_uuid"),
-                    agent_name=agent.name,
-                    preview=self.preview,
-                )
+                try:
+                    self.data_lake_event_adapter.custom_event_data(
+                        event_data=events,
+                        project_uuid=project_uuid,
+                        contact_urn=context_data.contact.get("urn"),
+                        channel_uuid=context_data.contact.get("channel_uuid"),
+                        agent_name=agent.name,
+                        preview=self.preview,
+                    )
+                except Exception as e:
+                    logger.error(f"Error calling custom_event_data in CollaboratorHooks: {str(e)}")
+                    sentry_sdk.capture_exception(e)
             else:
                 if "human" in tool.name.lower() or "support" in tool.name.lower():
                     logger.warning(
@@ -523,14 +527,18 @@ class SupervisorHooks(AgentHooks):
                 # Only proceed if we have a non-empty list
                 if isinstance(events, list) and len(events) > 0:
                     logger.info(f"[HOOK] Eventos da ferramenta '{tool.name}': {events}")
-                    self.data_lake_event_adapter.custom_event_data(
-                        event_data=events,
-                        project_uuid=project_uuid,
-                        contact_urn=context_data.contact.get("urn"),
-                        channel_uuid=context_data.contact.get("channel_uuid"),
-                        agent_name=agent.name,
-                        preview=self.preview,
-                    )
+                    try:
+                        self.data_lake_event_adapter.custom_event_data(
+                            event_data=events,
+                            project_uuid=project_uuid,
+                            contact_urn=context_data.contact.get("urn"),
+                            channel_uuid=context_data.contact.get("channel_uuid"),
+                            agent_name=agent.name,
+                            preview=self.preview,
+                        )
+                    except Exception as e:
+                        logger.error(f"Error calling custom_event_data in SupervisorHooks: {str(e)}")
+                        sentry_sdk.capture_exception(e)
 
             trace_data = {
                 "collaboratorName": agent.name,
