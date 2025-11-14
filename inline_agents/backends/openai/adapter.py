@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Callable, Optional
+from typing import Callable, Optional, Any
 
 import boto3
 import pendulum
@@ -435,6 +435,10 @@ class OpenAITeamAdapter(TeamAdapter):
         fields = {}
         for field_name, field_config in parameters.items():
             field_type = field_config.get("type", "string")
+            
+            if "type" not in field_config and cls._is_array_schema(field_config):
+                field_type = "array"
+            
             description = field_config.get("description", "")
             required = field_config.get("required", False)
             python_type = {
@@ -495,39 +499,83 @@ class OpenAITeamAdapter(TeamAdapter):
         )
 
     @classmethod
+    def _is_array_schema(cls, schema: dict) -> bool:
+        """Check if a schema should be treated as an array type"""
+        if not isinstance(schema, dict):
+            return False
+        
+        if schema.get("type") == "array":
+            return True
+        
+        if "items" in schema:
+            return True
+        
+        if "anyOf" in schema:
+            for option in schema["anyOf"]:
+                if isinstance(option, dict) and "items" in option:
+                    return True
+        if "oneOf" in schema:
+            for option in schema["oneOf"]:
+                if isinstance(option, dict) and "items" in option:
+                    return True
+        
+        return False
+
+    @classmethod
+    def _clean_schema_list(cls, schema_list: list):
+        """Helper to recursively clean a list of schemas (for anyOf/oneOf)"""
+        if not isinstance(schema_list, list):
+            return
+
+        for option in schema_list:
+            if isinstance(option, dict):
+                if cls._is_array_schema(option) and "type" not in option:
+                    option["type"] = "array"
+                
+                if "items" in option and isinstance(option["items"], dict):
+                    if "type" not in option["items"]:
+                        option["items"]["type"] = "string"
+                
+                cls._clean_schema(option)
+
+    @classmethod
+    def _fix_property_schema(cls, prop_schema: Any):
+        """Helper to fix the type of a single property's schema"""
+        if isinstance(prop_schema, dict) and "type" not in prop_schema:
+            if cls._is_array_schema(prop_schema):
+                prop_schema["type"] = "array"
+            else:
+                prop_schema["type"] = "string"
+        
+        cls._clean_schema(prop_schema)
+
+    @classmethod
     def _clean_schema(cls, schema: dict):
-        """Clean up the schema to ensure it's valid for OpenAI"""
-        if isinstance(schema, dict):
-            if "anyOf" in schema:
-                for option in schema["anyOf"]:
-                    if isinstance(option, dict):
-                        cls._clean_schema(option)
-            if "oneOf" in schema:
-                for option in schema["oneOf"]:
-                    if isinstance(option, dict):
-                        cls._clean_schema(option)
+        """
+        Clean up the schema recursively to ensure it's valid for OpenAI.
+        This is now much more readable and acts as a coordinator.
+        """
+        if not isinstance(schema, dict):
+            return 
 
-            if "properties" in schema:
-                for _, prop_schema in schema["properties"].items():
-                    if isinstance(prop_schema, dict) and "type" not in prop_schema:
-                        if "items" in prop_schema:
-                            prop_schema["type"] = "array"
-                        else:
-                            prop_schema["type"] = "string"
+        cls._clean_schema_list(schema.get("anyOf"))
+        cls._clean_schema_list(schema.get("oneOf"))
 
-                    cls._clean_schema(prop_schema)
+        if "properties" in schema:
+            for prop_schema in schema["properties"].values():
+                cls._fix_property_schema(prop_schema)
 
-            if "items" in schema:
-                if not schema["items"]:
-                    # If items is None or empty, set default
-                    schema["items"] = {"type": "string"}
-                elif isinstance(schema["items"], dict) and "type" not in schema["items"]:
-                    # If items is a dict without type, add type while preserving other properties
-                    schema["items"]["type"] = "string"
-                cls._clean_schema(schema["items"])
+        if "items" in schema:
+            items = schema["items"]
+            if not items:
+                schema["items"] = {"type": "string"}
+            elif isinstance(items, dict):
+                if "type" not in items:
+                    items["type"] = "string"
+                cls._clean_schema(items)
 
-            if "properties" in schema and "required" in schema:
-                schema["required"] = list(schema["properties"].keys())
+        if "properties" in schema and "required" in schema:
+            schema["required"] = list(schema["properties"].keys())
 
     @classmethod
     def get_supervisor_instructions(
