@@ -797,10 +797,15 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                         sentry_sdk.set_context("missing_integrated_agent", {
                             "agent_name": agent_name,
                             "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "event_key": event_copy.get("key", "unknown"),
                             "event": event_copy,
                         })
+                        sentry_sdk.set_tag("project_uuid", project_uuid)
+                        sentry_sdk.set_tag("agent_name", agent_name)
                         sentry_sdk.capture_message(
-                            f"IntegratedAgent not found for agent '{agent_name}'",
+                            f"IntegratedAgent not found for agent '{agent_name}' in project '{project_uuid}'",
                             level="warning"
                         )
                         continue
@@ -817,6 +822,13 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                         )
                     except Exception as e:
                         logger.error(f"Error updating conversation CSAT: {str(e)}")
+                        sentry_sdk.set_context("csat_update_error", {
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "csat_value": event_copy.get("value"),
+                        })
+                        sentry_sdk.set_tag("project_uuid", project_uuid)
                         sentry_sdk.capture_exception(e)
                         
                 if event_copy.get("key") == "weni_nps":
@@ -831,10 +843,33 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                         )
                     except Exception as e:
                         logger.error(f"Error updating conversation NPS: {str(e)}")
+                        sentry_sdk.set_context("nps_update_error", {
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "nps_value": event_copy.get("value"),
+                        })
+                        sentry_sdk.set_tag("project_uuid", project_uuid)
                         sentry_sdk.capture_exception(e)
 
                 if not event_copy.get("metadata") or not event_copy.get("metadata").get("agent_uuid"):
-                    logger.warning(f"Event missing required metadata: {event_copy}")
+                    logger.warning(
+                        f"Event missing required metadata. Project: {project_uuid}, "
+                        f"Contact: {contact_urn}, Event: {event_copy}"
+                    )
+                    sentry_sdk.set_context("event_missing_metadata", {
+                        "project_uuid": project_uuid,
+                        "contact_urn": contact_urn,
+                        "channel_uuid": channel_uuid,
+                        "agent_name": agent_name,
+                        "event_key": event_copy.get("key", "unknown"),
+                        "event_data": event_copy,
+                    })
+                    sentry_sdk.set_tag("project_uuid", project_uuid)
+                    sentry_sdk.capture_message(
+                        f"Event missing required metadata for project '{project_uuid}'",
+                        level="warning"
+                    )
                     continue
                     
                 self.to_data_lake_custom_event(
@@ -851,10 +886,15 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                 sentry_sdk.set_context("custom_event_data_error", {
                     "project_uuid": project_uuid,
                     "contact_urn": contact_urn,
+                    "channel_uuid": channel_uuid,
                     "agent_name": agent_name,
+                    "event_key": event_copy.get("key", "unknown"),
+                    "event_value": event_copy.get("value", "unknown"),
                     "event_data": event_copy,
                 })
                 sentry_sdk.set_tag("project_uuid", project_uuid)
+                sentry_sdk.set_tag("agent_name", agent_name)
+                sentry_sdk.set_tag("event_key", event_copy.get("key", "unknown"))
                 sentry_sdk.capture_exception(e)
                 continue
 
@@ -866,7 +906,14 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             return event_data
         except Exception as e:
             logger.error(f"Error getting trace summary data lake event: {str(e)}")
-            sentry_sdk.set_context("custom event to data lake", {"event_data": event_data})
+            sentry_sdk.set_context("custom event to data lake", {
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "event_key": event_data.get("key", "unknown"),
+                "event_value": event_data.get("value", "unknown"),
+                "event_data": event_data,
+            })
             sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_tag("event_key", event_data.get("key", "unknown"))
             sentry_sdk.capture_exception(e)
             return None
