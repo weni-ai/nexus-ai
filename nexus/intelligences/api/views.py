@@ -6,8 +6,8 @@ from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.utils.datastructures import MultiValueDictKeyError
 from django_filters import rest_framework as filters
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse, OpenApiExample
+from drf_spectacular.types import OpenApiTypes
 from rest_framework import parsers, status, views
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
@@ -1646,8 +1646,118 @@ class SupervisorViewset(ModelViewSet):
         except ProjectDoesNotExist:
             return Conversation.objects.none()
 
-    @swagger_auto_schema(
-        auto_schema=None  # Exclude from schema generation to avoid duplicate parameters
+    @extend_schema(
+        summary="List supervisor conversations",
+        description="""
+        Retrieve a paginated list of supervisor conversations for a project.
+        
+        This endpoint supports filtering, searching, and ordering of conversations.
+        
+        **Filters:**
+        - `start_date`: Filter conversations created on or after this date (format: DD-MM-YYYY)
+        - `end_date`: Filter conversations created on or before this date (format: DD-MM-YYYY)
+        - `csat`: Filter by CSAT score (can be multiple values, comma-separated)
+        - `resolution`: Filter by resolution status (can be multiple values, comma-separated)
+        - `topics`: Filter by topic names (can be multiple values, comma-separated)
+        - `has_chats_room`: Filter by whether conversation has chat room (true/false)
+        - `nps`: Filter by NPS score (exact match)
+        - `search`: Search in contact name or URN (case-insensitive)
+        
+        **Ordering:**
+        - Use `ordering` parameter with fields: `created_at`, `start_date`, `end_date`
+        - Prefix with `-` for descending order (e.g., `-start_date`)
+        - Default ordering is by `-start_date` (newest first)
+        
+        **Pagination:**
+        - Results are paginated using SupervisorPagination
+        """,
+        parameters=[
+            OpenApiParameter(
+                "project_uuid",
+                OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
+                description="UUID of the project",
+                required=True,
+            ),
+            OpenApiParameter(
+                "start_date",
+                OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                description="Filter conversations created on or after this date (format: DD-MM-YYYY)",
+                required=False,
+            ),
+            OpenApiParameter(
+                "end_date",
+                OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                description="Filter conversations created on or before this date (format: DD-MM-YYYY)",
+                required=False,
+            ),
+            OpenApiParameter(
+                "csat",
+                OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Filter by CSAT score(s). Multiple values can be comma-separated.",
+                required=False,
+            ),
+            OpenApiParameter(
+                "resolution",
+                OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Filter by resolution status. Multiple values can be comma-separated.",
+                required=False,
+            ),
+            OpenApiParameter(
+                "topics",
+                OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Filter by topic name(s). Multiple values can be comma-separated.",
+                required=False,
+            ),
+            OpenApiParameter(
+                "has_chats_room",
+                OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                description="Filter by whether conversation has chat room",
+                required=False,
+            ),
+            OpenApiParameter(
+                "nps",
+                OpenApiTypes.NUMBER,
+                location=OpenApiParameter.QUERY,
+                description="Filter by NPS score (exact match)",
+                required=False,
+            ),
+            OpenApiParameter(
+                "search",
+                OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Search in contact name or URN (case-insensitive)",
+                required=False,
+            ),
+            OpenApiParameter(
+                "ordering",
+                OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Order results by field. Use '-' prefix for descending. Options: created_at, start_date, end_date",
+                required=False,
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(
+                response=SupervisorDataSerializer(many=True),
+                description="Paginated list of supervisor conversations",
+            ),
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Bad Request - Invalid parameters or date format",
+            ),
+            404: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Not Found - Project not found",
+            ),
+        },
+        tags=["Supervisor"],
     )
     def list(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
@@ -1695,9 +1805,9 @@ class InstructionsClassificationAPIView(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated, ProjectPermission]
 
-    @swagger_auto_schema(
+    @extend_schema(
         operation_id="instruction_classify",
-        operation_description="""
+        description="""
         Classify an instruction against existing instructions in a content base.
 
         This endpoint analyzes a given instruction text and classifies it based on similarity
@@ -1712,78 +1822,66 @@ class InstructionsClassificationAPIView(APIView):
         **Authentication Required**: Yes (JWT Token)
         **Permissions Required**: User must have access to the specified project
         """,
-        request_body=InstructionClassificationRequestSerializer,
-        manual_parameters=[
-            openapi.Parameter(
+        request=InstructionClassificationRequestSerializer,
+        parameters=[
+            OpenApiParameter(
                 "project_uuid",
-                openapi.IN_PATH,
+                OpenApiTypes.UUID,
+                location=OpenApiParameter.PATH,
                 description="UUID of the project containing the content base",
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_UUID,
                 required=True,
             ),
         ],
         responses={
-            200: openapi.Response(
+            200: OpenApiResponse(
+                response=InstructionClassificationResponseSerializer,
                 description="Successful classification",
-                schema=InstructionClassificationResponseSerializer,
-                examples={
-                    "application/json": {
-                        "classification": [
-                            {
-                                "name": "customer_support",
-                                "reason": "This instruction relates to handling customer inquiries",
-                            },
-                            {
-                                "name": "product_information",
-                                "reason": "The instruction involves providing product details",
-                            },
-                        ],
-                        "suggestion": "Consider making this instruction more specific to improve clarity",
-                    }
-                },
+                examples=[
+                    OpenApiExample(
+                        "example_response",
+                        value={
+                            "classification": [
+                                {
+                                    "name": "customer_support",
+                                    "reason": "This instruction relates to handling customer inquiries",
+                                },
+                                {
+                                    "name": "product_information",
+                                    "reason": "The instruction involves providing product details",
+                                },
+                            ],
+                            "suggestion": "Consider making this instruction more specific to improve clarity",
+                        },
+                    )
+                ],
             ),
-            400: openapi.Response(
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
                 description="Bad Request - Missing or invalid instruction",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "error": openapi.Schema(
-                            type=openapi.TYPE_STRING, description="Error message describing what went wrong"
-                        )
-                    },
-                ),
-                examples={"application/json": {"error": "Instruction is required"}},
+                examples=[
+                    OpenApiExample(
+                        "error_example",
+                        value={"error": "Instruction is required"},
+                    )
+                ],
             ),
-            401: openapi.Response(
+            401: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
                 description="Unauthorized - Authentication required",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "detail": openapi.Schema(type=openapi.TYPE_STRING, description="Authentication error message")
-                    },
-                ),
             ),
-            403: openapi.Response(
+            403: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
                 description="Forbidden - User does not have access to this project",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "detail": openapi.Schema(type=openapi.TYPE_STRING, description="Permission error message")
-                    },
-                ),
             ),
-            500: openapi.Response(
+            500: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
                 description="Internal Server Error",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "error": openapi.Schema(
-                            type=openapi.TYPE_STRING, description="Error message describing the server error"
-                        )
-                    },
-                ),
-                examples={"application/json": {"error": "An error occurred while processing the classification"}},
+                examples=[
+                    OpenApiExample(
+                        "error_example",
+                        value={"error": "An error occurred while processing the classification"},
+                    )
+                ],
             ),
         },
         tags=["Instructions"],
