@@ -1,10 +1,12 @@
 import asyncio
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Request, HTTPException
 
 from calling.api_models import CallsModel
 from calling.service import CallingService
 from calling.sessions import SessionManager
+
+from django.conf import settings
 
 app = FastAPI()
 
@@ -14,8 +16,20 @@ def healthcheck():
     return {}
 
 
+def _validate_request_authorization(request: Request) -> bool:
+    authorization = request.headers.get("authorization")
+
+    if authorization is None:
+        return False
+
+    return authorization == settings.CALLING_API_AUTHORIZATION
+
+
 @app.post("/calls")
-async def calls(body: CallsModel):
+async def calls(body: CallsModel, request: Request):
+    if not _validate_request_authorization(request):
+        raise HTTPException(status_code=401, detail="Invalid authorization")
+
     call = body.call
     call_id = call.call_id
 
