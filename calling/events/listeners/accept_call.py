@@ -15,6 +15,6 @@ class AcceptCallListener(EventListener):
         await accept_call(
             session.answer_sdp,
             session.call_id,
-            settings.WA_PHONE_NUMBER,
+            session.wa_phone_number_id,
             settings.WA_ACCESS_TOKEN
         )

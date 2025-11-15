@@ -8,22 +8,24 @@ from calling.sessions.session import Session
 
 audio_file = "calling/sounds/waiting_sound.mp3"
 
-_global_player = None
-
-def get_audio_track():
-    global _global_player
-    if _global_player is None:
-        _global_player = MediaPlayer(audio_file, loop=True)
-    return _global_player.audio
-
-
 class PlayAudioListener(EventListener):
     async def perform(self, _, session: Session, **kwargs):
         wpp_audio_sender = session.wpp_audio_sender
 
         if wpp_audio_sender is not None:
+            old_player = getattr(session, "audio_player", None)
+
+            if old_player is not None:
+                try:
+                    if hasattr(old_player, '_stop'):
+                        old_player._stop()
+                except Exception as e:
+                    print(f"Error stopping previous player: {e}")
+
             player = MediaPlayer(audio_file, loop=True)
             outgoing_track = player.audio
+
+            session.audio_player = player
 
             await asyncio.sleep(0.01)
 

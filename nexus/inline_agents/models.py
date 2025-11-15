@@ -55,7 +55,7 @@ class Agent(models.Model):
         elif agents_backend == "OpenAIBackend":
             return settings.OPENAI_AGENTS_FOUNDATION_MODEL
 
-    def current_foundation_model(self, agents_backend, project = None):
+    def current_foundation_model(self, agents_backend, project=None):
         if not project:
             project = self.project
 

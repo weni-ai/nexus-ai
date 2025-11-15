@@ -17,6 +17,8 @@ class CallsModel(BaseModel):
     project_uuid: str
     channel_uuid: str
     call: CallModel
+    phone_number_id: str
+    name: str
 
 
 __all__ = ("CallsModel",)

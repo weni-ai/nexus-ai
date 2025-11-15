@@ -1,11 +1,17 @@
+import json
+
 from django.contrib import admin
 from django.db import models
 from django.forms import Textarea
 
-import json
-from nexus.inline_agents.models import Guardrail, InlineAgentsConfiguration, Agent
 from nexus.inline_agents.backends.bedrock.models import Supervisor
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor
+from nexus.inline_agents.models import (
+    Agent,
+    Guardrail,
+    InlineAgentsConfiguration,
+)
+from django.contrib.postgres.fields import ArrayField
 
 
 class PrettyJSONWidget(Textarea):
@@ -91,11 +97,16 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
 
     formfield_overrides = {
         models.JSONField: {'widget': PrettyJSONWidget(attrs={'rows': 20, 'cols': 80, 'class': 'vLargeTextField'})},
+        ArrayField: {'widget': PrettyJSONWidget(attrs={'rows': 20, 'cols': 40, 'class': 'vLargeTextField'})},
     }
 
     fieldsets = (
         (None, {
-            'fields': ('name', 'foundation_model', 'instruction', 'default_instructions_for_collaborators', 'max_tokens')
+            'fields': ('name', 'foundation_model', 'instruction', 'default_instructions_for_collaborators', 'max_tokens', 'exclude_tools_from_audio_orchestration', 'exclude_tools_from_text_orchestration')
+        }),
+        ('Transcription', {
+            'fields': ('transcription_prompt',),
+            'classes': ('collapse',)
         }),
         ('Configuration', {
             'fields': ('prompt_override_configuration', 'action_groups', 'knowledge_bases'),
@@ -126,7 +137,7 @@ class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-            'fields': ('project', 'agents_backend', 'default_instructions_for_collaborators')
+            'fields': ('project', 'agents_backend', 'default_instructions_for_collaborators', 'text_orchestration_exclusive_tools', 'audio_orchestration_exclusive_tools')
         }),
     )
 
@@ -141,6 +152,6 @@ class AgentAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-            'fields': ('name', 'project', 'is_official', 'instruction', 'collaboration_instructions', 'foundation_model', 'backend_foundation_models', 'source_type')
+            'fields': ('name', 'project', 'is_official', 'instruction', 'collaboration_instructions', 'foundation_model', 'backend_foundation_models', 'source_type', 'audio_orchestration', 'text_orchestration')
         }),
     )

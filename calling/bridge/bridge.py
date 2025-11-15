@@ -2,19 +2,23 @@ import asyncio
 import json
 import logging
 import traceback
+import re
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
 
-from calling.agent import tool
-from calling.clients.nexus import invoke_agents
+from router.tasks.invoke import invoke_audio_agents
 from calling.clients.openai import get_realtime_answer
-
 from ..sessions.session import Session, Status
+from calling.agent import response_instructions
 
 logger = logging.getLogger(__name__)
 
 from calling.events import EventRegistry
+
+
+def clean_response(response: str):
+    return re.sub(r'[^\w\s.,;:!?()/-]', '', response, flags=re.UNICODE)
 
 
 async def handle_input(input_text: str, session: Session) -> dict:
@@ -25,7 +29,7 @@ async def handle_input(input_text: str, session: Session) -> dict:
         session.interrupt_response(input_text)
 
     session.set_status(Status.WAITING_RESPONSE)
-    session.current_task = asyncio.create_task(asyncio.to_thread(invoke_agents, session.input_text))
+    session.current_task = asyncio.create_task(asyncio.to_thread(invoke_audio_agents, session, session.input_text))
 
     try:
         response = await session.current_task
@@ -84,17 +88,37 @@ class RTCBridge:
                         "audio": {
                             "input": {
                                 "turn_detection": {
-                                    "type": "server_vad",
-                                    "create_response": False
-                                }
+                                    "type": "semantic_vad",
+                                    "create_response": False,
+                                    
+                                    # "eagerness": "low", # auto, low, medium, high
+                                },
+                                # "noise_reduction": {
+                                #     "type": "near_field",
+                                # },
                             }
                         },
-                        "tools": [tool],
-                        "tool_choice": "auto",
                     },
                 }
 
                 cls._dc_send_json(dc, tools_session)
+
+                await EventRegistry.notify("openai.session.updated", session)
+
+                welcome_response = "Olá, tudo bem? Eu sou a Nic, assistente virtual do Prezunic. Estou aqui para te ajudar com o que precisar! Como posso te ajudar hoje?"
+
+                await asyncio.sleep(1)
+
+                cls._dc_send_json(
+                    dc,
+                    {
+                        "type": "response.create",
+                        "response": {
+                            "conversation": "none",
+                            "instructions": response_instructions.format(input_text="oi", response=welcome_response),
+                        }
+                    }
+                )
 
             @dc.on("message")
             async def on_message(message):
@@ -106,7 +130,7 @@ class RTCBridge:
                     return
 
                 if message_type == "error":
-                    logger.error(f"[on_message] Error message: {data}")
+                    print(f"[on_message] Error message: {data}")
                     
                 # if message_type == "input_audio_buffer.speech_started":
                 #     await EventRegistry.notify("contact.speech.started", session)
@@ -117,17 +141,24 @@ class RTCBridge:
 
                 if message_type == "conversation.item.input_audio_transcription.completed":
                     input_text = data.get("transcript")
-                    print("Entrada:", input_text)
+
+                    print("========[ENTRADA]==========")
+                    print(input_text)
+                    print("============-==============")
 
                     # await EventRegistry.notify(
                     #     "agent.run.started",
                     #     session
                     # )
+                    # response = await handle_input(input_text, session)
 
-                    response = await handle_input(input_text, session)
+                    response = await asyncio.to_thread(invoke_audio_agents, session, input_text)
+                
+                    response = clean_response(response)
+
+                    print("############[SAIDA]############")
                     print(response)
-                    if response == None:
-                        return
+                    print("###############-###############")
 
                     # response = await invoke_agents(input_text)
 
@@ -137,16 +168,16 @@ class RTCBridge:
                     #     response=response,
                     # )
 
-                    print("Resposta:", response)
 
                     cls._dc_send_json(
                         dc,
                         {
                             "type": "response.create",
                             "response": {
-                                "instructions": "Essa é a SUA resposta, você responderá como se você mesmo a tivesse gerado. Responda 100% fiel ao seguinte texto: " + response.get("output"),
-                            },
-                        },
+                                "conversation": "none",
+                                "instructions": response_instructions.format(input_text=input_text, response=response),
+                            }
+                        }
                     )
 
         try:
@@ -163,13 +194,26 @@ class RTCBridge:
                 return
 
             send_proxy = cls.relay.subscribe(track)
-            audio_sender = getattr(session, "wpp_audio_sender", None)
 
-            if audio_sender is not None:
+            output_transceiver = None
+            for t in wpp_connection.getTransceivers():
+                if t.kind == "audio" and t.direction in ["sendonly", "sendrecv"]:
+                    # Verificar se não é o transceiver de entrada
+                    if t.sender != session.wpp_audio_sender:
+                        output_transceiver = t
+                        break
+            
+            if output_transceiver:
                 try:
-                    audio_sender.replaceTrack(send_proxy)
+                    await output_transceiver.sender.replaceTrack(send_proxy)
                 except Exception as error:
-                    logger.error(error)
+                    logger.error(f"Erro ao substituir track de saída: {error}")
+            else:
+                # Fallback: adicionar novo sender se necessário
+                try:
+                    wpp_connection.addTrack(send_proxy)
+                except Exception as error:
+                    logger.error(f"Erro ao adicionar track: {error}")
 
         try:
             wa_to_oai = cls.relay.subscribe(incoming_wa_track)
