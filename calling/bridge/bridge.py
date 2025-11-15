@@ -8,12 +8,8 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
 
 from router.tasks.invoke import invoke_audio_agents
-
-from calling.clients.nexus import invoke_agents
 from calling.clients.openai import get_realtime_answer
-
 from ..sessions.session import Session, Status
-
 from calling.agent import response_instructions
 
 logger = logging.getLogger(__name__)
