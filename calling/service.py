@@ -21,13 +21,14 @@ from calling.events.listeners import (
     StopAudioListener,
 )
 from calling.sessions import SessionManager
+from calling.api_models import CallsModel
 
 
 EventRegistry.subscribe("agent.run.started", PlayAudioListener())
 EventRegistry.subscribe("agent.run.completed", StopAudioListener())
 EventRegistry.subscribe("contact.speech.started", StopAudioListener())
 EventRegistry.subscribe("whatspp.answer.created", PreAcceptCallListener())
-EventRegistry.subscribe("openai.channel.opened", AcceptCallListener())
+# EventRegistry.subscribe("whatsapp.call.pre-accepted", AcceptCallListener())
 EventRegistry.subscribe("whatsapp.remote.connected", SendWelcomeListener())
 
 
@@ -49,18 +50,23 @@ def temp_decode_agents(team: str) -> dict:
 class CallingService:
 
     @staticmethod
-    async def dispatch(sdp: str, call_id: str) -> None:
+    async def dispatch(body: CallsModel) -> None:
+        call = body.call
+        call_id = call.call_id
+
+
+        contact_urn = f"whatsapp:{call.to}"
+
         message_dict = {
-            "project_uuid": "b603aaf0-6e8b-4de7-8d96-8ee08c139780",
-            "text": "Sample",
-            "contact_urn": "ext:260257732924@",
-            "channel_uuid": "1029bbb8-2298-489c-ace7-09755a65f8df",
-            "contact_name": "Sample Name",
+            "project_uuid": body.project_uuid,
+            "contact_urn": contact_urn,
+            "channel_uuid": body.channel_uuid,
+            "contact_fields": {},  # TODO: enviar
+            "contact_name": body.name,
+            "text": ""
         }
 
-        # await get_agents(message_dict)
-
-        session = SessionManager.setup_session(call_id, sdp)
+        session = SessionManager.setup_session(call_id, call.session.sdp, body.phone_number_id)
         start_calling(session, message_dict)
 
         await RTCBridge.handle_offer(session)

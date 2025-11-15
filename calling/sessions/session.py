@@ -74,6 +74,7 @@ class Response:
 class Session:
     call_id: str
     offer_sdp: str
+    wa_phone_number_id: str
     wpp_connection: "RTCPeerConnection"
     openai_connection: "RTCPeerConnection" = None
     answer_sdp: str = None

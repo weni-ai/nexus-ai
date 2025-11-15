@@ -12,9 +12,9 @@ class SessionManager:
         cls._active_sessions[session.call_id] = session
 
     @classmethod
-    def setup_session(cls, call_id: str, sdp: str) -> Session:
+    def setup_session(cls, call_id: str, sdp: str, phone_number_id: str) -> Session:
         wpp_connection = RTCPeerConnection()
-        session = Session(call_id, sdp, wpp_connection)
+        session = Session(call_id, sdp, phone_number_id, wpp_connection)
         cls._add_active_session(session)
 
         return session
