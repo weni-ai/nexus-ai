@@ -10,6 +10,8 @@ from weni_datalake_sdk.clients.client import send_event_data
 from weni_datalake_sdk.paths.events_path import EventPath
 
 from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
+from inline_agents.data_lake.event_service import DataLakeEventService
+from inline_agents.backends.bedrock.event_extractor import BedrockEventExtractor
 from nexus.celery import app as celery_app
 from nexus.inline_agents.models import AgentCredential, Guardrail
 from nexus.utils import get_datasource_id
@@ -317,10 +319,15 @@ class BedrockTeamAdapter(TeamAdapter):
 
 
 class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
-    def __init__(self, send_data_lake_event_task: callable = None):
-        self.send_data_lake_event_task = send_data_lake_event_task
-        if self.send_data_lake_event_task is None:
-            self.send_data_lake_event_task = self._get_send_data_lake_event_task()
+    """Adapter for transforming Bedrock traces to data lake event format."""
+
+    def __init__(
+        self,
+        send_data_lake_event_task: callable = None
+    ):
+        if send_data_lake_event_task is None:
+            send_data_lake_event_task = self._get_send_data_lake_event_task()
+        self._event_service = DataLakeEventService(send_data_lake_event_task)
 
     def _get_send_data_lake_event_task(self) -> callable:
         return send_data_lake_event
@@ -413,15 +420,25 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                 event_data["metadata"]["tool_call"] = has_action_group
                 event_data["key"] = "tool_call"
                 event_data["value"] = has_action_group["tool_name"]
-                self.send_data_lake_event_task(event_data)
-                return event_data
+
+                # Validate and send event
+                validated_event = self._event_service.send_validated_event(
+                    event_data=event_data,
+                    use_delay=False
+                )
+                return validated_event
 
             if has_agent:
                 event_data["metadata"]["agent_collaboration"] = has_agent
                 event_data["key"] = "agent_invocation"
                 event_data["value"] = has_agent["agent_name"]
-                self.send_data_lake_event_task.delay(event_data)
-                return event_data
+
+                # Validate and send event
+                validated_event = self._event_service.send_validated_event(
+                    event_data=event_data,
+                    use_delay=True
+                )
+                return validated_event
 
         except Exception as e:
             logger.error(f"Error processing data lake event: {str(e)}")
@@ -438,67 +455,35 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         collaborator_name: str = "",
         preview: bool = False,
     ):
-        from nexus.inline_agents.models import IntegratedAgent
-        from nexus.usecases.inline_agents.update import (
-            update_conversation_data,
+        """Delegate custom event processing to the service."""
+        trace_data = {
+            **inline_trace,
+            "collaborator_name": collaborator_name,
+            "project_uuid": project_uuid,
+            "contact_urn": contact_urn
+        }
+        extractor = BedrockEventExtractor()
+        self._event_service.process_custom_events(
+            trace_data=trace_data,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            extractor=extractor,
+            preview=preview
         )
 
-        if preview:
-            return None
-
-        orchestration_trace = inline_trace.get("trace", {}).get("orchestrationTrace", {})
-
-        action_group_data = orchestration_trace.get("observation", {}).get("actionGroupInvocationOutput", {})
-        if action_group_data.get("text"):
-            try:
-                event_data = json.loads(action_group_data.get("text"))
-            except Exception as e:
-                print(f"[ + DEBUG error + ] error: {e}")
-                event_data = {}
-            if isinstance(event_data, dict):
-                event_data = event_data.get("events", [])
-            else:
-                event_data = []
-            for event_to_send in event_data:
-                if "metadata" not in event_to_send or event_to_send.get("metadata") is None:
-                    team_agent = IntegratedAgent.objects.get(agent__slug=collaborator_name, project__uuid=project_uuid)
-                    agent_uuid = team_agent.agent.uuid
-                    event_to_send["metadata"] = {"agent_uuid": agent_uuid}
-                if event_to_send.get("key") == "weni_csat":
-                    event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
-                    to_update = {"csat": event_to_send.get("value")}
-                    update_conversation_data(
-                        to_update=to_update,
-                        project_uuid=project_uuid,
-                        contact_urn=contact_urn,
-                        channel_uuid=channel_uuid,
-                    )
-                if event_to_send.get("key") == "weni_nps":
-                    event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_NPS
-                    to_update = {"nps": event_to_send.get("value")}
-                    update_conversation_data(
-                        to_update=to_update,
-                        project_uuid=project_uuid,
-                        contact_urn=contact_urn,
-                        channel_uuid=channel_uuid,
-                    )
-
-                self.to_data_lake_custom_event(
-                    event_data=event_to_send, project_uuid=project_uuid, contact_urn=contact_urn
-                )
-
-    def to_data_lake_custom_event(self, event_data: dict, project_uuid: str, contact_urn: str) -> Optional[dict]:
-        try:
-            event_data["project"] = project_uuid
-            event_data["contact_urn"] = contact_urn
-            self.send_data_lake_event_task.delay(event_data)
-            return event_data
-        except Exception as e:
-            logger.error(f"Error getting trace summary data lake event: {str(e)}")
-            sentry_sdk.set_context("custom event to data lake", {"event_data": event_data})
-            sentry_sdk.set_tag("project_uuid", project_uuid)
-            sentry_sdk.capture_exception(e)
-            return None
+    def to_data_lake_custom_event(
+        self,
+        event_data: dict,
+        project_uuid: str,
+        contact_urn: str
+    ) -> Optional[dict]:
+        """Send a single custom event to data lake (for direct event sending, not from traces)."""
+        return self._event_service.send_custom_event(
+            event_data=event_data,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn
+        )
 
 
 @celery_app.task
