@@ -43,14 +43,16 @@ class HooksState:
             if session_events:
                 return session_events
         
-        for _stored_tool_name, stored_tool_data in self.tool_info.items():
-            if isinstance(stored_tool_data, dict) and "events" in stored_tool_data:
-                events_list = stored_tool_data.get("events", [])
-                if events_list:
-                    return events_list
+        all_events = []
+        for _tool_name, tool_data in self.tool_info.items():
+            if "events" in tool_data:
+                events_list = tool_data.get("events", [])
+                all_events.extend(events_list)
+
+        if all_events:
+            return all_events
         
-        events = result.get("events", [])
-        return events
+        return result.get("events", [])
 
 
 @dataclass
