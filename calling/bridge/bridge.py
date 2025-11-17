@@ -146,13 +146,20 @@ class RTCBridge:
                     print(input_text)
                     print("============-==============")
 
+                    if session.response.awaiting_orchestration:
+                        print("Orquestração não finalizada")
+                        return
+
                     # await EventRegistry.notify(
                     #     "agent.run.started",
                     #     session
                     # )
                     # response = await handle_input(input_text, session)
+                    session.response.awaiting_orchestration = True
 
                     response = await asyncio.to_thread(invoke_audio_agents, session, input_text)
+
+                    session.response.awaiting_orchestration = False
                 
                     response = clean_response(response)
 

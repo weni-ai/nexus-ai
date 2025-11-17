@@ -11,7 +11,6 @@ from aiortc.rtcdtlstransport import (
 from router.tasks.invoke import start_calling
 
 from calling.bridge import RTCBridge
-from calling.clients.nexus import get_agents
 from calling.events import EventRegistry
 from calling.events.listeners import (
     AcceptCallListener,
@@ -54,8 +53,7 @@ class CallingService:
         call = body.call
         call_id = call.call_id
 
-
-        contact_urn = f"whatsapp:{call.to}"
+        contact_urn = f"whatsapp:{call.from_number}"
 
         message_dict = {
             "project_uuid": body.project_uuid,

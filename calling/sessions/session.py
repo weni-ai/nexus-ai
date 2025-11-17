@@ -37,13 +37,16 @@ class Response:
 
     session: "Session"
 
-    orchestration_running: bool = False
+    awaiting_orchestration: bool = False
     openai_responding: bool = False
     last_resposne: float = None
 
     def _dc_send_json(self, data: dict) -> None:
         if getattr(self.session.openai_datachannel, "readyState", None) == "open":
             self.session.openai_datachannel.send(json.dumps(data))
+
+    def send(self, data: dict) -> None:
+        pass
 
     def send_rational(self) -> None:
         print("Tentando enviar o Racional")
@@ -54,7 +57,7 @@ class Response:
             "type": "response.create",
             "response": {
                 "conversation": "none",
-                "instructions": rational_instructions.format(response="Aguarde só um momeno, estou verificando"),
+                "instructions": rational_instructions.format(response="Aguarde só um momeno, estou trabalhando em sua solicitação"),
             }
         }
         self._dc_send_json(data)
@@ -98,7 +101,7 @@ class Session:
     current_task: asyncio.Task = None
 
     response: Response = None
-    
+
     def __post_init__(self):
         self.response = Response(self)
 

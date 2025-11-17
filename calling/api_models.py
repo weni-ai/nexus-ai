@@ -9,6 +9,7 @@ class SessionModel(BaseModel):
 class CallModel(BaseModel):
     call_id: str = Field(alias="id")
     to: str
+    from_number: str = Field(alias="from")
     event: str
     session: SessionModel
 
