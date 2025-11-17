@@ -10,7 +10,8 @@ class OpenAIEventExtractor(EventExtractor):
 
     def extract_events(self, trace_data: dict) -> list[dict]:
         """Return events directly (already in list format for OpenAI)."""
-        return self.event_data
+        # Filter out non-dict items (e.g., strings) to prevent errors
+        return [event for event in self.event_data if isinstance(event, dict)]
 
     def get_agent_identifier(self, trace_data: dict) -> str:
         """Get agent name from OpenAI trace data."""

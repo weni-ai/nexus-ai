@@ -57,24 +57,19 @@ class HooksState:
         self.tool_calls.update(tool_call)
 
     def get_events(self, result: dict, tool_name: str):
-        # Try to get events from current tool execution (using list structure)
         current_info = self.get_tool_info(tool_name)
-        session_events = current_info.get("events", [])
+        session_events = current_info.get("events", {})
         if session_events:
             return session_events
         
-        # Fallback: search in all tool executions for events
-        if tool_name in self.tool_info:
-            executions = self.tool_info[tool_name]
-            if isinstance(executions, list):
-                for execution in executions:
-                    if isinstance(execution, dict) and "events" in execution:
-                        events_list = execution.get("events", [])
-                        if events_list:
-                            return events_list
+        if isinstance(result, list):
+            if result and isinstance(result[0], dict):
+                return result[0].get("events", {})
+            return {}
+        elif not isinstance(result, dict):
+            return {}
         
-        # Final fallback: get events from result
-        events = result.get("events", [])
+        events = result.get("events", {})
         return events
 
 

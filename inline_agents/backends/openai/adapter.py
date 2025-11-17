@@ -622,7 +622,6 @@ class OpenAITeamAdapter(TeamAdapter):
     def _clean_schema(cls, schema: dict):
         """
         Clean up the schema recursively to ensure it's valid for OpenAI.
-        This is now much more readable and acts as a coordinator.
         """
         if not isinstance(schema, dict):
             return 
