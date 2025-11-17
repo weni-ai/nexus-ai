@@ -346,6 +346,11 @@ class OpenAIBackend(InlineAgentsBackend):
                         },
                     )
                     
+                    try:
+                        final_response = self._get_final_response(result)
+                    except Exception:
+                        final_response = None
+                    
                     sentry_sdk.set_context(
                         "streaming_error",
                         {
@@ -356,6 +361,7 @@ class OpenAIBackend(InlineAgentsBackend):
                             "error_type": type(stream_error).__name__,
                             "error_message": str(stream_error),
                             "input_text_preview": input_text[:200] if input_text else None,
+                            "final_response": final_response,
                         },
                     )
                     sentry_sdk.set_tag("project_uuid", project_uuid)

@@ -43,6 +43,7 @@ class Supervisor(Agent):
                 model_settings=ModelSettings(
                     max_tokens=max_tokens,
                     reasoning=Reasoning(effort="medium", summary="auto"),
+                    parallel_tool_calls=False,
                 ),
             )
             return
@@ -56,6 +57,7 @@ class Supervisor(Agent):
                 hooks=hooks,
                 model_settings=ModelSettings(
                     max_tokens=max_tokens,
+                    parallel_tool_calls=False,
                 ),
             )
             return
@@ -68,6 +70,7 @@ class Supervisor(Agent):
             hooks=hooks,
             model_settings=ModelSettings(
                 max_tokens=max_tokens,
+                parallel_tool_calls=False,
             ),
         )
 
