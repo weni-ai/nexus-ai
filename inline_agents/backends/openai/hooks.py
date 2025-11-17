@@ -243,7 +243,11 @@ class CollaboratorHooks(AgentHooks):
     async def tool_started(self, context, agent, tool):
         context_data = context.context
         
-        parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", [])
+        # Try to get parameters from tool_info (new list structure)
+        tool_info = self.hooks_state.get_tool_info(tool.name)
+        parameters = tool_info.get("parameters", [])
+        
+        # Fallback: if no parameters found, try to get from tool_calls
         if not parameters:
             tool_call_args = self.hooks_state.tool_calls.get(tool.name)
             if tool_call_args:
@@ -296,6 +300,7 @@ class CollaboratorHooks(AgentHooks):
             channel_uuid=context_data.contact.get("channel_uuid"),
             conversation=self.conversation,
         )
+        self.hooks_state.advance_tool_info_index(tool.name)
 
     async def on_tool_end(self, context, agent, tool, result):
 
@@ -441,7 +446,11 @@ class SupervisorHooks(AgentHooks):
     async def tool_started(self, context, agent, tool):
         context_data = context.context
         
-        parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", [])
+        # Try to get parameters from tool_info (new list structure)
+        tool_info = self.hooks_state.get_tool_info(tool.name)
+        parameters = tool_info.get("parameters", [])
+        
+        # Fallback: if no parameters found, try to get from tool_calls
         if not parameters:
             tool_call_args = self.hooks_state.tool_calls.get(tool.name)
             if tool_call_args:
@@ -520,6 +529,7 @@ class SupervisorHooks(AgentHooks):
                 channel_uuid=context_data.contact.get("channel_uuid"),
                 conversation=self.conversation,
             )
+            self.hooks_state.advance_tool_info_index(tool.name)
 
     async def on_tool_end(self, context, agent, tool, result):
         # calling tool_started here instead of on_tool_start so we can get the parameters from tool execution
