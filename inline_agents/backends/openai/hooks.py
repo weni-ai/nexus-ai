@@ -287,13 +287,33 @@ class CollaboratorHooks(AgentHooks):
         if isinstance(result, str):
             try:
                 result_json = json.loads(result)
-                events = self.hooks_state.get_events(result_json, tool.name)
+                try:
+                    events = self.hooks_state.get_events(result_json, tool.name)
+                except Exception as e:
+                    logger.error(f"Error in get_events for tool '{tool.name}': {e}")
+                    sentry_sdk.set_context("get_events_error", {
+                        "tool_name": tool.name,
+                        "project_uuid": project_uuid,
+                        "contact_urn": context_data.contact.get("urn", "unknown")
+                    })
+                    sentry_sdk.capture_exception(e)
+                    events = []
             except Exception:
-                events = {}
+                events = []
         elif isinstance(result, dict):
-            events = self.hooks_state.get_events(result, tool.name)
+            try:
+                events = self.hooks_state.get_events(result, tool.name)
+            except Exception as e:
+                logger.error(f"Error in get_events for tool '{tool.name}': {e}")
+                sentry_sdk.set_context("get_events_error", {
+                    "tool_name": tool.name,
+                    "project_uuid": project_uuid,
+                    "contact_urn": context_data.contact.get("urn", "unknown")
+                })
+                sentry_sdk.capture_exception(e)
+                events = []
         else:
-            events = {}
+            events = []
 
         if events and events != "[]" and events != []:
             if isinstance(events, str):
@@ -503,13 +523,33 @@ class SupervisorHooks(AgentHooks):
             if isinstance(result, str):
                 try:
                     result_json = json.loads(result)
-                    events = self.hooks_state.get_events(result_json, tool.name)
+                    try:
+                        events = self.hooks_state.get_events(result_json, tool.name)
+                    except Exception as e:
+                        logger.error(f"Error in get_events for tool '{tool.name}': {e}")
+                        sentry_sdk.set_context("get_events_error", {
+                            "tool_name": tool.name,
+                            "project_uuid": project_uuid,
+                            "contact_urn": context_data.contact.get("urn", "unknown")
+                        })
+                        sentry_sdk.capture_exception(e)
+                        events = []
                 except Exception:
-                    events = {}
+                    events = []
             elif isinstance(result, dict):
-                events = self.hooks_state.get_events(result, tool.name)
+                try:
+                    events = self.hooks_state.get_events(result, tool.name)
+                except Exception as e:
+                    logger.error(f"Error in get_events for tool '{tool.name}': {e}")
+                    sentry_sdk.set_context("get_events_error", {
+                        "tool_name": tool.name,
+                        "project_uuid": project_uuid,
+                        "contact_urn": context_data.contact.get("urn", "unknown")
+                    })
+                    sentry_sdk.capture_exception(e)
+                    events = []
             else:
-                events = {}
+                events = []
 
             if events and events != "[]" and events != []:
                 if isinstance(events, str):
