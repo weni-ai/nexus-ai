@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Callable, Optional
+from typing import Callable, Optional, Any
 
 import boto3
 import pendulum
@@ -435,6 +435,10 @@ class OpenAITeamAdapter(TeamAdapter):
         fields = {}
         for field_name, field_config in parameters.items():
             field_type = field_config.get("type", "string")
+            
+            if "type" not in field_config and cls._is_array_schema(field_config):
+                field_type = "array"
+            
             description = field_config.get("description", "")
             required = field_config.get("required", False)
             python_type = {
@@ -495,39 +499,82 @@ class OpenAITeamAdapter(TeamAdapter):
         )
 
     @classmethod
+    def _is_array_schema(cls, schema: dict) -> bool:
+        """Check if a schema should be treated as an array type"""
+        if not isinstance(schema, dict):
+            return False
+        
+        if schema.get("type") == "array":
+            return True
+        
+        if "items" in schema:
+            return True
+        
+        if "anyOf" in schema:
+            for option in schema["anyOf"]:
+                if isinstance(option, dict) and "items" in option:
+                    return True
+        if "oneOf" in schema:
+            for option in schema["oneOf"]:
+                if isinstance(option, dict) and "items" in option:
+                    return True
+        
+        return False
+
+    @classmethod
+    def _clean_schema_list(cls, schema_list: list):
+        """Helper to recursively clean a list of schemas (for anyOf/oneOf)"""
+        if not isinstance(schema_list, list):
+            return
+
+        for option in schema_list:
+            if isinstance(option, dict):
+                if cls._is_array_schema(option) and "type" not in option:
+                    option["type"] = "array"
+                
+                if "items" in option and isinstance(option["items"], dict):
+                    if "type" not in option["items"]:
+                        option["items"]["type"] = "string"
+                
+                cls._clean_schema(option)
+
+    @classmethod
+    def _fix_property_schema(cls, prop_schema: Any):
+        """Helper to fix the type of a single property's schema"""
+        if isinstance(prop_schema, dict) and "type" not in prop_schema:
+            if cls._is_array_schema(prop_schema):
+                prop_schema["type"] = "array"
+            else:
+                prop_schema["type"] = "string"
+        
+        cls._clean_schema(prop_schema)
+
+    @classmethod
     def _clean_schema(cls, schema: dict):
-        """Clean up the schema to ensure it's valid for OpenAI"""
-        if isinstance(schema, dict):
-            if "anyOf" in schema:
-                for option in schema["anyOf"]:
-                    if isinstance(option, dict):
-                        cls._clean_schema(option)
-            if "oneOf" in schema:
-                for option in schema["oneOf"]:
-                    if isinstance(option, dict):
-                        cls._clean_schema(option)
+        """
+        Clean up the schema recursively to ensure it's valid for OpenAI.
+        """
+        if not isinstance(schema, dict):
+            return 
 
-            if "properties" in schema:
-                for _, prop_schema in schema["properties"].items():
-                    if isinstance(prop_schema, dict) and "type" not in prop_schema:
-                        if "items" in prop_schema:
-                            prop_schema["type"] = "array"
-                        else:
-                            prop_schema["type"] = "string"
+        cls._clean_schema_list(schema.get("anyOf"))
+        cls._clean_schema_list(schema.get("oneOf"))
 
-                    cls._clean_schema(prop_schema)
+        if "properties" in schema:
+            for prop_schema in schema["properties"].values():
+                cls._fix_property_schema(prop_schema)
 
-            if "items" in schema:
-                if not schema["items"]:
-                    # If items is None or empty, set default
-                    schema["items"] = {"type": "string"}
-                elif isinstance(schema["items"], dict) and "type" not in schema["items"]:
-                    # If items is a dict without type, add type while preserving other properties
-                    schema["items"]["type"] = "string"
-                cls._clean_schema(schema["items"])
+        if "items" in schema:
+            items = schema["items"]
+            if not items:
+                schema["items"] = {"type": "string"}
+            elif isinstance(items, dict):
+                if "type" not in items:
+                    items["type"] = "string"
+                cls._clean_schema(items)
 
-            if "properties" in schema and "required" in schema:
-                schema["required"] = list(schema["properties"].keys())
+        if "properties" in schema and "required" in schema:
+            schema["required"] = list(schema["properties"].keys())
 
     @classmethod
     def get_supervisor_instructions(
@@ -777,24 +824,126 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             return None
 
         for event_to_send in event_data:
-            if not event_to_send.get("metadata"):
-                team_agent = IntegratedAgent.objects.get(agent__slug=agent_name, project__uuid=project_uuid)
-                agent_uuid = team_agent.agent.uuid
-                event_to_send["metadata"] = {"agent_uuid": agent_uuid}
-            if event_to_send.get("key") == "weni_csat":
-                event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
-                to_update = {"csat": event_to_send.get("value")}
-                update_conversation_data(
-                    to_update=to_update, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
-                )
-            if event_to_send.get("key") == "weni_nps":
-                event_to_send["metadata"]["agent_uuid"] = settings.AGENT_UUID_NPS
-                to_update = {"nps": event_to_send.get("value")}
-                update_conversation_data(
-                    to_update=to_update, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
-                )
+            event_copy = event_to_send.copy()
+            
+            try:
+                if not isinstance(event_copy, dict):
+                    logger.warning(f"Invalid event structure: {event_copy}")
+                    continue
+                    
+                if not event_copy.get("metadata"):
+                    try:
+                        team_agent = IntegratedAgent.objects.get(agent__slug=agent_name, project__uuid=project_uuid)
+                        agent_uuid = team_agent.agent.uuid
+                        event_copy["metadata"] = {"agent_uuid": agent_uuid}
+                    except IntegratedAgent.DoesNotExist:
+                        logger.error(
+                            f"IntegratedAgent not found for agent '{agent_name}' in project '{project_uuid}'. "
+                            f"Skipping event: {event_copy}"
+                        )
+                        sentry_sdk.set_context("missing_integrated_agent", {
+                            "agent_name": agent_name,
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "event_key": event_copy.get("key", "unknown"),
+                            "event": event_copy,
+                        })
+                        sentry_sdk.set_tag("project_uuid", project_uuid)
+                        sentry_sdk.set_tag("agent_name", agent_name)
+                        sentry_sdk.capture_message(
+                            f"IntegratedAgent not found for agent '{agent_name}' in project '{project_uuid}'",
+                            level="warning"
+                        )
+                        continue
+                        
+                if event_copy.get("key") == "weni_csat":
+                    event_copy["metadata"]["agent_uuid"] = settings.AGENT_UUID_CSAT
+                    to_update = {"csat": event_copy.get("value")}
+                    try:
+                        update_conversation_data(
+                            to_update=to_update, 
+                            project_uuid=project_uuid, 
+                            contact_urn=contact_urn, 
+                            channel_uuid=channel_uuid
+                        )
+                    except Exception as e:
+                        logger.error(f"Error updating conversation CSAT: {str(e)}")
+                        sentry_sdk.set_context("csat_update_error", {
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "csat_value": event_copy.get("value"),
+                        })
+                        sentry_sdk.set_tag("project_uuid", project_uuid)
+                        sentry_sdk.capture_exception(e)
+                        
+                if event_copy.get("key") == "weni_nps":
+                    event_copy["metadata"]["agent_uuid"] = settings.AGENT_UUID_NPS
+                    to_update = {"nps": event_copy.get("value")}
+                    try:
+                        update_conversation_data(
+                            to_update=to_update, 
+                            project_uuid=project_uuid, 
+                            contact_urn=contact_urn, 
+                            channel_uuid=channel_uuid
+                        )
+                    except Exception as e:
+                        logger.error(f"Error updating conversation NPS: {str(e)}")
+                        sentry_sdk.set_context("nps_update_error", {
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "nps_value": event_copy.get("value"),
+                        })
+                        sentry_sdk.set_tag("project_uuid", project_uuid)
+                        sentry_sdk.capture_exception(e)
 
-            self.to_data_lake_custom_event(event_data=event_to_send, project_uuid=project_uuid, contact_urn=contact_urn)
+                if not event_copy.get("metadata") or not event_copy.get("metadata").get("agent_uuid"):
+                    logger.warning(
+                        f"Event missing required metadata. Project: {project_uuid}, "
+                        f"Contact: {contact_urn}, Event: {event_copy}"
+                    )
+                    sentry_sdk.set_context("event_missing_metadata", {
+                        "project_uuid": project_uuid,
+                        "contact_urn": contact_urn,
+                        "channel_uuid": channel_uuid,
+                        "agent_name": agent_name,
+                        "event_key": event_copy.get("key", "unknown"),
+                        "event_data": event_copy,
+                    })
+                    sentry_sdk.set_tag("project_uuid", project_uuid)
+                    sentry_sdk.capture_message(
+                        f"Event missing required metadata for project '{project_uuid}'",
+                        level="warning"
+                    )
+                    continue
+                    
+                self.to_data_lake_custom_event(
+                    event_data=event_copy, 
+                    project_uuid=project_uuid, 
+                    contact_urn=contact_urn
+                )
+                
+            except Exception as e:
+                logger.error(
+                    f"Error processing custom event data for tool '{agent_name}': {str(e)}. "
+                    f"Project: {project_uuid}, Contact: {contact_urn}, Event: {event_copy}"
+                )
+                sentry_sdk.set_context("custom_event_data_error", {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "channel_uuid": channel_uuid,
+                    "agent_name": agent_name,
+                    "event_key": event_copy.get("key", "unknown"),
+                    "event_value": event_copy.get("value", "unknown"),
+                    "event_data": event_copy,
+                })
+                sentry_sdk.set_tag("project_uuid", project_uuid)
+                sentry_sdk.set_tag("agent_name", agent_name)
+                sentry_sdk.set_tag("event_key", event_copy.get("key", "unknown"))
+                sentry_sdk.capture_exception(e)
+                continue
 
     def to_data_lake_custom_event(self, event_data: dict, project_uuid: str, contact_urn: str) -> Optional[dict]:
         try:
@@ -804,7 +953,14 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             return event_data
         except Exception as e:
             logger.error(f"Error getting trace summary data lake event: {str(e)}")
-            sentry_sdk.set_context("custom event to data lake", {"event_data": event_data})
+            sentry_sdk.set_context("custom event to data lake", {
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "event_key": event_data.get("key", "unknown"),
+                "event_value": event_data.get("value", "unknown"),
+                "event_data": event_data,
+            })
             sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_tag("event_key", event_data.get("key", "unknown"))
             sentry_sdk.capture_exception(e)
             return None
