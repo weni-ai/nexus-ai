@@ -61,7 +61,14 @@ class HooksState:
         session_events = current_info.get("events", {})
         if session_events:
             return session_events
-
+        
+        if isinstance(result, list):
+            if result and isinstance(result[0], dict):
+                return result[0].get("events", {})
+            return {}
+        elif not isinstance(result, dict):
+            return {}
+        
         events = result.get("events", {})
         return events
 

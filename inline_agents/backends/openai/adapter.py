@@ -824,13 +824,13 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             return None
 
         for event_to_send in event_data:
+            if not isinstance(event_to_send, dict):
+                logger.warning(f"Invalid event structure: {event_to_send}")
+                continue
+            
             event_copy = event_to_send.copy()
             
             try:
-                if not isinstance(event_copy, dict):
-                    logger.warning(f"Invalid event structure: {event_copy}")
-                    continue
-                    
                 if not event_copy.get("metadata"):
                     try:
                         team_agent = IntegratedAgent.objects.get(agent__slug=agent_name, project__uuid=project_uuid)
