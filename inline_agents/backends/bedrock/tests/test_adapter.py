@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-from django.test import TestCase
-=======
-from unittest.mock import Mock
->>>>>>> main
-
 from django.test import TestCase
 
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter, BedrockTeamAdapter
