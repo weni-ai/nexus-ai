@@ -237,7 +237,8 @@ class CollaboratorHooks(AgentHooks):
 
     async def tool_started(self, context, agent, tool):
         context_data = context.context
-        parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", {})
+        tool_info = self.hooks_state.get_tool_info(tool.name)
+        parameters = tool_info.get("parameters", [])
 
         logger.info(f"[HOOK] Executando ferramenta '{tool.name}'.")
         logger.info(f"[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.")
@@ -275,6 +276,7 @@ class CollaboratorHooks(AgentHooks):
             foundation_model=agent.model,
             backend="openai",
         )
+        self.hooks_state.advance_tool_info_index(tool.name)
 
     async def on_tool_end(self, context, agent, tool, result):
         await self.tool_started(context, agent, tool)
@@ -413,7 +415,8 @@ class SupervisorHooks(AgentHooks):
 
     async def tool_started(self, context, agent, tool):
         context_data = context.context
-        parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", {})
+        tool_info = self.hooks_state.get_tool_info(tool.name)
+        parameters = tool_info.get("parameters", [])
         tool_call_data = {"tool_name": tool.name, "parameters": parameters}
 
         if tool.name == self.knowledge_base_tool:
@@ -473,6 +476,7 @@ class SupervisorHooks(AgentHooks):
                 foundation_model=agent.model,
                 backend="openai",
             )
+            self.hooks_state.advance_tool_info_index(tool.name)
 
     async def on_tool_end(self, context, agent, tool, result):
         # calling tool_started here instead of on_tool_start so we can get the parameters from tool execution
