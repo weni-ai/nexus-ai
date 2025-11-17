@@ -1,8 +1,10 @@
 # ruff: noqa: E501
 import asyncio
+import logging
 from typing import Any, Dict
 
 import pendulum
+import sentry_sdk
 from agents import Agent, ModelSettings, Runner, trace
 from agents.agent import ToolsToFinalOutputResult
 from django.conf import settings
@@ -36,6 +38,8 @@ from nexus.projects.websockets.consumers import (
 )
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAIBackend(InlineAgentsBackend):
@@ -322,10 +326,77 @@ class OpenAIBackend(InlineAgentsBackend):
                 # Extract formatter_agent_instructions before passing to Runner.run_streamed
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
                 result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
-                async for event in result.stream_events():
-                    if event.type == "run_item_stream_event":
-                        if hasattr(event, "item") and event.item.type == "tool_call_item":
-                            hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
+                
+                try:
+                    async for event in result.stream_events():
+                        if event.type == "run_item_stream_event":
+                            if hasattr(event, "item") and event.item.type == "tool_call_item":
+                                hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
+                except Exception as stream_error:
+                    logger.error(
+                        f"[OpenAIBackend] Streaming error during agent execution: {stream_error}",
+                        extra={
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "session_id": session_id,
+                            "error_type": type(stream_error).__name__,
+                            "error_message": str(stream_error),
+                            "input_text": input_text[:500] if input_text else None, 
+                        },
+                    )
+                    
+                    sentry_sdk.set_context(
+                        "streaming_error",
+                        {
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "session_id": session_id,
+                            "error_type": type(stream_error).__name__,
+                            "error_message": str(stream_error),
+                            "input_text_preview": input_text[:200] if input_text else None,
+                        },
+                    )
+                    sentry_sdk.set_tag("project_uuid", project_uuid)
+                    sentry_sdk.set_tag("error_type", "streaming_error")
+                    sentry_sdk.capture_exception(stream_error)
+                    
+                    root_span.update_trace(
+                        input=input_text,
+                        output=final_response,
+                        metadata={
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "preview": preview,
+                            "error": True,
+                            "error_type": type(stream_error).__name__,
+                            "error_message": str(stream_error)[:500],
+                        },
+                    )
+                    
+                    if use_components and final_response:
+                        try:
+                            formatted_response = await self._run_formatter_agent_async(
+                                final_response,
+                                session,
+                                supervisor_hooks,
+                                external_team["context"],
+                                formatter_agent_instructions,
+                            )
+                            final_response = formatted_response
+                        except Exception as formatter_error:
+                            logger.error(
+                                f"[OpenAIBackend] Error in formatter agent after streaming error: {formatter_error}",
+                                extra={
+                                    "project_uuid": project_uuid,
+                                    "contact_urn": contact_urn,
+                                },
+                            )
+                    
+                    return final_response
+                
                 final_response = self._get_final_response(result)
 
                 # If use_components is True, process the result through the formatter agent
