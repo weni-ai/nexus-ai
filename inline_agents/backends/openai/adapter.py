@@ -695,6 +695,18 @@ class OpenAITeamAdapter(TeamAdapter):
         )
         return instruction
 
+    @classmethod
+    def _get_guardrails(cls, project_uuid: str) -> list[dict]:
+        try:
+            guardrails = Guardrail.objects.get(project__uuid=project_uuid)
+        except Guardrail.DoesNotExist:
+            guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
+
+        return {
+            'guardrailIdentifier': guardrails.identifier,
+            'guardrailVersion': str(guardrails.version)
+        }
+
 
 def create_standardized_event(agent_name, type, tool_name="", original_trace=None):
     return {

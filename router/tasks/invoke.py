@@ -10,13 +10,10 @@ from django.conf import settings
 from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
 from nexus.inline_agents.team.repository import ORMTeamRepository
-from nexus.projects.websockets.consumers import (
-    send_preview_message_to_websocket,
-)
+from nexus.projects.websockets.consumers import send_preview_message_to_websocket
+from nexus.usecases.guardrails.guardrails_usecase import GuardrailsUsecase
 from nexus.usecases.inline_agents.typing import TypingUsecase
-from nexus.usecases.intelligences.get_by_uuid import (
-    get_project_and_content_base_data,
-)
+from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.tasks.exceptions import EmptyTextException
@@ -99,15 +96,84 @@ def complexity_layer(input_text: str) -> str | None:
             return None
 
 
-def _preprocess_message_input(message: Dict) -> Tuple[Dict, Optional[str], bool]:
+def dispatch_preview(response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str) -> str:
+    response_msg = dispatch(
+        llm_response=response,
+        message=message_obj,
+        direct_message=broadcast,
+        user_email=flows_user_email,
+        full_chunks=[],
+        backend=agents_backend,
+    )
+    send_preview_message_to_websocket(
+        project_uuid=message_obj.project_uuid,
+        user_email=user_email,
+        message_data={"type": "preview", "content": response_msg},
+    )
+    return response_msg
+
+
+def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
+    print(f"[DEBUG] Guardrails complexity layer: {input_text}, {guardrail_id}, {guardrail_version}")
+    try:
+        payload = {
+            "first_input": input_text,
+            "guardrail_id": guardrail_id,
+            "guardrail_version": guardrail_version,
+        }
+        response = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME).invoke(
+            FunctionName=settings.GUARDRAILS_LAYER_LAMBDA,
+            InvocationType="RequestResponse",
+            Payload=json.dumps(payload).encode("utf-8"),
+        )
+        if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
+            payload = json.loads(response['Payload'].read().decode('utf-8'))
+            print(f"[DEBUG] Guardrails complexity layer response: {payload}")
+            response = payload
+            status_code = payload.get("statusCode")
+            if status_code == 200:
+                guardrails_message = response.get("body", {}).get("message")
+                return guardrails_message
+            else:
+                return None
+
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        sentry_sdk.set_context(
+            "extra_data",
+            {
+                "input_text": input_text,
+                "guardrail_id": guardrail_id,
+                "guardrail_version": guardrail_version,
+            },
+        )
+        return None
+
+
+class UnsafeMessageException(Exception):
+    message: str
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(self.message)
+
+
+def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Optional[str], bool]:
     """
     Handles complexity layer, attachments, and product items.
     """
     text = message.get("text", "")
     attachments = message.get("attachments", [])
     product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
+    foundation_model = None
 
-    foundation_model = complexity_layer(text)
+    if backend == "BedrockBackend":
+        foundation_model = complexity_layer(text)
+    else:
+        guardrails: Dict[str, str] = GuardrailsUsecase.get_guardrail_as_dict(message.get("project_uuid"))
+        guardrails_message = guardrails_complexity_layer(text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion"))
+        if guardrails_message:
+            raise UnsafeMessageException(guardrails_message)
 
     text, turn_off_rationale = handle_attachments(text=text, attachments=attachments)
 
@@ -217,14 +283,23 @@ def start_inline_agents(
     task_manager = task_manager or get_task_manager()
 
     try:
-        processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(message)
-
         TypingUsecase().send_typing_message(
-            contact_urn=processed_message.get("contact_urn"),
-            msg_external_id=processed_message.get("msg_event", {}).get("msg_external_id", ""),
-            project_uuid=processed_message.get("project_uuid"),
+            contact_urn=message.get("contact_urn"),
+            msg_external_id=message.get("msg_event", {}).get("msg_external_id", ""),
+            project_uuid=message.get("project_uuid"),
             preview=preview,
         )
+
+        project, content_base, inline_agent_configuration = get_project_and_content_base_data(message.get("project_uuid"))
+        agents_backend = project.agents_backend
+
+        broadcast, _ = get_action_clients(
+            preview=preview, multi_agents=True, project_use_components=project.use_components
+        )
+
+        flows_user_email = os.environ.get("FLOW_USER_EMAIL")
+
+        processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(message, agents_backend)
 
         # TODO: Logs
         message_obj = message_factory(
@@ -242,10 +317,6 @@ def start_inline_agents(
 
         message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
 
-        # Fetch project once and reuse throughout the flow to avoid redundant DB queries
-        project, content_base, inline_agent_configuration = get_project_and_content_base_data(message_obj.project_uuid)
-
-        agents_backend = project.agents_backend
         backend = BackendsRegistry.get_backend(agents_backend)
         team = ORMTeamRepository(agents_backend=agents_backend, project=project).get_team(message_obj.project_uuid)
 
@@ -276,26 +347,8 @@ def start_inline_agents(
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
 
-        broadcast, _ = get_action_clients(
-            preview=preview, multi_agents=True, project_use_components=project.use_components
-        )
-        flows_user_email = os.environ.get("FLOW_USER_EMAIL")
-
         if preview:
-            response_msg = dispatch(
-                llm_response=response,
-                message=message_obj,
-                direct_message=broadcast,
-                user_email=flows_user_email,
-                full_chunks=[],
-                backend=agents_backend,
-            )
-            send_preview_message_to_websocket(
-                project_uuid=message_obj.project_uuid,
-                user_email=user_email,
-                message_data={"type": "preview", "content": response_msg},
-            )
-            return response_msg
+            return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)
         else:
             return dispatch(
                 llm_response=response,
@@ -305,6 +358,29 @@ def start_inline_agents(
                 full_chunks=[],
                 backend=agents_backend,
             )
+
+    except UnsafeMessageException as e:
+        message_obj = message_factory(
+            project_uuid=message.get("project_uuid"),
+            text=message.get("text"),
+            contact_urn=message.get("contact_urn"),
+            metadata=message.get("metadata"),
+            attachments=message.get("attachments", []),
+            msg_event=message.get("msg_event"),
+            contact_fields=message.get("contact_fields", {}),
+            contact_name=message.get("contact_name", ""),
+            channel_uuid=message.get("channel_uuid", ""),
+        )
+        if preview:
+            return dispatch_preview(e.message, message_obj, broadcast, user_email, agents_backend, flows_user_email)
+        return dispatch(
+            llm_response=e.message,
+            message=message_obj,
+            direct_message=broadcast,
+            user_email=flows_user_email,
+            full_chunks=[],
+            backend=agents_backend,
+        )
 
     except Exception as e:
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
