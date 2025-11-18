@@ -1,5 +1,3 @@
-from unittest.mock import Mock
-
 from django.test import TestCase
 
 from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter, BedrockTeamAdapter
@@ -10,17 +8,15 @@ from inline_agents.backends.bedrock.tests.traces_factory import (
     CustomEventTraceFactory,
     NPSEventTraceFactory,
 )
+from inline_agents.data_lake import MockDataLakeEventService
 from nexus.usecases.intelligences.tests.intelligence_factory import ConversationFactory
-
-
-def mock_send_data_lake_event_task(event_data: dict):
-    pass
 
 
 class TestBedrockDataLakeEventAdapter(TestCase):
     def setUp(self):
-        self.mock_send_data_lake_event_task = Mock()
-        self.adapter = BedrockDataLakeEventAdapter(send_data_lake_event_task=self.mock_send_data_lake_event_task)
+        self.adapter = BedrockDataLakeEventAdapter()
+        self.mock_service = MockDataLakeEventService()
+        self.adapter._event_service = self.mock_service
         # Create conversation with null csat and nps for testing
         self.conversation = ConversationFactory(csat=None, nps=None)
         self.project_uuid = str(self.conversation.project.uuid)
@@ -92,20 +88,20 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             channel_uuid=self.channel_uuid,
         )
 
-        self.mock_send_data_lake_event_task.delay.assert_called_once()
+        self.assertEqual(len(self.mock_service.sent_events), 1)
 
-        call_args = self.mock_send_data_lake_event_task.delay.call_args[0][0]
+        event = self.mock_service.sent_events[0]
 
         # Verify the event data structure
-        self.assertEqual(call_args["event_name"], "weni_nexus_data")
-        self.assertEqual(call_args["key"], "csat")
-        self.assertEqual(call_args["value_type"], "string")
-        self.assertEqual(call_args["value"], "protocol_agent_csat")
-        self.assertEqual(call_args["project"], self.project_uuid)
-        self.assertEqual(call_args["contact_urn"], self.contact_urn)
-        self.assertIn("metadata", call_args)
-        self.assertIn("agent_collaboration", call_args["metadata"])
-        self.assertEqual(call_args["metadata"]["agent_collaboration"]["resposta"], "5")
+        self.assertEqual(event["event_name"], "weni_nexus_data")
+        self.assertEqual(event["key"], "csat")
+        self.assertEqual(event["value_type"], "string")
+        self.assertEqual(event["value"], "protocol_agent_csat")
+        self.assertEqual(event["project"], self.project_uuid)
+        self.assertEqual(event["contact_urn"], self.contact_urn)
+        self.assertIn("metadata", event)
+        self.assertIn("agent_collaboration", event["metadata"])
+        self.assertEqual(event["metadata"]["agent_collaboration"]["resposta"], "5")
 
     def test_custom_event_data_with_invalid_json_text(self):
         """Test custom_event_data method with invalid JSON in text field"""
@@ -122,7 +118,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             channel_uuid=self.channel_uuid,
         )
 
-        self.mock_send_data_lake_event_task.delay.assert_not_called()
+        self.assertEqual(len(self.mock_service.sent_events), 0)
 
     def test_custom_event_data_with_missing_text_field(self):
         """Test custom_event_data method with missing text field"""
@@ -137,7 +133,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             channel_uuid=self.channel_uuid,
         )
 
-        self.mock_send_data_lake_event_task.delay.assert_not_called()
+        self.assertEqual(len(self.mock_service.sent_events), 0)
 
     def test_custom_event_data_with_empty_events_list(self):
         """Test custom_event_data method with empty events list"""
@@ -154,7 +150,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             channel_uuid=self.channel_uuid,
         )
 
-        self.mock_send_data_lake_event_task.delay.assert_not_called()
+        self.assertEqual(len(self.mock_service.sent_events), 0)
 
     def test_custom_event_data_with_preview_mode(self):
         """Test custom_event_data method in preview mode"""
@@ -168,7 +164,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             preview=True,
         )
 
-        self.mock_send_data_lake_event_task.delay.assert_not_called()
+        self.assertEqual(len(self.mock_service.sent_events), 0)
         self.assertIsNone(result)
 
     def test_custom_event_data_with_csat_event_updates_conversation(self):
@@ -188,10 +184,10 @@ class TestBedrockDataLakeEventAdapter(TestCase):
 
         self.assertEqual(self.conversation.csat, "5")
 
-        self.mock_send_data_lake_event_task.delay.assert_called_once()
-        call_args = self.mock_send_data_lake_event_task.delay.call_args[0][0]
-        self.assertEqual(call_args["key"], "weni_csat")
-        self.assertEqual(call_args["value"], "5")
+        self.assertEqual(len(self.mock_service.sent_events), 1)
+        event = self.mock_service.sent_events[0]
+        self.assertEqual(event["key"], "weni_csat")
+        self.assertEqual(event["value"], "5")
 
     def test_custom_event_data_with_nps_event_updates_conversation(self):
         """Test that NPS event properly updates the Conversation model"""
@@ -210,10 +206,10 @@ class TestBedrockDataLakeEventAdapter(TestCase):
 
         self.assertEqual(self.conversation.nps, 8)
 
-        self.mock_send_data_lake_event_task.delay.assert_called_once()
-        call_args = self.mock_send_data_lake_event_task.delay.call_args[0][0]
-        self.assertEqual(call_args["key"], "weni_nps")
-        self.assertEqual(call_args["value"], 8)
+        self.assertEqual(len(self.mock_service.sent_events), 1)
+        event = self.mock_service.sent_events[0]
+        self.assertEqual(event["key"], "weni_nps")
+        self.assertEqual(event["value"], 8)
 
     def test_custom_event_data_with_both_csat_and_nps_events(self):
         """Test that both CSAT and NPS events update the Conversation model correctly"""
@@ -263,15 +259,16 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         self.assertEqual(conversation.csat, "4")
         self.assertEqual(conversation.nps, 7)
 
-        self.assertEqual(self.mock_send_data_lake_event_task.delay.call_count, 2)
+        self.assertEqual(len(self.mock_service.sent_events), 2)
 
-        first_call = self.mock_send_data_lake_event_task.delay.call_args_list[0][0][0]
-        self.assertEqual(first_call["key"], "weni_csat")
-        self.assertEqual(first_call["value"], "4")
+        csat_events = self.mock_service.get_events_by_key("weni_csat")
+        nps_events = self.mock_service.get_events_by_key("weni_nps")
 
-        second_call = self.mock_send_data_lake_event_task.delay.call_args_list[1][0][0]
-        self.assertEqual(second_call["key"], "weni_nps")
-        self.assertEqual(second_call["value"], 7)
+        self.assertEqual(len(csat_events), 1)
+        self.assertEqual(csat_events[0]["value"], "4")
+
+        self.assertEqual(len(nps_events), 1)
+        self.assertEqual(nps_events[0]["value"], 7)
 
     def test_custom_event_data_with_csat_event_in_preview_mode_does_not_update_conversation(self):
         """Test that CSAT event in preview mode does not update the Conversation model"""
@@ -291,7 +288,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
 
         self.assertIsNone(self.conversation.csat)
 
-        self.mock_send_data_lake_event_task.delay.assert_not_called()
+        self.assertEqual(len(self.mock_service.sent_events), 0)
         self.assertIsNone(result)
 
 
@@ -333,10 +330,7 @@ class TestBedrockTeamAdapter(TestCase):
 
         try:
             # Create a very long contact_urn that will exceed 100 characters
-            long_contact_urn = (
-                "whatsapp:+5511999999999@c.us.very.long.contact.identifier.that.exceeds.limits.by.a.lot."
-                "and.makes.the.session.id.too.long"
-            )
+            long_contact_urn = "whatsapp:+5511999999999@c.us.very.long.contact.identifier.that.exceeds.limits.by.a.lot.and.makes.the.session.id.too.long"
 
             session_id = self.adapter._get_session_id(long_contact_urn, self.project_uuid)
 

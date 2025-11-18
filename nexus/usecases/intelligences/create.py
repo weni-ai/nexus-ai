@@ -291,21 +291,26 @@ class ConversationUseCase:
         channel_uuid: str,
         contact_urn: str,
         contact_name: str,
-    ) -> bool:
-        conversation = Conversation.objects.filter(
-            project_id=project_uuid, channel_uuid=channel_uuid, contact_urn=contact_urn, resolution=2
+    ) -> Conversation:
+        conversation_queryset = Conversation.objects.filter(
+            project_id=project_uuid,
+            channel_uuid=channel_uuid,
+            contact_urn=contact_urn,
+            resolution=2,
         )
 
-        if not conversation.exists():
-            self.create_conversation_base_structure(
-                project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
+        if not conversation_queryset.exists():
+            conversation = self.create_conversation_base_structure(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                contact_name=contact_name,
+                channel_uuid=channel_uuid,
             )
-            return True
+            return conversation
 
-        if conversation.count() > 1:
-            conversation = conversation.order_by("-created_at")
-            conversation.exclude(uuid=conversation.first().uuid).update(resolution=3)
+        if conversation_queryset.count() > 1:
+            conversation_queryset = conversation_queryset.order_by("-created_at")
+            conversation_queryset.exclude(uuid=conversation_queryset.first().uuid).update(resolution=3)
+            return conversation_queryset.first()
 
-            return True
-
-        return True
+        return conversation_queryset.first()
