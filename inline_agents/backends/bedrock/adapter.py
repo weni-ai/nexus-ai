@@ -395,6 +395,8 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         preview: bool = False,
         backend: str = "bedrock",
         foundation_model: str = "",
+        channel_uuid: Optional[str] = None,
+        conversation: Optional[object] = None,
     ) -> Optional[dict]:
         if preview:
             return None
@@ -416,6 +418,11 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                 "metadata": {"backend": backend, "foundation_model": foundation_model},
             }
 
+            # Extract agent_identifier for agent_uuid lookup
+            agent_identifier = None
+            if has_agent:
+                agent_identifier = has_agent.get("agent_name")
+
             if has_action_group:
                 event_data["metadata"]["tool_call"] = has_action_group
                 event_data["key"] = "tool_call"
@@ -424,7 +431,12 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                 # Validate and send event
                 validated_event = self._event_service.send_validated_event(
                     event_data=event_data,
-                    use_delay=False
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    use_delay=False,
+                    channel_uuid=channel_uuid,
+                    agent_identifier=agent_identifier,
+                    conversation=conversation
                 )
                 return validated_event
 
@@ -436,7 +448,12 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                 # Validate and send event
                 validated_event = self._event_service.send_validated_event(
                     event_data=event_data,
-                    use_delay=True
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    use_delay=True,
+                    channel_uuid=channel_uuid,
+                    agent_identifier=agent_identifier,
+                    conversation=conversation
                 )
                 return validated_event
 
@@ -454,6 +471,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         channel_uuid: str,
         collaborator_name: str = "",
         preview: bool = False,
+        conversation: Optional[object] = None,
     ):
         """Delegate custom event processing to the service."""
         trace_data = {
@@ -469,20 +487,23 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
             extractor=extractor,
-            preview=preview
+            preview=preview,
+            conversation=conversation
         )
 
     def to_data_lake_custom_event(
         self,
         event_data: dict,
         project_uuid: str,
-        contact_urn: str
+        contact_urn: str,
+        channel_uuid: Optional[str] = None
     ) -> Optional[dict]:
         """Send a single custom event to data lake (for direct event sending, not from traces)."""
         return self._event_service.send_custom_event(
             event_data=event_data,
             project_uuid=project_uuid,
-            contact_urn=contact_urn
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid
         )
 
 

@@ -1,7 +1,7 @@
 # ruff: noqa: E501
 import asyncio
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import pendulum
 import sentry_sdk
@@ -97,6 +97,62 @@ class OpenAIBackend(InlineAgentsBackend):
             self._event_manager_notify = async_event_manager.notify
         return self._event_manager_notify
 
+    def _ensure_conversation(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        contact_name: str,
+        channel_uuid: str,
+        preview: bool = False
+    ) -> Optional[object]:
+        """Ensure conversation exists and return it, or None if creation fails or channel_uuid is missing."""
+        # Don't create conversations in preview mode
+        if preview:
+            return None
+
+        if not channel_uuid:
+            # channel_uuid is None - log to Sentry for debugging
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_tag("contact_urn", contact_urn)
+            sentry_sdk.set_context("conversation_creation", {
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "contact_name": contact_name,
+                "channel_uuid": None,
+                "backend": "openai",
+                "reason": "channel_uuid is None"
+            })
+            sentry_sdk.capture_message(
+                "Conversation not created: channel_uuid is None (OpenAI backend)",
+                level="warning"
+            )
+            return None
+
+        try:
+            from router.services.conversation_service import ConversationService
+
+            conversation_service = ConversationService()
+            return conversation_service.ensure_conversation_exists(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                contact_name=contact_name,
+                channel_uuid=channel_uuid
+            )
+        except Exception as e:
+            # If conversation lookup/creation fails, continue without it but log to Sentry
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_tag("contact_urn", contact_urn)
+            sentry_sdk.set_tag("channel_uuid", channel_uuid)
+            sentry_sdk.set_context("conversation_creation", {
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "contact_name": contact_name,
+                "channel_uuid": channel_uuid,
+                "backend": "openai"
+            })
+            sentry_sdk.capture_exception(e)
+            return None
+
     def invoke_agents(
         self,
         team: list[dict],
@@ -132,6 +188,15 @@ class OpenAIBackend(InlineAgentsBackend):
         supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
         data_lake_event_adapter = self._get_data_lake_event_adapter()
 
+        # Ensure conversation exists and get it for data lake events (skip in preview mode)
+        conversation = self._ensure_conversation(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            contact_name=contact_name,
+            channel_uuid=channel_uuid,
+            preview=preview
+        )
+
         hooks_state = HooksState(agents=team)
 
         save_inline_message_to_database(
@@ -158,6 +223,7 @@ class OpenAIBackend(InlineAgentsBackend):
             agents=team,
             hooks_state=hooks_state,
             data_lake_event_adapter=data_lake_event_adapter,
+            conversation=conversation,
         )
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
@@ -326,7 +392,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 # Extract formatter_agent_instructions before passing to Runner.run_streamed
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
                 result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
-                
+
                 try:
                     async for event in result.stream_events():
                         if event.type == "run_item_stream_event":
@@ -342,10 +408,10 @@ class OpenAIBackend(InlineAgentsBackend):
                             "session_id": session_id,
                             "error_type": type(stream_error).__name__,
                             "error_message": str(stream_error),
-                            "input_text": input_text[:500] if input_text else None, 
+                            "input_text": input_text[:500] if input_text else None,
                         },
                     )
-                    
+
                     sentry_sdk.set_context(
                         "streaming_error",
                         {
@@ -361,7 +427,13 @@ class OpenAIBackend(InlineAgentsBackend):
                     sentry_sdk.set_tag("project_uuid", project_uuid)
                     sentry_sdk.set_tag("error_type", "streaming_error")
                     sentry_sdk.capture_exception(stream_error)
-                    
+
+                    # Try to get final_response even if streaming failed
+                    try:
+                        final_response = self._get_final_response(result)
+                    except Exception:
+                        final_response = None
+
                     root_span.update_trace(
                         input=input_text,
                         output=final_response,
@@ -375,7 +447,7 @@ class OpenAIBackend(InlineAgentsBackend):
                             "error_message": str(stream_error)[:500],
                         },
                     )
-                    
+
                     if use_components and final_response:
                         try:
                             formatted_response = await self._run_formatter_agent_async(
@@ -394,9 +466,9 @@ class OpenAIBackend(InlineAgentsBackend):
                                     "contact_urn": contact_urn,
                                 },
                             )
-                    
+
                     return final_response
-                
+
                 final_response = self._get_final_response(result)
 
                 # If use_components is True, process the result through the formatter agent

@@ -7,7 +7,6 @@ from django.conf import settings
 from redis import Redis
 
 from router.repositories.redis.message import MessageRepository as RedisMessageRepository
-from router.services.conversation_service import ConversationService
 
 
 class TaskManager(ABC):
@@ -52,7 +51,7 @@ class RedisTaskManager(TaskManager):
     def __init__(self, redis_client: Optional[Redis] = None):
         self.redis_client = redis_client or Redis.from_url(settings.REDIS_URL)
         self.message_repository = RedisMessageRepository(self.redis_client)
-        self.conversation_service = ConversationService()
+        self._conversation_service = None
 
     def get_pending_response(self, project_uuid: str, contact_urn: str) -> Optional[str]:
         """Get the pending response for a contact."""
@@ -138,7 +137,7 @@ class RedisTaskManager(TaskManager):
         self.message_repository.storage_message(project_uuid, contact_urn, message_data)
 
         # Create conversation only if channel_uuid is not None
-        self.conversation_service.create_conversation_if_channel_exists(
+        self._get_conversation_service().create_conversation_if_channel_exists(
             project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
         )
 
@@ -160,7 +159,7 @@ class RedisTaskManager(TaskManager):
         self.message_repository.add_message(project_uuid, contact_urn, message)
 
         # Ensure conversation exists only if channel_uuid is not None
-        self.conversation_service.ensure_conversation_exists(
+        self._get_conversation_service().ensure_conversation_exists(
             project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
         )
 
@@ -174,6 +173,7 @@ class RedisTaskManager(TaskManager):
         channel_uuid: str = None,
         preview: bool = False,
     ) -> None:
+        """Handle message cache logic - stores message in cache."""
         if preview:
             return
 
@@ -181,6 +181,7 @@ class RedisTaskManager(TaskManager):
             print(f"[RedisTaskManager] - Skipping message cache: channel_uuid is None for contact {contact_urn}.")
             return
 
+        # Check if there are existing cached messages to decide storage method
         cached_messages = self.get_cache_messages(project_uuid, contact_urn)
         if cached_messages:
             self.add_message_to_cache(
@@ -210,3 +211,11 @@ class RedisTaskManager(TaskManager):
         Store a batch of messages in cache.
         """
         self.message_repository.store_batch_messages(project_uuid, contact_urn, messages, key)
+
+    def _get_conversation_service(self):
+        """Get conversation service instance, creating it if it doesn't exist."""
+        if self._conversation_service is None:
+            from router.services.conversation_service import ConversationService
+
+            self._conversation_service = ConversationService()
+        return self._conversation_service

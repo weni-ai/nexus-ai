@@ -369,7 +369,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 })
 
             session_attributes = result.get("response", {}).get("sessionAttributes", {})
-            
+
             events = []
             if isinstance(session_attributes, dict):
                 events = session_attributes.get("events", [])
@@ -435,10 +435,10 @@ class OpenAITeamAdapter(TeamAdapter):
         fields = {}
         for field_name, field_config in parameters.items():
             field_type = field_config.get("type", "string")
-            
+
             if "type" not in field_config and cls._is_array_schema(field_config):
                 field_type = "array"
-            
+
             description = field_config.get("description", "")
             required = field_config.get("required", False)
             python_type = {
@@ -503,13 +503,13 @@ class OpenAITeamAdapter(TeamAdapter):
         """Check if a schema should be treated as an array type"""
         if not isinstance(schema, dict):
             return False
-        
+
         if schema.get("type") == "array":
             return True
-        
+
         if "items" in schema:
             return True
-        
+
         if "anyOf" in schema:
             for option in schema["anyOf"]:
                 if isinstance(option, dict) and "items" in option:
@@ -518,7 +518,7 @@ class OpenAITeamAdapter(TeamAdapter):
             for option in schema["oneOf"]:
                 if isinstance(option, dict) and "items" in option:
                     return True
-        
+
         return False
 
     @classmethod
@@ -531,11 +531,11 @@ class OpenAITeamAdapter(TeamAdapter):
             if isinstance(option, dict):
                 if cls._is_array_schema(option) and "type" not in option:
                     option["type"] = "array"
-                
+
                 if "items" in option and isinstance(option["items"], dict):
                     if "type" not in option["items"]:
                         option["items"]["type"] = "string"
-                
+
                 cls._clean_schema(option)
 
     @classmethod
@@ -546,7 +546,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 prop_schema["type"] = "array"
             else:
                 prop_schema["type"] = "string"
-        
+
         cls._clean_schema(prop_schema)
 
     @classmethod
@@ -778,6 +778,8 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         preview: bool = False,
         backend: str = "openai",
         foundation_model: str = "",
+        channel_uuid: Optional[str] = None,
+        conversation: Optional[object] = None,
     ) -> Optional[dict]:
         if agent_data is None:
             agent_data = {}
@@ -796,13 +798,23 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                 "metadata": {"backend": backend, "foundation_model": foundation_model},
             }
 
+            # Extract agent_identifier for agent_uuid lookup
+            agent_identifier = None
+            if agent_data:
+                agent_identifier = agent_data.get("agent_name")
+
             if tool_call_data:
                 event_data["metadata"]["tool_call"] = tool_call_data
                 event_data["key"] = "tool_call"
                 event_data["value"] = tool_call_data["tool_name"]
                 validated_event = self._event_service.send_validated_event(
                     event_data=event_data,
-                    use_delay=False
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    use_delay=False,
+                    channel_uuid=channel_uuid,
+                    agent_identifier=agent_identifier,
+                    conversation=conversation
                 )
                 return validated_event
 
@@ -812,7 +824,12 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                 event_data["value"] = agent_data["agent_name"]
                 validated_event = self._event_service.send_validated_event(
                     event_data=event_data,
-                    use_delay=True
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    use_delay=True,
+                    channel_uuid=channel_uuid,
+                    agent_identifier=agent_identifier,
+                    conversation=conversation
                 )
                 return validated_event
 
@@ -830,6 +847,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         event_data: list,
         preview: bool = False,
         agent_name: str = "",
+        conversation: Optional[object] = None,
     ):
         """Delegate custom event processing to the service."""
         trace_data = {
@@ -843,18 +861,21 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
             extractor=extractor,
-            preview=preview
+            preview=preview,
+            conversation=conversation
         )
 
     def to_data_lake_custom_event(
         self,
         event_data: dict,
         project_uuid: str,
-        contact_urn: str
+        contact_urn: str,
+        channel_uuid: Optional[str] = None
     ) -> Optional[dict]:
         """Send a single custom event to data lake (for direct event sending, not from traces)."""
         return self._event_service.send_custom_event(
             event_data=event_data,
             project_uuid=project_uuid,
-            contact_urn=contact_urn
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid
         )

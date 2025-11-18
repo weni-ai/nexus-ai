@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import pendulum
 import sentry_sdk
@@ -93,6 +93,7 @@ class TraceHandler:
 
 
 class RunnerHooks(RunHooks):
+
     def __init__(
         self,
         supervisor_name: str,
@@ -181,6 +182,7 @@ class CollaboratorHooks(AgentHooks):
         session_id: str = None,
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
+        conversation: Optional[object] = None,
     ):
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
@@ -197,6 +199,7 @@ class CollaboratorHooks(AgentHooks):
         self.data_lake_event_adapter = data_lake_event_adapter
         self.hooks_state = hooks_state
         self.preview = preview
+        self.conversation = conversation
 
     async def on_start(self, context, agent):
         logger.info(f"[HOOK] Atribuindo tarefa ao agente '{agent.name}'.")
@@ -233,6 +236,8 @@ class CollaboratorHooks(AgentHooks):
             },
             foundation_model=agent.model,
             backend="openai",
+            channel_uuid=context_data.contact.get("channel_uuid"),
+            conversation=self.conversation,
         )
 
     async def tool_started(self, context, agent, tool):
@@ -273,8 +278,11 @@ class CollaboratorHooks(AgentHooks):
                 "parameters": parameters,
                 "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
             },
+            agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
             foundation_model=agent.model,
             backend="openai",
+            channel_uuid=context_data.contact.get("channel_uuid"),
+            conversation=self.conversation,
         )
         self.hooks_state.advance_tool_info_index(tool.name)
 
@@ -341,6 +349,7 @@ class CollaboratorHooks(AgentHooks):
                         channel_uuid=context_data.contact.get("channel_uuid"),
                         agent_name=agent.name,
                         preview=self.preview,
+                        conversation=self.conversation,
                     )
                 except Exception as e:
                     logger.error(f"Error calling custom_event_data in CollaboratorHooks: {str(e)}")
@@ -408,6 +417,7 @@ class SupervisorHooks(AgentHooks):
         session_id: Optional[str] = None,
         msg_external_id: Optional[str] = None,
         turn_off_rationale: bool = False,
+        conversation: Optional[object] = None,
         **kwargs,
     ):
         self.trace_handler = TraceHandler(
@@ -427,7 +437,7 @@ class SupervisorHooks(AgentHooks):
         self.knowledge_base_tool = knowledge_base_tool
         self.data_lake_event_adapter = data_lake_event_adapter
         self.hooks_state = hooks_state
-        self.preview = preview
+        self.conversation = conversation
 
         super().__init__()
 
@@ -448,8 +458,11 @@ class SupervisorHooks(AgentHooks):
                 project_uuid=context_data.project.get("uuid"),
                 contact_urn=context_data.contact.get("urn"),
                 tool_call_data=tool_call_data,
+                agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
                 foundation_model=agent.model,
                 backend="openai",
+                channel_uuid=context_data.contact.get("channel_uuid"),
+                conversation=self.conversation,
             )
             trace_data = {
                 "eventTime": pendulum.now().to_iso8601_string(),
@@ -497,8 +510,11 @@ class SupervisorHooks(AgentHooks):
                     "parameters": parameters,
                     "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
                 },
+                agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
                 foundation_model=agent.model,
                 backend="openai",
+                channel_uuid=context_data.contact.get("channel_uuid"),
+                conversation=self.conversation,
             )
             self.hooks_state.advance_tool_info_index(tool.name)
 
@@ -579,6 +595,7 @@ class SupervisorHooks(AgentHooks):
                             channel_uuid=context_data.contact.get("channel_uuid"),
                             agent_name=agent.name,
                             preview=self.preview,
+                            conversation=self.conversation,
                         )
                     except Exception as e:
                         logger.error(f"Error calling custom_event_data in SupervisorHooks: {str(e)}")
