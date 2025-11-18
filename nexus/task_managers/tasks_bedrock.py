@@ -1,3 +1,4 @@
+import logging
 from time import sleep
 from typing import Dict, List, Optional
 
@@ -14,6 +15,8 @@ from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFile
 from nexus.usecases.intelligences.update import UpdateContentBaseFileUseCase
 from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUseCase
 
+logger = logging.getLogger(__name__)
+
 
 @app.task
 def check_ingestion_job_status(
@@ -26,21 +29,57 @@ def check_ingestion_job_status(
     if waiting_time:
         sleep(waiting_time)
 
-    print(f"[+ 🦑 BEDROCK: Checking Ingestion Job {ingestion_job_id} Status +]")
+    logger.info(f"🦑 BEDROCK: Checking Ingestion Job {ingestion_job_id} Status")
 
     file_database = BedrockFileDatabase(project_uuid=project_uuid)
     ingestion_job_status: str = file_database.get_bedrock_ingestion_status(ingestion_job_id)
     status = TaskManager.status_map.get(ingestion_job_status)
 
     task_manager_usecase = CeleryTaskManagerUseCase()
-    task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
 
-    print(f"[+ 🦑 BEDROCK: Ingestion Job {ingestion_job_id} Status: {status} +]")
+    logger.info(f"🦑 BEDROCK: Ingestion Job {ingestion_job_id} Status: {ingestion_job_status}")
 
     if ingestion_job_status not in ["COMPLETE", "FAILED"]:
+        task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
         check_ingestion_job_status.delay(
             celery_task_manager_uuid, ingestion_job_id, file_type=file_type, project_uuid=project_uuid
         )
+    elif ingestion_job_status == "COMPLETE":
+        try:
+            task_manager = task_manager_usecase.get_task_manager_by_uuid(celery_task_manager_uuid, file_type)
+            
+            if hasattr(task_manager, "content_base_file") and task_manager.content_base_file:
+                content_base_uuid = str(task_manager.content_base_file.content_base.uuid)
+            elif hasattr(task_manager, "content_base_text") and task_manager.content_base_text:
+                content_base_uuid = str(task_manager.content_base_text.content_base.uuid)
+            elif hasattr(task_manager, "content_base_link") and task_manager.content_base_link:
+                content_base_uuid = str(task_manager.content_base_link.content_base.uuid)
+            else:
+                logger.warning("🦑 BEDROCK: Could not determine content_base_uuid, marking as complete")
+                task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
+                return True
+            
+            file_database.search_data(
+                content_base_uuid=content_base_uuid,
+                text="test",
+                number_of_results=1
+            )
+            logger.info(f"🦑 BEDROCK: Knowledge base is accessible for content_base_uuid {content_base_uuid}, marking as success")
+            task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
+            
+        except Exception as e:
+            logger.warning(f"🦑 BEDROCK: Knowledge base not yet accessible or data not indexed, will retry. Error: {e}")
+            processing_status = TaskManager.status_map.get("IN_PROGRESS")
+            task_manager_usecase.update_task_status(celery_task_manager_uuid, processing_status, file_type)
+            check_ingestion_job_status.delay(
+                celery_task_manager_uuid, 
+                ingestion_job_id, 
+                waiting_time=30,
+                file_type=file_type, 
+                project_uuid=project_uuid
+            )
+    elif ingestion_job_status == "FAILED":
+        task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
 
     return True
 
@@ -50,7 +89,7 @@ def start_ingestion_job(
     celery_task_manager_uuid: str, file_type: str = "file", post_delete: bool = False, project_uuid: str | None = None
 ):
     try:
-        print("[+ 🦑 BEDROCK: Starting Ingestion Job +]")
+        logger.info("🦑 BEDROCK: Starting Ingestion Job")
 
         file_database = BedrockFileDatabase(project_uuid=project_uuid)
         in_progress_ingestion_jobs: List = file_database.list_bedrock_ingestion()
@@ -78,9 +117,9 @@ def start_ingestion_job(
 
     except ClientError as e:
         if e.response["Error"]["Code"] == "ConflictException":
-            print(
-                "[+ 🦑 BEDROCK: Filter didn't catch in progress Ingestion Job. "
-                "\\n Waiting to start new IngestionJob ... +]"
+            logger.warning(
+                "🦑 BEDROCK: Filter didn't catch in progress Ingestion Job. "
+                "Waiting to start new IngestionJob ..."
             )
             sleep(15)
             return start_ingestion_job.delay(celery_task_manager_uuid, file_type=file_type, project_uuid=project_uuid)
@@ -93,7 +132,7 @@ def bedrock_upload_file(
     from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
     project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
-    print("[+ 🦑 BEDROCK: Task to Upload File +]")
+    logger.info("🦑 BEDROCK: Task to Upload File")
 
     file_database = BedrockFileDatabase(project_uuid=str(project.uuid))
     file_database_response = file_database.add_file(file, content_base_uuid, content_base_file_uuid)
@@ -102,7 +141,7 @@ def bedrock_upload_file(
         file_database.delete_file_and_metadata(content_base_uuid, file_database_response.file_name)
         return {"task_status": ContentBaseFileTaskManager.STATUS_FAIL, "error": file_database_response.err}
 
-    print("[+ 🦑 BEDROCK: File was added +]")
+    logger.info("🦑 BEDROCK: File was added")
 
     content_base_file_dto = UpdateContentBaseFileDTO(
         file_url=file_database_response.file_url, file_name=file_database_response.file_name
@@ -133,7 +172,7 @@ def bedrock_upload_inline_file(
 ):
     from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
-    print("[+ 🦑 BEDROCK: Task to Upload Inline File +]")
+    logger.info("🦑 BEDROCK: Task to Upload Inline File")
 
     project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
     file_database = BedrockFileDatabase(project_uuid=str(project.uuid))
@@ -143,7 +182,7 @@ def bedrock_upload_inline_file(
         file_database.delete_file_and_metadata(content_base_uuid, file_database_response.file_name)
         return {"task_status": ContentBaseFileTaskManager.STATUS_FAIL, "error": file_database_response.err}
 
-    print("[+ 🦑 BEDROCK: Inline File was added +]")
+    logger.info("🦑 BEDROCK: Inline File was added")
 
     content_base_file_dto = UpdateContentBaseFileDTO(
         file_url=file_database_response.file_url, file_name=file_database_response.file_name
@@ -198,7 +237,7 @@ def bedrock_upload_text_file(text: str, content_base_dto: Dict, content_base_tex
         file_database.delete_file_and_metadata(content_base_uuid, file_database_response.file_name)
         return {"task_status": ContentBaseFileTaskManager.STATUS_FAIL, "error": file_database_response.err}
 
-    print("[+ 🦑 BEDROCK: Text File was added +}")
+    logger.info("🦑 BEDROCK: Text File was added")
 
     task_manager = CeleryTaskManagerUseCase().create_celery_text_file_manager(content_base_text=content_base_text)
     start_ingestion_job(str(task_manager.uuid), "text", project_uuid=str(project.uuid))
@@ -237,7 +276,7 @@ def url_to_markdown(link: str, link_uuid: str) -> str:
 def bedrock_send_link(link: str, user_email: str, content_base_link_uuid: str):
     from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
-    print("[+ 🦑 BEDROCK: Task to Upload Link +]")
+    logger.info("🦑 BEDROCK: Task to Upload Link")
     content_base_link = ContentBaseLink.objects.get(uuid=content_base_link_uuid)
     content_base_uuid = str(content_base_link.content_base.uuid)
     project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
@@ -258,7 +297,7 @@ def bedrock_send_link(link: str, user_email: str, content_base_link_uuid: str):
     content_base_link.name = file_database_response.file_name
     content_base_link.save(update_fields=["name"])
 
-    print("[+ 🦑 BEDROCK: Link File was added +}")
+    logger.info("🦑 BEDROCK: Link File was added")
     start_ingestion_job(str(task_manager.uuid), "link", project_uuid=str(project.uuid))
 
     response = {
@@ -320,7 +359,7 @@ def run_update_lambda_function(
     bedrock_client = BedrockFileDatabase()
 
     # Update the Lambda function code and its alias
-    print(" UPDATE LAMBDA FUNCTION CODE ...")
+    logger.info("UPDATE LAMBDA FUNCTION CODE ...")
     lambda_response = bedrock_client.update_lambda_function(
         lambda_name=lambda_name,
         zip_content=zip_content,

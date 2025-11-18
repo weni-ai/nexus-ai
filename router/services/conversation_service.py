@@ -46,6 +46,10 @@ class ConversationService:
         contact_name: str,
         channel_uuid: str = None,
     ) -> Optional[object]:
+        """
+        Ensure conversation exists only if channel_uuid is not None.
+        Returns the conversation object if it exists or was created, None if channel_uuid is None.
+        """
         if channel_uuid is None:
             # Log to Sentry for debugging (expected but we want to track it)
             sentry_sdk.set_tag("project_uuid", project_uuid)
@@ -62,8 +66,7 @@ class ConversationService:
                 },
             )
             sentry_sdk.capture_message(
-                "Conversation not created: channel_uuid is None (ensure_conversation_exists)",
-                level="info",
+                "Conversation not created: channel_uuid is None (ensure_conversation_exists)", level="info"
             )
             return None
 

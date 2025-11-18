@@ -74,8 +74,7 @@ class MessageService:
             ttl_hours=ttl_hours,
         )
 
-        # Ensure conversation exists (checks before creating to avoid duplicates)
-        # channel_uuid is already validated in handle_message_cache, so it's guaranteed to be not None here
+        # Ensure conversation exists only if channel_uuid is not None
         self._get_conversation_service().ensure_conversation_exists(
             project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
         )
@@ -93,7 +92,7 @@ class MessageService:
         message = {"text": msg_text, "source": source, "created_at": self._get_current_timestamp()}
         self.message_repository.add_message(project_uuid, contact_urn, message, channel_uuid)
 
-        # Ensure conversation exists (checks before creating to avoid duplicates)
+        # Ensure conversation exists only if channel_uuid is not None
         self._get_conversation_service().ensure_conversation_exists(
             project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
         )

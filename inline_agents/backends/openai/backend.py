@@ -416,6 +416,7 @@ class OpenAIBackend(InlineAgentsBackend):
                         },
                     )
                     
+                    # Try to get final_response even if streaming failed
                     try:
                         final_response = self._get_final_response(result)
                     except Exception:

@@ -438,7 +438,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 })
 
             session_attributes = result.get("response", {}).get("sessionAttributes", {})
-            
+
             events = []
             if isinstance(session_attributes, dict):
                 events = session_attributes.get("events", [])
@@ -504,10 +504,10 @@ class OpenAITeamAdapter(TeamAdapter):
         fields = {}
         for field_name, field_config in parameters.items():
             field_type = field_config.get("type", "string")
-            
+
             if "type" not in field_config and cls._is_array_schema(field_config):
                 field_type = "array"
-            
+
             description = field_config.get("description", "")
             required = field_config.get("required", False)
             python_type = {
@@ -572,13 +572,13 @@ class OpenAITeamAdapter(TeamAdapter):
         """Check if a schema should be treated as an array type"""
         if not isinstance(schema, dict):
             return False
-        
+
         if schema.get("type") == "array":
             return True
-        
+
         if "items" in schema:
             return True
-        
+
         if "anyOf" in schema:
             for option in schema["anyOf"]:
                 if isinstance(option, dict) and "items" in option:
@@ -587,7 +587,7 @@ class OpenAITeamAdapter(TeamAdapter):
             for option in schema["oneOf"]:
                 if isinstance(option, dict) and "items" in option:
                     return True
-        
+
         return False
 
     @classmethod
@@ -600,11 +600,11 @@ class OpenAITeamAdapter(TeamAdapter):
             if isinstance(option, dict):
                 if cls._is_array_schema(option) and "type" not in option:
                     option["type"] = "array"
-                
+
                 if "items" in option and isinstance(option["items"], dict):
                     if "type" not in option["items"]:
                         option["items"]["type"] = "string"
-                
+
                 cls._clean_schema(option)
 
     @classmethod
@@ -615,7 +615,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 prop_schema["type"] = "array"
             else:
                 prop_schema["type"] = "string"
-        
+
         cls._clean_schema(prop_schema)
 
     @classmethod
