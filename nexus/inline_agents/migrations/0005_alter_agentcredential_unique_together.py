@@ -4,15 +4,14 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0013_project_use_components'),
-        ('inline_agents', '0004_supervisor_components_human_support_prompt_and_more'),
+        ("projects", "0013_project_use_components"),
+        ("inline_agents", "0004_supervisor_components_human_support_prompt_and_more"),
     ]
 
     operations = [
         migrations.AlterUniqueTogether(
-            name='agentcredential',
-            unique_together={('project', 'key')},
+            name="agentcredential",
+            unique_together={("project", "key")},
         ),
     ]

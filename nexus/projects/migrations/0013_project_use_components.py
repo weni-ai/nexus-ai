@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0012_project_inline_agent_switch_project_rationale_switch'),
+        ("projects", "0012_project_inline_agent_switch_project_rationale_switch"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='project',
-            name='use_components',
+            model_name="project",
+            name="use_components",
             field=models.BooleanField(default=False),
         ),
     ]

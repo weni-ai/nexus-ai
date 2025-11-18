@@ -1,15 +1,13 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Dict, List
 
+from django.conf import settings
 from openai import OpenAI
 
-from router.entities import LLMSetupDTO, ContactMessageDTO
-
-from django.conf import settings
+from router.entities import ContactMessageDTO, LLMSetupDTO
 
 
 class LLMClient(ABC):  # pragma: no cover
-
     @classmethod
     def get_by_type(cls, type):
         return filter(lambda llm: llm.code == type, cls.__subclasses__())
@@ -40,7 +38,17 @@ class LLMClient(ABC):  # pragma: no cover
             return self.replace_vars(self.prompt_with_context, variables)
         return self.replace_vars(self.prompt_without_context, variables)
 
-    def request_gpt(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO]):
+    @abstractmethod
+    def request_gpt(
+        self,
+        instructions: List,
+        chunks: List,
+        agent: Dict,
+        question: str,
+        llm_config: LLMSetupDTO,
+        last_messages: List[ContactMessageDTO],
+        **kwargs,
+    ):
         pass
 
     def format_few_shot(self, few_shot: str) -> List[Dict]:
@@ -49,42 +57,36 @@ class LLMClient(ABC):  # pragma: no cover
     def format_post_prompt(self, question: str) -> str:
         return self.post_prompt.replace("{{question}}", question)
 
-    def chat_completion(self, instructions: List, chunks: List, agent: Dict, question: str, llm_config: LLMSetupDTO, last_messages: List[ContactMessageDTO], few_shot: str = None):
+    def chat_completion(
+        self,
+        instructions: List,
+        chunks: List,
+        agent: Dict,
+        question: str,
+        llm_config: LLMSetupDTO,
+        last_messages: List[ContactMessageDTO],
+        few_shot: str = None,
+    ):
         self.prompt = self.format_prompt(instructions, chunks, agent)
 
         kwargs = dict(
             temperature=float(llm_config.temperature) if llm_config.temperature else None,
             top_p=float(llm_config.top_p) if llm_config.top_p else None,
-            max_tokens=int(llm_config.max_tokens) if llm_config.max_tokens else None
+            max_tokens=int(llm_config.max_tokens) if llm_config.max_tokens else None,
         )
 
         if settings.TOKEN_LIMIT:  # TODO: remove token limit
             kwargs.update({"max_tokens": settings.TOKEN_LIMIT})
 
-        messages = [
-            {
-                "role": "system",
-                "content": self.prompt
-            }
-        ]
+        messages = [{"role": "system", "content": self.prompt}]
 
         if few_shot:
             messages += self.format_few_shot(few_shot)
 
         if last_messages:
             for last_message in last_messages:
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": last_message.text
-                    }
-                )
-                messages.append(
-                    {
-                        "role": "assistant",
-                        "content": last_message.llm_respose
-                    }
-                )
+                messages.append({"role": "user", "content": last_message.text})
+                messages.append({"role": "assistant", "content": last_message.llm_respose})
 
         post_prompt = self.format_post_prompt(question)
 
@@ -96,18 +98,9 @@ class LLMClient(ABC):  # pragma: no cover
         )
 
         chat_completion = self.client.chat.completions.create(
-            messages=messages,
-            model=llm_config.model_version,
-            **{k: v for k, v in kwargs.items() if v is not None}
+            messages=messages, model=llm_config.model_version, **{k: v for k, v in kwargs.items() if v is not None}
         )
 
         text_answers = chat_completion.choices[0].message.content
 
-        return {
-            "answers": [
-                {
-                    "text": text_answers
-                }
-            ],
-            "id": "0"
-        }
+        return {"answers": [{"text": text_answers}], "id": "0"}

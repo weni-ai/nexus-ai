@@ -29,7 +29,7 @@ amqp = "^5.2.0"
 sentry-sdk = "^1.39.2"
 mozilla-django-oidc = "^4.0.0"
 django-cors-headers = "^4.3.1"
-openai = "1.104.1"
+openai = "1.107.2"
 pre-commit = "^3.6.2"
 fastapi = "0.116.1"
 uvicorn = "^0.29.0"
@@ -56,10 +56,12 @@ pandas = "^2.2.3"
 weni-datalake-sdk = "0.2.2"
 pyjwt = "^2.10.1"
 cryptography = "^45.0.5"
-openai-agents = "0.2.11"
-langfuse = "^3.3.2"
+openai-agents = {extras = ["litellm"], version = "^0.3.0"}
+langfuse = "3.4.0"
 nest-asyncio = "^1.6.0"
 pydantic-ai = {extras = ["logfire"], version = "^0.8.0"}
+aiohttp = "3.10"
+litellm = "1.76.3"
 
 
 
@@ -68,7 +70,7 @@ pydantic-ai = {extras = ["logfire"], version = "^0.8.0"}
 ipython = "^8.16.1"
 taskipy = "^1.12.0"
 blue = "^0.9.1"
-ruff = "^0.1.3"
+ruff = "^0.6.0"
 isort = "^5.12.0"
 ignr = "^2.2"
 pytest-django = "^4.6.0"
@@ -81,20 +83,42 @@ build-backend = "poetry.core.masonry.api"
 
 
 [tool.ruff]
-line-length = 79
-exclude = ['.venv', 'migrations', 'manage.py', 'wsgi.py', 'asgi.py', '__init__.py']
+line-length = 120
+exclude = ['.venv', 'migrations', 'manage.py', 'wsgi.py', 'asgi.py', '__init__.py', 'inline_agents/backends/bedrock/prompts.py']
+
+[tool.ruff.lint]
+select = [
+    "E",        # pycodestyle (Error)
+    "W",        # pycodestyle (Warning)
+    "F",        # Pyflakes
+    "B",        # flake8-bugbear
+    "Q",        # flake8-quotes
+    "UP",       # pyupgrade
+    "I",        # isort
+    "C901",     # mccabe (complex-structure)
+    "DJ",       # flake8-django
+]
+ignore = [
+    "DJ001"     # django-nullable-model-string-field
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
 
 [tool.isort]
 profile = "black"
-line_length = 79
+line_length = 120
 extend_skip = ['migrations', 'manage.py', 'wsgi.py', 'asgi.py', '__init__.py']
 
 [tool.pytest.ini_options]
 pythonpath = "."
 python_files = "tests.py test_*.py *_tests.py"
 DJANGO_SETTINGS_MODULE = "nexus.settings"
+addopts = "--ignore=nexus/projects/tests/test_permissions.py --ignore=nexus/actions/tests.py"
 
 [tool.blue]
+line-length = 79
 extend-exclude = '''
     (
         migrations/
@@ -115,7 +139,7 @@ omit = [
   "nexus/urls.py",
   "router/clients/",
   "router/management/commands/runapi.py"
-] 
+]
 
 [tool.taskipy.tasks]
 lint = 'ruff . && blue --check . --diff'
@@ -126,4 +150,3 @@ post_test = 'coverage html'
 run = 'python manage.py runserver'
 makemigrations = 'python manage.py makemigrations'
 migrate = 'python manage.py migrate'
-

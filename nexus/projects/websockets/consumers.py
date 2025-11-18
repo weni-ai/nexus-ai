@@ -3,21 +3,18 @@ import logging
 import re
 
 from asgiref.sync import async_to_sync
-
 from channels.generic.websocket import WebsocketConsumer
 from channels.layers import get_channel_layer
 
-from nexus.usecases.projects.projects_use_case import ProjectsUseCase
-
-from nexus.projects.permissions import has_project_permission
 from nexus.projects.exceptions import ProjectDoesNotExist
-
+from nexus.projects.permissions import has_project_permission
+from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
 logger = logging.getLogger(__name__)
 
 
 def sanitize_user_email(user_email):
-    return re.sub('[^A-Za-z0-9]+', '', str(user_email))
+    return re.sub("[^A-Za-z0-9]+", "", str(user_email))
 
 
 def send_message_to_websocket(message):
@@ -30,7 +27,7 @@ def send_message_to_websocket(message):
         "created_at": str(message.created_at),
         "message_text": message.text,
         "tag": reflection_data.get("tag", "failed") if reflection_data else "failed",
-        "classification": message.messagelog.classification
+        "classification": message.messagelog.classification,
     }
 
     room_name = f"project_{message.messagelog.project.uuid}"
@@ -41,7 +38,7 @@ def send_message_to_websocket(message):
             "type": "chat_message",
             "message": object_data,
             "message_type": "ws",
-        }
+        },
     )
 
 
@@ -66,18 +63,13 @@ class WebsocketMessageConsumer(WebsocketConsumer):
 
         if self.user.is_anonymous or close is True or self.project is None:
             self.close()
+            return
 
-        if not has_project_permission(
-            self.user,
-            self.project,
-            "GET"
-        ):
+        if not has_project_permission(self.user, self.project, "GET"):
             self.close()
+            return
 
-        async_to_sync(self.channel_layer.group_add)(
-            self.room_group_name,
-            self.channel_name
-        )
+        async_to_sync(self.channel_layer.group_add)(self.room_group_name, self.channel_name)
         self.accept()
 
     def receive(self, text_data=None, bytes_data=None):
@@ -91,16 +83,14 @@ class WebsocketMessageConsumer(WebsocketConsumer):
                 "type": "chat_message",
                 "message": message,
                 "message_type": message_type,
-            }
+            },
         )
 
     def chat_message(self, event):
         mtype = {"ping": "pong"}
         message = event["message"]
         message_type = event["message_type"]
-        self.send(text_data=json.dumps(
-            {"type": mtype.get(message_type, message_type), "message": message}
-        ))
+        self.send(text_data=json.dumps({"type": mtype.get(message_type, message_type), "message": message}))
 
 
 class PreviewConsumer(WebsocketConsumer):
@@ -126,18 +116,11 @@ class PreviewConsumer(WebsocketConsumer):
             self.close()
             return
 
-        if not has_project_permission(
-            self.user,
-            self.project,
-            "GET"
-        ):
+        if not has_project_permission(self.user, self.project, "GET"):
             self.close()
             return
 
-        async_to_sync(self.channel_layer.group_add)(
-            self.room_group_name,
-            self.channel_name
-        )
+        async_to_sync(self.channel_layer.group_add)(self.room_group_name, self.channel_name)
         self.accept()
 
     def receive(self, text_data=None, bytes_data=None):
@@ -151,21 +134,17 @@ class PreviewConsumer(WebsocketConsumer):
                 "type": "preview_message",
                 "message": message,
                 "message_type": message_type,
-            }
+            },
         )
 
     def preview_message(self, event):
         mtype = {"ping": "pong"}
         message = event["message"]
         message_type = event["message_type"]
-        self.send(text_data=json.dumps({
-            "type": mtype.get(message_type, message_type),
-            "message": message
-        }))
+        self.send(text_data=json.dumps({"type": mtype.get(message_type, message_type), "message": message}))
 
 
 def send_preview_message_to_websocket(project_uuid, message_data, user_email):
-
     channel_layer = get_channel_layer()
     room_name = f"preview_{project_uuid}_{sanitize_user_email(user_email)}"
 
@@ -175,7 +154,7 @@ def send_preview_message_to_websocket(project_uuid, message_data, user_email):
             "type": "preview_message",
             "message": message_data,
             "message_type": "preview",
-        }
+        },
     )
 
 
@@ -192,5 +171,5 @@ async def send_preview_message_to_websocket_async(project_uuid, message_data, us
             "type": "preview_message",
             "message": message_data,
             "message_type": "preview",
-        }
+        },
     )

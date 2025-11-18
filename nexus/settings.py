@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
+
 import os
 import sys
 from pathlib import Path
@@ -31,74 +32,75 @@ DEBUG = env.bool("DEBUG")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
-AUTH_USER_MODEL = 'users.User'
+AUTH_USER_MODEL = "users.User"
 
 # Application definition
 
 INSTALLED_APPS = [
-    'daphne',
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'mozilla_django_oidc',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
+    "daphne",
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "mozilla_django_oidc",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
     "django_celery_results",
     "django_celery_beat",
     "django_prometheus",
-    'rest_framework',
-    'drf_yasg',
-    'elasticapm.contrib.django',
+    "rest_framework",
+    "drf_yasg",
+    "elasticapm.contrib.django",
     # apps
-    'nexus.users',
-    'nexus.db',
-    'nexus.orgs',
-    'nexus.projects',
-    'nexus.intelligences',
-    'nexus.task_managers',
-    'nexus.event_driven',
-    'nexus.actions',
-    'corsheaders',
-    'router',
-    'nexus.logs',
-    'nexus.sentry',
-    'nexus.zeroshot',
-    'nexus.agents',
-    'nexus.inline_agents',
-    'nexus.reports',
+    "nexus.users",
+    "nexus.db",
+    "nexus.orgs",
+    "nexus.projects",
+    "nexus.intelligences",
+    "nexus.task_managers",
+    "nexus.event_driven",
+    "nexus.actions",
+    "corsheaders",
+    "router",
+    "nexus.logs",
+    "nexus.sentry",
+    "nexus.zeroshot",
+    "nexus.agents",
+    "nexus.inline_agents",
+    "nexus.reports",
+    "nexus.analytics",
 ]
 
 MIDDLEWARE = [
-    'django_prometheus.middleware.PrometheusBeforeMiddleware',
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "elasticapm.contrib.django.middleware.TracingMiddleware",
     "elasticapm.contrib.django.middleware.Catch404Middleware",
-    'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'nexus.logs.middleware.PrometheusAuthenticationMiddleware',
-    'django_prometheus.middleware.PrometheusAfterMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "nexus.logs.middleware.PrometheusAuthenticationMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
-ROOT_URLCONF = 'nexus.urls'
+ROOT_URLCONF = "nexus.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
                 "elasticapm.contrib.django.context_processors.rum_tracing",
             ],
         },
@@ -106,7 +108,7 @@ TEMPLATES = [
 ]
 
 # WSGI_APPLICATION = 'nexus.wsgi.application'
-ASGI_APPLICATION = 'nexus.asgi.application'
+ASGI_APPLICATION = "nexus.asgi.application"
 
 REDIS_CHANNEL_URL = env.str("REDIS_CHANNEL_URL")
 
@@ -131,16 +133,16 @@ DATABASES = {"default": env.db(var="DEFAULT_DATABASE", default="sqlite:///db.sql
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
@@ -148,17 +150,13 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-LANGUAGES = (
-    ('en-us', 'English'),
-    ('pt-br', 'Portuguese'),
-    ('es', 'Spanish')
-)
+LANGUAGES = (("en-us", "English"), ("pt-br", "Portuguese"), ("es", "Spanish"))
 
-DEFAULT_LANGUAGE = 'en-us'
+DEFAULT_LANGUAGE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -168,7 +166,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "static/"
 
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
@@ -177,7 +175,7 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Redis Config
 
@@ -208,9 +206,7 @@ SWAGGER_SETTINGS = {
     "USE_SESSION_AUTH": False,
     "DOC_EXPANSION": "list",
     "APIS_SORTER": "alpha",
-    "SECURITY_DEFINITIONS": {
-        "OIDC": {"type": "apiKey", "name": "Authorization", "in": "header"}
-    },
+    "SECURITY_DEFINITIONS": {"OIDC": {"type": "apiKey", "name": "Authorization", "in": "header"}},
 }
 
 # WENIGPT
@@ -308,16 +304,12 @@ OIDC_RP_SCOPES = env.str("OIDC_RP_SCOPES", default="openid email")
 
 
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "mozilla_django_oidc.contrib.drf.OIDCAuthentication"
-    ],
+    "DEFAULT_AUTHENTICATION_CLASSES": ["mozilla_django_oidc.contrib.drf.OIDCAuthentication"],
     "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
 }
 
 if TESTING:
-    REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"].append(
-        "rest_framework.authentication.TokenAuthentication"
-    )
+    REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"].append("rest_framework.authentication.TokenAuthentication")
 
 CORS_ORIGIN_ALLOW_ALL = True
 
@@ -402,8 +394,12 @@ WENIGPT_SHARK_PAIRS_TEMPLATE_PROMPT = env.str("WENIGPT_PAIRS_TEMPLATE_PROMPT", W
 WENIGPT_TEST_PAIRS_TEMPLATE_PROMPT = env.str("WENIGPT_TEST_PAIRS_TEMPLATE_PROMPT", WENIGPT_PAIRS_TEMPLATE_PROMPT)
 
 WENIGPT_NEXT_QUESTION_TEMPLATE_PROMPT = env.str("WENIGPT_NEXT_QUESTION_TEMPLATE_PROMPT")
-WENIGPT_SHARK_NEXT_QUESTION_TEMPLATE_PROMPT = env.str("WENIGPT_SHARK_NEXT_QUESTION_TEMPLATE_PROMPT", WENIGPT_NEXT_QUESTION_TEMPLATE_PROMPT)
-WENIGPT_TEST_NEXT_QUESTION_TEMPLATE_PROMPT = env.str("WENIGPT_TEST_NEXT_QUESTION_TEMPLATE_PROMPT", WENIGPT_NEXT_QUESTION_TEMPLATE_PROMPT)
+WENIGPT_SHARK_NEXT_QUESTION_TEMPLATE_PROMPT = env.str(
+    "WENIGPT_SHARK_NEXT_QUESTION_TEMPLATE_PROMPT", WENIGPT_NEXT_QUESTION_TEMPLATE_PROMPT
+)
+WENIGPT_TEST_NEXT_QUESTION_TEMPLATE_PROMPT = env.str(
+    "WENIGPT_TEST_NEXT_QUESTION_TEMPLATE_PROMPT", WENIGPT_NEXT_QUESTION_TEMPLATE_PROMPT
+)
 
 
 WENIGPT_SHARK = "shark-1"
@@ -413,7 +409,7 @@ WENIGPT_TEST = "test-1"
 WENIGPT_DEFAULT_VERSION = env.str("WENIGPT_DEFAULT_VERSION", WENIGPT_GOLFINHO)
 
 WENIGPT_VERSIONS = {
-    WENIGPT_GOLFINHO : {
+    WENIGPT_GOLFINHO: {
         "url": WENIGPT_API_URL,
         "context_prompt": WENIGPT_CONTEXT_PROMPT,
         "no_context_prompt": WENIGPT_NO_CONTEXT_PROMPT,
@@ -433,7 +429,7 @@ WENIGPT_VERSIONS = {
         "no_context_prompt": WENIGPT_TEST_NO_CONTEXT_PROMPT,
         "pairs_template_prompt": WENIGPT_TEST_PAIRS_TEMPLATE_PROMPT,
         "next_question_template_prompt": WENIGPT_TEST_NEXT_QUESTION_TEMPLATE_PROMPT,
-    }
+    },
 }
 
 # Healthcheck external services:
@@ -501,7 +497,9 @@ GROUNDEDNESS_SOURCES_THRESHOLD = env.int("GROUNDEDNESS_SCORE_AVG_THRESHOLD", 8)
 
 # Retail
 
-DEFAULT_RETAIL_INSTRUCTIONS = [instruction.strip() for instruction in env.str("DEFAULT_RETAIL_INSTRUCTIONS", "").split("\n") if instruction.strip()]
+DEFAULT_RETAIL_INSTRUCTIONS = [
+    instruction.strip() for instruction in env.str("DEFAULT_RETAIL_INSTRUCTIONS", "").split("\n") if instruction.strip()
+]
 
 
 SHARK_MODEL_ENCODING_NAME = env.str("SHARK_MODEL_ENCODING_NAME", "cl100k_base")
@@ -509,7 +507,7 @@ SHARK_MODEL_TOKEN_LIMIT = env.int("SHARK_MODEL_TOKEN_LIMIT", 6100)
 
 # Bedrock multi agents
 
-AWS_BEDROCK_AGENTS_MODEL_ID = env.list("AWS_BEDROCK_AGENTS_MODEL_ID")
+AWS_BEDROCK_AGENTS_MODEL_ID = env.list("AWS_BEDROCK_AGENTS_MODEL_ID")  # TODO: change to str
 AWS_BEDROCK_SUPERVISOR_MODEL_ID = env.list("AWS_BEDROCK_SUPERVISOR_MODEL_ID")
 AWS_BEDROCK_SUPERVISOR_INSTRUCTIONS = env.str("AWS_BEDROCK_SUPERVISOR_INSTRUCTIONS", "")
 AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID = env.str("AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID")
@@ -527,10 +525,11 @@ MULTI_AGENTS_PROJECTS = env.list("MULTI_AGENTS_PROJECTS", "")
 AWS_BEDROCK_LAMBDA_ARN = env.str("AWS_BEDROCK_LAMBDA_ARN", "")
 
 # Credential encryption settings
-CREDENTIAL_ENCRYPTION_KEY = env.str('CREDENTIAL_ENCRYPTION_KEY', default=None)
+CREDENTIAL_ENCRYPTION_KEY = env.str("CREDENTIAL_ENCRYPTION_KEY", default=None)
 if not CREDENTIAL_ENCRYPTION_KEY and not TESTING:
     # Generate a new key if not configured and not in testing mode
     from cryptography.fernet import Fernet
+
     CREDENTIAL_ENCRYPTION_KEY = Fernet.generate_key()
 
 BEDROCK_FILE_SIZE_LIMIT = env.int("BEDROCK_FILE_SIZE_LIMIT", 50)
@@ -539,6 +538,7 @@ BEDROCK_FILE_SIZE_LIMIT = env.int("BEDROCK_FILE_SIZE_LIMIT", 50)
 HUMAN_SUPPORT_AGENT_ID = env.str("HUMAN_SUPPORT_AGENT_ID", "")
 HUMAN_SUPPORT_ACTION_GROUP = env.list("HUMAN_SUPPORT_ACTION_GROUP", [])
 HUMAN_SUPPORT_INSTRUCTIONS = env.str("HUMAN_SUPPORT_INSTRUCTIONS", "")
+COMPONENTS_INSTRUCTIONS_UP = env.str("COMPONENTS_INSTRUCTIONS_UP", "")
 
 BEDROCK_AGENT_INLINE_CLIENT_ID = env.str("BEDROCK_AGENT_INLINE_CLIENT_ID", "")
 BEDROCK_AGENT_INLINE_CLIENT_SECRET = env.str("BEDROCK_AGENT_INLINE_CLIENT_SECRET", "")
@@ -589,17 +589,17 @@ JWT_SECRET_KEY = env.str("JWT_SECRET_KEY")
 OPENAI_AGENTS_FOUNDATION_MODEL = env.str("OPENAI_AGENTS_FOUNDATION_MODEL", "gpt-4o-mini")
 
 try:
-    with open(JWT_PUBLIC_KEY_PATH, "r") as f:
+    with open(JWT_PUBLIC_KEY_PATH) as f:
         JWT_PUBLIC_KEY = f.read()
 except FileNotFoundError:
     JWT_PUBLIC_KEY = None
 
 CONVERSATION_TOPIC_CLASSIFIER_NAME = env.str("CONVERSATION_TOPIC_CLASSIFIER_NAME")
 CONVERSATION_RESOLUTION_NAME = env.str("CONVERSATION_RESOLUTION_NAME")
+INSTRUCTION_CLASSIFY_NAME = env.str("INSTRUCTION_CLASSIFY_NAME")
 AGENT_UUID_CSAT = env.str("AGENT_UUID_CSAT")
 AGENT_UUID_NPS = env.str("AGENT_UUID_NPS")
 
-CUSTOM_LAMBDA_CONVERSATION_PROJECTS = env.list("CUSTOM_LAMBDA_CONVERSATION_PROJECTS", [])
 COMPLEXITY_LAYER_LAMBDA = env.str("COMPLEXITY_LAYER_LAMBDA", "lambda-complexity-layer")
 GUARDRAILS_LAYER_LAMBDA = env.str("GUARDRAILS_LAYER_LAMBDA", "lambda-complexity-layer-openai")
 
@@ -617,3 +617,20 @@ def get_datasource_id(project_uuid: str | None) -> str:
     if project_uuid in PROJECTS_WITH_LARGE_DATASOURCE:
         return AWS_BEDROCK_LARGE_DATASOURCE_ID
     return AWS_BEDROCK_DATASOURCE_ID
+
+
+# DynamoDB
+DYNAMODB_REGION = env.str("DYNAMODB_REGION", default="us-east-1")
+DYNAMODB_MESSAGE_TABLE = env.str("DYNAMODB_MESSAGE_TABLE", default="NexusMessages")
+
+DEFAULT_FOUNDATION_MODELS = {
+    "OpenAIBackend": OPENAI_AGENTS_FOUNDATION_MODEL,
+    "BedrockBackend": AWS_BEDROCK_AGENTS_MODEL_ID[0],
+}
+
+WENIGPT_BEDROCK_CONVERSATION_CUSTOM_MODEL_ID = env.str("WENIGPT_BEDROCK_CONVERSATION_CUSTOM_MODEL_ID")
+USE_BEDROCK_CONVERSE = env.bool("USE_BEDROCK_CONVERSE", True)
+BEDROCK_CONVERSE_PROMPT = env.str("BEDROCK_CONVERSE_PROMPT")
+BEDROCK_CONVERSE_MAX_LENGHT = env.int("BEDROCK_CONVERSE_MAX_LENGHT", 4096)
+FORMATTER_AGENT_MODEL = env.str("FORMATTER_AGENT_MODEL", "gpt-4.1-mini")
+FLOW_USER_EMAIL = env.str("FLOW_USER_EMAIL", "")

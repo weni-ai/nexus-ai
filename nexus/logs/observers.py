@@ -1,36 +1,31 @@
-import os
 import json
-import requests
+import os
 
+import requests
 from prometheus_client import Gauge
 
 from nexus.event_domain.event_observer import EventObserver
 
 
 class ZeroShotClassificationHealthCheckObserver(EventObserver):  # pragma: no cover
-
     def __init__(self):
         self.url = os.environ.get("HC_ZEROSHOT_URL")
         self.token = os.environ.get("HC_WENI_TOKEN")
         self.service_name = "zeroshot_classification"
-        self.service_health = Gauge('service_zeroshot_classification_health', 'Health status of services', ['service_name'])
+        self.service_health = Gauge(
+            "service_zeroshot_classification_health", "Health status of services", ["service_name"]
+        )
 
     def perform(self):
         if os.environ.get("ENVIRONMENT") == "production":
-            actions = list({
-                "class": "health check",
-                "context": "health check",
-            })
-            payload = {
-                "context": "health check",
-                "language": "por",
-                "text": "health check",
-                "options": actions
-            }
-            headers = {
-                'Authorization': f'Bearer {self.token}',
-                'Content-Type': 'application/json'
-            }
+            actions = list(
+                {
+                    "class": "health check",
+                    "context": "health check",
+                }
+            )
+            payload = {"context": "health check", "language": "por", "text": "health check", "options": actions}
+            headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
             try:
                 response = requests.request("POST", self.url, headers=headers, data=json.dumps(payload))
 
@@ -43,12 +38,16 @@ class ZeroShotClassificationHealthCheckObserver(EventObserver):  # pragma: no co
 
 
 class ZeroShotHealthCheckObserver(EventObserver):  # pragma: no cover
-
     def __init__(self):
         self.url = os.environ.get("HC_ZEROSHOT_URL")
         self.token = os.environ.get("HC_WENI_TOKEN")
         self.service_name = "zeroshot"
-        self.service_health = Gauge('service_health_zeroshot', 'Health status of services', ['service_name'])
+        # Use class-level metric to avoid duplicate registration
+        if not hasattr(ZeroShotHealthCheckObserver, "_service_health"):
+            ZeroShotHealthCheckObserver._service_health = Gauge(
+                "service_health_zeroshot", "Health status of services", ["service_name"]
+            )
+        self.service_health = ZeroShotHealthCheckObserver._service_health
 
     def perform(self):
         if os.environ.get("ENVIRONMENT") == "production":
@@ -64,12 +63,16 @@ class ZeroShotHealthCheckObserver(EventObserver):  # pragma: no cover
 
 
 class GolfinhoHealthCheckObserver(EventObserver):  # pragma: no cover
-
     def __init__(self):
         self.url = os.environ.get("HC_GOLFINHO_URL")
         self.token = os.environ.get("HC_WENI_TOKEN")
         self.service_name = "wenigpt_golfinho"
-        self.service_health = Gauge('service_health_golfinho', 'Health status of services', ['service_name'])
+        # Use class-level metric to avoid duplicate registration
+        if not hasattr(GolfinhoHealthCheckObserver, "_service_health"):
+            GolfinhoHealthCheckObserver._service_health = Gauge(
+                "service_health_golfinho", "Health status of services", ["service_name"]
+            )
+        self.service_health = GolfinhoHealthCheckObserver._service_health
 
     def perform(self):
         if os.environ.get("ENVIRONMENT") == "production":

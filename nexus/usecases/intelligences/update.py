@@ -1,30 +1,29 @@
 import pendulum
-
-from .get_by_uuid import (
-    get_by_intelligence_uuid,
-    get_by_contentbase_uuid,
-    get_by_content_base_file_uuid,
-    get_llm_by_project_uuid,
-)
-from nexus.usecases import orgs, users, projects
-from nexus.projects.permissions import has_project_permission
-from nexus.orgs import permissions
-from .exceptions import IntelligencePermissionDenied
-from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO, UpdateLLMDTO
-from nexus.intelligences.models import ContentBase, ContentBaseText
-from nexus.events import event_manager
-
 from django.forms.models import model_to_dict
 
+from nexus.events import event_manager
+from nexus.intelligences.models import ContentBase, ContentBaseText
+from nexus.orgs import permissions
+from nexus.projects.permissions import has_project_permission
+from nexus.usecases import orgs, projects, users
+from nexus.usecases.intelligences.intelligences_dto import UpdateContentBaseFileDTO, UpdateLLMDTO
 
-class UpdateIntelligenceUseCase():
+from .exceptions import IntelligencePermissionDenied
+from .get_by_uuid import (
+    get_by_content_base_file_uuid,
+    get_by_contentbase_uuid,
+    get_by_intelligence_uuid,
+    get_llm_by_project_uuid,
+)
 
+
+class UpdateIntelligenceUseCase:
     def update_intelligences(
-            self,
-            intelligence_uuid: str,
-            user_email: str,
-            name: str = None,
-            description: str = None,
+        self,
+        intelligence_uuid: str,
+        user_email: str,
+        name: str = None,
+        description: str = None,
     ):
         user = users.get_by_email(user_email)
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
@@ -49,21 +48,17 @@ class UpdateIntelligenceUseCase():
         return intelligence
 
 
-class UpdateContentBaseUseCase():
-
-    def __init__(
-        self,
-        event_manager_notify=event_manager.notify
-    ):
+class UpdateContentBaseUseCase:
+    def __init__(self, event_manager_notify=event_manager.notify):
         self.event_manager_notify = event_manager_notify
 
     def update_contentbase(
-            self,
-            contentbase_uuid: str,
-            user_email: str,
-            title: str = None,
-            language: str = None,
-            description: str = None,
+        self,
+        contentbase_uuid: str,
+        user_email: str,
+        title: str = None,
+        language: str = None,
+        description: str = None,
     ) -> ContentBase:
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         user = users.get_by_email(user_email)
@@ -79,21 +74,21 @@ class UpdateContentBaseUseCase():
         update_fields = []
         if title:
             contentbase.title = title
-            update_fields.append('title')
+            update_fields.append("title")
 
         if language:
             contentbase.language = language
-            update_fields.append('language')
+            update_fields.append("language")
 
         if description:
             contentbase.description = description
-            update_fields.append('description')
+            update_fields.append("description")
 
         contentbase.modified_at = pendulum.now()
-        update_fields.append('modified_at')
+        update_fields.append("modified_at")
 
         contentbase.modified_by = user
-        update_fields.append('modified_by')
+        update_fields.append("modified_by")
 
         contentbase.save(update_fields=update_fields)
         new_contentbase_data = model_to_dict(contentbase)
@@ -110,41 +105,62 @@ class UpdateContentBaseUseCase():
         return contentbase
 
 
-class UpdateContentBaseTextUseCase():
-
-    def __init__(
-        self,
-        event_manager_notify=event_manager.notify
-    ):
+class UpdateContentBaseTextUseCase:
+    def __init__(self, event_manager_notify=event_manager.notify):
         self.event_manager_notify = event_manager_notify
 
     def update_contentbasetext(
-            self,
-            contentbasetext: ContentBaseText,
-            user_email: str,
-            text: str = None,
+        self,
+        contentbasetext: ContentBaseText,
+        user_email: str,
+        text: str = None,
     ):
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         user = users.get_by_email(user_email)
-        org = org_use_case.get_org_by_contentbasetext_uuid(
-            contentbasetext.uuid
-        )
+        org = org_use_case.get_org_by_contentbasetext_uuid(contentbasetext.uuid)
 
         has_permission = permissions.can_edit_content_bases(user, org)
         if not has_permission:
             raise IntelligencePermissionDenied()
 
         old_contentbasetext_data = model_to_dict(contentbasetext)
-        old_contentbasetext_data['modified_at'] = str(old_contentbasetext_data['modified_at'])
+        old_contentbasetext_data["modified_at"] = str(old_contentbasetext_data["modified_at"])
         if text is not None:
             contentbasetext.text = text
             contentbasetext.modified_at = pendulum.now()
             contentbasetext.modified_by = user
-            contentbasetext.save(
-                update_fields=['text', 'modified_at', 'modified_by']
-            )
+            contentbasetext.save(update_fields=["text", "modified_at", "modified_by"])
         new_contentbase_data = model_to_dict(contentbasetext)
-        new_contentbase_data['modified_at'] = str(new_contentbase_data['modified_at'])
+        new_contentbase_data["modified_at"] = str(new_contentbase_data["modified_at"])
+
+        self.event_manager_notify(
+            event="contentbase_text_activity",
+            content_base_text=contentbasetext,
+            old_contentbasetext_data=old_contentbasetext_data,
+            new_contentbase_data=new_contentbase_data,
+            user=user,
+            action_type="U",
+        )
+
+        return contentbasetext
+
+    def update_inline_contentbasetext(
+        self,
+        contentbasetext: ContentBaseText,
+        user_email: str,
+        text: str = None,
+    ):
+        user = users.get_by_email(user_email)
+
+        old_contentbasetext_data = model_to_dict(contentbasetext)
+        old_contentbasetext_data["modified_at"] = str(old_contentbasetext_data["modified_at"])
+        if text is not None:
+            contentbasetext.text = text
+            contentbasetext.modified_at = pendulum.now()
+            contentbasetext.modified_by = user
+            contentbasetext.save(update_fields=["text", "modified_at", "modified_by"])
+        new_contentbase_data = model_to_dict(contentbasetext)
+        new_contentbase_data["modified_at"] = str(new_contentbase_data["modified_at"])
 
         self.event_manager_notify(
             event="contentbase_text_activity",
@@ -158,25 +174,16 @@ class UpdateContentBaseTextUseCase():
         return contentbasetext
 
 
-class UpdateContentBaseFileUseCase():
-
-    def __init__(
-        self,
-        event_manager_notify=event_manager.notify
-    ) -> None:
+class UpdateContentBaseFileUseCase:
+    def __init__(self, event_manager_notify=event_manager.notify) -> None:
         self.event_manager_notify = event_manager_notify
 
     def update_content_base_file(
-            self,
-            content_base_file_uuid: str,
-            user_email: str,
-            update_content_base_file_dto: UpdateContentBaseFileDTO
+        self, content_base_file_uuid: str, user_email: str, update_content_base_file_dto: UpdateContentBaseFileDTO
     ):
         org_use_case = orgs.GetOrgByIntelligenceUseCase()
         user = users.get_by_email(user_email)
-        org = org_use_case.get_org_by_contentbasefile_uuid(
-            content_base_file_uuid
-        )
+        org = org_use_case.get_org_by_contentbasefile_uuid(content_base_file_uuid)
 
         has_permission = permissions.can_edit_content_bases(user, org)
         if not has_permission:
@@ -200,10 +207,7 @@ class UpdateContentBaseFileUseCase():
         return content_base_file
 
     def update_inline_content_base_file(
-            self,
-            content_base_file_uuid: str,
-            user_email: str,
-            update_content_base_file_dto: UpdateContentBaseFileDTO
+        self, content_base_file_uuid: str, user_email: str, update_content_base_file_dto: UpdateContentBaseFileDTO
     ):
         user = users.get_by_email(user_email)
 
@@ -225,21 +229,11 @@ class UpdateContentBaseFileUseCase():
         return content_base_file
 
 
-class UpdateLLMUseCase():
-
-    def __init__(
-        self,
-        event_manager_notify=event_manager.notify
-    ) -> None:
+class UpdateLLMUseCase:
+    def __init__(self, event_manager_notify=event_manager.notify) -> None:
         self.event_manager_notify = event_manager_notify
 
-    def _save_log(
-        self,
-        llm,
-        values_before_update,
-        values_after_update,
-        user
-    ) -> bool:
+    def _save_log(self, llm, values_before_update, values_after_update, user) -> bool:
         action_details = {}
         for key, old_value in values_before_update.items():
             new_value = values_after_update.get(key)
@@ -252,28 +246,15 @@ class UpdateLLMUseCase():
                             old_value["token"] = "old_token"
                         if new_token:
                             new_value["token"] = "new_token"
-                action_details[key] = {'old': old_value, 'new': new_value}
+                action_details[key] = {"old": old_value, "new": new_value}
 
-        self.event_manager_notify(
-            event="llm_update_activity",
-            llm=llm,
-            action_details=action_details,
-            user=user
-        )
+        self.event_manager_notify(event="llm_update_activity", llm=llm, action_details=action_details, user=user)
 
-    def update_llm_by_project(
-        self,
-        update_llm_dto: UpdateLLMDTO
-    ):
-
+    def update_llm_by_project(self, update_llm_dto: UpdateLLMDTO):
         project = projects.get_project_by_uuid(update_llm_dto.project_uuid)
         user = users.get_by_email(update_llm_dto.user_email)
 
-        has_project_permission(
-            user=user,
-            project=project,
-            method='PUT'
-        )
+        has_project_permission(user=user, project=project, method="PUT")
 
         llm = get_llm_by_project_uuid(project.uuid)
         values_before_update = model_to_dict(llm)
@@ -285,10 +266,7 @@ class UpdateLLMUseCase():
         values_after_update = model_to_dict(llm)
 
         self._save_log(
-            llm=llm,
-            values_before_update=values_before_update,
-            values_after_update=values_after_update,
-            user=user
+            llm=llm, values_before_update=values_before_update, values_after_update=values_after_update, user=user
         )
 
         return llm

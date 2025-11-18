@@ -14,6 +14,7 @@ from openai.types.shared import Reasoning
 from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
 
+
 class Supervisor(Agent):
     def function_tools(self) -> list:
         return [self.knowledge_base_bedrock]
@@ -27,8 +28,10 @@ class Supervisor(Agent):
         hooks: list[AgentHooks] | None = None,
         handoffs: list[Agent] | None = None,
         prompt_override_configuration: dict | None = None,
+        preview: bool = False,
+        max_tokens: int | None = None,
+        use_components: bool = False,
     ):
-
         tools.extend(self.function_tools())
         if model in settings.MODELS_WITH_REASONING:
             super().__init__(
@@ -38,11 +41,22 @@ class Supervisor(Agent):
                 tools=tools,
                 hooks=hooks,
                 model_settings=ModelSettings(
-                    reasoning=Reasoning(
-                        effort="medium",
-                        summary="auto"
-                    ),
-                )
+                    max_tokens=max_tokens,
+                    reasoning=Reasoning(effort="medium", summary="auto"),
+                ),
+            )
+            return
+
+        if use_components:
+            super().__init__(
+                name=name,
+                instructions=instructions,
+                model=model,
+                tools=tools,
+                hooks=hooks,
+                model_settings=ModelSettings(
+                    max_tokens=max_tokens,
+                ),
             )
             return
 
@@ -52,7 +66,11 @@ class Supervisor(Agent):
             model=model,
             tools=tools,
             hooks=hooks,
+            model_settings=ModelSettings(
+                max_tokens=max_tokens,
+            ),
         )
+
         return
 
     @function_tool
@@ -69,23 +87,18 @@ class Supervisor(Agent):
 
         retrieve_params = {
             "knowledgeBaseId": settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID,
-            "retrievalQuery": {"text": question}
+            "retrievalQuery": {"text": question},
         }
 
         combined_filter = {
             "andAll": [
-                {
-                    "equals": {
-                        "key": "contentBaseUuid",
-                        "value": content_base_uuid
-                    }
-                },
+                {"equals": {"key": "contentBaseUuid", "value": content_base_uuid}},
                 {
                     "equals": {
                         "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": get_datasource_id(wrapper.context.project.get("uuid"))
+                        "value": get_datasource_id(wrapper.context.project.get("uuid")),
                     }
-                }
+                },
             ]
         }
 

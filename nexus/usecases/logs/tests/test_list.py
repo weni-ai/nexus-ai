@@ -1,19 +1,20 @@
+from unittest.mock import patch
+
+import requests
 from django.test import TestCase
 from django.urls import reverse
-
 from rest_framework import status
-from rest_framework.test import APIRequestFactory, force_authenticate, APITestCase
-
-from nexus.logs.models import Message, MessageLog
-from nexus.logs.api.views import ConversationContextViewset
+from rest_framework.test import APIRequestFactory, APITestCase, force_authenticate
 
 from nexus.intelligences.models import IntegratedIntelligence
-
-from nexus.usecases.logs.list import ListLogUsecase
-from nexus.usecases.intelligences.tests.intelligence_factory import LLMFactory, IntegratedIntelligenceFactory
+from nexus.logs.api.views import ConversationContextViewset
+from nexus.logs.models import Message, MessageLog
+from nexus.projects.models import ProjectAuth, ProjectAuthorizationRole
 from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
-from nexus.usecases.projects.tests.project_factory import ProjectFactory
+from nexus.usecases.intelligences.tests.intelligence_factory import IntegratedIntelligenceFactory, LLMFactory
+from nexus.usecases.logs.list import ListLogUsecase
 from nexus.usecases.logs.tests.logs_factory import MessageLogFactory
+from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
 class ListLogsTestCase(TestCase):
@@ -26,20 +27,12 @@ class ListLogsTestCase(TestCase):
         self.project2 = ProjectFactory()
         self.content_base2 = get_default_content_base_by_project(str(self.project2.uuid))
 
-        self.message = Message.objects.create(
-            text="Test Message",
-            contact_urn="tel:123321",
-            status="S"
-        )
+        self.message = Message.objects.create(text="Test Message", contact_urn="tel:123321", status="S")
         self.message2 = Message.objects.create(
             text="Test Message 2",
             contact_urn="tel:321123",
         )
-        self.message3 = Message.objects.create(
-            text="Test Message 3",
-            contact_urn="tel:456654",
-            exception="TestError"
-        )
+        self.message3 = Message.objects.create(text="Test Message 3", contact_urn="tel:456654", exception="TestError")
 
         self.log = MessageLog.objects.create(
             message=self.message,
@@ -50,7 +43,7 @@ class ListLogsTestCase(TestCase):
             classification="other",
             llm_model="test gpt",
             llm_response="Test mode",
-            metadata={}
+            metadata={},
         )
         self.log2 = MessageLog.objects.create(
             message=self.message2,
@@ -61,7 +54,7 @@ class ListLogsTestCase(TestCase):
             classification="other",
             llm_model="test gpt",
             llm_response="Test mode",
-            metadata={}
+            metadata={},
         )
         self.log3 = MessageLog.objects.create(
             message=self.message3,
@@ -72,33 +65,36 @@ class ListLogsTestCase(TestCase):
             classification="other",
             llm_model="test gpt3",
             llm_response="Test mode",
-            metadata={}
+            metadata={},
         )
 
     def test_list_by_project(self):
         usecase = ListLogUsecase()
         logs = usecase.list_logs_by_project(str(self.project.uuid), order_by="asc")
 
-        self.assertEquals(logs.count(), 2)
+        self.assertEqual(logs.count(), 2)
         self.assertIsInstance(logs.first(), MessageLog)
-        self.assertEquals(self.log, logs.first())
+        self.assertEqual(self.log, logs.first())
 
     def test_list_by_project_filter_with_kwargs(self):
         usecase = ListLogUsecase()
         logs = usecase.list_logs_by_project(str(self.project.uuid), order_by="asc", message__contact_urn="tel:456654")
 
-        self.assertEquals(logs.count(), 1)
+        self.assertEqual(logs.count(), 1)
         self.assertIsInstance(logs.first(), MessageLog)
-        self.assertEquals(self.log3, logs.first())
+        self.assertEqual(self.log3, logs.first())
 
 
 class ConversationContextViewsetTestCase(APITestCase):
-
     def setUp(self):
         ii: IntegratedIntelligence = IntegratedIntelligenceFactory()
         self.project = ii.project
         self.content_base = ii.intelligence.contentbases.first()
         self.user = self.project.created_by
+
+        auth = ProjectAuth.objects.get(project=self.project, user=self.user)
+        auth.role = ProjectAuthorizationRole.CONTRIBUTOR.value
+        auth.save()
 
         self.msg_log = MessageLogFactory.create_batch(
             10,
@@ -108,12 +104,15 @@ class ConversationContextViewsetTestCase(APITestCase):
             message__status="S",
         )
         self.factory = APIRequestFactory()
-        self.view = ConversationContextViewset.as_view({'get': 'list'})
-        self.url = reverse('list-conversation-context', kwargs={'project_uuid': str(self.project.uuid)})
+        self.view = ConversationContextViewset.as_view({"get": "list"})
+        self.url = reverse("list-conversation-context", kwargs={"project_uuid": str(self.project.uuid)})
 
-    def test_list_last_messages(self):
+    @patch("nexus.projects.permissions._check_project_authorization")
+    def test_list_last_messages(self, mock_check_authorization):
+        mock_check_authorization.side_effect = requests.RequestException
+
         log_id = self.msg_log[-1].id
-        request = self.factory.get(self.url, {'log_id': log_id, 'number_of_messages': 5})
+        request = self.factory.get(self.url, {"log_id": log_id, "number_of_messages": 5})
         force_authenticate(request, user=self.user)
         response = self.view(request, project_uuid=str(self.project.uuid))
         response.render()

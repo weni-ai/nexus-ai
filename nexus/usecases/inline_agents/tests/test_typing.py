@@ -1,5 +1,6 @@
+import uuid
 from unittest import TestCase
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.conf import settings
 
@@ -11,40 +12,38 @@ class TestTypingUsecase(TestCase):
         self.typing_usecase = TypingUsecase()
         self.contact_urn = "whatsapp:+5511999999999"
         self.msg_external_id = "test-msg-id"
+        self.project_uuid = str(uuid.uuid4())
 
-    @patch('requests.post')
-    def test_send_typing_message(self, mock_post):
-        # Mock authentication response
-        auth_response = MagicMock()
-        auth_response.json.return_value = {"access_token": "fake-token"}
-        mock_post.side_effect = [auth_response, MagicMock()]
+    @patch("nexus.usecases.inline_agents.typing.InternalAuthentication")
+    def test_send_typing_message(self, mock_auth_class):
+        mock_auth_instance = mock_auth_class.return_value
 
-        # Execute the method we want to test
+        self.typing_usecase.auth_client = mock_auth_instance
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_auth_instance.make_request_with_retry.return_value = mock_response
+
+        # Execute the method
         self.typing_usecase.send_typing_message(
             contact_urn=self.contact_urn,
-            msg_external_id=self.msg_external_id
+            msg_external_id=self.msg_external_id,
+            project_uuid=self.project_uuid,
         )
 
-        # Verify if requests.post was called twice
-        self.assertEqual(mock_post.call_count, 2)
+        mock_auth_instance.make_request_with_retry.assert_called_once()
 
-        # Get arguments from the second call (the main call)
-        args, kwargs = mock_post.call_args_list[1]
+        _, kwargs = mock_auth_instance.make_request_with_retry.call_args
 
-        # Verify the URL
-        self.assertEqual(args[0], f"{settings.FLOWS_REST_ENDPOINT}/api/v2/whatsapp_broadcasts.json")
+        expected_url = f"{settings.FLOWS_REST_ENDPOINT}/api/v2/internals/whatsapp_broadcasts"
+        self.assertEqual(kwargs["url"], expected_url)
 
-        # Verify the request body
         expected_body = {
             "urns": [self.contact_urn],
+            "project": self.project_uuid,
             "msg": {
-                "msg_external_id": self.msg_external_id,
-                "action_type": "msg/typing_indicator"
-            }
+                "action_external_id": self.msg_external_id,
+                "action_type": "typing_indicator",
+            },
         }
-        self.assertEqual(kwargs['json'], expected_body)
-
-        # Verify if headers were passed correctly
-        self.assertIn('headers', kwargs)
-        self.assertIn('Authorization', kwargs['headers'])
-        self.assertTrue(kwargs['headers']['Authorization'].startswith('Bearer '))
+        self.assertEqual(kwargs["json"], expected_body)

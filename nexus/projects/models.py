@@ -13,7 +13,7 @@ class TemplateType(models.Model):
     setup = models.JSONField(default=dict)
 
     def __str__(self) -> str:
-        return f'{self.uuid} - {self.name}'
+        return f"{self.uuid} - {self.name}"
 
 
 class Project(BaseModel, SoftDeleteModel):
@@ -28,14 +28,12 @@ class Project(BaseModel, SoftDeleteModel):
     DEFAULT_BACKEND = "BedrockBackend"
 
     name = models.CharField(max_length=255)
-    org = models.ForeignKey(
-        Org, on_delete=models.CASCADE, related_name='projects'
-    )
+    org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name="projects")
     template_type = models.ForeignKey(
         TemplateType,
         on_delete=models.SET_NULL,
         null=True,
-        related_name='template_type',
+        related_name="template_type",
     )
     is_template = models.BooleanField(default=False)
     brain_on = models.BooleanField(default=False)
@@ -48,6 +46,7 @@ class Project(BaseModel, SoftDeleteModel):
     inline_agent_switch = models.BooleanField(default=False)
     use_components = models.BooleanField(default=False)
     default_supervisor_foundation_model = models.CharField(max_length=100, blank=True, null=True)
+    default_collaborators_foundation_model = models.CharField(max_length=100, blank=True, null=True)
     use_prompt_creation_configurations = models.BooleanField(default=True)
     conversation_turns_to_include = models.IntegerField(default=10)
     exclude_previous_thinking_steps = models.BooleanField(default=True)
@@ -55,12 +54,12 @@ class Project(BaseModel, SoftDeleteModel):
         "inline_agents.Guardrail",
         on_delete=models.SET_NULL,
         null=True,
-        related_name='project',
+        related_name="project",
         blank=True,
     )
 
     def __str__(self):
-        return f'{self.uuid} - Project: {self.name} - Org: {self.org.name}'
+        return f"{self.uuid} - Project: {self.name} - Org: {self.org.name}"
 
     def get_user_authorization(self, user_email):
         return self.authorizations.get(user__email=user_email)
@@ -68,7 +67,7 @@ class Project(BaseModel, SoftDeleteModel):
     @property
     def is_multi_agent(self):
         try:
-            self.team
+            _ = self.team
             return True
         except Exception:
             return False
@@ -83,38 +82,36 @@ class ProjectAuthorizationRole(Enum):
 
 
 class ProjectAuth(models.Model):
-    class Meta:
-        unique_together = ['user', 'project']
-
     ROLE_CHOICES = [
-        (ProjectAuthorizationRole.NOT_SETTED.value, 'not set'),
-        (ProjectAuthorizationRole.VIEWER.value, 'viewer'),
-        (ProjectAuthorizationRole.CONTRIBUTOR.value, 'contributor'),
-        (ProjectAuthorizationRole.MODERATOR.value, 'moderator'),
-        (ProjectAuthorizationRole.SUPPORT.value, 'support'),
-        (ProjectAuthorizationRole.CHAT_USER.value, 'chat user'),
+        (ProjectAuthorizationRole.NOT_SETTED.value, "not set"),
+        (ProjectAuthorizationRole.VIEWER.value, "viewer"),
+        (ProjectAuthorizationRole.CONTRIBUTOR.value, "contributor"),
+        (ProjectAuthorizationRole.MODERATOR.value, "moderator"),
+        (ProjectAuthorizationRole.SUPPORT.value, "support"),
+        (ProjectAuthorizationRole.CHAT_USER.value, "chat user"),
     ]
 
-    project = models.ForeignKey(
-        Project, on_delete=models.CASCADE, related_name='authorizations'
-    )
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="authorizations")
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='project_authorizations',
+        related_name="project_authorizations",
     )
     role = models.PositiveIntegerField(choices=ROLE_CHOICES)
     is_active = models.BooleanField(default=True)
 
+    class Meta:
+        unique_together = ["user", "project"]
+
     def __str__(self):
-        return f'{self.user} - {self.project} - {self.role}'
+        return f"{self.user} - {self.project} - {self.role}"
 
 
 class IntegratedFeature(models.Model):
-
     feature_uuid = models.UUIDField()
-    project = models.ForeignKey(
-        Project, on_delete=models.CASCADE, related_name='integrated_features'
-    )
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="integrated_features")
     current_version_setup = models.JSONField(default=list)
     is_integrated = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"IntegratedFeature - {self.project} - {self.feature_uuid}"

@@ -1,10 +1,9 @@
+from django.conf import settings
 from rest_framework import permissions
 from rest_framework.exceptions import ValidationError
 
-from nexus.projects.permissions import has_external_general_project_permission
 from nexus.projects.models import ProjectAuth
-
-from django.conf import settings
+from nexus.projects.permissions import has_external_general_project_permission
 
 
 class ProjectPermission(permissions.BasePermission):
@@ -24,19 +23,17 @@ class ProjectPermission(permissions.BasePermission):
             project_uuid = next(iter(uuids))
 
             return has_external_general_project_permission(
-                request=request,
-                project_uuid=project_uuid,
-                method=request.method
+                request=request, project_uuid=project_uuid, method=request.method
             )
         except (ProjectAuth.DoesNotExist, StopIteration):
             return False
         except Exception as e:
-            raise ValidationError({"detail": f"An error occurred: {str(e)}"})
+            raise ValidationError({"detail": f"An error occurred: {str(e)}"}) from e
 
 
 class ExternalTokenPermission(permissions.BasePermission):
     def has_permission(self, request, view):
-        authorization_header = request.headers.get('Authorization')
+        authorization_header = request.headers.get("Authorization")
 
         if not authorization_header:
             return False
@@ -50,15 +47,14 @@ class ExternalTokenPermission(permissions.BasePermission):
 
 
 class CombinedExternalProjectPermission(permissions.BasePermission):
-    """
-    Permission class that allows access if either ExternalTokenPermission OR ProjectPermission passes.
-    """
     def has_permission(self, request, view):
-        # Check ExternalTokenPermission first
         external_token_permission = ExternalTokenPermission()
         if external_token_permission.has_permission(request, view):
             return True
 
-        # If ExternalTokenPermission fails, check ProjectPermission
-        project_permission = ProjectPermission()
-        return project_permission.has_permission(request, view)
+        authorization_header = request.headers.get("Authorization")
+        if authorization_header:
+            project_permission = ProjectPermission()
+            return project_permission.has_permission(request, view)
+
+        return False

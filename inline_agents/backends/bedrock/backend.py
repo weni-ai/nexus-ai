@@ -1,31 +1,32 @@
 import logging
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional
 
 import boto3
 from django.template.defaultfilters import slugify
 
+from inline_agents.adapter import DataLakeEventAdapter
 from inline_agents.backend import InlineAgentsBackend
 from nexus.environment import env
 from nexus.inline_agents.backends.bedrock.repository import (
     BedrockSupervisorRepository,
 )
+from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
+from router.handler import PostMessageHandler
 from router.traces_observers.save_traces import save_inline_message_to_database
 
-from .adapter import BedrockTeamAdapter, BedrockDataLakeEventAdapter
-from inline_agents.adapter import DataLakeEventAdapter
-from nexus.projects.models import Project
-
+from .adapter import BedrockDataLakeEventAdapter, BedrockTeamAdapter
 
 logger = logging.getLogger(__name__)
 
 
 def _get_lambda_usecase():
     from nexus.usecases.intelligences.lambda_usecase import LambdaUseCase
+
     return LambdaUseCase()
 
 
@@ -33,7 +34,7 @@ class BedrockBackend(InlineAgentsBackend):
     supervisor_repository = BedrockSupervisorRepository
     team_adapter = BedrockTeamAdapter
 
-    REGION_NAME = env.str('AWS_BEDROCK_REGION_NAME')
+    REGION_NAME = env.str("AWS_BEDROCK_REGION_NAME")
 
     def __init__(self):
         super().__init__()
@@ -41,11 +42,12 @@ class BedrockBackend(InlineAgentsBackend):
         self._data_lake_event_adapter = None
 
     def _get_client(self):
-        return boto3.client('bedrock-agent-runtime', region_name=self.REGION_NAME)
+        return boto3.client("bedrock-agent-runtime", region_name=self.REGION_NAME)
 
     def _get_event_manager_notify(self):
         if self._event_manager_notify is None:
             from nexus.events import event_manager
+
             self._event_manager_notify = event_manager.notify
         return self._event_manager_notify
 
@@ -88,10 +90,7 @@ class BedrockBackend(InlineAgentsBackend):
 
         typing_usecase = TypingUsecase()
         typing_usecase.send_typing_message(
-            contact_urn=contact_urn,
-            msg_external_id=msg_external_id,
-            project_uuid=project_uuid,
-            preview=preview
+            contact_urn=contact_urn, msg_external_id=msg_external_id, project_uuid=project_uuid, preview=preview
         )
 
         jwt_usecase = JWTUsecase()
@@ -108,11 +107,13 @@ class BedrockBackend(InlineAgentsBackend):
             contact_name=contact_name,
             channel_uuid=channel_uuid,
             auth_token=auth_token,
-            sanitized_urn=sanitized_urn
+            sanitized_urn=sanitized_urn,
+            project=project,
+            content_base=kwargs.get("content_base"),
         )
 
         if use_prompt_creation_configurations:
-            external_team["promptCreationConfigurations"] = { 
+            external_team["promptCreationConfigurations"] = {
                 "excludePreviousThinkingSteps": exclude_previous_thinking_steps,
                 "previousConversationTurnsToInclude": conversation_turns_to_include,
             }
@@ -130,7 +131,7 @@ class BedrockBackend(InlineAgentsBackend):
             session_id=session_id,
             source_type="user",
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
         )
         print(f"[DEBUG] Session ID: {session_id}")
         print(f"[DEBUG] Log: {log}")
@@ -144,8 +145,8 @@ class BedrockBackend(InlineAgentsBackend):
                 message_data={
                     "type": "status",
                     "content": "Starting Bedrock agent processing",
-                    "session_id": session_id
-                }
+                    "session_id": session_id,
+                },
             )
 
         response = client.invoke_inline_agent(**external_team)
@@ -156,8 +157,8 @@ class BedrockBackend(InlineAgentsBackend):
         rationale_traces = []
 
         for event in completion:
-            if 'chunk' in event:
-                chunk = event['chunk']['bytes'].decode()
+            if "chunk" in event:
+                chunk = event["chunk"]["bytes"].decode()
                 full_response += chunk
 
                 # Send chunk through WebSocket if in preview mode and user_email is provided
@@ -165,24 +166,24 @@ class BedrockBackend(InlineAgentsBackend):
                     send_preview_message_to_websocket(
                         project_uuid=str(project_uuid),
                         user_email=user_email,
-                        message_data={
-                            "type": "chunk",
-                            "content": chunk,
-                            "session_id": session_id
-                        }
+                        message_data={"type": "chunk", "content": chunk, "session_id": session_id},
                     )
 
                 print("------------------------------------------")
                 print("Chunk: ", event)
                 print("------------------------------------------")
 
-            if 'trace' in event:
+            if "trace" in event:
                 # Store the trace event for potential use
-                trace_data = event['trace']
+                trace_data = event["trace"]
                 collaborator_name = event.get("collaboratorName", "")
                 trace_events.append(trace_data)
 
                 orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
+
+                collaborator_foundation_model = orchestration_trace.get("modelInvocationInput", {}).get(
+                    "foundationModel", ""
+                )
 
                 self._data_lake_event_adapter.custom_event_data(
                     inline_trace=trace_data,
@@ -190,14 +191,18 @@ class BedrockBackend(InlineAgentsBackend):
                     contact_urn=contact_urn,
                     channel_uuid=channel_uuid,
                     preview=preview,
-                    collaborator_name=collaborator_name
+                    collaborator_name=collaborator_name,
                 )
 
                 self._data_lake_event_adapter.to_data_lake_event(
                     inline_trace=trace_data,
                     project_uuid=project_uuid,
                     contact_urn=contact_urn,
-                    preview=preview
+                    preview=preview,
+                    backend="bedrock",
+                    foundation_model=collaborator_foundation_model
+                    if collaborator_foundation_model
+                    else supervisor.get("foundation_model", ""),
                 )
 
                 if "rationale" in orchestration_trace:
@@ -208,7 +213,7 @@ class BedrockBackend(InlineAgentsBackend):
                         contact_urn=contact_urn,
                         project_uuid=project_uuid,
                         msg_external_id=msg_external_id,
-                        preview=preview
+                        preview=preview,
                     )
 
                 # Notify observers about the trace
@@ -226,7 +231,7 @@ class BedrockBackend(InlineAgentsBackend):
                     session_id=session_id,
                     msg_external_id=msg_external_id,
                     turn_off_rationale=turn_off_rationale,
-                    channel_uuid=channel_uuid
+                    channel_uuid=channel_uuid,
                 )
 
                 if "rationale" in orchestration_trace and msg_external_id and not preview:
@@ -234,7 +239,7 @@ class BedrockBackend(InlineAgentsBackend):
                         contact_urn=contact_urn,
                         project_uuid=project_uuid,
                         msg_external_id=msg_external_id,
-                        preview=preview
+                        preview=preview,
                     )
 
                 print("------------------------------------------")
@@ -243,7 +248,7 @@ class BedrockBackend(InlineAgentsBackend):
 
         # Saving traces on s3
         self._event_manager_notify(
-            event='save_inline_trace_events',
+            event="save_inline_trace_events",
             trace_events=trace_events,
             project_uuid=project_uuid,
             user_input=input_text,
@@ -253,18 +258,14 @@ class BedrockBackend(InlineAgentsBackend):
             session_id=session_id,
             source_type="agent",  # If user message, source_type="user"
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
         )
 
         if preview and user_email:
             send_preview_message_to_websocket(
                 project_uuid=str(project_uuid),
                 user_email=user_email,
-                message_data={
-                    "type": "status",
-                    "content": "Processing complete",
-                    "session_id": session_id
-                }
+                message_data={"type": "status", "content": "Processing complete", "session_id": session_id},
             )
 
         rationale_texts = self._extract_rationale_text(rationale_traces)
@@ -273,12 +274,12 @@ class BedrockBackend(InlineAgentsBackend):
             full_response=full_response,
         )
 
+        post_message_handler = PostMessageHandler()
+        full_response = post_message_handler.handle_post_message(full_response)
+
         if "rationale" in orchestration_trace and msg_external_id and not preview:
             typing_usecase.send_typing_message(
-                contact_urn=contact_urn,
-                project_uuid=project_uuid,
-                msg_external_id=msg_external_id,
-                preview=preview
+                contact_urn=contact_urn, project_uuid=project_uuid, msg_external_id=msg_external_id, preview=preview
             )
 
         return full_response
@@ -298,12 +299,12 @@ class BedrockBackend(InlineAgentsBackend):
         rationale_texts = []
         try:
             for trace_data in rationale_traces:
-                if 'trace' in trace_data:
-                    inner_trace = trace_data['trace']
-                    if 'orchestrationTrace' in inner_trace:
-                        orchestration = inner_trace['orchestrationTrace']
-                        if 'rationale' in orchestration:
-                            rationale_texts.append(orchestration['rationale'].get('text'))
+                if "trace" in trace_data:
+                    inner_trace = trace_data["trace"]
+                    if "orchestrationTrace" in inner_trace:
+                        orchestration = inner_trace["orchestrationTrace"]
+                        if "rationale" in orchestration:
+                            rationale_texts.append(orchestration["rationale"].get("text"))
             return rationale_texts
         except Exception as e:
             logger.error(f"Error extracting rationale text: {str(e)}", exc_info=True)
@@ -319,13 +320,13 @@ class BedrockBackend(InlineAgentsBackend):
             instruction=supervisor["instruction"],
             foundationModel=supervisor["foundation_model"],
             endSession=True,
-            sessionId=session_id
+            sessionId=session_id,
         )
 
         full_response = ""
         for event in response["completion"]:
-            if 'chunk' in event:
-                chunk = event['chunk']['bytes'].decode()
+            if "chunk" in event:
+                chunk = event["chunk"]["bytes"].decode()
                 full_response += chunk
 
         return full_response

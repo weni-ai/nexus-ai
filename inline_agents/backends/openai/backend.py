@@ -1,27 +1,34 @@
+# ruff: noqa: E501
 import asyncio
-import json
-import os
-from dataclasses import asdict, dataclass
-from datetime import datetime
-from typing import Any, Dict, List
+import logging
+from typing import Any, Dict
 
 import pendulum
-from agents import Agent, Runner
+import sentry_sdk
+from agents import Agent, ModelSettings, Runner, trace
+from agents.agent import ToolsToFinalOutputResult
 from django.conf import settings
+from langfuse import get_client
 from redis import Redis
 
 from inline_agents.backend import InlineAgentsBackend
 from inline_agents.backends.openai.adapter import (
-    OpenAITeamAdapter,
     OpenAIDataLakeEventAdapter,
+    OpenAITeamAdapter,
 )
-from inline_agents.backends.openai.hooks import SupervisorHooks, RunnerHooks
+from inline_agents.backends.openai.components_tools import COMPONENT_TOOLS
+from inline_agents.backends.openai.entities import FinalResponse
+from inline_agents.backends.openai.hooks import (
+    HooksState,
+    RunnerHooks,
+    SupervisorHooks,
+)
 from inline_agents.backends.openai.sessions import (
     RedisSession,
     make_session_factory,
 )
-from nexus.inline_agents.backends.openai.models import (
-    OpenAISupervisor as Supervisor,
+from nexus.inline_agents.backends.openai.repository import (
+    OpenAISupervisorRepository,
 )
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.intelligences.models import ContentBase
@@ -29,138 +36,10 @@ from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import (
     send_preview_message_to_websocket,
 )
+from nexus.usecases.jwt.jwt_usecase import JWTUsecase
+from router.traces_observers.save_traces import save_inline_message_to_database
 
-
-@dataclass
-class StreamEventCapture:
-    timestamp: str
-    event_type: str
-    event_data: Dict[str, Any]
-    agent_name: str = ""
-
-
-class StreamEventLogger:
-    def __init__(self, output_file: str = "stream_events.json"):
-        self.output_file = output_file
-        self.events: List[StreamEventCapture] = []
-
-    def convert_event(self, event, agent_name: str = ""):
-        try:
-            event_data = {}
-
-            if hasattr(event, 'type'):
-                event_data['type'] = event.type
-
-            if hasattr(event, 'data'):
-                event_data['data'] = self._serialize_data(event.data)
-
-            if hasattr(event, 'item'):
-                event_data['item'] = self._serialize_data(event.item)
-
-            if hasattr(event, 'name'):
-                event_data['name'] = event.name
-
-            if hasattr(event, 'new_agent'):
-                event_data['new_agent'] = self._serialize_data(event.new_agent)
-
-            captured_event = StreamEventCapture(
-                timestamp=datetime.now().isoformat(),
-                event_type=event.type if hasattr(event, 'type') else str(type(event)),
-                event_data=event_data,
-                agent_name=agent_name
-            )
-            return captured_event
-
-        except Exception as e:
-            print(f"❌ Error capturing event: {e}")
-
-    def _serialize_data(self, data) -> Any:
-        try:
-            if hasattr(data, '__dict__'):
-                return {k: self._serialize_data(v) for k, v in data.__dict__.items()}
-            elif isinstance(data, (list, tuple)):
-                return [self._serialize_data(item) for item in data]
-            elif isinstance(data, dict):
-                return {k: self._serialize_data(v) for k, v in data.items()}
-            else:
-                return str(data)
-        except:
-            return str(data)
-
-    def save_to_json(self, directory: str = 'events') -> str:
-        try:
-            events_data = []
-            for event in self.events:
-                events_data.append(asdict(event))
-
-            os.makedirs(directory, exist_ok=True)
-
-            output_path = os.path.join(directory, os.path.basename(self.output_file))
-
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(events_data, f, indent=2, ensure_ascii=False)
-
-            print(f"✅ Events saved at: {output_path}")
-            return output_path
-
-        except Exception as e:
-            print(f"❌ Error saving events: {e}")
-            return ""
-
-    def get_events_summary(self) -> Dict[str, Any]:
-        event_types = {}
-        for event in self.events:
-            event_type = event.event_type
-            if event_type not in event_types:
-                event_types[event_type] = 0
-            event_types[event_type] += 1
-
-        return {
-            "total_events": len(self.events),
-            "event_types": event_types,
-            "duration": f"{self.events[-1].timestamp} - {self.events[0].timestamp}" if self.events else "N/A"
-        }
-
-
-class OpenAISupervisorRepository:
-    @classmethod
-    def get_supervisor(
-        cls,
-        project: Project,
-        foundation_model: str = None,
-    ) -> Agent:
-
-        supervisor = Supervisor.objects.order_by('id').last()
-
-        if not supervisor:
-            raise Supervisor.DoesNotExist()
-
-        supervisor_dict = {
-            "instruction": cls._get_supervisor_instructions(project=project, supervisor=supervisor),
-            "tools": cls._get_supervisor_tools(project=project, supervisor=supervisor),
-            "foundation_model": supervisor.foundation_model,
-            "knowledge_bases": supervisor.knowledge_bases,
-            "prompt_override_configuration": supervisor.prompt_override_configuration,
-        }
-
-        return supervisor_dict
-
-    @classmethod
-    def _get_supervisor_instructions(cls, project, supervisor) -> str:
-        if project.use_components and project.human_support:
-            return supervisor.components_human_support_prompt
-        elif project.use_components:
-            return supervisor.components_prompt
-        elif project.human_support:
-            return supervisor.human_support_prompt
-        else:
-            return supervisor.instruction
-
-    @classmethod
-    def _get_supervisor_tools(cls, project, supervisor) -> list[dict]:
-        if project.human_support:
-            return supervisor.human_support_action_groups
-        return supervisor.action_groups
+logger = logging.getLogger(__name__)
 
 
 class OpenAIBackend(InlineAgentsBackend):
@@ -171,7 +50,8 @@ class OpenAIBackend(InlineAgentsBackend):
         super().__init__()
         self._event_manager_notify = None
         self._data_lake_event_adapter = None
-    
+        self.langfuse_c = get_client()
+
     def _get_data_lake_event_adapter(self):
         if self._data_lake_event_adapter is None:
             self._data_lake_event_adapter = OpenAIDataLakeEventAdapter()
@@ -180,15 +60,31 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_client(self):
         return Runner()
 
-    def _get_session(self, project_uuid: str, sanitized_urn: str) -> tuple[RedisSession, str]:
+    def _get_session(
+        self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None
+    ) -> tuple[RedisSession, str]:
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
-        return RedisSession(session_id=session_id, r=redis_client), session_id
+        return RedisSession(
+            session_id=session_id,
+            r=redis_client,
+            project_uuid=project_uuid,
+            sanitized_urn=sanitized_urn,
+            limit=conversation_turns_to_include,
+        ), session_id
 
-    def _get_session_factory(self, project_uuid: str, sanitized_urn: str):
+    def _get_session_factory(
+        self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None
+    ):
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
-        return make_session_factory(redis=redis_client, base_id=session_id)
+        return make_session_factory(
+            redis=redis_client,
+            base_id=session_id,
+            project_uuid=project_uuid,
+            sanitized_urn=sanitized_urn,
+            limit=conversation_turns_to_include,
+        )
 
     def end_session(self, project_uuid: str, sanitized_urn: str):
         session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
@@ -197,6 +93,7 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_event_manager_notify(self):
         if self._event_manager_notify is None:
             from nexus.events import async_event_manager
+
             self._event_manager_notify = async_event_manager.notify
         return self._event_manager_notify
 
@@ -221,15 +118,35 @@ class OpenAIBackend(InlineAgentsBackend):
         turn_off_rationale: bool = False,
         event_manager_notify: callable = None,
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
-        **kwargs
+        **kwargs,
     ):
+        turns_to_include = None
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
-        session_factory = self._get_session_factory(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
-        session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
+        session_factory = self._get_session_factory(
+            project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
+        )
+        session, session_id = self._get_session(
+            project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
+        )
 
         supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
+        data_lake_event_adapter = self._get_data_lake_event_adapter()
+
+        hooks_state = HooksState(agents=team)
+
+        save_inline_message_to_database(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            text=input_text,
+            preview=preview,
+            session_id=session_id,
+            source_type="user",
+            contact_name=contact_name,
+            channel_uuid=channel_uuid,
+        )
+
         supervisor_hooks = SupervisorHooks(
-            supervisor_name="manager",
+            agent_name="manager",
             preview=preview,
             rationale_switch=rationale_switch,
             language=language,
@@ -239,7 +156,8 @@ class OpenAIBackend(InlineAgentsBackend):
             turn_off_rationale=turn_off_rationale,
             event_manager_notify=self._event_manager_notify,
             agents=team,
-            data_lake_event_adapter=self._get_data_lake_event_adapter(),
+            hooks_state=hooks_state,
+            data_lake_event_adapter=data_lake_event_adapter,
         )
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
@@ -252,7 +170,12 @@ class OpenAIBackend(InlineAgentsBackend):
             turn_off_rationale=turn_off_rationale,
             event_manager_notify=self._event_manager_notify,
             agents=team,
+            hooks_state=hooks_state,
         )
+
+        jwt_usecase = JWTUsecase()
+        auth_token = jwt_usecase.generate_jwt_token(project_uuid)
+
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
             agents=team,
@@ -269,6 +192,18 @@ class OpenAIBackend(InlineAgentsBackend):
             inline_agent_configuration=inline_agent_configuration,
             session_factory=session_factory,
             session=session,
+            data_lake_event_adapter=data_lake_event_adapter,
+            preview=preview,
+            hooks_state=hooks_state,
+            event_manager_notify=self._event_manager_notify,
+            rationale_switch=rationale_switch,
+            language=language,
+            user_email=user_email,
+            session_id=session_id,
+            msg_external_id=msg_external_id,
+            turn_off_rationale=turn_off_rationale,
+            auth_token=auth_token,
+            use_components=use_components,
         )
 
         client = self._get_client()
@@ -280,17 +215,87 @@ class OpenAIBackend(InlineAgentsBackend):
                 message_data={
                     "type": "status",
                     "content": "Starting OpenAI agent processing",
-                    "session_id": session_id
-                }
+                    "session_id": session_id,
+                },
             )
 
-        result = asyncio.run(self._invoke_agents_async(
-            client, external_team, session, session_id,
-            input_text, contact_urn, project_uuid, channel_uuid,
-            user_email, preview, rationale_switch, language,
-            turn_off_rationale, msg_external_id, supervisor_hooks, runner_hooks
-        ))
+        result = asyncio.run(
+            self._invoke_agents_async(
+                client,
+                external_team,
+                session,
+                session_id,
+                input_text,
+                contact_urn,
+                project_uuid,
+                channel_uuid,
+                user_email,
+                preview,
+                rationale_switch,
+                language,
+                turn_off_rationale,
+                msg_external_id,
+                supervisor_hooks,
+                runner_hooks,
+                hooks_state,
+                use_components,
+            )
+        )
         return result
+
+    async def _run_formatter_agent_async(
+        self, final_response: str, session, supervisor_hooks, context, formatter_instructions=""
+    ):
+        """Run the formatter agent asynchronously within the trace context"""
+        # Create formatter agent to process the final response
+        formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions)
+
+        # Run the formatter agent with the final response
+        formatter_result = await self._run_formatter_agent(formatter_agent, final_response, session, context)
+
+        return formatter_result
+
+    def _create_formatter_agent(self, supervisor_hooks, formatter_instructions=""):
+        """Create the formatter agent with component tools"""
+
+        def custom_tool_handler(context, tool_results):
+            if tool_results:
+                first_result = tool_results[0]
+                return ToolsToFinalOutputResult(is_final_output=True, final_output=first_result.output)
+            return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
+
+        # Use custom instructions if provided, otherwise use default
+        instructions = (
+            formatter_instructions
+            or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
+        )
+
+        formatter_agent = Agent(
+            name="Response Formatter Agent",
+            instructions=instructions,
+            model=settings.FORMATTER_AGENT_MODEL,
+            tools=COMPONENT_TOOLS,
+            hooks=supervisor_hooks,
+            tool_use_behavior=custom_tool_handler,
+            model_settings=ModelSettings(tool_choice="required", parallel_tool_calls=False),
+        )
+        return formatter_agent
+
+    async def _run_formatter_agent(self, formatter_agent, final_response, session, context):
+        """Run the formatter agent with the final response"""
+        try:
+            # Create a FinalResponse object for the formatter agent
+            result = await Runner.run(
+                starting_agent=formatter_agent,
+                input=final_response,
+                context=context,
+                session=session,
+            )
+            return result.final_output
+        except Exception as e:
+            print(f"Error in formatter agent: {e}")
+            # Return the original response if formatter fails
+            return final_response
 
     async def _invoke_agents_async(
         self,
@@ -310,24 +315,117 @@ class OpenAIBackend(InlineAgentsBackend):
         msg_external_id,
         supervisor_hooks,
         runner_hooks,
+        hooks_state,
+        use_components,
     ):
         """Async wrapper to handle the streaming response"""
-
-        event_logger = StreamEventLogger(f"{session_id}{pendulum.now()}.json")
-
-        result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
-
-        async for event in result.stream_events():
-            if event.type == "run_item_stream_event":
+        with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
+            trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
+            print(f"[+ DEBUG +] Trace ID: {trace_id}")
+            with trace(workflow_name=project_uuid, trace_id=trace_id):
+                # Extract formatter_agent_instructions before passing to Runner.run_streamed
+                formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
+                result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
                 
-                if hasattr(event, 'item') and event.item.type == "tool_call_item":
-                    supervisor_hooks.tool_calls.update(
-                        {
-                            event.item.raw_item.name:event.item.raw_item.arguments
-                        }
+                try:
+                    async for event in result.stream_events():
+                        if event.type == "run_item_stream_event":
+                            if hasattr(event, "item") and event.item.type == "tool_call_item":
+                                hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
+                except Exception as stream_error:
+                    logger.error(
+                        f"[OpenAIBackend] Streaming error during agent execution: {stream_error}",
+                        extra={
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "session_id": session_id,
+                            "error_type": type(stream_error).__name__,
+                            "error_message": str(stream_error),
+                            "input_text": input_text[:500] if input_text else None, 
+                        },
                     )
-                    print("------------------------------------------")
-                    print("1. Tool call item: ", supervisor_hooks.tool_calls)
-                    print("------------------------------------------")
+                    
+                    sentry_sdk.set_context(
+                        "streaming_error",
+                        {
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "session_id": session_id,
+                            "error_type": type(stream_error).__name__,
+                            "error_message": str(stream_error),
+                            "input_text_preview": input_text[:200] if input_text else None,
+                        },
+                    )
+                    sentry_sdk.set_tag("project_uuid", project_uuid)
+                    sentry_sdk.set_tag("error_type", "streaming_error")
+                    sentry_sdk.capture_exception(stream_error)
+                    
+                    root_span.update_trace(
+                        input=input_text,
+                        output=final_response,
+                        metadata={
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "preview": preview,
+                            "error": True,
+                            "error_type": type(stream_error).__name__,
+                            "error_message": str(stream_error)[:500],
+                        },
+                    )
+                    
+                    if use_components and final_response:
+                        try:
+                            formatted_response = await self._run_formatter_agent_async(
+                                final_response,
+                                session,
+                                supervisor_hooks,
+                                external_team["context"],
+                                formatter_agent_instructions,
+                            )
+                            final_response = formatted_response
+                        except Exception as formatter_error:
+                            logger.error(
+                                f"[OpenAIBackend] Error in formatter agent after streaming error: {formatter_error}",
+                                extra={
+                                    "project_uuid": project_uuid,
+                                    "contact_urn": contact_urn,
+                                },
+                            )
+                    
+                    return final_response
+                
+                final_response = self._get_final_response(result)
 
-        return result.final_output
+                # If use_components is True, process the result through the formatter agent
+                if use_components:
+                    formatted_response = await self._run_formatter_agent_async(
+                        final_response,
+                        session,
+                        supervisor_hooks,
+                        external_team["context"],
+                        formatter_agent_instructions,
+                    )
+                    final_response = formatted_response
+
+                root_span.update_trace(
+                    input=input_text,
+                    output=final_response,
+                    metadata={
+                        "project_uuid": project_uuid,
+                        "contact_urn": contact_urn,
+                        "channel_uuid": channel_uuid,
+                        "preview": preview,
+                    },
+                )
+
+        return final_response
+
+    def _get_final_response(self, result):
+        if isinstance(result.final_output, FinalResponse):
+            final_response = result.final_output.final_response
+        else:
+            final_response = result.final_output
+        return final_response

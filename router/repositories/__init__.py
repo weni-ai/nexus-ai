@@ -1,5 +1,4 @@
-from abc import ABC, abstractmethod
+class Repository:
+    """Base repository class."""
 
-
-class Repository(ABC):
     pass

@@ -1,15 +1,13 @@
 import os
-import django
 
+import django
 from django.test import TestCase
 
 from nexus.logs.models import MessageLog
-from nexus.usecases.logs.tests.logs_factory import MessageLogFactory
 from nexus.usecases.logs.create import CreateLogUsecase
-
-from router.repositories import orm
+from nexus.usecases.logs.tests.logs_factory import MessageLogFactory
 from router.entities import ContactMessageDTO
-
+from router.repositories import orm
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
@@ -17,7 +15,6 @@ django.setup()
 
 
 class TestFlowsORMRepository(TestCase):
-
     def setUp(self) -> None:
         self.msg_log: MessageLog = MessageLogFactory()
         self.repository = orm.MessageLogsRepository()

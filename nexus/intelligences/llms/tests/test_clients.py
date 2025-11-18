@@ -1,12 +1,12 @@
 import uuid
-from typing import List, Dict
+from typing import Dict, List
 
-from django.test import TestCase
-from nexus.intelligences.llms.wenigpt import WeniGPTClient
-from nexus.intelligences.llms.exceptions import WeniGPTInvalidVersionError
-
-from router.entities import ContactMessageDTO, AgentDTO
 from django.conf import settings
+from django.test import TestCase
+
+from nexus.intelligences.llms.exceptions import WeniGPTInvalidVersionError
+from nexus.intelligences.llms.wenigpt import WeniGPTClient
+from router.entities import AgentDTO, ContactMessageDTO
 
 
 class WenigptClientTestCase(TestCase):
@@ -30,22 +30,52 @@ class WenigptClientTestCase(TestCase):
 
     def test(self):
         last_messages = [
-            ContactMessageDTO(contact_urn="", text="QUESTION I", llm_respose="ANSWER I", content_base_uuid=self.content_base_uuid, project_uuid=self.project_uuid),
-            ContactMessageDTO(contact_urn="", text="QUESTION II", llm_respose="ANSWER II", content_base_uuid=self.content_base_uuid, project_uuid=self.project_uuid),
-            ContactMessageDTO(contact_urn="", text="QUESTION III", llm_respose="ANSWER III", content_base_uuid=self.content_base_uuid, project_uuid=self.project_uuid),
-            ContactMessageDTO(contact_urn="", text="QUESTION IV", llm_respose="ANSWER IV", content_base_uuid=self.content_base_uuid, project_uuid=self.project_uuid),
-            ContactMessageDTO(contact_urn="", text="QUESTION V", llm_respose="ANSWER V", content_base_uuid=self.content_base_uuid, project_uuid=self.project_uuid),
+            ContactMessageDTO(
+                contact_urn="",
+                text="QUESTION I",
+                llm_respose="ANSWER I",
+                content_base_uuid=self.content_base_uuid,
+                project_uuid=self.project_uuid,
+            ),
+            ContactMessageDTO(
+                contact_urn="",
+                text="QUESTION II",
+                llm_respose="ANSWER II",
+                content_base_uuid=self.content_base_uuid,
+                project_uuid=self.project_uuid,
+            ),
+            ContactMessageDTO(
+                contact_urn="",
+                text="QUESTION III",
+                llm_respose="ANSWER III",
+                content_base_uuid=self.content_base_uuid,
+                project_uuid=self.project_uuid,
+            ),
+            ContactMessageDTO(
+                contact_urn="",
+                text="QUESTION IV",
+                llm_respose="ANSWER IV",
+                content_base_uuid=self.content_base_uuid,
+                project_uuid=self.project_uuid,
+            ),
+            ContactMessageDTO(
+                contact_urn="",
+                text="QUESTION V",
+                llm_respose="ANSWER V",
+                content_base_uuid=self.content_base_uuid,
+                project_uuid=self.project_uuid,
+            ),
         ]
         prompt = self.client.format_prompt(self.instructions, self.chunks, self.agent, self.question, last_messages)
         assert "{{" not in prompt
         assert "}}" not in prompt
 
     def test_url(self):
-        self.assertEquals(self.client.url, settings.WENIGPT_API_URL)
+        self.assertEqual(self.client.url, settings.WENIGPT_API_URL)
         self.client = WeniGPTClient(settings.WENIGPT_SHARK)
-        self.assertEquals(self.client.url, settings.WENIGPT_SHARK_API_URL)
+        self.assertEqual(self.client.url, settings.WENIGPT_SHARK_API_URL)
         self.client = WeniGPTClient(settings.WENIGPT_TEST)
-        self.assertEquals(self.client.url, settings.WENIGPT_TEST_API_URL)
+        self.assertEqual(self.client.url, settings.WENIGPT_TEST_API_URL)
 
     def test_fail(self):
         with self.assertRaises(WeniGPTInvalidVersionError):
@@ -53,21 +83,21 @@ class WenigptClientTestCase(TestCase):
 
     def test_golfinho_prompts(self):
         client = WeniGPTClient(settings.WENIGPT_GOLFINHO)
-        self.assertEquals(client.prompt_with_context, settings.WENIGPT_CONTEXT_PROMPT)
-        self.assertEquals(client.prompt_without_context, settings.WENIGPT_NO_CONTEXT_PROMPT)
-        self.assertEquals(client.pairs_template_prompt, settings.WENIGPT_PAIRS_TEMPLATE_PROMPT)
-        self.assertEquals(client.next_question_template_prompt, settings.WENIGPT_NEXT_QUESTION_TEMPLATE_PROMPT)
+        self.assertEqual(client.prompt_with_context, settings.WENIGPT_CONTEXT_PROMPT)
+        self.assertEqual(client.prompt_without_context, settings.WENIGPT_NO_CONTEXT_PROMPT)
+        self.assertEqual(client.pairs_template_prompt, settings.WENIGPT_PAIRS_TEMPLATE_PROMPT)
+        self.assertEqual(client.next_question_template_prompt, settings.WENIGPT_NEXT_QUESTION_TEMPLATE_PROMPT)
 
     def test_shark_prompts(self):
         client = WeniGPTClient(settings.WENIGPT_SHARK)
-        self.assertEquals(client.prompt_with_context, settings.WENIGPT_SHARK_CONTEXT_PROMPT)
-        self.assertEquals(client.prompt_without_context, settings.WENIGPT_SHARK_NO_CONTEXT_PROMPT)
-        self.assertEquals(client.pairs_template_prompt, settings.WENIGPT_SHARK_PAIRS_TEMPLATE_PROMPT)
-        self.assertEquals(client.next_question_template_prompt, settings.WENIGPT_SHARK_NEXT_QUESTION_TEMPLATE_PROMPT)
+        self.assertEqual(client.prompt_with_context, settings.WENIGPT_SHARK_CONTEXT_PROMPT)
+        self.assertEqual(client.prompt_without_context, settings.WENIGPT_SHARK_NO_CONTEXT_PROMPT)
+        self.assertEqual(client.pairs_template_prompt, settings.WENIGPT_SHARK_PAIRS_TEMPLATE_PROMPT)
+        self.assertEqual(client.next_question_template_prompt, settings.WENIGPT_SHARK_NEXT_QUESTION_TEMPLATE_PROMPT)
 
     def test_wenigpt_test_prompts(self):
-        client = WeniGPTClient(settings.WENIGPT_SHARK)
-        self.assertEquals(client.prompt_with_context, settings.WENIGPT_TEST_CONTEXT_PROMPT)
-        self.assertEquals(client.prompt_without_context, settings.WENIGPT_TEST_NO_CONTEXT_PROMPT)
-        self.assertEquals(client.pairs_template_prompt, settings.WENIGPT_TEST_PAIRS_TEMPLATE_PROMPT)
-        self.assertEquals(client.next_question_template_prompt, settings.WENIGPT_TEST_NEXT_QUESTION_TEMPLATE_PROMPT)
+        client = WeniGPTClient(settings.WENIGPT_TEST)
+        self.assertEqual(client.prompt_with_context, settings.WENIGPT_TEST_CONTEXT_PROMPT)
+        self.assertEqual(client.prompt_without_context, settings.WENIGPT_TEST_NO_CONTEXT_PROMPT)
+        self.assertEqual(client.pairs_template_prompt, settings.WENIGPT_TEST_PAIRS_TEMPLATE_PROMPT)
+        self.assertEqual(client.next_question_template_prompt, settings.WENIGPT_TEST_NEXT_QUESTION_TEMPLATE_PROMPT)

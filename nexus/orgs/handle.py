@@ -1,7 +1,7 @@
 from amqp.channel import Channel
 
-from .consumers.org_consumer import OrgConsumer
 from .consumers.org_auth_consumer import OrgAuthConsumer
+from .consumers.org_consumer import OrgConsumer
 
 
 def handle_consumers(channel: Channel) -> None:

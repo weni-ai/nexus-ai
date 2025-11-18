@@ -1,29 +1,28 @@
 import os
+from typing import Dict, List
 
-from typing import List, Dict
 from django.conf import settings
 from ftfy import fix_encoding
 
 from nexus.intelligences.llms.client import LLMClient
 from nexus.usecases.logs.entities import LogMetadata
-from router.classifiers.reflection import run_reflection_task
-
-from router.dispatcher import dispatch
-from router.indexer import get_chunks
-from router.llms.call import call_llm, Indexer
-from router.direct_message import DirectMessage
-from router.flow_start import FlowStart
-from router.repositories import Repository
 from router.classifiers import Classifier
+from router.classifiers.reflection import run_reflection_task
+from router.direct_message import DirectMessage
+from router.dispatcher import dispatch
 from router.entities import (
     AgentDTO,
     ContactMessageDTO,
     ContentBaseDTO,
-    InstructionDTO,
     FlowDTO,
+    InstructionDTO,
     LLMSetupDTO,
     Message,
 )
+from router.flow_start import FlowStart
+from router.indexer import get_chunks
+from router.llms.call import Indexer, call_llm
+from router.repositories import Repository
 
 
 def get_language_codes(language_code: str):
@@ -62,7 +61,7 @@ def route(
     llm_config: LLMSetupDTO,
     flows_user_email: str,
     log_usecase,
-    message_log=None
+    message_log=None,
 ):
     try:
         content_base: ContentBaseDTO = content_base_repository.get_content_base_by_project(message.project_uuid)
@@ -72,15 +71,18 @@ def route(
             flow: FlowDTO = flows_repository.get_project_flow_by_name(name=classification)
 
         if not flow or flow.send_to_llm:
-
             print("[ + Fallback + ]")
 
             fallback_flow: FlowDTO = flows_repository.project_flow_fallback(fallback=True)
 
             if settings.USE_REDIS_CACHE_CONTEXT:
-                last_messages: List[ContactMessageDTO] = message_logs_repository.list_cached_messages(message.project_uuid, message.contact_urn)
+                last_messages: List[ContactMessageDTO] = message_logs_repository.list_cached_messages(
+                    message.project_uuid, message.contact_urn
+                )
             else:
-                last_messages: List[ContactMessageDTO] = message_logs_repository.list_last_messages(message.project_uuid, message.contact_urn, 5)
+                last_messages: List[ContactMessageDTO] = message_logs_repository.list_last_messages(
+                    message.project_uuid, message.contact_urn, 5
+                )
 
             agent: AgentDTO = content_base_repository.get_agent(content_base.uuid)
             agent = agent.set_default_if_null()
@@ -91,17 +93,13 @@ def route(
             if instructions == []:
                 instructions += settings.DEFAULT_INSTRUCTIONS
 
-            full_chunks: List[Dict] = get_chunks(
-                indexer,
-                text=message.text,
-                content_base_uuid=content_base.uuid
-            )
+            full_chunks: List[Dict] = get_chunks(indexer, text=message.text, content_base_uuid=content_base.uuid)
 
             print(f"[+ Instructions: {instructions} +]")
 
             chunks: List[str] = []
             for chunk in full_chunks:
-                full_page = chunk.get("full_page").replace("\x00", "\uFFFD")
+                full_page = chunk.get("full_page").replace("\x00", "\ufffd")
                 try:
                     full_page.encode("latin-1")
                     chunks.append(full_page)
@@ -121,6 +119,7 @@ def route(
                 instructions=instructions,
                 llm_config=llm_config,
                 last_messages=last_messages,
+                project_uuid=message.project_uuid,
             )
 
             llm_response = bad_words_filter(llm_response)
@@ -139,7 +138,7 @@ def route(
                 agent_role=agent.role,
                 agent_personality=agent.personality,
                 agent_goal=agent.goal,
-                instructions=instructions
+                instructions=instructions,
             )
             log_usecase.update_log_field(
                 chunks_json=full_chunks,
@@ -150,7 +149,7 @@ def route(
                 classification=classification,
                 llm_model=f"{llm_config.model}:{llm_config.model_version}",
                 llm_response=llm_response,
-                metadata=metadata.dict
+                metadata=metadata.dict,
             )
 
             if fallback_flow:
@@ -160,7 +159,7 @@ def route(
                     flow=fallback_flow,
                     flow_start=flow_start,
                     llm_response=llm_response,
-                    user_email=flows_user_email
+                    user_email=flows_user_email,
                 )
 
             if not flow:
@@ -187,7 +186,7 @@ def route(
                 flow=flow,
                 flow_start=flow_start,
                 llm_response=llm_response,
-                user_email=flows_user_email
+                user_email=flows_user_email,
             )
 
         log_usecase.update_log_field(
@@ -198,17 +197,12 @@ def route(
                 "tag": "action_started",
                 "action_uuid": str(flow.pk),
                 "action_name": flow.name,
-            }
+            },
         )
 
         log_usecase.send_message()
 
-        return dispatch(
-            message=message,
-            flow_start=flow_start,
-            flow=flow,
-            user_email=flows_user_email
-        )
+        return dispatch(message=message, flow_start=flow_start, flow=flow, user_email=flows_user_email)
 
     except Exception as e:
         log_usecase.update_status("F", exception_text=e)
