@@ -1,15 +1,14 @@
 from typing import List
-from openai import OpenAI
-from django.conf import settings
 
-from nexus.task_managers.file_database import GPTDatabase
+from django.conf import settings
+from openai import OpenAI
 
 from nexus.intelligences.llms.chatgpt import ChatGPTClient
+from nexus.task_managers.file_database import GPTDatabase
 from router.entities.intelligences import LLMSetupDTO
 
 
 class ChatGPTDatabase(GPTDatabase):
-
     language_codes = {
         "pt": "português",
         "en": "inglês",
@@ -25,31 +24,21 @@ class ChatGPTDatabase(GPTDatabase):
             name=settings.DEFAULT_AGENT_NAME,
             role=settings.DEFAULT_AGENT_ROLE,
             goal=settings.DEFAULT_AGENT_GOAL,
-            personality=settings.DEFAULT_AGENT_PERSONALITY
+            personality=settings.DEFAULT_AGENT_PERSONALITY,
         )
-        self.default_llm_config = LLMSetupDTO(model="chatgpt", model_version=settings.CHATGPT_MODEL, temperature=0.1, top_p=0.1, token=self.api_key)
+        self.default_llm_config = LLMSetupDTO(
+            model="chatgpt", model_version=settings.CHATGPT_MODEL, temperature=0.1, top_p=0.1, token=self.api_key
+        )
 
     def get_client(self):
         return OpenAI(api_key=self.api_key)
 
-    def request_gpt(
-        self,
-        contexts: List,
-        question: str,
-        language: str,
-        content_base_uuid: str,
-        testing: bool = False
-    ):
-        lang = self.language_codes.get(language, 'português')
+    def request_gpt(self, contexts: List, question: str, language: str, content_base_uuid: str, testing: bool = False):
+        lang = self.language_codes.get(language, "português")
         self.default_instructions.append(f"Seu idioma é {lang}, portanto, sua resposta deve vir SOMENTE em {lang}")
 
         gpt_response = self.client.request_gpt(
-            self.default_instructions,
-            contexts,
-            self.default_agent,
-            question,
-            self.default_llm_config,
-            []
+            self.default_instructions, contexts, self.default_agent, question, self.default_llm_config, []
         )
 
         text_answer = None

@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0009_project_agents_backend'),
+        ("projects", "0009_project_agents_backend"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='project',
-            name='human_support',
+            model_name="project",
+            name="human_support",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='project',
-            name='human_support_prompt',
+            model_name="project",
+            name="human_support_prompt",
             field=models.TextField(blank=True, null=True),
         ),
     ]

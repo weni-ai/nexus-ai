@@ -4,19 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inline_agents', '0005_alter_agentcredential_unique_together'),
+        ("inline_agents", "0005_alter_agentcredential_unique_together"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='supervisor',
-            name='instruction',
-            field=models.TextField(verbose_name='Default prompt'),
+            model_name="supervisor",
+            name="instruction",
+            field=models.TextField(verbose_name="Default prompt"),
         ),
         migrations.AddIndex(
-            model_name='inlineagentmessage',
-            index=models.Index(fields=['project', 'created_at', 'contact_urn'], name='inline_agen_project_612fd2_idx'),
+            model_name="inlineagentmessage",
+            index=models.Index(fields=["project", "created_at", "contact_urn"], name="inline_agen_project_612fd2_idx"),
         ),
     ]

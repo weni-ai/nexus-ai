@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0011_alter_project_agents_backend'),
+        ("projects", "0011_alter_project_agents_backend"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='project',
-            name='inline_agent_switch',
+            model_name="project",
+            name="inline_agent_switch",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='project',
-            name='rationale_switch',
+            model_name="project",
+            name="rationale_switch",
             field=models.BooleanField(default=False),
         ),
     ]

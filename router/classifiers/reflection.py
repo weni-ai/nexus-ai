@@ -1,7 +1,6 @@
-from router.classifiers.groundedness import Groundedness
-
-from nexus.logs.models import MessageLog
 from nexus.celery import app as celery_app
+from nexus.logs.models import MessageLog
+from router.classifiers.groundedness import Groundedness
 
 
 @celery_app.task
@@ -19,10 +18,9 @@ def run_reflection_task(
 
 
 class Reflection:
-
     """
-        Reflection classification will always occur after llm responses are received.
-        It should reflect on the overall llm performance and improve the quality of the responses.
+    Reflection classification will always occur after llm responses are received.
+    It should reflect on the overall llm performance and improve the quality of the responses.
     """
 
     def __init__(
@@ -36,7 +34,6 @@ class Reflection:
         self.llm_response = llm_response
 
     def classify(self):
-
         groundedness = Groundedness(
             self.llm_response,
             self.chunk_used,

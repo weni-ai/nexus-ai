@@ -1,22 +1,23 @@
-import unicodedata
 import re
 import string
-from typing import List, Dict
+import unicodedata
+from typing import Dict, List
 from uuid import uuid4
 
-from django.db import models
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
+from django.db import models
 
-from nexus.users.models import User
-from nexus.projects.models import Project
 from nexus.intelligences.models import ContentBase, Intelligence
+from nexus.projects.models import Project
+from nexus.users.models import User
 
 
 class TextComparer:
     @staticmethod
     def similarity(sentence_a: str, sentence_b: str) -> float:
         from difflib import SequenceMatcher
+
         return SequenceMatcher(None, sentence_a, sentence_b).ratio()
 
     @staticmethod
@@ -28,13 +29,17 @@ class TextComparer:
         return s
 
     @staticmethod
-    def string_in_text(sentence: str, text: str, compare_similarity: bool = True, similarity_threshold: float = 0.8) -> bool:
+    def string_in_text(
+        sentence: str, text: str, compare_similarity: bool = True, similarity_threshold: float = 0.8
+    ) -> bool:
         keywords: List[str] = sentence.split()
 
         if compare_similarity:
             keywords_in_text = []
             for keyword in keywords:
-                keyword_in_text = any(TextComparer.similarity(keyword, word) >= similarity_threshold for word in text.split())
+                keyword_in_text = any(
+                    TextComparer.similarity(keyword, word) >= similarity_threshold for word in text.split()
+                )
                 keywords_in_text.append(keyword_in_text)
             return all(keywords_in_text)
 
@@ -43,19 +48,12 @@ class TextComparer:
 
 
 class Message(models.Model):
-
-    STATUS_CHOICES = (
-        ("F", "fail"),
-        ("P", "processing"),
-        ("S", "success")
-    )
+    STATUS_CHOICES = (("F", "fail"), ("P", "processing"), ("S", "success"))
 
     uuid = models.UUIDField(primary_key=True, default=uuid4)
     text = models.TextField()
     contact_urn = models.CharField(max_length=255)
-    status = models.CharField(
-        max_length=1, choices=STATUS_CHOICES, default='P'
-    )
+    status = models.CharField(max_length=1, choices=STATUS_CHOICES, default="P")
     exception = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     groundedness_details_cache = models.JSONField(null=True, blank=True)
@@ -74,7 +72,7 @@ class Message(models.Model):
                 groundedness = Groundedness(
                     llm_response=self.messagelog.llm_response,
                     llm_chunk_used=self.messagelog.chunks,
-                    log=self.messagelog
+                    log=self.messagelog,
                 )
                 reflection_data = self.messagelog.reflection_data
 
@@ -88,17 +86,13 @@ class Message(models.Model):
                             "score": sentence.get("score"),
                         }
                         for chunk in self.messagelog.chunks_json:
-
                             evidence: str = sentence.get("evidence", "")
                             clean_evidence: str = TextComparer.clean_string(evidence)
                             clean_chunk: str = TextComparer.clean_string(chunk.get("full_page", ""))
 
                             if TextComparer.string_in_text(clean_evidence, clean_chunk):
                                 sentence_stats["sources"].append(
-                                    {
-                                        "filename": chunk.get("filename"),
-                                        "file_uuid": chunk.get("file_uuid")
-                                    }
+                                    {"filename": chunk.get("filename"), "file_uuid": chunk.get("file_uuid")}
                                 )
                         groundedness_details.append(sentence_stats)
                     self.messagelog.groundedness_details = groundedness_details
@@ -109,10 +103,7 @@ class Message(models.Model):
         return messagelog_groundedness_details
 
     def calculate_response_status(self):
-        status = {
-            True: "S",
-            False: "F"
-        }
+        status = {True: "S", False: "F"}
         groundedness_score = self.messagelog.groundedness_score
 
         if groundedness_score or isinstance(groundedness_score, int):
@@ -124,7 +115,7 @@ class Message(models.Model):
         self.groundedness_details_cache = self.calculate_groundedness_details()
         self.response_status_cache = self.calculate_response_status()
         if save:
-            self.save(update_fields=['groundedness_details_cache', 'response_status_cache'])
+            self.save(update_fields=["groundedness_details_cache", "response_status_cache"])
 
     @property
     def groundedness_details(self):
@@ -147,9 +138,7 @@ class MessageLog(models.Model):
     chunks_json = ArrayField(models.JSONField(), null=True)
     prompt = models.TextField()
     project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True)
-    content_base = models.ForeignKey(
-        ContentBase, on_delete=models.CASCADE, null=True
-    )
+    content_base = models.ForeignKey(ContentBase, on_delete=models.CASCADE, null=True)
     classification = models.CharField(max_length=255, null=True)
     llm_model = models.CharField(max_length=255, null=True)
     llm_response = models.TextField()
@@ -168,12 +157,7 @@ class MessageLog(models.Model):
 
 
 class RecentActivities(models.Model):
-
-    ACTION_CHOICES = (
-        ("C", "created"),
-        ("U", "updated"),
-        ("D", "deleted")
-    )
+    ACTION_CHOICES = (("C", "created"), ("U", "updated"), ("D", "deleted"))
 
     action_model = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)

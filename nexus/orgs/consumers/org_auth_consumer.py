@@ -1,11 +1,10 @@
 import amqp
 from sentry_sdk import capture_exception
 
+from nexus.event_driven.consumer.consumers import EDAConsumer
+from nexus.event_driven.parsers import JSONParser
 from nexus.orgs.org_dto import OrgAuthCreationDTO
 from nexus.usecases.orgs.create import CreateOrgAuthUseCase
-
-from nexus.event_driven.parsers import JSONParser
-from nexus.event_driven.consumer.consumers import EDAConsumer
 
 
 class OrgAuthConsumer(EDAConsumer):
@@ -14,9 +13,7 @@ class OrgAuthConsumer(EDAConsumer):
         try:
             body = JSONParser.parse(message.body)
             org_auth_dto = OrgAuthCreationDTO(
-                org_uuid=body.get("organization_uuid"),
-                user_email=body.get("user_email"),
-                role=body.get("role")
+                org_uuid=body.get("organization_uuid"), user_email=body.get("user_email"), role=body.get("role")
             )
             org_auth_creation = CreateOrgAuthUseCase()
             org_auth_creation.create_org_auth_with_dto(org_auth_dto=org_auth_dto)

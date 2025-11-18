@@ -1,11 +1,9 @@
 import amqp
 from sentry_sdk import capture_exception
 
-from nexus.projects.project_dto import FlowConsumerDTO
-
-from nexus.event_driven.parsers import JSONParser
 from nexus.event_driven.consumer.consumers import EDAConsumer
-
+from nexus.event_driven.parsers import JSONParser
+from nexus.projects.project_dto import FlowConsumerDTO
 from nexus.usecases.actions import delete, retrieve
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 

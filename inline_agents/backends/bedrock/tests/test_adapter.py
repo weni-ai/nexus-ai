@@ -4,9 +4,9 @@ from inline_agents.backends.bedrock.adapter import BedrockDataLakeEventAdapter, 
 from inline_agents.backends.bedrock.tests.traces_factory import (
     ActionGroupTraceFactory,
     AgentCollaborationTraceFactory,
-    CustomEventTraceFactory,
     CSATEventTraceFactory,
-    NPSEventTraceFactory
+    CustomEventTraceFactory,
+    NPSEventTraceFactory,
 )
 from inline_agents.data_lake import MockDataLakeEventService
 from nexus.usecases.intelligences.tests.intelligence_factory import ConversationFactory
@@ -27,9 +27,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         action_group_trace = ActionGroupTraceFactory()
 
         event_data = self.adapter.to_data_lake_event(
-            inline_trace=action_group_trace,
-            project_uuid=self.project_uuid,
-            contact_urn=self.contact_urn
+            inline_trace=action_group_trace, project_uuid=self.project_uuid, contact_urn=self.contact_urn
         )
 
         self.assertEqual(event_data["event_name"], "weni_nexus_data")
@@ -44,9 +42,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         agent_trace = AgentCollaborationTraceFactory()
 
         event_data = self.adapter.to_data_lake_event(
-            inline_trace=agent_trace,
-            project_uuid=self.project_uuid,
-            contact_urn=self.contact_urn
+            inline_trace=agent_trace, project_uuid=self.project_uuid, contact_urn=self.contact_urn
         )
 
         self.assertEqual(event_data["event_name"], "weni_nexus_data")
@@ -61,13 +57,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         action_group_input = {
             "actionGroupName": "test_action_group",
             "function": "test_function",
-            "parameters": [
-                {
-                    "name": "test_param",
-                    "type": "string",
-                    "value": "test_value"
-                }
-            ]
+            "parameters": [{"name": "test_param", "type": "string", "value": "test_value"}],
         }
 
         metadata = self.adapter.metadata_action_group(action_group_input)
@@ -79,10 +69,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
     def test_metadata_agent_collaboration(self):
         agent_collaboration_input = {
             "agentCollaboratorName": "test_agent",
-            "input": {
-                "text": "test input text",
-                "type": "TEXT"
-            }
+            "input": {"text": "test input text", "type": "TEXT"},
         }
 
         metadata = self.adapter.metadata_agent_collaboration(agent_collaboration_input)
@@ -98,7 +85,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
             contact_urn=self.contact_urn,
-            channel_uuid=self.channel_uuid
+            channel_uuid=self.channel_uuid,
         )
 
         self.assertEqual(len(self.mock_service.sent_events), 1)
@@ -120,13 +107,15 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         """Test custom_event_data method with invalid JSON in text field"""
         custom_trace = CustomEventTraceFactory()
 
-        custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"]["text"] = "invalid json"
+        custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"]["text"] = (
+            "invalid json"
+        )
 
         self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
             contact_urn=self.contact_urn,
-            channel_uuid=self.channel_uuid
+            channel_uuid=self.channel_uuid,
         )
 
         self.assertEqual(len(self.mock_service.sent_events), 0)
@@ -141,7 +130,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
             contact_urn=self.contact_urn,
-            channel_uuid=self.channel_uuid
+            channel_uuid=self.channel_uuid,
         )
 
         self.assertEqual(len(self.mock_service.sent_events), 0)
@@ -150,13 +139,15 @@ class TestBedrockDataLakeEventAdapter(TestCase):
         """Test custom_event_data method with empty events list"""
         custom_trace = CustomEventTraceFactory()
 
-        custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"]["text"] = '{"events": []}'
+        custom_trace["trace"]["orchestrationTrace"]["observation"]["actionGroupInvocationOutput"]["text"] = (
+            '{"events": []}'
+        )
 
         self.adapter.custom_event_data(
             inline_trace=custom_trace,
             project_uuid=self.project_uuid,
             contact_urn=self.contact_urn,
-            channel_uuid=self.channel_uuid
+            channel_uuid=self.channel_uuid,
         )
 
         self.assertEqual(len(self.mock_service.sent_events), 0)
@@ -170,7 +161,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             project_uuid=self.project_uuid,
             contact_urn=self.contact_urn,
             channel_uuid=self.channel_uuid,
-            preview=True
+            preview=True,
         )
 
         self.assertEqual(len(self.mock_service.sent_events), 0)
@@ -186,7 +177,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             inline_trace=csat_trace,
             project_uuid=self.project_uuid,
             contact_urn=self.contact_urn,
-            channel_uuid=self.channel_uuid
+            channel_uuid=self.channel_uuid,
         )
 
         self.conversation.refresh_from_db()
@@ -208,7 +199,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             inline_trace=nps_trace,
             project_uuid=self.project_uuid,
             contact_urn=self.contact_urn,
-            channel_uuid=self.channel_uuid
+            channel_uuid=self.channel_uuid,
         )
 
         self.conversation.refresh_from_db()
@@ -237,15 +228,20 @@ class TestBedrockDataLakeEventAdapter(TestCase):
                                 "clientRequestId": "test-request",
                                 "endTime": "2024-01-01T00:00:01Z",
                                 "startTime": "2024-01-01T00:00:00Z",
-                                "totalTimeMs": 1000
+                                "totalTimeMs": 1000,
                             },
-                            "text": '{"events": [{"event_name": "weni_nexus_data", "key": "weni_csat", "value_type": "string", "value": "4", "metadata": {}}, {"event_name": "weni_nexus_data", "key": "weni_nps", "value_type": "string", "value": 7, "metadata": {}}]}'
+                            "text": (
+                                '{"events": [{"event_name": "weni_nexus_data", "key": "weni_csat", '
+                                '"value_type": "string", "value": "4", "metadata": {}}, '
+                                '{"event_name": "weni_nexus_data", "key": "weni_nps", "value_type": '
+                                '"string", "value": 7, "metadata": {}}]}'
+                            ),
                         },
                         "traceId": "test-trace",
-                        "type": "ACTION_GROUP"
+                        "type": "ACTION_GROUP",
                     }
                 }
-            }
+            },
         }
 
         self.assertIsNone(conversation.csat)
@@ -255,7 +251,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             inline_trace=combined_trace,
             project_uuid=str(conversation.project.uuid),
             contact_urn=conversation.contact_urn,
-            channel_uuid=conversation.channel_uuid
+            channel_uuid=conversation.channel_uuid,
         )
 
         conversation.refresh_from_db()
@@ -285,7 +281,7 @@ class TestBedrockDataLakeEventAdapter(TestCase):
             project_uuid=self.project_uuid,
             contact_urn=self.contact_urn,
             channel_uuid=self.channel_uuid,
-            preview=True
+            preview=True,
         )
 
         self.conversation.refresh_from_db()
@@ -315,7 +311,10 @@ class TestBedrockTeamAdapter(TestCase):
     def test_get_session_id_with_long_session_id_normal_project(self):
         """Test that session ID is truncated for normal projects when too long"""
         # Create a very long contact_urn that will exceed 100 characters
-        long_contact_urn = "whatsapp:+5511999999999@c.us.very.long.contact.identifier.that.exceeds.limits.by.a.lot.and.makes.the.session.id.too.long"
+        long_contact_urn = (
+            "whatsapp:+5511999999999@c.us.very.long.contact.identifier.that.exceeds.limits.by.a.lot."
+            "and.makes.the.session.id.too.long"
+        )
         session_id = self.adapter._get_session_id(long_contact_urn, self.project_uuid)
         # Should be exactly 100 characters for normal projects
         self.assertEqual(len(session_id), 100)
@@ -326,7 +325,7 @@ class TestBedrockTeamAdapter(TestCase):
         from django.conf import settings
 
         # Mock settings to include our project as special
-        original_setting = getattr(settings, 'PROJECTS_WITH_SPECIAL_SESSION_ID', [])
+        original_setting = getattr(settings, "PROJECTS_WITH_SPECIAL_SESSION_ID", [])
         settings.PROJECTS_WITH_SPECIAL_SESSION_ID = [self.project_uuid]
 
         try:

@@ -1,12 +1,10 @@
-import ast
 import json
-import re
+from typing import Callable, Dict, List
 
-from typing import List, Dict, Callable
-
-from router.direct_message import DirectMessage
-from router.clients.flows.http.send_message import WhatsAppBroadcastHTTPClient
 import sentry_sdk
+
+from router.clients.flows.http.send_message import WhatsAppBroadcastHTTPClient
+from router.direct_message import DirectMessage
 
 
 class SimulateBroadcast(DirectMessage):
@@ -15,7 +13,9 @@ class SimulateBroadcast(DirectMessage):
         self.__access_token = access_token
         self.get_file_info = get_file_info
 
-    def send_direct_message(self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs) -> None:
+    def send_direct_message(
+        self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs
+    ) -> None:
         sources: List[Dict] = []
         seen_uuid: List[str] = []
 
@@ -30,12 +30,14 @@ class SimulateBroadcast(DirectMessage):
             file_info = self.get_file_info(file_uuid)
 
             if file_info:
-                sources.append({
-                    "filename": file_info.get("filename"),
-                    "uuid": file_uuid,
-                    "created_file_name": file_info.get("created_file_name"),
-                    "extension_file": file_info.get("extension_file"),
-                })
+                sources.append(
+                    {
+                        "filename": file_info.get("filename"),
+                        "uuid": file_uuid,
+                        "created_file_name": file_info.get("created_file_name"),
+                        "extension_file": file_info.get("extension_file"),
+                    }
+                )
 
         response_data = {"type": "broadcast", "message": text, "fonts": sources}
 
@@ -50,14 +52,16 @@ class SimulateWhatsAppBroadcastHTTPClient(WhatsAppBroadcastHTTPClient):
         project_uuid: str,
         user: str,
         full_chunks: List[Dict] = None,
-        backend: str = "BedrockBackend"
+        backend: str = "BedrockBackend",
     ) -> None:
         if backend == "BedrockBackend":
             return self.format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)
-        
+
         return self.format_message_for_openai(msg, urns, project_uuid, user, full_chunks)
 
-    def format_response_for_bedrock(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> Dict:
+    def format_response_for_bedrock(
+        self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
+    ) -> Dict:
         msgs = self.get_json_strings(msg)
         if not msgs:
             msgs = [{"msg": {"text": str(msg)}}]
@@ -65,7 +69,9 @@ class SimulateWhatsAppBroadcastHTTPClient(WhatsAppBroadcastHTTPClient):
 
         return response_data
 
-    def format_message_for_openai(self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]) -> Dict:
+    def format_message_for_openai(
+        self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
+    ) -> Dict:
         try:
             msg = json.loads(msg)
         except Exception as error:

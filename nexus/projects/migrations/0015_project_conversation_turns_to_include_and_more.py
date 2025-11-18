@@ -4,25 +4,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0014_project_default_supervisor_foundation_model'),
+        ("projects", "0014_project_default_supervisor_foundation_model"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='project',
-            name='conversation_turns_to_include',
+            model_name="project",
+            name="conversation_turns_to_include",
             field=models.IntegerField(default=10),
         ),
         migrations.AddField(
-            model_name='project',
-            name='exclude_previous_thinking_steps',
+            model_name="project",
+            name="exclude_previous_thinking_steps",
             field=models.BooleanField(default=True),
         ),
         migrations.AddField(
-            model_name='project',
-            name='use_prompt_creation_configurations',
+            model_name="project",
+            name="use_prompt_creation_configurations",
             field=models.BooleanField(default=False),
         ),
     ]
