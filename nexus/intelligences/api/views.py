@@ -1645,7 +1645,7 @@ class SupervisorViewset(ModelViewSet):
     filterset_class = ConversationFilter
     search_fields = ["contact_name", "contact_urn"]
     ordering_fields = ["created_at", "start_date", "end_date"]
-    ordering = ["-start_date"]
+    ordering = ["-start_date", "-uuid"]
 
     def get_filter_backends(self):
         """Disable filter backends during schema generation to avoid duplicate parameters"""
