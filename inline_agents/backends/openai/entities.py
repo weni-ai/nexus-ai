@@ -56,14 +56,28 @@ class HooksState:
     def add_tool_call(self, tool_call: Dict[str, Any]):
         self.tool_calls.update(tool_call)
 
-    def get_events(self, result: dict, tool_name: str):
+    def get_events(self, result: Any, tool_name: str):
         current_info = self.get_tool_info(tool_name)
         session_events = current_info.get("events", {})
         if session_events:
             return session_events
 
-        events = result.get("events", {})
-        return events
+        # Handle case where result is a list
+        if isinstance(result, list):
+            # Check if any item in the list has an "events" key
+            for item in result:
+                if isinstance(item, dict) and "events" in item:
+                    return item.get("events", {})
+            # If no events found in list items, return empty list
+            return []
+
+        # Handle case where result is a dict
+        if isinstance(result, dict):
+            events = result.get("events", {})
+            return events
+
+        # If result is neither list nor dict, return empty list
+        return []
 
 
 @dataclass
