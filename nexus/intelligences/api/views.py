@@ -1664,7 +1664,7 @@ class SupervisorViewset(ModelViewSet):
 
         try:
             project = get_project_by_uuid(project_uuid)
-            return Conversation.objects.select_related("topic", "project").filter(project=project).exclude(resolution=3)
+            return Conversation.objects.select_related("topic", "project").filter(project=project)
         except ProjectDoesNotExist:
             return Conversation.objects.none()
 
