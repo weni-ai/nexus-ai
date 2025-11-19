@@ -389,7 +389,7 @@ def create_lambda_conversation(
 
     try:
         project = Project.objects.get(uuid=payload.get("project_uuid"))
-        
+
         if not project.brain_on:
             return
 
@@ -558,7 +558,9 @@ def create_lambda_conversation(
 
             project_uuid = payload.get("project_uuid")
             if project_uuid:
-                integrated_agent = IntegratedAgent.objects.filter(project__uuid=project_uuid).select_related("agent").first()
+                integrated_agent = (
+                    IntegratedAgent.objects.filter(project__uuid=project_uuid).select_related("agent").first()
+                )
 
                 if integrated_agent:
                     agent_uuid = str(integrated_agent.agent.uuid)

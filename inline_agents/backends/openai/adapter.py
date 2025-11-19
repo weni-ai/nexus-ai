@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Callable, Optional, Any
+from typing import Any, Callable, Optional
 
 import boto3
 import pendulum
@@ -21,9 +21,8 @@ from pydantic import BaseModel, Field, create_model
 
 from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.data_lake import send_data_lake_event
-from inline_agents.data_lake.event_service import DataLakeEventService
-from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.entities import Context, HooksState
+from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.hooks import (
     CollaboratorHooks,
     RunnerHooks,
@@ -35,6 +34,7 @@ from inline_agents.backends.openai.sessions import (
     set_watermark,
 )
 from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
+from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
     AgentCredential,
     InlineAgentsConfiguration,
@@ -59,24 +59,16 @@ def sanitize_history(history: str) -> str:
         history = str(history)
 
     # Remove common null and control characters
-    cleaned = history.replace('\u0000', '').replace('\x00', '')
-    cleaned = cleaned.replace('\u007f', '').replace('\u000f', '')
+    cleaned = history.replace("\u0000", "").replace("\x00", "")
+    cleaned = cleaned.replace("\u007f", "").replace("\u000f", "")
 
     # Remove other non-printable control characters (except line breaks and tabs)
-    cleaned = ''.join(
-        char for char in cleaned
-        if char.isprintable() or char in '\n\r\t'
-    )
+    cleaned = "".join(char for char in cleaned if char.isprintable() or char in "\n\r\t")
 
     return cleaned.strip()
 
 
-def make_agent_proxy_tool(
-    agent: Agent[Context],
-    tool_name: str,
-    tool_description: str,
-    session_factory: Callable
-):
+def make_agent_proxy_tool(agent: Agent[Context], tool_name: str, tool_description: str, session_factory: Callable):
     @function_tool
     async def _proxy(ctx: RunContextWrapper[Context], question: str) -> str:
         """
@@ -349,9 +341,9 @@ class OpenAITeamAdapter(TeamAdapter):
             parameters = []
             for key, value in payload.items():
                 # Sanitize history if present
-                if key == 'history':
-                    original_value = str(value) if value else ''
-                    null_count = original_value.count('\u0000') + original_value.count('\x00')
+                if key == "history":
+                    original_value = str(value) if value else ""
+                    null_count = original_value.count("\u0000") + original_value.count("\x00")
 
                     if null_count > 0:
                         logger.warning(
@@ -361,17 +353,19 @@ class OpenAITeamAdapter(TeamAdapter):
                             f"Contact: {contact.get('urn', 'unknown')}, "
                             f"Project: {project.get('uuid', 'unknown')}"
                         )
-                        sentry_sdk.set_context("corrupted_history", {
-                            "function_name": function_name,
-                            "null_count": null_count,
-                            "original_length": len(original_value),
-                            "contact_urn": contact.get('urn', 'unknown'),
-                            "project_uuid": project.get('uuid', 'unknown'),
-                            "preview": original_value[:200]
-                        })
+                        sentry_sdk.set_context(
+                            "corrupted_history",
+                            {
+                                "function_name": function_name,
+                                "null_count": null_count,
+                                "original_length": len(original_value),
+                                "contact_urn": contact.get("urn", "unknown"),
+                                "project_uuid": project.get("uuid", "unknown"),
+                                "preview": original_value[:200],
+                            },
+                        )
                         sentry_sdk.capture_message(
-                            f"Corrupted history detected: {null_count} nulls in {function_name}",
-                            level="warning"
+                            f"Corrupted history detected: {null_count} nulls in {function_name}", level="warning"
                         )
 
                     # Sanitize the history
@@ -383,10 +377,7 @@ class OpenAITeamAdapter(TeamAdapter):
                             f"for function '{function_name}'"
                         )
 
-                parameters.append({
-                    "name": key,
-                    "value": value
-                })
+                parameters.append({"name": key, "value": value})
             # ctx.context.hooks_state.add_tool_call(
             #     {
             #         function_name: parameters
@@ -433,9 +424,9 @@ class OpenAITeamAdapter(TeamAdapter):
                     f"Contact: {contact.get('urn', 'unknown')}, "
                     f"Project: {project.get('uuid', 'unknown')}"
                 )
-                return json.dumps({
-                    "error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"
-                })
+                return json.dumps(
+                    {"error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"}
+                )
 
             session_attributes = result.get("response", {}).get("sessionAttributes", {})
 
@@ -460,26 +451,25 @@ class OpenAITeamAdapter(TeamAdapter):
                     f"Contact: {contact.get('urn', 'unknown')}, "
                     f"Project: {project.get('uuid', 'unknown')}"
                 )
-                sentry_sdk.set_context("missing_lambda_events", {
-                    "function_name": function_name,
-                    "contact_urn": contact.get('urn', 'unknown'),
-                    "project_uuid": project.get('uuid', 'unknown'),
-                    "response_keys": list(result.get("response", {}).keys()) if isinstance(result.get("response"), dict) else []
-                })
-                sentry_sdk.capture_message(
-                    f"Lambda '{function_name}' did not return events",
-                    level="warning"
+                sentry_sdk.set_context(
+                    "missing_lambda_events",
+                    {
+                        "function_name": function_name,
+                        "contact_urn": contact.get("urn", "unknown"),
+                        "project_uuid": project.get("uuid", "unknown"),
+                        "response_keys": list(result.get("response", {}).keys())
+                        if isinstance(result.get("response"), dict)
+                        else [],
+                    },
                 )
+                sentry_sdk.capture_message(f"Lambda '{function_name}' did not return events", level="warning")
             else:
                 logger.info(
                     f"Lambda '{function_name}' returned {len(events)} event(s). "
                     f"Contact: {contact.get('urn', 'unknown')}"
                 )
 
-            ctx.context.hooks_state.add_tool_info(
-                function_name,
-                session_attributes
-            )
+            ctx.context.hooks_state.add_tool_info(function_name, session_attributes)
 
             return result["response"]["functionResponse"]["responseBody"]["TEXT"]["body"]
         except Exception as e:
@@ -488,13 +478,16 @@ class OpenAITeamAdapter(TeamAdapter):
                 f"Contact: {contact.get('urn', 'unknown')}, "
                 f"Project: {project.get('uuid', 'unknown')}"
             )
-            sentry_sdk.set_context("lambda_invocation_error", {
-                "function_name": function_name,
-                "function_arn": function_arn,
-                "contact_urn": contact.get('urn', 'unknown'),
-                "project_uuid": project.get('uuid', 'unknown'),
-                "error": str(e)
-            })
+            sentry_sdk.set_context(
+                "lambda_invocation_error",
+                {
+                    "function_name": function_name,
+                    "function_arn": function_arn,
+                    "contact_urn": contact.get("urn", "unknown"),
+                    "project_uuid": project.get("uuid", "unknown"),
+                    "error": str(e),
+                },
+            )
             sentry_sdk.capture_exception(e)
             return json.dumps({"error": f"Error on lambda: {str(e)}"})
 
@@ -624,7 +617,7 @@ class OpenAITeamAdapter(TeamAdapter):
         Clean up the schema recursively to ensure it's valid for OpenAI.
         """
         if not isinstance(schema, dict):
-            return 
+            return
 
         cls._clean_schema_list(schema.get("anyOf"))
         cls._clean_schema_list(schema.get("oneOf"))
@@ -771,10 +764,7 @@ class OpenAITeamAdapter(TeamAdapter):
         except Guardrail.DoesNotExist:
             guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
 
-        return {
-            'guardrailIdentifier': guardrails.identifier,
-            'guardrailVersion': str(guardrails.version)
-        }
+        return {"guardrailIdentifier": guardrails.identifier, "guardrailVersion": str(guardrails.version)}
 
 
 def create_standardized_event(agent_name, type, tool_name="", original_trace=None):

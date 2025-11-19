@@ -96,7 +96,9 @@ def complexity_layer(input_text: str) -> str | None:
             return None
 
 
-def dispatch_preview(response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str) -> str:
+def dispatch_preview(
+    response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str
+) -> str:
     response_msg = dispatch(
         llm_response=response,
         message=message_obj,
@@ -127,7 +129,7 @@ def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_ve
             Payload=json.dumps(payload).encode("utf-8"),
         )
         if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
-            payload = json.loads(response['Payload'].read().decode('utf-8'))
+            payload = json.loads(response["Payload"].read().decode("utf-8"))
             print(f"[DEBUG] Guardrails complexity layer response: {payload}")
             response = payload
             status_code = payload.get("statusCode")
@@ -171,7 +173,9 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
         foundation_model = complexity_layer(text)
     else:
         guardrails: Dict[str, str] = GuardrailsUsecase.get_guardrail_as_dict(message.get("project_uuid"))
-        guardrails_message = guardrails_complexity_layer(text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion"))
+        guardrails_message = guardrails_complexity_layer(
+            text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion")
+        )
         if guardrails_message:
             raise UnsafeMessageException(guardrails_message)
 
@@ -291,7 +295,9 @@ def start_inline_agents(
             preview=preview,
         )
 
-        project, content_base, inline_agent_configuration = get_project_and_content_base_data(message.get("project_uuid"))
+        project, content_base, inline_agent_configuration = get_project_and_content_base_data(
+            message.get("project_uuid")
+        )
         agents_backend = project.agents_backend
 
         broadcast, _ = get_action_clients(
