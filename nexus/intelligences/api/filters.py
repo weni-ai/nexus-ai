@@ -49,7 +49,9 @@ class ConversationFilter(filters.FilterSet):
         """Filter by end date with default value if not provided"""
         print(f"DEBUG: filter_end_date called with value: {value}, type: {type(value)}")
         if value:
-            result = queryset.filter(end_date__date__lte=value)
+            from django.db.models import Q
+
+            result = queryset.filter(Q(end_date__date__lte=value) | Q(start_date__date__lte=value))
             print(f"DEBUG: end_date filter result count: {result.count()}")
             return result
         # Only apply default if no end_date parameter was provided at all
