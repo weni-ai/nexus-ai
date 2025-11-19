@@ -1,13 +1,28 @@
 # This module exports use case classes and functions
 # Import individual items as needed to avoid circular dependencies
 
+# Cache for imported attributes to avoid repeated imports
+_import_cache = {}
+
 
 def _lazy_import(module_name, item_name):
     """Lazy import helper to avoid circular dependencies."""
     import importlib
 
-    module = importlib.import_module(module_name)
-    return getattr(module, item_name)
+    cache_key = (module_name, item_name)
+    if cache_key in _import_cache:
+        return _import_cache[cache_key]
+
+    try:
+        module = importlib.import_module(module_name)
+        attr = getattr(module, item_name)
+        _import_cache[cache_key] = attr
+        return attr
+    except (ImportError, AttributeError) as e:
+        # Re-raise with more context for debugging
+        raise AttributeError(
+            f"Failed to lazy import {item_name!r} from {module_name!r}: {e}"
+        ) from e
 
 
 # Define __getattr__ for lazy imports

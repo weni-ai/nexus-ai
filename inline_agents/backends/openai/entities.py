@@ -59,17 +59,25 @@ class HooksState:
     def get_events(self, result: dict, tool_name: str):
         current_info = self.get_tool_info(tool_name)
         session_events = current_info.get("events", {})
+
         if session_events:
             return session_events
-        
+
         if isinstance(result, list):
-            if result and isinstance(result[0], dict):
-                return result[0].get("events", {})
-            return {}
-        elif not isinstance(result, dict):
-            return {}
-        
-        events = result.get("events", {})
+            aggregated = []
+            for item in result:
+                if isinstance(item, dict):
+                    item_events = item.get("events")
+                    if isinstance(item_events, list):
+                        aggregated.extend(item_events)
+                    elif isinstance(item_events, dict):
+                        aggregated.extend(item_events.get("events", []))
+            return aggregated
+
+        if not isinstance(result, dict):
+            return []
+
+        events = result.get("events", [])
         return events
 
 

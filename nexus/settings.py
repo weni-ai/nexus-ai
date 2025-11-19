@@ -616,6 +616,7 @@ AGENT_UUID_CSAT = env.str("AGENT_UUID_CSAT")
 AGENT_UUID_NPS = env.str("AGENT_UUID_NPS")
 
 COMPLEXITY_LAYER_LAMBDA = env.str("COMPLEXITY_LAYER_LAMBDA", "lambda-complexity-layer")
+GUARDRAILS_LAYER_LAMBDA = env.str("GUARDRAILS_LAYER_LAMBDA", "lambda-complexity-layer-openai")
 
 MODELS_WITH_REASONING = env.list("MODELS_WITH_REASONING", [])
 

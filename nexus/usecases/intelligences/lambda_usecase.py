@@ -66,11 +66,15 @@ class LambdaUseCase:
             )
         return conversation_payload
 
-    def send_datalake_event(self, event_data: dict, project_uuid: str, contact_urn: str):
+    def send_datalake_event(self, event_data: dict, project_uuid: str, contact_urn: str, channel_uuid: str = None):
         adapter = self._get_data_lake_event_adapter()
-        adapter.to_data_lake_custom_event(event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn)
+        adapter.to_data_lake_custom_event(
+            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
+        )
 
-    def lambda_conversation_resolution(self, messages, has_chats_room: bool, project_uuid: str, contact_urn: str):
+    def lambda_conversation_resolution(
+        self, messages, has_chats_room: bool, project_uuid: str, contact_urn: str, channel_uuid: str = None
+    ):
         # If has_chats_room is True, skip lambda call and set resolution to "Has Chat Room"
         if has_chats_room:
             resolution = "Has Chat Room"
@@ -83,7 +87,9 @@ class LambdaUseCase:
                     "human_support": has_chats_room,
                 },
             }
-            self.send_datalake_event(event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn)
+            self.send_datalake_event(
+                event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
+            )
             return resolution
 
         # Original logic for when has_chats_room is False
@@ -94,6 +100,24 @@ class LambdaUseCase:
         )
         conversation_resolution_response = json.loads(conversation_resolution.get("Payload").read()).get("body")
         resolution = conversation_resolution_response.get("result")
+
+        # Ensure resolution is not None - use "unclassified" if lambda returns empty/None
+        if not resolution:
+            logger.warning(
+                f"Lambda returned None/empty resolution. Using 'unclassified'. "
+                f"Project: {project_uuid}, Contact: {contact_urn}"
+            )
+            sentry_sdk.set_context(
+                "lambda_resolution_missing",
+                {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "conversation_resolution_response": conversation_resolution_response,
+                },
+            )
+            sentry_sdk.capture_message("Lambda returned None/empty resolution - using unclassified", level="warning")
+            resolution = "unclassified"  # Use unclassified resolution for empty/None values
+
         event_data = {
             "event_name": "weni_nexus_data",
             "key": "conversation_classification",
@@ -103,21 +127,17 @@ class LambdaUseCase:
                 "human_support": has_chats_room,
             },
         }
-        self.send_datalake_event(event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn)
+        self.send_datalake_event(
+            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
+        )
 
         return conversation_resolution_response.get("result")
 
     def _is_valid_topic_uuid(self, topic_uuid_raw) -> bool:
-        """
-        Check if topic_uuid is valid (not None, not empty, not "None" string).
-        """
         if not topic_uuid_raw:
             return False
-
         topic_uuid_str = str(topic_uuid_raw)
-        invalid_values = {"", "None"}
-
-        return topic_uuid_str not in invalid_values
+        return topic_uuid_str not in {"", "None"}
 
     def lambda_conversation_topics(
         self,
@@ -125,6 +145,7 @@ class LambdaUseCase:
         has_chats_room: bool,
         project_uuid: str,
         contact_urn: str,
+        channel_uuid: str = None,
     ):
         from nexus.intelligences.models import Topics
 
@@ -150,24 +171,41 @@ class LambdaUseCase:
             )
             conversation_topics = json.loads(conversation_topics.get("Payload").read())
             conversation_topics = conversation_topics.get("body")
-            topic_uuid_raw = conversation_topics.get("topic_uuid")
-            
-            # Update event_data if topic_uuid is valid
-            if self._is_valid_topic_uuid(topic_uuid_raw):
+            topic_uuid = conversation_topics.get("topic_uuid")
+            topic_name = conversation_topics.get("topic_name")
+
+            if self._is_valid_topic_uuid(topic_uuid) and topic_name:
                 event_data = {
                     "event_name": "weni_nexus_data",
                     "key": "topics",
                     "value_type": "string",
-                    "value": conversation_topics.get("topic_name"),
+                    "value": topic_name,
                     "metadata": {
-                        "topic_uuid": str(topic_uuid_raw),
-                        "subtopic_uuid": str(conversation_topics.get("subtopic_uuid")),
-                        "subtopic": conversation_topics.get("subtopic_name"),
+                        "topic_uuid": str(topic_uuid),
+                        "subtopic_uuid": str(conversation_topics.get("subtopic_uuid") or ""),
+                        "subtopic": conversation_topics.get("subtopic_name") or "",
                         "human_support": has_chats_room,
                     },
                 }
+            elif self._is_valid_topic_uuid(topic_uuid) and not topic_name:
+                logger.warning(
+                    f"Lambda returned topic_uuid but topic_name is None/empty. "
+                    f"Project: {project_uuid}, Contact: {contact_urn}, Topic UUID: {topic_uuid}"
+                )
+                sentry_sdk.set_context(
+                    "lambda_topics_missing_name",
+                    {
+                        "project_uuid": project_uuid,
+                        "contact_urn": contact_urn,
+                        "topic_uuid": topic_uuid,
+                        "conversation_topics_response": conversation_topics,
+                    },
+                )
+                sentry_sdk.capture_message("Lambda returned topic_uuid but topic_name is None/empty", level="warning")
 
-        self.send_datalake_event(event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn)
+        self.send_datalake_event(
+            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
+        )
 
         topic_uuid = event_data.get("metadata").get("topic_uuid")
 
@@ -312,6 +350,13 @@ class LambdaUseCase:
             # Normalize classification data to consistent format
             classification = self._normalize_classification_data(classification_data, reason)
 
+            if isinstance(classification, list) and len(classification) == 1:
+                item = classification[0]
+                if isinstance(item, dict):
+                    name = item.get("name") or item.get("classification")
+                    if isinstance(name, str) and name.strip().lower() == "correct":
+                        classification = []
+
             return classification, suggestion
 
         except Exception as e:
@@ -369,8 +414,8 @@ def create_lambda_conversation(
                     "correlation_id": correlation_id,
                     "project_uuid": project_uuid,
                     "contact_urn": contact_urn,
-                    "task_name": "create_lambda_conversation"
-                }
+                    "task_name": "create_lambda_conversation",
+                },
             )
             raise ValueError("No unclassified messages found for conversation period")
 
@@ -383,7 +428,7 @@ def create_lambda_conversation(
         )
 
         formated_messages = lambda_usecase.get_lambda_conversation(messages)
-        
+
         logger.info(
             "[create_lambda_conversation] Invoking resolution lambda",
             extra={
@@ -392,15 +437,26 @@ def create_lambda_conversation(
                 "project_uuid": project_uuid,
                 "contact_urn": contact_urn,
                 "messages_count": len(messages),
-                "task_name": "create_lambda_conversation"
-            }
+                "task_name": "create_lambda_conversation",
+            },
         )
-        
+
+        channel_uuid = payload.get("channel_uuid")
+
         resolution = lambda_usecase.lambda_conversation_resolution(
             messages=formated_messages,
             has_chats_room=payload.get("has_chats_room"),
             project_uuid=project_uuid,
             contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+        )
+
+        topic = lambda_usecase.lambda_conversation_topics(
+            messages=formated_messages,
+            has_chats_room=payload.get("has_chats_room"),
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
         )
 
         contact_name = payload.get("name")
@@ -460,12 +516,13 @@ def create_lambda_conversation(
 
         conversation_queryset.update(**update_data)
 
+        # Delete messages after processing (instead of updating resolution)
         message_service.clear_message_cache(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             channel_uuid=payload.get("channel_uuid"),
         )
-        
+
         logger.info(
             "[create_lambda_conversation] Task completed successfully",
             extra={
@@ -475,8 +532,8 @@ def create_lambda_conversation(
                 "contact_urn": contact_urn,
                 "external_id": external_id,
                 "resolution": resolution_choice_value,
-                "task_name": "create_lambda_conversation"
-            }
+                "task_name": "create_lambda_conversation",
+            },
         )
 
     except Exception as e:
