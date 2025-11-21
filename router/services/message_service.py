@@ -73,7 +73,6 @@ class MessageService:
             channel_uuid=channel_uuid,
             ttl_hours=ttl_hours,
         )
-
     def add_message_to_cache(
         self,
         project_uuid: str,
@@ -88,11 +87,22 @@ class MessageService:
         self.message_repository.add_message(project_uuid, contact_urn, message, channel_uuid)
 
         # Ensure conversation exists only if channel_uuid is not None
-        self._get_conversation_service().ensure_conversation_exists(
-            project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
-        )
+        if channel_uuid:
+            self._get_conversation_service().ensure_conversation_exists(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                contact_name=contact_name,
+                channel_uuid=channel_uuid,
+            )
 
-    def get_cache_messages(self, project_uuid: str, contact_urn: str, channel_uuid: str, limit: int = 50, cursor: str = None) -> dict:
+    def get_cache_messages(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str,
+        limit: int = 50,
+        cursor: str = None,
+    ) -> dict:
         """Get messages from cache with pagination - optimized for large datasets."""
         return self.message_repository.get_messages(project_uuid, contact_urn, channel_uuid, limit, cursor)
 
