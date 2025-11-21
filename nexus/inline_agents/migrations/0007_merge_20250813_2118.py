@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inline_agents', '0006_alter_supervisor_instruction_and_more'),
-        ('inline_agents', '0006_openaisupervisor'),
+        ("inline_agents", "0006_alter_supervisor_instruction_and_more"),
+        ("inline_agents", "0006_openaisupervisor"),
     ]
 
-    operations = [
-    ]
+    operations = []

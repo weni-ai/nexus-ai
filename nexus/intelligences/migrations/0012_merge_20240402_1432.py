@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0011_contentbase_is_router'),
-        ('intelligences', '0011_merge_20240328_1856'),
+        ("intelligences", "0011_contentbase_is_router"),
+        ("intelligences", "0011_merge_20240328_1856"),
     ]
 
-    operations = [
-    ]
+    operations = []

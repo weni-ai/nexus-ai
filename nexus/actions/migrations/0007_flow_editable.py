@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('actions', '0006_alter_flow_action_type_alter_flow_group'),
+        ("actions", "0006_alter_flow_action_type_alter_flow_group"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='flow',
-            name='editable',
+            model_name="flow",
+            name="editable",
             field=models.BooleanField(default=True),
         ),
     ]
