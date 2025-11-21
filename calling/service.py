@@ -27,8 +27,8 @@ EventRegistry.subscribe("agent.run.started", PlayAudioListener())
 EventRegistry.subscribe("agent.run.completed", StopAudioListener())
 EventRegistry.subscribe("contact.speech.started", StopAudioListener())
 EventRegistry.subscribe("whatspp.answer.created", PreAcceptCallListener())
-# EventRegistry.subscribe("whatsapp.call.pre-accepted", AcceptCallListener())
-EventRegistry.subscribe("whatsapp.remote.connected", SendWelcomeListener())
+
+EventRegistry.subscribe("openai.session.updated", SendWelcomeListener())
 
 
 

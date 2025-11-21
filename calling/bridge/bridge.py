@@ -105,21 +105,6 @@ class RTCBridge:
 
                 await EventRegistry.notify("openai.session.updated", session)
 
-                welcome_response = "Olá, tudo bem? Eu sou a Nic, assistente virtual do Prezunic. Estou aqui para te ajudar com o que precisar! Como posso te ajudar hoje?"
-
-                await asyncio.sleep(1)
-
-                cls._dc_send_json(
-                    dc,
-                    {
-                        "type": "response.create",
-                        "response": {
-                            "conversation": "none",
-                            "instructions": response_instructions.format(input_text="oi", response=welcome_response),
-                        }
-                    }
-                )
-
             @dc.on("message")
             async def on_message(message):
                 data = json.loads(message)
