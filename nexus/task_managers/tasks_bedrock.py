@@ -55,8 +55,9 @@ def check_ingestion_job_status(
             elif hasattr(task_manager, "content_base_link") and task_manager.content_base_link:
                 content_base_uuid = str(task_manager.content_base_link.content_base.uuid)
             else:
-                logger.warning("🦑 BEDROCK: Could not determine content_base_uuid, marking as complete")
-                task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
+                logger.error("🦑 BEDROCK: Could not determine content_base_uuid - task_manager em estado inválido")
+                logger.error(f"  Task Manager UUID: {celery_task_manager_uuid}, File Type: {file_type}")
+                logger.error(f"  Task Manager Type: {type(task_manager).__name__}")
                 return True
             
             file_database.search_data(
