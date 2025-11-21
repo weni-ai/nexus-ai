@@ -42,11 +42,8 @@ class Supervisor(Agent):
                 hooks=hooks,
                 model_settings=ModelSettings(
                     max_tokens=max_tokens,
-                    reasoning=Reasoning(
-                        effort="medium",
-                        summary="auto"
-                    ),
-                )
+                    reasoning=Reasoning(effort="medium", summary="auto"),
+                ),
             )
             return
 
@@ -90,23 +87,18 @@ class Supervisor(Agent):
 
         retrieve_params = {
             "knowledgeBaseId": settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID,
-            "retrievalQuery": {"text": question}
+            "retrievalQuery": {"text": question},
         }
 
         combined_filter = {
             "andAll": [
-                {
-                    "equals": {
-                        "key": "contentBaseUuid",
-                        "value": content_base_uuid
-                    }
-                },
+                {"equals": {"key": "contentBaseUuid", "value": content_base_uuid}},
                 {
                     "equals": {
                         "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": get_datasource_id(wrapper.context.project.get("uuid"))
+                        "value": get_datasource_id(wrapper.context.project.get("uuid")),
                     }
-                }
+                },
             ]
         }
 

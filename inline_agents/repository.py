@@ -2,6 +2,7 @@ from django.conf import settings
 
 # todo: make supervisor abstract class
 
+
 class SupervisorRepository:
     @classmethod
     def get_foundation_model(cls, project, supervisor, foundation_model: str = None) -> str:
@@ -12,11 +13,9 @@ class SupervisorRepository:
         if custom_project_model:
             return custom_project_model
 
-
         supervisor_default_model = supervisor.foundation_model
 
         if foundation_model:
             supervisor_default_model = foundation_model
 
         return supervisor_default_model
-

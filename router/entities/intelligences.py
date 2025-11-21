@@ -1,4 +1,5 @@
 from dataclasses import dataclass, fields
+
 from django.conf import settings
 
 

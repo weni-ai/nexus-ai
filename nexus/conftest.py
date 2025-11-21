@@ -10,12 +10,12 @@ from nexus.users.models import User
 
 @fixture
 def create_user():
-    return User.objects.create_user('test@user.com')
+    return User.objects.create_user("test@user.com")
 
 
 @fixture
 def create_org(create_user):
-    org_name = 'Test Org'
+    org_name = "Test Org"
     user = create_user
     return Org.objects.create(created_by=user, name=org_name)
 
@@ -24,7 +24,7 @@ def create_org(create_user):
 def create_template_type():
     return TemplateType.objects.create(
         uuid=uuid4(),
-        name='Test Template Type',
+        name="Test Template Type",
     )
 
 
@@ -32,24 +32,18 @@ def create_template_type():
 def create_intelligence(create_org, create_user):
     org = create_org
     user = create_user
-    return Intelligence.objects.create(
-        name='Test Intelligence', org=org, created_by=user
-    )
+    return Intelligence.objects.create(name="Test Intelligence", org=org, created_by=user)
 
 
 @fixture
 def create_project(create_org, create_user):
     org = create_org
     user = create_user
-    return Project.objects.create(
-        name='Test Project', org=org, created_by=user
-    )
+    return Project.objects.create(name="Test Project", org=org, created_by=user)
 
 
 @fixture
 def create_content_base(create_user, create_intelligence):
     intelligence = create_intelligence
     user = create_user
-    return ContentBase.objects.create(
-        title='test content base', intelligence=intelligence, created_by=user
-    )
+    return ContentBase.objects.create(title="test content base", intelligence=intelligence, created_by=user)

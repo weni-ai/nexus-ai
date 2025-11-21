@@ -7,7 +7,6 @@ from nexus.internals import InternalAuthentication, RestClient
 
 
 class FlowsRESTClient(RestClient):
-
     def __init__(self):
         self.base_url = settings.FLOWS_REST_ENDPOINT
         self.authentication_instance = InternalAuthentication()
@@ -26,32 +25,23 @@ class FlowsRESTClient(RestClient):
         )
 
     def list_project_flows(self, project_uuid: str, page_size: int = None, page: int = None):
-        params = {
-            "project": project_uuid,
-            "page_size": page_size,
-            "page": page
-        }
+        params = {"project": project_uuid, "page_size": page_size, "page": page}
         try:
             response = requests.get(
-                self._get_url("/api/v2/internals/flows"),
-                headers=self.authentication_instance.headers,
-                params=params
+                self._get_url("/api/v2/internals/flows"), headers=self.authentication_instance.headers, params=params
             )
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError:
-            return {'count': 0, 'next': None, 'previous': None, 'results': []}
+            return {"count": 0, "next": None, "previous": None, "results": []}
 
     def get_project_flows(self, project_uuid: str, flow_name: str):
         try:
-            params = dict(
-                flow_name=flow_name,
-                project=project_uuid
-            )
+            params = dict(flow_name=flow_name, project=project_uuid)
             response = requests.get(
                 url=self._get_url("/api/v2/internals/project-flows/"),
                 headers=self.authentication_instance.headers,
-                params=params
+                params=params,
             )
             response.raise_for_status()
             return response.json()
@@ -65,7 +55,7 @@ class FlowsRESTClient(RestClient):
             response = requests.get(
                 url=self._get_url("/api/v2/internals/contacts_fields"),
                 headers=self.authentication_instance.headers,
-                params=params
+                params=params,
             )
             response.raise_for_status()
             return response.json()
@@ -79,7 +69,7 @@ class FlowsRESTClient(RestClient):
             response = requests.post(
                 url=self._get_url("/api/v2/internals/contacts_fields"),
                 headers=self.authentication_instance.headers,
-                json=body
+                json=body,
             )
             response.raise_for_status()
             return response.json()
@@ -99,11 +89,7 @@ class FlowsRESTClient(RestClient):
         print("Body: ", body)
         print("Project UUID: ", project_uuid)
 
-        response = requests.post(
-            url,
-            json=body,
-            headers=self.authentication_instance.headers
-        )
+        response = requests.post(url, json=body, headers=self.authentication_instance.headers)
         print("response status: ", response.status_code)
         print("response: ", response.text)
         print("--------------------------")
