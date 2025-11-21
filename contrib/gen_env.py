@@ -244,6 +244,14 @@ def generate_env():
         "PROJECTS_WITH_SPECIAL_SESSION_ID": "",
         "PROJECTS_WITH_LARGE_DATASOURCE": "",
         "MODELS_WITH_REASONING": "",
+        "INSTRUCTION_CLASSIFY_NAME": "",
+        "WA_PHONE_NUMBER": "",
+        "WA_ACCESS_TOKEN": "",
+        "GATEWAY_VERIFICATION_TOKEN": "",
+        "GATEWAY_URL": "",
+        "TURN_SERVER_URL": "",
+        "TURN_SERVER_USERNAME": "",
+        "TURN_SERVER_PASSWORD": "",
     }
 
     with open(env_path, "w") as configfile:
