@@ -1,12 +1,8 @@
-
-
 class PostMessageHandler:
-
     def handle_post_message(
         self,
         final_response: str,
     ) -> str:
-
         replace_variables = {
             "\\n": "\n",
         }

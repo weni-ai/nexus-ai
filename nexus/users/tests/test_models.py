@@ -4,9 +4,8 @@ from ..models import User
 
 
 class TestUserManager(TestCase):
-
     def setUp(self) -> None:
-        self.user_email = 'test@test.com'
+        self.user_email = "test@test.com"
 
     def test_create_user(self):
         user = User.objects.create_user(email=self.user_email)
@@ -19,4 +18,4 @@ class TestUserManager(TestCase):
 
     def test_create_user_without_email(self):
         with self.assertRaises(ValueError):
-            User.objects.create_user(email='')
+            User.objects.create_user(email="")

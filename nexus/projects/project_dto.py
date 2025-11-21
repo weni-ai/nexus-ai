@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from nexus.users.models import User
 from nexus.projects.models import Project, ProjectAuthorizationRole
+from nexus.users.models import User
 
 
 @dataclass

@@ -1,7 +1,7 @@
 from typing import List
 
-from router.flow_start import FlowStart
 from router.entities import FlowDTO
+from router.flow_start import FlowStart
 
 
 class SimulateFlowStart(FlowStart):
@@ -17,7 +17,7 @@ class SimulateFlowStart(FlowStart):
         user_message: str,
         msg_event: dict = None,
         attachments: list = None,
-        llm_response: str = None
+        llm_response: str = None,
     ) -> None:
         params = {
             "message": user_message,
@@ -33,7 +33,7 @@ class SimulateFlowStart(FlowStart):
             "uuid": flow.uuid,
             "name": flow.name,
             "msg_event": msg_event,
-            "params": params
+            "params": params,
         }
 
         return response_data

@@ -1,5 +1,6 @@
 import json
 import re
+
 from django.test import TestCase
 
 from .mailroom import message_factory
@@ -7,28 +8,23 @@ from .mailroom import message_factory
 
 class MailroomMessageTest(TestCase):
     def test_contact_fields_serialization(self):
-        message = message_factory(project_uuid="123", text="Hello", contact_urn="123", contact_fields={
-            "cpf": {
-                "value": "123456",
-                "type": "text"
-            },
-            "age": {
-                "value": 26,
-                "type": "number"
-            }
-        })
+        message = message_factory(
+            project_uuid="123",
+            text="Hello",
+            contact_urn="123",
+            contact_fields={"cpf": {"value": "123456", "type": "text"}, "age": {"value": 26, "type": "number"}},
+        )
 
         expected_result = json.dumps({"cpf": "123456", "age": 26})
         self.assertEqual(message.contact_fields_as_json, expected_result)
 
     def test_contact_fields_with_none_value(self):
-        message = message_factory(project_uuid="123", text="Hello", contact_urn="123", contact_fields={
-            "cpf": None,
-            "age": {
-                "value": 26,
-                "type": "number"
-            }
-        })
+        message = message_factory(
+            project_uuid="123",
+            text="Hello",
+            contact_urn="123",
+            contact_fields={"cpf": None, "age": {"value": 26, "type": "number"}},
+        )
 
         expected_result = json.dumps({"cpf": None, "age": 26})
         self.assertEqual(message.contact_fields_as_json, expected_result)
@@ -46,10 +42,10 @@ class MailroomMessageTest(TestCase):
         self.assertEqual(message.contact_fields_as_json, expected_result)
 
     def test_metadata_serialization_with_values(self):
-        message = message_factory(project_uuid="123", text="Hello", contact_urn="123", metadata={"123" : "12"})
+        message = message_factory(project_uuid="123", text="Hello", contact_urn="123", metadata={"123": "12"})
 
         self.assertIsNotNone(message.metadata)
-        self.assertEqual(message.metadata, {"123" : "12"})
+        self.assertEqual(message.metadata, {"123": "12"})
 
     def test_metadata_serialization_with_none(self):
         message = message_factory(project_uuid="123", text="Hello", contact_urn="123", metadata={})
@@ -103,14 +99,15 @@ class MailroomMessageTest(TestCase):
         self.assertEqual(message.sanitized_urn, expected)
 
     def test_regex_pattern_directly(self):
-        pattern = r'(:[0-9]+)@.*'
+        pattern = r"(:[0-9]+)@.*"
         test_cases = [
             # Cases that should be removed
             ("ext:1234567890@domain.com", "ext:1234567890"),
-            ("project-891f3bfc-76c7-4fab-9cb0-42534b59d3cc-session-ext:212034573131@cartaopresente.alobebe.com.br", 
-            "project-891f3bfc-76c7-4fab-9cb0-42534b59d3cc-session-ext:212034573131"),
+            (
+                "project-891f3bfc-76c7-4fab-9cb0-42534b59d3cc-session-ext:212034573131@cartaopresente.alobebe.com.br",
+                "project-891f3bfc-76c7-4fab-9cb0-42534b59d3cc-session-ext:212034573131",
+            ),
             ("ext:123@domain@another.com", "ext:123"),
-            
             # Cases that should not be modified by the regex pattern the @ will be sanitized after
             ("ext@domain:1234567890", "ext@domain:1234567890"),
             ("ext:1234567890", "ext:1234567890"),
@@ -118,9 +115,9 @@ class MailroomMessageTest(TestCase):
             ("ext:abc@domain.com", "ext:abc@domain.com"),
             ("", ""),
         ]
-        
+
         for input_urn, expected in test_cases:
-            result = re.sub(pattern, r'\1', input_urn) if re.search(pattern, input_urn) else input_urn
+            result = re.sub(pattern, r"\1", input_urn) if re.search(pattern, input_urn) else input_urn
             assert result == expected, f"Input: {input_urn}\nExpected: {expected}\nGot: {result}"
 
     def test_edge_cases_with_message_factory(self):
@@ -131,10 +128,8 @@ class MailroomMessageTest(TestCase):
             ("ext:123@domain.com:8080", "ext:123"),
             ("ext:123@domain.com#fragment", "ext:123"),
             ("ext:123@domain.com?param=value", "ext:123"),
-            
             ("ext:123@domain.com", "ext:123"),
             ("ext:123@domain.com", "ext:123"),
-            
             ("ext:0@domain.com", "ext:0"),
             ("ext:999999999999999@domain.com", "ext:999999999999999"),
             ("ext:123456789@domain.com", "ext:123456789"),

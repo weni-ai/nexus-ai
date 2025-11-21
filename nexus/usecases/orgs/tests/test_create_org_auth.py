@@ -1,13 +1,14 @@
+from uuid import uuid4
+
 from django.test import TestCase
 
-from nexus.usecases.orgs.tests.org_factory import OrgFactory
-from nexus.usecases.orgs.exceptions import (
-    OrgRoleDoesNotExists,
-    OrgDoesNotExists,
-)
-from nexus.usecases.users.exceptions import UserDoesNotExists
 from nexus.usecases.orgs.create_org_auth import CreateOrgAuthUseCase
-from uuid import uuid4
+from nexus.usecases.orgs.exceptions import (
+    OrgDoesNotExists,
+    OrgRoleDoesNotExists,
+)
+from nexus.usecases.orgs.tests.org_factory import OrgFactory
+from nexus.usecases.users.exceptions import UserDoesNotExists
 
 
 class CreateOrgAuthTestCase(TestCase):
@@ -51,5 +52,5 @@ class CreateOrgAuthTestCase(TestCase):
     def test_create_org_auth_invalid_user_email(self):
         role: int = 3
         with self.assertRaises(UserDoesNotExists):
-            invalid_email: str = 'invalid@email.com'
+            invalid_email: str = "invalid@email.com"
             self.usecase.create_org_auth(str(self.org.uuid), invalid_email, role=role)
