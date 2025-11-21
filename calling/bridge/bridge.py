@@ -10,7 +10,7 @@ from aiortc.contrib.media import MediaRelay
 from router.tasks.invoke import invoke_audio_agents
 from calling.clients.openai import get_realtime_answer
 from ..sessions.session import Session, Status
-from calling.agent import response_instructions
+from calling.agent import response_instructions, get_agent_setup
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +129,18 @@ class RTCBridge:
                 if message_type == "session.updated":
                     return
 
+                if message_type == "response.created":
+                    await EventRegistry.notify(
+                        "openai.response.created",
+                        session
+                    )
+
+                if message_type == "output_audio_buffer.stopped":
+                    await EventRegistry.notify(
+                        "openai.audio.stopped",
+                        session
+                    )
+
                 if message_type == "error":
                     print(f"[on_message] Error message: {data}")
                     
@@ -157,10 +169,10 @@ class RTCBridge:
                     # response = await handle_input(input_text, session)
                     session.response.awaiting_orchestration = True
 
-                    response = await asyncio.to_thread(invoke_audio_agents, session, input_text)
+                    response = await asyncio.to_thread(invoke_audio_agents, session, input_text, use_langfuse=True)
 
                     session.response.awaiting_orchestration = False
-                
+
                     response = clean_response(response)
 
                     print("############[SAIDA]############")
@@ -236,7 +248,7 @@ class RTCBridge:
         logger.debug("[OAI] Open AI Offer:\n", openai_connection.localDescription.sdp)
 
         try:
-            answer_sdp = await get_realtime_answer(openai_connection.localDescription.sdp)
+            answer_sdp = await get_realtime_answer(openai_connection.localDescription.sdp, get_agent_setup(session.project_uuid))
 
             await openai_connection.setRemoteDescription(RTCSessionDescription(answer_sdp, "answer"))
             print("[OAI] Answer da OpenAI aplicado (tamanho)", len(answer_sdp or ""))

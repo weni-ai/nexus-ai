@@ -79,6 +79,7 @@ class Session:
     offer_sdp: str
     wa_phone_number_id: str
     wpp_connection: "RTCPeerConnection"
+    project_uuid: str
     openai_connection: "RTCPeerConnection" = None
     answer_sdp: str = None
     agents: Optional[dict] = None
