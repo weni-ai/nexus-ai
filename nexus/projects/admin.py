@@ -55,6 +55,7 @@ class ProjectAdmin(admin.ModelAdmin):
                     "conversation_turns_to_include",
                     "exclude_previous_thinking_steps",
                     "guardrail",
+                    "default_formatter_foundation_model",
                 )
             },
         ),
