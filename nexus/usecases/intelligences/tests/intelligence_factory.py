@@ -13,7 +13,6 @@ from nexus.intelligences.models import (
     ContentBaseLink,
     ContentBaseText,
     Conversation,
-    ConversationMessage,
     InlineAgentMessage,
     IntegratedIntelligence,
     Intelligence,
@@ -178,11 +177,3 @@ class ConversationFactory(factory.django.DjangoModelFactory):
     resolution = factory.Faker("random_element", elements=[choice[0] for choice in Conversation.RESOLUTION_CHOICES])
     topic = factory.SubFactory(TopicsFactory)
     subtopic = factory.SubFactory(SubTopicsFactory, topic=factory.SelfAttribute("..topic"))
-
-
-class ConversationMessageFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = ConversationMessage
-
-    conversation = factory.SubFactory(ConversationFactory)
-    message = factory.SubFactory(InlineAgentMessageFactory)

@@ -339,3 +339,128 @@ class TestGetLogGroup(TestCase):
         log_group = self.usecase.get_log_group(self.project.uuid, self.agent.slug, tool_key)
         print(log_group)
         self.assertEqual(log_group.get("tool_name"), f"{tool_key}-{self.agent.id}")
+
+
+class TestInlineAgentsConfiguration(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory(
+            name="Test Project",
+            brain_on=True,
+        )
+        from nexus.inline_agents.models import InlineAgentsConfiguration
+        self.config = InlineAgentsConfiguration.objects.create(
+            project=self.project,
+            agents_backend="OpenAIBackend",
+            audio_orchestration=False,
+            audio_orchestration_voice=None,
+        )
+
+    def test_set_audio_orchestration_voice_with_valid_voice(self):
+        """Testa que uma voz válida é salva corretamente"""
+        valid_voice = "alloy"
+        self.config.set_audio_orchestration_voice(valid_voice)
+        
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.audio_orchestration_voice, valid_voice)
+
+    def test_set_audio_orchestration_voice_with_all_valid_voices(self):
+        """Testa que todas as vozes válidas funcionam"""
+        for voice in self.config.valid_voices:
+            self.config.set_audio_orchestration_voice(voice)
+            self.config.refresh_from_db()
+            self.assertEqual(self.config.audio_orchestration_voice, voice)
+
+    def test_set_audio_orchestration_voice_with_invalid_voice(self):
+        """Testa que uma voz inválida levanta ValueError"""
+        invalid_voice = "invalid_voice"
+        
+        with self.assertRaises(ValueError):
+            self.config.set_audio_orchestration_voice(invalid_voice)
+        
+        # Verifica que o valor não foi alterado
+        self.config.refresh_from_db()
+        self.assertIsNone(self.config.audio_orchestration_voice)
+
+    def test_set_audio_orchestration_voice_with_empty_string(self):
+        """Testa que string vazia é considerada inválida"""
+        with self.assertRaises(ValueError):
+            self.config.set_audio_orchestration_voice("")
+        
+        self.config.refresh_from_db()
+        self.assertIsNone(self.config.audio_orchestration_voice)
+
+    def test_set_audio_orchestration_activate_with_valid_voice(self):
+        """Testa ativar audio_orchestration com voz válida"""
+        self.config.set_audio_orchestration(True, "nova")
+        
+        self.config.refresh_from_db()
+        self.assertTrue(self.config.audio_orchestration)
+        self.assertEqual(self.config.audio_orchestration_voice, "nova")
+
+    def test_set_audio_orchestration_activate_without_voice(self):
+        """Testa ativar audio_orchestration sem voz"""
+        self.config.set_audio_orchestration(True)
+        
+        self.config.refresh_from_db()
+        self.assertTrue(self.config.audio_orchestration)
+        # Voz não deve ser alterada se não fornecida
+        self.assertIsNone(self.config.audio_orchestration_voice)
+
+    def test_set_audio_orchestration_deactivate_with_voice(self):
+        """Testa desativar audio_orchestration mantendo a voz"""
+        # Primeiro ativa com uma voz
+        self.config.set_audio_orchestration(True, "echo")
+        self.config.refresh_from_db()
+        self.assertTrue(self.config.audio_orchestration)
+        self.assertEqual(self.config.audio_orchestration_voice, "echo")
+        
+        # Desativa mantendo a voz
+        self.config.set_audio_orchestration(False, "echo")
+        self.config.refresh_from_db()
+        self.assertFalse(self.config.audio_orchestration)
+        self.assertEqual(self.config.audio_orchestration_voice, "echo")
+
+    def test_set_audio_orchestration_deactivate_without_voice(self):
+        """Testa desativar audio_orchestration sem voz"""
+        # Primeiro ativa
+        self.config.set_audio_orchestration(True, "onyx")
+        self.config.refresh_from_db()
+        self.assertTrue(self.config.audio_orchestration)
+        
+        # Desativa sem voz
+        self.config.set_audio_orchestration(False)
+        self.config.refresh_from_db()
+        self.assertFalse(self.config.audio_orchestration)
+        # Voz anterior deve ser mantida
+        self.assertEqual(self.config.audio_orchestration_voice, "onyx")
+
+    def test_set_audio_orchestration_with_invalid_voice_raises_error(self):
+        """Testa que set_audio_orchestration com voz inválida levanta ValueError"""
+        with self.assertRaises(ValueError):
+            self.config.set_audio_orchestration(True, "invalid_voice")
+        
+        # Verifica que nada foi alterado
+        self.config.refresh_from_db()
+        self.assertFalse(self.config.audio_orchestration)
+        self.assertIsNone(self.config.audio_orchestration_voice)
+
+    def test_set_audio_orchestration_update_voice_when_already_activated(self):
+        """Testa atualizar a voz quando audio_orchestration já está ativado"""
+        # Ativa com uma voz
+        self.config.set_audio_orchestration(True, "coral")
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.audio_orchestration_voice, "coral")
+        
+        # Atualiza para outra voz válida
+        self.config.set_audio_orchestration(True, "sage")
+        self.config.refresh_from_db()
+        self.assertTrue(self.config.audio_orchestration)
+        self.assertEqual(self.config.audio_orchestration_voice, "sage")
+
+    def test_set_audio_orchestration_activate_with_none_voice(self):
+        """Testa ativar sem passar voz (None)"""
+        self.config.set_audio_orchestration(True, None)
+        
+        self.config.refresh_from_db()
+        self.assertTrue(self.config.audio_orchestration)
+        self.assertIsNone(self.config.audio_orchestration_voice)

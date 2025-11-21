@@ -74,11 +74,6 @@ class MessageService:
             ttl_hours=ttl_hours,
         )
 
-        # Ensure conversation exists only if channel_uuid is not None
-        self._get_conversation_service().ensure_conversation_exists(
-            project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
-        )
-
     def add_message_to_cache(
         self,
         project_uuid: str,

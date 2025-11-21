@@ -18,12 +18,12 @@ from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
-from nexus.usecases.inline_agents.get import (
-    GetInlineAgentsUsecase,
-    GetInlineCredentialsUsecase,
-    GetLogGroupUsecase,
-)
+from nexus.usecases.inline_agents.get import GetInlineAgentsUsecase, GetInlineCredentialsUsecase, GetLogGroupUsecase
 from nexus.usecases.inline_agents.update import UpdateAgentUseCase
+from nexus.usecases.intelligences.get_by_uuid import (
+    create_inline_agents_configuration,
+    get_project_and_content_base_data,
+)
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from router.entities import message_factory
 
@@ -469,3 +469,56 @@ class AgentEndSessionView(APIView):
         backend = BackendsRegistry.get_backend(agents_backend)
         backend.end_session(message_obj.project_uuid, message_obj.sanitized_urn)
         return Response({"message": "Agent session ended successfully"})
+
+
+class AgentBuilderAudio(APIView):
+    def get(self, request, project_uuid):
+        _, _, inline_agents_configuration = get_project_and_content_base_data(project_uuid=project_uuid)
+        if inline_agents_configuration:
+            return Response({
+                "audio_orchestration": inline_agents_configuration.audio_orchestration,
+                "agent_voice": inline_agents_configuration.audio_orchestration_voice
+            })
+
+        return Response({
+            "audio_orchestration": False,
+            "agent_voice": None
+        })
+
+    def post(self, request, project_uuid):
+        agent_voice = request.data.get("agent_voice")
+        audio_orchestration = request.data.get("audio_orchestration")
+
+        if not agent_voice and audio_orchestration is None:
+            return Response(
+                {"error": "At least one of 'audio_orchestration' or 'agent_voice' is required"},
+                status=400
+            )
+
+        try:
+            project, _, inline_agents_configuration = get_project_and_content_base_data(project_uuid=project_uuid)
+
+            if inline_agents_configuration is None:
+                inline_agents_configuration = create_inline_agents_configuration(project, audio_orchestration=audio_orchestration, audio_orchestration_voice=agent_voice)
+
+            if audio_orchestration is not None and agent_voice:
+                inline_agents_configuration.set_audio_orchestration(audio_orchestration, agent_voice)
+
+            elif audio_orchestration is not None:
+                inline_agents_configuration.set_audio_orchestration(audio_orchestration)
+
+            elif agent_voice:
+                inline_agents_configuration.set_audio_orchestration_voice(agent_voice)
+
+            return Response(
+                {
+                    "audio_orchestration": inline_agents_configuration.audio_orchestration,
+                    "agent_voice": inline_agents_configuration.audio_orchestration_voice
+                },
+                status=200
+            )
+
+        except ValueError:
+            return Response({"error": "Invalid voice option"}, status=400)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
