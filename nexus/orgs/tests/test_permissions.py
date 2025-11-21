@@ -1,9 +1,8 @@
 from django.test import TestCase
 
-from nexus.usecases.orgs.tests.org_factory import OrgAuthFactory
-
 from nexus.orgs import permissions
 from nexus.orgs.models import Role
+from nexus.usecases.orgs.tests.org_factory import OrgAuthFactory
 
 # TODO: Use parameterized tests
 
@@ -150,7 +149,6 @@ class TestViewerPermissionTestCase(TestCase):
 
 
 class TestOrgAuthDoesNotExist(TestCase):
-
     def setUp(self) -> None:
         self.user = OrgAuthFactory().user
         self.org = OrgAuthFactory().org
