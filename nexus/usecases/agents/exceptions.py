@@ -31,5 +31,7 @@ class SkillFileTooLarge(APIException):
 
 class AgentAttributeNotAllowed(APIException):
     satus_code = 400
-    default_detail = 'You are not allowed to add or update prompt_override_configuration, memory_configuration and foundationModel.'
+    default_detail = (
+        "You are not allowed to add or update prompt_override_configuration, memory_configuration and foundationModel."
+    )
     default_code = "agent_attribute_not_allowed"

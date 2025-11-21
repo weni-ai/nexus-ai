@@ -1,14 +1,13 @@
 from rest_framework import serializers
-from nexus.logs.models import MessageLog, RecentActivities, Message
-from nexus.inline_agents.models import InlineAgentMessage
-from nexus.usecases.actions.retrieve import FlowDoesNotExist
 
-from router.repositories.orm import FlowsORMRepository
+from nexus.inline_agents.models import InlineAgentMessage
+from nexus.logs.models import Message, MessageLog, RecentActivities
+from nexus.usecases.actions.retrieve import FlowDoesNotExist
 from router.classifiers import Classifier
+from router.repositories.orm import FlowsORMRepository
 
 
 class TagPercentageSerializer(serializers.Serializer):
-
     class Meta:
         model = MessageLog
         fields = [
@@ -25,13 +24,7 @@ class TagPercentageSerializer(serializers.Serializer):
 class MessageHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = MessageLog
-        fields = [
-            "id",
-            "created_at",
-            "message_text",
-            "tag",
-            "classification"
-        ]
+        fields = ["id", "created_at", "message_text", "tag", "classification"]
 
     message_text = serializers.SerializerMethodField()
     tag = serializers.SerializerMethodField()
@@ -45,10 +38,7 @@ class MessageHistorySerializer(serializers.ModelSerializer):
         if reflection_tag == "action_started":
             return reflection_tag
 
-        return {
-            "S": "success",
-            "F": "failed"
-        }.get(obj.message.response_status)
+        return {"S": "success", "F": "failed"}.get(obj.message.response_status)
 
 
 class MessageLogSerializer(serializers.ModelSerializer):
@@ -102,7 +92,6 @@ class MessageFullLogSerializer(MessageLogSerializer):
 
 
 class RecentActivitiesSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = RecentActivities
         fields = [
@@ -123,7 +112,6 @@ class RecentActivitiesSerializer(serializers.ModelSerializer):
         return obj.created_by.email
 
     def get_model_group(self, obj: RecentActivities) -> str:
-
         ACTION_MODEL_GROUPS = {
             "Flow": "Action",
             "ContentBaseAgent": "Customization",
@@ -177,7 +165,6 @@ class MessageDetailSerializer(serializers.ModelSerializer):
         return obj.messagelog.classification != Classifier.CLASSIFICATION_OTHER
 
     def get_actions_type(self, obj):
-
         if obj.messagelog.reflection_data:
             action_name: str | None = obj.messagelog.reflection_data.get("action_name")
             if action_name:
@@ -192,9 +179,9 @@ class MessageDetailSerializer(serializers.ModelSerializer):
             # old logs without action info in reflection_data
             if not action_uuid:
                 try:
-                    action = FlowsORMRepository(
-                        project_uuid=str(obj.messagelog.project.uuid)
-                    ).get_project_flow_by_name(obj.messagelog.classification)
+                    action = FlowsORMRepository(project_uuid=str(obj.messagelog.project.uuid)).get_project_flow_by_name(
+                        obj.messagelog.classification
+                    )
                     return str(action.pk)
                 except FlowDoesNotExist:
                     return None

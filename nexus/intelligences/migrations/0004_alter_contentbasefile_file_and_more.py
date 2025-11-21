@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('intelligences', '0003_contentbasetext_file_contentbasetext_file_name'),
+        ("intelligences", "0003_contentbasetext_file_contentbasetext_file_name"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='contentbasefile',
-            name='file',
+            model_name="contentbasefile",
+            name="file",
             field=models.URLField(blank=True, null=True),
         ),
         migrations.AlterField(
-            model_name='contentbasefile',
-            name='file_name',
+            model_name="contentbasefile",
+            name="file_name",
             field=models.CharField(blank=True, max_length=255, null=True),
         ),
     ]

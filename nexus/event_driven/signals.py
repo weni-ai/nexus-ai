@@ -1,6 +1,5 @@
+from django.db import close_old_connections, reset_queries
 from django.dispatch import Signal
-from django.db import reset_queries, close_old_connections
-
 
 message_started = Signal()
 message_finished = Signal()
