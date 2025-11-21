@@ -1,5 +1,5 @@
-from typing import List
 from abc import ABC, abstractmethod
+from typing import List
 
 
 class FlowStart(ABC):  # pragma: no cover

@@ -14,15 +14,9 @@ class ResolutionDTO:
         return {key: value for key, value in self.__dict__.items() if value is not None}
 
 
-def resolution_message(
-    resolution_dto: ResolutionDTO
-):  # pragma: no cover
+def resolution_message(resolution_dto: ResolutionDTO):  # pragma: no cover
     publisher = RabbitMQPublisher()
 
     message = resolution_dto.dict()
 
-    publisher.send_message(
-        body=message,
-        exchange="resolution.topic",
-        routing_key=""
-    )
+    publisher.send_message(body=message, exchange="resolution.topic", routing_key="")

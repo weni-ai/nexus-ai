@@ -1,6 +1,6 @@
-import amqp
 import time
 
+import amqp
 from django.conf import settings
 
 
@@ -9,7 +9,7 @@ class RabbitMQConnection:
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(RabbitMQConnection, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance.connect()
         return cls._instance
 
@@ -19,7 +19,7 @@ class RabbitMQConnection:
             virtual_host=settings.EDA_VIRTUAL_HOST,
             userid=settings.EDA_BROKER_USER,
             password=settings.EDA_BROKER_PASSWORD,
-            port=settings.EDA_BROKER_PORT
+            port=settings.EDA_BROKER_PORT,
         )
         self.channel = self.connection.channel()
 

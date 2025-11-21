@@ -1,24 +1,22 @@
 from enum import Enum
-from uuid import uuid4
 from typing import Optional
+from uuid import uuid4
 
-from django.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
+from django.db import models
 
 from nexus.db.models import BaseModel, SoftDeleteModel
+from nexus.inline_agents.models import InlineAgentMessage
 from nexus.orgs.models import Org
 from nexus.projects.models import Project
-from nexus.inline_agents.models import InlineAgentMessage
 
 
 class Intelligence(BaseModel, SoftDeleteModel):
     name = models.CharField(max_length=255)
     content_bases_count = models.PositiveBigIntegerField(default=0)
     description = models.TextField(null=True, blank=True)
-    org = models.ForeignKey(
-        Org, on_delete=models.CASCADE, related_name='intelligences'
-    )
+    org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name="intelligences")
     is_router = models.BooleanField(default=False)
 
     def increase_content_bases_count(self):
@@ -33,13 +31,12 @@ class Intelligence(BaseModel, SoftDeleteModel):
 
 class IntegratedIntelligence(BaseModel):
     intelligence = models.ForeignKey(Intelligence, on_delete=models.CASCADE)
-    project = models.ForeignKey('projects.Project', on_delete=models.CASCADE)
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
 
     def unique_router(self):
         if self.intelligence.is_router:
             existing_router = IntegratedIntelligence.objects.filter(
-                project=self.project,
-                intelligence__is_router=True
+                project=self.project, intelligence__is_router=True
             ).exclude(uuid=self.uuid)
             if existing_router.exists():
                 raise ValidationError("A project can only have one IntegratedIntelligence with is_router=True")
@@ -50,17 +47,16 @@ class IntegratedIntelligence(BaseModel):
 
 
 class Languages(Enum):
-    PORTUGUESE = 'pt-br'
-    ENGLISH = 'en-us'
-    SPANISH = 'es'
+    PORTUGUESE = "pt-br"
+    ENGLISH = "en-us"
+    SPANISH = "es"
 
 
 class ContentBase(BaseModel, SoftDeleteModel):
-
     LANGUAGES = (
         (Languages.ENGLISH.value, "English"),
         (Languages.PORTUGUESE.value, "Portuguese"),
-        (Languages.SPANISH.value, "Spanish")
+        (Languages.SPANISH.value, "Spanish"),
     )
 
     title = models.CharField(max_length=255)
@@ -68,13 +64,9 @@ class ContentBase(BaseModel, SoftDeleteModel):
     intelligence = models.ForeignKey(
         Intelligence,
         on_delete=models.CASCADE,
-        related_name='%(class)ss',
+        related_name="%(class)ss",
     )
-    language = models.CharField(
-        max_length=10,
-        default=Languages.PORTUGUESE.value,
-        choices=LANGUAGES
-    )
+    language = models.CharField(max_length=10, default=Languages.PORTUGUESE.value, choices=LANGUAGES)
     is_router = models.BooleanField(default=False)
 
 
@@ -82,68 +74,60 @@ class ContentBaseFile(BaseModel, SoftDeleteModel):
     file = models.URLField(null=True, blank=True)
     file_name = models.CharField(max_length=255, null=True, blank=True)
     extension_file = models.CharField(max_length=10)
-    content_base = models.ForeignKey(
-        ContentBase, related_name='contentbasefiles', on_delete=models.CASCADE
-    )
+    content_base = models.ForeignKey(ContentBase, related_name="contentbasefiles", on_delete=models.CASCADE)
 
     @property
     def created_file_name(self):
-        file_name_without_extension = self.file_name.split('.')[0]
+        file_name_without_extension = self.file_name.split(".")[0]
         file_name_without_uuid = file_name_without_extension[:-37]
         return file_name_without_uuid
 
 
 class ContentBaseLink(BaseModel, SoftDeleteModel):
     link = models.URLField()
-    content_base = models.ForeignKey(
-        ContentBase, related_name='contentbaselinks', on_delete=models.CASCADE
+    content_base = models.ForeignKey(ContentBase, related_name="contentbaselinks", on_delete=models.CASCADE)
+    name = models.CharField(
+        null=True, max_length=255, help_text="used to manage file with content from the link in bedrock"
     )
-    name = models.CharField(null=True, max_length=255, help_text="used to manage file with content from the link in bedrock")
 
 
 class ContentBaseText(BaseModel, SoftDeleteModel):
     file = models.URLField(blank=True, null=True)
     file_name = models.CharField(max_length=255, null=True, blank=True)
     text = models.TextField()
-    content_base = models.ForeignKey(
-        ContentBase, related_name='contentbasetexts', on_delete=models.CASCADE
-    )
+    content_base = models.ForeignKey(ContentBase, related_name="contentbasetexts", on_delete=models.CASCADE)
 
 
 class ContentBaseLogs(models.Model):
     FEEDBACK_CHOICES = [
         (0, "Resposta foi em um assunto completamente diferente do perguntado."),
-        (1, "Resposta foi parcialmente correta, pois além da parte correta, trouxe informações no mesmo tema mas fora do contexto disponível."),
-        (2, "Resposta foi parcialmente correta, pois além da parte correta, trouxe informações de um tema completamente diferente."),
-        (3, "Respondeu que não possui a informação para fornecer a resposta, porém a informação consta no contexto disponível."),
+        (
+            1,
+            "Resposta foi parcialmente correta, pois além da parte correta, trouxe informações "
+            "no mesmo tema mas fora do contexto disponível.",
+        ),
+        (
+            2,
+            "Resposta foi parcialmente correta, pois além da parte correta, trouxe informações "
+            "de um tema completamente diferente.",
+        ),
+        (
+            3,
+            "Respondeu que não possui a informação para fornecer a resposta, porém a informação "
+            "consta no contexto disponível.",
+        ),
     ]
 
-    content_base = models.ForeignKey(
-        ContentBase,
-        related_name="logs",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True
-    )
+    content_base = models.ForeignKey(ContentBase, related_name="logs", on_delete=models.SET_NULL, null=True, blank=True)
     question = models.TextField()
     language = models.CharField(max_length=10)
-    texts_chunks = ArrayField(
-        models.TextField()
-    )
+    texts_chunks = ArrayField(models.TextField())
     full_prompt = models.TextField()
     weni_gpt_response = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
-    wenigpt_version = models.CharField(
-        null=True,
-        max_length=255
-    )
+    wenigpt_version = models.CharField(null=True, max_length=255)
     testing = models.BooleanField(default=False)
-    user_feedback = models.CharField(
-        max_length=100,
-        choices=FEEDBACK_CHOICES,
-        null=True,
-        blank=True
-    )
+    user_feedback = models.CharField(max_length=100, choices=FEEDBACK_CHOICES, null=True, blank=True)
     correct_answer = models.BooleanField(default=True)
 
     def __str__(self) -> str:
@@ -183,13 +167,18 @@ class UserQuestion(models.Model):
         related_name="user_question",
     )
 
+    def __str__(self):
+        return f"UserQuestion - {self.text[:50]}"
+
 
 class LLM(BaseModel, SoftDeleteModel):
-
     model = models.CharField(max_length=255, default="WeniGPT")
     setup = models.JSONField()
     advanced_options = models.JSONField(null=True, blank=True)
     integrated_intelligence = models.OneToOneField(IntegratedIntelligence, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"LLM - {self.model}"
 
 
 class ContentBaseAgent(models.Model):
@@ -197,12 +186,18 @@ class ContentBaseAgent(models.Model):
     role = models.CharField(max_length=255, null=True)
     personality = models.CharField(max_length=255, null=True)
     goal = models.TextField()
-    content_base = models.OneToOneField(ContentBase, related_name='agent', on_delete=models.CASCADE)
+    content_base = models.OneToOneField(ContentBase, related_name="agent", on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"ContentBaseAgent - {self.name}"
 
 
 class ContentBaseInstruction(models.Model):
     instruction = models.TextField()
-    content_base = models.ForeignKey(ContentBase, related_name='instructions', on_delete=models.CASCADE)
+    content_base = models.ForeignKey(ContentBase, related_name="instructions", on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"Instruction - {self.instruction[:50]}"
 
 
 class Topics(models.Model):
@@ -211,7 +206,10 @@ class Topics(models.Model):
     description = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    project = models.ForeignKey('projects.Project', on_delete=models.CASCADE)
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
 
 
 class SubTopics(models.Model):
@@ -222,15 +220,17 @@ class SubTopics(models.Model):
 
     topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="subtopics")
 
+    def __str__(self):
+        return f"{self.topic.name} - {self.name}"
+
 
 class Conversation(models.Model):
-
     RESOLUTION_CHOICES = [
         (0, "Resolved"),
         (1, "Unresolved"),
         (2, "In Progress"),
         (3, "Unclassified"),
-        (4, "Has Chat Room")
+        (4, "Has Chat Room"),
     ]
 
     CSAT_CHOICES = [
@@ -252,19 +252,20 @@ class Conversation(models.Model):
     contact_name = models.CharField(max_length=255, null=True, blank=True)
     channel_uuid = models.UUIDField(null=True, blank=True)
     topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
-    subtopic = models.ForeignKey(SubTopics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True)
+    subtopic = models.ForeignKey(
+        SubTopics, on_delete=models.CASCADE, related_name="conversations", null=True, blank=True
+    )
     nps = models.IntegerField(null=True, blank=True)
-    csat = models.CharField(
-        max_length=255,
-        choices=CSAT_CHOICES,
-        null=True,
-        blank=True
-    )
-    resolution = models.CharField(
-        max_length=255,
-        choices=RESOLUTION_CHOICES,
-        default=2
-    )
+    csat = models.CharField(max_length=255, choices=CSAT_CHOICES, null=True, blank=True)
+    resolution = models.CharField(max_length=255, choices=RESOLUTION_CHOICES, default=2)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["project", "contact_urn", "start_date", "end_date", "channel_uuid"]),
+        ]
+
+    def __str__(self):
+        return f"Conversation - {self.uuid} - {self.contact_name}"
 
     def get_topic(self):
         return self.topic.name if self.topic else None

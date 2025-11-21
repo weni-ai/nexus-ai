@@ -4,13 +4,9 @@ from ..task_manager_dto import CeleryContentBaseFileTaskManagerDTO
 
 
 class TestTaskManagerDTO(TestCase):
-
     def test_celery_content_base_file_task_manager_dto(self):
         dto = CeleryContentBaseFileTaskManagerDTO(
-            status="status",
-            uuid="uuid",
-            created_by="created_by",
-            content_base_file_uuid="content_base_file_uuid"
+            status="status", uuid="uuid", created_by="created_by", content_base_file_uuid="content_base_file_uuid"
         )
 
         assert dto.status == "status"
@@ -22,5 +18,5 @@ class TestTaskManagerDTO(TestCase):
             "status": "status",
             "uuid": "uuid",
             "created_by": "created_by",
-            "content_base_file_uuid": "content_base_file_uuid"
+            "content_base_file_uuid": "content_base_file_uuid",
         }
