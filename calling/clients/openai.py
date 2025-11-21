@@ -4,10 +4,8 @@ import json
 import requests
 from django.conf import settings
 
-from calling.agent import agent
 
-
-async def get_realtime_answer(offer_sdp: str) -> str:
+async def get_realtime_answer(offer_sdp: str, agent: dict) -> str:
     url = f"https://api.openai.com/v1/realtime/calls?model=gpt-realtime"
 
     headers = {

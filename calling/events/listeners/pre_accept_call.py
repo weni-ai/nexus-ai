@@ -1,6 +1,7 @@
 from django.conf import settings
 
 from calling.clients.meta import pre_accept_call
+from calling.events import EventRegistry
 from calling.events.listener import EventListener
 from calling.sessions import Session, SessionManager
 
@@ -14,7 +15,10 @@ class PreAcceptCallListener(EventListener):
         await pre_accept_call(
             session.answer_sdp,
             session.call_id,
-            settings.WA_PHONE_NUMBER,
+            session.wa_phone_number_id,
             settings.WA_ACCESS_TOKEN
         )
+
+        await EventRegistry.notify("whatsapp.call.pre-accepted", session)
+
 

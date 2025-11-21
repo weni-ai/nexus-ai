@@ -35,6 +35,9 @@ class OpenAISupervisorRepository(SupervisorRepository):
             "prompt_override_configuration": supervisor.prompt_override_configuration,
             "default_instructions_for_collaborators": supervisor.default_instructions_for_collaborators,
             "max_tokens": supervisor.max_tokens,
+            "exclude_tools_from_audio_orchestration": supervisor.exclude_tools_from_audio_orchestration,
+            "exclude_tools_from_text_orchestration": supervisor.exclude_tools_from_text_orchestration,
+            "transcription_instructions": supervisor.transcription_prompt,
         }
 
         return supervisor_dict
