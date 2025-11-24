@@ -650,8 +650,6 @@ BEDROCK_CONVERSE_MAX_LENGHT = env.int("BEDROCK_CONVERSE_MAX_LENGHT", 4096)
 FORMATTER_AGENT_MODEL = env.str("FORMATTER_AGENT_MODEL", "gpt-4.1-mini")
 FLOW_USER_EMAIL = env.str("FLOW_USER_EMAIL", "")
 
-<<<<<<< HEAD
-
 """
 Calling Settings TODO: Move to the appropriate settings.
 """
@@ -665,7 +663,6 @@ GATEWAY_URL = env.str("GATEWAY_URL")
 TURN_SERVER_URL = env.str("TURN_SERVER_URL")
 TURN_SERVER_USERNAME = env.str("TURN_SERVER_USERNAME")
 TURN_SERVER_PASSWORD = env.str("TURN_SERVER_PASSWORD")
-=======
 # Logging configuration
 LOG_LEVEL = env.str("LOG_LEVEL", "INFO")
 
@@ -695,4 +692,3 @@ LOGGING = {
         },
     },
 }
->>>>>>> fix/replace-prints-with-logging-1
