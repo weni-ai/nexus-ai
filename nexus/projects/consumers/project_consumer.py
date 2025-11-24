@@ -22,7 +22,7 @@ class ProjectConsumer(EDAConsumer):
                 org_uuid=body.get("organization_uuid"),
                 brain_on=body.get("brain_on"),
                 authorizations=body.get("authorizations"),
-                indexer_database=body.get("indexer_database") or Project.SENTENX,
+                indexer_database=body.get("indexer_database") or Project.BEDROCK,
             )
 
             project_creation = ProjectsUseCase()

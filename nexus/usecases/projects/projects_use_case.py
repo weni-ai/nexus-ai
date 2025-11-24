@@ -111,21 +111,7 @@ class ProjectsUseCase:
         user = get_by_email(user_email=user_email)
         org = orgs.get_by_uuid(org_uuid=project_dto.org_uuid)
 
-        backend = "OpenAIBackend"  # Default
-        if project_dto.indexer_database == Project.BEDROCK:
-            backend = "BedrockBackend"
-            sentry_sdk.set_tag("project_backend", "BedrockBackend")
-            sentry_sdk.set_context(
-                "project_creation",
-                {
-                    "uuid": project_dto.uuid,
-                    "name": project_dto.name,
-                    "org_uuid": project_dto.org_uuid,
-                    "brain_on": project_dto.brain_on,
-                    "indexer_database": project_dto.indexer_database,
-                },
-            )
-            sentry_sdk.capture_message("Project created with Bedrock backend", level="info")
+        backend = "OpenAIBackend"
 
         template_type = None
         if project_dto.is_template:
@@ -168,10 +154,6 @@ class ProjectsUseCase:
                     supervisor_instructions=supervisor_instructions,
                     user=user,
                 )
-            else:
-                # For OpenAIBackend (AB 2.5), do not provision Bedrock supervisor resources
-                # Multi-agent orchestration happens at runtime via OpenAI backend
-                pass
 
         auths = project_dto.authorizations
         auth_usecase = ProjectAuthUseCase()
