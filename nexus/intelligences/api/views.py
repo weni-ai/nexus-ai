@@ -1916,9 +1916,10 @@ class InstructionsClassificationAPIView(APIView):
     )
     def post(self, request, project_uuid):
         try:
-            instruction = request.data.get("instruction", "")
-            if not instruction:
-                return Response({"error": "Instruction is required"}, status=status.HTTP_400_BAD_REQUEST)
+            serializer = InstructionClassificationRequestSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            instruction = serializer.validated_data["instruction"]
+            language = serializer.validated_data["language"]
 
             user = request.user
             name = user.name or user.email.split("@")[0]
@@ -1946,6 +1947,7 @@ class InstructionsClassificationAPIView(APIView):
                 adjective=adjective,
                 instructions=instructions,
                 instruction_to_classify=instruction,
+                language=language,
             )
 
             return Response({"classification": classification, "suggestion": suggestion}, status=status.HTTP_200_OK)
