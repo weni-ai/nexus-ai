@@ -4,6 +4,7 @@ from sentry_sdk import capture_exception
 
 from nexus.event_driven.consumer.consumers import EDAConsumer
 from nexus.event_driven.parsers import JSONParser
+from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
@@ -22,6 +23,7 @@ class ProjectConsumer(EDAConsumer):
                 org_uuid=body.get("organization_uuid"),
                 brain_on=body.get("brain_on"),
                 authorizations=body.get("authorizations"),
+                indexer_database=body.get("indexer_database") or Project.SENTENX,
             )
 
             project_creation = ProjectsUseCase()
