@@ -1,7 +1,7 @@
 """Mock service for data lake events - useful for testing and local development."""
 
 import logging
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 from inline_agents.data_lake.event_service import DataLakeEventService
 

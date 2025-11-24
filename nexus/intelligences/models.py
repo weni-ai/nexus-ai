@@ -7,7 +7,6 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from nexus.db.models import BaseModel, SoftDeleteModel
-from nexus.inline_agents.models import InlineAgentMessage
 from nexus.orgs.models import Org
 from nexus.projects.models import Project
 

@@ -53,5 +53,5 @@ class DataLakeEventDTO:
             "key": self.key.strip() if self.key else "",
             "value_type": self.value_type,
             "value": self.value,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }

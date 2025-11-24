@@ -156,10 +156,10 @@ class WeniGPTClient(LLMClient):
             text_answers = None
 
             try:
-                print(f"Request for WeniGPT: {self.prompt}")
+                logger.debug("Request for WeniGPT", extra={"prompt_len": len(self.prompt) if self.prompt else 0})
                 response = requests.request("POST", self.url, headers=self.headers, data=json.dumps(data))
                 response_json = response.json()
-                print(f"Resposta Json do WeniGPT: {response_json}")
+                logger.debug("WeniGPT JSON response", extra={"keys": list(response_json.keys())})
                 text_answers = response_json["output"][0].get("choices")[0].get("tokens")[0]
 
                 return {

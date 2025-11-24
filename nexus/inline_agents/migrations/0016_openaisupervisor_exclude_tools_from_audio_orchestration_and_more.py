@@ -5,25 +5,28 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inline_agents', '0015_make_foundation_model_nullable'),
+        ("inline_agents", "0015_make_foundation_model_nullable"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='openaisupervisor',
-            name='exclude_tools_from_audio_orchestration',
-            field=django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=255), blank=True, default=list, size=None),
+            model_name="openaisupervisor",
+            name="exclude_tools_from_audio_orchestration",
+            field=django.contrib.postgres.fields.ArrayField(
+                base_field=models.CharField(max_length=255), blank=True, default=list, size=None
+            ),
         ),
         migrations.AddField(
-            model_name='openaisupervisor',
-            name='exclude_tools_from_text_orchestration',
-            field=django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=255), blank=True, default=list, size=None),
+            model_name="openaisupervisor",
+            name="exclude_tools_from_text_orchestration",
+            field=django.contrib.postgres.fields.ArrayField(
+                base_field=models.CharField(max_length=255), blank=True, default=list, size=None
+            ),
         ),
         migrations.AddField(
-            model_name='openaisupervisor',
-            name='transcription_prompt',
-            field=models.TextField(blank=True, help_text='Prompt to use for transcription', null=True),
+            model_name="openaisupervisor",
+            name="transcription_prompt",
+            field=models.TextField(blank=True, help_text="Prompt to use for transcription", null=True),
         ),
     ]
