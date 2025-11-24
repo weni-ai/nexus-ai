@@ -13,7 +13,7 @@ class ProjectCreationDTO:
     is_template: bool
     authorizations: list
     brain_on: bool = False
-    indexer_database: str = Project.BEDROCK
+    indexer_database: str = Project.SENTENX
 
 
 @dataclass
