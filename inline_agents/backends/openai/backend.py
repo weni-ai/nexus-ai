@@ -98,12 +98,7 @@ class OpenAIBackend(InlineAgentsBackend):
         return self._event_manager_notify
 
     def _ensure_conversation(
-        self,
-        project_uuid: str,
-        contact_urn: str,
-        contact_name: str,
-        channel_uuid: str,
-        preview: bool = False
+        self, project_uuid: str, contact_urn: str, contact_name: str, channel_uuid: str, preview: bool = False
     ) -> Optional[object]:
         """Ensure conversation exists and return it, or None if creation fails or channel_uuid is missing."""
         # Don't create conversations in preview mode
@@ -114,17 +109,19 @@ class OpenAIBackend(InlineAgentsBackend):
             # channel_uuid is None - log to Sentry for debugging
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_tag("contact_urn", contact_urn)
-            sentry_sdk.set_context("conversation_creation", {
-                "project_uuid": project_uuid,
-                "contact_urn": contact_urn,
-                "contact_name": contact_name,
-                "channel_uuid": None,
-                "backend": "openai",
-                "reason": "channel_uuid is None"
-            })
+            sentry_sdk.set_context(
+                "conversation_creation",
+                {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "contact_name": contact_name,
+                    "channel_uuid": None,
+                    "backend": "openai",
+                    "reason": "channel_uuid is None",
+                },
+            )
             sentry_sdk.capture_message(
-                "Conversation not created: channel_uuid is None (OpenAI backend)",
-                level="warning"
+                "Conversation not created: channel_uuid is None (OpenAI backend)", level="warning"
             )
             return None
 
@@ -133,23 +130,23 @@ class OpenAIBackend(InlineAgentsBackend):
 
             conversation_service = ConversationService()
             return conversation_service.ensure_conversation_exists(
-                project_uuid=project_uuid,
-                contact_urn=contact_urn,
-                contact_name=contact_name,
-                channel_uuid=channel_uuid
+                project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
             )
         except Exception as e:
             # If conversation lookup/creation fails, continue without it but log to Sentry
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_tag("contact_urn", contact_urn)
             sentry_sdk.set_tag("channel_uuid", channel_uuid)
-            sentry_sdk.set_context("conversation_creation", {
-                "project_uuid": project_uuid,
-                "contact_urn": contact_urn,
-                "contact_name": contact_name,
-                "channel_uuid": channel_uuid,
-                "backend": "openai"
-            })
+            sentry_sdk.set_context(
+                "conversation_creation",
+                {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "contact_name": contact_name,
+                    "channel_uuid": channel_uuid,
+                    "backend": "openai",
+                },
+            )
             sentry_sdk.capture_exception(e)
             return None
 
@@ -194,7 +191,7 @@ class OpenAIBackend(InlineAgentsBackend):
             contact_urn=contact_urn,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
-            preview=preview
+            preview=preview,
         )
 
         hooks_state = HooksState(agents=team)
@@ -363,7 +360,7 @@ class OpenAIBackend(InlineAgentsBackend):
             )
             return result.final_output
         except Exception as e:
-            print(f"Error in formatter agent: {e}")
+            logger.error("Error in formatter agent: %s", e, exc_info=True)
             # Return the original response if formatter fails
             return final_response
 
@@ -391,7 +388,7 @@ class OpenAIBackend(InlineAgentsBackend):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
             trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
-            print(f"[+ DEBUG +] Trace ID: {trace_id}")
+            logger.debug("Trace ID", extra={"trace_id": trace_id})
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 # Extract formatter_agent_instructions before passing to Runner.run_streamed
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")

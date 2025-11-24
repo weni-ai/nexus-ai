@@ -1,6 +1,7 @@
-import amqp
 import logging
 import uuid
+
+import amqp
 from sentry_sdk import capture_exception
 
 from nexus.event_driven.consumer.consumers import EDAConsumer
@@ -16,26 +17,26 @@ class ConversationConsumer(EDAConsumer):
         # Generate correlation ID for tracking
         correlation_id = str(uuid.uuid4())
         delivery_tag = message.delivery_tag
-        
+
         logger.info(
             "[ConversationConsumer] Starting message consumption",
             extra={
                 "correlation_id": correlation_id,
                 "delivery_tag": delivery_tag,
                 "consumer": "ConversationConsumer",
-                "message_body": message.body.decode() if message.body else None
-            }
+                "message_body": message.body.decode() if message.body else None,
+            },
         )
-        
+
         try:
             body = JSONParser.parse(message.body)
-            
+
             # Extract key identifiers
             project_uuid = body.get("project_uuid")
             contact_urn = body.get("contact_urn")
             external_id = body.get("id")
             channel_uuid = body.get("channel_uuid")
-            
+
             window_conversation_dto = WindowConversationDTO(
                 project_uuid=project_uuid,
                 channel_uuid=channel_uuid,
@@ -90,9 +91,9 @@ class ConversationConsumer(EDAConsumer):
                     "delivery_tag": delivery_tag,
                     "error": str(e),
                     "error_type": "KeyError",
-                    "consumer": "ConversationConsumer"
+                    "consumer": "ConversationConsumer",
                 },
-                exc_info=True
+                exc_info=True,
             )
             capture_exception(e)
             message.channel.basic_reject(delivery_tag, requeue=False)
@@ -104,9 +105,9 @@ class ConversationConsumer(EDAConsumer):
                     "delivery_tag": delivery_tag,
                     "error": str(exception),
                     "error_type": type(exception).__name__,
-                    "consumer": "ConversationConsumer"
+                    "consumer": "ConversationConsumer",
                 },
-                exc_info=True
+                exc_info=True,
             )
             capture_exception(exception)
             message.channel.basic_reject(delivery_tag, requeue=False)

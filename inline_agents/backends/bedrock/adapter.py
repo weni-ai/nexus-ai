@@ -10,8 +10,8 @@ from weni_datalake_sdk.clients.client import send_event_data
 from weni_datalake_sdk.paths.events_path import EventPath
 
 from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
-from inline_agents.data_lake.event_service import DataLakeEventService
 from inline_agents.backends.bedrock.event_extractor import BedrockEventExtractor
+from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.celery import app as celery_app
 from nexus.inline_agents.models import AgentCredential, Guardrail
 from nexus.utils import get_datasource_id
@@ -75,7 +75,9 @@ class BedrockTeamAdapter(TeamAdapter):
             channel_uuid=channel_uuid,
         )
 
-        print(f"[ + DEBUG + ] auth_token: {auth_token}")
+        import logging
+
+        logging.getLogger(__name__).debug("Auth token present", extra={"token_len": len(auth_token or "")})
 
         credentials = self._get_credentials(project_uuid)
 
@@ -113,7 +115,11 @@ class BedrockTeamAdapter(TeamAdapter):
             "idleSessionTTLInSeconds": settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS,
         }
 
-        print(f"[ + DEBUG + ] external_team: {external_team}")
+        import logging
+
+        logging.getLogger(__name__).debug(
+            "External team built", extra={"agents_count": len(external_team.get("agents", []))}
+        )
 
         return external_team
 
@@ -489,6 +495,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         )
 
     def to_data_lake_custom_event(
+<<<<<<< HEAD
         self,
         event_data: dict,
         project_uuid: str,
@@ -501,6 +508,13 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
+=======
+        self, event_data: dict, project_uuid: str, contact_urn: str, channel_uuid: Optional[str] = None
+    ) -> Optional[dict]:
+        """Send a single custom event to data lake (for direct event sending, not from traces)."""
+        return self._event_service.send_custom_event(
+            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
+>>>>>>> fix/replace-prints-with-logging-1
         )
 
 

@@ -918,10 +918,14 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         conversation: Optional[object] = None,
     ):
         """Delegate custom event processing to the service."""
+<<<<<<< HEAD
         trace_data = {
             "project_uuid": project_uuid,
             "contact_urn": contact_urn,
         }
+=======
+        trace_data = {"project_uuid": project_uuid, "contact_urn": contact_urn}
+>>>>>>> fix/replace-prints-with-logging-1
         extractor = OpenAIEventExtractor(event_data=event_data, agent_name=agent_name)
         self._event_service.process_custom_events(
             trace_data=trace_data,
@@ -934,6 +938,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         )
 
     def to_data_lake_custom_event(
+<<<<<<< HEAD
         self,
         event_data: dict,
         project_uuid: str,
@@ -946,4 +951,11 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
+=======
+        self, event_data: dict, project_uuid: str, contact_urn: str, channel_uuid: Optional[str] = None
+    ) -> Optional[dict]:
+        """Send a single custom event to data lake (for direct event sending, not from traces)."""
+        return self._event_service.send_custom_event(
+            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
+>>>>>>> fix/replace-prints-with-logging-1
         )

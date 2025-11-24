@@ -67,7 +67,12 @@ def complexity_layer(input_text: str) -> str | None:
             if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
                 payload = json.loads(response["Payload"].read().decode("utf-8"))
                 classification = payload.get("body").get("classification")
-                print(f"[DEBUG] Message: {input_text} - Classification: {classification}")
+                import logging
+
+                logging.getLogger(__name__).debug(
+                    "Message classification",
+                    extra={"text_len": len(input_text or ""), "classification": classification},
+                )
                 return classification
             else:
                 error_msg = (
@@ -116,7 +121,12 @@ def dispatch_preview(
 
 
 def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
-    print(f"[DEBUG] Guardrails complexity layer: {input_text}, {guardrail_id}, {guardrail_version}")
+    import logging
+
+    logging.getLogger(__name__).debug(
+        "Guardrails complexity layer",
+        extra={"text_len": len(input_text or ""), "guardrail_id": guardrail_id, "guardrail_version": guardrail_version},
+    )
     try:
         payload = {
             "first_input": input_text,
@@ -130,7 +140,11 @@ def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_ve
         )
         if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
             payload = json.loads(response["Payload"].read().decode("utf-8"))
-            print(f"[DEBUG] Guardrails complexity layer response: {payload}")
+            import logging
+
+            logging.getLogger(__name__).debug(
+                "Guardrails complexity layer response", extra={"keys": list(payload.keys())}
+            )
             response = payload
             status_code = payload.get("statusCode")
             if status_code == 200:
@@ -250,9 +264,10 @@ def _handle_task_error(
     if task_manager:
         task_manager.clear_pending_tasks(project_uuid, contact_urn)
 
-    print(f"[DEBUG] Error in start_inline_agents: {str(exc)}")
-    print(f"[DEBUG] Error type: {type(exc)}")
-    print(f"[DEBUG] Full exception details: {exc.__dict__}")
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.error("Error in start_inline_agents: %s", str(exc), exc_info=True)
 
     if isinstance(exc, botocore.exceptions.EventStreamError) and "throttlingException" in str(exc):
         raise ThrottlingException(str(exc))
@@ -320,7 +335,9 @@ def start_inline_agents(
             contact_name=processed_message.get("contact_name", ""),
             channel_uuid=processed_message.get("channel_uuid", ""),
         )
-        print(f"[DEBUG] Message: {message_obj}")
+        import logging
+
+        logging.getLogger(__name__).debug("Message object built", extra={"has_text": bool(message_obj.text)})
 
         message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
 

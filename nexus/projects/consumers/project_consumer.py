@@ -1,4 +1,5 @@
 import amqp
+import logging
 from sentry_sdk import capture_exception
 
 from nexus.event_driven.consumer.consumers import EDAConsumer
@@ -9,7 +10,7 @@ from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
 class ProjectConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
-        print(f"[ProjectConsumer] - Consuming a message. Body: {message.body}")
+        logger.debug("[ProjectConsumer] Consuming a message", extra={"body_len": len(message.body) if hasattr(message, "body") else None})
         try:
             body = JSONParser.parse(message.body)
 
@@ -25,10 +26,11 @@ class ProjectConsumer(EDAConsumer):
 
             project_creation = ProjectsUseCase()
             project_creation.create_project(project_dto=project_dto, user_email=body.get("user_email"))
-
+            
             message.channel.basic_ack(message.delivery_tag)
-            print(f"[ProjectConsumer] - Project created: {project_dto.uuid}")
+            logger.info("[ProjectConsumer] Project created", extra={"uuid": project_dto.uuid})
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
-            print(f"[ProjectConsumer] - Message rejected by: {exception}")
+            logger.error("[ProjectConsumer] Message rejected", exc_info=True)
+logger = logging.getLogger(__name__)
