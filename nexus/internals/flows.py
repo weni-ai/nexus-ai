@@ -92,19 +92,6 @@ class FlowsRESTClient(RestClient):
             "project_uuid": project_uuid[:8] + "..." if project_uuid else None,
         })
 
-<<<<<<< HEAD
-        jwt_usecase = JWTUsecase()
-        jwt_token = jwt_usecase.generate_broadcast_jwt_token()
-        headers = {
-            "Content-Type": "application/json; charset: utf-8",
-            "Authorization": f"Bearer {jwt_token}",
-        }
-
-        response = requests.post(url, json=body, headers=headers)
-        print("response status: ", response.status_code)
-        print("response: ", response.text)
-        print("--------------------------")
-=======
         response = requests.post(url, json=body, headers=self.authentication_instance.headers)
         logger.debug(
             "Whatsapp broadcast response",

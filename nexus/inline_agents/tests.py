@@ -1,6 +1,7 @@
 import json
 import logging
 from io import BytesIO
+import logging
 from unittest.mock import Mock, patch
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
