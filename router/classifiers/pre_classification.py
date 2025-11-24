@@ -47,7 +47,9 @@ class PreClassification:
         return self.flow_started
 
     def direct_flows(self, flow_dto: FlowDTO, start_flow: bool):
-        print(f"[+ Pre Classification Direct Flow: {flow_dto.uuid} +]")
+        import logging
+
+        logging.getLogger(__name__).info("Pre Classification Direct Flow", extra={"uuid": flow_dto.uuid})
 
         if start_flow:
             self.flow_start.start_flow(
@@ -70,7 +72,9 @@ class PreClassification:
         return self.flow_started
 
     def pre_classification_preview(self) -> dict:
-        print(f"[+ Pre Classification Preview: {self.message} +]")
+        import logging
+
+        logging.getLogger(__name__).info("Pre Classification Preview", extra={"message": str(self.message)})
 
         if self.message_text:
             flow_dto = self.safety_check(start_flow=False)

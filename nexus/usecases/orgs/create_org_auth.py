@@ -1,3 +1,5 @@
+import logging
+
 from nexus.orgs.models import Org, OrgAuth, Role
 from nexus.orgs.org_dto import OrgAuthCreationDTO
 from nexus.usecases import orgs, users
@@ -16,7 +18,7 @@ def _create_org_auth(org: Org, user: User, role: int):
             org_auth.save(update_fields=["role"])
     except Exception as exception:
         org_auth = OrgAuth.objects.create(org=org, user=user, role=role)
-        print(f"[CreateOrgAuthUseCase] - error: {exception}")
+        logging.getLogger(__name__).error("[CreateOrgAuthUseCase] error: %s", exception, exc_info=True)
     return OrgAuth.objects.get(org=org, user=user)
 
 

@@ -1,3 +1,4 @@
+import logging
 from typing import Dict, List
 
 import requests
@@ -83,19 +84,30 @@ class FlowsRESTClient(RestClient):
         body = dict(urns=urns, project=project_uuid)
         body.update(msg)
 
-        print("----Whatsapp broadcast----")
-        print("URL: ", url)
-        print("URNs: ", urns)
-        print("Msg: ", msg)
-        print("Body: ", body)
-        print("Project UUID: ", project_uuid)
+        logger.debug(
+            "Whatsapp broadcast",
+            extra={
+                "url": url,
+                "urns_count": len(urns) if isinstance(urns, list) else None,
+                "msg_len": len(str(msg)),
+                "body_keys": list(body.keys()),
+                "project_uuid": project_uuid[:8] + "..." if project_uuid else None,
+            },
+        )
 
         jwt_usecase = JWTUsecase()
         jwt_token = jwt_usecase.generate_broadcast_jwt_token()
         headers = {"Content-Type": "application/json; charset: utf-8", "Authorization": f"Bearer {jwt_token}"}
 
         response = requests.post(url, json=body, headers=headers)
-        print("response status: ", response.status_code)
-        print("response: ", response.text)
-        print("--------------------------")
+        logger.debug(
+            "Whatsapp broadcast response",
+            extra={
+                "status_code": response.status_code,
+                "response_preview": response.text[:200] if response.text else None,
+            },
+        )
         return response
+
+
+logger = logging.getLogger(__name__)

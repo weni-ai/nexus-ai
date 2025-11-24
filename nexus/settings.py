@@ -644,6 +644,36 @@ BEDROCK_CONVERSE_MAX_LENGHT = env.int("BEDROCK_CONVERSE_MAX_LENGHT", 4096)
 FORMATTER_AGENT_MODEL = env.str("FORMATTER_AGENT_MODEL", "gpt-4.1-mini")
 FLOW_USER_EMAIL = env.str("FLOW_USER_EMAIL", "")
 
+# Logging configuration
+LOG_LEVEL = env.str("LOG_LEVEL", "INFO")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}
+
 # gRPC Streaming Configuration
 GRPC_ENABLED = env.bool("GRPC_ENABLED", default=False)
 GRPC_SERVICE_HOST = env.str("GRPC_SERVICE_HOST", default="localhost")

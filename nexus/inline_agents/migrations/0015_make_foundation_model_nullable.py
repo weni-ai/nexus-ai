@@ -7,45 +7,55 @@ def add_or_alter_foundation_model_column(apps, schema_editor):
     """Add foundation_model column if it doesn't exist, or alter it if it does."""
     with connection.cursor() as cursor:
         # Check if column exists
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT column_name
             FROM information_schema.columns
             WHERE table_name='inline_agents_agent'
             AND column_name='foundation_model';
-        """)
+        """
+        )
 
         column_exists = cursor.fetchone() is not None
 
         if not column_exists:
             # Add the column if it doesn't exist
-            cursor.execute("""
+            cursor.execute(
+                """
                 ALTER TABLE inline_agents_agent
                 ADD COLUMN foundation_model VARCHAR(255) NULL DEFAULT '';
-            """)
+            """
+            )
         else:
             # Alter the column to be nullable if it exists
-            cursor.execute("""
+            cursor.execute(
+                """
                 ALTER TABLE inline_agents_agent
                 ALTER COLUMN foundation_model SET DEFAULT '',
                 ALTER COLUMN foundation_model DROP NOT NULL;
-            """)
+            """
+            )
 
 
 def reverse_migration(apps, schema_editor):
     """Reverse migration - make field not nullable."""
     with connection.cursor() as cursor:
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT column_name
             FROM information_schema.columns
             WHERE table_name='inline_agents_agent'
             AND column_name='foundation_model';
-        """)
+        """
+        )
 
         if cursor.fetchone() is not None:
-            cursor.execute("""
+            cursor.execute(
+                """
                 ALTER TABLE inline_agents_agent
                 ALTER COLUMN foundation_model SET NOT NULL;
-            """)
+            """
+            )
 
 
 class Migration(migrations.Migration):

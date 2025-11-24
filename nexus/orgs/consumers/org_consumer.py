@@ -1,3 +1,5 @@
+import logging
+
 import amqp
 from sentry_sdk import capture_exception
 
@@ -9,7 +11,10 @@ from nexus.usecases.orgs.create import CreateOrgUseCase
 
 class OrgConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
-        print(f"[OrgConsumer] - Consuming a message. Body: {message.body}")
+        logger.debug(
+            "[OrgConsumer] Consuming a message",
+            extra={"body_len": len(message.body) if hasattr(message, "body") else None},
+        )
         try:
             body = JSONParser.parse(message.body)
 
@@ -21,8 +26,11 @@ class OrgConsumer(EDAConsumer):
             org_creation.create_orgs(org_dto=org_dto, user_email=body.get("user_email"))
 
             message.channel.basic_ack(message.delivery_tag)
-            print(f"[OrgConsumer] - Org created: {org_dto.uuid}")
+            logger.info("[OrgConsumer] Org created", extra={"uuid": org_dto.uuid})
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
-            print(f"[OrgConsumer] - Message rejected by: {exception}")
+            logger.error("[OrgConsumer] Message rejected", exc_info=True)
+
+
+logger = logging.getLogger(__name__)

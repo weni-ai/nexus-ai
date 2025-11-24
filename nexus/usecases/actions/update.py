@@ -127,5 +127,7 @@ class UpdateTemplateActionUseCase:
         except TemplateAction.DoesNotExist as e:
             raise ValueError("Template action not found") from e
         except Exception as e:
-            print("Error updating template action: ", e)
+            import logging
+
+            logging.getLogger(__name__).error("Error updating template action: %s", e, exc_info=True)
             raise Exception("Error updating template action") from e

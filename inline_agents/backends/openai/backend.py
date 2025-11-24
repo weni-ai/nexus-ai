@@ -376,7 +376,10 @@ class OpenAIBackend(InlineAgentsBackend):
             for index, tool in enumerate(COMPONENT_TOOLS):
                 tool_name = tool.name
                 tool_description = formatter_tools_descriptions.get(tool_name)
-                print(f"tool: {tool_name}, tem descrição: {tool_description != None}")
+                logger.debug(
+                    "Formatter tool description presence",
+                    extra={"tool": tool_name, "has_description": tool_description is not None},
+                )
                 if tool_description:
                     COMPONENT_TOOLS[index].description = tool_description
             return COMPONENT_TOOLS
@@ -386,7 +389,9 @@ class OpenAIBackend(InlineAgentsBackend):
             formatter_instructions
             or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
         )
-        print(formatter_agent_configurations)
+        logger.debug(
+            "Formatter agent configurations", extra={"keys": list((formatter_agent_configurations or {}).keys())}
+        )
         # Handle None case for formatter_agent_configurations
         if formatter_agent_configurations is None:
             formatter_agent_configurations = {}
@@ -444,14 +449,14 @@ class OpenAIBackend(InlineAgentsBackend):
                 session=session,
             )
             # Only stream events if the result has stream_events method
-            stream_events = getattr(result, 'stream_events', None)
+            stream_events = getattr(result, "stream_events", None)
             if stream_events and callable(stream_events):
                 async for _ in stream_events():
                     pass
             return self._get_final_response(result)
         except Exception as e:
-            logger.error(f"Error in formatter agent: {e}", exc_info=True)
-            print(f"Error in formatter agent: {e}")
+            logger.error("Error in formatter agent: %s", e, exc_info=True)
+            # Return the original response if formatter fails
             return final_response
 
     def _initialize_grpc_client(
@@ -570,6 +575,7 @@ class OpenAIBackend(InlineAgentsBackend):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
             trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
+            logger.debug("Trace ID", extra={"trace_id": trace_id})
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
                 result = client.run_streamed(
@@ -578,7 +584,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 delta_counter = 0
                 try:
                     # Only stream events if the result has stream_events method
-                    stream_events = getattr(result, 'stream_events', None)
+                    stream_events = getattr(result, "stream_events", None)
                     if stream_events and callable(stream_events):
                         async for event in stream_events():
                             delta_counter = self._process_delta_event(
@@ -592,7 +598,9 @@ class OpenAIBackend(InlineAgentsBackend):
                             )
                             if event.type == "run_item_stream_event":
                                 if hasattr(event, "item") and event.item.type == "tool_call_item":
-                                    hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
+                                    hooks_state.tool_calls.update(
+                                        {event.item.raw_item.name: event.item.raw_item.arguments}
+                                    )
                 except openai.APIError as api_error:
                     self._sentry_capture_exception(
                         api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True

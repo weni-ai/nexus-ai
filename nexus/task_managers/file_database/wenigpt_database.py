@@ -58,6 +58,9 @@ class WeniGPTDatabase(GPTDatabase):
             return {"answers": [{"text": text_answer}], "id": "0", "question_uuid": str(log.user_question.uuid)}
         except Exception as e:
             response = {"error": str(e)}
-            print(response)
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error("wenigpt_database error: %s", response)
 
         return {"answers": None, "id": "0", "message": "No context found for this question"}

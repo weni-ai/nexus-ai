@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import Dict, List
 
@@ -65,7 +66,9 @@ class ChatGPTFunctionClassifier(Classifier):
         return tools
 
     def predict(self, message: str, flows: List[FlowDTO], language: str = "por") -> str:
-        print(f"[+ ChatGPT message function classification: {message} ({language}) +]")
+        logging.getLogger(__name__).info(
+            "ChatGPT message function classification", extra={"language": language, "message_len": len(message or "")}
+        )
 
         formated_prompt = self.get_prompt()
 

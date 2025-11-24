@@ -81,7 +81,10 @@ class ContentBaseLinkSerializer(serializers.ModelSerializer):
             task_manager = obj.upload_tasks.order_by("created_at").last()
             return task_manager.status
         except Exception as e:
-            print(e)
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error("Serializer exception: %s", e, exc_info=True)
             return ContentBaseLinkTaskManager.STATUS_FAIL
 
 

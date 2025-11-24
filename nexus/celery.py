@@ -65,6 +65,10 @@ if not settings.TESTING:
     langfuse = get_client()
 
     if langfuse.auth_check():
-        print("Langfuse client is authenticated and ready!")
+        import logging
+
+        logging.getLogger(__name__).info("Langfuse client is authenticated and ready!")
     else:
-        print("Authentication failed. Please check your credentials and host.")
+        import logging
+
+        logging.getLogger(__name__).error("Langfuse authentication failed. Check credentials and host.")
