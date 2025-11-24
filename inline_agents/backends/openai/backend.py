@@ -305,23 +305,24 @@ class OpenAIBackend(InlineAgentsBackend):
                 runner_hooks,
                 hooks_state,
                 use_components,
+                formatter_agent_foundation_model=project.default_formatter_foundation_model,
             )
         )
         return result
 
     async def _run_formatter_agent_async(
-        self, final_response: str, session, supervisor_hooks, context, formatter_instructions=""
+        self, final_response: str, session, supervisor_hooks, context, formatter_instructions="", formatter_agent_foundation_model=None
     ):
         """Run the formatter agent asynchronously within the trace context"""
         # Create formatter agent to process the final response
-        formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions)
+        formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions, formatter_agent_foundation_model)
 
         # Run the formatter agent with the final response
         formatter_result = await self._run_formatter_agent(formatter_agent, final_response, session, context)
 
         return formatter_result
 
-    def _create_formatter_agent(self, supervisor_hooks, formatter_instructions=""):
+    def _create_formatter_agent(self, supervisor_hooks, formatter_instructions="", formatter_agent_foundation_model=None):
         """Create the formatter agent with component tools"""
 
         def custom_tool_handler(context, tool_results):
@@ -336,15 +337,18 @@ class OpenAIBackend(InlineAgentsBackend):
             or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
         )
 
+        model: str = formatter_agent_foundation_model if formatter_agent_foundation_model else settings.FORMATTER_AGENT_MODEL
+
         formatter_agent = Agent(
             name="Response Formatter Agent",
             instructions=instructions,
-            model=settings.FORMATTER_AGENT_MODEL,
+            model=model,
             tools=COMPONENT_TOOLS,
             hooks=supervisor_hooks,
             tool_use_behavior=custom_tool_handler,
             model_settings=ModelSettings(tool_choice="required", parallel_tool_calls=False),
         )
+        print(f"))))))))))))))))))))))))MODELO DO FORMATTER AGENT: {formatter_agent.model}")
         return formatter_agent
 
     async def _run_formatter_agent(self, formatter_agent, final_response, session, context):
@@ -383,6 +387,7 @@ class OpenAIBackend(InlineAgentsBackend):
         runner_hooks,
         hooks_state,
         use_components,
+        formatter_agent_foundation_model=None,
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
@@ -456,6 +461,7 @@ class OpenAIBackend(InlineAgentsBackend):
                                 supervisor_hooks,
                                 external_team["context"],
                                 formatter_agent_instructions,
+                                formatter_agent_foundation_model,
                             )
                             final_response = formatted_response
                         except Exception as formatter_error:
@@ -479,6 +485,7 @@ class OpenAIBackend(InlineAgentsBackend):
                         supervisor_hooks,
                         external_team["context"],
                         formatter_agent_instructions,
+                        formatter_agent_foundation_model,
                     )
                     final_response = formatted_response
 
