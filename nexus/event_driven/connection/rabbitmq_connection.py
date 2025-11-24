@@ -28,7 +28,9 @@ class RabbitMQConnection:
             if not hasattr(self, "connection"):
                 self._establish_connection()
         except Exception as e:
-            print("Error while connecting to RabbitMQ:", str(e))
+            import logging
+
+            logging.getLogger(__name__).error("Error while connecting to RabbitMQ: %s", str(e), exc_info=True)
             time.sleep(5)  # Wait until try to reconnect
             self._establish_connection()
 

@@ -67,7 +67,12 @@ def complexity_layer(input_text: str) -> str | None:
             if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
                 payload = json.loads(response["Payload"].read().decode("utf-8"))
                 classification = payload.get("body").get("classification")
-                print(f"[DEBUG] Message: {input_text} - Classification: {classification}")
+                import logging
+
+                logging.getLogger(__name__).debug(
+                    "Message classification",
+                    extra={"text_len": len(input_text or ""), "classification": classification},
+                )
                 return classification
             else:
                 error_msg = (
@@ -96,7 +101,9 @@ def complexity_layer(input_text: str) -> str | None:
             return None
 
 
-def dispatch_preview(response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str) -> str:
+def dispatch_preview(
+    response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str
+) -> str:
     response_msg = dispatch(
         llm_response=response,
         message=message_obj,
@@ -114,7 +121,12 @@ def dispatch_preview(response: str, message_obj: Dict, broadcast: Dict, user_ema
 
 
 def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
-    print(f"[DEBUG] Guardrails complexity layer: {input_text}, {guardrail_id}, {guardrail_version}")
+    import logging
+
+    logging.getLogger(__name__).debug(
+        "Guardrails complexity layer",
+        extra={"text_len": len(input_text or ""), "guardrail_id": guardrail_id, "guardrail_version": guardrail_version},
+    )
     try:
         payload = {
             "first_input": input_text,
@@ -127,8 +139,12 @@ def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_ve
             Payload=json.dumps(payload).encode("utf-8"),
         )
         if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
-            payload = json.loads(response['Payload'].read().decode('utf-8'))
-            print(f"[DEBUG] Guardrails complexity layer response: {payload}")
+            payload = json.loads(response["Payload"].read().decode("utf-8"))
+            import logging
+
+            logging.getLogger(__name__).debug(
+                "Guardrails complexity layer response", extra={"keys": list(payload.keys())}
+            )
             response = payload
             status_code = payload.get("statusCode")
             if status_code == 200:
@@ -171,7 +187,9 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
         foundation_model = complexity_layer(text)
     else:
         guardrails: Dict[str, str] = GuardrailsUsecase.get_guardrail_as_dict(message.get("project_uuid"))
-        guardrails_message = guardrails_complexity_layer(text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion"))
+        guardrails_message = guardrails_complexity_layer(
+            text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion")
+        )
         if guardrails_message:
             raise UnsafeMessageException(guardrails_message)
 
@@ -245,9 +263,10 @@ def _handle_task_error(
     if task_manager:
         task_manager.clear_pending_tasks(project_uuid, contact_urn)
 
-    print(f"[DEBUG] Error in start_inline_agents: {str(exc)}")
-    print(f"[DEBUG] Error type: {type(exc)}")
-    print(f"[DEBUG] Full exception details: {exc.__dict__}")
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.error("Error in start_inline_agents: %s", str(exc), exc_info=True)
 
     if isinstance(exc, botocore.exceptions.EventStreamError) and "throttlingException" in str(exc):
         raise ThrottlingException(str(exc))
@@ -290,7 +309,9 @@ def start_inline_agents(
             preview=preview,
         )
 
-        project, content_base, inline_agent_configuration = get_project_and_content_base_data(message.get("project_uuid"))
+        project, content_base, inline_agent_configuration = get_project_and_content_base_data(
+            message.get("project_uuid")
+        )
         agents_backend = project.agents_backend
 
         broadcast, _ = get_action_clients(
@@ -313,7 +334,9 @@ def start_inline_agents(
             contact_name=processed_message.get("contact_name", ""),
             channel_uuid=processed_message.get("channel_uuid", ""),
         )
-        print(f"[DEBUG] Message: {message_obj}")
+        import logging
+
+        logging.getLogger(__name__).debug("Message object built", extra={"has_text": bool(message_obj.text)})
 
         message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
 

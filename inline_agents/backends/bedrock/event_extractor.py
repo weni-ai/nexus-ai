@@ -14,25 +14,24 @@ class BedrockEventExtractor(EventExtractor):
     def extract_events(self, trace_data: dict) -> list[dict]:
         """Extract events from Bedrock trace format."""
         orchestration_trace = trace_data.get("trace", {}).get("orchestrationTrace", {})
-        action_group_data = orchestration_trace.get('observation', {}).get("actionGroupInvocationOutput", {})
+        action_group_data = orchestration_trace.get("observation", {}).get("actionGroupInvocationOutput", {})
 
-        if not action_group_data.get('text'):
+        if not action_group_data.get("text"):
             return []
 
         try:
-            event_data = json.loads(action_group_data.get('text'))
+            event_data = json.loads(action_group_data.get("text"))
         except (json.JSONDecodeError, TypeError) as e:
-            project_uuid = trace_data.get('project_uuid', 'unknown')
-            contact_urn = trace_data.get('contact_urn', 'unknown')
+            project_uuid = trace_data.get("project_uuid", "unknown")
+            contact_urn = trace_data.get("contact_urn", "unknown")
             logger.warning(
                 f"Failed to parse action group response as JSON: {str(e)}. "
                 f"Project: {project_uuid}, Contact: {contact_urn}"
             )
             sentry_sdk.set_tag("project_uuid", project_uuid)
-            sentry_sdk.set_context("json_parse_error", {
-                "text": action_group_data.get('text', '')[:500],
-                "contact_urn": contact_urn
-            })
+            sentry_sdk.set_context(
+                "json_parse_error", {"text": action_group_data.get("text", "")[:500], "contact_urn": contact_urn}
+            )
             sentry_sdk.capture_exception(e)
             return []
 
