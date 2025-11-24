@@ -1,6 +1,7 @@
 from typing import Optional
 
 import sentry_sdk
+
 from nexus.usecases.intelligences.create import ConversationUseCase
 
 
@@ -21,17 +22,19 @@ class ConversationService:
             # Log to Sentry for debugging (expected but we want to track it)
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_tag("contact_urn", contact_urn)
-            sentry_sdk.set_context("conversation_creation", {
-                "project_uuid": project_uuid,
-                "contact_urn": contact_urn,
-                "contact_name": contact_name,
-                "channel_uuid": None,
-                "method": "create_conversation_if_channel_exists",
-                "reason": "channel_uuid is None"
-            })
+            sentry_sdk.set_context(
+                "conversation_creation",
+                {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "contact_name": contact_name,
+                    "channel_uuid": None,
+                    "method": "create_conversation_if_channel_exists",
+                    "reason": "channel_uuid is None",
+                },
+            )
             sentry_sdk.capture_message(
-                "Conversation not created: channel_uuid is None (create_conversation_if_channel_exists)",
-                level="info"
+                "Conversation not created: channel_uuid is None (create_conversation_if_channel_exists)", level="info"
             )
             return None
 

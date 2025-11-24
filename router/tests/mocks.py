@@ -143,12 +143,16 @@ class MockBroadcastHTTPClient:
     def send_direct_message(
         self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs
     ):
-        print(f"[+ Test: Sending direct message to {urns} +]")
+        import logging
+
+        logging.getLogger(__name__).debug("Test: Sending direct message", extra={"urns": urns})
 
 
 class MockFlowStartHTTPClient:
     def start_flow(self, flow: str, user: str, urns: List, user_message: str, llm_response: str):
-        print(f"[+ Test: Starting flow {flow} +]")
+        import logging
+
+        logging.getLogger(__name__).debug("Test: Starting flow", extra={"flow": flow})
 
 
 class TestException(Exception):

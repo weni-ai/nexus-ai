@@ -126,6 +126,7 @@ class MessageService:
         """Get conversation service instance, creating it if it doesn't exist."""
         if self._conversation_service is None:
             from router.services.conversation_service import ConversationService
+
             self._conversation_service = ConversationService()
         return self._conversation_service
 

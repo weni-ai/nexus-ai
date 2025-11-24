@@ -23,7 +23,9 @@ class SaveTracesObserver(EventObserver):
         channel_uuid: str,
         **kwargs,
     ):
-        print("Start SaveTracesObserver")
+        import logging
+
+        logging.getLogger(__name__).info("Start SaveTracesObserver")
 
         data = ""
 
@@ -80,7 +82,9 @@ def save_inline_trace_events(
         upload_traces_to_s3(data, key)
 
     except Exception as e:
-        print(f"Error saving inline trace events: {e}")
+        import logging
+
+        logging.getLogger(__name__).error("Error saving inline trace events: %s", e, exc_info=True)
         sentry_sdk.set_tag("project_uuid", project_uuid)
         sentry_sdk.set_tag("contact_urn", contact_urn)
         sentry_sdk.set_context(
@@ -145,5 +149,7 @@ def _prepare_trace_data(trace_events: List[Dict]) -> str:
 
 
 def upload_traces_to_s3(data: str, key: str):
-    print(f"Uploading traces to s3: {key}")
+    import logging
+
+    logging.getLogger(__name__).info("Uploading traces to s3", extra={"key": key})
     BedrockFileDatabase().upload_inline_traces(data, key)

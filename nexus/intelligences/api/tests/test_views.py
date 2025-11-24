@@ -1227,6 +1227,7 @@ class TestLLMViewset(TestCase):
             intelligence.save()
 
         from nexus.projects.models import ProjectAuth, ProjectAuthorizationRole
+
         ProjectAuth.objects.update_or_create(
             user=self.user, project=self.project, defaults={"role": ProjectAuthorizationRole.MODERATOR.value}
         )
@@ -1238,9 +1239,11 @@ class TestLLMViewset(TestCase):
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_get_llm_config_success(self, mock_has_permission):
         """Test successfully retrieving LLM config via GET"""
+
         def mock_permission(request, project_uuid, method):
             from nexus.projects.models import Project
             from nexus.projects.permissions import has_project_permission
+
             project = Project.objects.get(uuid=project_uuid)
             return has_project_permission(request.user, project, method)
 
@@ -1257,16 +1260,19 @@ class TestLLMViewset(TestCase):
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_get_llm_config_no_llm_exists(self, mock_has_permission):
         """Test GET when no LLM config exists for the project"""
+
         def mock_permission(request, project_uuid, method):
             from nexus.projects.models import Project
             from nexus.projects.permissions import has_project_permission
+
             project = Project.objects.get(uuid=project_uuid)
             return has_project_permission(request.user, project, method)
 
         mock_has_permission.side_effect = mock_permission
 
-        from nexus.usecases.intelligences.get_by_uuid import get_integrated_intelligence_by_project
         from nexus.intelligences.models import LLM
+        from nexus.usecases.intelligences.get_by_uuid import get_integrated_intelligence_by_project
+
         project_uuid = str(self.project.uuid)
         integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
         LLM.objects.filter(integrated_intelligence=integrated_intelligence).delete()
@@ -1274,14 +1280,16 @@ class TestLLMViewset(TestCase):
         response = self.client.get(self.base_url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data, {'uuid': None, 'model': '', 'setup': None, 'advanced_options': None})
+        self.assertEqual(response.data, {"uuid": None, "model": "", "setup": None, "advanced_options": None})
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_patch_llm_config_success(self, mock_has_permission):
         """Test successfully updating LLM config via PATCH"""
+
         def mock_permission(request, project_uuid, method):
             from nexus.projects.models import Project
             from nexus.projects.permissions import has_project_permission
+
             project = Project.objects.get(uuid=project_uuid)
             return has_project_permission(request.user, project, method)
 
@@ -1297,7 +1305,7 @@ class TestLLMViewset(TestCase):
             },
             "advanced_options": {
                 "stream": True,
-            }
+            },
         }
 
         response = self.client.patch(self.base_url, data=update_data, format="json")

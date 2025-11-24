@@ -1,5 +1,6 @@
-from django.db import models
 from django.contrib.postgres.fields import ArrayField
+from django.db import models
+
 
 class OpenAISupervisor(models.Model):
     created_on = models.DateTimeField(auto_now_add=True)
