@@ -1,4 +1,3 @@
-import logging
 from typing import List
 
 import requests
@@ -17,10 +16,10 @@ class BroadcastHTTPClient(DirectMessage):
         payload = {"user": user, "project": project_uuid, "urns": urns, "text": text}
         params = {"token": self.__access_token}
 
-        logging.getLogger(__name__).debug("Broadcast payload", extra={"payload_keys": list(payload.keys())})
+        print(payload)
 
         response = requests.post(url, data=payload, params=params)
-        logging.getLogger(__name__).debug("Broadcast response", extra={"text_len": len(response.text or "")})
+        print("Resposta: ", response.text)
         try:
             response.raise_for_status()
         except Exception as error:

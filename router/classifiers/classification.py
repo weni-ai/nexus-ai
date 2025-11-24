@@ -32,9 +32,7 @@ class Classification:
         user_message: str = None,
         attachments: list = None,
     ):
-        import logging
-
-        logging.getLogger(__name__).info("Classification Direct Flow", extra={"uuid": flow_dto.uuid})
+        print(f"[+ Classification Direct Flow: {flow_dto.uuid} +]")
 
         if start_flow:
             self.flow_start.start_flow(

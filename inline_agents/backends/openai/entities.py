@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from agents import Session
 from pydantic import BaseModel, Field
@@ -37,11 +37,11 @@ class HooksState:
     def get_tool_info(self, tool_name: str) -> Dict[str, Any]:
         if tool_name not in self.tool_info:
             return {}
-
+        
         executions = self.tool_info[tool_name]
         if not executions:
             return {}
-
+        
         index = self.tool_info_index.get(tool_name, 0)
         if index < len(executions):
             return executions[index]

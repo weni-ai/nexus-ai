@@ -1,5 +1,4 @@
 import json
-import logging
 import uuid
 from typing import Dict, List
 from unittest import skip
@@ -421,5 +420,5 @@ class TemplateActionViewSetTestCase(TestCase):
             project_uuid=str(self.project.uuid),
         )
         response.render()
-        logging.getLogger(__name__).info("Response content rendered", extra={"length": len(response.content or b"")})
+        print(response.content)
         self.assertEqual(response.status_code, 200)

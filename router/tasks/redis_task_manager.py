@@ -178,11 +178,7 @@ class RedisTaskManager(TaskManager):
             return
 
         if channel_uuid is None:
-            import logging
-
-            logging.getLogger(__name__).info(
-                "Skipping message cache: channel_uuid is None", extra={"contact_urn": contact_urn}
-            )
+            print(f"[RedisTaskManager] - Skipping message cache: channel_uuid is None for contact {contact_urn}.")
             return
 
         # Check if there are existing cached messages to decide storage method

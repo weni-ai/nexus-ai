@@ -1,6 +1,5 @@
 import ast
 import json
-import logging
 import re
 from typing import Dict, List
 
@@ -27,7 +26,7 @@ class SendMessageHTTPClient(DirectMessage):
         payload = json.dumps(payload).encode("utf-8")
 
         response = requests.post(url, data=payload, headers=headers)
-        logging.getLogger(__name__).debug("SendMessage response", extra={"text_len": len(response.text or "")})
+        print("Resposta: ", response.text)
         try:
             response.raise_for_status()
         except Exception as error:
@@ -73,6 +72,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
                 return obj
             except json.JSONDecodeError:
                 try:
+                    # print(f"Error parsing JSON: {json_str}")
                     obj = ast.literal_eval(json_str)
                     return obj
                 except Exception:

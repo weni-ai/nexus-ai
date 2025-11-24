@@ -27,8 +27,6 @@ class RabbitMQPublisher:
                 )
                 sended = True
             except Exception as err:
-                import logging
-
-                logging.getLogger(__name__).error("RabbitMQ publish error: %s", err, exc_info=True)
+                print(f"error: {err}")
                 self.rabbitmq_connection._establish_connection()
                 sleep(settings.EDA_WAIT_TIME_RETRY)

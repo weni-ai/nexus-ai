@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 from typing import Dict, List
 
@@ -13,7 +12,7 @@ class NexusZeroshotClient:
         self.prompt = prompt
 
     def fast_predict(self, message: str, actions: List[Dict], language: str = "por"):
-        logging.getLogger(__name__).info("Calling Zeroshot in Nexus")
+        print("[+ Calling Zeroshot in Nexus +]")
         zeroshot_data = {"context": self.prompt, "language": language, "text": message, "options": actions}
         zeroshot = InvokeModel(zeroshot_data)
         response = zeroshot.invoke()

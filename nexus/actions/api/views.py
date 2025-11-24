@@ -207,9 +207,7 @@ class MessagePreviewView(APIView):
                 metadata=data.get("metadata", {}),
             )
             if project.inline_agent_switch:
-                import logging
-
-                logging.getLogger(__name__).info("Starting Inline Agent")
+                print("[+ Starting Inline Agent +]")
                 start_inline_agents.apply_async(
                     kwargs={
                         "message": message.dict(),

@@ -10,8 +10,8 @@ from weni_datalake_sdk.clients.client import send_event_data
 from weni_datalake_sdk.paths.events_path import EventPath
 
 from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
-from inline_agents.backends.bedrock.event_extractor import BedrockEventExtractor
 from inline_agents.data_lake.event_service import DataLakeEventService
+from inline_agents.backends.bedrock.event_extractor import BedrockEventExtractor
 from nexus.celery import app as celery_app
 from nexus.inline_agents.models import AgentCredential, Guardrail
 from nexus.utils import get_datasource_id
@@ -75,9 +75,7 @@ class BedrockTeamAdapter(TeamAdapter):
             channel_uuid=channel_uuid,
         )
 
-        import logging
-
-        logging.getLogger(__name__).debug("Auth token present", extra={"token_len": len(auth_token or "")})
+        print(f"[ + DEBUG + ] auth_token: {auth_token}")
 
         credentials = self._get_credentials(project_uuid)
 
@@ -115,11 +113,7 @@ class BedrockTeamAdapter(TeamAdapter):
             "idleSessionTTLInSeconds": settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS,
         }
 
-        import logging
-
-        logging.getLogger(__name__).debug(
-            "External team built", extra={"agents_count": len(external_team.get("agents", []))}
-        )
+        print(f"[ + DEBUG + ] external_team: {external_team}")
 
         return external_team
 
@@ -327,7 +321,10 @@ class BedrockTeamAdapter(TeamAdapter):
 class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
     """Adapter for transforming Bedrock traces to data lake event format."""
 
-    def __init__(self, send_data_lake_event_task: callable = None):
+    def __init__(
+        self,
+        send_data_lake_event_task: callable = None
+    ):
         if send_data_lake_event_task is None:
             send_data_lake_event_task = self._get_send_data_lake_event_task()
         self._event_service = DataLakeEventService(send_data_lake_event_task)
@@ -439,7 +436,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                     use_delay=False,
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
-                    conversation=conversation,
+                    conversation=conversation
                 )
                 return validated_event
 
@@ -456,7 +453,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                     use_delay=True,
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
-                    conversation=conversation,
+                    conversation=conversation
                 )
                 return validated_event
 
@@ -481,7 +478,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             **inline_trace,
             "collaborator_name": collaborator_name,
             "project_uuid": project_uuid,
-            "contact_urn": contact_urn,
+            "contact_urn": contact_urn
         }
         extractor = BedrockEventExtractor()
         self._event_service.process_custom_events(
@@ -491,15 +488,22 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             channel_uuid=channel_uuid,
             extractor=extractor,
             preview=preview,
-            conversation=conversation,
+            conversation=conversation
         )
 
     def to_data_lake_custom_event(
-        self, event_data: dict, project_uuid: str, contact_urn: str, channel_uuid: Optional[str] = None
+        self,
+        event_data: dict,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: Optional[str] = None
     ) -> Optional[dict]:
         """Send a single custom event to data lake (for direct event sending, not from traces)."""
         return self._event_service.send_custom_event(
-            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
+            event_data=event_data,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid
         )
 
 

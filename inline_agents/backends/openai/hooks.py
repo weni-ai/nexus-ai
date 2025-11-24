@@ -93,6 +93,7 @@ class TraceHandler:
 
 
 class RunnerHooks(RunHooks):
+
     def __init__(
         self,
         supervisor_name: str,
@@ -300,14 +301,11 @@ class CollaboratorHooks(AgentHooks):
                     events = self.hooks_state.get_events(result_json, tool.name)
                 except Exception as e:
                     logger.error(f"Error in get_events for tool '{tool.name}': {e}")
-                    sentry_sdk.set_context(
-                        "get_events_error",
-                        {
-                            "tool_name": tool.name,
-                            "project_uuid": project_uuid,
-                            "contact_urn": context_data.contact.get("urn", "unknown"),
-                        },
-                    )
+                    sentry_sdk.set_context("get_events_error", {
+                        "tool_name": tool.name,
+                        "project_uuid": project_uuid,
+                        "contact_urn": context_data.contact.get("urn", "unknown")
+                    })
                     sentry_sdk.capture_exception(e)
                     events = []
             except Exception:
@@ -317,14 +315,11 @@ class CollaboratorHooks(AgentHooks):
                 events = self.hooks_state.get_events(result, tool.name)
             except Exception as e:
                 logger.error(f"Error in get_events for tool '{tool.name}': {e}")
-                sentry_sdk.set_context(
-                    "get_events_error",
-                    {
-                        "tool_name": tool.name,
-                        "project_uuid": project_uuid,
-                        "contact_urn": context_data.contact.get("urn", "unknown"),
-                    },
-                )
+                sentry_sdk.set_context("get_events_error", {
+                    "tool_name": tool.name,
+                    "project_uuid": project_uuid,
+                    "contact_urn": context_data.contact.get("urn", "unknown")
+                })
                 sentry_sdk.capture_exception(e)
                 events = []
         else:
@@ -552,14 +547,11 @@ class SupervisorHooks(AgentHooks):
                         events = self.hooks_state.get_events(result_json, tool.name)
                     except Exception as e:
                         logger.error(f"Error in get_events for tool '{tool.name}': {e}")
-                        sentry_sdk.set_context(
-                            "get_events_error",
-                            {
-                                "tool_name": tool.name,
-                                "project_uuid": project_uuid,
-                                "contact_urn": context_data.contact.get("urn", "unknown"),
-                            },
-                        )
+                        sentry_sdk.set_context("get_events_error", {
+                            "tool_name": tool.name,
+                            "project_uuid": project_uuid,
+                            "contact_urn": context_data.contact.get("urn", "unknown")
+                        })
                         sentry_sdk.capture_exception(e)
                         events = []
                 except Exception:
@@ -569,14 +561,11 @@ class SupervisorHooks(AgentHooks):
                     events = self.hooks_state.get_events(result, tool.name)
                 except Exception as e:
                     logger.error(f"Error in get_events for tool '{tool.name}': {e}")
-                    sentry_sdk.set_context(
-                        "get_events_error",
-                        {
-                            "tool_name": tool.name,
-                            "project_uuid": project_uuid,
-                            "contact_urn": context_data.contact.get("urn", "unknown"),
-                        },
-                    )
+                    sentry_sdk.set_context("get_events_error", {
+                        "tool_name": tool.name,
+                        "project_uuid": project_uuid,
+                        "contact_urn": context_data.contact.get("urn", "unknown")
+                    })
                     sentry_sdk.capture_exception(e)
                     events = []
             else:

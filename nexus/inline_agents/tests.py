@@ -1,5 +1,4 @@
 import json
-import logging
 from io import BytesIO
 from unittest.mock import Mock, patch
 
@@ -183,9 +182,8 @@ class TestPushAgents(TestCase):
 
         agent_usecase = CreateAgentUseCase(agent_backend_client=MockBedrockClient)
         update_agent_usecase = UpdateAgentUseCase(agent_backend_client=MockBedrockClient)
-        logger = logging.getLogger(__name__)
         for key in agents:
-            logger.info("Creating agent", extra={"key": key})
+            print(f"[+ ------------ Creating agent {key} ------------ +]")
             agent = agent_usecase.create_agent(key, agents[key], self.project, files)
             self.assertIsInstance(agent, Agent)
             self.assertTrue(agent.inline_contact_fields.filter(key="city").exists())
@@ -193,7 +191,7 @@ class TestPushAgents(TestCase):
             agent_qs = Agent.objects.filter(slug=key, project=self.project)
             existing_agent = agent_qs.exists()
 
-            logger.info("Agent created separator")
+            print("\n[+ ---------------------------------------------- +]")
 
             if existing_agent:
                 agents[key]["credentials"]["API_KEY"]["is_confidential"] = False
@@ -239,7 +237,7 @@ class TestPushAgents(TestCase):
                     file=BytesIO(b"mock file content"),
                 )
 
-                logger.info("Updating agent", extra={"key": key})
+                print(f"[+ ------------ Updating agent {key} ------------  +]")
                 agent_obj = agent_qs.first()
                 update_agent_usecase.update_agent(agent_obj, agents[key], self.project, files)
 
@@ -254,7 +252,7 @@ class TestPushAgents(TestCase):
 
                 self.assertEqual(agent_obj.versions.count(), 2)
 
-                logger.info("Updating agent again", extra={"key": key})
+                print(f"[+ ------------ Updating agent {key} again ------------  +]")
                 agents[key]["tools"].pop()
                 del files[f"{key}:new_tool"]
                 agents[key]["tools"][0]["parameters"][0]["city"]["contact_field"] = False

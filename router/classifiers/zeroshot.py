@@ -1,4 +1,3 @@
-import logging
 from typing import List
 
 from django.conf import settings
@@ -22,9 +21,7 @@ class ZeroshotClassifier(Classifier):
 
     def predict(self, message: str, flows: List[FlowDTO], language: str = "por") -> str:
         try:
-            logging.getLogger(__name__).info(
-                "Zeroshot message classification", extra={"language": language, "message_len": len(message or "")}
-            )
+            print(f"[+ Zeroshot message classification: {message} ({language}) +]")
             flows_list = []
             for flow in flows:
                 flows_list.append(
@@ -44,7 +41,7 @@ class ZeroshotClassifier(Classifier):
             return response.get("classification")
         except Exception as e:
             message = f"Zeroshot Error: {e}"
-            logging.getLogger(__name__).error(message)
+            print(message)
             raise ZeroshotException(message) from e
 
 
