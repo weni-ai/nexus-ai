@@ -692,11 +692,11 @@ class BedrockFileDatabase(FileDataBase):
         )
 
         function_schema = base_action_group_response["agentActionGroup"]["functionSchema"]["functions"]
-        # print("FUNCTION SCHEMA: ", function_schema)
+        logger.debug("Function schema fetched", extra={"function_count": len(function_schema) if function_schema else 0})
         for function in function_schema:
             function["name"] = "".join(c for c in function["name"] if c.isalnum() or c in "_-")
 
-        # print("FUNCTION SCHEMA SANITIZED: ", function_schema)
+        logger.debug("Function schema sanitized", extra={"function_count": len(function_schema) if function_schema else 0})
 
         self.bedrock_agent.create_agent_action_group(
             actionGroupExecutor={"lambda": lambda_arn},
