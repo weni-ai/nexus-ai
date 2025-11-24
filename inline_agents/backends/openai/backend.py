@@ -311,14 +311,14 @@ class OpenAIBackend(InlineAgentsBackend):
     ):
         """Run the formatter agent asynchronously within the trace context"""
         # Create formatter agent to process the final response
-        print("[DEBUG] Create formatter agent")
+        logger.debug("Create formatter agent")
         formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions)
-        print("[DEBUG] Formatter agent created")
+        logger.debug("Formatter agent created")
 
         # Run the formatter agent with the final response
         formatter_result = await self._run_formatter_agent(formatter_agent, final_response, session, context)
 
-        print("[DEBUG] Formatter agent result: ", formatter_result)
+        logger.debug("Formatter agent result", extra={"preview_len": len(str(formatter_result or ""))})
 
         return formatter_result
 
@@ -412,13 +412,13 @@ class OpenAIBackend(InlineAgentsBackend):
                             "input_text": input_text[:500] if input_text else None,
                         },
                     )
-                    
+
                     # Try to get final_response even if streaming failed
                     try:
                         final_response = self._get_final_response(result)
                     except Exception:
                         final_response = None
-                    
+
                     sentry_sdk.set_context(
                         "streaming_error",
                         {
@@ -475,8 +475,7 @@ class OpenAIBackend(InlineAgentsBackend):
 
                 # If use_components is True, process the result through the formatter agent
                 if use_components:
-                    print("="*60 + " COMPONENTS DEBUG " + "="*60)
-                    print("[DEBUG] Start using components")
+                    logger.debug("Components debug start")
                     formatted_response = await self._run_formatter_agent_async(
                         final_response,
                         session,
@@ -484,10 +483,9 @@ class OpenAIBackend(InlineAgentsBackend):
                         external_team["context"],
                         formatter_agent_instructions,
                     )
-                    print("[DEBUG] Formatted result: ", formatted_response)
+                    logger.debug("Formatted result", extra={"preview_len": len(str(formatted_response or ""))})
                     final_response = formatted_response
-                    print("[DEBUG] Final response: ", final_response)
-                    print("="*60 + " COMPONENTS DEBUG " + "="*60)
+                    logger.debug("Final response", extra={"preview_len": len(str(final_response or ""))})
 
                 root_span.update_trace(
                     input=input_text,

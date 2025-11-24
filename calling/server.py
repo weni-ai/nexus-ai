@@ -19,7 +19,9 @@ async def calls(body: CallsModel):
     call = body.call
     call_id = call.call_id
 
-    print(f"received {call.event}")
+    import logging
+
+    logging.getLogger(__name__).info("Call received", extra={"event": call.event})
 
     if call.event == "terminate":
         await SessionManager.close_session(call_id)

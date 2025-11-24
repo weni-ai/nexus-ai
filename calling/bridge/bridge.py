@@ -18,7 +18,6 @@ from calling.events import EventRegistry
 
 
 class RTCBridge:
-
     relay = MediaRelay()
 
     @classmethod
@@ -44,7 +43,7 @@ class RTCBridge:
 
         openai_connection = RTCPeerConnection(configuration=RTC_CONFIG)
         session.openai_connection = openai_connection
-        print("[OAI] Criando PeerConnection para OpenAI")
+        logger.info("[OAI] Criando PeerConnection para OpenAI")
 
         events_dc = None
 
@@ -122,7 +121,6 @@ class RTCBridge:
             session.set_openai_datachannel(openai_dc)
             _setup_events_channel(openai_dc)
         except Exception as e:
-
             logger.error("[OAI][DC] Falha ao criar datachannel local:", e)
 
         @openai_connection.on("track")
@@ -162,7 +160,10 @@ class RTCBridge:
         offer = await openai_connection.createOffer()
         await openai_connection.setLocalDescription(offer)
 
-        print("[OAI] Enviando offer para OpenAI (tamanho)", len(openai_connection.localDescription.sdp or ""))
+        logger.info(
+            "[OAI] Enviando offer para OpenAI (tamanho)",
+            extra={"sdp_len": len(openai_connection.localDescription.sdp or "")},
+        )
 
         logger.debug("[OAI] Open AI Offer:\n", openai_connection.localDescription.sdp)
 
@@ -171,19 +172,19 @@ class RTCBridge:
                 openai_connection.localDescription.sdp, session.agents.get("instructions")
             )
             await openai_connection.setRemoteDescription(RTCSessionDescription(answer_sdp, "answer"))
-            print("[OAI] Answer da OpenAI aplicado (tamanho)", len(answer_sdp or ""))
+            logger.info("[OAI] Answer da OpenAI aplicado (tamanho)", extra={"answer_len": len(answer_sdp or "")})
         except Exception as e:
             logger.error("[OAI] Falha ao negociar com OpenAI:", e)
             try:
                 await openai_connection.close()
             except Exception:
-                print("ERRO AO FECHAR CONEXão")
+                logger.error("[OAI] ERRO AO FECHAR CONEXÃO")
             openai_connection = None
             return
 
         @wpp_connection.on("connectionstatechange")
         async def wpp_on_connectionstatechange():
-            print("Estado da conexão (WAP):", openai_connection.connectionState)
+            logger.info("Estado da conexão (WAP)", extra={"state": openai_connection.connectionState})
 
     @classmethod
     async def handle_offer(cls, session: Session):
@@ -203,7 +204,7 @@ class RTCBridge:
 
         answer = await wpp_connection.createAnswer()
         await wpp_connection.setLocalDescription(answer)
-        
+
         session.set_answer_sdp(answer.sdp)
         await EventRegistry.notify("whatspp.answer.created", session)
 
