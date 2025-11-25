@@ -305,7 +305,7 @@ class OpenAIBackend(InlineAgentsBackend):
         formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions, formatter_agent_configurations)
 
         # Run the formatter agent with the final response
-        formatter_result = await self._run_formatter_agent(formatter_agent, final_response, session, context)
+        formatter_result = await self._run_formatter_agent(formatter_agent, final_response, session, context, formatter_agent_configurations)
 
         return formatter_result
 
@@ -363,10 +363,19 @@ class OpenAIBackend(InlineAgentsBackend):
 
         return formatter_agent
 
-    async def _run_formatter_agent(self, formatter_agent, final_response, session, context):
+    async def _run_formatter_agent(self, formatter_agent, final_response, session, context, formatter_agent_configurations):
         """Run the formatter agent with the final response"""
         try:
-            # Create a FinalResponse object for the formatter agent
+            formatter_send_only_assistant_message = formatter_agent_configurations.get("formatter_send_only_assistant_message") or False
+            if formatter_send_only_assistant_message:
+                input_formatter = await session.get_items()
+                result = await Runner.run(
+                    starting_agent=formatter_agent,
+                    input=input_formatter,
+                    context=context,
+                )
+                return result.final_output
+
             result = await Runner.run(
                 starting_agent=formatter_agent,
                 input=final_response,
@@ -376,7 +385,6 @@ class OpenAIBackend(InlineAgentsBackend):
             return result.final_output
         except Exception as e:
             print(f"Error in formatter agent: {e}")
-            # Return the original response if formatter fails
             return final_response
 
     async def _invoke_agents_async(
