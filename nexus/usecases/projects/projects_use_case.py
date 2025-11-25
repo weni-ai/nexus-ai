@@ -111,7 +111,7 @@ class ProjectsUseCase:
         user = get_by_email(user_email=user_email)
         org = orgs.get_by_uuid(org_uuid=project_dto.org_uuid)
 
-        backend = "OpenAIBackend"  # Default
+        backend = "OpenAIBackend"
         if project_dto.indexer_database == Project.BEDROCK:
             backend = "BedrockBackend"
             sentry_sdk.set_tag("project_backend", "BedrockBackend")
