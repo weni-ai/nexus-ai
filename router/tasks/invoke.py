@@ -186,12 +186,11 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
     if backend == "BedrockBackend":
         foundation_model = complexity_layer(text)
     else:
-        guardrails: Dict[str, str] = GuardrailsUsecase.get_guardrail_as_dict(message.get("project_uuid"))
-        guardrails_message = guardrails_complexity_layer(
-            text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion")
-        )
-        if guardrails_message:
-            raise UnsafeMessageException(guardrails_message)
+        pass
+        # guardrails: Dict[str, str] = GuardrailsUsecase.get_guardrail_as_dict(message.get("project_uuid"))
+        # guardrails_message = guardrails_complexity_layer(text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion"))
+        # if guardrails_message:
+        #     raise UnsafeMessageException(guardrails_message)
 
     text, turn_off_rationale = handle_attachments(text=text, attachments=attachments)
 
