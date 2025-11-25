@@ -1,16 +1,14 @@
-import factory
-
 from uuid import uuid4
 
-from nexus.inline_agents.models import (
-    Agent,
-    Version,
-    IntegratedAgent,
-    Guardrail,
-)
+import factory
 
 from nexus.inline_agents.backends.bedrock.models import Supervisor
-
+from nexus.inline_agents.models import (
+    Agent,
+    Guardrail,
+    IntegratedAgent,
+    Version,
+)
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
@@ -19,12 +17,12 @@ class AgentFactory(factory.django.DjangoModelFactory):
         model = Agent
 
     uuid = uuid4()
-    name = factory.Sequence(lambda n: 'test%d' % n)
-    slug = factory.Sequence(lambda n: 'test%d' % n)
+    name = factory.Sequence(lambda n: "test%d" % n)
+    slug = factory.Sequence(lambda n: "test%d" % n)
     instruction = "Be helpful and friendly"
     collaboration_instructions = "send to this agent if user is talking about the topic of the agent"
     foundation_model = "nova-pro"
-    is_official = factory.Faker('boolean')
+    is_official = factory.Faker("boolean")
     project = factory.SubFactory(ProjectFactory)
 
 
@@ -55,18 +53,18 @@ class GuardrailFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Guardrail
 
-    identifier = factory.Sequence(lambda n: 'test%d' % n)
+    identifier = factory.Sequence(lambda n: "test%d" % n)
     version = factory.Sequence(lambda n: n)
-    changelog = factory.Faker('json')
-    current_version = factory.Faker('boolean')
+    changelog = factory.Faker("json")
+    current_version = factory.Faker("boolean")
 
 
 class SupervisorFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Supervisor
 
-    name = factory.Sequence(lambda n: 'test%d' % n)
-    instruction = factory.Faker('text')
+    name = factory.Sequence(lambda n: "test%d" % n)
+    instruction = factory.Faker("text")
     foundation_model = "nova-pro"
     prompt_override_configuration = {"default": {}, "components": {}}
     action_groups = []

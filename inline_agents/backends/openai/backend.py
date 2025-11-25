@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 import asyncio
 import hashlib
 import logging
@@ -5,7 +6,8 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import pendulum
-from agents import Agent, Runner, trace, ModelSettings
+import sentry_sdk
+from agents import Agent, ModelSettings, Runner, trace
 from agents.agent import ToolsToFinalOutputResult
 from django.conf import settings
 from langfuse import get_client
@@ -16,8 +18,8 @@ from inline_agents.backends.openai.adapter import (
     OpenAIDataLakeEventAdapter,
     OpenAITeamAdapter,
 )
-from inline_agents.backends.openai.entities import FinalResponse
 from inline_agents.backends.openai.components_tools import COMPONENT_TOOLS
+from inline_agents.backends.openai.entities import FinalResponse
 from inline_agents.backends.openai.grpc import (
     MessageStreamingClient,
     is_grpc_enabled,
@@ -64,15 +66,31 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_client(self):
         return Runner()
 
-    def _get_session(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None) -> tuple[RedisSession, str]:
+    def _get_session(
+        self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None
+    ) -> tuple[RedisSession, str]:
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
-        return RedisSession(session_id=session_id, r=redis_client, project_uuid=project_uuid, sanitized_urn=sanitized_urn, limit=conversation_turns_to_include), session_id
+        return RedisSession(
+            session_id=session_id,
+            r=redis_client,
+            project_uuid=project_uuid,
+            sanitized_urn=sanitized_urn,
+            limit=conversation_turns_to_include,
+        ), session_id
 
-    def _get_session_factory(self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None):
+    def _get_session_factory(
+        self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None
+    ):
         redis_client = Redis.from_url(settings.REDIS_URL)
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
-        return make_session_factory(redis=redis_client, base_id=session_id, project_uuid=project_uuid, sanitized_urn=sanitized_urn, limit=conversation_turns_to_include)
+        return make_session_factory(
+            redis=redis_client,
+            base_id=session_id,
+            project_uuid=project_uuid,
+            sanitized_urn=sanitized_urn,
+            limit=conversation_turns_to_include,
+        )
 
     def end_session(self, project_uuid: str, sanitized_urn: str):
         session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
@@ -81,8 +99,65 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_event_manager_notify(self):
         if self._event_manager_notify is None:
             from nexus.events import async_event_manager
+
             self._event_manager_notify = async_event_manager.notify
         return self._event_manager_notify
+
+    def _ensure_conversation(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        contact_name: str,
+        channel_uuid: str,
+        preview: bool = False
+    ) -> Optional[object]:
+        """Ensure conversation exists and return it, or None if creation fails or channel_uuid is missing."""
+        # Don't create conversations in preview mode
+        if preview:
+            return None
+
+        if not channel_uuid:
+            # channel_uuid is None - log to Sentry for debugging
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_tag("contact_urn", contact_urn)
+            sentry_sdk.set_context("conversation_creation", {
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "contact_name": contact_name,
+                "channel_uuid": None,
+                "backend": "openai",
+                "reason": "channel_uuid is None"
+            })
+            sentry_sdk.capture_message(
+                "Conversation not created: channel_uuid is None (OpenAI backend)",
+                level="warning"
+            )
+            return None
+
+        try:
+            from router.services.conversation_service import ConversationService
+
+            conversation_service = ConversationService()
+            return conversation_service.ensure_conversation_exists(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                contact_name=contact_name,
+                channel_uuid=channel_uuid
+            )
+        except Exception as e:
+            # If conversation lookup/creation fails, continue without it but log to Sentry
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_tag("contact_urn", contact_urn)
+            sentry_sdk.set_tag("channel_uuid", channel_uuid)
+            sentry_sdk.set_context("conversation_creation", {
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "contact_name": contact_name,
+                "channel_uuid": channel_uuid,
+                "backend": "openai"
+            })
+            sentry_sdk.capture_exception(e)
+            return None
 
     def invoke_agents(
         self,
@@ -105,23 +180,28 @@ class OpenAIBackend(InlineAgentsBackend):
         turn_off_rationale: bool = False,
         event_manager_notify: callable = None,
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
-        **kwargs
+        **kwargs,
     ):
         turns_to_include = None
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
         session_factory = self._get_session_factory(
-            project_uuid=project_uuid,
-            sanitized_urn=sanitized_urn,
-            conversation_turns_to_include=turns_to_include
+            project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
         )
         session, session_id = self._get_session(
-            project_uuid=project_uuid,
-            sanitized_urn=sanitized_urn,
-            conversation_turns_to_include=turns_to_include
+            project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
         )
 
         supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
         data_lake_event_adapter = self._get_data_lake_event_adapter()
+
+        # Ensure conversation exists and get it for data lake events (skip in preview mode)
+        conversation = self._ensure_conversation(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            contact_name=contact_name,
+            channel_uuid=channel_uuid,
+            preview=preview
+        )
 
         hooks_state = HooksState(agents=team)
 
@@ -133,7 +213,7 @@ class OpenAIBackend(InlineAgentsBackend):
             session_id=session_id,
             source_type="user",
             contact_name=contact_name,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
         )
 
         supervisor_hooks = SupervisorHooks(
@@ -149,6 +229,7 @@ class OpenAIBackend(InlineAgentsBackend):
             agents=team,
             hooks_state=hooks_state,
             data_lake_event_adapter=data_lake_event_adapter,
+            conversation=conversation,
         )
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
@@ -206,11 +287,10 @@ class OpenAIBackend(InlineAgentsBackend):
                 message_data={
                     "type": "status",
                     "content": "Starting OpenAI agent processing",
-                    "session_id": session_id
-                }
+                    "session_id": session_id,
+                },
             )
 
-        # Initialize gRPC streaming client if enabled (disabled for preview)
         grpc_client, grpc_msg_id = None, None
         if not preview:
             grpc_client, grpc_msg_id = self._initialize_grpc_client(
@@ -226,10 +306,10 @@ class OpenAIBackend(InlineAgentsBackend):
             input_text, contact_urn, project_uuid, channel_uuid,
             user_email, preview, rationale_switch, language,
             turn_off_rationale, msg_external_id, supervisor_hooks, runner_hooks, hooks_state,
-            use_components, grpc_client, grpc_msg_id
+            use_components, formatter_agent_foundation_model=project.default_formatter_foundation_model,
+            grpc_client=grpc_client, grpc_msg_id=grpc_msg_id
         ))
 
-        # Send completion message if gRPC was used
         if grpc_client and grpc_msg_id:
             try:
                 content = result if isinstance(result, str) else str(result)
@@ -247,101 +327,43 @@ class OpenAIBackend(InlineAgentsBackend):
 
         return result
 
-    def _send_grpc_delta(
-        self,
-        delta_content: str,
-        grpc_client: MessageStreamingClient,
-        grpc_msg_id: str,
-        delta_counter: int,
-        channel_uuid: str,
-        contact_urn: str,
-        project_uuid: str
-    ) -> bool:
-        """Send a single delta message via gRPC."""
-        try:
-            grpc_client.send_delta_message(
-                msg_id=f"{grpc_msg_id}-delta-{delta_counter}",
-                content=delta_content,
-                channel_uuid=channel_uuid,
-                contact_urn=contact_urn,
-                project_uuid=str(project_uuid)
-            )
-            return True
-        except Exception as e:
-            logger.error(f"gRPC delta send failed: {e}", exc_info=True)
-            return False
+    async def _run_formatter_agent_async(self, final_response: str, session, supervisor_hooks, context, formatter_instructions="", formatter_agent_foundation_model=None):
+        """Run the formatter agent asynchronously within the trace context"""
+        # Create formatter agent to process the final response
+        formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions, formatter_agent_foundation_model)
 
-    def _process_delta_event(
-        self,
-        event,
-        grpc_client: Optional[MessageStreamingClient],
-        grpc_msg_id: Optional[str],
-        delta_counter: int,
-        channel_uuid: str,
-        contact_urn: str,
-        project_uuid: str
-    ) -> int:
-        """Process a delta event and stream it via gRPC."""
-        from openai.types.responses import ResponseTextDeltaEvent
-
-        if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
-            delta_content = event.data.delta
-            if delta_content and grpc_client and grpc_msg_id:
-                delta_counter += 1
-                self._send_grpc_delta(
-                    delta_content=delta_content,
-                    grpc_client=grpc_client,
-                    grpc_msg_id=grpc_msg_id,
-                    delta_counter=delta_counter,
-                    channel_uuid=channel_uuid,
-                    contact_urn=contact_urn,
-                    project_uuid=project_uuid
-                )
-
-        return delta_counter
-
-    async def _run_formatter_agent_async(
-        self,
-        final_response: str,
-        session,
-        supervisor_hooks,
-        context,
-        formatter_instructions=""
-    ):
-        """Run the formatter agent asynchronously."""
-        formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions)
-        return await self._run_formatter_agent_streamed(
+        # Run the formatter agent with the final response
+        formatter_result = await self._run_formatter_agent(
             formatter_agent, final_response, session, context
         )
 
-    def _create_formatter_agent(self, supervisor_hooks, formatter_instructions=""):
+        return formatter_result
+
+    def _create_formatter_agent(self, supervisor_hooks, formatter_instructions="", formatter_agent_foundation_model=None):
         """Create the formatter agent with component tools"""
+
         def custom_tool_handler(context, tool_results):
             if tool_results:
                 first_result = tool_results[0]
-                return ToolsToFinalOutputResult(
-                    is_final_output=True,
-                    final_output=first_result.output
-                )
-            return ToolsToFinalOutputResult(
-                is_final_output=False,
-                final_output=None
-            )
+                return ToolsToFinalOutputResult(is_final_output=True, final_output=first_result.output)
+            return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
 
         # Use custom instructions if provided, otherwise use default
-        instructions = formatter_instructions or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
+        instructions = (
+            formatter_instructions
+            or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
+        )
+
+        model: str = formatter_agent_foundation_model if formatter_agent_foundation_model else settings.FORMATTER_AGENT_MODEL
 
         formatter_agent = Agent(
             name="Response Formatter Agent",
             instructions=instructions,
-            model=settings.FORMATTER_AGENT_MODEL,
+            model=model,
             tools=COMPONENT_TOOLS,
             hooks=supervisor_hooks,
             tool_use_behavior=custom_tool_handler,
-            model_settings=ModelSettings(
-                tool_choice="required",
-                parallel_tool_calls=False
-            )
+            model_settings=ModelSettings(tool_choice="required", parallel_tool_calls=False),
         )
         return formatter_agent
 
@@ -416,36 +438,55 @@ class OpenAIBackend(InlineAgentsBackend):
             logger.error(f"gRPC setup failed: {e}", exc_info=True)
             return None, None
 
-    def _extract_message_content(self, event) -> Optional[str]:
-        """
-        Extract message content from stream event.
+    def _send_grpc_delta(
+        self,
+        delta_content: str,
+        grpc_client: MessageStreamingClient,
+        grpc_msg_id: str,
+        delta_counter: int,
+        channel_uuid: str,
+        contact_urn: str,
+        project_uuid: str
+    ):
+        """Send a delta message via gRPC."""
+        try:
+            grpc_client.send_delta_message(
+                msg_id=grpc_msg_id,
+                content=delta_content,
+                channel_uuid=channel_uuid,
+                contact_urn=contact_urn,
+                project_uuid=str(project_uuid)
+            )
+        except Exception as e:
+            logger.error(f"gRPC delta send failed: {e}", exc_info=True)
 
-        Args:
-            event: Stream event from agents library
+    def _process_delta_event(
+        self,
+        event,
+        grpc_client: Optional[MessageStreamingClient],
+        grpc_msg_id: Optional[str],
+        delta_counter: int,
+        channel_uuid: str,
+        contact_urn: str,
+        project_uuid: str
+    ) -> int:
+        """Process a delta event and stream it via gRPC."""
+        from openai.types.responses import ResponseTextDeltaEvent
 
-        Returns:
-            Message content string or None if not found
-        """
-        if getattr(event, 'type', None) != "run_item_stream_event":
-            return None
-
-        item = getattr(event, 'item', None)
-        if not item or getattr(item, 'type', None) != "message_output_item":
-            return None
-
-        raw_item = getattr(item, 'raw_item', None)
-        if not raw_item:
-            return None
-
-        # Try to get content from object attribute or dict
-        content = getattr(raw_item, 'content', None)
-        if content is None and isinstance(raw_item, dict):
-            content = raw_item.get('content')
-
-        if content and isinstance(content, str) and content.strip():
-            return content
-
-        return None
+        if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+            delta_content = event.data.delta
+            if delta_content and grpc_client and grpc_msg_id:
+                delta_counter += 1
+                self._send_grpc_delta(
+                    delta_content=delta_content,
+                    grpc_client=grpc_client,
+                    grpc_msg_id=grpc_msg_id,
+                    delta_counter=delta_counter,
+                    channel_uuid=channel_uuid,
+                    contact_urn=contact_urn,
+                    project_uuid=project_uuid
+                )
+        return delta_counter
 
     async def _invoke_agents_async(
         self,
@@ -467,18 +508,17 @@ class OpenAIBackend(InlineAgentsBackend):
         runner_hooks,
         hooks_state,
         use_components,
+        formatter_agent_foundation_model=None,
         grpc_client: Optional[MessageStreamingClient] = None,
         grpc_msg_id: Optional[str] = None,
     ):
         """Async wrapper to handle the streaming response"""
-        delta_counter = 0
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
             trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
-            print(f"[+ DEBUG +] Trace ID: {trace_id}")
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
                 result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
-
+                delta_counter = 0
                 async for event in result.stream_events():
                     delta_counter = self._process_delta_event(
                         event=event,
@@ -489,29 +529,17 @@ class OpenAIBackend(InlineAgentsBackend):
                         contact_urn=contact_urn,
                         project_uuid=project_uuid
                     )
-
-                    # Handle other event types (tool calls, etc.)
-                    if getattr(event, 'type', None) == "run_item_stream_event":
-                        item = getattr(event, 'item', None)
-                        item_type = getattr(item, 'type', None) if item else None
-
-                        # Handle tool calls
-                        if item_type == "tool_call_item":
-                            raw_item = getattr(item, 'raw_item', None)
-                            if raw_item:
-                                hooks_state.tool_calls.update({
-                                    getattr(raw_item, 'name', ''): getattr(raw_item, 'arguments', {})
-                                })
-
+                    if event.type == "run_item_stream_event":
+                        if hasattr(event, 'item') and event.item.type == "tool_call_item":
+                            hooks_state.tool_calls.update({
+                                event.item.raw_item.name: event.item.raw_item.arguments
+                            })
                 final_response = self._get_final_response(result)
 
                 if use_components:
                     formatted_response = await self._run_formatter_agent_async(
-                        final_response=final_response,
-                        session=session,
-                        supervisor_hooks=supervisor_hooks,
-                        context=external_team["context"],
-                        formatter_instructions=formatter_agent_instructions
+                        final_response, session, supervisor_hooks, external_team["context"],
+                        formatter_agent_instructions, formatter_agent_foundation_model
                     )
                     final_response = formatted_response
 
@@ -523,7 +551,7 @@ class OpenAIBackend(InlineAgentsBackend):
                         "contact_urn": contact_urn,
                         "channel_uuid": channel_uuid,
                         "preview": preview,
-                    }
+                    },
                 )
 
         return final_response

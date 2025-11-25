@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 def get_fernet_key():
     """Get or generate a Fernet key for encryption"""
-    key = getattr(settings, 'CREDENTIAL_ENCRYPTION_KEY', None)
+    key = getattr(settings, "CREDENTIAL_ENCRYPTION_KEY", None)
     if not key:
         # Generate a new key if not configured
         key = Fernet.generate_key()
@@ -55,5 +55,5 @@ def decrypt_value(encrypted_value: str) -> str:
         decrypted_bytes = f.decrypt(decoded)
         result = decrypted_bytes.decode()
         return result
-    except Exception as e:
+    except Exception:
         return encrypted_value

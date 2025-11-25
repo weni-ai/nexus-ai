@@ -1,11 +1,8 @@
-import boto3
-
 import logging
-
+from contextlib import contextmanager
 from functools import partial
 
-from contextlib import contextmanager
-
+import boto3
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -28,6 +25,4 @@ def get_dynamodb_table(table_name: str):
         raise e
 
 
-get_message_table = partial(
-    get_dynamodb_table, table_name=settings.DYNAMODB_MESSAGE_TABLE
-)
+get_message_table = partial(get_dynamodb_table, table_name=settings.DYNAMODB_MESSAGE_TABLE)

@@ -1,15 +1,16 @@
 from uuid import uuid4
-from django.db import models
-from django.contrib.postgres.fields import ArrayField
+
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
+from django.db import models
 
 from nexus.agents.encryption import decrypt_value
 from nexus.agents.exceptions import (
+    CredentialIsConfidentialInvalid,
     CredentialKeyInvalid,
     CredentialLabelInvalid,
-    CredentialValueInvalid,
     CredentialPlaceholderInvalid,
-    CredentialIsConfidentialInvalid,
+    CredentialValueInvalid,
 )
 from nexus.projects.models import Project
 
@@ -45,9 +46,12 @@ class Agent(models.Model):
     backend_foundation_models = models.JSONField(default=dict)
     source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
 
+    def __str__(self):
+        return self.name
+
     @property
     def current_version(self):
-        return self.versions.order_by('created_on').last()
+        return self.versions.order_by("created_on").last()
 
     def __get_default_value_fallback(self, agents_backend):
         if agents_backend == "BedrockBackend":
@@ -55,7 +59,7 @@ class Agent(models.Model):
         elif agents_backend == "OpenAIBackend":
             return settings.OPENAI_AGENTS_FOUNDATION_MODEL
 
-    def current_foundation_model(self, agents_backend, project = None):
+    def current_foundation_model(self, agents_backend, project=None):
         if not project:
             project = self.project
 
@@ -72,7 +76,10 @@ class IntegratedAgent(models.Model):
     created_on = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('agent', 'project')
+        unique_together = ("agent", "project")
+
+    def __str__(self):
+        return f"{self.agent.name} - {self.project}"
 
 
 class Version(models.Model):
@@ -80,6 +87,9 @@ class Version(models.Model):
     display_skills = ArrayField(models.JSONField())
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="versions")
     created_on = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Version for {self.agent.name} - {self.created_on}"
 
 
 class AgentCredential(models.Model):
@@ -93,7 +103,14 @@ class AgentCredential(models.Model):
     agents = models.ManyToManyField(Agent)
 
     class Meta:
-        unique_together = ('project', 'key')
+        unique_together = ("project", "key")
+
+    def __str__(self):
+        return self.label
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     def clean(self):
         if not isinstance(self.key, str):
@@ -121,10 +138,6 @@ class AgentCredential(models.Model):
         if not isinstance(self.is_confidential, bool):
             raise CredentialIsConfidentialInvalid(field_name=str(self.key))
 
-    def save(self, *args, **kwargs):
-        self.clean()
-        super().save(*args, **kwargs)
-
     @property
     def decrypted_value(self):
         """Get the decrypted value of the credential"""
@@ -143,6 +156,9 @@ class ContactField(models.Model):
     key = models.CharField(max_length=255)
     value_type = models.CharField(max_length=255)
 
+    def __str__(self):
+        return f"{self.key}: {self.value_type}"
+
 
 class InlineAgentMessage(models.Model):
     TRACES_BASE_PATH = "traces"
@@ -156,26 +172,48 @@ class InlineAgentMessage(models.Model):
     source_type = models.CharField(max_length=255)
     source = models.CharField(max_length=255)
 
-    @property
-    def trace_path(self):
-        return f"{self.TRACES_BASE_PATH}/{self.project.uuid}/{self.uuid}.jsonl"
-
     class Meta:
         indexes = [
             models.Index(fields=["project", "created_at", "contact_urn"]),
         ]
 
+    def __str__(self):
+        return f"InlineAgentMessage - {self.contact_urn}"
+
+    @property
+    def trace_path(self):
+        return f"{self.TRACES_BASE_PATH}/{self.project.uuid}/{self.uuid}.jsonl"
+
 
 class InlineAgentsConfiguration(models.Model):
+    valid_voices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer", "verse"]
     # TODO: Move inline agents configuration from project model to this model
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_agent_configurations")
     agents_backend = models.CharField(max_length=100)
     default_instructions_for_collaborators = models.TextField(null=True, blank=True)
-
-    def __str__(self):
-        return f"Project: {self.project.name} - Agents backend: {self.agents_backend}"
+    audio_orchestration = models.BooleanField(default=False)
+    audio_orchestration_voice = models.CharField(null=True, blank=True, default="shimmer")
 
     class Meta:
         verbose_name = "Inline agents configurations for a project"
         verbose_name_plural = "Inline agents configurations for a project"
-        unique_together = ('project', 'agents_backend')
+        unique_together = ("project", "agents_backend")
+
+    def __str__(self):
+        return f"Project: {self.project.name} - Agents backend: {self.agents_backend}"
+
+    def set_audio_orchestration_voice(self, voice: str):
+        if voice not in self.valid_voices:
+            raise ValueError
+        self.audio_orchestration_voice = voice
+        self.save()
+
+    def set_audio_orchestration(self, activate: bool, voice: str = None):
+        if voice:
+            try:
+                self.set_audio_orchestration_voice(voice)
+            except ValueError:
+                raise
+
+        self.audio_orchestration = activate
+        self.save()

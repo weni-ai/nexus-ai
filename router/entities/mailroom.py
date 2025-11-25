@@ -1,7 +1,8 @@
 import json
 import re
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel
-from typing import Dict, List, Optional, Any
 
 
 class ContactField(BaseModel):
@@ -36,25 +37,26 @@ class Message(BaseModel):
     def sanitized_urn(self):
         urn_to_sanitize = self.contact_urn
 
-        pattern = r'(:[0-9]+)@.*'
+        pattern = r"(:[0-9]+)@.*"
         match = re.search(pattern, urn_to_sanitize)
         if match:
-            urn_to_sanitize = re.sub(pattern, r'\1', urn_to_sanitize)
+            urn_to_sanitize = re.sub(pattern, r"\1", urn_to_sanitize)
 
         sanitized = ""
         for char in urn_to_sanitize:
-            if not char.isalnum() and char not in '-_.:':
+            if not char.isalnum() and char not in "-_.:":
                 sanitized += f"_{ord(char)}"
             else:
                 sanitized += char
         return sanitized
 
 
-def message_factory(*args, contact_fields: dict = {}, metadata: dict = {}, **kwargs) -> Message:
-    fields = []
-
+def message_factory(*args, contact_fields: Optional[dict] = None, metadata: Optional[dict] = None, **kwargs) -> Message:
+    if contact_fields is None:
+        contact_fields = {}
     if metadata is None:
         metadata = {}
+    fields = []
 
     if contact_fields:
         for key, value in contact_fields.items():

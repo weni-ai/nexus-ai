@@ -1,10 +1,10 @@
 from datetime import datetime
 
-from django.db.models import QuerySet
 from django.core.exceptions import FieldError
+from django.db.models import QuerySet
 
-from nexus.logs.models import MessageLog
 from nexus.inline_agents.models import InlineAgentMessage
+from nexus.logs.models import MessageLog
 from router.services.message_service import MessageService
 
 
@@ -37,10 +37,7 @@ class ListLogUsecase:
         created_at = log.created_at
 
         logs = MessageLog.objects.filter(
-            project=project,
-            source=source,
-            message__contact_urn=contact_urn,
-            created_at__lt=created_at
+            project=project, source=source, message__contact_urn=contact_urn, created_at__lt=created_at
         ).order_by("-created_at")[:message_count]
 
         logs = list(logs)[::-1]
@@ -55,20 +52,13 @@ class ListLogUsecase:
         end: datetime,
     ):
         messages = InlineAgentMessage.objects.filter(
-            project__uuid=project_uuid,
-            contact_urn=contact_urn,
-            created_at__range=(start, end)
+            project__uuid=project_uuid, contact_urn=contact_urn, created_at__range=(start, end)
         ).order_by("created_at")
 
         return messages
 
     def list_messages_for_conversation(
-        self,
-        project_uuid: str,
-        contact_urn: str,
-        channel_uuid: str,
-        start: datetime,
-        end: datetime
+        self, project_uuid: str, contact_urn: str, channel_uuid: str, start: datetime, end: datetime
     ):
         """
         Get all messages for a specific conversation period using DynamoDB repository.
@@ -98,7 +88,7 @@ class ListLogUsecase:
             channel_uuid=channel_uuid,
             start_date=start_iso,
             end_date=end_iso,
-            resolution_status=None  # No resolution filtering - get all messages
+            resolution_status=None,  # No resolution filtering - get all messages
         )
 
         return messages
