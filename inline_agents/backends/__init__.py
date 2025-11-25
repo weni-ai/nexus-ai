@@ -1,8 +1,9 @@
+import os
+
 from inline_agents.backend import InlineAgentsBackend
 
 from .bedrock.backend import BedrockBackend
 from .exceptions import BackendAlreadyRegistered, UnregisteredBackend
-from .openai.backend import OpenAIBackend
 
 
 class BackendsRegistry:
@@ -44,4 +45,9 @@ class BackendsRegistry:
 
 
 BackendsRegistry.register(BedrockBackend(), set_default=True)
-BackendsRegistry.register(OpenAIBackend())
+
+# Avoid importing OpenAI backend during migrations to prevent instrumentation issues
+if "makemigrations" not in os.sys.argv and "migrate" not in os.sys.argv:
+    from .openai.backend import OpenAIBackend
+
+    BackendsRegistry.register(OpenAIBackend())
