@@ -1,5 +1,7 @@
 from django.contrib import admin
+from django.db.models import JSONField
 
+from nexus.admin_widgets import PrettyJSONWidget
 from nexus.projects.models import Project
 
 
@@ -38,6 +40,10 @@ class ProjectAdmin(admin.ModelAdmin):
     ordering = ("-created_at",)
     readonly_fields = ("name", "uuid")
 
+    formfield_overrides = {
+        JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 20, "cols": 80, "class": "vLargeTextField"})},
+    }
+
     fieldsets = (
         (
             None,
@@ -55,10 +61,22 @@ class ProjectAdmin(admin.ModelAdmin):
                     "conversation_turns_to_include",
                     "exclude_previous_thinking_steps",
                     "guardrail",
-                    "default_formatter_foundation_model",
                 )
             },
         ),
+        (
+            "Formatter Agent Configurations",
+            {
+                "fields": (
+                    "default_formatter_foundation_model",
+                    "formatter_instructions",
+                    "formatter_reasoning_effort",
+                    "formatter_reasoning_summary",
+                    "formatter_send_only_assistant_message",
+                    "formatter_tools_descriptions",
+                )
+            }
+        )
     )
 
     def get_form(self, request, obj=None, **kwargs):
