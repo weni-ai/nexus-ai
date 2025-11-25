@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("projects", "0019_project_default_collaborators_foundation_model"),
+        ("projects", "0021_project_formatter_instructions_and_more"),
     ]
 
     operations = [
