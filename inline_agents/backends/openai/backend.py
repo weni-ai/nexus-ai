@@ -104,12 +104,7 @@ class OpenAIBackend(InlineAgentsBackend):
         return self._event_manager_notify
 
     def _ensure_conversation(
-        self,
-        project_uuid: str,
-        contact_urn: str,
-        contact_name: str,
-        channel_uuid: str,
-        preview: bool = False
+        self, project_uuid: str, contact_urn: str, contact_name: str, channel_uuid: str, preview: bool = False
     ) -> Optional[object]:
         """Ensure conversation exists and return it, or None if creation fails or channel_uuid is missing."""
         # Don't create conversations in preview mode
@@ -120,17 +115,19 @@ class OpenAIBackend(InlineAgentsBackend):
             # channel_uuid is None - log to Sentry for debugging
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_tag("contact_urn", contact_urn)
-            sentry_sdk.set_context("conversation_creation", {
-                "project_uuid": project_uuid,
-                "contact_urn": contact_urn,
-                "contact_name": contact_name,
-                "channel_uuid": None,
-                "backend": "openai",
-                "reason": "channel_uuid is None"
-            })
+            sentry_sdk.set_context(
+                "conversation_creation",
+                {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "contact_name": contact_name,
+                    "channel_uuid": None,
+                    "backend": "openai",
+                    "reason": "channel_uuid is None",
+                },
+            )
             sentry_sdk.capture_message(
-                "Conversation not created: channel_uuid is None (OpenAI backend)",
-                level="warning"
+                "Conversation not created: channel_uuid is None (OpenAI backend)", level="warning"
             )
             return None
 
@@ -139,23 +136,23 @@ class OpenAIBackend(InlineAgentsBackend):
 
             conversation_service = ConversationService()
             return conversation_service.ensure_conversation_exists(
-                project_uuid=project_uuid,
-                contact_urn=contact_urn,
-                contact_name=contact_name,
-                channel_uuid=channel_uuid
+                project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
             )
         except Exception as e:
             # If conversation lookup/creation fails, continue without it but log to Sentry
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_tag("contact_urn", contact_urn)
             sentry_sdk.set_tag("channel_uuid", channel_uuid)
-            sentry_sdk.set_context("conversation_creation", {
-                "project_uuid": project_uuid,
-                "contact_urn": contact_urn,
-                "contact_name": contact_name,
-                "channel_uuid": channel_uuid,
-                "backend": "openai"
-            })
+            sentry_sdk.set_context(
+                "conversation_creation",
+                {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "contact_name": contact_name,
+                    "channel_uuid": channel_uuid,
+                    "backend": "openai",
+                },
+            )
             sentry_sdk.capture_exception(e)
             return None
 
@@ -200,7 +197,7 @@ class OpenAIBackend(InlineAgentsBackend):
             contact_urn=contact_urn,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
-            preview=preview
+            preview=preview,
         )
 
         hooks_state = HooksState(agents=team)
@@ -298,17 +295,34 @@ class OpenAIBackend(InlineAgentsBackend):
                 contact_urn=contact_urn,
                 session_id=session_id,
                 project_uuid=project_uuid,
-                language=language
+                language=language,
             )
 
-        result = asyncio.run(self._invoke_agents_async(
-            client, external_team, session, session_id,
-            input_text, contact_urn, project_uuid, channel_uuid,
-            user_email, preview, rationale_switch, language,
-            turn_off_rationale, msg_external_id, supervisor_hooks, runner_hooks, hooks_state,
-            use_components, formatter_agent_foundation_model=project.default_formatter_foundation_model,
-            grpc_client=grpc_client, grpc_msg_id=grpc_msg_id
-        ))
+        result = asyncio.run(
+            self._invoke_agents_async(
+                client,
+                external_team,
+                session,
+                session_id,
+                input_text,
+                contact_urn,
+                project_uuid,
+                channel_uuid,
+                user_email,
+                preview,
+                rationale_switch,
+                language,
+                turn_off_rationale,
+                msg_external_id,
+                supervisor_hooks,
+                runner_hooks,
+                hooks_state,
+                use_components,
+                formatter_agent_foundation_model=project.default_formatter_foundation_model,
+                grpc_client=grpc_client,
+                grpc_msg_id=grpc_msg_id,
+            )
+        )
 
         if grpc_client and grpc_msg_id:
             try:
@@ -318,7 +332,7 @@ class OpenAIBackend(InlineAgentsBackend):
                     content=content,
                     channel_uuid=channel_uuid,
                     contact_urn=contact_urn,
-                    project_uuid=str(project_uuid)
+                    project_uuid=str(project_uuid),
                 )
             except Exception as e:
                 logger.error(f"gRPC completion failed: {e}", exc_info=True)
@@ -327,19 +341,29 @@ class OpenAIBackend(InlineAgentsBackend):
 
         return result
 
-    async def _run_formatter_agent_async(self, final_response: str, session, supervisor_hooks, context, formatter_instructions="", formatter_agent_foundation_model=None):
+    async def _run_formatter_agent_async(
+        self,
+        final_response: str,
+        session,
+        supervisor_hooks,
+        context,
+        formatter_instructions="",
+        formatter_agent_foundation_model=None,
+    ):
         """Run the formatter agent asynchronously within the trace context"""
         # Create formatter agent to process the final response
-        formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions, formatter_agent_foundation_model)
+        formatter_agent = self._create_formatter_agent(
+            supervisor_hooks, formatter_instructions, formatter_agent_foundation_model
+        )
 
         # Run the formatter agent with the final response
-        formatter_result = await self._run_formatter_agent(
-            formatter_agent, final_response, session, context
-        )
+        formatter_result = await self._run_formatter_agent(formatter_agent, final_response, session, context)
 
         return formatter_result
 
-    def _create_formatter_agent(self, supervisor_hooks, formatter_instructions="", formatter_agent_foundation_model=None):
+    def _create_formatter_agent(
+        self, supervisor_hooks, formatter_instructions="", formatter_agent_foundation_model=None
+    ):
         """Create the formatter agent with component tools"""
 
         def custom_tool_handler(context, tool_results):
@@ -354,7 +378,9 @@ class OpenAIBackend(InlineAgentsBackend):
             or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
         )
 
-        model: str = formatter_agent_foundation_model if formatter_agent_foundation_model else settings.FORMATTER_AGENT_MODEL
+        model: str = (
+            formatter_agent_foundation_model if formatter_agent_foundation_model else settings.FORMATTER_AGENT_MODEL
+        )
 
         formatter_agent = Agent(
             name="Response Formatter Agent",
@@ -367,13 +393,7 @@ class OpenAIBackend(InlineAgentsBackend):
         )
         return formatter_agent
 
-    async def _run_formatter_agent_streamed(
-        self,
-        formatter_agent,
-        final_response,
-        session,
-        context
-    ):
+    async def _run_formatter_agent_streamed(self, formatter_agent, final_response, session, context):
         """Run the formatter agent."""
         try:
             client = self._get_client()
@@ -391,12 +411,7 @@ class OpenAIBackend(InlineAgentsBackend):
             return final_response
 
     def _initialize_grpc_client(
-        self,
-        channel_uuid: str,
-        contact_urn: str,
-        session_id: str,
-        project_uuid: str,
-        language: str
+        self, channel_uuid: str, contact_urn: str, session_id: str, project_uuid: str, language: str
     ) -> tuple[Optional[MessageStreamingClient], Optional[str]]:
         """Initialize gRPC client and send setup message."""
         if not is_grpc_enabled() or not contact_urn:
@@ -406,15 +421,11 @@ class OpenAIBackend(InlineAgentsBackend):
             channel_uuid = "default-channel-uuid"
 
         try:
-            grpc_host = getattr(settings, 'GRPC_SERVICE_HOST', 'localhost')
-            grpc_port = getattr(settings, 'GRPC_SERVICE_PORT', 50051)
-            grpc_use_tls = getattr(settings, 'GRPC_USE_TLS', False)
+            grpc_host = getattr(settings, "GRPC_SERVICE_HOST", "localhost")
+            grpc_port = getattr(settings, "GRPC_SERVICE_PORT", 50051)
+            grpc_use_tls = getattr(settings, "GRPC_USE_TLS", False)
 
-            grpc_client = MessageStreamingClient(
-                host=grpc_host,
-                port=grpc_port,
-                use_secure_channel=grpc_use_tls
-            )
+            grpc_client = MessageStreamingClient(host=grpc_host, port=grpc_port, use_secure_channel=grpc_use_tls)
 
             grpc_msg_id = hashlib.sha256(
                 f"{contact_urn}-{session_id}-{datetime.now().isoformat()}".encode()
@@ -428,7 +439,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 metadata={
                     "session_id": session_id,
                     "language": language,
-                }
+                },
             ):
                 pass
 
@@ -446,7 +457,7 @@ class OpenAIBackend(InlineAgentsBackend):
         delta_counter: int,
         channel_uuid: str,
         contact_urn: str,
-        project_uuid: str
+        project_uuid: str,
     ):
         """Send a delta message via gRPC."""
         try:
@@ -455,7 +466,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 content=delta_content,
                 channel_uuid=channel_uuid,
                 contact_urn=contact_urn,
-                project_uuid=str(project_uuid)
+                project_uuid=str(project_uuid),
             )
         except Exception as e:
             logger.error(f"gRPC delta send failed: {e}", exc_info=True)
@@ -468,7 +479,7 @@ class OpenAIBackend(InlineAgentsBackend):
         delta_counter: int,
         channel_uuid: str,
         contact_urn: str,
-        project_uuid: str
+        project_uuid: str,
     ) -> int:
         """Process a delta event and stream it via gRPC."""
         from openai.types.responses import ResponseTextDeltaEvent
@@ -484,7 +495,7 @@ class OpenAIBackend(InlineAgentsBackend):
                     delta_counter=delta_counter,
                     channel_uuid=channel_uuid,
                     contact_urn=contact_urn,
-                    project_uuid=project_uuid
+                    project_uuid=project_uuid,
                 )
         return delta_counter
 
@@ -527,19 +538,21 @@ class OpenAIBackend(InlineAgentsBackend):
                         delta_counter=delta_counter,
                         channel_uuid=channel_uuid,
                         contact_urn=contact_urn,
-                        project_uuid=project_uuid
+                        project_uuid=project_uuid,
                     )
                     if event.type == "run_item_stream_event":
-                        if hasattr(event, 'item') and event.item.type == "tool_call_item":
-                            hooks_state.tool_calls.update({
-                                event.item.raw_item.name: event.item.raw_item.arguments
-                            })
+                        if hasattr(event, "item") and event.item.type == "tool_call_item":
+                            hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
                 final_response = self._get_final_response(result)
 
                 if use_components:
                     formatted_response = await self._run_formatter_agent_async(
-                        final_response, session, supervisor_hooks, external_team["context"],
-                        formatter_agent_instructions, formatter_agent_foundation_model
+                        final_response,
+                        session,
+                        supervisor_hooks,
+                        external_team["context"],
+                        formatter_agent_instructions,
+                        formatter_agent_foundation_model,
                     )
                     final_response = formatted_response
 
