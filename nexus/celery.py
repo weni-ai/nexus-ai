@@ -60,7 +60,7 @@ logfire.configure(
     send_to_logfire=False,
 )
 
-if not settings.TESTING:
+if not settings.TESTING and "makemigrations" not in sys.argv and "migrate" not in sys.argv:
     logfire.instrument_openai_agents()
     langfuse = get_client()
 
