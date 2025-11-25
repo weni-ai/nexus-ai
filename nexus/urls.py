@@ -1,8 +1,11 @@
 from django.contrib import admin
 from django.http import HttpResponse
 from django.urls import include, path
-from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
-from rest_framework import permissions
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 
 from nexus.actions.api.routers import urlpatterns as actions_routes
 from nexus.agents.api.routers import urlpatterns as agent_routes
@@ -25,9 +28,9 @@ url_api += analytics_routes
 
 urlpatterns = [
     path("", lambda _: HttpResponse()),
-    path("docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
-    path("docs/swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("swagger/", SpectacularSwaggerView.as_view(url_name="schema")),
+    path("docs/", SpectacularRedocView.as_view(url_name="schema")),
     path("admin/", admin.site.urls),
     path("api-auth/", include("rest_framework.urls")),
     path("api/", include(url_api)),

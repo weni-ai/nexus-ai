@@ -1,12 +1,12 @@
 from django.contrib import admin
 
-from nexus.projects.models import Project
 from nexus.analytics.admin import (
     get_average_resolution_rate,
-    get_unresolved_rate,
     get_individual_resolution_rate,
     get_projects_by_motor,
+    get_unresolved_rate,
 )
+from nexus.projects.models import Project
 
 
 @admin.register(Project)
@@ -61,6 +61,7 @@ class ProjectAdmin(admin.ModelAdmin):
                     "conversation_turns_to_include",
                     "exclude_previous_thinking_steps",
                     "guardrail",
+                    "default_formatter_foundation_model",
                 )
             },
         ),

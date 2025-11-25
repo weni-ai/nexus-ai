@@ -328,6 +328,13 @@ if TESTING:
 
 CORS_ORIGIN_ALLOW_ALL = True
 
+SPECTACULAR_SETTINGS = {
+    "TITLE": "API Documentation",
+    "VERSION": "v1.0.0",
+    "LICENSE": {"name": "GPL-3.0 License"},
+}
+
+
 OPENAI_API_KEY = env.str("OPENAI_API_KEY")
 CHATGPT_MODEL = env.str("CHATGPT_MODEL")
 CHATGPT_ORGS = env.list("CHATGPT_ORGS")
