@@ -11,13 +11,11 @@ from agents import Agent, ModelSettings, Runner, trace
 from agents.agent import ToolsToFinalOutputResult
 from django.conf import settings
 from langfuse import get_client
+from openai.types.shared import Reasoning
 from redis import Redis
 
 from inline_agents.backend import InlineAgentsBackend
-from inline_agents.backends.openai.adapter import (
-    OpenAIDataLakeEventAdapter,
-    OpenAITeamAdapter,
-)
+from inline_agents.backends.openai.adapter import OpenAIDataLakeEventAdapter, OpenAITeamAdapter
 from inline_agents.backends.openai.components_tools import COMPONENT_TOOLS
 from inline_agents.backends.openai.entities import FinalResponse
 from inline_agents.backends.openai.grpc import (
@@ -39,9 +37,7 @@ from nexus.inline_agents.backends.openai.repository import (
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.intelligences.models import ContentBase
 from nexus.projects.models import Project
-from nexus.projects.websockets.consumers import (
-    send_preview_message_to_websocket,
-)
+from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
 
@@ -318,9 +314,9 @@ class OpenAIBackend(InlineAgentsBackend):
                 runner_hooks,
                 hooks_state,
                 use_components,
-                formatter_agent_foundation_model=project.default_formatter_foundation_model,
                 grpc_client=grpc_client,
                 grpc_msg_id=grpc_msg_id,
+                formatter_agent_configurations=project.formatter_agent_configurations,
             )
         )
 
@@ -342,28 +338,18 @@ class OpenAIBackend(InlineAgentsBackend):
         return result
 
     async def _run_formatter_agent_async(
-        self,
-        final_response: str,
-        session,
-        supervisor_hooks,
-        context,
-        formatter_instructions="",
-        formatter_agent_foundation_model=None,
+        self, final_response: str, session, supervisor_hooks, context, formatter_instructions="", formatter_agent_configurations=None
     ):
         """Run the formatter agent asynchronously within the trace context"""
         # Create formatter agent to process the final response
-        formatter_agent = self._create_formatter_agent(
-            supervisor_hooks, formatter_instructions, formatter_agent_foundation_model
-        )
+        formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions, formatter_agent_configurations)
 
         # Run the formatter agent with the final response
-        formatter_result = await self._run_formatter_agent(formatter_agent, final_response, session, context)
+        formatter_result = await self._run_formatter_agent(formatter_agent, final_response, session, context, formatter_agent_configurations)
 
         return formatter_result
 
-    def _create_formatter_agent(
-        self, supervisor_hooks, formatter_instructions="", formatter_agent_foundation_model=None
-    ):
+    def _create_formatter_agent(self, supervisor_hooks, formatter_instructions="", formatter_agent_configurations=None):
         """Create the formatter agent with component tools"""
 
         def custom_tool_handler(context, tool_results):
@@ -372,32 +358,64 @@ class OpenAIBackend(InlineAgentsBackend):
                 return ToolsToFinalOutputResult(is_final_output=True, final_output=first_result.output)
             return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
 
+        def get_component_tools(formatter_tools_descriptions: dict):
+            if not formatter_tools_descriptions:
+                return COMPONENT_TOOLS
+            for index, tool in enumerate(COMPONENT_TOOLS):
+                tool_name = tool.name
+                tool_description = formatter_tools_descriptions.get(tool_name)
+                print(f"tool: {tool_name}, tem descrição: {tool_description != None}")
+                if tool_description:
+                    COMPONENT_TOOLS[index].description = tool_description
+            return COMPONENT_TOOLS
+
         # Use custom instructions if provided, otherwise use default
         instructions = (
             formatter_instructions
             or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
         )
+        print(formatter_agent_configurations)
+        # Handle None case for formatter_agent_configurations
+        if formatter_agent_configurations is None:
+            formatter_agent_configurations = {}
 
-        model: str = (
-            formatter_agent_foundation_model if formatter_agent_foundation_model else settings.FORMATTER_AGENT_MODEL
-        )
+        # Use value if not None, otherwise use default
+        formatter_agent_model: str = formatter_agent_configurations.get("formatter_foundation_model") or settings.FORMATTER_AGENT_MODEL
+        formatter_instructions: str = formatter_agent_configurations.get("formatter_instructions") or instructions
+        formatter_reasoning_effort: str = formatter_agent_configurations.get("formatter_reasoning_effort")
+        formatter_reasoning_summary: str = formatter_agent_configurations.get("formatter_reasoning_summary") or "auto"
+        formatter_tools_descriptions: bool = formatter_agent_configurations.get("formatter_tools_descriptions")
+        tools = get_component_tools(formatter_tools_descriptions)
 
         formatter_agent = Agent(
             name="Response Formatter Agent",
-            instructions=instructions,
-            model=model,
-            tools=COMPONENT_TOOLS,
+            instructions=formatter_instructions,
+            model=formatter_agent_model,
+            tools=tools,
             hooks=supervisor_hooks,
             tool_use_behavior=custom_tool_handler,
             model_settings=ModelSettings(tool_choice="required", parallel_tool_calls=False),
         )
+
+        if formatter_reasoning_effort:
+            formatter_agent.model_settings = ModelSettings(reasoning=Reasoning(effort=formatter_reasoning_effort, summary=formatter_reasoning_summary))
+
         return formatter_agent
 
-    async def _run_formatter_agent_streamed(self, formatter_agent, final_response, session, context):
-        """Run the formatter agent."""
+    async def _run_formatter_agent(self, formatter_agent, final_response, session, context, formatter_agent_configurations):
+        """Run the formatter agent with the final response"""
         try:
-            client = self._get_client()
-            result = client.run_streamed(
+            formatter_send_only_assistant_message = formatter_agent_configurations.get("formatter_send_only_assistant_message") or False
+            if formatter_send_only_assistant_message:
+                input_formatter = await session.get_items()
+                result = await Runner.run(
+                    starting_agent=formatter_agent,
+                    input=input_formatter,
+                    context=context,
+                )
+                return result.final_output
+
+            result = await Runner.run(
                 starting_agent=formatter_agent,
                 input=final_response,
                 context=context,
@@ -408,6 +426,7 @@ class OpenAIBackend(InlineAgentsBackend):
             return self._get_final_response(result)
         except Exception as e:
             logger.error(f"Error in formatter agent: {e}", exc_info=True)
+            print(f"Error in formatter agent: {e}")
             return final_response
 
     def _initialize_grpc_client(
@@ -519,9 +538,9 @@ class OpenAIBackend(InlineAgentsBackend):
         runner_hooks,
         hooks_state,
         use_components,
-        formatter_agent_foundation_model=None,
         grpc_client: Optional[MessageStreamingClient] = None,
         grpc_msg_id: Optional[str] = None,
+        formatter_agent_configurations=None,
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
@@ -530,19 +549,91 @@ class OpenAIBackend(InlineAgentsBackend):
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
                 result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
                 delta_counter = 0
-                async for event in result.stream_events():
-                    delta_counter = self._process_delta_event(
-                        event=event,
-                        grpc_client=grpc_client,
-                        grpc_msg_id=grpc_msg_id,
-                        delta_counter=delta_counter,
-                        channel_uuid=channel_uuid,
-                        contact_urn=contact_urn,
-                        project_uuid=project_uuid,
+                try:
+                    async for event in result.stream_events():
+                        delta_counter = self._process_delta_event(
+                            event=event,
+                            grpc_client=grpc_client,
+                            grpc_msg_id=grpc_msg_id,
+                            delta_counter=delta_counter,
+                            channel_uuid=channel_uuid,
+                            contact_urn=contact_urn,
+                            project_uuid=project_uuid,
+                        )
+                        if event.type == "run_item_stream_event":
+                            if hasattr(event, "item") and event.item.type == "tool_call_item":
+                                hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
+                except Exception as stream_error:
+                    logger.error(
+                        f"[OpenAIBackend] Streaming error during agent execution: {stream_error}",
+                        extra={
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "session_id": session_id,
+                            "error_type": type(stream_error).__name__,
+                            "error_message": str(stream_error),
+                            "input_text": input_text[:500] if input_text else None,
+                        },
                     )
-                    if event.type == "run_item_stream_event":
-                        if hasattr(event, "item") and event.item.type == "tool_call_item":
-                            hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
+                    sentry_sdk.set_context(
+                        "streaming_error",
+                        {
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "session_id": session_id,
+                            "error_type": type(stream_error).__name__,
+                            "error_message": str(stream_error),
+                            "input_text_preview": input_text[:200] if input_text else None,
+                        },
+                    )
+                    sentry_sdk.set_tag("project_uuid", project_uuid)
+                    sentry_sdk.set_tag("error_type", "streaming_error")
+                    sentry_sdk.capture_exception(stream_error)
+
+                    # Try to get final_response even if streaming failed
+                    try:
+                        final_response = self._get_final_response(result)
+                    except Exception:
+                        final_response = None
+
+                    root_span.update_trace(
+                        input=input_text,
+                        output=final_response,
+                        metadata={
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "preview": preview,
+                            "error": True,
+                            "error_type": type(stream_error).__name__,
+                            "error_message": str(stream_error)[:500],
+                        },
+                    )
+
+                    if use_components and final_response:
+                        try:
+                            formatted_response = await self._run_formatter_agent_async(
+                                final_response,
+                                session,
+                                supervisor_hooks,
+                                external_team["context"],
+                                formatter_agent_instructions,
+                                formatter_agent_configurations,
+                            )
+                            final_response = formatted_response
+                        except Exception as formatter_error:
+                            logger.error(
+                                f"[OpenAIBackend] Error in formatter agent after streaming error: {formatter_error}",
+                                extra={
+                                    "project_uuid": project_uuid,
+                                    "contact_urn": contact_urn,
+                                },
+                            )
+
+                    return final_response
+
                 final_response = self._get_final_response(result)
 
                 if use_components:
@@ -552,7 +643,7 @@ class OpenAIBackend(InlineAgentsBackend):
                         supervisor_hooks,
                         external_team["context"],
                         formatter_agent_instructions,
-                        formatter_agent_foundation_model,
+                        formatter_agent_configurations,
                     )
                     final_response = formatted_response
 

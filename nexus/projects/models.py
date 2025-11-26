@@ -46,7 +46,6 @@ class Project(BaseModel, SoftDeleteModel):
     inline_agent_switch = models.BooleanField(default=False)
     use_components = models.BooleanField(default=False)
     default_supervisor_foundation_model = models.CharField(max_length=100, blank=True, null=True)
-    default_formatter_foundation_model = models.CharField(max_length=100, blank=True, null=True)
     default_collaborators_foundation_model = models.CharField(max_length=100, blank=True, null=True)
     use_prompt_creation_configurations = models.BooleanField(default=True)
     conversation_turns_to_include = models.IntegerField(default=10)
@@ -58,6 +57,13 @@ class Project(BaseModel, SoftDeleteModel):
         related_name="project",
         blank=True,
     )
+
+    default_formatter_foundation_model = models.CharField(max_length=100, blank=True, null=True)
+    formatter_instructions = models.TextField(null=True, blank=True)
+    formatter_reasoning_effort = models.CharField(max_length=50, blank=True, null=True)
+    formatter_reasoning_summary = models.CharField(max_length=50, blank=True, null=True, default="auto")
+    formatter_send_only_assistant_message = models.BooleanField(default=False)
+    formatter_tools_descriptions = models.JSONField(default=dict, null=True, blank=True)
 
     def __str__(self):
         return f"{self.uuid} - Project: {self.name} - Org: {self.org.name}"
@@ -72,6 +78,18 @@ class Project(BaseModel, SoftDeleteModel):
             return True
         except Exception:
             return False
+
+    @property
+    def formatter_agent_configurations(self) -> dict[str, str]:
+        return {
+            "formatter_foundation_model": self.default_formatter_foundation_model,
+            "formatter_instructions": self.formatter_instructions,
+            "formatter_reasoning_effort": self.formatter_reasoning_effort,
+            "formatter_reasoning_summary": self.formatter_reasoning_summary,
+            "formatter_send_only_assistant_message": self.formatter_send_only_assistant_message,
+            "formatter_tools_descriptions": self.formatter_tools_descriptions,
+        }
+
 
 
 class ProjectAuthorizationRole(Enum):
