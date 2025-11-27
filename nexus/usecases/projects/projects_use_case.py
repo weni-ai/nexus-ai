@@ -146,33 +146,6 @@ class ProjectsUseCase:
 
         self.create_brain_project_base(project_dto=project_dto, user_email=user_email, project=project)
 
-        if project.brain_on:
-            if project.agents_backend == "BedrockBackend":
-                sentry_sdk.set_tag("bedrock_supervisor_provisioned", True)
-                sentry_sdk.set_context(
-                    "bedrock_provisioning",
-                    {
-                        "project_uuid": str(project.uuid),
-                        "agents_backend": project.agents_backend,
-                    },
-                )
-                sentry_sdk.capture_message("Provisioning Bedrock supervisor on project creation", level="info")
-                supervisor_name = f"Supervisor for {project.name}"
-                supervisor_description = "Default supervisor description."
-                supervisor_instructions = "Default supervisor instructions."
-
-                self.create_multi_agents_base(
-                    project_uuid=str(project.uuid),
-                    supervisor_name=supervisor_name,
-                    supervisor_description=supervisor_description,
-                    supervisor_instructions=supervisor_instructions,
-                    user=user,
-                )
-            else:
-                # For OpenAIBackend (AB 2.5), do not provision Bedrock supervisor resources
-                # Multi-agent orchestration happens at runtime via OpenAI backend
-                pass
-
         auths = project_dto.authorizations
         auth_usecase = ProjectAuthUseCase()
         for auth in auths:
