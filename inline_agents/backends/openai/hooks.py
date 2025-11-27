@@ -419,6 +419,7 @@ class SupervisorHooks(AgentHooks):
         turn_off_rationale: bool = False,
         conversation: Optional[object] = None,
         use_components: bool = False,
+        **kwargs,
     ):
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
