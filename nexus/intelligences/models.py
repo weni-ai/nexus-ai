@@ -268,7 +268,7 @@ class Conversation(models.Model):
         return f"Conversation - {self.uuid} - {self.contact_name}"
 
     def get_topic(self):
-        return self.topic.name
+        return self.topic.name if self.topic else None
 
     @property
     def to_json(self):
