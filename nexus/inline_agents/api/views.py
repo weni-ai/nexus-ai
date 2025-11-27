@@ -2,6 +2,12 @@ import json
 
 from django.conf import settings
 from django.db.models import Q
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    OpenApiTypes,
+    extend_schema,
+)
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -17,6 +23,8 @@ from nexus.inline_agents.api.serializers import (
     IntegratedAgentSerializer,
     OfficialAgentDetailSerializer,
     OfficialAgentListSerializer,
+    OfficialAgentsAssignRequestSerializer,
+    OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
 )
 from nexus.inline_agents.models import Agent
@@ -117,6 +125,32 @@ class OfficialAgentsV1(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
 
+    @extend_schema(
+        operation_id="v1_official_agents_list",
+        summary="List official agents",
+        description=(
+            "Returns available official agents. Optional filters: "
+            "`type`, `group`, `category`, `system`. Use `project_uuid` to mark `assigned`."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="project_uuid",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.STR,
+            ),
+            OpenApiParameter(name="type", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="group", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="category", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+        ],
+        responses={
+            200: OpenApiResponse(description="Agents list", response=OfficialAgentListSerializer),
+            401: OpenApiResponse(description="Unauthorized"),
+            403: OpenApiResponse(description="Forbidden"),
+        },
+        tags=["Agents"],
+    )
     def get(self, request, *args, **kwargs):
         project_uuid = request.query_params.get("project_uuid")
         type_filter = request.query_params.get("type")
@@ -138,6 +172,22 @@ class OfficialAgentsV1(APIView):
         serializer = OfficialAgentListSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
 
+    @extend_schema(
+        operation_id="v1_official_agents_assign",
+        summary="Assign official agent to project and/or configure credentials",
+        description=(
+            "Assigns or removes an official agent (`assigned`) and optionally creates credentials. "
+            "When `system` is provided, `credentials` must follow the system template."
+        ),
+        request=OfficialAgentsAssignRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="Operation performed", response=OfficialAgentsAssignResponseSerializer),
+            400: OpenApiResponse(description="Bad request"),
+            404: OpenApiResponse(description="Not found"),
+            422: OpenApiResponse(description="Unprocessable Entity"),
+        },
+        tags=["Agents"],
+    )
     def post(self, request, *args, **kwargs):
         project_uuid = request.data.get("project_uuid")
         agent_uuid = request.data.get("agent_uuid")
@@ -161,81 +211,138 @@ class OfficialAgentsV1(APIView):
         result = {}
 
         if assigned is not None:
-            usecase = AssignAgentsUsecase()
-            if assigned:
-                created, _ = usecase.assign_agent(agent_uuid, project_uuid)
-                result["assigned"] = True
-                result["assigned_created"] = created
-            else:
-                deleted, _ = usecase.unassign_agent(agent_uuid, project_uuid)
-                result["assigned"] = False
-                result["assigned_deleted"] = deleted
+            result.update(self._handle_assignment(agent_uuid, project_uuid, assigned))
 
         if credentials_data:
-            available_systems = list(agent.systems.values_list("slug", flat=True))
-            if system and system not in available_systems:
-                return Response({"error": "Invalid system"}, status=422)
-
-            expected_templates = CREDENTIALS_MAPPER.get(agent.slug, {})
-            if system:
-                expected_templates = expected_templates.get(system, [])
-            else:
-                expected_templates = []
-
-            if system and not expected_templates:
-                return Response({"error": "Credentials template not found for system"}, status=422)
-
-            expected_names = {tpl.get("name") for tpl in expected_templates}
-            provided_names = {item.get("name") for item in credentials_data}
-
-            if system:
-                missing = sorted(list(expected_names - provided_names))
-                extra = sorted(list(provided_names - expected_names))
-                if missing:
-                    return Response({"error": "Missing credentials", "missing": missing}, status=422)
-                if extra:
-                    return Response({"error": "Unexpected credentials", "extra": extra}, status=422)
-
-            for item in credentials_data:
-                name = item.get("name")
-                label = item.get("label")
-                placeholder = item.get("placeholder")
-                is_confidential = item.get("is_confidential", True)
-                value = item.get("value")
-
-                if not isinstance(name, str) or not name:
-                    return Response({"error": "Invalid credential name"}, status=422)
-                if not isinstance(label, str) or not label:
-                    return Response({"error": f"Invalid label for {name}"}, status=422)
-                if placeholder is not None and not isinstance(placeholder, str):
-                    return Response({"error": f"Invalid placeholder for {name}"}, status=422)
-                if not isinstance(is_confidential, bool):
-                    return Response({"error": f"Invalid is_confidential for {name}"}, status=422)
-                if value is not None and not isinstance(value, str):
-                    return Response({"error": f"Invalid value type for {name}"}, status=422)
-
-            credentials = {}
-            for cred_item in credentials_data:
-                credentials.update(
-                    {
-                        cred_item.get("name"): {
-                            "label": cred_item.get("label"),
-                            "placeholder": cred_item.get("placeholder"),
-                            "is_confidential": cred_item.get("is_confidential", True),
-                            "value": cred_item.get("value"),
-                        }
-                    }
-                )
-            created_credentials = CreateAgentUseCase().create_credentials(agent, project, credentials)
-            result["created_credentials"] = created_credentials
+            creds_result = self._handle_credentials(agent, project, credentials_data, system)
+            if isinstance(creds_result, Response):
+                return creds_result
+            result.update(creds_result)
 
         return Response(result or {"message": "No changes applied"}, status=200)
+
+    def _handle_assignment(self, agent_uuid: str, project_uuid: str, assigned: bool) -> dict:
+        usecase = AssignAgentsUsecase()
+        if assigned:
+            created, _ = usecase.assign_agent(agent_uuid, project_uuid)
+            return {"assigned": True, "assigned_created": created}
+        deleted, _ = usecase.unassign_agent(agent_uuid, project_uuid)
+        return {"assigned": False, "assigned_deleted": deleted}
+
+    def _handle_credentials(
+        self,
+        agent: Agent,
+        project: Project,
+        credentials_data: list,
+        system: str | None,
+    ) -> dict | Response:
+        invalid_system = self._validate_system(agent, system)
+        if invalid_system:
+            return invalid_system
+
+        expected_templates = self._get_expected_templates(agent, system)
+        names_error = self._validate_credentials_names(credentials_data, expected_templates, system)
+        if names_error:
+            return names_error
+
+        fields_error = self._validate_credentials_fields(credentials_data)
+        if fields_error:
+            return fields_error
+
+        payload = self._format_credentials_payload(credentials_data)
+        created = CreateAgentUseCase().create_credentials(agent, project, payload)
+        return {"created_credentials": created}
+
+    def _validate_system(self, agent: Agent, system: str | None) -> Response | None:
+        available = list(agent.systems.values_list("slug", flat=True))
+        if system and system not in available:
+            return Response({"error": "Invalid system"}, status=422)
+        return None
+
+    def _get_expected_templates(self, agent: Agent, system: str | None) -> list:
+        templates = CREDENTIALS_MAPPER.get(agent.slug, {})
+        return templates.get(system, []) if system else []
+
+    def _validate_credentials_names(
+        self, credentials_data: list, expected_templates: list, system: str | None
+    ) -> Response | None:
+        if not system:
+            return None
+        if system and not expected_templates:
+            return Response({"error": "Credentials template not found for system"}, status=422)
+        expected_names = {tpl.get("name") for tpl in expected_templates}
+        provided_names = {item.get("name") for item in credentials_data}
+        missing = sorted(list(expected_names - provided_names))
+        extra = sorted(list(provided_names - expected_names))
+        if missing:
+            return Response({"error": "Missing credentials", "missing": missing}, status=422)
+        if extra:
+            return Response({"error": "Unexpected credentials", "extra": extra}, status=422)
+        return None
+
+    def _validate_credentials_fields(self, credentials_data: list) -> Response | None:
+        for item in credentials_data:
+            name = item.get("name")
+            label = item.get("label")
+            placeholder = item.get("placeholder")
+            is_confidential = item.get("is_confidential", True)
+            value = item.get("value")
+
+            if not isinstance(name, str) or not name:
+                return Response({"error": "Invalid credential name"}, status=422)
+            if not isinstance(label, str) or not label:
+                return Response({"error": f"Invalid label for {name}"}, status=422)
+            if placeholder is not None and not isinstance(placeholder, str):
+                return Response({"error": f"Invalid placeholder for {name}"}, status=422)
+            if not isinstance(is_confidential, bool):
+                return Response({"error": f"Invalid is_confidential for {name}"}, status=422)
+            if value is not None and not isinstance(value, str):
+                return Response({"error": f"Invalid value type for {name}"}, status=422)
+        return None
+
+    def _format_credentials_payload(self, credentials_data: list) -> dict:
+        payload = {}
+        for cred_item in credentials_data:
+            payload.update(
+                {
+                    cred_item.get("name"): {
+                        "label": cred_item.get("label"),
+                        "placeholder": cred_item.get("placeholder"),
+                        "is_confidential": cred_item.get("is_confidential", True),
+                        "value": cred_item.get("value"),
+                    }
+                }
+            )
+        return payload
 
 
 class OfficialAgentDetailV1(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
 
+    @extend_schema(
+        operation_id="v1_official_agent_detail",
+        summary="Get official agent details",
+        description=(
+            "Returns details of the official agent, MCP and expected credentials for the selected `system`. "
+            "Provide `project_uuid` to check if it is `assigned`."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="project_uuid",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.STR,
+            ),
+            OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="agent_uuid", location=OpenApiParameter.PATH, required=True, type=OpenApiTypes.STR),
+        ],
+        responses={
+            200: OpenApiResponse(description="Agent detail", response=OfficialAgentDetailSerializer),
+            404: OpenApiResponse(description="Agent not found"),
+        },
+        tags=["Agents"],
+    )
     def get(self, request, *args, **kwargs):
         agent_uuid = kwargs.get("agent_uuid")
         project_uuid = request.query_params.get("project_uuid")
