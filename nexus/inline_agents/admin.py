@@ -5,7 +5,15 @@ from django.db import models
 from nexus.admin_widgets import PrettyJSONWidget
 from nexus.inline_agents.backends.bedrock.models import Supervisor
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor
-from nexus.inline_agents.models import Agent, Guardrail, InlineAgentsConfiguration
+from nexus.inline_agents.models import (
+    Agent,
+    AgentCategory,
+    AgentGroup,
+    AgentSystem,
+    AgentType,
+    Guardrail,
+    InlineAgentsConfiguration,
+)
 
 
 @admin.register(Guardrail)
@@ -108,11 +116,11 @@ class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
 
 @admin.register(Agent)
 class AgentAdmin(admin.ModelAdmin):
-    list_display = ("uuid", "name", "project", "is_official")
-    list_filter = ("is_official", "source_type")
+    list_display = ("uuid", "name", "project", "is_official", "agent_type", "category")
+    list_filter = ("is_official", "source_type", "agent_type", "category")
     search_fields = ("name", "project__name", "project__uuid", "slug")
     ordering = ("project__name",)
-    autocomplete_fields = ["project"]
+    autocomplete_fields = ["project", "group", "systems", "agent_type", "category"]
 
     fieldsets = (
         (
@@ -122,6 +130,10 @@ class AgentAdmin(admin.ModelAdmin):
                     "name",
                     "project",
                     "is_official",
+                    "agent_type",
+                    "category",
+                    "group",
+                    "systems",
                     "instruction",
                     "collaboration_instructions",
                     "foundation_model",
@@ -131,3 +143,37 @@ class AgentAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+
+@admin.register(AgentGroup)
+class AgentGroupAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug")
+    search_fields = ("name", "slug")
+    ordering = ("name",)
+    formfield_overrides = {
+        models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
+    }
+
+
+@admin.register(AgentSystem)
+class AgentSystemAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug")
+    search_fields = ("name", "slug")
+    ordering = ("name",)
+    formfield_overrides = {
+        models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
+    }
+
+
+@admin.register(AgentType)
+class AgentTypeAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug")
+    search_fields = ("name", "slug")
+    ordering = ("name",)
+
+
+@admin.register(AgentCategory)
+class AgentCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug")
+    search_fields = ("name", "slug")
+    ordering = ("name",)
