@@ -223,6 +223,7 @@ class OpenAIBackend(InlineAgentsBackend):
             hooks_state=hooks_state,
             data_lake_event_adapter=data_lake_event_adapter,
             conversation=conversation,
+            use_components=use_components,
         )
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
@@ -388,6 +389,8 @@ class OpenAIBackend(InlineAgentsBackend):
         formatter_reasoning_summary: str = formatter_agent_configurations.get("formatter_reasoning_summary") or "auto"
         formatter_tools_descriptions: bool = formatter_agent_configurations.get("formatter_tools_descriptions")
         tools = get_component_tools(formatter_tools_descriptions)
+
+        supervisor_hooks.save_components_trace = True
 
         formatter_agent = Agent(
             name="Response Formatter Agent",
