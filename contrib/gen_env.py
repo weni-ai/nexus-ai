@@ -3,6 +3,7 @@ Responsible for speeding up the generation of a local '.env' configuration file.
 OBS: Run in development environment only
 """
 
+import logging
 import os
 
 from django.core.management.utils import get_random_secret_key
@@ -20,7 +21,7 @@ def generate_env():
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 
     if os.path.exists(env_path):
-        print("A .env file already exists, delete it and run again")
+        logger.warning("A .env file already exists, delete it and run again")
         return
 
     # Detect if we're running in GitHub Actions
@@ -30,11 +31,11 @@ def generate_env():
     if is_github_actions:
         db_host = "postgres"
         redis_host = "redis"
-        print("Detected GitHub Actions environment - using postgres/redis hostnames")
+        logger.info("Detected GitHub Actions environment - using postgres/redis hostnames")
     else:
         db_host = "localhost"
         redis_host = "localhost"
-        print("Detected local environment - using localhost hostnames")
+        logger.info("Detected local environment - using localhost hostnames")
 
     VARIABLES = {
         "DEBUG": True,
@@ -260,3 +261,4 @@ def generate_env():
 
 if __name__ == "__main__":
     generate_env()
+logger = logging.getLogger(__name__)

@@ -11,7 +11,4 @@ class GuardrailsUsecase:
         except Guardrail.DoesNotExist:
             guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
 
-        return {
-            'guardrailIdentifier': guardrails.identifier,
-            'guardrailVersion': str(guardrails.version)
-        }
+        return {"guardrailIdentifier": guardrails.identifier, "guardrailVersion": str(guardrails.version)}
