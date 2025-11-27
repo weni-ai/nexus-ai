@@ -418,7 +418,7 @@ class SupervisorHooks(AgentHooks):
         msg_external_id: Optional[str] = None,
         turn_off_rationale: bool = False,
         conversation: Optional[object] = None,
-        **kwargs,
+        use_components: bool = False,
     ):
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
@@ -438,6 +438,9 @@ class SupervisorHooks(AgentHooks):
         self.data_lake_event_adapter = data_lake_event_adapter
         self.hooks_state = hooks_state
         self.conversation = conversation
+        self.use_components = use_components
+        # this field is updated before calling formatter agent
+        self.save_components_trace = False
 
         super().__init__()
 
@@ -636,14 +639,16 @@ class SupervisorHooks(AgentHooks):
             },
         }
         await self.trace_handler.send_trace(context_data, agent.name, "sending_response", trace_data)
-        await self.trace_handler.save_trace_data(
-            trace_events=self.trace_handler.hooks_state.trace_data,
-            project_uuid=context_data.project.get("uuid"),
-            input_text=context_data.input_text,
-            contact_urn=context_data.contact.get("urn"),
-            full_response=final_response,
-            preview=self.preview,
-            session_id=context_data.session.get_session_id(),
-            contact_name=context_data.contact.get("name"),
-            channel_uuid=context_data.contact.get("channel_uuid"),
-        )
+
+        if (self.use_components and self.save_components_trace) or not self.use_components:
+            await self.trace_handler.save_trace_data(
+                trace_events=self.trace_handler.hooks_state.trace_data,
+                project_uuid=context_data.project.get("uuid"),
+                input_text=context_data.input_text,
+                contact_urn=context_data.contact.get("urn"),
+                full_response=final_response,
+                preview=self.preview,
+                session_id=context_data.session.get_session_id(),
+                contact_name=context_data.contact.get("name"),
+                channel_uuid=context_data.contact.get("channel_uuid"),
+            )
