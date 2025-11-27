@@ -25,7 +25,7 @@ class Project(BaseModel, SoftDeleteModel):
         (BEDROCK, "Bedrock"),
     )
 
-    DEFAULT_BACKEND = "BedrockBackend"
+    DEFAULT_BACKEND = "OpenAIBackend"
 
     name = models.CharField(max_length=255)
     org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name="projects")
