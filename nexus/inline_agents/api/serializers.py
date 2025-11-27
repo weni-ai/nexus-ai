@@ -102,3 +102,75 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
         if obj.is_confidential:
             return obj.value
         return obj.decrypted_value
+
+
+class OfficialAgentListSerializer(serializers.Serializer):
+    uuid = serializers.UUIDField()
+    name = serializers.CharField()
+    description = serializers.CharField()
+    type = serializers.CharField()
+    group = serializers.CharField(allow_null=True)
+    category = serializers.CharField(allow_blank=True)
+    systems = serializers.ListField(child=serializers.CharField(), allow_empty=True)
+    assigned = serializers.BooleanField()
+
+    def to_representation(self, obj):
+        project_uuid = self.context.get("project_uuid")
+        assigned = False
+        if project_uuid:
+            assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
+        systems = list(obj.systems.values_list("slug", flat=True)) if hasattr(obj, "systems") else []
+        group_name = obj.group.slug if getattr(obj, "group", None) else None
+        return {
+            "uuid": obj.uuid,
+            "name": obj.name,
+            "description": obj.collaboration_instructions,
+            "type": (obj.agent_type.slug if getattr(obj, "agent_type", None) else ""),
+            "group": group_name,
+            "category": (obj.category.slug if getattr(obj, "category", None) else ""),
+            "systems": systems,
+            "assigned": assigned,
+        }
+
+    def _get_meta(self, agent: Agent) -> dict:
+        mapper = self.context.get("official_mapper", {})
+        return mapper.get(agent.slug, {})
+
+
+class OfficialAgentDetailSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    description = serializers.CharField()
+    type = serializers.CharField()
+    group = serializers.CharField()
+    category = serializers.CharField()
+    system = serializers.CharField()
+    systems = serializers.ListField(child=serializers.CharField(), allow_empty=True)
+    assigned = serializers.BooleanField()
+    MCP = serializers.DictField()
+    credentials = serializers.ListField()
+
+    def to_representation(self, obj):
+        project_uuid = self.context.get("project_uuid")
+        system = self.context.get("system")
+        mcp_mapper = self.context.get("mcp_mapper", {})
+        cred_mapper = self.context.get("credentials_mapper", {})
+        available_systems = list(obj.systems.values_list("slug", flat=True)) if hasattr(obj, "systems") else []
+        selected_system = system or (available_systems[0] if available_systems else "")
+        assigned = False
+        if project_uuid:
+            assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
+        mcp = mcp_mapper.get(obj.slug, {}).get(selected_system, {})
+        creds = cred_mapper.get(obj.slug, {}).get(selected_system, [])
+        group_name = obj.group.slug if getattr(obj, "group", None) else None
+        return {
+            "name": obj.name,
+            "description": obj.collaboration_instructions,
+            "type": (obj.agent_type.slug if getattr(obj, "agent_type", None) else ""),
+            "group": group_name,
+            "category": (obj.category.slug if getattr(obj, "category", None) else ""),
+            "system": selected_system,
+            "systems": available_systems,
+            "assigned": assigned,
+            "MCP": mcp,
+            "credentials": creds,
+        }

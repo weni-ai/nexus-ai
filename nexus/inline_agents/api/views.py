@@ -6,10 +6,17 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from inline_agents.backends import BackendsRegistry
+try:
+    from inline_agents.backends import BackendsRegistry
+except Exception:
+    BackendsRegistry = None
+from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.inline_agents.api.mappers import CREDENTIALS_MAPPER, MCP_MAPPER
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     IntegratedAgentSerializer,
+    OfficialAgentDetailSerializer,
+    OfficialAgentListSerializer,
     ProjectCredentialsListSerializer,
 )
 from nexus.inline_agents.models import Agent
@@ -104,6 +111,156 @@ class PushAgents(APIView):
             return Response({"error": "Project not found"}, status=404)
 
         return Response({})
+
+
+class OfficialAgentsV1(APIView):
+    authentication_classes = AUTHENTICATION_CLASSES
+    permission_classes = [CombinedExternalProjectPermission]
+
+    def get(self, request, *args, **kwargs):
+        project_uuid = request.query_params.get("project_uuid")
+        type_filter = request.query_params.get("type")
+        group_filter = request.query_params.get("group")
+        category_filter = request.query_params.get("category")
+        system_filter = request.query_params.get("system")
+
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM, slug__in=["product_concierge"])
+
+        if type_filter:
+            agents = agents.filter(agent_type__slug=type_filter)
+        if group_filter:
+            agents = agents.filter(group__slug=group_filter)
+        if category_filter:
+            agents = agents.filter(category__slug=category_filter)
+        if system_filter:
+            agents = agents.filter(systems__slug=system_filter).distinct("uuid")
+
+        serializer = OfficialAgentListSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        return Response(serializer.data)
+
+    def post(self, request, *args, **kwargs):
+        project_uuid = request.data.get("project_uuid")
+        agent_uuid = request.data.get("agent_uuid")
+        assigned = request.data.get("assigned")
+        credentials_data = request.data.get("credentials", [])
+        system = request.data.get("system")
+
+        if not project_uuid or not agent_uuid:
+            return Response({"error": "project_uuid and agent_uuid are required"}, status=400)
+
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+            agent = Agent.objects.get(
+                uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM, slug__in=["product_concierge"]
+            )
+        except Project.DoesNotExist:
+            return Response({"error": "Project not found"}, status=404)
+        except Agent.DoesNotExist:
+            return Response({"error": "Agent not found"}, status=404)
+
+        result = {}
+
+        if assigned is not None:
+            usecase = AssignAgentsUsecase()
+            if assigned:
+                created, _ = usecase.assign_agent(agent_uuid, project_uuid)
+                result["assigned"] = True
+                result["assigned_created"] = created
+            else:
+                deleted, _ = usecase.unassign_agent(agent_uuid, project_uuid)
+                result["assigned"] = False
+                result["assigned_deleted"] = deleted
+
+        if credentials_data:
+            available_systems = list(agent.systems.values_list("slug", flat=True))
+            if system and system not in available_systems:
+                return Response({"error": "Invalid system"}, status=422)
+
+            expected_templates = CREDENTIALS_MAPPER.get(agent.slug, {})
+            if system:
+                expected_templates = expected_templates.get(system, [])
+            else:
+                expected_templates = []
+
+            if system and not expected_templates:
+                return Response({"error": "Credentials template not found for system"}, status=422)
+
+            expected_names = {tpl.get("name") for tpl in expected_templates}
+            provided_names = {item.get("name") for item in credentials_data}
+
+            if system:
+                missing = sorted(list(expected_names - provided_names))
+                extra = sorted(list(provided_names - expected_names))
+                if missing:
+                    return Response({"error": "Missing credentials", "missing": missing}, status=422)
+                if extra:
+                    return Response({"error": "Unexpected credentials", "extra": extra}, status=422)
+
+            for item in credentials_data:
+                name = item.get("name")
+                label = item.get("label")
+                placeholder = item.get("placeholder")
+                is_confidential = item.get("is_confidential", True)
+                value = item.get("value")
+
+                if not isinstance(name, str) or not name:
+                    return Response({"error": "Invalid credential name"}, status=422)
+                if not isinstance(label, str) or not label:
+                    return Response({"error": f"Invalid label for {name}"}, status=422)
+                if placeholder is not None and not isinstance(placeholder, str):
+                    return Response({"error": f"Invalid placeholder for {name}"}, status=422)
+                if not isinstance(is_confidential, bool):
+                    return Response({"error": f"Invalid is_confidential for {name}"}, status=422)
+                if value is not None and not isinstance(value, str):
+                    return Response({"error": f"Invalid value type for {name}"}, status=422)
+
+            credentials = {}
+            for cred_item in credentials_data:
+                credentials.update(
+                    {
+                        cred_item.get("name"): {
+                            "label": cred_item.get("label"),
+                            "placeholder": cred_item.get("placeholder"),
+                            "is_confidential": cred_item.get("is_confidential", True),
+                            "value": cred_item.get("value"),
+                        }
+                    }
+                )
+            created_credentials = CreateAgentUseCase().create_credentials(agent, project, credentials)
+            result["created_credentials"] = created_credentials
+
+        return Response(result or {"message": "No changes applied"}, status=200)
+
+
+class OfficialAgentDetailV1(APIView):
+    authentication_classes = AUTHENTICATION_CLASSES
+    permission_classes = [CombinedExternalProjectPermission]
+
+    def get(self, request, *args, **kwargs):
+        agent_uuid = kwargs.get("agent_uuid")
+        project_uuid = request.query_params.get("project_uuid")
+        system = request.query_params.get("system")
+
+        try:
+            agent = Agent.objects.get(
+                uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM, slug__in=["product_concierge"]
+            )
+        except Agent.DoesNotExist:
+            return Response({"error": "Agent not found"}, status=404)
+
+        mcp_mapper = MCP_MAPPER
+        credentials_mapper = CREDENTIALS_MAPPER
+
+        serializer = OfficialAgentDetailSerializer(
+            agent,
+            context={
+                "project_uuid": project_uuid,
+                "system": system,
+                "mcp_mapper": mcp_mapper,
+                "credentials_mapper": credentials_mapper,
+            },
+        )
+        return Response(serializer.data)
 
 
 class ActiveAgentsView(APIView):
@@ -466,7 +623,7 @@ class AgentEndSessionView(APIView):
 
         projects_use_case = ProjectsUseCase()
         agents_backend = projects_use_case.get_agents_backend_by_project(project_uuid)
-        backend = BackendsRegistry.get_backend(agents_backend)
+        backend = BackendsRegistry.get_backend(agents_backend) if BackendsRegistry else None
         backend.end_session(message_obj.project_uuid, message_obj.sanitized_urn)
         return Response({"message": "Agent session ended successfully"})
 
