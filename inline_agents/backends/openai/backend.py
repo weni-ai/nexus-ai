@@ -1,6 +1,8 @@
 # ruff: noqa: E501
 import asyncio
+import hashlib
 import logging
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 import pendulum
@@ -16,9 +18,22 @@ from inline_agents.backend import InlineAgentsBackend
 from inline_agents.backends.openai.adapter import OpenAIDataLakeEventAdapter, OpenAITeamAdapter
 from inline_agents.backends.openai.components_tools import COMPONENT_TOOLS
 from inline_agents.backends.openai.entities import FinalResponse
-from inline_agents.backends.openai.hooks import HooksState, RunnerHooks, SupervisorHooks
-from inline_agents.backends.openai.sessions import RedisSession, make_session_factory
-from nexus.inline_agents.backends.openai.repository import OpenAISupervisorRepository
+from inline_agents.backends.openai.grpc import (
+    MessageStreamingClient,
+    is_grpc_enabled,
+)
+from inline_agents.backends.openai.hooks import (
+    HooksState,
+    RunnerHooks,
+    SupervisorHooks,
+)
+from inline_agents.backends.openai.sessions import (
+    RedisSession,
+    make_session_factory,
+)
+from nexus.inline_agents.backends.openai.repository import (
+    OpenAISupervisorRepository,
+)
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.intelligences.models import ContentBase
 from nexus.projects.models import Project
@@ -269,6 +284,16 @@ class OpenAIBackend(InlineAgentsBackend):
                 },
             )
 
+        grpc_client, grpc_msg_id = None, None
+        if not preview:
+            grpc_client, grpc_msg_id = self._initialize_grpc_client(
+                channel_uuid=channel_uuid,
+                contact_urn=contact_urn,
+                session_id=session_id,
+                project_uuid=project_uuid,
+                language=language,
+            )
+
         result = asyncio.run(
             self._invoke_agents_async(
                 client,
@@ -289,9 +314,27 @@ class OpenAIBackend(InlineAgentsBackend):
                 runner_hooks,
                 hooks_state,
                 use_components,
+                grpc_client=grpc_client,
+                grpc_msg_id=grpc_msg_id,
                 formatter_agent_configurations=project.formatter_agent_configurations,
             )
         )
+
+        if grpc_client and grpc_msg_id:
+            try:
+                content = result if isinstance(result, str) else str(result)
+                grpc_client.send_completed_message(
+                    msg_id=grpc_msg_id,
+                    content=content,
+                    channel_uuid=channel_uuid,
+                    contact_urn=contact_urn,
+                    project_uuid=str(project_uuid),
+                )
+            except Exception as e:
+                logger.error(f"gRPC completion failed: {e}", exc_info=True)
+            finally:
+                grpc_client.close()
+
         return result
 
     async def _run_formatter_agent_async(
@@ -343,7 +386,6 @@ class OpenAIBackend(InlineAgentsBackend):
         formatter_instructions: str = formatter_agent_configurations.get("formatter_instructions") or instructions
         formatter_reasoning_effort: str = formatter_agent_configurations.get("formatter_reasoning_effort")
         formatter_reasoning_summary: str = formatter_agent_configurations.get("formatter_reasoning_summary") or "auto"
-        formatter_send_only_assistant_message: bool = formatter_agent_configurations.get("formatter_send_only_assistant_message")
         formatter_tools_descriptions: bool = formatter_agent_configurations.get("formatter_tools_descriptions")
         tools = get_component_tools(formatter_tools_descriptions)
 
@@ -381,11 +423,103 @@ class OpenAIBackend(InlineAgentsBackend):
                 context=context,
                 session=session,
             )
-            return result.final_output
+            stream_events = getattr(result, "stream_events", None)
+            if callable(stream_events):
+                async for _ in stream_events():
+                    pass
+            return self._get_final_response(result)
         except Exception as e:
-            logger.error("Error in formatter agent: %s", e, exc_info=True)
-            # Return the original response if formatter fails
+            logger.error(f"Error in formatter agent: {e}", exc_info=True)
             return final_response
+
+    def _initialize_grpc_client(
+        self, channel_uuid: str, contact_urn: str, session_id: str, project_uuid: str, language: str
+    ) -> tuple[Optional[MessageStreamingClient], Optional[str]]:
+        """Initialize gRPC client and send setup message."""
+        if not is_grpc_enabled() or not contact_urn:
+            return None, None
+
+        if not channel_uuid:
+            channel_uuid = "default-channel-uuid"
+
+        try:
+            grpc_host = getattr(settings, "GRPC_SERVICE_HOST", "localhost")
+            grpc_port = getattr(settings, "GRPC_SERVICE_PORT", 50051)
+            grpc_use_tls = getattr(settings, "GRPC_USE_TLS", False)
+
+            grpc_client = MessageStreamingClient(host=grpc_host, port=grpc_port, use_secure_channel=grpc_use_tls)
+
+            grpc_msg_id = hashlib.sha256(
+                f"{contact_urn}-{session_id}-{datetime.now().isoformat()}".encode()
+            ).hexdigest()[:16]
+
+            for _ in grpc_client.stream_messages_with_setup(
+                msg_id=grpc_msg_id,
+                channel_uuid=channel_uuid,
+                contact_urn=contact_urn,
+                project_uuid=str(project_uuid),
+                metadata={
+                    "session_id": session_id,
+                    "language": language,
+                },
+            ):
+                pass
+
+            return grpc_client, grpc_msg_id
+
+        except Exception as e:
+            logger.error(f"gRPC setup failed: {e}", exc_info=True)
+            return None, None
+
+    def _send_grpc_delta(
+        self,
+        delta_content: str,
+        grpc_client: MessageStreamingClient,
+        grpc_msg_id: str,
+        delta_counter: int,
+        channel_uuid: str,
+        contact_urn: str,
+        project_uuid: str,
+    ):
+        """Send a delta message via gRPC."""
+        try:
+            grpc_client.send_delta_message(
+                msg_id=f"{grpc_msg_id}-delta-{delta_counter}",
+                content=delta_content,
+                channel_uuid=channel_uuid,
+                contact_urn=contact_urn,
+                project_uuid=str(project_uuid),
+            )
+        except Exception as e:
+            logger.error(f"gRPC delta send failed: {e}", exc_info=True)
+
+    def _process_delta_event(
+        self,
+        event,
+        grpc_client: Optional[MessageStreamingClient],
+        grpc_msg_id: Optional[str],
+        delta_counter: int,
+        channel_uuid: str,
+        contact_urn: str,
+        project_uuid: str,
+    ) -> int:
+        """Process a delta event and stream it via gRPC."""
+        from openai.types.responses import ResponseTextDeltaEvent
+
+        if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+            delta_content = event.data.delta
+            if delta_content and grpc_client and grpc_msg_id:
+                delta_counter += 1
+                self._send_grpc_delta(
+                    delta_content=delta_content,
+                    grpc_client=grpc_client,
+                    grpc_msg_id=grpc_msg_id,
+                    delta_counter=delta_counter,
+                    channel_uuid=channel_uuid,
+                    contact_urn=contact_urn,
+                    project_uuid=project_uuid,
+                )
+        return delta_counter
 
     async def _invoke_agents_async(
         self,
@@ -407,6 +541,8 @@ class OpenAIBackend(InlineAgentsBackend):
         runner_hooks,
         hooks_state,
         use_components,
+        grpc_client: Optional[MessageStreamingClient] = None,
+        grpc_msg_id: Optional[str] = None,
         formatter_agent_configurations=None,
     ):
         """Async wrapper to handle the streaming response"""
@@ -414,12 +550,20 @@ class OpenAIBackend(InlineAgentsBackend):
             trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
             logger.debug("Trace ID", extra={"trace_id": trace_id})
             with trace(workflow_name=project_uuid, trace_id=trace_id):
-                # Extract formatter_agent_instructions before passing to Runner.run_streamed
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
                 result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
-
+                delta_counter = 0
                 try:
                     async for event in result.stream_events():
+                        delta_counter = self._process_delta_event(
+                            event=event,
+                            grpc_client=grpc_client,
+                            grpc_msg_id=grpc_msg_id,
+                            delta_counter=delta_counter,
+                            channel_uuid=channel_uuid,
+                            contact_urn=contact_urn,
+                            project_uuid=project_uuid,
+                        )
                         if event.type == "run_item_stream_event":
                             if hasattr(event, "item") and event.item.type == "tool_call_item":
                                 hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
@@ -436,13 +580,11 @@ class OpenAIBackend(InlineAgentsBackend):
                             "input_text": input_text[:500] if input_text else None,
                         },
                     )
-
                     # Try to get final_response even if streaming failed
                     try:
                         final_response = self._get_final_response(result)
                     except Exception:
                         final_response = None
-
                     sentry_sdk.set_context(
                         "streaming_error",
                         {
@@ -498,7 +640,6 @@ class OpenAIBackend(InlineAgentsBackend):
 
                 final_response = self._get_final_response(result)
 
-                # If use_components is True, process the result through the formatter agent
                 if use_components:
                     logger.debug("Components debug start")
                     formatted_response = await self._run_formatter_agent_async(
