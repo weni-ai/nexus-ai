@@ -174,3 +174,26 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             "MCP": mcp,
             "credentials": creds,
         }
+
+
+class CredentialItemSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    label = serializers.CharField()
+    placeholder = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    is_confidential = serializers.BooleanField()
+    value = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+
+
+class OfficialAgentsAssignRequestSerializer(serializers.Serializer):
+    project_uuid = serializers.UUIDField()
+    agent_uuid = serializers.UUIDField()
+    assigned = serializers.BooleanField(required=False)
+    system = serializers.CharField(required=False)
+    credentials = serializers.ListField(child=CredentialItemSerializer(), required=False)
+
+
+class OfficialAgentsAssignResponseSerializer(serializers.Serializer):
+    assigned = serializers.BooleanField(required=False)
+    assigned_created = serializers.BooleanField(required=False)
+    assigned_deleted = serializers.BooleanField(required=False)
+    created_credentials = serializers.ListField(child=serializers.CharField(), required=False)
