@@ -46,8 +46,8 @@ class BackendsRegistry:
 
 BackendsRegistry.register(BedrockBackend(), set_default=True)
 
-# Avoid importing OpenAI backend during migrations to prevent instrumentation issues
-if "makemigrations" not in os.sys.argv and "migrate" not in os.sys.argv:
+# Avoid importing OpenAI backend unless explicitly enabled
+if os.environ.get("ENABLE_OPENAI_INLINE_BACKEND") == "1":
     from .openai.backend import OpenAIBackend
 
     BackendsRegistry.register(OpenAIBackend())
