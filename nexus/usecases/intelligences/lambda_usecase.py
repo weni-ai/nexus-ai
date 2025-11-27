@@ -262,7 +262,14 @@ class LambdaUseCase:
         ]
 
     def instruction_classify(
-        self, name: str, occupation: str, goal: str, adjective: str, instructions: list, instruction_to_classify: str
+        self,
+        name: str,
+        occupation: str,
+        goal: str,
+        adjective: str,
+        instructions: list,
+        instruction_to_classify: str,
+        language: str,
     ):
         try:
             instructions_payload = {
@@ -272,6 +279,7 @@ class LambdaUseCase:
                 "adjective": adjective,
                 "instructions": instructions,
                 "instruction_to_classify": instruction_to_classify,
+                "language": language,
             }
 
             response = self.invoke_lambda(
