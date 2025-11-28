@@ -882,12 +882,14 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         event_data: dict,
         project_uuid: str,
         contact_urn: str,
-        channel_uuid: Optional[str] = None
+        channel_uuid: Optional[str] = None,
+        conversation: Optional[object] = None
     ) -> Optional[dict]:
         """Send a single custom event to data lake (for direct event sending, not from traces)."""
         return self._event_service.send_custom_event(
             event_data=event_data,
             project_uuid=project_uuid,
             contact_urn=contact_urn,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
+            conversation=conversation
         )
