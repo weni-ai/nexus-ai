@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from .supervisor_public import SupervisorPublicConversationsView
 from .views import (
     CommerceHasAgentBuilder,
     ContentBaseFilePreview,
@@ -95,6 +96,11 @@ urlpatterns = [
     path("<project_uuid>/upload-file", UploadFileView.as_view(), name="upload-file"),
     path("commerce/check-exists-agent-builder", CommerceHasAgentBuilder.as_view(), name="check-exists-agent-builder"),
     path("<project_uuid>/supervisor/", SupervisorViewset.as_view({"get": "list"}), name="supervisor"),
+    path(
+        "public/<project_uuid>/supervisor/conversations",
+        SupervisorPublicConversationsView.as_view(),
+        name="public-supervisor-conversations",
+    ),
     path(
         "<project_uuid>/instructions-classification/",
         InstructionsClassificationAPIView.as_view(),
