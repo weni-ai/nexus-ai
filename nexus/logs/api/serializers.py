@@ -1,3 +1,4 @@
+import json
 from rest_framework import serializers
 
 from nexus.inline_agents.models import InlineAgentMessage
@@ -202,3 +203,13 @@ class InlineConversationSerializer(serializers.ModelSerializer):
             "source_type",
             "created_at",
         ]
+
+    text = serializers.SerializerMethodField()
+
+    def get_text(self, obj: InlineAgentMessage) -> str:
+        text = obj.text
+        try:
+            texts = json.loads(text)
+            return json.dumps(texts[0])
+        except json.JSONDecodeError:
+            return text
