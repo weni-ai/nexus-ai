@@ -210,6 +210,6 @@ class InlineConversationSerializer(serializers.ModelSerializer):
         text = obj.text
         try:
             texts = json.loads(text)
-            return str(texts[0])
+            return json.dumps(texts[0])
         except json.JSONDecodeError:
             return text
