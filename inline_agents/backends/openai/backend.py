@@ -3,6 +3,7 @@ import asyncio
 import logging
 from typing import Any, Dict, Optional
 
+import openai
 import pendulum
 import sentry_sdk
 from agents import Agent, ModelSettings, Runner, trace
@@ -423,36 +424,11 @@ class OpenAIBackend(InlineAgentsBackend):
                         if event.type == "run_item_stream_event":
                             if hasattr(event, "item") and event.item.type == "tool_call_item":
                                 hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
+                except openai.APIError as api_error:
+                    self._sentry_capture_exception(api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True)
+                    raise
                 except Exception as stream_error:
-                    logger.error(
-                        f"[OpenAIBackend] Streaming error during agent execution: {stream_error}",
-                        extra={
-                            "project_uuid": project_uuid,
-                            "contact_urn": contact_urn,
-                            "channel_uuid": channel_uuid,
-                            "session_id": session_id,
-                            "error_type": type(stream_error).__name__,
-                            "error_message": str(stream_error),
-                            "input_text": input_text[:500] if input_text else None,
-                        },
-                    )
-
-                    sentry_sdk.set_context(
-                        "streaming_error",
-                        {
-                            "project_uuid": project_uuid,
-                            "contact_urn": contact_urn,
-                            "channel_uuid": channel_uuid,
-                            "session_id": session_id,
-                            "error_type": type(stream_error).__name__,
-                            "error_message": str(stream_error),
-                            "input_text_preview": input_text[:200] if input_text else None,
-                        },
-                    )
-                    sentry_sdk.set_tag("project_uuid", project_uuid)
-                    sentry_sdk.set_tag("error_type", "streaming_error")
-                    sentry_sdk.capture_exception(stream_error)
-
+                    self._sentry_capture_exception(stream_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True)
                     # Try to get final_response even if streaming failed
                     try:
                         final_response = self._get_final_response(result)
@@ -528,3 +504,34 @@ class OpenAIBackend(InlineAgentsBackend):
         else:
             final_response = result.final_output
         return final_response
+
+    def _sentry_capture_exception(self, exception, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger):
+        if enable_logger:
+            logger.error(
+                f"[OpenAIBackend] Streaming error during agent execution: {exception}",
+                extra={
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "channel_uuid": channel_uuid,
+                    "session_id": session_id,
+                    "error_type": type(exception).__name__,
+                    "error_message": str(exception),
+                    "input_text": input_text[:500] if input_text else None,
+                },
+            )
+
+        sentry_sdk.set_context(
+            "streaming_error",
+            {
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "channel_uuid": channel_uuid,
+                "session_id": session_id,
+                "error_type": type(exception).__name__,
+                "error_message": str(exception),
+                "input_text_preview": input_text[:200] if input_text else None,
+            },
+        )
+        sentry_sdk.set_tag("project_uuid", project_uuid)
+        sentry_sdk.set_tag("error_type", "streaming_error")
+        sentry_sdk.capture_exception(exception)
