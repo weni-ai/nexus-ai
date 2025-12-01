@@ -287,6 +287,10 @@ class OpenAIBackend(InlineAgentsBackend):
 
         grpc_client, grpc_msg_id = None, None
         if not preview:
+            logger.info(
+                f"[gRPC] Initializing gRPC client (preview=False) - "
+                f"project_uuid: {project_uuid}, contact_urn: {contact_urn}"
+            )
             grpc_client, grpc_msg_id = self._initialize_grpc_client(
                 channel_uuid=channel_uuid,
                 contact_urn=contact_urn,
@@ -294,6 +298,8 @@ class OpenAIBackend(InlineAgentsBackend):
                 project_uuid=project_uuid,
                 language=language,
             )
+        else:
+            logger.debug("[gRPC] Skipping gRPC initialization - preview mode is enabled")
 
         result = asyncio.run(
             self._invoke_agents_async(
@@ -324,17 +330,37 @@ class OpenAIBackend(InlineAgentsBackend):
         if grpc_client and grpc_msg_id:
             try:
                 content = result if isinstance(result, str) else str(result)
-                grpc_client.send_completed_message(
+                content_length = len(content)
+                logger.info(
+                    f"[gRPC] Sending completed message - "
+                    f"msg_id: {grpc_msg_id}, content_length: {content_length} chars, "
+                    f"contact_urn: {contact_urn}, channel_uuid: {channel_uuid}"
+                )
+                response = grpc_client.send_completed_message(
                     msg_id=grpc_msg_id,
                     content=content,
                     channel_uuid=channel_uuid,
                     contact_urn=contact_urn,
                     project_uuid=str(project_uuid),
                 )
+                logger.info(
+                    f"[gRPC] Completed message sent - "
+                    f"status: {response.get('status')}, sequence: {response.get('sequence')}, "
+                    f"is_final: {response.get('is_final')}"
+                )
             except Exception as e:
-                logger.error(f"gRPC completion failed: {e}", exc_info=True)
+                logger.error(
+                    f"[gRPC] Completion failed - "
+                    f"msg_id: {grpc_msg_id}, contact_urn: {contact_urn}, error: {e}",
+                    exc_info=True
+                )
             finally:
+                logger.info(f"[gRPC] Closing client connection - msg_id: {grpc_msg_id}")
                 grpc_client.close()
+        elif not grpc_client:
+            logger.debug("[gRPC] Skipping completed message - grpc_client is None")
+        elif not grpc_msg_id:
+            logger.debug("[gRPC] Skipping completed message - grpc_msg_id is None")
 
         return result
 
@@ -439,24 +465,53 @@ class OpenAIBackend(InlineAgentsBackend):
         self, channel_uuid: str, contact_urn: str, session_id: str, project_uuid: str, language: str
     ) -> tuple[Optional[MessageStreamingClient], Optional[str]]:
         """Initialize gRPC client and send setup message."""
-        if not is_grpc_enabled() or not contact_urn:
+        logger.info(
+            f"[gRPC] Initializing client - "
+            f"enabled: {is_grpc_enabled()}, contact_urn: {contact_urn}, "
+            f"channel_uuid: {channel_uuid}, session_id: {session_id}, "
+            f"project_uuid: {project_uuid}, language: {language}"
+        )
+
+        if not is_grpc_enabled():
+            logger.warning("[gRPC] gRPC is disabled in settings (GRPC_ENABLED=False)")
+            return None, None
+
+        if not contact_urn:
+            logger.warning("[gRPC] Skipping initialization - contact_urn is empty")
             return None, None
 
         if not channel_uuid:
             channel_uuid = "default-channel-uuid"
+            logger.warning(f"[gRPC] Using default channel_uuid: {channel_uuid}")
 
         try:
             grpc_host = getattr(settings, "GRPC_SERVICE_HOST", "localhost")
             grpc_port = getattr(settings, "GRPC_SERVICE_PORT", 50051)
             grpc_use_tls = getattr(settings, "GRPC_USE_TLS", False)
 
+            logger.info(
+                f"[gRPC] Client configuration - "
+                f"host: {grpc_host}, port: {grpc_port}, use_tls: {grpc_use_tls}"
+            )
+
             grpc_client = MessageStreamingClient(host=grpc_host, port=grpc_port, use_secure_channel=grpc_use_tls)
+
+            # Test connection
+            connection_ok = grpc_client.check_connection(timeout=5)
+            if not connection_ok:
+                logger.warning(f"[gRPC] Connection check failed, but continuing anyway")
 
             grpc_msg_id = hashlib.sha256(
                 f"{contact_urn}-{session_id}-{datetime.now().isoformat()}".encode()
             ).hexdigest()[:16]
 
-            for _ in grpc_client.stream_messages_with_setup(
+            logger.info(
+                f"[gRPC] Generated msg_id: {grpc_msg_id} - "
+                f"contact_urn: {contact_urn}, session_id: {session_id}"
+            )
+
+            setup_responses = []
+            for response in grpc_client.stream_messages_with_setup(
                 msg_id=grpc_msg_id,
                 channel_uuid=channel_uuid,
                 contact_urn=contact_urn,
@@ -466,12 +521,28 @@ class OpenAIBackend(InlineAgentsBackend):
                     "language": language,
                 },
             ):
-                pass
+                setup_responses.append(response)
+                logger.debug(f"[gRPC] Setup response: {response}")
 
+            if setup_responses:
+                last_response = setup_responses[-1]
+                logger.info(
+                    f"[gRPC] Setup completed - "
+                    f"status: {last_response.get('status')}, "
+                    f"is_final: {last_response.get('is_final')}, "
+                    f"message: {last_response.get('message')}"
+                )
+
+            logger.info(f"[gRPC] Client initialized successfully - msg_id: {grpc_msg_id}")
             return grpc_client, grpc_msg_id
 
         except Exception as e:
-            logger.error(f"gRPC setup failed: {e}", exc_info=True)
+            logger.error(
+                f"[gRPC] Setup failed - "
+                f"contact_urn: {contact_urn}, channel_uuid: {channel_uuid}, "
+                f"project_uuid: {project_uuid}, error: {e}",
+                exc_info=True
+            )
             return None, None
 
     def _send_grpc_delta(
@@ -485,16 +556,31 @@ class OpenAIBackend(InlineAgentsBackend):
         project_uuid: str,
     ):
         """Send a delta message via gRPC."""
+        delta_msg_id = f"{grpc_msg_id}-delta-{delta_counter}"
         try:
-            grpc_client.send_delta_message(
-                msg_id=f"{grpc_msg_id}-delta-{delta_counter}",
+            logger.debug(
+                f"[gRPC] Sending delta #{delta_counter} - "
+                f"msg_id: {delta_msg_id}, content_length: {len(delta_content)} chars, "
+                f"contact_urn: {contact_urn}"
+            )
+            response = grpc_client.send_delta_message(
+                msg_id=delta_msg_id,
                 content=delta_content,
                 channel_uuid=channel_uuid,
                 contact_urn=contact_urn,
                 project_uuid=str(project_uuid),
             )
+            logger.debug(
+                f"[gRPC] Delta #{delta_counter} sent - "
+                f"status: {response.get('status')}, sequence: {response.get('sequence')}"
+            )
         except Exception as e:
-            logger.error(f"gRPC delta send failed: {e}", exc_info=True)
+            logger.error(
+                f"[gRPC] Delta send failed - "
+                f"delta_counter: {delta_counter}, msg_id: {delta_msg_id}, "
+                f"content_length: {len(delta_content)}, error: {e}",
+                exc_info=True
+            )
 
     def _process_delta_event(
         self,
@@ -513,6 +599,11 @@ class OpenAIBackend(InlineAgentsBackend):
             delta_content = event.data.delta
             if delta_content and grpc_client and grpc_msg_id:
                 delta_counter += 1
+                logger.debug(
+                    f"[gRPC] Processing delta event #{delta_counter} - "
+                    f"content_length: {len(delta_content)} chars, "
+                    f"msg_id: {grpc_msg_id}"
+                )
                 self._send_grpc_delta(
                     delta_content=delta_content,
                     grpc_client=grpc_client,
@@ -522,6 +613,12 @@ class OpenAIBackend(InlineAgentsBackend):
                     contact_urn=contact_urn,
                     project_uuid=project_uuid,
                 )
+            elif not grpc_client:
+                logger.debug("[gRPC] Skipping delta - grpc_client is None")
+            elif not grpc_msg_id:
+                logger.debug("[gRPC] Skipping delta - grpc_msg_id is None")
+            elif not delta_content:
+                logger.debug("[gRPC] Skipping delta - delta_content is empty")
         return delta_counter
 
     async def _invoke_agents_async(
