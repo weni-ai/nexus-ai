@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
@@ -154,6 +154,35 @@ class AgentGroupAdmin(admin.ModelAdmin):
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
+    actions = ["apply_shared_config_to_agents"]
+
+    def apply_shared_config_to_agents(self, request, queryset):
+        updated_count = 0
+        for group in queryset:
+            shared = group.shared_config or {}
+            for agent in group.agents.all():
+                changed = False
+                if "backend_foundation_models" in shared and isinstance(shared["backend_foundation_models"], dict):
+                    agent.backend_foundation_models = shared["backend_foundation_models"]
+                    changed = True
+                if "foundation_model" in shared and isinstance(shared["foundation_model"], str):
+                    agent.foundation_model = shared["foundation_model"]
+                    changed = True
+                if "instruction" in shared and isinstance(shared["instruction"], str):
+                    agent.instruction = shared["instruction"]
+                    changed = True
+                if "collaboration_instructions" in shared and isinstance(shared["collaboration_instructions"], str):
+                    agent.collaboration_instructions = shared["collaboration_instructions"]
+                    changed = True
+                if "source_type" in shared and isinstance(shared["source_type"], str):
+                    agent.source_type = shared["source_type"]
+                    changed = True
+                if changed:
+                    agent.save()
+                    updated_count += 1
+        messages.success(request, f"Configuration applied. Agents updated: {updated_count}")
+
+    apply_shared_config_to_agents.short_description = "Apply shared_config to agents"
 
 
 @admin.register(AgentSystem)
