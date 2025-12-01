@@ -520,7 +520,14 @@ def _apply_sentry_tags(
         ]
 
     def instruction_classify(
-        self, name: str, occupation: str, goal: str, adjective: str, instructions: list, instruction_to_classify: str
+        self,
+        name: str,
+        occupation: str,
+        goal: str,
+        adjective: str,
+        instructions: list,
+        instruction_to_classify: str,
+        language: str,
     ):
         try:
             instructions_payload = {
@@ -530,6 +537,7 @@ def _apply_sentry_tags(
                 "adjective": adjective,
                 "instructions": instructions,
                 "instruction_to_classify": instruction_to_classify,
+                "language": language,
             }
 
             response = self.invoke_lambda(
