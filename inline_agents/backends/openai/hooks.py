@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import pendulum
 import sentry_sdk
@@ -93,6 +93,7 @@ class TraceHandler:
 
 
 class RunnerHooks(RunHooks):
+
     def __init__(
         self,
         supervisor_name: str,
@@ -181,6 +182,7 @@ class CollaboratorHooks(AgentHooks):
         session_id: str = None,
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
+        conversation: Optional[object] = None,
     ):
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
@@ -197,6 +199,7 @@ class CollaboratorHooks(AgentHooks):
         self.data_lake_event_adapter = data_lake_event_adapter
         self.hooks_state = hooks_state
         self.preview = preview
+        self.conversation = conversation
 
     async def on_start(self, context, agent):
         logger.info(f"[HOOK] Atribuindo tarefa ao agente '{agent.name}'.")
@@ -233,11 +236,14 @@ class CollaboratorHooks(AgentHooks):
             },
             foundation_model=agent.model,
             backend="openai",
+            channel_uuid=context_data.contact.get("channel_uuid"),
+            conversation=self.conversation,
         )
 
     async def tool_started(self, context, agent, tool):
         context_data = context.context
-        parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", {})
+        tool_info = self.hooks_state.get_tool_info(tool.name)
+        parameters = tool_info.get("parameters", [])
 
         logger.info(f"[HOOK] Executando ferramenta '{tool.name}'.")
         logger.info(f"[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.")
@@ -272,9 +278,13 @@ class CollaboratorHooks(AgentHooks):
                 "parameters": parameters,
                 "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
             },
+            agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
             foundation_model=agent.model,
             backend="openai",
+            channel_uuid=context_data.contact.get("channel_uuid"),
+            conversation=self.conversation,
         )
+        self.hooks_state.advance_tool_info_index(tool.name)
 
     async def on_tool_end(self, context, agent, tool, result):
         await self.tool_started(context, agent, tool)
@@ -287,13 +297,33 @@ class CollaboratorHooks(AgentHooks):
         if isinstance(result, str):
             try:
                 result_json = json.loads(result)
-                events = self.hooks_state.get_events(result_json, tool.name)
+                try:
+                    events = self.hooks_state.get_events(result_json, tool.name)
+                except Exception as e:
+                    logger.error(f"Error in get_events for tool '{tool.name}': {e}")
+                    sentry_sdk.set_context("get_events_error", {
+                        "tool_name": tool.name,
+                        "project_uuid": project_uuid,
+                        "contact_urn": context_data.contact.get("urn", "unknown")
+                    })
+                    sentry_sdk.capture_exception(e)
+                    events = []
             except Exception:
-                events = {}
+                events = []
         elif isinstance(result, dict):
-            events = self.hooks_state.get_events(result, tool.name)
+            try:
+                events = self.hooks_state.get_events(result, tool.name)
+            except Exception as e:
+                logger.error(f"Error in get_events for tool '{tool.name}': {e}")
+                sentry_sdk.set_context("get_events_error", {
+                    "tool_name": tool.name,
+                    "project_uuid": project_uuid,
+                    "contact_urn": context_data.contact.get("urn", "unknown")
+                })
+                sentry_sdk.capture_exception(e)
+                events = []
         else:
-            events = {}
+            events = []
 
         if events and events != "[]" and events != []:
             if isinstance(events, str):
@@ -311,14 +341,19 @@ class CollaboratorHooks(AgentHooks):
             # Only proceed if we have a non-empty list
             if isinstance(events, list) and len(events) > 0:
                 logger.info(f"[HOOK] Eventos da ferramenta '{tool.name}': {events}")
-                self.data_lake_event_adapter.custom_event_data(
-                    event_data=events,
-                    project_uuid=project_uuid,
-                    contact_urn=context_data.contact.get("urn"),
-                    channel_uuid=context_data.contact.get("channel_uuid"),
-                    agent_name=agent.name,
-                    preview=self.preview,
-                )
+                try:
+                    self.data_lake_event_adapter.custom_event_data(
+                        event_data=events,
+                        project_uuid=project_uuid,
+                        contact_urn=context_data.contact.get("urn"),
+                        channel_uuid=context_data.contact.get("channel_uuid"),
+                        agent_name=agent.name,
+                        preview=self.preview,
+                        conversation=self.conversation,
+                    )
+                except Exception as e:
+                    logger.error(f"Error calling custom_event_data in CollaboratorHooks: {str(e)}")
+                    sentry_sdk.capture_exception(e)
             else:
                 if "human" in tool.name.lower() or "support" in tool.name.lower():
                     logger.warning(
@@ -382,6 +417,7 @@ class SupervisorHooks(AgentHooks):
         session_id: Optional[str] = None,
         msg_external_id: Optional[str] = None,
         turn_off_rationale: bool = False,
+        conversation: Optional[object] = None,
         **kwargs,
     ):
         self.trace_handler = TraceHandler(
@@ -401,7 +437,7 @@ class SupervisorHooks(AgentHooks):
         self.knowledge_base_tool = knowledge_base_tool
         self.data_lake_event_adapter = data_lake_event_adapter
         self.hooks_state = hooks_state
-        self.preview = preview
+        self.conversation = conversation
 
         super().__init__()
 
@@ -413,7 +449,8 @@ class SupervisorHooks(AgentHooks):
 
     async def tool_started(self, context, agent, tool):
         context_data = context.context
-        parameters = self.hooks_state.tool_info.get(tool.name, {}).get("parameters", {})
+        tool_info = self.hooks_state.get_tool_info(tool.name)
+        parameters = tool_info.get("parameters", [])
         tool_call_data = {"tool_name": tool.name, "parameters": parameters}
 
         if tool.name == self.knowledge_base_tool:
@@ -421,8 +458,11 @@ class SupervisorHooks(AgentHooks):
                 project_uuid=context_data.project.get("uuid"),
                 contact_urn=context_data.contact.get("urn"),
                 tool_call_data=tool_call_data,
+                agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
                 foundation_model=agent.model,
                 backend="openai",
+                channel_uuid=context_data.contact.get("channel_uuid"),
+                conversation=self.conversation,
             )
             trace_data = {
                 "eventTime": pendulum.now().to_iso8601_string(),
@@ -470,9 +510,13 @@ class SupervisorHooks(AgentHooks):
                     "parameters": parameters,
                     "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
                 },
+                agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
                 foundation_model=agent.model,
                 backend="openai",
+                channel_uuid=context_data.contact.get("channel_uuid"),
+                conversation=self.conversation,
             )
+            self.hooks_state.advance_tool_info_index(tool.name)
 
     async def on_tool_end(self, context, agent, tool, result):
         # calling tool_started here instead of on_tool_start so we can get the parameters from tool execution
@@ -499,13 +543,33 @@ class SupervisorHooks(AgentHooks):
             if isinstance(result, str):
                 try:
                     result_json = json.loads(result)
-                    events = self.hooks_state.get_events(result_json, tool.name)
+                    try:
+                        events = self.hooks_state.get_events(result_json, tool.name)
+                    except Exception as e:
+                        logger.error(f"Error in get_events for tool '{tool.name}': {e}")
+                        sentry_sdk.set_context("get_events_error", {
+                            "tool_name": tool.name,
+                            "project_uuid": project_uuid,
+                            "contact_urn": context_data.contact.get("urn", "unknown")
+                        })
+                        sentry_sdk.capture_exception(e)
+                        events = []
                 except Exception:
-                    events = {}
+                    events = []
             elif isinstance(result, dict):
-                events = self.hooks_state.get_events(result, tool.name)
+                try:
+                    events = self.hooks_state.get_events(result, tool.name)
+                except Exception as e:
+                    logger.error(f"Error in get_events for tool '{tool.name}': {e}")
+                    sentry_sdk.set_context("get_events_error", {
+                        "tool_name": tool.name,
+                        "project_uuid": project_uuid,
+                        "contact_urn": context_data.contact.get("urn", "unknown")
+                    })
+                    sentry_sdk.capture_exception(e)
+                    events = []
             else:
-                events = {}
+                events = []
 
             if events and events != "[]" and events != []:
                 if isinstance(events, str):
@@ -523,14 +587,19 @@ class SupervisorHooks(AgentHooks):
                 # Only proceed if we have a non-empty list
                 if isinstance(events, list) and len(events) > 0:
                     logger.info(f"[HOOK] Eventos da ferramenta '{tool.name}': {events}")
-                    self.data_lake_event_adapter.custom_event_data(
-                        event_data=events,
-                        project_uuid=project_uuid,
-                        contact_urn=context_data.contact.get("urn"),
-                        channel_uuid=context_data.contact.get("channel_uuid"),
-                        agent_name=agent.name,
-                        preview=self.preview,
-                    )
+                    try:
+                        self.data_lake_event_adapter.custom_event_data(
+                            event_data=events,
+                            project_uuid=project_uuid,
+                            contact_urn=context_data.contact.get("urn"),
+                            channel_uuid=context_data.contact.get("channel_uuid"),
+                            agent_name=agent.name,
+                            preview=self.preview,
+                            conversation=self.conversation,
+                        )
+                    except Exception as e:
+                        logger.error(f"Error calling custom_event_data in SupervisorHooks: {str(e)}")
+                        sentry_sdk.capture_exception(e)
 
             trace_data = {
                 "collaboratorName": agent.name,

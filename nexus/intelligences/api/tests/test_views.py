@@ -21,6 +21,7 @@ from nexus.usecases.intelligences.tests.intelligence_factory import (
     ConversationFactory,
     IntegratedIntelligenceFactory,
     IntelligenceFactory,
+    LLMFactory,
     SubTopicsFactory,
     TopicsFactory,
 )
@@ -1211,3 +1212,130 @@ class TestSupervisorViewset(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertIn("detail", response.data)
+
+
+class TestLLMViewset(TestCase):
+    def setUp(self):
+        """Set up test data for LLMViewset tests"""
+        self.user = User.objects.create_user(email="test@example.com", password="testpass123")
+        self.llm = LLMFactory(created_by=self.user)
+        self.project = self.llm.integrated_intelligence.project
+
+        intelligence = self.llm.integrated_intelligence.intelligence
+        if not intelligence.is_router:
+            intelligence.is_router = True
+            intelligence.save()
+
+        from nexus.projects.models import ProjectAuth, ProjectAuthorizationRole
+        ProjectAuth.objects.update_or_create(
+            user=self.user, project=self.project, defaults={"role": ProjectAuthorizationRole.MODERATOR.value}
+        )
+
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        self.base_url = f"/api/{self.project.uuid}/llm/"
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_get_llm_config_success(self, mock_has_permission):
+        """Test successfully retrieving LLM config via GET"""
+        def mock_permission(request, project_uuid, method):
+            from nexus.projects.models import Project
+            from nexus.projects.permissions import has_project_permission
+            project = Project.objects.get(uuid=project_uuid)
+            return has_project_permission(request.user, project, method)
+
+        mock_has_permission.side_effect = mock_permission
+
+        response = self.client.get(self.base_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("uuid", response.data)
+        self.assertIn("model", response.data)
+        self.assertIn("setup", response.data)
+        self.assertIn("advanced_options", response.data)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_get_llm_config_no_llm_exists(self, mock_has_permission):
+        """Test GET when no LLM config exists for the project"""
+        def mock_permission(request, project_uuid, method):
+            from nexus.projects.models import Project
+            from nexus.projects.permissions import has_project_permission
+            project = Project.objects.get(uuid=project_uuid)
+            return has_project_permission(request.user, project, method)
+
+        mock_has_permission.side_effect = mock_permission
+
+        from nexus.usecases.intelligences.get_by_uuid import get_integrated_intelligence_by_project
+        from nexus.intelligences.models import LLM
+        project_uuid = str(self.project.uuid)
+        integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
+        LLM.objects.filter(integrated_intelligence=integrated_intelligence).delete()
+
+        response = self.client.get(self.base_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {'uuid': None, 'model': '', 'setup': None, 'advanced_options': None})
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_patch_llm_config_success(self, mock_has_permission):
+        """Test successfully updating LLM config via PATCH"""
+        def mock_permission(request, project_uuid, method):
+            from nexus.projects.models import Project
+            from nexus.projects.permissions import has_project_permission
+            project = Project.objects.get(uuid=project_uuid)
+            return has_project_permission(request.user, project, method)
+
+        mock_has_permission.side_effect = mock_permission
+
+        update_data = {
+            "model": "gpt-3.5-turbo",
+            "setup": {
+                "temperature": 0.8,
+                "top_p": 0.95,
+                "top_k": 40,
+                "max_length": 150,
+            },
+            "advanced_options": {
+                "stream": True,
+            }
+        }
+
+        response = self.client.patch(self.base_url, data=update_data, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["model"], update_data["model"])
+
+    def test_patch_llm_config_authentication_required(self):
+        """Test that authentication is required for PATCH"""
+        unauthenticated_client = APIClient()
+        update_data = {"model": "gpt-4"}
+        response = unauthenticated_client.patch(self.base_url, data=update_data, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_get_llm_config_project_permission_required(self, mock_has_permission):
+        """Test that project permission is required"""
+        mock_has_permission.return_value = False
+
+        unauthorized_user = User.objects.create_user(email="unauthorized@test.com")
+        unauthorized_client = APIClient()
+        unauthorized_client.force_authenticate(user=unauthorized_user)
+
+        response = unauthorized_client.get(self.base_url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_patch_llm_config_project_permission_required(self, mock_has_permission):
+        """Test that project permission is required for PATCH"""
+        mock_has_permission.return_value = False
+
+        unauthorized_user = User.objects.create_user(email="unauthorized2@test.com")
+        unauthorized_client = APIClient()
+        unauthorized_client.force_authenticate(user=unauthorized_user)
+
+        update_data = {"model": "gpt-4"}
+        response = unauthorized_client.patch(self.base_url, data=update_data, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

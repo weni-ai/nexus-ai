@@ -7,10 +7,10 @@ class ConversationFilter(filters.FilterSet):
     """Filter for Conversation model"""
 
     start_date = filters.DateFilter(
-        field_name="created_at", lookup_expr="gte", input_formats=["%d-%m-%Y"], method="filter_start_date"
+        field_name="start_date", lookup_expr="gte", input_formats=["%d-%m-%Y"], method="filter_start_date"
     )
     end_date = filters.DateFilter(
-        field_name="created_at", lookup_expr="lte", input_formats=["%d-%m-%Y"], method="filter_end_date"
+        field_name="end_date", lookup_expr="lte", input_formats=["%d-%m-%Y"], method="filter_end_date"
     )
     csat = filters.BaseInFilter(field_name="csat")
     resolution = filters.BaseInFilter(field_name="resolution")
@@ -38,7 +38,7 @@ class ConversationFilter(filters.FilterSet):
         """Filter by start date with default value if not provided"""
         print(f"DEBUG: filter_start_date called with value: {value}, type: {type(value)}")
         if value:
-            result = queryset.filter(created_at__date__gte=value)
+            result = queryset.filter(start_date__date__gte=value)
             print(f"DEBUG: start_date filter result count: {result.count()}")
             return result
         # Only apply default if no start_date parameter was provided at all
@@ -49,7 +49,9 @@ class ConversationFilter(filters.FilterSet):
         """Filter by end date with default value if not provided"""
         print(f"DEBUG: filter_end_date called with value: {value}, type: {type(value)}")
         if value:
-            result = queryset.filter(created_at__date__lte=value)
+            from django.db.models import Q
+
+            result = queryset.filter(Q(end_date__date__lte=value) | Q(start_date__date__lte=value))
             print(f"DEBUG: end_date filter result count: {result.count()}")
             return result
         # Only apply default if no end_date parameter was provided at all

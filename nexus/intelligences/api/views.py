@@ -2,12 +2,16 @@ import os
 
 import sentry_sdk
 from django.conf import settings
-from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.utils.datastructures import MultiValueDictKeyError
 from django_filters import rest_framework as filters
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    OpenApiTypes,
+    extend_schema,
+)
 from rest_framework import parsers, status, views
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
@@ -56,6 +60,7 @@ from nexus.task_managers.tasks_bedrock import (
 )
 from nexus.usecases import intelligences
 from nexus.usecases.intelligences.exceptions import (
+    ContentBaseDoesNotExist,
     IntelligencePermissionDenied,
 )
 from nexus.usecases.intelligences.get_by_uuid import (
@@ -70,6 +75,7 @@ from nexus.usecases.task_managers.celery_task_manager import (
 from nexus.usecases.task_managers.file_database import (
     get_gpt_by_content_base_uuid,
 )
+from nexus.usecases.users.exceptions import UserDoesNotExists
 from nexus.users.models import User
 
 from .serializers import (
@@ -714,7 +720,7 @@ class ContentBaseFileViewset(ModelViewSet):
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-    def create(self, request, content_base_uuid=str):
+    def create(self, request, **kwargs):
         from rest_framework import status as http_status
 
         def validate_file_size(file):
@@ -723,6 +729,14 @@ class ContentBaseFileViewset(ModelViewSet):
                 return Response(data={"message": "File size is too large"}, status=http_status.HTTP_400_BAD_REQUEST)
 
         try:
+            # Get content_base_uuid from URL kwargs
+            content_base_uuid = self.kwargs.get("content_base_uuid")
+            if not content_base_uuid:
+                return Response(
+                    data={"message": "content_base_uuid is required"}, status=http_status.HTTP_400_BAD_REQUEST
+                )
+
+            # Check permissions by calling get_queryset
             self.get_queryset()
 
             user: User = request.user
@@ -761,6 +775,18 @@ class ContentBaseFileViewset(ModelViewSet):
             return Response(data={"message": "file is required"}, status=http_status.HTTP_400_BAD_REQUEST)
         except IntelligencePermissionDenied:
             return Response(status=http_status.HTTP_401_UNAUTHORIZED)
+        except ContentBaseDoesNotExist as e:
+            return Response(data={"message": str(e)}, status=http_status.HTTP_404_NOT_FOUND)
+        except UserDoesNotExists as e:
+            return Response(data={"message": str(e)}, status=http_status.HTTP_404_NOT_FOUND)
+        except ValidationError as e:
+            return Response(data={"message": f"Invalid UUID: {str(e)}"}, status=http_status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            return Response(
+                data={"message": f"An error occurred while uploading the file: {str(e)}"},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def get_queryset(self):
         if getattr(self, "swagger_fake_view", False):
@@ -1646,8 +1672,46 @@ class SupervisorViewset(ModelViewSet):
         except ProjectDoesNotExist:
             return Conversation.objects.none()
 
-    @swagger_auto_schema(
-        auto_schema=None  # Exclude from schema generation to avoid duplicate parameters
+    @extend_schema(
+        operation_id="supervisor_list",
+        summary="List supervisor conversation data",
+        description=(
+            "Returns paginated supervisor conversation data for a project.\n\n"
+            "Filters: start_date (DD-MM-YYYY), end_date (DD-MM-YYYY), csat, resolution, topics, "
+            "has_chats_room, nps, search. Supports ordering and search."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="project_uuid",
+                location=OpenApiParameter.PATH,
+                description="Project UUID",
+                required=True,
+                type=OpenApiTypes.STR,
+            ),
+            OpenApiParameter(
+                name="start_date", description="Start date (DD-MM-YYYY)", required=False, type=OpenApiTypes.STR
+            ),
+            OpenApiParameter(
+                name="end_date", description="End date (DD-MM-YYYY)", required=False, type=OpenApiTypes.STR
+            ),
+            OpenApiParameter(name="csat", description="CSAT filter", required=False, type=OpenApiTypes.NUMBER),
+            OpenApiParameter(name="resolution", description="Resolution filter", required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="topics", description="Topics filter", required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(
+                name="has_chats_room", description="Has human chat room", required=False, type=OpenApiTypes.BOOL
+            ),
+            OpenApiParameter(name="nps", description="NPS filter", required=False, type=OpenApiTypes.NUMBER),
+            OpenApiParameter(
+                name="search", description="Search by contact name or URN", required=False, type=OpenApiTypes.STR
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(description="Lista paginada de conversas", response=SupervisorDataSerializer),
+            400: OpenApiResponse(description="Invalid parameters"),
+            404: OpenApiResponse(description="Project not found"),
+            500: OpenApiResponse(description="Internal error"),
+        },
+        tags=["Supervisor"],
     )
     def list(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
@@ -1695,96 +1759,31 @@ class InstructionsClassificationAPIView(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated, ProjectPermission]
 
-    @swagger_auto_schema(
+    @extend_schema(
         operation_id="instruction_classify",
-        operation_description="""
-        Classify an instruction against existing instructions in a content base.
-
-        This endpoint analyzes a given instruction text and classifies it based on similarity
-        to existing instructions in the project's content base. It uses AI/ML models to determine
-        how the instruction should be categorized and provides suggestions for improvement.
-
-        The classification process considers:
-        - The agent's goal and personality from the content base
-        - Existing custom instructions in the content base
-        - User context (name, occupation)
-
-        **Authentication Required**: Yes (JWT Token)
-        **Permissions Required**: User must have access to the specified project
-        """,
-        request_body=InstructionClassificationRequestSerializer,
-        manual_parameters=[
-            openapi.Parameter(
-                "project_uuid",
-                openapi.IN_PATH,
-                description="UUID of the project containing the content base",
-                type=openapi.TYPE_STRING,
-                format=openapi.FORMAT_UUID,
+        summary="Classify instruction",
+        description=(
+            "Classifies an instruction based on the project's existing content base instructions. "
+            "Returns suggested categories and an improvement suggestion."
+        ),
+        request=InstructionClassificationRequestSerializer,
+        parameters=[
+            OpenApiParameter(
+                name="project_uuid",
+                location=OpenApiParameter.PATH,
+                description="Project UUID",
                 required=True,
-            ),
+                type=OpenApiTypes.STR,
+            )
         ],
         responses={
-            200: openapi.Response(
-                description="Successful classification",
-                schema=InstructionClassificationResponseSerializer,
-                examples={
-                    "application/json": {
-                        "classification": [
-                            {
-                                "name": "customer_support",
-                                "reason": "This instruction relates to handling customer inquiries",
-                            },
-                            {
-                                "name": "product_information",
-                                "reason": "The instruction involves providing product details",
-                            },
-                        ],
-                        "suggestion": "Consider making this instruction more specific to improve clarity",
-                    }
-                },
+            200: OpenApiResponse(
+                description="Classification done", response=InstructionClassificationResponseSerializer
             ),
-            400: openapi.Response(
-                description="Bad Request - Missing or invalid instruction",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "error": openapi.Schema(
-                            type=openapi.TYPE_STRING, description="Error message describing what went wrong"
-                        )
-                    },
-                ),
-                examples={"application/json": {"error": "Instruction is required"}},
-            ),
-            401: openapi.Response(
-                description="Unauthorized - Authentication required",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "detail": openapi.Schema(type=openapi.TYPE_STRING, description="Authentication error message")
-                    },
-                ),
-            ),
-            403: openapi.Response(
-                description="Forbidden - User does not have access to this project",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "detail": openapi.Schema(type=openapi.TYPE_STRING, description="Permission error message")
-                    },
-                ),
-            ),
-            500: openapi.Response(
-                description="Internal Server Error",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "error": openapi.Schema(
-                            type=openapi.TYPE_STRING, description="Error message describing the server error"
-                        )
-                    },
-                ),
-                examples={"application/json": {"error": "An error occurred while processing the classification"}},
-            ),
+            400: OpenApiResponse(description="Bad request"),
+            401: OpenApiResponse(description="Unauthorized"),
+            403: OpenApiResponse(description="Forbidden"),
+            500: OpenApiResponse(description="Internal error"),
         },
         tags=["Instructions"],
     )

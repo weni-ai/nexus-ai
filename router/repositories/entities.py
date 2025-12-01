@@ -23,6 +23,7 @@ class ResolutionEntities:
             "resolved": ResolutionEntities.RESOLVED,
             "unresolved": ResolutionEntities.UNRESOLVED,
             "in progress": ResolutionEntities.IN_PROGRESS,
+            "unclassified": ResolutionEntities.UNCLASSIFIED,
             "has chat room": ResolutionEntities.HAS_CHAT_ROOM,
         }
         return resolution_mapping.get(resolution_string.lower(), ResolutionEntities.IN_PROGRESS)

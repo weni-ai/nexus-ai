@@ -1,13 +1,10 @@
 from django.urls import path
 
-from nexus.agents.api.views import (
-    AgentTracesView,
-    DeleteAgentView,
-    RationaleView,
-)
+from nexus.agents.api.views import AgentTracesView, DeleteAgentView, RationaleView
 from nexus.inline_agents.api.views import ActiveAgentsView as ActiveInlineAgentsView
-from nexus.inline_agents.api.views import AgentEndSessionView, LogGroupView, MultiAgentView
+from nexus.inline_agents.api.views import AgentBuilderAudio, AgentEndSessionView
 from nexus.inline_agents.api.views import AgentsView as InlineAgentsView
+from nexus.inline_agents.api.views import LogGroupView, MultiAgentView
 from nexus.inline_agents.api.views import OfficialAgentsView as InlineOfficialAgentsView
 from nexus.inline_agents.api.views import ProjectComponentsView as InlineProjectComponentsView
 from nexus.inline_agents.api.views import ProjectCredentialsView as InlineProjectCredentialsView
@@ -50,6 +47,7 @@ urlpatterns = [
     path("project/<project_uuid>/components", InlineProjectComponentsView.as_view(), name="project-components"),
     path("project/<project_uuid>/multi-agents", MultiAgentView.as_view(), name="multi-agents"),
     path("project/<project_uuid>/end-session", AgentEndSessionView.as_view(), name="end-session"),
+    path("project/<project_uuid>/multi-agents-audio", AgentBuilderAudio.as_view(), name="multi-agents-audio"),
     path("agents/log-group", LogGroupView.as_view(), name="agents-log-group"),
     path("reports", ReportView.as_view(), name="reports"),
     path("project/<project_uuid>/agents/<str:agent_uuid>", DeleteAgentView.as_view(), name="delete-agent"),

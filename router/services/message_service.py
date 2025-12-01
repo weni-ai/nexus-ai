@@ -1,7 +1,6 @@
 import pendulum
 
 from router.repositories import Repository
-from router.services.conversation_service import ConversationService
 
 
 class MessageService:
@@ -14,7 +13,7 @@ class MessageService:
             message_repository = DynamoMessageRepository()
 
         self.message_repository = message_repository
-        self.conversation_service = ConversationService()
+        self._conversation_service = None
 
     def handle_message_cache(
         self,
@@ -26,8 +25,10 @@ class MessageService:
         channel_uuid: str,
         preview: bool = False,
     ) -> None:
-        """Handle message cache logic - matches original RedisTaskManager.handle_message_cache."""
         if preview:
+            return
+
+        if not channel_uuid:
             return
 
         current_conversation_response = self.message_repository.get_messages(
@@ -73,11 +74,6 @@ class MessageService:
             ttl_hours=ttl_hours,
         )
 
-        # Create conversation only if channel_uuid is not None
-        self.conversation_service.create_conversation_if_channel_exists(
-            project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
-        )
-
     def add_message_to_cache(
         self,
         project_uuid: str,
@@ -92,7 +88,7 @@ class MessageService:
         self.message_repository.add_message(project_uuid, contact_urn, message, channel_uuid)
 
         # Ensure conversation exists only if channel_uuid is not None
-        self.conversation_service.ensure_conversation_exists(
+        self._get_conversation_service().ensure_conversation_exists(
             project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
         )
 
@@ -125,6 +121,13 @@ class MessageService:
         return self.message_repository.get_messages_for_conversation(
             project_uuid, contact_urn, channel_uuid, start_date, end_date, resolution_status
         )
+
+    def _get_conversation_service(self):
+        """Get conversation service instance, creating it if it doesn't exist."""
+        if self._conversation_service is None:
+            from router.services.conversation_service import ConversationService
+            self._conversation_service = ConversationService()
+        return self._conversation_service
 
     def _get_current_timestamp(self) -> str:
         """Get current timestamp in ISO format."""
