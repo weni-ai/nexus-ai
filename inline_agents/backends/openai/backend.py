@@ -416,7 +416,7 @@ class OpenAIBackend(InlineAgentsBackend):
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 # Extract formatter_agent_instructions before passing to Runner.run_streamed
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
-                result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
+                result = client.run_streamed(**external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS)
 
                 try:
                     async for event in result.stream_events():

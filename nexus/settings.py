@@ -49,7 +49,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "django_prometheus",
     "rest_framework",
-    "drf_yasg",
+    "drf_spectacular",
     "elasticapm.contrib.django",
     # apps
     "nexus.users",
@@ -306,12 +306,20 @@ OIDC_RP_SCOPES = env.str("OIDC_RP_SCOPES", default="openid email")
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["mozilla_django_oidc.contrib.drf.OIDCAuthentication"],
     "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 if TESTING:
     REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"].append("rest_framework.authentication.TokenAuthentication")
 
 CORS_ORIGIN_ALLOW_ALL = True
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "API Documentation",
+    "VERSION": "v1.0.0",
+    "LICENSE": {"name": "GPL-3.0 License"},
+}
+
 
 OPENAI_API_KEY = env.str("OPENAI_API_KEY")
 CHATGPT_MODEL = env.str("CHATGPT_MODEL")
@@ -634,3 +642,8 @@ BEDROCK_CONVERSE_PROMPT = env.str("BEDROCK_CONVERSE_PROMPT")
 BEDROCK_CONVERSE_MAX_LENGHT = env.int("BEDROCK_CONVERSE_MAX_LENGHT", 4096)
 FORMATTER_AGENT_MODEL = env.str("FORMATTER_AGENT_MODEL", "gpt-4.1-mini")
 FLOW_USER_EMAIL = env.str("FLOW_USER_EMAIL", "")
+
+OPENAI_AGENTS_REASONING_EFFORT = env.str("OPENAI_AGENTS_REASONING_EFFORT", None)
+OPENAI_AGENTS_REASONING_SUMMARY = env.str("OPENAI_AGENTS_REASONING_SUMMARY", "auto")
+OPENAI_AGENTS_PARALLEL_TOOL_CALLS = env.bool("OPENAI_AGENTS_PARALLEL_TOOL_CALLS", True)
+OPENAI_AGENTS_MAX_TURNS = env.int("OPENAI_AGENTS_MAX_TURNS", 10)
