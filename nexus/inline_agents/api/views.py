@@ -139,6 +139,7 @@ class OfficialAgentsV1(APIView):
                 required=False,
                 type=OpenApiTypes.STR,
             ),
+            OpenApiParameter(name="name", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(name="type", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(name="group", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(name="category", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
@@ -153,13 +154,15 @@ class OfficialAgentsV1(APIView):
     )
     def get(self, request, *args, **kwargs):
         project_uuid = request.query_params.get("project_uuid")
+        name_filter = request.query_params.get("name")
         type_filter = request.query_params.get("type")
         group_filter = request.query_params.get("group")
         category_filter = request.query_params.get("category")
         system_filter = request.query_params.get("system")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM, slug__in=["product_concierge"])
-
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+        if name_filter:
+            agents = agents.filter(name__icontains=name_filter)
         if type_filter:
             agents = agents.filter(agent_type__slug=type_filter)
         if group_filter:
@@ -349,9 +352,7 @@ class OfficialAgentDetailV1(APIView):
         system = request.query_params.get("system")
 
         try:
-            agent = Agent.objects.get(
-                uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM, slug__in=["product_concierge"]
-            )
+            agent = Agent.objects.get(uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM)
         except Agent.DoesNotExist:
             return Response({"error": "Agent not found"}, status=404)
 
