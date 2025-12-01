@@ -128,6 +128,7 @@ class AgentAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "name",
+                    "slug",
                     "project",
                     "is_official",
                     "agent_type",
