@@ -4,6 +4,7 @@ from typing import Dict, Optional, Tuple
 
 import boto3
 import botocore
+import openai
 import sentry_sdk
 from django.conf import settings
 
@@ -16,7 +17,7 @@ from nexus.usecases.inline_agents.typing import TypingUsecase
 from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 from router.dispatcher import dispatch
 from router.entities import message_factory
-from router.tasks.exceptions import EmptyTextException
+from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
 from router.tasks.redis_task_manager import RedisTaskManager
 
 from .actions_client import get_action_clients
@@ -197,7 +198,7 @@ def _manage_pending_task(task_manager: RedisTaskManager, message_obj, current_ta
     Handles revoking old tasks and concatenating messages for rapid inputs.
     """
     pending_task_id = task_manager.get_pending_task_id(message_obj.project_uuid, message_obj.contact_urn)
-    if pending_task_id:
+    if pending_task_id and pending_task_id != current_task_id:
         celery_app.control.revoke(pending_task_id, terminate=True)
 
     final_message_text = task_manager.handle_pending_response(
@@ -346,6 +347,9 @@ def start_inline_agents(
             inline_agent_configuration=inline_agent_configuration,
         )
 
+        if response is None or response == "":
+            raise EmptyFinalResponseException("Final response is empty")
+
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
 
         if preview:
@@ -382,6 +386,16 @@ def start_inline_agents(
             full_chunks=[],
             backend=agents_backend,
         )
-
+    
+    except (openai.APIError, EmptyFinalResponseException) as e:
+        if self.request.retries < 2:
+            raise self.retry(
+                exc=e,
+                countdown=2 ** self.request.retries,
+                max_retries=2,
+                priority=0,
+                jitter=False
+            )
+        _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
     except Exception as e:
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
