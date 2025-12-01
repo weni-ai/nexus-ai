@@ -657,51 +657,8 @@ BEDROCK_CONVERSE_MAX_LENGHT = env.int("BEDROCK_CONVERSE_MAX_LENGHT", 4096)
 FORMATTER_AGENT_MODEL = env.str("FORMATTER_AGENT_MODEL", "gpt-4.1-mini")
 FLOW_USER_EMAIL = env.str("FLOW_USER_EMAIL", "")
 
-"""
-Calling Settings TODO: Move to the appropriate settings.
-"""
-
-WA_PHONE_NUMBER = env.str("WA_PHONE_NUMBER")
-WA_ACCESS_TOKEN = env.str("WA_ACCESS_TOKEN")
-
-GATEWAY_VERIFICATION_TOKEN = env.str("GATEWAY_VERIFICATION_TOKEN")
-GATEWAY_URL = env.str("GATEWAY_URL")
-
-TURN_SERVER_URL = env.str("TURN_SERVER_URL")
-TURN_SERVER_USERNAME = env.str("TURN_SERVER_USERNAME")
-TURN_SERVER_PASSWORD = env.str("TURN_SERVER_PASSWORD")
-# Logging configuration
-LOG_LEVEL = env.str("LOG_LEVEL", "INFO")
-
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "standard": {
-            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
-        },
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "standard",
-        },
-    },
-    "root": {
-        "handlers": ["console"],
-        "level": LOG_LEVEL,
-    },
-    "loggers": {
-        "django": {
-            "handlers": ["console"],
-            "level": LOG_LEVEL,
-            "propagate": False,
-        },
-    },
-}
-
-# gRPC Streaming Configuration
-GRPC_ENABLED = env.bool("GRPC_ENABLED", default=False)
-GRPC_SERVICE_HOST = env.str("GRPC_SERVICE_HOST", default="localhost")
-GRPC_SERVICE_PORT = env.int("GRPC_SERVICE_PORT", default=50051)
-GRPC_USE_TLS = env.bool("GRPC_USE_TLS", default=False)
+# OpenAI agents runtime configuration
+OPENAI_AGENTS_REASONING_EFFORT = env.str("OPENAI_AGENTS_REASONING_EFFORT", None)
+OPENAI_AGENTS_REASONING_SUMMARY = env.str("OPENAI_AGENTS_REASONING_SUMMARY", "auto")
+OPENAI_AGENTS_PARALLEL_TOOL_CALLS = env.bool("OPENAI_AGENTS_PARALLEL_TOOL_CALLS", True)
+OPENAI_AGENTS_MAX_TURNS = env.int("OPENAI_AGENTS_MAX_TURNS", 10)
