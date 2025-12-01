@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ("projects", "0021_project_formatter_instructions_and_more"),
+        ("projects", "0022_alter_project_agents_backend"),
     ]
 
     operations = [
