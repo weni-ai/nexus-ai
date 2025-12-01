@@ -23,3 +23,8 @@ class CallsModel(BaseModel):
 
 
 __all__ = ("CallsModel",)
+
+
+class BusinessInitiatedCallsModel(BaseModel):
+    project_uuid: str
+    contact_urn: str

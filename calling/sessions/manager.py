@@ -12,10 +12,17 @@ class SessionManager:
         cls._active_sessions[session.call_id] = session
 
     @classmethod
-    def setup_session(cls, call_id: str, sdp: str, phone_number_id: str, project_uuid: str) -> Session:
+    def setup_session(cls, call_id: str, phone_number_id: str, project_uuid: str, contact_urn: str, offer_sdp: str = None,) -> Session:
         wpp_connection = RTCPeerConnection()
-        session = Session(call_id, sdp, phone_number_id, wpp_connection, project_uuid)
+        session = Session(phone_number_id, wpp_connection, project_uuid, contact_urn, call_id=call_id, offer_sdp=offer_sdp)
         cls._add_active_session(session)
+
+        return session
+
+    @classmethod
+    def setup_business_initiated_session(cls, phone_number_id: str, project_uuid: str, contact_urn: str) -> Session:
+        wpp_connection = RTCPeerConnection()
+        session = Session(phone_number_id, wpp_connection, project_uuid, contact_urn)
 
         return session
 

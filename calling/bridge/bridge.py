@@ -10,7 +10,9 @@ from aiortc.contrib.media import MediaRelay
 from router.tasks.invoke import invoke_audio_agents
 from calling.clients.openai import get_realtime_answer
 from ..sessions.session import Session, Status
+from calling.sessions import Session, Status
 from calling.agent import response_instructions, get_agent_setup
+
 
 logger = logging.getLogger(__name__)
 
@@ -129,8 +131,8 @@ class RTCBridge:
                 if message_type == "error":
                     print(f"[on_message] Error message: {data}")
                     
-                # if message_type == "input_audio_buffer.speech_started":
-                #     await EventRegistry.notify("contact.speech.started", session)
+                if message_type == "input_audio_buffer.speech_started":
+                    await EventRegistry.notify("contact.speech.started", session)
 
                 if message_type == "input_audio_buffer.committed":
                     # stop audio
@@ -268,8 +270,24 @@ class RTCBridge:
 
         answer = await wpp_connection.createAnswer()
         await wpp_connection.setLocalDescription(answer)
-        
+
         session.set_answer_sdp(answer.sdp)
         await EventRegistry.notify("whatspp.answer.created", session)
 
         return answer.sdp
+
+    @classmethod
+    async def handle_business_initiated(cls, session: Session):
+        wpp_connection = session.wpp_connection
+
+        @wpp_connection.on("track")
+        def on_track(track):
+            if track.kind == "audio":
+                asyncio.create_task(cls._connect_openai_and_bridge(session, track))
+
+        await wpp_connection.setRemoteDescription(RTCSessionDescription(session.answer_sdp, "answer"))
+
+        for transceiver in wpp_connection.getTransceivers():
+            if transceiver.kind == "audio":
+                transceiver.direction = "sendrecv"
+                session.wpp_audio_sender = transceiver.sender

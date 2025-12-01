@@ -80,6 +80,9 @@ class Session:
     wa_phone_number_id: str
     wpp_connection: "RTCPeerConnection"
     project_uuid: str
+    contact_urn: str
+    call_id: str = None
+    offer_sdp: str = None
     openai_connection: "RTCPeerConnection" = None
     answer_sdp: str = None
     agents: Optional[dict] = None
