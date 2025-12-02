@@ -389,6 +389,7 @@ def start_inline_agents(
     
     except (openai.APIError, EmptyFinalResponseException) as e:
         if self.request.retries < 2:
+            task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
             raise self.retry(
                 exc=e,
                 countdown=2 ** self.request.retries,
