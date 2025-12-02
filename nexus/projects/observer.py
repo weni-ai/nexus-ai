@@ -1,5 +1,6 @@
 from django.forms.models import model_to_dict
 
+from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver
 from nexus.event_domain.recent_activity.create import create_recent_activity
 from nexus.event_domain.recent_activity.recent_activities_dto import CreateRecentActivityDTO
@@ -21,6 +22,7 @@ def _update_comparison_fields(
     return action_details
 
 
+@observer("project_activity")
 class ProjectObserver(EventObserver):
     def perform(self, project, user, action_type: str, **kwargs):
         integrated_intelligence = IntegratedIntelligence.objects.filter(project__uuid=project.uuid).first()

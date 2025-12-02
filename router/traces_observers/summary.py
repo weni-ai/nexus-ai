@@ -5,6 +5,7 @@ import time
 from django.conf import settings
 from openai import OpenAI
 
+from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver
 
 
@@ -109,6 +110,7 @@ def _update_trace_summary(language: str, trace_data: dict):
     return summary
 
 
+@observer("inline_trace_observers")
 class SummaryTracesObserver(EventObserver):
     """
     This observer is responsible for:
@@ -161,6 +163,7 @@ class SummaryTracesObserver(EventObserver):
             return "Processing your request now"
 
 
+@observer("inline_trace_observers_async", manager="async")
 class AsyncSummaryTracesObserver(EventObserver):
     """
     Async version of SummaryTracesObserver for async contexts.
