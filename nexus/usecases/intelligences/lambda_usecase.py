@@ -137,7 +137,8 @@ class LambdaUseCase:
         if not topic_uuid_raw:
             return False
         topic_uuid_str = str(topic_uuid_raw)
-        return topic_uuid_str not in {"", "None"}
+        invalid_values = {"", "None"}
+        return topic_uuid_str not in invalid_values
 
     def lambda_conversation_topics(
         self,
@@ -171,33 +172,33 @@ class LambdaUseCase:
             )
             conversation_topics = json.loads(conversation_topics.get("Payload").read())
             conversation_topics = conversation_topics.get("body")
-            topic_uuid = conversation_topics.get("topic_uuid")
+            topic_uuid_raw = conversation_topics.get("topic_uuid")
             topic_name = conversation_topics.get("topic_name")
 
-            if self._is_valid_topic_uuid(topic_uuid) and topic_name:
+            if self._is_valid_topic_uuid(topic_uuid_raw) and topic_name:
                 event_data = {
                     "event_name": "weni_nexus_data",
                     "key": "topics",
                     "value_type": "string",
                     "value": topic_name,
                     "metadata": {
-                        "topic_uuid": str(topic_uuid),
+                        "topic_uuid": str(topic_uuid_raw),
                         "subtopic_uuid": str(conversation_topics.get("subtopic_uuid") or ""),
                         "subtopic": conversation_topics.get("subtopic_name") or "",
                         "human_support": has_chats_room,
                     },
                 }
-            elif self._is_valid_topic_uuid(topic_uuid) and not topic_name:
+            elif self._is_valid_topic_uuid(topic_uuid_raw) and not topic_name:
                 logger.warning(
                     f"Lambda returned topic_uuid but topic_name is None/empty. "
-                    f"Project: {project_uuid}, Contact: {contact_urn}, Topic UUID: {topic_uuid}"
+                    f"Project: {project_uuid}, Contact: {contact_urn}, Topic UUID: {topic_uuid_raw}"
                 )
                 sentry_sdk.set_context(
                     "lambda_topics_missing_name",
                     {
                         "project_uuid": project_uuid,
                         "contact_urn": contact_urn,
-                        "topic_uuid": topic_uuid,
+                        "topic_uuid": topic_uuid_raw,
                         "conversation_topics_response": conversation_topics,
                     },
                 )
@@ -220,6 +221,254 @@ class LambdaUseCase:
                 # Invalid UUID format - return None instead of raising
                 return None
         return None
+
+    def _get_project_and_validate_brain_on(self, project_uuid: str, contact_urn: str):
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            logger.error(f"[Billing] Project not found - project_uuid: {project_uuid}, contact_urn: {contact_urn}")
+            raise
+        if not project.brain_on:
+            logger.info(
+                f"[Billing] Skipping conversation processing - brain_on is False - "
+                f"project_uuid: {project_uuid}, contact_urn: {contact_urn}"
+            )
+            return None
+        return project
+
+    def _get_messages_for_conversation(
+        self,
+        message_service: MessageService,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str,
+        payload: dict,
+    ):
+        messages = message_service.get_messages_for_conversation(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            start_date=payload.get("start_date"),
+            end_date=payload.get("end_date"),
+        )
+        if not messages:
+            logger.warning(
+                "[create_lambda_conversation] No messages found",
+                extra={
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "task_name": "create_lambda_conversation",
+                },
+            )
+            raise ValueError("No unclassified messages found for conversation period")
+        return messages
+
+    def _classify_conversation(
+        self,
+        formated_messages: dict,
+        payload: dict,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str,
+    ):
+        resolution = self.lambda_conversation_resolution(
+            messages=formated_messages,
+            has_chats_room=payload.get("has_chats_room"),
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+        )
+        contact_name = payload.get("name")
+        resolution_choice_value = ResolutionEntities.convert_resolution_string_to_int(resolution)
+        topic = self.lambda_conversation_topics(
+            messages=formated_messages,
+            has_chats_room=payload.get("has_chats_room"),
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+        )
+        return contact_name, resolution_choice_value, topic
+
+    def _send_billing_resolution(
+        self,
+        resolution_choice_value: int,
+        project_uuid: str,
+        contact_urn: str,
+        external_id: str,
+        task_id: str,
+        correlation_id: str,
+    ):
+        resolution_dto = ResolutionDTO(
+            resolution=resolution_choice_value,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            external_id=external_id,
+        )
+        logger.info(
+            "[create_lambda_conversation] Sending resolution to billing",
+            extra={
+                "task_id": task_id,
+                "correlation_id": correlation_id,
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "external_id": external_id,
+                "resolution": resolution_choice_value,
+                "resolution_name": ResolutionEntities.resolution_mapping(resolution_choice_value)[1],
+                "task_name": "create_lambda_conversation",
+            },
+        )
+        resolution_message(resolution_dto)
+
+    def _determine_error_and_log(
+        self,
+        e: Exception,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str,
+    ):
+        error_message = str(e)
+        if isinstance(e, ValueError) and "No unclassified messages found" in error_message:
+            error_type = "no_messages_found"
+            logger.warning(
+                f"[Billing] No messages found for conversation - "
+                f"project_uuid: {project_uuid}, contact_urn: {contact_urn}, "
+                f"channel_uuid: {channel_uuid}, error: {error_message}"
+            )
+        else:
+            error_type = "unknown"
+            logger.error(
+                f"[Billing] Error processing conversation - "
+                f"project_uuid: {project_uuid}, contact_urn: {contact_urn}, "
+                f"channel_uuid: {channel_uuid}, error_type: {type(e).__name__}, "
+                f"error: {error_message}"
+            )
+        return error_type, error_message
+
+    def _send_unclassified_to_billing(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        has_chats_room: bool,
+        error_type: str,
+        error_message: str,
+    ):
+        event_data = {
+            "event_name": "weni_nexus_data",
+            "key": "conversation_classification",
+            "value_type": "string",
+            "value": "Unclassified",
+            "metadata": {
+                "human_support": has_chats_room,
+                "error_type": error_type,
+                "error_message": error_message[:500] if error_message else None,
+            },
+        }
+        self.send_datalake_event(event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn)
+        logger.info(
+            "[Billing] Sent unclassified to billing due to error",
+            extra={
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "error_type": error_type,
+            },
+        )
+
+    def _update_conversation_unclassified(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str,
+        external_id: str,
+        payload: dict,
+    ):
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            logger.warning(
+                f"[Billing] Project not found when updating conversation - "
+                f"project_uuid: {project_uuid}, contact_urn: {contact_urn}"
+            )
+            return
+
+        conversation_queryset = Conversation.objects.filter(
+            project=project,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            resolution=ResolutionEntities.IN_PROGRESS,
+        )
+        if conversation_queryset.exists():
+            update_data = {
+                "resolution": ResolutionEntities.UNCLASSIFIED,
+                "start_date": payload.get("start_date"),
+                "end_date": payload.get("end_date"),
+                "has_chats_room": payload.get("has_chats_room", False),
+                "external_id": external_id,
+            }
+            contact_name = payload.get("name")
+            if contact_name:
+                update_data["contact_name"] = contact_name
+            conversation_queryset.update(**update_data)
+            resolution_dto = ResolutionDTO(
+                resolution=ResolutionEntities.UNCLASSIFIED,
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                external_id=external_id,
+            )
+            resolution_message(resolution_dto)
+            logger.info(
+                f"[Billing] Updated conversation to Unclassified in database - "
+                f"project_uuid: {project_uuid}, contact_urn: {contact_urn}"
+            )
+
+    def _get_agent_uuid(self, project_uuid: str):
+        try:
+            from nexus.inline_agents.models import IntegratedAgent
+
+            integrated_agent = (
+                IntegratedAgent.objects.filter(project__uuid=project_uuid).select_related("agent").first()
+            )
+            if integrated_agent:
+                return str(integrated_agent.agent.uuid)
+        except Exception:
+            return None
+        return None
+
+    def _build_sentry_context(
+        self,
+        payload: dict,
+        task_id: str,
+        correlation_id: str,
+        error_type: str,
+        error_message: str,
+        agent_uuid: str | None,
+    ):
+        context = {
+            "payload": payload,
+            "task_id": task_id,
+            "correlation_id": correlation_id,
+            "error_type": error_type,
+            "error_message": error_message,
+        }
+        if agent_uuid:
+            context["agent_uuid"] = agent_uuid
+        return context
+
+    def _apply_sentry_tags(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        error_type: str,
+        task_id: str,
+        correlation_id: str,
+        agent_uuid: str | None,
+    ):
+        sentry_sdk.set_tag("project_uuid", project_uuid)
+        sentry_sdk.set_tag("contact_urn", contact_urn)
+        sentry_sdk.set_tag("error_type", error_type)
+        sentry_sdk.set_tag("task_id", task_id)
+        sentry_sdk.set_tag("correlation_id", correlation_id)
+        if agent_uuid:
+            sentry_sdk.set_tag("agent_uuid", agent_uuid)
 
     def _get_message_service(self):
         if self.task_manager is None:
@@ -396,42 +645,25 @@ def create_lambda_conversation(
     )
 
     try:
-        project = Project.objects.get(uuid=payload.get("project_uuid"))
-
-        if not project.brain_on:
-            return
+        project_uuid = payload.get("project_uuid")
+        contact_urn = payload.get("contact_urn")
+        channel_uuid = payload.get("channel_uuid")
 
         lambda_usecase = LambdaUseCase()
         message_service = lambda_usecase._get_message_service()
 
-        # Use new conversation-based message retrieval
-        messages = message_service.get_messages_for_conversation(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            channel_uuid=payload.get("channel_uuid"),
-            # If any errors happen to an older conversation, we will get all messages for correct conversation
-            start_date=payload.get("start_date"),
-            end_date=payload.get("end_date"),
+        project = lambda_usecase._get_project_and_validate_brain_on(project_uuid, contact_urn)
+        if project is None:
+            return
+
+        messages = lambda_usecase._get_messages_for_conversation(
+            message_service, project_uuid, contact_urn, channel_uuid, payload
         )
 
-        if not messages:
-            logger.warning(
-                "[create_lambda_conversation] No messages found",
-                extra={
-                    "task_id": task_id,
-                    "correlation_id": correlation_id,
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "task_name": "create_lambda_conversation",
-                },
-            )
-            raise ValueError("No unclassified messages found for conversation period")
-
-        project = Project.objects.get(uuid=project_uuid)
         conversation_queryset = Conversation.objects.filter(
             project=project,
             contact_urn=contact_urn,
-            channel_uuid=payload.get("channel_uuid"),
+            channel_uuid=channel_uuid,
             resolution=ResolutionEntities.IN_PROGRESS,
         )
 
@@ -451,63 +683,8 @@ def create_lambda_conversation(
 
         channel_uuid = payload.get("channel_uuid")
 
-        resolution = lambda_usecase.lambda_conversation_resolution(
-            messages=formated_messages,
-            has_chats_room=payload.get("has_chats_room"),
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            channel_uuid=channel_uuid,
-        )
-
-        topic = lambda_usecase.lambda_conversation_topics(
-            messages=formated_messages,
-            has_chats_room=payload.get("has_chats_room"),
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            channel_uuid=channel_uuid,
-        )
-
-        contact_name = payload.get("name")
-        resolution_choice_value = ResolutionEntities.convert_resolution_string_to_int(resolution)
-
-        resolution_dto = ResolutionDTO(
-            resolution=resolution_choice_value,
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            external_id=external_id,
-        )
-
-        # Log when sending unclassified conversations to billing
-        if resolution_choice_value == ResolutionEntities.UNCLASSIFIED:
-            logging.info(
-                f"[Billing] Sending unclassified conversation to billing - "
-                f"project_uuid: {project_uuid}, "
-                f"contact_urn: {contact_urn}, "
-                f"external_id: {external_id}, "
-                f"resolution: {resolution_choice_value}"
-            )
-        logger.info(
-            "[create_lambda_conversation] Sending resolution to billing",
-            extra={
-                "task_id": task_id,
-                "correlation_id": correlation_id,
-                "project_uuid": project_uuid,
-                "contact_urn": contact_urn,
-                "external_id": external_id,
-                "resolution": resolution_choice_value,
-                "resolution_name": ResolutionEntities.resolution_mapping(resolution_choice_value)[1],
-                "task_name": "create_lambda_conversation",
-            },
-        )
-
-        resolution_message(resolution_dto)
-
-        # Get topic after billing message is sent
-        topic = lambda_usecase.lambda_conversation_topics(
-            messages=formated_messages,
-            has_chats_room=payload.get("has_chats_room"),
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
+        contact_name, resolution_choice_value, topic = lambda_usecase._classify_conversation(
+            formated_messages, payload, project_uuid, contact_urn, channel_uuid
         )
 
         update_data = {
@@ -524,13 +701,31 @@ def create_lambda_conversation(
 
         conversation_queryset.update(**update_data)
 
-        # Delete messages after processing (instead of updating resolution)
         message_service.clear_message_cache(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
-            channel_uuid=payload.get("channel_uuid"),
+            channel_uuid=channel_uuid,
         )
+        update_data = {
+            "start_date": payload.get("start_date"),
+            "end_date": payload.get("end_date"),
+            "has_chats_room": payload.get("has_chats_room"),
+            "external_id": external_id,
+            "resolution": resolution_choice_value,
+            "topic": topic,
+        }
+        if contact_name:
+            update_data["contact_name"] = contact_name
+        conversation_queryset.update(**update_data)
 
+        lambda_usecase._send_billing_resolution(
+            resolution_choice_value,
+            project_uuid,
+            contact_urn,
+            external_id,
+            task_id,
+            correlation_id,
+        )
         logger.info(
             "[create_lambda_conversation] Task completed successfully",
             extra={
@@ -545,6 +740,46 @@ def create_lambda_conversation(
         )
 
     except Exception as e:
+        project_uuid = payload.get("project_uuid")
+        contact_urn = payload.get("contact_urn")
+        channel_uuid = payload.get("channel_uuid")
+        external_id = payload.get("external_id")
+        has_chats_room = payload.get("has_chats_room", False)
+
+        error_type, error_message = lambda_usecase._determine_error_and_log(e, project_uuid, contact_urn, channel_uuid)
+
+        # Send unclassified to billing in case of error
+        try:
+            lambda_usecase = LambdaUseCase()
+            lambda_usecase._send_unclassified_to_billing(
+                project_uuid, contact_urn, has_chats_room, error_type, error_message
+            )
+
+            # Update conversation in database with Unclassified status if it exists
+            lambda_usecase._update_conversation_unclassified(
+                project_uuid, contact_urn, channel_uuid, external_id, payload
+            )
+
+        except Exception as billing_error:
+            logger.error(
+                f"[Billing] Error sending unclassified to billing - "
+                f"project_uuid: {project_uuid}, contact_urn: {contact_urn}, "
+                f"error: {str(billing_error)}"
+            )
+
+        # Enrich Sentry context and log failure details, including agent_uuid when available
+        agent_uuid = None
+        try:
+            from nexus.inline_agents.models import IntegratedAgent
+        except Exception:
+            IntegratedAgent = None
+        if IntegratedAgent and project_uuid:
+            integrated_agent = (
+                IntegratedAgent.objects.filter(project__uuid=project_uuid).select_related("agent").first()
+            )
+            if integrated_agent:
+                agent_uuid = str(integrated_agent.agent.uuid)
+
         logger.error(
             "[create_lambda_conversation] Task failed",
             extra={
@@ -560,38 +795,22 @@ def create_lambda_conversation(
             exc_info=True,
         )
 
-        agent_uuid = None
-        try:
-            from nexus.inline_agents.models import IntegratedAgent
-
-            project_uuid = payload.get("project_uuid")
-            if project_uuid:
-                integrated_agent = (
-                    IntegratedAgent.objects.filter(project__uuid=project_uuid).select_related("agent").first()
-                )
-
-                if integrated_agent:
-                    agent_uuid = str(integrated_agent.agent.uuid)
-        except Exception:
-            pass
-
-        sentry_context = {
-            "payload": payload,
-            "task_id": task_id,
-            "correlation_id": correlation_id,
-        }
-
-        if agent_uuid:
-            sentry_context["agent_uuid"] = agent_uuid
-
+        sentry_context = lambda_usecase._build_sentry_context(
+            payload=payload,
+            task_id=task_id,
+            correlation_id=correlation_id,
+            error_type=error_type,
+            error_message=error_message,
+            agent_uuid=agent_uuid,
+        )
         sentry_sdk.set_context("conversation_context", sentry_context)
-        sentry_sdk.set_tag("project_uuid", project_uuid)
-        sentry_sdk.set_tag("contact_urn", contact_urn)
-        sentry_sdk.set_tag("task_id", task_id)
-        sentry_sdk.set_tag("correlation_id", correlation_id)
-        sentry_sdk.set_tag("channel_uuid", payload.get("channel_uuid"))
-
-        if agent_uuid:
-            sentry_sdk.set_tag("agent_uuid", agent_uuid)
-
+        lambda_usecase._apply_sentry_tags(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            error_type=error_type,
+            task_id=task_id,
+            correlation_id=correlation_id,
+            agent_uuid=agent_uuid,
+        )
+        sentry_sdk.set_tag("channel_uuid", channel_uuid)
         sentry_sdk.capture_exception(e)
