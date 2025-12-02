@@ -66,14 +66,20 @@ class LambdaUseCase:
             )
         return conversation_payload
 
-    def send_datalake_event(self, event_data: dict, project_uuid: str, contact_urn: str, channel_uuid: str = None):
+    def send_datalake_event(
+        self, event_data: dict, project_uuid: str, contact_urn: str, channel_uuid: str = None, conversation: object = None
+    ):
         adapter = self._get_data_lake_event_adapter()
         adapter.to_data_lake_custom_event(
-            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
+            event_data=event_data,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            conversation=conversation
         )
 
     def lambda_conversation_resolution(
-        self, messages, has_chats_room: bool, project_uuid: str, contact_urn: str, channel_uuid: str = None
+        self, messages, has_chats_room: bool, project_uuid: str, contact_urn: str, channel_uuid: str = None, conversation: object = None
     ):
         # If has_chats_room is True, skip lambda call and set resolution to "Has Chat Room"
         if has_chats_room:
@@ -88,7 +94,7 @@ class LambdaUseCase:
                 },
             }
             self.send_datalake_event(
-                event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
+                event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, conversation=conversation
             )
             return resolution
 
@@ -128,7 +134,7 @@ class LambdaUseCase:
             },
         }
         self.send_datalake_event(
-            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
+            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, conversation=conversation
         )
 
         return conversation_resolution_response.get("result")
@@ -146,7 +152,7 @@ class LambdaUseCase:
         return topic_uuid_str not in invalid_values
 
     def lambda_conversation_topics(
-        self, messages, has_chats_room: bool, project_uuid: str, contact_urn: str, channel_uuid: str = None
+        self, messages, has_chats_room: bool, project_uuid: str, contact_urn: str, channel_uuid: str = None, conversation: object = None
     ):
         from nexus.intelligences.models import Topics
 
@@ -205,7 +211,7 @@ class LambdaUseCase:
                 sentry_sdk.capture_message("Lambda returned topic_uuid but topic_name is None/empty", level="warning")
 
         self.send_datalake_event(
-            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
+            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, conversation=conversation
         )
 
         topic_uuid = event_data.get("metadata").get("topic_uuid")
@@ -270,6 +276,7 @@ class LambdaUseCase:
         project_uuid: str,
         contact_urn: str,
         channel_uuid: str,
+        conversation: object = None,
     ):
         resolution = self.lambda_conversation_resolution(
             messages=formated_messages,
@@ -277,6 +284,7 @@ class LambdaUseCase:
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
+            conversation=conversation,
         )
         contact_name = payload.get("name")
         resolution_choice_value = ResolutionEntities.convert_resolution_string_to_int(resolution)
@@ -286,6 +294,7 @@ class LambdaUseCase:
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
+            conversation=conversation,
         )
         return contact_name, resolution_choice_value, topic
 
@@ -683,14 +692,17 @@ def create_lambda_conversation(
 
         channel_uuid = payload.get("channel_uuid")
 
+        # Get conversation object to pass to lambda methods for data lake events
+        conversation = conversation_queryset.first()
+
         contact_name, resolution_choice_value, topic = lambda_usecase._classify_conversation(
             formated_messages,
             payload,
             project_uuid,
             contact_urn,
             channel_uuid,
+            conversation,
         )
-
         update_data = {
             "start_date": payload.get("start_date"),
             "end_date": payload.get("end_date"),
