@@ -31,17 +31,17 @@ class DataLakeEventService:
     def __init__(self, send_data_lake_event_task: callable):
         self.send_data_lake_event_task = send_data_lake_event_task
 
-    def _get_conversation_uuid(
+    def _get_conversation(
         self,
         project_uuid: str,
         contact_urn: str,
         channel_uuid: Optional[str] = None,
         conversation: Optional[object] = None
-    ) -> Optional[str]:
-        """Get conversation UUID from Conversation model or provided conversation object."""
+    ) -> Optional[object]:
+        """Get conversation object from Conversation model or provided conversation object."""
         # If conversation object is provided, use it directly
         if conversation:
-            return str(conversation.uuid)
+            return conversation
 
         # Otherwise, query for it (channel_uuid is required for querying)
         if not channel_uuid:
@@ -56,12 +56,10 @@ class DataLakeEventService:
                 channel_uuid=channel_uuid
             ).order_by("-created_at").first()
 
-            if conversation_obj:
-                return str(conversation_obj.uuid)
-            return None
+            return conversation_obj
         except Exception as e:
             logger.warning(
-                f"Error retrieving conversation_uuid: {str(e)}. "
+                f"Error retrieving conversation: {str(e)}. "
                 f"Project: {project_uuid}, Contact: {contact_urn}, Channel: {channel_uuid}"
             )
             # Log to Sentry for debugging
@@ -72,10 +70,28 @@ class DataLakeEventService:
                 "project_uuid": project_uuid,
                 "contact_urn": contact_urn,
                 "channel_uuid": channel_uuid,
-                "method": "_get_conversation_uuid"
+                "method": "_get_conversation"
             })
             sentry_sdk.capture_exception(e)
             return None
+
+    def _get_conversation_uuid(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: Optional[str] = None,
+        conversation: Optional[object] = None
+    ) -> Optional[str]:
+        """Get conversation UUID from Conversation model or provided conversation object."""
+        conversation_obj = self._get_conversation(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            conversation=conversation
+        )
+        if conversation_obj:
+            return str(conversation_obj.uuid)
+        return None
 
     def _enrich_metadata(
         self,
@@ -86,20 +102,35 @@ class DataLakeEventService:
         agent_identifier: Optional[str] = None,
         conversation: Optional[object] = None
     ) -> None:
-        """Enrich event metadata with agent_uuid and conversation_uuid."""
+        """Enrich event metadata with agent_uuid, conversation_uuid, conversation_start_date, and conversation_end_date."""
         event_data.setdefault("metadata", {})
         metadata = event_data["metadata"]
 
-        # Add conversation_uuid if missing
-        if "conversation_uuid" not in metadata:
-            conversation_uuid = self._get_conversation_uuid(
-                project_uuid=project_uuid,
-                contact_urn=contact_urn,
-                channel_uuid=channel_uuid,
-                conversation=conversation
-            )
-            if conversation_uuid:
-                metadata["conversation_uuid"] = conversation_uuid
+        # Get conversation object to extract all conversation fields
+        conversation_obj = self._get_conversation(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            conversation=conversation
+        )
+
+        # Add conversation fields if conversation exists
+        if conversation_obj:
+            # Add conversation_uuid if missing
+            if "conversation_uuid" not in metadata:
+                metadata["conversation_uuid"] = str(conversation_obj.uuid)
+
+            # Add conversation_start_date if missing and start_date exists
+            if "conversation_start_date" not in metadata and conversation_obj.start_date:
+                metadata["conversation_start_date"] = pendulum.instance(
+                    conversation_obj.start_date
+                ).to_iso8601_string()
+
+            # Add conversation_end_date if missing and end_date exists
+            if "conversation_end_date" not in metadata and conversation_obj.end_date:
+                metadata["conversation_end_date"] = pendulum.instance(
+                    conversation_obj.end_date
+                ).to_iso8601_string()
 
         # Add agent_uuid if missing and agent_identifier is provided
         if "agent_uuid" not in metadata and agent_identifier:
@@ -186,7 +217,8 @@ class DataLakeEventService:
                         event_to_send,
                         project_uuid,
                         contact_urn,
-                        channel_uuid
+                        channel_uuid,
+                        conversation=conversation
                     )
 
                 self.send_custom_event(
