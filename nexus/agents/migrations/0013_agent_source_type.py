@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('agents', '0012_merge_20250327_2211'),
+        ("agents", "0012_merge_20250327_2211"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='agent',
-            name='source_type',
-            field=models.CharField(choices=[('VTEX_APP', 'VTEX App'), ('PLATFORM', 'Platform')], default='PLATFORM', max_length=255),
+            model_name="agent",
+            name="source_type",
+            field=models.CharField(
+                choices=[("VTEX_APP", "VTEX App"), ("PLATFORM", "Platform")], default="PLATFORM", max_length=255
+            ),
         ),
     ]

@@ -1,10 +1,10 @@
 from django.urls import path
 
 from .views import (
+    ProjectsByMotorView,
     ResolutionRateAverageView,
     ResolutionRateIndividualView,
     UnresolvedRateView,
-    ProjectsByMotorView,
 )
 
 urlpatterns = [
@@ -33,4 +33,3 @@ urlpatterns = [
         name="projects-by-motor",
     ),
 ]
-

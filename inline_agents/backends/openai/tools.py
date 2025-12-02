@@ -33,7 +33,12 @@ class Supervisor(Agent):
         use_components: bool = False,
     ):
         tools.extend(self.function_tools())
-        if model in settings.MODELS_WITH_REASONING:
+
+        reasoning_effort = settings.OPENAI_AGENTS_REASONING_EFFORT
+        reasoning_summary = settings.OPENAI_AGENTS_REASONING_SUMMARY
+        parallel_tool_calls = settings.OPENAI_AGENTS_PARALLEL_TOOL_CALLS
+
+        if model in settings.MODELS_WITH_REASONING and reasoning_effort:
             super().__init__(
                 name=name,
                 instructions=instructions,
@@ -42,11 +47,9 @@ class Supervisor(Agent):
                 hooks=hooks,
                 model_settings=ModelSettings(
                     max_tokens=max_tokens,
-                    reasoning=Reasoning(
-                        effort="medium",
-                        summary="auto"
-                    ),
-                )
+                    reasoning=Reasoning(effort=reasoning_effort, summary=reasoning_summary),
+                    parallel_tool_calls=parallel_tool_calls,
+                ),
             )
             return
 
@@ -59,6 +62,7 @@ class Supervisor(Agent):
                 hooks=hooks,
                 model_settings=ModelSettings(
                     max_tokens=max_tokens,
+                    parallel_tool_calls=parallel_tool_calls,
                 ),
             )
             return
@@ -71,6 +75,7 @@ class Supervisor(Agent):
             hooks=hooks,
             model_settings=ModelSettings(
                 max_tokens=max_tokens,
+                parallel_tool_calls=parallel_tool_calls,
             ),
         )
 
@@ -90,23 +95,18 @@ class Supervisor(Agent):
 
         retrieve_params = {
             "knowledgeBaseId": settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID,
-            "retrievalQuery": {"text": question}
+            "retrievalQuery": {"text": question},
         }
 
         combined_filter = {
             "andAll": [
-                {
-                    "equals": {
-                        "key": "contentBaseUuid",
-                        "value": content_base_uuid
-                    }
-                },
+                {"equals": {"key": "contentBaseUuid", "value": content_base_uuid}},
                 {
                     "equals": {
                         "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": get_datasource_id(wrapper.context.project.get("uuid"))
+                        "value": get_datasource_id(wrapper.context.project.get("uuid")),
                     }
-                }
+                },
             ]
         }
 
