@@ -75,8 +75,13 @@ urlpatterns = [
     ),
     path(
         "<project_uuid>/topics/<topic_uuid>/subtopics/",
-        SubTopicsViewSet.as_view({"get": "list", "post": "create", "put": "update", "delete": "destroy"}),
+        SubTopicsViewSet.as_view({"get": "list", "post": "create"}),
         name="subtopics",
+    ),
+    path(
+        "<project_uuid>/topics/<topic_uuid>/subtopics/<uuid>/",
+        SubTopicsViewSet.as_view({"get": "retrieve", "put": "update", "delete": "destroy"}),
+        name="subtopic-detail",
     ),
     path(
         "v1/intelligences/content_bases/<project_uuid>/",
