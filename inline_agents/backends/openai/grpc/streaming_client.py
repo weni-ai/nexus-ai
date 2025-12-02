@@ -2,11 +2,11 @@
 gRPC client for streaming messages to external services.
 """
 
-import grpc
 import logging
 from datetime import datetime
-from typing import Iterator, Optional, List, Dict, Any
+from typing import Any, Dict, Iterator, List, Optional
 
+import grpc
 from django.conf import settings
 
 from inline_agents.backends.openai.grpc.generated import (
@@ -33,11 +33,11 @@ class MessageStreamingClient:
 
     def __init__(
         self,
-        host: str = 'localhost',
+        host: str = "localhost",
         port: int = 50051,
         use_secure_channel: bool = False,
         credentials: Optional[grpc.ChannelCredentials] = None,
-        max_message_length: int = 100 * 1024 * 1024
+        max_message_length: int = 100 * 1024 * 1024,
     ):
         """
         Initialize the streaming client.
@@ -51,14 +51,14 @@ class MessageStreamingClient:
         """
         self.host = host
         self.port = port
-        self.target = f'{host}:{port}'
+        self.target = f"{host}:{port}"
 
         options = [
-            ('grpc.max_send_message_length', max_message_length),
-            ('grpc.max_receive_message_length', max_message_length),
-            ('grpc.keepalive_time_ms', 30000),
-            ('grpc.keepalive_timeout_ms', 10000),
-            ('grpc.keepalive_permit_without_calls', True),
+            ("grpc.max_send_message_length", max_message_length),
+            ("grpc.max_receive_message_length", max_message_length),
+            ("grpc.keepalive_time_ms", 30000),
+            ("grpc.keepalive_timeout_ms", 10000),
+            ("grpc.keepalive_permit_without_calls", True),
         ]
 
         if use_secure_channel:
@@ -86,7 +86,7 @@ class MessageStreamingClient:
         channel_uuid: str,
         contact_urn: str,
         project_uuid: Optional[str] = None,
-        config: Optional[Dict[str, str]] = None
+        config: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """
         Send initial setup message (unary RPC).
@@ -100,24 +100,24 @@ class MessageStreamingClient:
             channel_uuid=channel_uuid,
             contact_urn=contact_urn,
             project_uuid=project_uuid or "",
-            config=config or {}
+            config=config or {},
         )
 
         try:
             response = self.stub.Setup(request, timeout=30)
             return {
-                'success': response.success,
-                'session_id': response.session_id,
-                'message': response.message,
-                'error_message': response.error_message if not response.success else None
+                "success": response.success,
+                "session_id": response.session_id,
+                "message": response.message,
+                "error_message": response.error_message if not response.success else None,
             }
         except grpc.RpcError as e:
             logger.error(f"Setup error: {e.code()} - {e.details()}")
             return {
-                'success': False,
-                'session_id': None,
-                'message': f"gRPC error: {e.code().name}",
-                'error_message': e.details()
+                "success": False,
+                "session_id": None,
+                "message": f"gRPC error: {e.code().name}",
+                "error_message": e.details(),
             }
 
     def send_delta_message(
@@ -128,7 +128,7 @@ class MessageStreamingClient:
         contact_urn: str,
         project_uuid: Optional[str] = None,
         metadata: Optional[Dict[str, str]] = None,
-        timeout: int = 30
+        timeout: int = 30,
     ) -> Dict[str, Any]:
         """
         Send a single delta message (unary RPC).
@@ -169,27 +169,27 @@ class MessageStreamingClient:
             contact_urn=contact_urn,
             project_uuid=project_uuid or "",
             metadata=metadata or {},
-            timestamp=datetime.now().isoformat()
+            timestamp=datetime.now().isoformat(),
         )
 
         try:
             response = self.stub.SendMessage(message, timeout=timeout)
             return {
-                'status': response.status,
-                'msg_id': response.msg_id,
-                'message': response.message,
-                'sequence': response.sequence,
-                'is_final': response.is_final,
-                'data': dict(response.data) if response.data else {}
+                "status": response.status,
+                "msg_id": response.msg_id,
+                "message": response.message,
+                "sequence": response.sequence,
+                "is_final": response.is_final,
+                "data": dict(response.data) if response.data else {},
             }
         except grpc.RpcError as e:
             logger.error(f"Delta message error: {e.code()} - {e.details()}")
             return {
-                'status': 'error',
-                'msg_id': msg_id,
-                'message': f"gRPC error: {e.code().name}",
-                'error_code': e.code().name,
-                'error_message': e.details()
+                "status": "error",
+                "msg_id": msg_id,
+                "message": f"gRPC error: {e.code().name}",
+                "error_code": e.code().name,
+                "error_message": e.details(),
             }
 
     def send_completed_message(
@@ -200,7 +200,7 @@ class MessageStreamingClient:
         contact_urn: str,
         project_uuid: Optional[str] = None,
         metadata: Optional[Dict[str, str]] = None,
-        timeout: int = 30
+        timeout: int = 30,
     ) -> Dict[str, Any]:
         """
         Send a completed message (unary RPC).
@@ -247,27 +247,27 @@ class MessageStreamingClient:
             contact_urn=contact_urn,
             project_uuid=project_uuid or "",
             metadata=metadata or {},
-            timestamp=datetime.now().isoformat()
+            timestamp=datetime.now().isoformat(),
         )
 
         try:
             response = self.stub.SendMessage(message, timeout=timeout)
             return {
-                'status': response.status,
-                'msg_id': response.msg_id,
-                'message': response.message,
-                'sequence': response.sequence,
-                'is_final': response.is_final,
-                'data': dict(response.data) if response.data else {}
+                "status": response.status,
+                "msg_id": response.msg_id,
+                "message": response.message,
+                "sequence": response.sequence,
+                "is_final": response.is_final,
+                "data": dict(response.data) if response.data else {},
             }
         except grpc.RpcError as e:
             logger.error(f"Completed message error: {e.code()} - {e.details()}")
             return {
-                'status': 'error',
-                'msg_id': msg_id,
-                'message': f"gRPC error: {e.code().name}",
-                'error_code': e.code().name,
-                'error_message': e.details()
+                "status": "error",
+                "msg_id": msg_id,
+                "message": f"gRPC error: {e.code().name}",
+                "error_code": e.code().name,
+                "error_message": e.details(),
             }
 
     def stream_messages_with_setup(
@@ -277,7 +277,7 @@ class MessageStreamingClient:
         contact_urn: str,
         messages: Optional[List[str]] = None,
         project_uuid: Optional[str] = None,
-        metadata: Optional[Dict[str, str]] = None
+        metadata: Optional[Dict[str, str]] = None,
     ) -> Iterator[Dict[str, Any]]:
         """
         Stream messages with automatic setup (bidirectional streaming).
@@ -319,7 +319,7 @@ class MessageStreamingClient:
                 contact_urn=contact_urn,
                 project_uuid=project_uuid or "",
                 metadata=metadata or {},
-                timestamp=datetime.now().isoformat()
+                timestamp=datetime.now().isoformat(),
             )
             yield setup_msg
 
@@ -334,7 +334,7 @@ class MessageStreamingClient:
                         contact_urn=contact_urn,
                         project_uuid=project_uuid or "",
                         metadata=metadata or {},
-                        timestamp=datetime.now().isoformat()
+                        timestamp=datetime.now().isoformat(),
                     )
                     yield content_msg
 
@@ -343,14 +343,14 @@ class MessageStreamingClient:
 
             for response in response_iterator:
                 result = {
-                    'status': response.status,
-                    'msg_id': response.msg_id,
-                    'message': response.message,
-                    'sequence': response.sequence,
-                    'is_final': response.is_final,
-                    'error_code': response.error_code if response.error_code else None,
-                    'error_message': response.error_message if response.error_message else None,
-                    'data': dict(response.data) if response.data else {}
+                    "status": response.status,
+                    "msg_id": response.msg_id,
+                    "message": response.message,
+                    "sequence": response.sequence,
+                    "is_final": response.is_final,
+                    "error_code": response.error_code if response.error_code else None,
+                    "error_message": response.error_message if response.error_message else None,
+                    "data": dict(response.data) if response.data else {},
                 }
                 yield result
 
@@ -360,14 +360,14 @@ class MessageStreamingClient:
         except grpc.RpcError as e:
             logger.error(f"Streaming error: {e.code()} - {e.details()}")
             yield {
-                'status': 'error',
-                'msg_id': msg_id,
-                'message': f"gRPC error: {e.code().name}",
-                'sequence': -1,
-                'is_final': True,
-                'error_code': e.code().name,
-                'error_message': e.details(),
-                'data': {}
+                "status": "error",
+                "msg_id": msg_id,
+                "message": f"gRPC error: {e.code().name}",
+                "sequence": -1,
+                "is_final": True,
+                "error_code": e.code().name,
+                "error_message": e.details(),
+                "data": {},
             }
 
     def send_single_message(
@@ -378,7 +378,7 @@ class MessageStreamingClient:
         content: str,
         message_type: str = "content",
         project_uuid: Optional[str] = None,
-        metadata: Optional[Dict[str, str]] = None
+        metadata: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Send a single message (unary RPC)."""
         logger.info(f"Sending single message: {msg_id}")
@@ -391,27 +391,27 @@ class MessageStreamingClient:
             contact_urn=contact_urn,
             project_uuid=project_uuid or "",
             metadata=metadata or {},
-            timestamp=datetime.now().isoformat()
+            timestamp=datetime.now().isoformat(),
         )
 
         try:
             response = self.stub.SendMessage(message, timeout=30)
             return {
-                'status': response.status,
-                'msg_id': response.msg_id,
-                'message': response.message,
-                'sequence': response.sequence,
-                'is_final': response.is_final,
-                'data': dict(response.data) if response.data else {}
+                "status": response.status,
+                "msg_id": response.msg_id,
+                "message": response.message,
+                "sequence": response.sequence,
+                "is_final": response.is_final,
+                "data": dict(response.data) if response.data else {},
             }
         except grpc.RpcError as e:
             logger.error(f"Error: {e.code()} - {e.details()}")
             return {
-                'status': 'error',
-                'msg_id': msg_id,
-                'message': f"gRPC error: {e.code().name}",
-                'error_code': e.code().name,
-                'error_message': e.details()
+                "status": "error",
+                "msg_id": msg_id,
+                "message": f"gRPC error: {e.code().name}",
+                "error_code": e.code().name,
+                "error_message": e.details(),
             }
 
     def close(self):

@@ -12,7 +12,6 @@ from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
 from nexus.inline_agents.team.repository import ORMTeamRepository
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
-from nexus.usecases.guardrails.guardrails_usecase import GuardrailsUsecase
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 from router.dispatcher import dispatch
@@ -97,7 +96,9 @@ def complexity_layer(input_text: str) -> str | None:
             return None
 
 
-def dispatch_preview(response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str) -> str:
+def dispatch_preview(
+    response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str
+) -> str:
     response_msg = dispatch(
         llm_response=response,
         message=message_obj,
@@ -128,7 +129,7 @@ def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_ve
             Payload=json.dumps(payload).encode("utf-8"),
         )
         if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
-            payload = json.loads(response['Payload'].read().decode('utf-8'))
+            payload = json.loads(response["Payload"].read().decode("utf-8"))
             print(f"[DEBUG] Guardrails complexity layer response: {payload}")
             response = payload
             status_code = payload.get("statusCode")
@@ -292,7 +293,9 @@ def start_inline_agents(
             preview=preview,
         )
 
-        project, content_base, inline_agent_configuration = get_project_and_content_base_data(message.get("project_uuid"))
+        project, content_base, inline_agent_configuration = get_project_and_content_base_data(
+            message.get("project_uuid")
+        )
         agents_backend = project.agents_backend
 
         broadcast, _ = get_action_clients(
@@ -386,17 +389,11 @@ def start_inline_agents(
             full_chunks=[],
             backend=agents_backend,
         )
-    
+
     except (openai.APIError, EmptyFinalResponseException) as e:
         if self.request.retries < 2:
             task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
-            raise self.retry(
-                exc=e,
-                countdown=2 ** self.request.retries,
-                max_retries=2,
-                priority=0,
-                jitter=False
-            )
+            raise self.retry(exc=e, countdown=2**self.request.retries, max_retries=2, priority=0, jitter=False)
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
     except Exception as e:
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)

@@ -19,7 +19,8 @@ from nexus.agents.models import (
     Credential,
     Team,
 )
-from nexus.inline_agents.models import Agent as InlineAgent, IntegratedAgent, AgentCredential
+from nexus.inline_agents.models import Agent as InlineAgent
+from nexus.inline_agents.models import AgentCredential, IntegratedAgent
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.models import Project
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
@@ -796,10 +797,7 @@ class DeleteAgentView(APIView):
         try:
             project = Project.objects.get(uuid=project_uuid)
         except Project.DoesNotExist:
-            return Response(
-                {"error": "Project not found"},
-                status=404
-            )
+            return Response({"error": "Project not found"}, status=404)
 
         # Try to find both agent types
         legacy_agent = None
@@ -816,10 +814,7 @@ class DeleteAgentView(APIView):
             pass
 
         if not legacy_agent and not inline_agent:
-            return Response(
-                {"error": "Agent not found"},
-                status=404
-            )
+            return Response({"error": "Agent not found"}, status=404)
 
         if legacy_agent and inline_agent:
             logger.warning(
@@ -846,20 +841,14 @@ class DeleteAgentView(APIView):
         # Check if agent is currently active
         active_agents = ActiveAgent.objects.filter(agent=agent)
         if active_agents.exists():
-            teams = [
-                {
-                    "team_uuid": str(aa.team.uuid),
-                    "project_name": aa.team.project.name
-                }
-                for aa in active_agents
-            ]
+            teams = [{"team_uuid": str(aa.team.uuid), "project_name": aa.team.project.name} for aa in active_agents]
             return Response(
                 {
                     "error": "Cannot delete active agent. Please unassign it first.",
                     "active_teams": teams,
-                    "instructions": "Go to Teams section and unassign this agent before deletion"
+                    "instructions": "Go to Teams section and unassign this agent before deletion",
                 },
-                status=400
+                status=400,
             )
 
         # Determine backend type
@@ -873,7 +862,7 @@ class DeleteAgentView(APIView):
             "backend_type": "BEDROCK" if is_bedrock else "OPENAI",
             "lambdas_deleted": [],
             "aliases_deleted": [],
-            "warnings": []
+            "warnings": [],
         }
 
         # Delete Bedrock-specific resources
@@ -882,7 +871,7 @@ class DeleteAgentView(APIView):
             try:
                 bedrock_client = BedrockFileDatabase()
                 for skill in agent.agent_skills.all():
-                    function_name = skill.skill.get('function_name')
+                    function_name = skill.skill.get("function_name")
                     if function_name:
                         try:
                             bedrock_client.delete_lambda_function(function_name)
@@ -902,8 +891,7 @@ class DeleteAgentView(APIView):
                 if version.alias_id and version.alias_id != "DRAFT":
                     try:
                         usecase.external_agent_client.bedrock_agent.delete_agent_alias(
-                            agentId=agent.external_id,
-                            agentAliasId=version.alias_id
+                            agentId=agent.external_id, agentAliasId=version.alias_id
                         )
                         deletion_summary["aliases_deleted"].append(version.alias_id)
                         logger.info(f"Deleted alias: {version.alias_id}")
@@ -923,9 +911,9 @@ class DeleteAgentView(APIView):
                     {
                         "error": "Failed to delete external Bedrock resources",
                         "details": str(e),
-                        "partial_deletion": deletion_summary
+                        "partial_deletion": deletion_summary,
                     },
-                    status=500
+                    status=500,
                 )
 
         # Delete database records (CASCADE handles related records)
@@ -933,13 +921,7 @@ class DeleteAgentView(APIView):
         agent.delete()
         logger.info(f"Legacy agent {agent.uuid} ({agent_name}) deleted successfully")
 
-        return Response(
-            {
-                "message": "Agent deleted successfully",
-                **deletion_summary
-            },
-            status=200
-        )
+        return Response({"message": "Agent deleted successfully", **deletion_summary}, status=200)
 
     def _delete_inline_agent(self, agent: InlineAgent, project_uuid: str, logger):
         """Delete an inline agent (nexus.inline_agents.models.Agent)"""
@@ -947,26 +929,22 @@ class DeleteAgentView(APIView):
         integrated_agents = IntegratedAgent.objects.filter(agent=agent)
         if integrated_agents.exists():
             projects = [
-                {
-                    "project_uuid": str(ia.project.uuid),
-                    "project_name": ia.project.name
-                }
-                for ia in integrated_agents
+                {"project_uuid": str(ia.project.uuid), "project_name": ia.project.name} for ia in integrated_agents
             ]
             return Response(
                 {
                     "error": "Cannot delete agent that is integrated into projects. Please unassign it first.",
                     "integrated_projects": projects,
-                    "instructions": "Unassign this agent from all projects before deletion"
+                    "instructions": "Unassign this agent from all projects before deletion",
                 },
-                status=400
+                status=400,
             )
 
         deletion_summary = {
             "agent_uuid": str(agent.uuid),
             "agent_name": agent.name,
             "agent_type": "INLINE",
-            "warnings": []
+            "warnings": [],
         }
 
         # Clean up credentials if this is the only agent using them
