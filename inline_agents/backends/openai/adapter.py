@@ -240,6 +240,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 session=session,
                 input_text=input_text,
                 hooks_state=hooks_state,
+                contact_fields=contact_fields,
             ),
             "formatter_agent_instructions": supervisor.get("formatter_agent_components_instructions", ""),
         }
@@ -253,6 +254,7 @@ class OpenAITeamAdapter(TeamAdapter):
         channel_uuid: str,
         contact_name: str,
         content_base_uuid: str,
+        contact_fields: str,
         globals_dict: Optional[dict] = None,
         session: Optional[Session] = None,
         input_text: str = "",
@@ -261,7 +263,7 @@ class OpenAITeamAdapter(TeamAdapter):
         if globals_dict is None:
             globals_dict = {}
         credentials = cls._get_credentials(project_uuid)
-        contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name}
+        contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name, "fields": contact_fields}
         project = {"uuid": project_uuid, "auth_token": auth_token}
         content_base = {"uuid": content_base_uuid}
 
