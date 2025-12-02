@@ -75,7 +75,7 @@ class MockCacheRepository(Repository):
         current_time = self._time.time()
 
         # Check if expired
-        if expiration > 0 and current_time > expiration:
+        if expiration > 0 and current_time >= expiration:
             del self._cache[key]
             return None
 
@@ -108,7 +108,7 @@ class MockCacheRepository(Repository):
         # Check if expired
         value, expiration = self._cache[key]
         current_time = self._time.time()
-        if expiration > 0 and current_time > expiration:
+        if expiration > 0 and current_time >= expiration:
             del self._cache[key]
             return False
 
@@ -125,7 +125,7 @@ class MockCacheRepository(Repository):
         expired_keys = [
             key
             for key, (value, expiration) in self._cache.items()
-            if expiration > 0 and current_time > expiration
+            if expiration > 0 and current_time >= expiration
         ]
         for key in expired_keys:
             del self._cache[key]
