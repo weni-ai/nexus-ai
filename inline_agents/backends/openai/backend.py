@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+import openai
 import pendulum
 import sentry_sdk
 from agents import Agent, ModelSettings, Runner, trace
@@ -223,6 +224,7 @@ class OpenAIBackend(InlineAgentsBackend):
             hooks_state=hooks_state,
             data_lake_event_adapter=data_lake_event_adapter,
             conversation=conversation,
+            use_components=use_components,
         )
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
@@ -387,6 +389,8 @@ class OpenAIBackend(InlineAgentsBackend):
         formatter_tools_descriptions: bool = formatter_agent_configurations.get("formatter_tools_descriptions")
         tools = get_component_tools(formatter_tools_descriptions)
 
+        supervisor_hooks.save_components_trace = True
+
         formatter_agent = Agent(
             name="Response Formatter Agent",
             instructions=formatter_instructions,
@@ -547,7 +551,7 @@ class OpenAIBackend(InlineAgentsBackend):
             trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
-                result = client.run_streamed(**external_team, session=session, hooks=runner_hooks)
+                result = client.run_streamed(**external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS)
                 delta_counter = 0
                 try:
                     async for event in result.stream_events():
@@ -563,35 +567,11 @@ class OpenAIBackend(InlineAgentsBackend):
                         if event.type == "run_item_stream_event":
                             if hasattr(event, "item") and event.item.type == "tool_call_item":
                                 hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
+                except openai.APIError as api_error:
+                    self._sentry_capture_exception(api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True)
+                    raise
                 except Exception as stream_error:
-                    logger.error(
-                        f"[OpenAIBackend] Streaming error during agent execution: {stream_error}",
-                        extra={
-                            "project_uuid": project_uuid,
-                            "contact_urn": contact_urn,
-                            "channel_uuid": channel_uuid,
-                            "session_id": session_id,
-                            "error_type": type(stream_error).__name__,
-                            "error_message": str(stream_error),
-                            "input_text": input_text[:500] if input_text else None,
-                        },
-                    )
-                    sentry_sdk.set_context(
-                        "streaming_error",
-                        {
-                            "project_uuid": project_uuid,
-                            "contact_urn": contact_urn,
-                            "channel_uuid": channel_uuid,
-                            "session_id": session_id,
-                            "error_type": type(stream_error).__name__,
-                            "error_message": str(stream_error),
-                            "input_text_preview": input_text[:200] if input_text else None,
-                        },
-                    )
-                    sentry_sdk.set_tag("project_uuid", project_uuid)
-                    sentry_sdk.set_tag("error_type", "streaming_error")
-                    sentry_sdk.capture_exception(stream_error)
-
+                    self._sentry_capture_exception(stream_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True)
                     # Try to get final_response even if streaming failed
                     try:
                         final_response = self._get_final_response(result)
@@ -666,3 +646,34 @@ class OpenAIBackend(InlineAgentsBackend):
         else:
             final_response = result.final_output
         return final_response
+
+    def _sentry_capture_exception(self, exception, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger):
+        if enable_logger:
+            logger.error(
+                f"[OpenAIBackend] Streaming error during agent execution: {exception}",
+                extra={
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "channel_uuid": channel_uuid,
+                    "session_id": session_id,
+                    "error_type": type(exception).__name__,
+                    "error_message": str(exception),
+                    "input_text": input_text[:500] if input_text else None,
+                },
+            )
+
+        sentry_sdk.set_context(
+            "streaming_error",
+            {
+                "project_uuid": project_uuid,
+                "contact_urn": contact_urn,
+                "channel_uuid": channel_uuid,
+                "session_id": session_id,
+                "error_type": type(exception).__name__,
+                "error_message": str(exception),
+                "input_text_preview": input_text[:200] if input_text else None,
+            },
+        )
+        sentry_sdk.set_tag("project_uuid", project_uuid)
+        sentry_sdk.set_tag("error_type", "streaming_error")
+        sentry_sdk.capture_exception(exception)

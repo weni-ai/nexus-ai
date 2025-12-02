@@ -213,7 +213,6 @@ class RedisSession(Session):
                         },
                     )
                     continue
-            print(f"[DEBUG] Items: {items}")
             return items
 
         except redis.RedisError as e:

@@ -23,7 +23,7 @@ django-celery-beat = "2.5.0"
 django-celery-results = "2.5.1"
 redis = "^5.0.1"
 requests = "^2.31.0"
-drf-yasg = "^1.21.7"
+drf-spectacular = "^0.27.2"
 boto3 = "^1.39.4"
 amqp = "^5.2.0"
 sentry-sdk = "^1.39.2"
@@ -144,7 +144,7 @@ omit = [
 ]
 
 [tool.taskipy.tasks]
-lint = 'ruff . && blue --check . --diff'
+lint = 'ruff check . && blue --check . --diff'
 format = 'blue .  && isort .'
 pre_test = 'task lint'
 test = 'pytest -s -x --cov=. -vv'

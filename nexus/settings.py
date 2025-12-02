@@ -49,7 +49,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "django_prometheus",
     "rest_framework",
-    "drf_yasg",
+    "drf_spectacular",
     "elasticapm.contrib.django",
     # apps
     "nexus.users",
@@ -306,12 +306,20 @@ OIDC_RP_SCOPES = env.str("OIDC_RP_SCOPES", default="openid email")
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["mozilla_django_oidc.contrib.drf.OIDCAuthentication"],
     "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 if TESTING:
     REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"].append("rest_framework.authentication.TokenAuthentication")
 
 CORS_ORIGIN_ALLOW_ALL = True
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "API Documentation",
+    "VERSION": "v1.0.0",
+    "LICENSE": {"name": "GPL-3.0 License"},
+}
+
 
 OPENAI_API_KEY = env.str("OPENAI_API_KEY")
 CHATGPT_MODEL = env.str("CHATGPT_MODEL")
@@ -640,3 +648,8 @@ GRPC_ENABLED = env.bool("GRPC_ENABLED", default=False)
 GRPC_SERVICE_HOST = env.str("GRPC_SERVICE_HOST", default="localhost")
 GRPC_SERVICE_PORT = env.int("GRPC_SERVICE_PORT", default=50051)
 GRPC_USE_TLS = env.bool("GRPC_USE_TLS", default=False)
+
+OPENAI_AGENTS_REASONING_EFFORT = env.str("OPENAI_AGENTS_REASONING_EFFORT", None)
+OPENAI_AGENTS_REASONING_SUMMARY = env.str("OPENAI_AGENTS_REASONING_SUMMARY", "auto")
+OPENAI_AGENTS_PARALLEL_TOOL_CALLS = env.bool("OPENAI_AGENTS_PARALLEL_TOOL_CALLS", True)
+OPENAI_AGENTS_MAX_TURNS = env.int("OPENAI_AGENTS_MAX_TURNS", 10)
