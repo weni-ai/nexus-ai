@@ -34,6 +34,9 @@ try:
     import router.traces_observers.summary  # noqa: F401
     import router.traces_observers.save_traces  # noqa: F401
 
+    # Cache invalidation observers
+    import router.services.cache_invalidation_observers  # noqa: F401
+
     # Auto-register all decorated observers
     auto_register_observers(event_manager, async_event_manager)
 except ImportError as e:
