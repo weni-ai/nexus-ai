@@ -301,6 +301,7 @@ OIDC_DRF_AUTH_BACKEND = env.str(
     default="nexus.authentication.authentication.WeniOIDCAuthenticationBackend",
 )
 OIDC_RP_SCOPES = env.str("OIDC_RP_SCOPES", default="openid email")
+OIDC_RP_EMAIL = env.str("OIDC_RP_EMAIL", default="")
 
 
 REST_FRAMEWORK = {
