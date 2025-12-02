@@ -425,8 +425,11 @@ class OpenAIBackend(InlineAgentsBackend):
                 context=context,
                 session=session,
             )
-            async for _ in result.stream_events():
-                pass
+            # Only stream events if the result has stream_events method
+            stream_events = getattr(result, 'stream_events', None)
+            if stream_events and callable(stream_events):
+                async for _ in stream_events():
+                    pass
             return self._get_final_response(result)
         except Exception as e:
             logger.error(f"Error in formatter agent: {e}", exc_info=True)
@@ -554,19 +557,22 @@ class OpenAIBackend(InlineAgentsBackend):
                 result = client.run_streamed(**external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS)
                 delta_counter = 0
                 try:
-                    async for event in result.stream_events():
-                        delta_counter = self._process_delta_event(
-                            event=event,
-                            grpc_client=grpc_client,
-                            grpc_msg_id=grpc_msg_id,
-                            delta_counter=delta_counter,
-                            channel_uuid=channel_uuid,
-                            contact_urn=contact_urn,
-                            project_uuid=project_uuid,
-                        )
-                        if event.type == "run_item_stream_event":
-                            if hasattr(event, "item") and event.item.type == "tool_call_item":
-                                hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
+                    # Only stream events if the result has stream_events method
+                    stream_events = getattr(result, 'stream_events', None)
+                    if stream_events and callable(stream_events):
+                        async for event in stream_events():
+                            delta_counter = self._process_delta_event(
+                                event=event,
+                                grpc_client=grpc_client,
+                                grpc_msg_id=grpc_msg_id,
+                                delta_counter=delta_counter,
+                                channel_uuid=channel_uuid,
+                                contact_urn=contact_urn,
+                                project_uuid=project_uuid,
+                            )
+                            if event.type == "run_item_stream_event":
+                                if hasattr(event, "item") and event.item.type == "tool_call_item":
+                                    hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
                 except openai.APIError as api_error:
                     self._sentry_capture_exception(api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True)
                     raise
