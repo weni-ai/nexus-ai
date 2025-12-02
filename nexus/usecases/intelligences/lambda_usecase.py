@@ -67,7 +67,12 @@ class LambdaUseCase:
         return conversation_payload
 
     def send_datalake_event(
-        self, event_data: dict, project_uuid: str, contact_urn: str, channel_uuid: str = None, conversation: object = None
+        self,
+        event_data: dict,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str = None,
+        conversation: object = None,
     ):
         adapter = self._get_data_lake_event_adapter()
         adapter.to_data_lake_custom_event(
@@ -75,11 +80,17 @@ class LambdaUseCase:
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
-            conversation=conversation
+            conversation=conversation,
         )
 
     def lambda_conversation_resolution(
-        self, messages, has_chats_room: bool, project_uuid: str, contact_urn: str, channel_uuid: str = None, conversation: object = None
+        self,
+        messages,
+        has_chats_room: bool,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str = None,
+        conversation: object = None,
     ):
         # If has_chats_room is True, skip lambda call and set resolution to "Has Chat Room"
         if has_chats_room:
@@ -94,7 +105,11 @@ class LambdaUseCase:
                 },
             }
             self.send_datalake_event(
-                event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, conversation=conversation
+                event_data=event_data,
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                channel_uuid=channel_uuid,
+                conversation=conversation,
             )
             return resolution
 
@@ -134,7 +149,11 @@ class LambdaUseCase:
             },
         }
         self.send_datalake_event(
-            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, conversation=conversation
+            event_data=event_data,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            conversation=conversation,
         )
 
         return conversation_resolution_response.get("result")
@@ -152,7 +171,13 @@ class LambdaUseCase:
         return topic_uuid_str not in invalid_values
 
     def lambda_conversation_topics(
-        self, messages, has_chats_room: bool, project_uuid: str, contact_urn: str, channel_uuid: str = None, conversation: object = None
+        self,
+        messages,
+        has_chats_room: bool,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str = None,
+        conversation: object = None,
     ):
         from nexus.intelligences.models import Topics
 
@@ -211,7 +236,11 @@ class LambdaUseCase:
                 sentry_sdk.capture_message("Lambda returned topic_uuid but topic_name is None/empty", level="warning")
 
         self.send_datalake_event(
-            event_data=event_data, project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, conversation=conversation
+            event_data=event_data,
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            channel_uuid=channel_uuid,
+            conversation=conversation,
         )
 
         topic_uuid = event_data.get("metadata").get("topic_uuid")
@@ -259,14 +288,17 @@ class LambdaUseCase:
         )
         if not messages:
             logger.warning(
-                "[create_lambda_conversation] No messages found",
+                "[create_lambda_conversation] No messages found for conversation period",
                 extra={
                     "project_uuid": project_uuid,
                     "contact_urn": contact_urn,
+                    "channel_uuid": channel_uuid,
+                    "start_date": payload.get("start_date"),
+                    "end_date": payload.get("end_date"),
                     "task_name": "create_lambda_conversation",
                 },
             )
-            raise ValueError("No unclassified messages found for conversation period")
+            raise ValueError("No messages found for conversation period")
         return messages
 
     def _classify_conversation(

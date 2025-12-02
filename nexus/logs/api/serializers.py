@@ -1,4 +1,5 @@
 import json
+
 from rest_framework import serializers
 
 from nexus.inline_agents.models import InlineAgentMessage
@@ -209,7 +210,11 @@ class InlineConversationSerializer(serializers.ModelSerializer):
     def get_text(self, obj: InlineAgentMessage) -> str:
         text = obj.text
         try:
-            texts = json.loads(text)
-            return json.dumps(texts[0])
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return json.dumps(parsed[0]) if parsed else ""
+            if isinstance(parsed, dict):
+                return json.dumps(parsed)
+            return str(parsed)
         except json.JSONDecodeError:
             return text
