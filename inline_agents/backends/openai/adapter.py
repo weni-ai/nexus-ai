@@ -262,6 +262,12 @@ class OpenAITeamAdapter(TeamAdapter):
     ) -> Context:
         if globals_dict is None:
             globals_dict = {}
+
+        try:
+            contact_fields = json.loads(contact_fields)
+        except json.JSONDecodeError:
+            contact_fields = {}
+
         credentials = cls._get_credentials(project_uuid)
         contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name, "fields": contact_fields}
         project = {"uuid": project_uuid, "auth_token": auth_token}
