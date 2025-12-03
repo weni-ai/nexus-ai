@@ -10,13 +10,12 @@ from django.conf import settings
 
 from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
-from nexus.inline_agents.team.repository import ORMTeamRepository
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.inline_agents.typing import TypingUsecase
-from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
+from router.services.pre_generation_service import PreGenerationService
 from router.tasks.redis_task_manager import RedisTaskManager
 
 from .actions_client import get_action_clients
@@ -286,17 +285,32 @@ def start_inline_agents(
     task_manager = task_manager or get_task_manager()
 
     try:
+        project_uuid = message.get("project_uuid")
+
         TypingUsecase().send_typing_message(
             contact_urn=message.get("contact_urn"),
             msg_external_id=message.get("msg_event", {}).get("msg_external_id", ""),
-            project_uuid=message.get("project_uuid"),
+            project_uuid=project_uuid,
             preview=preview,
         )
 
-        project, content_base, inline_agent_configuration = get_project_and_content_base_data(
-            message.get("project_uuid")
-        )
-        agents_backend = project.agents_backend
+        # Pre-Generation: Fetch and cache all project data
+        # This uses CacheService to minimize database queries
+        # Performance tracking is handled inside PreGenerationService
+        # TODO: When workflow orchestrator is implemented, this will be a separate Celery task
+        pre_generation_service = PreGenerationService()
+        (
+            project_dict,
+            content_base_dict,
+            team_cached,
+            guardrails_config,
+            inline_agent_config_dict,
+            agents_backend,
+        ) = pre_generation_service.fetch_pre_generation_data(project_uuid)
+
+        # Get actual Django model objects (still needed for backend.invoke_agents)
+        # The cache is already populated by PreGenerationService, so subsequent calls will use cache
+        project, content_base, inline_agent_configuration = pre_generation_service.get_project_objects(project_uuid)
 
         broadcast, _ = get_action_clients(
             preview=preview, multi_agents=True, project_use_components=project.use_components
@@ -323,7 +337,9 @@ def start_inline_agents(
         message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
 
         backend = BackendsRegistry.get_backend(agents_backend)
-        team = ORMTeamRepository(agents_backend=agents_backend, project=project).get_team(message_obj.project_uuid)
+        # Use cached team data from PreGenerationService
+        # team_cached is already in the correct format (list[dict]) that backend.invoke_agents expects
+        team = team_cached
 
         response = backend.invoke_agents(
             team=team,
