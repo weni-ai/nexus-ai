@@ -15,11 +15,28 @@ class OpenAISupervisor(models.Model):
     human_support_action_groups = models.JSONField(null=True, blank=True)
 
     components_prompt = models.TextField(null=True, blank=True)
-    components_human_support_prompt = models.TextField(null=True, blank=True, verbose_name="Formatter agent instructions")  # TODO: rename attribute to formatter_agent_instructions
-    components_instructions_up_prompt = models.TextField(null=True, blank=True, verbose_name="Components Instructions UP")
+    components_human_support_prompt = models.TextField(
+        null=True, blank=True, verbose_name="Formatter agent instructions"
+    )  # TODO: rename attribute to formatter_agent_instructions
+    components_instructions_up_prompt = models.TextField(
+        null=True, blank=True, verbose_name="Components Instructions UP"
+    )
 
-    default_instructions_for_collaborators = models.TextField(null=True, blank=True, help_text="Instructions that will be added to every collaborator")
-    max_tokens = models.IntegerField(null=True, blank=True, help_text="Maximum number of tokens to generate", default=2048)
+    default_instructions_for_collaborators = models.TextField(
+        null=True, blank=True, help_text="Instructions that will be added to every collaborator"
+    )
+    max_tokens = models.IntegerField(
+        null=True, blank=True, help_text="Maximum number of tokens to generate", default=2048
+    )
+    max_tokens_collaborator = models.IntegerField(
+        null=True, blank=True, help_text="Maximum number of tokens to generate", default=2048
+    )
+    audio_orchestration_max_tokens = models.IntegerField(
+        null=True, blank=True, help_text="Maximum number of tokens to generate for audio orchestration", default=2048
+    )
+    audio_orchestration_max_tokens_collaborator = models.IntegerField(
+        null=True, blank=True, help_text="Maximum number of tokens to generate for audio orchestration for collaborators", default=2048
+    )
 
     exclude_tools_from_audio_orchestration = ArrayField(models.CharField(max_length=255), default=list, blank=True)
     exclude_tools_from_text_orchestration = ArrayField(models.CharField(max_length=255), default=list, blank=True)
@@ -29,3 +46,8 @@ class OpenAISupervisor(models.Model):
     class Meta:
         verbose_name = "OpenAI Supervisor"
         verbose_name_plural = "OpenAI Supervisors"
+
+    def get_max_tokens(self, audio_orchestration: bool = False) -> tuple[int, int]:
+        if audio_orchestration:
+            return self.audio_orchestration_max_tokens, self.audio_orchestration_max_tokens_collaborator
+        return self.max_tokens, self.max_tokens_collaborator

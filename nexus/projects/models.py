@@ -60,6 +60,14 @@ class Project(BaseModel, SoftDeleteModel):
         blank=True,
     )
 
+    default_formatter_foundation_model = models.CharField(max_length=100, blank=True, null=True)
+    formatter_instructions = models.TextField(null=True, blank=True)
+    formatter_reasoning_effort = models.CharField(max_length=50, blank=True, null=True)
+    formatter_reasoning_summary = models.CharField(max_length=50, blank=True, null=True, default="auto")
+    formatter_send_only_assistant_message = models.BooleanField(default=False)
+    formatter_tools_descriptions = models.JSONField(default=dict, null=True, blank=True)
+    audio_orchestration_welcome_message = models.TextField(null=True, blank=True)
+
     def __str__(self):
         return f'{self.uuid} - Project: {self.name} - Org: {self.org.name}'
 
