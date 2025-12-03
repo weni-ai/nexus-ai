@@ -11,11 +11,7 @@ class JWTUsecase:
             "exp": datetime.now(timezone.utc) + timedelta(hours=1),
             "iat": datetime.now(timezone.utc),
         }
-        token = jwt.encode(
-            payload,
-            settings.JWT_SECRET_KEY,
-            algorithm="RS256"
-        )
+        token = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="RS256")
         return token
 
     def generate_broadcast_jwt_token(self):
@@ -23,11 +19,7 @@ class JWTUsecase:
         payload = {
             "email": oidc_email,
             "exp": datetime.now(timezone.utc) + timedelta(hours=1),
-            "iat": datetime.now(timezone.utc)
+            "iat": datetime.now(timezone.utc),
         }
-        token = jwt.encode(
-            payload,
-            settings.JWT_SECRET_KEY,
-            algorithm="RS256"
-        )
+        token = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm="RS256")
         return token

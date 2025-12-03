@@ -1,4 +1,7 @@
 import json
+import logging
+
+import sentry_sdk
 from rest_framework import serializers
 
 from nexus.inline_agents.models import InlineAgentMessage
@@ -6,6 +9,8 @@ from nexus.logs.models import Message, MessageLog, RecentActivities
 from nexus.usecases.actions.retrieve import FlowDoesNotExist
 from router.classifiers import Classifier
 from router.repositories.orm import FlowsORMRepository
+
+logger = logging.getLogger(__name__)
 
 
 class TagPercentageSerializer(serializers.Serializer):
@@ -208,8 +213,21 @@ class InlineConversationSerializer(serializers.ModelSerializer):
 
     def get_text(self, obj: InlineAgentMessage) -> str:
         text = obj.text
+        logger.info(
+            "inline_conversation_text_received",
+            extra={"uuid": str(obj.uuid), "text_len": len(text), "text_head": text[:200]},
+        )
+
         try:
-            texts = json.loads(text)
-            return json.dumps(texts[0])
-        except json.JSONDecodeError:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return json.dumps(parsed[0]) if parsed else ""
+            if isinstance(parsed, dict):
+                return json.dumps(parsed)
+            return str(parsed)
+        except json.JSONDecodeError as e:
+            logger.warning("inline_conversation_text_decode_error", exc_info=True)
+            sentry_sdk.set_tag("inline_message_uuid", str(obj.uuid))
+            sentry_sdk.set_context("inline_message_text", {"text": text})
+            sentry_sdk.capture_exception(e)
             return text

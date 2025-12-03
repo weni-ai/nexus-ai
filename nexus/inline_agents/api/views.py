@@ -475,31 +475,29 @@ class AgentBuilderAudio(APIView):
     def get(self, request, project_uuid):
         _, _, inline_agents_configuration = get_project_and_content_base_data(project_uuid=project_uuid)
         if inline_agents_configuration:
-            return Response({
-                "audio_orchestration": inline_agents_configuration.audio_orchestration,
-                "agent_voice": inline_agents_configuration.audio_orchestration_voice
-            })
+            return Response(
+                {
+                    "audio_orchestration": inline_agents_configuration.audio_orchestration,
+                    "agent_voice": inline_agents_configuration.audio_orchestration_voice,
+                }
+            )
 
-        return Response({
-            "audio_orchestration": False,
-            "agent_voice": None
-        })
+        return Response({"audio_orchestration": False, "agent_voice": None})
 
     def post(self, request, project_uuid):
         agent_voice = request.data.get("agent_voice")
         audio_orchestration = request.data.get("audio_orchestration")
 
         if not agent_voice and audio_orchestration is None:
-            return Response(
-                {"error": "At least one of 'audio_orchestration' or 'agent_voice' is required"},
-                status=400
-            )
+            return Response({"error": "At least one of 'audio_orchestration' or 'agent_voice' is required"}, status=400)
 
         try:
             project, _, inline_agents_configuration = get_project_and_content_base_data(project_uuid=project_uuid)
 
             if inline_agents_configuration is None:
-                inline_agents_configuration = create_inline_agents_configuration(project, audio_orchestration=audio_orchestration, audio_orchestration_voice=agent_voice)
+                inline_agents_configuration = create_inline_agents_configuration(
+                    project, audio_orchestration=audio_orchestration, audio_orchestration_voice=agent_voice
+                )
 
             if audio_orchestration is not None and agent_voice:
                 inline_agents_configuration.set_audio_orchestration(audio_orchestration, agent_voice)
@@ -513,9 +511,9 @@ class AgentBuilderAudio(APIView):
             return Response(
                 {
                     "audio_orchestration": inline_agents_configuration.audio_orchestration,
-                    "agent_voice": inline_agents_configuration.audio_orchestration_voice
+                    "agent_voice": inline_agents_configuration.audio_orchestration_voice,
                 },
-                status=200
+                status=200,
             )
 
         except ValueError:

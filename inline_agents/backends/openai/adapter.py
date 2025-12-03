@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Callable, Optional, Any
+from typing import Any, Callable, Optional
 
 import boto3
 import pendulum
@@ -21,9 +21,8 @@ from pydantic import BaseModel, Field, create_model
 
 from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.data_lake import send_data_lake_event
-from inline_agents.data_lake.event_service import DataLakeEventService
-from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.entities import Context, HooksState
+from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.hooks import (
     CollaboratorHooks,
     RunnerHooks,
@@ -35,6 +34,7 @@ from inline_agents.backends.openai.sessions import (
     set_watermark,
 )
 from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
+from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
     AgentCredential,
     InlineAgentsConfiguration,
@@ -372,9 +372,9 @@ class OpenAITeamAdapter(TeamAdapter):
                     f"Contact: {contact.get('urn', 'unknown')}, "
                     f"Project: {project.get('uuid', 'unknown')}"
                 )
-                return json.dumps({
-                    "error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"
-                })
+                return json.dumps(
+                    {"error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"}
+                )
 
             session_attributes = result.get("response", {}).get("sessionAttributes", {})
 
@@ -399,26 +399,25 @@ class OpenAITeamAdapter(TeamAdapter):
                     f"Contact: {contact.get('urn', 'unknown')}, "
                     f"Project: {project.get('uuid', 'unknown')}"
                 )
-                sentry_sdk.set_context("missing_lambda_events", {
-                    "function_name": function_name,
-                    "contact_urn": contact.get('urn', 'unknown'),
-                    "project_uuid": project.get('uuid', 'unknown'),
-                    "response_keys": list(result.get("response", {}).keys()) if isinstance(result.get("response"), dict) else []
-                })
-                sentry_sdk.capture_message(
-                    f"Lambda '{function_name}' did not return events",
-                    level="warning"
+                sentry_sdk.set_context(
+                    "missing_lambda_events",
+                    {
+                        "function_name": function_name,
+                        "contact_urn": contact.get("urn", "unknown"),
+                        "project_uuid": project.get("uuid", "unknown"),
+                        "response_keys": list(result.get("response", {}).keys())
+                        if isinstance(result.get("response"), dict)
+                        else [],
+                    },
                 )
+                sentry_sdk.capture_message(f"Lambda '{function_name}' did not return events", level="warning")
             else:
                 logger.info(
                     f"Lambda '{function_name}' returned {len(events)} event(s). "
                     f"Contact: {contact.get('urn', 'unknown')}"
                 )
 
-            ctx.context.hooks_state.add_tool_info(
-                function_name,
-                session_attributes
-            )
+            ctx.context.hooks_state.add_tool_info(function_name, session_attributes)
 
             return result["response"]["functionResponse"]["responseBody"]["TEXT"]["body"]
         except Exception as e:
@@ -427,13 +426,16 @@ class OpenAITeamAdapter(TeamAdapter):
                 f"Contact: {contact.get('urn', 'unknown')}, "
                 f"Project: {project.get('uuid', 'unknown')}"
             )
-            sentry_sdk.set_context("lambda_invocation_error", {
-                "function_name": function_name,
-                "function_arn": function_arn,
-                "contact_urn": contact.get('urn', 'unknown'),
-                "project_uuid": project.get('uuid', 'unknown'),
-                "error": str(e)
-            })
+            sentry_sdk.set_context(
+                "lambda_invocation_error",
+                {
+                    "function_name": function_name,
+                    "function_arn": function_arn,
+                    "contact_urn": contact.get("urn", "unknown"),
+                    "project_uuid": project.get("uuid", "unknown"),
+                    "error": str(e),
+                },
+            )
             sentry_sdk.capture_exception(e)
             return json.dumps({"error": f"Error on lambda: {str(e)}"})
 
@@ -563,7 +565,7 @@ class OpenAITeamAdapter(TeamAdapter):
         Clean up the schema recursively to ensure it's valid for OpenAI.
         """
         if not isinstance(schema, dict):
-            return 
+            return
 
         cls._clean_schema_list(schema.get("anyOf"))
         cls._clean_schema_list(schema.get("oneOf"))
@@ -710,10 +712,7 @@ class OpenAITeamAdapter(TeamAdapter):
         except Guardrail.DoesNotExist:
             guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
 
-        return {
-            'guardrailIdentifier': guardrails.identifier,
-            'guardrailVersion': str(guardrails.version)
-        }
+        return {"guardrailIdentifier": guardrails.identifier, "guardrailVersion": str(guardrails.version)}
 
 
 def create_standardized_event(agent_name, type, tool_name="", original_trace=None):
@@ -778,10 +777,7 @@ def process_openai_trace(event):
 class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
     """Adapter for transforming OpenAI traces to data lake event format."""
 
-    def __init__(
-        self,
-        send_data_lake_event_task: callable = None
-    ):
+    def __init__(self, send_data_lake_event_task: callable = None):
         if send_data_lake_event_task is None:
             send_data_lake_event_task = self._get_send_data_lake_event_task()
         self._event_service = DataLakeEventService(send_data_lake_event_task)
@@ -834,7 +830,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     use_delay=False,
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
-                    conversation=conversation
+                    conversation=conversation,
                 )
                 return validated_event
 
@@ -849,7 +845,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     use_delay=True,
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
-                    conversation=conversation
+                    conversation=conversation,
                 )
                 return validated_event
 
@@ -870,10 +866,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         conversation: Optional[object] = None,
     ):
         """Delegate custom event processing to the service."""
-        trace_data = {
-            "project_uuid": project_uuid,
-            "contact_urn": contact_urn
-        }
+        trace_data = {"project_uuid": project_uuid, "contact_urn": contact_urn}
         extractor = OpenAIEventExtractor(event_data=event_data, agent_name=agent_name)
         self._event_service.process_custom_events(
             trace_data=trace_data,
@@ -882,7 +875,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             channel_uuid=channel_uuid,
             extractor=extractor,
             preview=preview,
-            conversation=conversation
+            conversation=conversation,
         )
 
     def to_data_lake_custom_event(
@@ -891,7 +884,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         project_uuid: str,
         contact_urn: str,
         channel_uuid: Optional[str] = None,
-        conversation: Optional[object] = None
+        conversation: Optional[object] = None,
     ) -> Optional[dict]:
         """Send a single custom event to data lake (for direct event sending, not from traces)."""
         return self._event_service.send_custom_event(
@@ -899,5 +892,5 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
-            conversation=conversation
+            conversation=conversation,
         )

@@ -1,9 +1,9 @@
 import logging
-import pendulum
-import sentry_sdk
-
 from abc import ABC, abstractmethod
 from typing import Optional
+
+import pendulum
+import sentry_sdk
 
 from inline_agents.data_lake.event_dto import DataLakeEventDTO
 from inline_agents.data_lake.special_event_handler import get_special_event_handlers
@@ -36,7 +36,7 @@ class DataLakeEventService:
         project_uuid: str,
         contact_urn: str,
         channel_uuid: Optional[str] = None,
-        conversation: Optional[object] = None
+        conversation: Optional[object] = None,
     ) -> Optional[object]:
         """Get conversation object from Conversation model or provided conversation object."""
         # If conversation object is provided, use it directly
@@ -50,11 +50,13 @@ class DataLakeEventService:
         try:
             from nexus.intelligences.models import Conversation
 
-            conversation_obj = Conversation.objects.filter(
-                project__uuid=project_uuid,
-                contact_urn=contact_urn,
-                channel_uuid=channel_uuid
-            ).order_by("-created_at").first()
+            conversation_obj = (
+                Conversation.objects.filter(
+                    project__uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
+                )
+                .order_by("-created_at")
+                .first()
+            )
 
             return conversation_obj
         except Exception as e:
@@ -66,12 +68,15 @@ class DataLakeEventService:
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_tag("contact_urn", contact_urn)
             sentry_sdk.set_tag("channel_uuid", channel_uuid)
-            sentry_sdk.set_context("conversation_lookup", {
-                "project_uuid": project_uuid,
-                "contact_urn": contact_urn,
-                "channel_uuid": channel_uuid,
-                "method": "_get_conversation"
-            })
+            sentry_sdk.set_context(
+                "conversation_lookup",
+                {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "channel_uuid": channel_uuid,
+                    "method": "_get_conversation",
+                },
+            )
             sentry_sdk.capture_exception(e)
             return None
 
@@ -80,14 +85,11 @@ class DataLakeEventService:
         project_uuid: str,
         contact_urn: str,
         channel_uuid: Optional[str] = None,
-        conversation: Optional[object] = None
+        conversation: Optional[object] = None,
     ) -> Optional[str]:
         """Get conversation UUID from Conversation model or provided conversation object."""
         conversation_obj = self._get_conversation(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            channel_uuid=channel_uuid,
-            conversation=conversation
+            project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, conversation=conversation
         )
         if conversation_obj:
             return str(conversation_obj.uuid)
@@ -100,7 +102,7 @@ class DataLakeEventService:
         contact_urn: str,
         channel_uuid: Optional[str] = None,
         agent_identifier: Optional[str] = None,
-        conversation: Optional[object] = None
+        conversation: Optional[object] = None,
     ) -> None:
         """Enrich event metadata with agent_uuid, conversation_uuid, conversation_start_date, and conversation_end_date."""
         event_data.setdefault("metadata", {})
@@ -108,10 +110,7 @@ class DataLakeEventService:
 
         # Get conversation object to extract all conversation fields
         conversation_obj = self._get_conversation(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            channel_uuid=channel_uuid,
-            conversation=conversation
+            project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, conversation=conversation
         )
 
         # Add conversation fields if conversation exists
@@ -122,25 +121,18 @@ class DataLakeEventService:
 
             # Add conversation_start_date if missing and start_date exists
             if "conversation_start_date" not in metadata and conversation_obj.start_date:
-                metadata["conversation_start_date"] = pendulum.instance(
-                    conversation_obj.start_date
-                ).to_iso8601_string()
+                metadata["conversation_start_date"] = pendulum.instance(conversation_obj.start_date).to_iso8601_string()
 
             # Add conversation_end_date if missing and end_date exists
             if "conversation_end_date" not in metadata and conversation_obj.end_date:
-                metadata["conversation_end_date"] = pendulum.instance(
-                    conversation_obj.end_date
-                ).to_iso8601_string()
+                metadata["conversation_end_date"] = pendulum.instance(conversation_obj.end_date).to_iso8601_string()
 
         # Add agent_uuid if missing and agent_identifier is provided
         if "agent_uuid" not in metadata and agent_identifier:
             try:
                 from nexus.inline_agents.models import IntegratedAgent
 
-                team_agent = IntegratedAgent.objects.get(
-                    agent__slug=agent_identifier,
-                    project__uuid=project_uuid
-                )
+                team_agent = IntegratedAgent.objects.get(agent__slug=agent_identifier, project__uuid=project_uuid)
                 metadata["agent_uuid"] = str(team_agent.agent.uuid)
             except IntegratedAgent.DoesNotExist:
                 logger.warning(
@@ -148,14 +140,10 @@ class DataLakeEventService:
                     f"project_uuid={project_uuid}. Event will be sent without agent_uuid."
                 )
                 sentry_sdk.set_tag("project_uuid", project_uuid)
-                sentry_sdk.set_context("agent_lookup", {
-                    "agent_identifier": agent_identifier,
-                    "project_uuid": project_uuid
-                })
-                sentry_sdk.capture_message(
-                    f"IntegratedAgent not found: {agent_identifier}",
-                    level="warning"
+                sentry_sdk.set_context(
+                    "agent_lookup", {"agent_identifier": agent_identifier, "project_uuid": project_uuid}
                 )
+                sentry_sdk.capture_message(f"IntegratedAgent not found: {agent_identifier}", level="warning")
 
     def _prepare_and_validate_event(
         self,
@@ -164,7 +152,7 @@ class DataLakeEventService:
         contact_urn: str,
         channel_uuid: Optional[str] = None,
         agent_identifier: Optional[str] = None,
-        conversation: Optional[object] = None
+        conversation: Optional[object] = None,
     ) -> dict:
         """Prepare event data, enrich metadata, and validate using DTO."""
         # Set required fields (will be validated by DTO)
@@ -180,7 +168,7 @@ class DataLakeEventService:
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
             agent_identifier=agent_identifier,
-            conversation=conversation
+            conversation=conversation,
         )
 
         # Validate using DTO (will raise ValueError if validation fails)
@@ -196,7 +184,7 @@ class DataLakeEventService:
         channel_uuid: str,
         extractor: EventExtractor,
         preview: bool = False,
-        conversation: Optional[object] = None
+        conversation: Optional[object] = None,
     ) -> None:
         """Process custom events using backend-specific extractor."""
         if preview:
@@ -214,11 +202,7 @@ class DataLakeEventService:
                 # Handle special events (CSAT, NPS, etc.) first
                 if event_key in special_handlers:
                     special_handlers[event_key].process(
-                        event_to_send,
-                        project_uuid,
-                        contact_urn,
-                        channel_uuid,
-                        conversation=conversation
+                        event_to_send, project_uuid, contact_urn, channel_uuid, conversation=conversation
                     )
 
                 self.send_custom_event(
@@ -227,7 +211,7 @@ class DataLakeEventService:
                     contact_urn=contact_urn,
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
-                    conversation=conversation
+                    conversation=conversation,
                 )
 
             except Exception as e:
@@ -237,10 +221,9 @@ class DataLakeEventService:
                     f"Project: {project_uuid}"
                 )
                 sentry_sdk.set_tag("project_uuid", project_uuid)
-                sentry_sdk.set_context("custom_event_error", {
-                    "event_data": event_to_send,
-                    "agent_identifier": agent_identifier
-                })
+                sentry_sdk.set_context(
+                    "custom_event_error", {"event_data": event_to_send, "agent_identifier": agent_identifier}
+                )
                 sentry_sdk.capture_exception(e)
 
     def send_custom_event(
@@ -250,7 +233,7 @@ class DataLakeEventService:
         contact_urn: str,
         channel_uuid: Optional[str] = None,
         agent_identifier: Optional[str] = None,
-        conversation: Optional[object] = None
+        conversation: Optional[object] = None,
     ) -> Optional[dict]:
         """Send a custom event to data lake after validation."""
         try:
@@ -264,7 +247,7 @@ class DataLakeEventService:
                 contact_urn=contact_urn,
                 channel_uuid=channel_uuid,
                 agent_identifier=agent_identifier,
-                conversation=conversation
+                conversation=conversation,
             )
 
             self.send_data_lake_event_task.delay(validated_event)
@@ -275,12 +258,15 @@ class DataLakeEventService:
                 f"Event key: {event_data.get('key', 'unknown')}, "
                 f"Project: {project_uuid}, Contact: {contact_urn}"
             )
-            sentry_sdk.set_context("custom event validation error", {
-                "event_data": event_data,
-                "project_uuid": project_uuid,
-                "contact_urn": contact_urn,
-                "validation_error": str(e)
-            })
+            sentry_sdk.set_context(
+                "custom event validation error",
+                {
+                    "event_data": event_data,
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "validation_error": str(e),
+                },
+            )
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.capture_exception(e)
             return None
@@ -299,7 +285,7 @@ class DataLakeEventService:
         use_delay: bool = True,
         channel_uuid: Optional[str] = None,
         agent_identifier: Optional[str] = None,
-        conversation: Optional[object] = None
+        conversation: Optional[object] = None,
     ) -> Optional[dict]:
         """Send a validated event to data lake."""
         try:
@@ -315,7 +301,7 @@ class DataLakeEventService:
                 contact_urn=contact_urn,
                 channel_uuid=channel_uuid,
                 agent_identifier=agent_identifier,
-                conversation=conversation
+                conversation=conversation,
             )
 
             if use_delay:
@@ -326,9 +312,6 @@ class DataLakeEventService:
             return validated_event
         except (ValueError, TypeError) as e:
             logger.error(f"Event validation failed: {str(e)}")
-            sentry_sdk.set_context("event validation error", {
-                "event_data": event_data,
-                "validation_error": str(e)
-            })
+            sentry_sdk.set_context("event validation error", {"event_data": event_data, "validation_error": str(e)})
             sentry_sdk.capture_exception(e)
             return None
