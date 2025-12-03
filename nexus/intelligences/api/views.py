@@ -1288,6 +1288,12 @@ class RouterRetailViewSet(views.APIView):
         project.inline_agent_switch = True
         project.save()
 
+        # Fire cache invalidation event for project update
+        event_manager.notify(
+            event="cache_invalidation:project",
+            project=project,
+        )
+
         response = {"personalization": personalization_serializer.data, "links": created_links}
 
         return Response(response, status=200)

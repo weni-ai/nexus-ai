@@ -193,7 +193,8 @@ class RationaleObserver(EventObserver):
 
 **What's included:**
 - **SentryErrorMiddleware**: Automatically captures all observer errors to Sentry
-- **PerformanceMonitoringMiddleware**: Logs execution time and warns on slow observers
+- **PerformanceLoggingMiddleware**: Logs execution time to Python logging and warns on slow observers
+- **SentryPerformanceMiddleware**: Sends performance data to Sentry Performance Monitoring for dashboards and alerting
 
 **How it works:**
 - Middleware hooks are automatically called:
@@ -220,12 +221,13 @@ class CustomMiddleware(ObserverMiddleware):
 
 **Using Custom Middleware:**
 ```python
-from nexus.event_domain.middleware import MiddlewareChain, SentryErrorMiddleware, PerformanceMonitoringMiddleware
+from nexus.event_domain.middleware import MiddlewareChain, SentryErrorMiddleware, PerformanceLoggingMiddleware, SentryPerformanceMiddleware
 
 # Create custom middleware chain
 chain = MiddlewareChain()
 chain.add(SentryErrorMiddleware())
-chain.add(PerformanceMonitoringMiddleware(slow_threshold=2.0))
+chain.add(SentryPerformanceMiddleware())
+chain.add(PerformanceLoggingMiddleware(slow_threshold=2.0))
 chain.add(CustomMiddleware())
 
 # Create manager with custom middleware

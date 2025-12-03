@@ -58,6 +58,12 @@ class ProjectUpdateUseCase:
             user=user,
         )
 
+        # Fire cache invalidation event
+        self.event_manager_notify(
+            event="cache_invalidation:project",
+            project=project,
+        )
+
         return project
 
 

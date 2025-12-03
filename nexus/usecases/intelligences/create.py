@@ -96,6 +96,19 @@ class CreateContentBaseUseCase:
 
         self.event_manager_notify(event="contentbase_activity", contentbase=contentbase, action_type="C", user=user)
 
+        # Fire cache invalidation event if this is a router content base (project-level)
+        if is_router:
+            try:
+                from nexus.intelligences.models import IntegratedIntelligence
+                integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
+                project = integrated_intelligence.project
+                self.event_manager_notify(
+                    event="cache_invalidation:content_base",
+                    contentbase=contentbase,
+                )
+            except Exception:
+                pass  # Skip if no project (org-level content base)
+
         return contentbase
 
 
