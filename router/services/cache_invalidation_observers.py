@@ -142,14 +142,44 @@ class ContentBaseCacheInvalidationObserver(EventObserver):
                     "intelligence_uuid": str(cb.intelligence.uuid),
                 }
 
-            # Refresh content base cache
+            def _instructions_to_list(cb):
+                try:
+                    return list(cb.instructions.all().values_list("instruction", flat=True))
+                except Exception:
+                    return []
+
+            def _agent_to_dict(cb):
+                try:
+                    agent = cb.agent
+                    if agent:
+                        return {
+                            "name": agent.name,
+                            "role": agent.role,
+                            "personality": agent.personality,
+                            "goal": agent.goal,
+                        }
+                except Exception:
+                    pass
+                return None
+
+            # Refresh content base cache and related caches
             cache_service.invalidate_content_base_cache(
                 project_uuid=project_uuid,
                 fetch_func=lambda uuid: _content_base_to_dict(content_base_obj),
                 agents_backend=agents_backend,
             )
+            cache_service.invalidate_instructions_cache(
+                project_uuid=project_uuid,
+                fetch_func=lambda uuid: _instructions_to_list(content_base_obj),
+                agents_backend=agents_backend,
+            )
+            cache_service.invalidate_agent_cache(
+                project_uuid=project_uuid,
+                fetch_func=lambda uuid: _agent_to_dict(content_base_obj),
+                agents_backend=agents_backend,
+            )
 
-            logger.info(f"Refreshed content base cache for {project_uuid}")
+            logger.info(f"Refreshed content base, instructions, and agent cache for {project_uuid}")
         except Exception as e:
             logger.error(f"Failed to refresh content base cache: {e}", exc_info=True)
 
@@ -196,14 +226,33 @@ class ContentBaseAgentCacheInvalidationObserver(EventObserver):
                     "intelligence_uuid": str(cb.intelligence.uuid),
                 }
 
-            # Refresh content base cache (agent is part of content base)
+            def _agent_to_dict(cb):
+                try:
+                    agent = cb.agent
+                    if agent:
+                        return {
+                            "name": agent.name,
+                            "role": agent.role,
+                            "personality": agent.personality,
+                            "goal": agent.goal,
+                        }
+                except Exception:
+                    pass
+                return None
+
+            # Refresh content base cache and agent cache separately
             cache_service.invalidate_content_base_cache(
                 project_uuid=project_uuid,
                 fetch_func=lambda uuid: _content_base_to_dict(content_base_obj),
                 agents_backend=agents_backend,
             )
+            cache_service.invalidate_agent_cache(
+                project_uuid=project_uuid,
+                fetch_func=lambda uuid: _agent_to_dict(content_base_obj),
+                agents_backend=agents_backend,
+            )
 
-            logger.info(f"Refreshed content base cache (agent update) for {project_uuid}")
+            logger.info(f"Refreshed content base and agent cache (agent update) for {project_uuid}")
         except Exception as e:
             logger.error(f"Failed to refresh content base cache (agent update): {e}", exc_info=True)
 
@@ -250,14 +299,25 @@ class ContentBaseInstructionCacheInvalidationObserver(EventObserver):
                     "intelligence_uuid": str(cb.intelligence.uuid),
                 }
 
-            # Refresh content base cache (instructions are part of content base)
+            def _instructions_to_list(cb):
+                try:
+                    return list(cb.instructions.all().values_list("instruction", flat=True))
+                except Exception:
+                    return []
+
+            # Refresh content base cache and instructions cache separately
             cache_service.invalidate_content_base_cache(
                 project_uuid=project_uuid,
                 fetch_func=lambda uuid: _content_base_to_dict(content_base_obj),
                 agents_backend=agents_backend,
             )
+            cache_service.invalidate_instructions_cache(
+                project_uuid=project_uuid,
+                fetch_func=lambda uuid: _instructions_to_list(content_base_obj),
+                agents_backend=agents_backend,
+            )
 
-            logger.info(f"Refreshed content base cache (instruction update) for {project_uuid}")
+            logger.info(f"Refreshed content base and instructions cache (instruction update) for {project_uuid}")
         except Exception as e:
             logger.error(f"Failed to refresh content base cache (instruction update): {e}", exc_info=True)
 

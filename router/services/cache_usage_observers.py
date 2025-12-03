@@ -5,8 +5,7 @@ These observers track cache hit/miss rates, performance metrics, and usage patte
 to help monitor and optimize the cache layer.
 """
 import logging
-import time
-from typing import Dict, Optional
+from typing import Optional
 
 from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver

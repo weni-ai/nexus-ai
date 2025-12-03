@@ -99,10 +99,12 @@ class OpenAITeamAdapter(TeamAdapter):
         channel_uuid: str,
         supervisor_hooks: SupervisorHooks,
         runner_hooks: RunnerHooks,
-        content_base: ContentBase,
-        project: Project,
+        content_base: ContentBase = None,
+        project: Project = None,
         auth_token: str = "",
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
+        # Cached inline agent config data (optional, used to avoid database queries)
+        default_instructions_for_collaborators: str = None,
         session_factory: Callable = None,
         session: Session = None,
         data_lake_event_adapter: DataLakeEventAdapter = None,
@@ -116,18 +118,55 @@ class OpenAITeamAdapter(TeamAdapter):
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
         use_components: bool = False,
+        # Cached data parameters (optional, used to avoid database queries)
+        content_base_uuid: str = None,
+        business_rules: str = None,
+        instructions: list[str] = None,
+        agent_data: dict = None,
         **kwargs,
     ) -> list[dict]:
         agents_as_tools = []
 
-        content_base_uuid = str(content_base.uuid)
-        business_rules = project.human_support_prompt
+        # Use cached data if provided, otherwise fall back to Django objects
+        if content_base_uuid is None:
+            if content_base:
+                content_base_uuid = str(content_base.uuid)
+            else:
+                raise ValueError("content_base_uuid must be provided if content_base is None")
 
-        instructions = content_base.instructions.all()
-        agent_data = content_base.agent
+        if business_rules is None:
+            if project:
+                business_rules = project.human_support_prompt
+            else:
+                business_rules = None
 
-        supervisor_instructions = list(instructions.values_list("instruction", flat=True))
-        supervisor_instructions = "\n".join(supervisor_instructions)
+        if instructions is None:
+            if content_base:
+                instructions_queryset = content_base.instructions.all()
+                instructions = list(instructions_queryset.values_list("instruction", flat=True))
+            else:
+                instructions = []
+        # else: instructions is already a list from cache
+
+        if agent_data is None:
+            if content_base:
+                try:
+                    agent = content_base.agent
+                    if agent:
+                        agent_data = {
+                            "name": agent.name,
+                            "role": agent.role,
+                            "personality": agent.personality,
+                            "goal": agent.goal,
+                        }
+                    else:
+                        agent_data = None
+                except Exception:
+                    agent_data = None
+            else:
+                agent_data = None
+
+        supervisor_instructions = "\n".join(instructions) if instructions else ""
 
         time_now = pendulum.now("America/Sao_Paulo")
         llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
@@ -159,10 +198,13 @@ class OpenAITeamAdapter(TeamAdapter):
         for agent in agents:
             agent_instructions = agent.get("instruction")
 
-            if isinstance(inline_agent_configuration, InlineAgentsConfiguration):
-                default_instructions_for_collaborators = (
-                    inline_agent_configuration.default_instructions_for_collaborators
-                )
+            # Use cached data if provided, otherwise fall back to Django object
+            if default_instructions_for_collaborators is None:
+                if isinstance(inline_agent_configuration, InlineAgentsConfiguration):
+                    default_instructions_for_collaborators = (
+                        inline_agent_configuration.default_instructions_for_collaborators
+                    )
+            if default_instructions_for_collaborators:
                 agent_instructions += f"\n{default_instructions_for_collaborators}"
 
             supervisor_default_collaborator_instructions = supervisor.get("default_instructions_for_collaborators", "")

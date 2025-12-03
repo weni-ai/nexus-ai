@@ -72,6 +72,18 @@ class DeleteContentBaseUseCase:
             instruction.delete()
         content_base.refresh_from_db()
 
+        # Fire cache invalidation event after all deletions
+        try:
+            project_uuid = str(content_base.intelligence.project.uuid)
+            # Fire cache invalidation for instructions (we need to pass a dummy instruction or just project_uuid)
+            # Since we're invalidating the entire instructions list, we can just pass project_uuid
+            self.event_manager_notify(
+                event="cache_invalidation:content_base_instruction",
+                project_uuid=project_uuid,
+            )
+        except AttributeError:
+            pass  # Skip if no project (org-level content base)
+
 
 class DeleteContentBaseTextUseCase:
     def __init__(self, file_database) -> None:

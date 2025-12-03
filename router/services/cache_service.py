@@ -12,6 +12,8 @@ class CacheService:
     TEAM_DATA_TTL = 86400  # 24 hours
     INLINE_AGENT_CONFIG_TTL = 86400  # 24 hours
     GUARDRAILS_TTL = 86400  # 24 hours
+    INSTRUCTIONS_TTL = 86400  # 24 hours
+    AGENT_DATA_TTL = 86400  # 24 hours
     WORKFLOW_CACHE_TTL = 600  # 10 minutes
 
     # Cache type configuration - makes it easy to add new cache types
@@ -21,6 +23,8 @@ class CacheService:
         "team": {"ttl": TEAM_DATA_TTL, "key_suffix": "team", "requires_backend": True},
         "guardrails": {"ttl": GUARDRAILS_TTL, "key_suffix": "guardrails"},
         "inline_agent_config": {"ttl": INLINE_AGENT_CONFIG_TTL, "key_suffix": "inline_agent_config"},
+        "instructions": {"ttl": INSTRUCTIONS_TTL, "key_suffix": "instructions"},
+        "agent": {"ttl": AGENT_DATA_TTL, "key_suffix": "agent"},
     }
 
     # Required cache types for composite cache
@@ -143,6 +147,25 @@ class CacheService:
             self.cache_repository.set(cache_key, data, self.INLINE_AGENT_CONFIG_TTL)
         return data
 
+    def get_instructions_data(
+        self, project_uuid: str, fetch_func: Callable[[str], List[str]]
+    ) -> List[str]:
+        """Get content base instructions from cache or fetch and cache."""
+        cache_key = self._get_cache_key(project_uuid, "instructions")
+        return self._get_or_create(cache_key, fetch_func, self.INSTRUCTIONS_TTL, project_uuid)
+
+    def get_agent_data(self, project_uuid: str, fetch_func: Callable[[str], Optional[Dict]]) -> Optional[Dict]:
+        """Get content base agent data from cache or fetch and cache."""
+        cache_key = self._get_cache_key(project_uuid, "agent")
+        cached = self.cache_repository.get(cache_key)
+        if cached:
+            return cached
+
+        data = fetch_func(project_uuid)
+        if data:
+            self.cache_repository.set(cache_key, data, self.AGENT_DATA_TTL)
+        return data
+
     def cache_workflow_data(
         self, workflow_id: str, data_type: str, data: Any, ttl: Optional[int] = None
     ) -> None:
@@ -205,6 +228,8 @@ class CacheService:
             else None,
             "guardrails": lambda: self.get_guardrails_config(project_uuid, fetch_func),
             "inline_agent_config": lambda: self.get_inline_agent_config(project_uuid, fetch_func),
+            "instructions": lambda: self.get_instructions_data(project_uuid, fetch_func),
+            "agent": lambda: self.get_agent_data(project_uuid, fetch_func),
         }
 
         if fetch_func:
@@ -248,6 +273,24 @@ class CacheService:
     ) -> None:
         """Invalidate and refresh content base cache."""
         self._invalidate_cache_type(project_uuid, "content_base", fetch_func, agents_backend)
+
+    def invalidate_instructions_cache(
+        self,
+        project_uuid: str,
+        fetch_func: Optional[Callable[[str], List[str]]] = None,
+        agents_backend: Optional[str] = None,
+    ) -> None:
+        """Invalidate and refresh instructions cache."""
+        self._invalidate_cache_type(project_uuid, "instructions", fetch_func, agents_backend)
+
+    def invalidate_agent_cache(
+        self,
+        project_uuid: str,
+        fetch_func: Optional[Callable[[str], Optional[Dict]]] = None,
+        agents_backend: Optional[str] = None,
+    ) -> None:
+        """Invalidate and refresh agent cache."""
+        self._invalidate_cache_type(project_uuid, "agent", fetch_func, agents_backend)
 
     def invalidate_team_cache(
         self,
