@@ -168,10 +168,11 @@ class PreGenerationService:
                 import sentry_sdk
 
                 # Create Sentry transaction for the actual pre-generation stage
+                # Note: sampled=True overrides global traces_sample_rate=0.0
                 with sentry_sdk.start_transaction(
                     name="pre_generation.fetch_data",
                     op="pre_generation",
-                    sampled=True,  # Always sample stage performance
+                    sampled=True,
                 ) as transaction:
                     transaction.set_tag("stage", "pre_generation")
                     transaction.set_tag("project_uuid", project_uuid)
