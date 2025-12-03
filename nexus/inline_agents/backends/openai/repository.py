@@ -14,6 +14,7 @@ class OpenAISupervisorRepository(SupervisorRepository):
         cls,
         project: Project,
         foundation_model: str = None,
+        audio_orchestration: bool = False,
     ) -> Agent:
 
         supervisor = Supervisor.objects.order_by('id').last()
@@ -34,7 +35,7 @@ class OpenAISupervisorRepository(SupervisorRepository):
             "knowledge_bases": supervisor.knowledge_bases,
             "prompt_override_configuration": supervisor.prompt_override_configuration,
             "default_instructions_for_collaborators": supervisor.default_instructions_for_collaborators,
-            "max_tokens": supervisor.max_tokens,
+            "max_tokens": supervisor.get_max_tokens(audio_orchestration=audio_orchestration),
             "exclude_tools_from_audio_orchestration": supervisor.exclude_tools_from_audio_orchestration,
             "exclude_tools_from_text_orchestration": supervisor.exclude_tools_from_text_orchestration,
             "transcription_instructions": supervisor.transcription_prompt,

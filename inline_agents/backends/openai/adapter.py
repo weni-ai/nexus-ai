@@ -136,7 +136,7 @@ class OpenAITeamAdapter(TeamAdapter):
         time_now = pendulum.now("America/Sao_Paulo")
         llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
 
-        max_tokens = supervisor.get("max_tokens", 2048)
+        max_tokens: tuple[int, int] = supervisor.get("max_tokens", (2048, 2048))
 
         instruction = cls.get_supervisor_instructions(
             instruction=supervisor["instruction"],
@@ -199,7 +199,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 model=agent.get("foundationModel", settings.OPENAI_AGENTS_FOUNDATION_MODEL),
                 hooks=hooks,
                 model_settings=ModelSettings(
-                    max_tokens=max_tokens,
+                    max_tokens=max_tokens[1],
                 )
             )
 
@@ -228,7 +228,7 @@ class OpenAITeamAdapter(TeamAdapter):
             model=supervisor["foundation_model"],
             prompt_override_configuration=supervisor.get("prompt_override_configuration", {}),
             preview=preview,
-            max_tokens=max_tokens,
+            max_tokens=max_tokens[1],
             use_components=use_components,
             exclude_tools_from_audio_orchestration=supervisor.get("exclude_tools_from_audio_orchestration", []),
             exclude_tools_from_text_orchestration=supervisor.get("exclude_tools_from_text_orchestration", []),
