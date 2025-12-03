@@ -29,16 +29,15 @@ from nexus.event_domain.event_observer import EventObserver
 logger = logging.getLogger(__name__)
 
 
-@observer("project_activity", isolate_errors=True, manager="async")
+@observer("cache_invalidation:project", isolate_errors=True, manager="async")
 class ProjectCacheInvalidationObserver(EventObserver):
     """Invalidates and refreshes project cache when project is updated."""
 
     async def perform(self, **kwargs):
         """Refresh project cache when project is updated."""
         project = kwargs.get("project")
-        action_type = kwargs.get("action_type")
 
-        if not project or action_type != "U":  # Only on updates
+        if not project:
             return
 
         try:
@@ -106,16 +105,15 @@ class ProjectCacheInvalidationObserver(EventObserver):
             # Error is isolated, won't break the update operation
 
 
-@observer("contentbase_activity", isolate_errors=True, manager="async")
+@observer("cache_invalidation:content_base", isolate_errors=True, manager="async")
 class ContentBaseCacheInvalidationObserver(EventObserver):
     """Invalidates and refreshes content base cache when content base is updated."""
 
     async def perform(self, **kwargs):
         """Refresh content base cache when content base is updated."""
         contentbase = kwargs.get("contentbase")
-        action_type = kwargs.get("action_type")
 
-        if not contentbase or action_type != "U":  # Only on updates
+        if not contentbase:
             return
 
         try:
@@ -156,15 +154,16 @@ class ContentBaseCacheInvalidationObserver(EventObserver):
             logger.error(f"Failed to refresh content base cache: {e}", exc_info=True)
 
 
-@observer("contentbase_agent_activity", isolate_errors=True, manager="async")
+@observer("cache_invalidation:content_base_agent", isolate_errors=True, manager="async")
 class ContentBaseAgentCacheInvalidationObserver(EventObserver):
     """Invalidates and refreshes content base cache when agent is updated."""
 
     async def perform(self, **kwargs):
         """Refresh content base cache when agent is updated."""
         content_base_agent = kwargs.get("content_base_agent")
+        project_uuid = kwargs.get("project_uuid")
 
-        if not content_base_agent:
+        if not content_base_agent and not project_uuid:
             return
 
         try:
@@ -174,12 +173,16 @@ class ContentBaseAgentCacheInvalidationObserver(EventObserver):
 
             cache_service = CacheService()
 
-            # Get project_uuid from content base
-            content_base = content_base_agent.content_base
-            try:
-                project_uuid = str(content_base.intelligence.project.uuid)
-            except AttributeError:
-                logger.debug(f"Content base {content_base.uuid} has no project, skipping cache invalidation")
+            # Get project_uuid if not provided directly
+            if not project_uuid and content_base_agent:
+                content_base = content_base_agent.content_base
+                try:
+                    project_uuid = str(content_base.intelligence.project.uuid)
+                except AttributeError:
+                    logger.debug(f"Content base {content_base.uuid} has no project, skipping cache invalidation")
+                    return
+
+            if not project_uuid:
                 return
 
             # Get fresh data
@@ -205,15 +208,16 @@ class ContentBaseAgentCacheInvalidationObserver(EventObserver):
             logger.error(f"Failed to refresh content base cache (agent update): {e}", exc_info=True)
 
 
-@observer("contentbase_instruction_activity", isolate_errors=True, manager="async")
+@observer("cache_invalidation:content_base_instruction", isolate_errors=True, manager="async")
 class ContentBaseInstructionCacheInvalidationObserver(EventObserver):
     """Invalidates and refreshes content base cache when instructions are updated."""
 
     async def perform(self, **kwargs):
         """Refresh content base cache when instructions are updated."""
         content_base_instruction = kwargs.get("content_base_instruction")
+        project_uuid = kwargs.get("project_uuid")
 
-        if not content_base_instruction:
+        if not content_base_instruction and not project_uuid:
             return
 
         try:
@@ -223,12 +227,16 @@ class ContentBaseInstructionCacheInvalidationObserver(EventObserver):
 
             cache_service = CacheService()
 
-            # Get project_uuid from content base
-            content_base = content_base_instruction.content_base
-            try:
-                project_uuid = str(content_base.intelligence.project.uuid)
-            except AttributeError:
-                logger.debug(f"Content base {content_base.uuid} has no project, skipping cache invalidation")
+            # Get project_uuid if not provided directly
+            if not project_uuid and content_base_instruction:
+                content_base = content_base_instruction.content_base
+                try:
+                    project_uuid = str(content_base.intelligence.project.uuid)
+                except AttributeError:
+                    logger.debug(f"Content base {content_base.uuid} has no project, skipping cache invalidation")
+                    return
+
+            if not project_uuid:
                 return
 
             # Get fresh data
@@ -254,23 +262,15 @@ class ContentBaseInstructionCacheInvalidationObserver(EventObserver):
             logger.error(f"Failed to refresh content base cache (instruction update): {e}", exc_info=True)
 
 
-@observer("contentbase_activity", isolate_errors=True, manager="async")
+@observer("cache_invalidation:team", isolate_errors=True, manager="async")
 class TeamCacheInvalidationObserver(EventObserver):
-    """
-    Invalidates and refreshes team cache when content base is updated.
-
-    Note: This handles team updates that happen through ContentBasePersonalizationSerializer.
-    For direct team updates via PushAgents API, we need to either:
-    1. Fire an event from PushAgents, OR
-    2. Add cache invalidation directly in PushAgents.post()
-    """
+    """Invalidates and refreshes team cache when team is updated."""
 
     async def perform(self, **kwargs):
-        """Refresh team cache when content base (which includes team) is updated."""
-        contentbase = kwargs.get("contentbase")
-        action_type = kwargs.get("action_type")
+        """Refresh team cache when team is updated."""
+        project_uuid = kwargs.get("project_uuid")
 
-        if not contentbase or action_type != "U":  # Only on updates
+        if not project_uuid:
             return
 
         try:
@@ -280,13 +280,6 @@ class TeamCacheInvalidationObserver(EventObserver):
             from router.services.cache_service import CacheService
 
             cache_service = CacheService()
-
-            # Get project_uuid from content base
-            try:
-                project_uuid = str(contentbase.intelligence.project.uuid)
-            except AttributeError:
-                logger.debug(f"Content base {contentbase.uuid} has no project, skipping team cache invalidation")
-                return
 
             # Get fresh data
             project_obj, content_base_obj, _ = get_project_and_content_base_data(project_uuid)
@@ -303,12 +296,3 @@ class TeamCacheInvalidationObserver(EventObserver):
             logger.info(f"Refreshed team cache for {project_uuid}")
         except Exception as e:
             logger.error(f"Failed to refresh team cache: {e}", exc_info=True)
-
-
-# Note: For direct team updates via PushAgents API (nexus/inline_agents/api/views.py),
-# we need to add cache invalidation directly in PushAgents.post() method since
-# it doesn't currently fire an event. Alternatively, we could add an event there.
-#
-# For guardrails updates, we would need to:
-# 1. Fire an event when guardrails are updated, OR
-# 2. Add cache invalidation directly in the guardrails update handler

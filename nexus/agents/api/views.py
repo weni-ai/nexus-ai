@@ -451,10 +451,26 @@ class ActiveAgentsViewSet(APIView):
             print("------------------------ UPDATING AGENT ---------------------")
             usecase.assign_agent(agent_uuid=agent_uuid, project_uuid=project_uuid, created_by=user)
             usecase.create_supervisor_version(project_uuid, user)
+
+            # Fire cache invalidation event for team update (agent assigned)
+            from nexus.events import event_manager
+            event_manager.notify(
+                event="cache_invalidation:team",
+                project_uuid=project_uuid,
+            )
+
             return Response({"assigned": True})
 
         usecase.unassign_agent(agent_uuid=agent_uuid, project_uuid=project_uuid)
         usecase.create_supervisor_version(project_uuid, user)
+
+        # Fire cache invalidation event for team update (agent unassigned)
+        from nexus.events import event_manager
+        event_manager.notify(
+            event="cache_invalidation:team",
+            project_uuid=project_uuid,
+        )
+
         return Response({"assigned": False})
 
 
@@ -755,11 +771,25 @@ class RationaleView(APIView):
             project.rationale_switch = rationale
             project.save(update_fields=["rationale_switch"])
 
+            # Fire cache invalidation event for project update
+            from nexus.events import event_manager
+            event_manager.notify(
+                event="cache_invalidation:project",
+                project=project,
+            )
+
             return Response({"message": "Rationale updated successfully", "rationale": rationale})
         except Team.DoesNotExist:
             project = Project.objects.get(uuid=project_uuid)
             project.rationale_switch = rationale
             project.save(update_fields=["rationale_switch"])
+
+            # Fire cache invalidation event for project update
+            from nexus.events import event_manager
+            event_manager.notify(
+                event="cache_invalidation:project",
+                project=project,
+            )
 
             return Response({"message": "Rationale updated successfully", "rationale": rationale})
 

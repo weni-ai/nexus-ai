@@ -201,6 +201,12 @@ class ProjectsUseCase:
         project.agents_backend = agents_backend
         project.save()
 
+        # Fire cache invalidation event for project update
+        self.event_manager_notify(
+            event="cache_invalidation:project",
+            project=project,
+        )
+
         return project.agents_backend
 
     def get_agent_builder_project_details(self, project_uuid: str) -> dict:
