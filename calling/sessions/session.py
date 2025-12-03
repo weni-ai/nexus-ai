@@ -20,6 +20,7 @@ from agents import Runner
 from agents.memory import Session as OpenAISession
 
 from inline_agents.backend import InlineAgentsBackend
+from nexus.projects.models import Project
 from router.entities.mailroom import Message
 from calling.agent import rational_instructions
 
@@ -102,7 +103,7 @@ class Session:
     current_task: asyncio.Task = None
 
     response: Response = None
-
+    project: Project = None
     def __post_init__(self):
         self.response = Response(self)
 
@@ -150,6 +151,9 @@ class Session:
     
     def set_backend(self, backend: InlineAgentsBackend) -> None:
         self.backend = backend
+
+    def set_project_obj(self, project: Project) -> None:
+        self.project = project
 
     async def close(self) -> None:
         await self.wpp_connection.close()

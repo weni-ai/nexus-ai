@@ -338,7 +338,7 @@ def _initialize_session_agents(
         conversation_turns_to_include=None
     )
 
-    supervisor: Dict[str, Any] = backend.supervisor_repository.get_supervisor(project=project)
+    supervisor: Dict[str, Any] = backend.supervisor_repository.get_supervisor(project=project, audio_orchestration=True)
     jwt_usecase = JWTUsecase()
     auth_token = jwt_usecase.generate_jwt_token(message_obj.project_uuid)
 
@@ -374,6 +374,7 @@ def _initialize_session_agents(
     session.set_orchestration_session_id(session_id)
     session.set_orchestration_session(orchestration_session)
     session.set_message_obj(message_obj)
+    session.set_project_obj(project)
 
 
 def _get_calling_backend_and_team(project_uuid: str) -> tuple:
