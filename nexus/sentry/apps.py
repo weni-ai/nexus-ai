@@ -21,4 +21,5 @@ class SentryConfig(AppConfig):
             integrations=[DjangoIntegration()],
             environment=settings.ENVIRONMENT,
             before_send=partial(filter_events, events_to_filter=settings.FILTER_SENTRY_EVENTS),
+            traces_sample_rate=0.0,  # Disable automatic instrumentation
         )
