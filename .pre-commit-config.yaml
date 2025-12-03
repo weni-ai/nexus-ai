@@ -3,6 +3,7 @@ exclude: |
     ^inline_agents/backends/openai/grpc/message_stream_service\.proto$
     |^inline_agents/backends/openai/grpc/generated/message_stream_service_pb2\.py$
     |^inline_agents/backends/openai/grpc/generated/message_stream_service_pb2_grpc\.py$
+    |.*/migrations/.*
   )
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
