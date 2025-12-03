@@ -16,6 +16,7 @@ from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
 from router.services.pre_generation_service import PreGenerationService
+from router.tasks.invocation_context import CachedProjectData
 from router.tasks.redis_task_manager import RedisTaskManager
 
 from .actions_client import get_action_clients
@@ -263,6 +264,52 @@ def _handle_task_error(
     raise exc
 
 
+def _invoke_backend(
+    backend,
+    cached_data: CachedProjectData,
+    message_obj,
+    processed_message: Dict,
+    preview: bool,
+    language: str,
+    user_email: str,
+    foundation_model: Optional[str],
+    turn_off_rationale: bool,
+):
+    """
+    Invoke backend with cached data to avoid database queries.
+
+    This helper function simplifies the backend invocation by grouping
+    all cached data and parameters into a cleaner interface.
+    """
+    project_dict = cached_data.project_dict
+    invoke_kwargs = cached_data.get_invoke_kwargs()
+
+    return backend.invoke_agents(
+        team=cached_data.team,
+        input_text=message_obj.text,
+        contact_urn=message_obj.contact_urn,
+        project_uuid=message_obj.project_uuid,
+        preview=preview,
+        rationale_switch=project_dict["rationale_switch"],
+        sanitized_urn=message_obj.sanitized_urn,
+        language=language,
+        user_email=user_email,
+        use_components=project_dict["use_components"],
+        contact_fields=message_obj.contact_fields_as_json,
+        contact_name=message_obj.contact_name,
+        channel_uuid=message_obj.channel_uuid,
+        msg_external_id=processed_message.get("msg_event", {}).get("msg_external_id", ""),
+        turn_off_rationale=turn_off_rationale,
+        use_prompt_creation_configurations=project_dict["use_prompt_creation_configurations"],
+        conversation_turns_to_include=project_dict["conversation_turns_to_include"],
+        exclude_previous_thinking_steps=project_dict["exclude_previous_thinking_steps"],
+        foundation_model=foundation_model,
+        # Django objects (project, content_base, inline_agent_configuration) are optional
+        # and default to None - we omit them since we always use cached data
+        **invoke_kwargs,
+    )
+
+
 @celery_app.task(
     bind=True,
     soft_time_limit=300,
@@ -306,14 +353,16 @@ def start_inline_agents(
             guardrails_config,
             inline_agent_config_dict,
             agents_backend,
+            instructions_cached,
+            agent_cached,
         ) = pre_generation_service.fetch_pre_generation_data(project_uuid)
 
-        # Get actual Django model objects (still needed for backend.invoke_agents)
-        # The cache is already populated by PreGenerationService, so subsequent calls will use cache
-        project, content_base, inline_agent_configuration = pre_generation_service.get_project_objects(project_uuid)
+        # All data is now cached - no need to fetch Django objects
+        # Backend will use cached data passed via kwargs
 
+        # Use cached dict value instead of accessing Django object
         broadcast, _ = get_action_clients(
-            preview=preview, multi_agents=True, project_use_components=project.use_components
+            preview=preview, multi_agents=True, project_use_components=project_dict["use_components"]
         )
 
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
@@ -336,34 +385,29 @@ def start_inline_agents(
 
         message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
 
-        backend = BackendsRegistry.get_backend(agents_backend)
-        # Use cached team data from PreGenerationService
-        # team_cached is already in the correct format (list[dict]) that backend.invoke_agents expects
-        team = team_cached
+        # Prepare cached data context
+        cached_data = CachedProjectData.from_pre_generation_data(
+            project_dict=project_dict,
+            content_base_dict=content_base_dict,
+            team=team_cached,
+            guardrails_config=guardrails_config,
+            inline_agent_config_dict=inline_agent_config_dict,
+            instructions=instructions_cached,
+            agent_data=agent_cached,
+        )
 
-        response = backend.invoke_agents(
-            team=team,
-            input_text=message_obj.text,
-            contact_urn=message_obj.contact_urn,
-            project_uuid=message_obj.project_uuid,
+        # Invoke backend with simplified parameters
+        backend = BackendsRegistry.get_backend(agents_backend)
+        response = _invoke_backend(
+            backend=backend,
+            cached_data=cached_data,
+            message_obj=message_obj,
+            processed_message=processed_message,
             preview=preview,
-            rationale_switch=project.rationale_switch,
-            sanitized_urn=message_obj.sanitized_urn,
             language=language,
             user_email=user_email,
-            use_components=project.use_components,
-            contact_fields=message_obj.contact_fields_as_json,
-            contact_name=message_obj.contact_name,
-            channel_uuid=message_obj.channel_uuid,
-            msg_external_id=processed_message.get("msg_event", {}).get("msg_external_id", ""),
-            turn_off_rationale=turn_off_rationale,
-            use_prompt_creation_configurations=project.use_prompt_creation_configurations,
-            conversation_turns_to_include=project.conversation_turns_to_include,
-            exclude_previous_thinking_steps=project.exclude_previous_thinking_steps,
-            project=project,
-            content_base=content_base,
             foundation_model=foundation_model,
-            inline_agent_configuration=inline_agent_configuration,
+            turn_off_rationale=turn_off_rationale,
         )
 
         if response is None or response == "":

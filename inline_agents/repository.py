@@ -5,11 +5,18 @@ from django.conf import settings
 
 class SupervisorRepository:
     @classmethod
-    def get_foundation_model(cls, project, supervisor, foundation_model: str = None) -> str:
+    def get_foundation_model(
+        cls,
+        project=None,
+        supervisor=None,
+        foundation_model: str = None,
+        default_supervisor_foundation_model: str = None,
+    ) -> str:
         if foundation_model in settings.LOCKED_FOUNDATION_MODELS:
             return foundation_model
 
-        custom_project_model = project.default_supervisor_foundation_model
+        # Use cached data if provided, otherwise fall back to Django object
+        custom_project_model = default_supervisor_foundation_model if default_supervisor_foundation_model is not None else (project.default_supervisor_foundation_model if project else None)
         if custom_project_model:
             return custom_project_model
 
