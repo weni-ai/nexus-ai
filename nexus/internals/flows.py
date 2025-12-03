@@ -92,16 +92,9 @@ class FlowsRESTClient(RestClient):
 
         jwt_usecase = JWTUsecase()
         jwt_token = jwt_usecase.generate_broadcast_jwt_token()
-        headers = {
-            "Content-Type": "application/json; charset: utf-8",
-            "Authorization": f"Bearer {jwt_token}"
-        }
+        headers = {"Content-Type": "application/json; charset: utf-8", "Authorization": f"Bearer {jwt_token}"}
 
-        response = requests.post(
-            url,
-            json=body,
-            headers=headers
-        )
+        response = requests.post(url, json=body, headers=headers)
         print("response status: ", response.status_code)
         print("response: ", response.text)
         print("--------------------------")
