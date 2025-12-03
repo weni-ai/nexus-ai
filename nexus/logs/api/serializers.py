@@ -213,13 +213,18 @@ class InlineConversationSerializer(serializers.ModelSerializer):
 
     def get_text(self, obj: InlineAgentMessage) -> str:
         text = obj.text
+        uuid = obj.uuid
         logger.info(
             "inline_conversation_text_received",
-            extra={"uuid": str(obj.uuid), "text_len": len(text), "text_head": text[:200]},
+            extra={"uuid": str(uuid), "text_len": len(text), "text_head": text[:200]},
         )
 
         try:
-            parsed = json.loads(text)
+            normalized_text = text.strip()
+            if not normalized_text or normalized_text[0] not in '[{"':
+                return text
+
+            parsed = json.loads(normalized_text)
             if isinstance(parsed, list):
                 return json.dumps(parsed[0]) if parsed else ""
             if isinstance(parsed, dict):
@@ -227,7 +232,7 @@ class InlineConversationSerializer(serializers.ModelSerializer):
             return str(parsed)
         except json.JSONDecodeError as e:
             logger.warning("inline_conversation_text_decode_error", exc_info=True)
-            sentry_sdk.set_tag("inline_message_uuid", str(obj.uuid))
+            sentry_sdk.set_tag("inline_message_uuid", str(uuid))
             sentry_sdk.set_context("inline_message_text", {"text": text})
             sentry_sdk.capture_exception(e)
             return text
