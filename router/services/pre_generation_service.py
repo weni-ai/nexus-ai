@@ -125,20 +125,60 @@ class PreGenerationService:
         transaction = None
 
         # Try to start Sentry transaction (non-blocking if Sentry is unavailable)
+        # ANSI color codes for terminal output
+        COLOR_RESET = "\033[0m"
+        COLOR_GREEN = "\033[32m"
+        COLOR_YELLOW = "\033[33m"
+        COLOR_RED = "\033[31m"
+        COLOR_CYAN = "\033[36m"
+
         try:
             import sentry_sdk
+
+            # Check if Sentry is initialized
+            if not sentry_sdk.Hub.current.client:
+                logger.warning(
+                    f"{COLOR_YELLOW}[SENTRY DEBUG]{COLOR_RESET} Sentry not initialized - transaction will not be created for project {project_uuid}",
+                    extra={"project_uuid": project_uuid, "sentry_initialized": False},
+                )
+            else:
+                logger.debug(
+                    f"{COLOR_CYAN}[SENTRY DEBUG]{COLOR_RESET} Attempting to create Sentry transaction for project {project_uuid}",
+                    extra={"project_uuid": project_uuid, "sentry_initialized": True},
+                )
 
             transaction = sentry_sdk.start_transaction(
                 name="pre_generation.fetch_data",
                 op="pre_generation",
                 sampled=True,  # Override global traces_sample_rate=0.0
             )
+
             if transaction:
                 transaction.set_tag("stage", "pre_generation")
                 transaction.set_tag("project_uuid", project_uuid)
-        except Exception:
-            logger.warning("Sentry not available, continuing without transaction tracking", exc_info=True)
-            pass
+                logger.info(
+                    f"{COLOR_GREEN}[SENTRY DEBUG]{COLOR_RESET} ✓ Sentry transaction created successfully for project {project_uuid}",
+                    extra={
+                        "project_uuid": project_uuid,
+                        "transaction_name": "pre_generation.fetch_data",
+                        "transaction_op": "pre_generation",
+                        "transaction_sampled": True,
+                    },
+                )
+            else:
+                logger.warning(
+                    f"{COLOR_YELLOW}[SENTRY DEBUG]{COLOR_RESET} ✗ Sentry transaction is None (not sampled or not initialized) for project {project_uuid}",
+                    extra={
+                        "project_uuid": project_uuid,
+                        "sentry_initialized": sentry_sdk.Hub.current.client is not None,
+                    },
+                )
+        except Exception as sentry_error:
+            logger.warning(
+                f"{COLOR_RED}[SENTRY DEBUG]{COLOR_RESET} ✗ Failed to create Sentry transaction for project {project_uuid}: {sentry_error}",
+                extra={"project_uuid": project_uuid, "error": str(sentry_error)},
+                exc_info=True,
+            )
 
         try:
             # Lazy imports to avoid circular dependencies
@@ -228,6 +268,13 @@ class PreGenerationService:
             error = str(e)
             raise
         finally:
+            # ANSI color codes for terminal output
+            COLOR_RESET = "\033[0m"
+            COLOR_GREEN = "\033[32m"
+            COLOR_YELLOW = "\033[33m"
+            COLOR_RED = "\033[31m"
+            COLOR_CYAN = "\033[36m"
+
             duration = time.time() - start_time
             if transaction:
                 try:
@@ -236,8 +283,37 @@ class PreGenerationService:
                     if error:
                         transaction.set_data("error", error)
                     transaction.finish()
+                    logger.info(
+                        f"{COLOR_GREEN}[SENTRY DEBUG]{COLOR_RESET} ✓ Sentry transaction finished successfully for project {project_uuid} (duration: {duration:.3f}s, status: {status})",
+                        extra={
+                            "project_uuid": project_uuid,
+                            "duration": duration,
+                            "status": status,
+                            "transaction_finished": True,
+                        },
+                    )
                 except Exception as tracking_error:
-                    logger.warning(f"Failed to finish Sentry transaction: {tracking_error}", exc_info=True)
+                    logger.error(
+                        f"{COLOR_RED}[SENTRY DEBUG]{COLOR_RESET} ✗ Failed to finish Sentry transaction for project {project_uuid}: {tracking_error}",
+                        extra={
+                            "project_uuid": project_uuid,
+                            "duration": duration,
+                            "status": status,
+                            "transaction_finished": False,
+                            "error": str(tracking_error),
+                        },
+                        exc_info=True,
+                    )
+            else:
+                logger.debug(
+                    f"{COLOR_CYAN}[SENTRY DEBUG]{COLOR_RESET} ⚠ No Sentry transaction to finish for project {project_uuid} (duration: {duration:.3f}s, status: {status})",
+                    extra={
+                        "project_uuid": project_uuid,
+                        "duration": duration,
+                        "status": status,
+                        "transaction_available": False,
+                    },
+                )
 
             try:
                 if status == "success":
