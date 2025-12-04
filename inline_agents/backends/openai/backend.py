@@ -366,14 +366,24 @@ class OpenAIBackend(InlineAgentsBackend):
         return result
 
     async def _run_formatter_agent_async(
-        self, final_response: str, session, supervisor_hooks, context, formatter_instructions="", formatter_agent_configurations=None
+        self,
+        final_response: str,
+        session,
+        supervisor_hooks,
+        context,
+        formatter_instructions="",
+        formatter_agent_configurations=None,
     ):
         """Run the formatter agent asynchronously within the trace context"""
         # Create formatter agent to process the final response
-        formatter_agent = self._create_formatter_agent(supervisor_hooks, formatter_instructions, formatter_agent_configurations)
+        formatter_agent = self._create_formatter_agent(
+            supervisor_hooks, formatter_instructions, formatter_agent_configurations
+        )
 
         # Run the formatter agent with the final response
-        formatter_result = await self._run_formatter_agent(formatter_agent, final_response, session, context, formatter_agent_configurations)
+        formatter_result = await self._run_formatter_agent(
+            formatter_agent, final_response, session, context, formatter_agent_configurations
+        )
 
         return formatter_result
 
@@ -408,7 +418,9 @@ class OpenAIBackend(InlineAgentsBackend):
             formatter_agent_configurations = {}
 
         # Use value if not None, otherwise use default
-        formatter_agent_model: str = formatter_agent_configurations.get("formatter_foundation_model") or settings.FORMATTER_AGENT_MODEL
+        formatter_agent_model: str = (
+            formatter_agent_configurations.get("formatter_foundation_model") or settings.FORMATTER_AGENT_MODEL
+        )
         formatter_instructions: str = formatter_agent_configurations.get("formatter_instructions") or instructions
         formatter_reasoning_effort: str = formatter_agent_configurations.get("formatter_reasoning_effort")
         formatter_reasoning_summary: str = formatter_agent_configurations.get("formatter_reasoning_summary") or "auto"
@@ -428,14 +440,20 @@ class OpenAIBackend(InlineAgentsBackend):
         )
 
         if formatter_reasoning_effort:
-            formatter_agent.model_settings = ModelSettings(reasoning=Reasoning(effort=formatter_reasoning_effort, summary=formatter_reasoning_summary))
+            formatter_agent.model_settings = ModelSettings(
+                reasoning=Reasoning(effort=formatter_reasoning_effort, summary=formatter_reasoning_summary)
+            )
 
         return formatter_agent
 
-    async def _run_formatter_agent(self, formatter_agent, final_response, session, context, formatter_agent_configurations):
+    async def _run_formatter_agent(
+        self, formatter_agent, final_response, session, context, formatter_agent_configurations
+    ):
         """Run the formatter agent with the final response"""
         try:
-            formatter_send_only_assistant_message = formatter_agent_configurations.get("formatter_send_only_assistant_message") or False
+            formatter_send_only_assistant_message = (
+                formatter_agent_configurations.get("formatter_send_only_assistant_message") or False
+            )
             if formatter_send_only_assistant_message:
                 input_formatter = await session.get_items()
                 result = await Runner.run(
@@ -580,7 +598,9 @@ class OpenAIBackend(InlineAgentsBackend):
             trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
-                result = client.run_streamed(**external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS)
+                result = client.run_streamed(
+                    **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
+                )
                 delta_counter = 0
                 try:
                     # Only stream events if the result has stream_events method
@@ -600,10 +620,20 @@ class OpenAIBackend(InlineAgentsBackend):
                                 if hasattr(event, "item") and event.item.type == "tool_call_item":
                                     hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
                 except openai.APIError as api_error:
-                    self._sentry_capture_exception(api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True)
+                    self._sentry_capture_exception(
+                        api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True
+                    )
                     raise
                 except Exception as stream_error:
-                    self._sentry_capture_exception(stream_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True)
+                    self._sentry_capture_exception(
+                        stream_error,
+                        project_uuid,
+                        contact_urn,
+                        channel_uuid,
+                        session_id,
+                        input_text,
+                        enable_logger=True,
+                    )
                     # Try to get final_response even if streaming failed
                     try:
                         final_response = self._get_final_response(result)
@@ -679,7 +709,9 @@ class OpenAIBackend(InlineAgentsBackend):
             final_response = result.final_output
         return final_response
 
-    def _sentry_capture_exception(self, exception, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger):
+    def _sentry_capture_exception(
+        self, exception, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger
+    ):
         if enable_logger:
             logger.error(
                 f"[OpenAIBackend] Streaming error during agent execution: {exception}",

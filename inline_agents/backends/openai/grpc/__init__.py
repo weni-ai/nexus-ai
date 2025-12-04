@@ -7,4 +7,4 @@ from inline_agents.backends.openai.grpc.streaming_client import (
     is_grpc_enabled,
 )
 
-__all__ = ['MessageStreamingClient', 'is_grpc_enabled']
+__all__ = ["MessageStreamingClient", "is_grpc_enabled"]

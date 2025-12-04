@@ -28,6 +28,15 @@ class OpenAISupervisor(models.Model):
     max_tokens = models.IntegerField(
         null=True, blank=True, help_text="Maximum number of tokens to generate", default=2048
     )
+    max_tokens_collaborator = models.IntegerField(
+        null=True, blank=True, help_text="Maximum number of tokens to generate", default=2048
+    )
+    audio_orchestration_max_tokens = models.IntegerField(
+        null=True, blank=True, help_text="Maximum number of tokens to generate for audio orchestration", default=2048
+    )
+    audio_orchestration_max_tokens_collaborator = models.IntegerField(
+        null=True, blank=True, help_text="Maximum number of tokens to generate for audio orchestration for collaborators", default=2048
+    )
 
     exclude_tools_from_audio_orchestration = ArrayField(models.CharField(max_length=255), default=list, blank=True)
     exclude_tools_from_text_orchestration = ArrayField(models.CharField(max_length=255), default=list, blank=True)
