@@ -156,15 +156,33 @@ class PreGenerationService:
             if transaction:
                 transaction.set_tag("stage", "pre_generation")
                 transaction.set_tag("project_uuid", project_uuid)
+
+                # Check transaction properties
+                transaction_sampled = getattr(transaction, "sampled", None)
+                transaction_trace_id = getattr(transaction, "trace_id", None)
+                transaction_span_id = getattr(transaction, "span_id", None)
+
                 logger.info(
                     f"{COLOR_GREEN}[SENTRY DEBUG]{COLOR_RESET} ✓ Sentry transaction created successfully for project {project_uuid}",
                     extra={
                         "project_uuid": project_uuid,
                         "transaction_name": "pre_generation.fetch_data",
                         "transaction_op": "pre_generation",
-                        "transaction_sampled": True,
+                        "transaction_sampled": transaction_sampled,
+                        "transaction_trace_id": str(transaction_trace_id) if transaction_trace_id else None,
+                        "transaction_span_id": str(transaction_span_id) if transaction_span_id else None,
                     },
                 )
+
+                # Warn if transaction is not sampled
+                if transaction_sampled is False:
+                    logger.warning(
+                        f"{COLOR_YELLOW}[SENTRY DEBUG]{COLOR_RESET} ⚠ Transaction created but NOT SAMPLED - will not be sent to Sentry for project {project_uuid}",
+                        extra={
+                            "project_uuid": project_uuid,
+                            "transaction_sampled": False,
+                        },
+                    )
             else:
                 logger.warning(
                     f"{COLOR_YELLOW}[SENTRY DEBUG]{COLOR_RESET} ✗ Sentry transaction is None (not sampled or not initialized) for project {project_uuid}",
@@ -278,20 +296,53 @@ class PreGenerationService:
             duration = time.time() - start_time
             if transaction:
                 try:
+                    import sentry_sdk
+
                     transaction.set_measurement("duration", duration, unit="second")
                     transaction.set_status("ok" if status == "success" else "internal_error")
                     if error:
                         transaction.set_data("error", error)
-                    transaction.finish()
-                    logger.info(
-                        f"{COLOR_GREEN}[SENTRY DEBUG]{COLOR_RESET} ✓ Sentry transaction finished successfully for project {project_uuid} (duration: {duration:.3f}s, status: {status})",
+
+                    # Check transaction state before finishing
+                    transaction_id = getattr(transaction, "trace_id", None) or getattr(transaction, "event_id", None)
+                    transaction_sampled = getattr(transaction, "sampled", None)
+                    logger.debug(
+                        f"{COLOR_CYAN}[SENTRY DEBUG]{COLOR_RESET} Finishing transaction (trace_id: {transaction_id}, sampled: {transaction_sampled}) for project {project_uuid}",
                         extra={
                             "project_uuid": project_uuid,
-                            "duration": duration,
-                            "status": status,
-                            "transaction_finished": True,
+                            "transaction_id": str(transaction_id) if transaction_id else None,
+                            "transaction_sampled": transaction_sampled,
                         },
                     )
+
+                    transaction.finish()
+
+                    # Verify transaction was sent
+                    client = sentry_sdk.Hub.current.client
+                    if client:
+                        logger.info(
+                            f"{COLOR_GREEN}[SENTRY DEBUG]{COLOR_RESET} ✓ Sentry transaction finished successfully for project {project_uuid} (duration: {duration:.3f}s, status: {status}, trace_id: {transaction_id}, sampled: {transaction_sampled})",
+                            extra={
+                                "project_uuid": project_uuid,
+                                "duration": duration,
+                                "status": status,
+                                "transaction_finished": True,
+                                "transaction_id": str(transaction_id) if transaction_id else None,
+                                "transaction_sampled": transaction_sampled,
+                                "sentry_client_available": True,
+                            },
+                        )
+                    else:
+                        logger.warning(
+                            f"{COLOR_YELLOW}[SENTRY DEBUG]{COLOR_RESET} ⚠ Transaction finished but Sentry client not available - may not be sent for project {project_uuid}",
+                            extra={
+                                "project_uuid": project_uuid,
+                                "duration": duration,
+                                "status": status,
+                                "transaction_finished": True,
+                                "sentry_client_available": False,
+                            },
+                        )
                 except Exception as tracking_error:
                     logger.error(
                         f"{COLOR_RED}[SENTRY DEBUG]{COLOR_RESET} ✗ Failed to finish Sentry transaction for project {project_uuid}: {tracking_error}",
