@@ -315,13 +315,34 @@ class PreGenerationService:
                         },
                     )
 
+                    # Get client info before finishing
+                    client = sentry_sdk.Hub.current.client
+                    transport_info = None
+                    if client:
+                        transport = getattr(client, "transport", None)
+                        if transport:
+                            transport_type = type(transport).__name__
+                            transport_info = {
+                                "transport_type": transport_type,
+                                "transport_has_flush": hasattr(transport, "flush"),
+                                "transport_has_capture": hasattr(transport, "capture_event"),
+                            }
+
                     transaction.finish()
 
-                    # Verify transaction was sent
-                    client = sentry_sdk.Hub.current.client
+                    # Verify transaction was sent and get detailed info
                     if client:
+                        # Check if transaction was actually captured
+                        transaction_captured = getattr(transaction, "_captured", False)
+                        transaction_state = getattr(transaction, "_status", None)
+
+                        # Get transport details
+                        transport = getattr(client, "transport", None)
+                        dsn = getattr(client, "dsn", None)
+                        dsn_public_key = dsn.public_key if dsn else None
+
                         logger.info(
-                            f"{COLOR_GREEN}[SENTRY DEBUG]{COLOR_RESET} ✓ Sentry transaction finished successfully for project {project_uuid} (duration: {duration:.3f}s, status: {status}, trace_id: {transaction_id}, sampled: {transaction_sampled})",
+                            f"{COLOR_GREEN}[SENTRY DEBUG]{COLOR_RESET} ✓ Sentry transaction finished for project {project_uuid}",
                             extra={
                                 "project_uuid": project_uuid,
                                 "duration": duration,
@@ -329,9 +350,35 @@ class PreGenerationService:
                                 "transaction_finished": True,
                                 "transaction_id": str(transaction_id) if transaction_id else None,
                                 "transaction_sampled": transaction_sampled,
+                                "transaction_captured": transaction_captured,
+                                "transaction_state": transaction_state,
                                 "sentry_client_available": True,
+                                "dsn_public_key": dsn_public_key,
+                                "transport_info": transport_info,
                             },
                         )
+
+                        # Additional debug: Check if we can see pending events
+                        if hasattr(client, "_transport") and hasattr(client._transport, "_queue"):
+                            queue_size = len(client._transport._queue) if hasattr(client._transport._queue, "__len__") else "unknown"
+                            logger.debug(
+                                f"{COLOR_CYAN}[SENTRY DEBUG]{COLOR_RESET} Transport queue size: {queue_size}",
+                                extra={"queue_size": queue_size, "project_uuid": project_uuid},
+                            )
+
+                        # Try to flush if transport supports it
+                        if transport and hasattr(transport, "flush"):
+                            try:
+                                flush_result = transport.flush(timeout=1.0)
+                                logger.debug(
+                                    f"{COLOR_CYAN}[SENTRY DEBUG]{COLOR_RESET} Transport flush result: {flush_result}",
+                                    extra={"flush_result": flush_result, "project_uuid": project_uuid},
+                                )
+                            except Exception as flush_error:
+                                logger.warning(
+                                    f"{COLOR_YELLOW}[SENTRY DEBUG]{COLOR_RESET} Transport flush failed: {flush_error}",
+                                    extra={"flush_error": str(flush_error), "project_uuid": project_uuid},
+                                )
                     else:
                         logger.warning(
                             f"{COLOR_YELLOW}[SENTRY DEBUG]{COLOR_RESET} ⚠ Transaction finished but Sentry client not available - may not be sent for project {project_uuid}",

@@ -1,3 +1,4 @@
+import logging
 from functools import partial
 
 import sentry_sdk
@@ -7,6 +8,8 @@ from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.django import DjangoIntegration
 
 from nexus.sentry.filters import filter_events
+
+logger = logging.getLogger(__name__)
 
 
 def traces_sampler(sampling_context):
@@ -26,22 +29,33 @@ def traces_sampler(sampling_context):
     transaction_context = sampling_context.get("transaction_context", {})
     transaction_name = transaction_context.get("name", "")
     transaction_op = transaction_context.get("op", "")
+    sampled_flag = transaction_context.get("sampled")
+
+    # Log detailed information about what the sampler receives
+    logger.debug(
+        f"[SENTRY SAMPLER] Called with context: name={transaction_name}, op={transaction_op}, sampled={sampled_flag}, "
+        f"full_context_keys={list(sampling_context.keys())}, transaction_context_keys={list(transaction_context.keys())}"
+    )
 
     # Always sample manual transactions (pre_generation, observer, etc.)
     if transaction_name == "pre_generation.fetch_data":
+        logger.info(f"[SENTRY SAMPLER] Sampling pre_generation transaction: {transaction_name} -> 1.0")
         return 1.0  # 100% sampling for pre_generation transactions
 
     # Check for observer transactions (from SentryPerformanceMiddleware)
     if transaction_op == "observer.execute" or (transaction_name and transaction_name.startswith("observer.")):
+        logger.info(f"[SENTRY SAMPLER] Sampling observer transaction: {transaction_name} -> 1.0")
         return 1.0  # 100% sampling for observer transactions
 
     # Check if sampled=True was explicitly set (manual transaction)
     # This handles cases where sampled=True is passed to start_transaction()
-    if transaction_context.get("sampled") is True:
+    if sampled_flag is True:
+        logger.info(f"[SENTRY SAMPLER] Sampling transaction with sampled=True: {transaction_name} -> 1.0")
         return 1.0  # Always sample when explicitly requested
 
     # For all other transactions (automatic instrumentation from Django/Celery), don't sample
     # This keeps automatic instrumentation disabled
+    logger.debug(f"[SENTRY SAMPLER] Not sampling automatic transaction: {transaction_name} -> 0.0")
     return 0.0
 
 
@@ -53,6 +67,10 @@ class SentryConfig(AppConfig):
             return
 
         if settings.USE_SENTRY:
+            # TEMPORARY: Enable debug mode for detailed Sentry SDK logging
+            # This will show detailed information about transaction processing and sending
+            logger.info("[SENTRY] Debug mode enabled - detailed logs will be shown")
+
             sentry_sdk.init(
                 dsn=settings.SENTRY_URL,
                 integrations=[
@@ -63,4 +81,6 @@ class SentryConfig(AppConfig):
                 before_send=partial(filter_events, events_to_filter=settings.FILTER_SENTRY_EVENTS),
                 traces_sample_rate=0.0,  # Disable automatic instrumentation (use manual transactions)
                 traces_sampler=traces_sampler,  # Custom sampler for manual transactions
+                debug=True,  # TEMPORARY: Enable debug logging for Sentry SDK
             )
+            logger.info(f"[SENTRY] Initialized with DSN: {settings.SENTRY_URL[:20]}..., debug=True")
