@@ -2,7 +2,7 @@ import pendulum
 from django.conf import settings
 from django.core.exceptions import ValidationError
 
-from nexus.events import notify_async
+from nexus.events import event_manager, notify_async
 from nexus.intelligences.models import (
     LLM,
     ContentBase,
