@@ -6,7 +6,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("inline_agents", "0017_inlineagentsconfiguration_audio_orchestration_and_more"),
+        ("inline_agents", "0018_openaisupervisor_audio_orchestration_max_tokens_and_more"),
     ]
 
     operations = [
