@@ -338,8 +338,6 @@ class PreGenerationService:
 
                         # Get transport details
                         transport = getattr(client, "transport", None)
-                        dsn = getattr(client, "dsn", None)
-                        dsn_public_key = dsn.public_key if dsn else None
 
                         logger.info(
                             f"{COLOR_GREEN}[SENTRY DEBUG]{COLOR_RESET} ✓ Sentry transaction finished for project {project_uuid}",
@@ -353,7 +351,6 @@ class PreGenerationService:
                                 "transaction_captured": transaction_captured,
                                 "transaction_state": transaction_state,
                                 "sentry_client_available": True,
-                                "dsn_public_key": dsn_public_key,
                                 "transport_info": transport_info,
                             },
                         )
