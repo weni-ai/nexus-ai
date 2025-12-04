@@ -3,6 +3,7 @@ from functools import partial
 import sentry_sdk
 from django.apps import AppConfig
 from django.conf import settings
+from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.django import DjangoIntegration
 
 from nexus.sentry.filters import filter_events
@@ -15,11 +16,14 @@ class SentryConfig(AppConfig):
         if not settings.USE_SENTRY:
             return
 
-    if settings.USE_SENTRY:
-        sentry_sdk.init(
-            dsn=settings.SENTRY_URL,
-            integrations=[DjangoIntegration()],
-            environment=settings.ENVIRONMENT,
-            before_send=partial(filter_events, events_to_filter=settings.FILTER_SENTRY_EVENTS),
-            traces_sample_rate=0.0,  # Disable automatic instrumentation
-        )
+        if settings.USE_SENTRY:
+            sentry_sdk.init(
+                dsn=settings.SENTRY_URL,
+                integrations=[
+                    DjangoIntegration(),
+                    CeleryIntegration(),
+                ],
+                environment=settings.ENVIRONMENT,
+                before_send=partial(filter_events, events_to_filter=settings.FILTER_SENTRY_EVENTS),
+                traces_sample_rate=0.0,  # Disable automatic instrumentation (use manual transactions)
+            )

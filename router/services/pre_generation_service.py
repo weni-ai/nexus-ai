@@ -122,6 +122,23 @@ class PreGenerationService:
         start_time = time.time()
         status = "success"
         error = None
+        transaction = None
+
+        # Try to start Sentry transaction (non-blocking if Sentry is unavailable)
+        try:
+            import sentry_sdk
+
+            transaction = sentry_sdk.start_transaction(
+                name="pre_generation.fetch_data",
+                op="pre_generation",
+                sampled=True,  # Override global traces_sample_rate=0.0
+            )
+            if transaction:
+                transaction.set_tag("stage", "pre_generation")
+                transaction.set_tag("project_uuid", project_uuid)
+        except Exception:
+            logger.warning("Sentry not available, continuing without transaction tracking", exc_info=True)
+            pass
 
         try:
             # Lazy imports to avoid circular dependencies
@@ -129,27 +146,17 @@ class PreGenerationService:
             from nexus.usecases.guardrails.guardrails_usecase import GuardrailsUsecase
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 
-            # Fetch project and content base data
-            # Note: This fetches Django model objects, which we convert to dicts for caching
-            # The objects are needed for some operations, but the dicts are cached for future use
             project_obj, content_base_obj, inline_agent_config_obj = get_project_and_content_base_data(project_uuid)
 
-            # Prefetch relationships to avoid N+1 queries when backend accesses them
-            # The backend accesses content_base.instructions.all() and content_base.agent
-            # These are already prefetched by get_project_and_content_base_data (prefetch_related("instructions"))
-            # but we ensure agent is accessible without extra query
             try:
-                # Access agent to ensure it's loaded (OneToOne relationship)
                 _ = content_base_obj.agent
             except Exception:
                 pass  # Agent might not exist, that's okay
 
-            # Store objects to avoid duplicate queries in get_project_objects()
             self._project_obj = project_obj
             self._content_base_obj = content_base_obj
             self._inline_agent_config_obj = inline_agent_config_obj
 
-            # Convert to dict and cache using CacheService
             project_dict = self.cache_service.get_project_data(
                 project_uuid,
                 fetch_func=lambda uuid: self._project_to_dict(project_obj),
@@ -160,22 +167,18 @@ class PreGenerationService:
                 fetch_func=lambda uuid: self._content_base_to_dict(content_base_obj),
             )
 
-            # Cache instructions separately (used by backend)
             instructions_list = self.cache_service.get_instructions_data(
                 project_uuid,
                 fetch_func=lambda uuid: self._instructions_to_list(content_base_obj),
             )
 
-            # Cache agent data separately (used by backend)
             agent_dict = self.cache_service.get_agent_data(
                 project_uuid,
                 fetch_func=lambda uuid: self._agent_to_dict(content_base_obj),
             )
 
-            # Get agents_backend from project
             agents_backend = project_dict.get("agents_backend") or project_obj.agents_backend
 
-            # Fetch team data using cache
             team = self.cache_service.get_team_data(
                 project_uuid,
                 agents_backend,
@@ -184,13 +187,11 @@ class PreGenerationService:
                 ).get_team(uuid),
             )
 
-            # Fetch guardrails config using cache
             guardrails_config = self.cache_service.get_guardrails_config(
                 project_uuid,
                 fetch_func=lambda uuid: GuardrailsUsecase.get_guardrail_as_dict(uuid),
             )
 
-            # Fetch inline agent config using cache (if available)
             inline_agent_config = None
             if inline_agent_config_obj:
                 inline_agent_config = self.cache_service.get_inline_agent_config(
@@ -227,26 +228,18 @@ class PreGenerationService:
             error = str(e)
             raise
         finally:
-            # Track performance with Sentry (actual stage duration)
             duration = time.time() - start_time
-            try:
-                import sentry_sdk
-
-                # Create Sentry transaction for the actual pre-generation stage
-                # Note: sampled=True overrides global traces_sample_rate=0.0
-                with sentry_sdk.start_transaction(
-                    name="pre_generation.fetch_data",
-                    op="pre_generation",
-                    sampled=True,
-                ) as transaction:
-                    transaction.set_tag("stage", "pre_generation")
-                    transaction.set_tag("project_uuid", project_uuid)
+            if transaction:
+                try:
                     transaction.set_measurement("duration", duration, unit="second")
                     transaction.set_status("ok" if status == "success" else "internal_error")
                     if error:
                         transaction.set_data("error", error)
+                    transaction.finish()
+                except Exception as tracking_error:
+                    logger.warning(f"Failed to finish Sentry transaction: {tracking_error}", exc_info=True)
 
-                # Log performance metrics
+            try:
                 if status == "success":
                     logger.info(
                         f"Pre-Generation completed: {status} in {duration:.3f}s",
@@ -269,7 +262,6 @@ class PreGenerationService:
                         },
                     )
 
-                # Warn on slow pre-generation
                 if duration > 5.0:
                     logger.warning(
                         f"Slow Pre-Generation: {duration:.3f}s for project {project_uuid}",
@@ -280,9 +272,8 @@ class PreGenerationService:
                             "slow": True,
                         },
                     )
-            except Exception as tracking_error:
-                # Don't let performance tracking break the main flow
-                logger.warning(f"Failed to track pre-generation performance: {tracking_error}", exc_info=True)
+            except Exception as logging_error:
+                logger.warning(f"Failed to log pre-generation performance: {logging_error}", exc_info=True)
 
     def get_project_objects(
         self, project_uuid: str

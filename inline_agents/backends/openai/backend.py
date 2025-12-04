@@ -36,8 +36,6 @@ from nexus.inline_agents.backends.openai.repository import (
     OpenAISupervisorRepository,
 )
 from nexus.inline_agents.models import InlineAgentsConfiguration
-from nexus.intelligences.models import ContentBase
-from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
@@ -160,8 +158,6 @@ class OpenAIBackend(InlineAgentsBackend):
         project_uuid: str,
         sanitized_urn: str,
         contact_fields: str,
-        project: Project = None,
-        content_base: ContentBase = None,
         preview: bool = False,
         language: str = "en",
         contact_name: str = "",
@@ -194,10 +190,8 @@ class OpenAIBackend(InlineAgentsBackend):
             project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
         )
 
-        # Use cached data if available, otherwise fall back to Django object
-        # This eliminates the need to query project from database
+        # Cached data is always provided from start_inline_agents
         supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(
-            project=project,
             use_components=use_components_cached,
             human_support=human_support_cached,
             default_supervisor_foundation_model=default_supervisor_foundation_model_cached,
@@ -277,8 +271,6 @@ class OpenAIBackend(InlineAgentsBackend):
             channel_uuid=channel_uuid,
             supervisor_hooks=supervisor_hooks,
             runner_hooks=runner_hooks,
-            project=project,
-            content_base=content_base,
             inline_agent_configuration=inline_agent_configuration,
             session_factory=session_factory,
             session=session,
