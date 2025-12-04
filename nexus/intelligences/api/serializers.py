@@ -2,7 +2,7 @@ from django.forms.models import model_to_dict
 from rest_framework import serializers
 
 from nexus.agents.models import Team
-from nexus.events import event_manager
+from nexus.events import event_manager, notify_async
 from nexus.intelligences.models import (
     LLM,
     ContentBase,
@@ -188,8 +188,8 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 project.human_support_prompt = team.human_support_prompt
                 project.save()
 
-                # Fire cache invalidation event for team update
-                event_manager.notify(
+                # Fire cache invalidation event for team update (async observer)
+                notify_async(
                     event="cache_invalidation:team",
                     project_uuid=project_uuid,
                 )
@@ -242,7 +242,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 # Fire cache invalidation event
                 try:
                     project_uuid = str(instance.intelligence.project.uuid)
-                    event_manager.notify(
+                    notify_async(
                         event="cache_invalidation:content_base_agent",
                         content_base_agent=agent,
                         project_uuid=project_uuid,
@@ -261,7 +261,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 # Fire cache invalidation event for agent creation
                 try:
                     project_uuid = str(instance.intelligence.project.uuid)
-                    event_manager.notify(
+                    notify_async(
                         event="cache_invalidation:content_base_agent",
                         content_base_agent=created_agent,
                         project_uuid=project_uuid,
@@ -295,7 +295,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                         # Fire cache invalidation event
                         try:
                             project_uuid = str(instance.intelligence.project.uuid)
-                            event_manager.notify(
+                            notify_async(
                                 event="cache_invalidation:content_base_instruction",
                                 content_base_instruction=instruction,
                                 project_uuid=project_uuid,
@@ -317,7 +317,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                         # Fire cache invalidation event
                         try:
                             project_uuid = str(instance.intelligence.project.uuid)
-                            event_manager.notify(
+                            notify_async(
                                 event="cache_invalidation:content_base_instruction",
                                 content_base_instruction=created_instruction,
                                 project_uuid=project_uuid,

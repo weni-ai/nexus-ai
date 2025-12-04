@@ -1,6 +1,6 @@
 from typing import List
 
-from nexus.events import event_manager
+from nexus.events import notify_async
 from nexus.intelligences.models import ContentBaseFile, ContentBaseLink
 from nexus.orgs import permissions
 from nexus.usecases import orgs, users
@@ -77,7 +77,7 @@ class DeleteContentBaseUseCase:
             project_uuid = str(content_base.intelligence.project.uuid)
             # Fire cache invalidation for instructions (we need to pass a dummy instruction or just project_uuid)
             # Since we're invalidating the entire instructions list, we can just pass project_uuid
-            self.event_manager_notify(
+            notify_async(
                 event="cache_invalidation:content_base_instruction",
                 project_uuid=project_uuid,
             )

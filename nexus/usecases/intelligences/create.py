@@ -2,7 +2,7 @@ import pendulum
 from django.conf import settings
 from django.core.exceptions import ValidationError
 
-from nexus.events import event_manager
+from nexus.events import notify_async
 from nexus.intelligences.models import (
     LLM,
     ContentBase,
@@ -102,7 +102,7 @@ class CreateContentBaseUseCase:
                 from nexus.intelligences.models import IntegratedIntelligence
                 integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
                 project = integrated_intelligence.project
-                self.event_manager_notify(
+                notify_async(
                     event="cache_invalidation:content_base",
                     contentbase=contentbase,
                 )

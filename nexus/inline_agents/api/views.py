@@ -19,7 +19,7 @@ from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
 from nexus.usecases.inline_agents.get import GetInlineAgentsUsecase, GetInlineCredentialsUsecase, GetLogGroupUsecase
-from nexus.events import event_manager
+from nexus.events import event_manager, notify_async
 from nexus.usecases.inline_agents.update import UpdateAgentUseCase
 from nexus.usecases.intelligences.get_by_uuid import (
     create_inline_agents_configuration,
@@ -101,8 +101,8 @@ class PushAgents(APIView):
                     print(f"[+ Creating agent {key} +]")
                     agent_usecase.create_agent(key, agents[key], project, files)
 
-            # Fire cache invalidation event for team update (agents are part of team)
-            event_manager.notify(
+            # Fire cache invalidation event for team update (agents are part of team) (async observer)
+            notify_async(
                 event="cache_invalidation:team",
                 project_uuid=project_uuid,
             )
@@ -127,8 +127,8 @@ class ActiveAgentsView(APIView):
             if assign:
                 usecase.assign_agent(agent_uuid, project_uuid)
 
-                # Fire cache invalidation event for team update (agent assigned)
-                event_manager.notify(
+                # Fire cache invalidation event for team update (agent assigned) (async observer)
+                notify_async(
                     event="cache_invalidation:team",
                     project_uuid=project_uuid,
                 )
@@ -137,8 +137,8 @@ class ActiveAgentsView(APIView):
 
             usecase.unassign_agent(agent_uuid, project_uuid)
 
-            # Fire cache invalidation event for team update (agent unassigned)
-            event_manager.notify(
+            # Fire cache invalidation event for team update (agent unassigned) (async observer)
+            notify_async(
                 event="cache_invalidation:team",
                 project_uuid=project_uuid,
             )
@@ -478,8 +478,8 @@ class MultiAgentView(APIView):
                 project.use_prompt_creation_configurations = True
             project.save()
 
-            # Fire cache invalidation event for project update
-            event_manager.notify(
+            # Fire cache invalidation event for project update (async observer)
+            notify_async(
                 event="cache_invalidation:project",
                 project=project,
             )
@@ -545,8 +545,8 @@ class AgentBuilderAudio(APIView):
             elif agent_voice:
                 inline_agents_configuration.set_audio_orchestration_voice(agent_voice)
 
-            # Fire cache invalidation event for project update (inline_agent_config is part of project cache)
-            event_manager.notify(
+            # Fire cache invalidation event for project update (inline_agent_config is part of project cache) (async observer)
+            notify_async(
                 event="cache_invalidation:project",
                 project=project,
             )

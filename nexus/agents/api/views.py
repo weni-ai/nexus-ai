@@ -452,9 +452,9 @@ class ActiveAgentsViewSet(APIView):
             usecase.assign_agent(agent_uuid=agent_uuid, project_uuid=project_uuid, created_by=user)
             usecase.create_supervisor_version(project_uuid, user)
 
-            # Fire cache invalidation event for team update (agent assigned)
-            from nexus.events import event_manager
-            event_manager.notify(
+            # Fire cache invalidation event for team update (agent assigned) (async observer)
+            from nexus.events import notify_async
+            notify_async(
                 event="cache_invalidation:team",
                 project_uuid=project_uuid,
             )
@@ -464,9 +464,9 @@ class ActiveAgentsViewSet(APIView):
         usecase.unassign_agent(agent_uuid=agent_uuid, project_uuid=project_uuid)
         usecase.create_supervisor_version(project_uuid, user)
 
-        # Fire cache invalidation event for team update (agent unassigned)
-        from nexus.events import event_manager
-        event_manager.notify(
+        # Fire cache invalidation event for team update (agent unassigned) (async observer)
+        from nexus.events import notify_async
+        notify_async(
             event="cache_invalidation:team",
             project_uuid=project_uuid,
         )
@@ -771,9 +771,9 @@ class RationaleView(APIView):
             project.rationale_switch = rationale
             project.save(update_fields=["rationale_switch"])
 
-            # Fire cache invalidation event for project update
-            from nexus.events import event_manager
-            event_manager.notify(
+            # Fire cache invalidation event for project update (async observer)
+            from nexus.events import notify_async
+            notify_async(
                 event="cache_invalidation:project",
                 project=project,
             )
@@ -784,9 +784,9 @@ class RationaleView(APIView):
             project.rationale_switch = rationale
             project.save(update_fields=["rationale_switch"])
 
-            # Fire cache invalidation event for project update
-            from nexus.events import event_manager
-            event_manager.notify(
+            # Fire cache invalidation event for project update (async observer)
+            from nexus.events import notify_async
+            notify_async(
                 event="cache_invalidation:project",
                 project=project,
             )

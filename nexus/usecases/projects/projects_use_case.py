@@ -3,7 +3,7 @@ import json
 import pendulum
 from django.conf import settings
 
-from nexus.events import event_manager
+from nexus.events import event_manager, notify_async
 from nexus.inline_agents.models import ContactField
 from nexus.intelligences.models import ContentBase, IntegratedIntelligence
 from nexus.projects.exceptions import ProjectDoesNotExist
@@ -201,8 +201,8 @@ class ProjectsUseCase:
         project.agents_backend = agents_backend
         project.save()
 
-        # Fire cache invalidation event for project update
-        self.event_manager_notify(
+        # Fire cache invalidation event for project update (async observer)
+        notify_async(
             event="cache_invalidation:project",
             project=project,
         )
