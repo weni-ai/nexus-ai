@@ -173,14 +173,20 @@ class OpenAITeamAdapter(TeamAdapter):
 
         max_tokens = supervisor.get("max_tokens", 2048)
 
+        # Extract agent data fields (agent_data is a dict from cache)
+        agent_name = agent_data.get("name")
+        agent_role = agent_data.get("role")
+        agent_goal = agent_data.get("goal")
+        agent_personality = agent_data.get("personality")
+
         instruction = cls.get_supervisor_instructions(
             instruction=supervisor["instruction"],
             date_time_now=llm_formatted_time,
             contact_fields=contact_fields,
-            supervisor_name=agent_data.name,
-            supervisor_role=agent_data.role,
-            supervisor_goal=agent_data.goal,
-            supervisor_adjective=agent_data.personality,
+            supervisor_name=agent_name,
+            supervisor_role=agent_role,
+            supervisor_goal=agent_goal,
+            supervisor_adjective=agent_personality,
             supervisor_instructions=supervisor_instructions if supervisor_instructions else "",
             business_rules=business_rules if business_rules else "",
             project_id=project_uuid,
