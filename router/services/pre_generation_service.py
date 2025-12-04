@@ -1,13 +1,3 @@
-"""
-Pre-Generation service for fetching and caching project data.
-
-This service handles the cache-aware fetching of all data needed for
-inline agent processing. It uses CacheService to minimize database queries.
-
-Currently called directly from start_inline_agents, but designed to be
-easily refactored into a separate Celery task when workflow orchestrator
-is implemented.
-"""
 import logging
 from typing import Dict, List, Optional, Tuple
 
@@ -17,18 +7,13 @@ logger = logging.getLogger(__name__)
 
 
 class PreGenerationService:
-    """Service for pre-generation data fetching with caching."""
-
     def __init__(self, cache_service: Optional[CacheService] = None):
-        """Initialize with optional cache service (for testing)."""
         self.cache_service = cache_service or CacheService()
-        # Store Django objects to avoid duplicate queries
         self._project_obj = None
         self._content_base_obj = None
         self._inline_agent_config_obj = None
 
     def _project_to_dict(self, project) -> Dict:
-        """Convert Project model to dictionary for caching."""
         return {
             "uuid": str(project.uuid),
             "agents_backend": project.agents_backend,
@@ -40,7 +25,6 @@ class PreGenerationService:
             "default_supervisor_foundation_model": project.default_supervisor_foundation_model,
             "human_support": project.human_support,
             "human_support_prompt": project.human_support_prompt,
-            # Formatter agent configurations (used by OpenAI backend)
             "default_formatter_foundation_model": project.default_formatter_foundation_model,
             "formatter_instructions": project.formatter_instructions,
             "formatter_reasoning_effort": project.formatter_reasoning_effort,
@@ -50,7 +34,6 @@ class PreGenerationService:
         }
 
     def _content_base_to_dict(self, content_base) -> Dict:
-        """Convert ContentBase model to dictionary for caching."""
         return {
             "uuid": str(content_base.uuid),
             "title": content_base.title,
@@ -58,14 +41,12 @@ class PreGenerationService:
         }
 
     def _instructions_to_list(self, content_base) -> List[str]:
-        """Extract instructions as list of instruction texts (used by backend)."""
         try:
             return list(content_base.instructions.all().values_list("instruction", flat=True))
         except Exception:
-            return []  # If instructions don't exist or error, use empty list
+            return []
 
     def _agent_to_dict(self, content_base) -> Optional[Dict]:
-        """Extract agent data as dictionary (used by backend)."""
         try:
             agent = content_base.agent
             if agent:
@@ -76,11 +57,10 @@ class PreGenerationService:
                     "goal": agent.goal,
                 }
         except Exception:
-            pass  # If agent doesn't exist or error, return None
+            pass
         return None
 
     def _get_inline_agent_config(self, config) -> Optional[Dict]:
-        """Convert InlineAgentsConfiguration to dictionary for caching."""
         if config:
             return {
                 "agents_backend": config.agents_backend,
@@ -92,114 +72,28 @@ class PreGenerationService:
     def fetch_pre_generation_data(
         self, project_uuid: str
     ) -> Tuple[Dict, Dict, List[Dict], Dict, Optional[Dict], str, List[str], Optional[Dict]]:
-        """
-        Fetch all pre-generation data using cache-first strategy.
+        from nexus.sentry.transaction_tracker import track_transaction
 
-        This method uses CacheService to minimize database queries by:
-        1. Checking cache first for each data type
-        2. Fetching from database only if cache miss
-        3. Caching the result for future requests
+        with track_transaction(
+            name="pre_generation.fetch_data",
+            op="pre_generation",
+            tags={
+                "stage": "pre_generation",
+                "project_uuid": project_uuid,
+            },
+        ):
+            return self._fetch_pre_generation_data_impl(project_uuid)
 
-        Also tracks performance metrics automatically via observers.
-
-        Args:
-            project_uuid: UUID of the project
-
-        Returns:
-            Tuple of:
-            - project_dict: Project data as dictionary
-            - content_base_dict: Content base data as dictionary
-            - team: Team/agents data as list of dictionaries
-            - guardrails_config: Guardrails configuration as dictionary
-            - inline_agent_config: Inline agent configuration (optional)
-            - agents_backend: Agents backend string
-
-        Raises:
-            Exception: If data cannot be fetched
-        """
+    def _fetch_pre_generation_data_impl(
+        self, project_uuid: str
+    ) -> Tuple[Dict, Dict, List[Dict], Dict, Optional[Dict], str, List[str], Optional[Dict]]:
         import time
 
         start_time = time.time()
         status = "success"
         error = None
-        transaction = None
-
-        # Try to start Sentry transaction (non-blocking if Sentry is unavailable)
-        # ANSI color codes for terminal output
-        COLOR_RESET = "\033[0m"
-        COLOR_GREEN = "\033[32m"
-        COLOR_YELLOW = "\033[33m"
-        COLOR_RED = "\033[31m"
-        COLOR_CYAN = "\033[36m"
 
         try:
-            import sentry_sdk
-
-            # Check if Sentry is initialized
-            if not sentry_sdk.Hub.current.client:
-                logger.warning(
-                    f"{COLOR_YELLOW}[SENTRY DEBUG]{COLOR_RESET} Sentry not initialized - transaction will not be created for project {project_uuid}",
-                    extra={"project_uuid": project_uuid, "sentry_initialized": False},
-                )
-            else:
-                logger.debug(
-                    f"{COLOR_CYAN}[SENTRY DEBUG]{COLOR_RESET} Attempting to create Sentry transaction for project {project_uuid}",
-                    extra={"project_uuid": project_uuid, "sentry_initialized": True},
-                )
-
-            transaction = sentry_sdk.start_transaction(
-                name="pre_generation.fetch_data",
-                op="pre_generation",
-                sampled=True,  # Override global traces_sample_rate=0.0
-            )
-
-            if transaction:
-                transaction.set_tag("stage", "pre_generation")
-                transaction.set_tag("project_uuid", project_uuid)
-
-                # Check transaction properties
-                transaction_sampled = getattr(transaction, "sampled", None)
-                transaction_trace_id = getattr(transaction, "trace_id", None)
-                transaction_span_id = getattr(transaction, "span_id", None)
-
-                logger.info(
-                    f"{COLOR_GREEN}[SENTRY DEBUG]{COLOR_RESET} ✓ Sentry transaction created successfully for project {project_uuid}",
-                    extra={
-                        "project_uuid": project_uuid,
-                        "transaction_name": "pre_generation.fetch_data",
-                        "transaction_op": "pre_generation",
-                        "transaction_sampled": transaction_sampled,
-                        "transaction_trace_id": str(transaction_trace_id) if transaction_trace_id else None,
-                        "transaction_span_id": str(transaction_span_id) if transaction_span_id else None,
-                    },
-                )
-
-                # Warn if transaction is not sampled
-                if transaction_sampled is False:
-                    logger.warning(
-                        f"{COLOR_YELLOW}[SENTRY DEBUG]{COLOR_RESET} ⚠ Transaction created but NOT SAMPLED - will not be sent to Sentry for project {project_uuid}",
-                        extra={
-                            "project_uuid": project_uuid,
-                            "transaction_sampled": False,
-                        },
-                    )
-            else:
-                logger.warning(
-                    f"{COLOR_YELLOW}[SENTRY DEBUG]{COLOR_RESET} ✗ Sentry transaction is None (not sampled or not initialized) for project {project_uuid}",
-                    extra={
-                        "project_uuid": project_uuid,
-                        "sentry_initialized": sentry_sdk.Hub.current.client is not None,
-                    },
-                )
-        except Exception as sentry_error:
-            logger.warning(
-                f"{COLOR_RED}[SENTRY DEBUG]{COLOR_RESET} ✗ Failed to create Sentry transaction for project {project_uuid}: {sentry_error}",
-                extra={"project_uuid": project_uuid, "error": str(sentry_error)},
-                exc_info=True,
-            )
-
-        try:
-            # Lazy imports to avoid circular dependencies
             from nexus.inline_agents.team.repository import ORMTeamRepository
             from nexus.usecases.guardrails.guardrails_usecase import GuardrailsUsecase
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
@@ -209,7 +103,7 @@ class PreGenerationService:
             try:
                 _ = content_base_obj.agent
             except Exception:
-                pass  # Agent might not exist, that's okay
+                pass
 
             self._project_obj = project_obj
             self._content_base_obj = content_base_obj
@@ -286,85 +180,7 @@ class PreGenerationService:
             error = str(e)
             raise
         finally:
-            # ANSI color codes for terminal output
-            COLOR_RESET = "\033[0m"
-            COLOR_GREEN = "\033[32m"
-            COLOR_YELLOW = "\033[33m"
-            COLOR_RED = "\033[31m"
-            COLOR_CYAN = "\033[36m"
-
             duration = time.time() - start_time
-            if transaction:
-                try:
-                    import sentry_sdk
-
-                    transaction.set_measurement("duration", duration, unit="second")
-                    transaction.set_status("ok" if status == "success" else "internal_error")
-                    if error:
-                        transaction.set_data("error", error)
-
-                    # Check transaction state before finishing
-                    transaction_id = getattr(transaction, "trace_id", None) or getattr(transaction, "event_id", None)
-                    transaction_sampled = getattr(transaction, "sampled", None)
-                    logger.debug(
-                        f"{COLOR_CYAN}[SENTRY DEBUG]{COLOR_RESET} Finishing transaction (trace_id: {transaction_id}, sampled: {transaction_sampled}) for project {project_uuid}",
-                        extra={
-                            "project_uuid": project_uuid,
-                            "transaction_id": str(transaction_id) if transaction_id else None,
-                            "transaction_sampled": transaction_sampled,
-                        },
-                    )
-
-                    transaction.finish()
-
-                    # Verify transaction was sent
-                    client = sentry_sdk.Hub.current.client
-                    if client:
-                        logger.info(
-                            f"{COLOR_GREEN}[SENTRY DEBUG]{COLOR_RESET} ✓ Sentry transaction finished successfully for project {project_uuid} (duration: {duration:.3f}s, status: {status}, trace_id: {transaction_id}, sampled: {transaction_sampled})",
-                            extra={
-                                "project_uuid": project_uuid,
-                                "duration": duration,
-                                "status": status,
-                                "transaction_finished": True,
-                                "transaction_id": str(transaction_id) if transaction_id else None,
-                                "transaction_sampled": transaction_sampled,
-                                "sentry_client_available": True,
-                            },
-                        )
-                    else:
-                        logger.warning(
-                            f"{COLOR_YELLOW}[SENTRY DEBUG]{COLOR_RESET} ⚠ Transaction finished but Sentry client not available - may not be sent for project {project_uuid}",
-                            extra={
-                                "project_uuid": project_uuid,
-                                "duration": duration,
-                                "status": status,
-                                "transaction_finished": True,
-                                "sentry_client_available": False,
-                            },
-                        )
-                except Exception as tracking_error:
-                    logger.error(
-                        f"{COLOR_RED}[SENTRY DEBUG]{COLOR_RESET} ✗ Failed to finish Sentry transaction for project {project_uuid}: {tracking_error}",
-                        extra={
-                            "project_uuid": project_uuid,
-                            "duration": duration,
-                            "status": status,
-                            "transaction_finished": False,
-                            "error": str(tracking_error),
-                        },
-                        exc_info=True,
-                    )
-            else:
-                logger.debug(
-                    f"{COLOR_CYAN}[SENTRY DEBUG]{COLOR_RESET} ⚠ No Sentry transaction to finish for project {project_uuid} (duration: {duration:.3f}s, status: {status})",
-                    extra={
-                        "project_uuid": project_uuid,
-                        "duration": duration,
-                        "status": status,
-                        "transaction_available": False,
-                    },
-                )
 
             try:
                 if status == "success":
@@ -401,33 +217,3 @@ class PreGenerationService:
                     )
             except Exception as logging_error:
                 logger.warning(f"Failed to log pre-generation performance: {logging_error}", exc_info=True)
-
-    def get_project_objects(
-        self, project_uuid: str
-    ) -> Tuple[object, object, Optional[object]]:
-        """
-        Get actual Django model objects (for backward compatibility).
-
-        This method returns the objects that were already fetched in fetch_pre_generation_data(),
-        avoiding duplicate database queries.
-
-        Note: In the future, when backend.invoke_agents is refactored to accept dicts,
-        this method can be removed.
-
-        Args:
-            project_uuid: UUID of the project (for validation, not used if objects already cached)
-
-        Returns:
-            Tuple of (project, content_base, inline_agent_config)
-        """
-        # Return cached objects from fetch_pre_generation_data() to avoid duplicate queries
-        if self._project_obj and self._content_base_obj:
-            return self._project_obj, self._content_base_obj, self._inline_agent_config_obj
-
-        # Fallback: fetch if objects weren't cached (shouldn't happen in normal flow)
-        from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
-        project_obj, content_base_obj, inline_agent_config_obj = get_project_and_content_base_data(project_uuid)
-        self._project_obj = project_obj
-        self._content_base_obj = content_base_obj
-        self._inline_agent_config_obj = inline_agent_config_obj
-        return project_obj, content_base_obj, inline_agent_config_obj
