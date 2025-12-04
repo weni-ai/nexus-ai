@@ -160,8 +160,8 @@ class OpenAIBackend(InlineAgentsBackend):
         project_uuid: str,
         sanitized_urn: str,
         contact_fields: str,
-        project: Project,
-        content_base: ContentBase,
+        project: Project = None,
+        content_base: ContentBase = None,
         preview: bool = False,
         language: str = "en",
         contact_name: str = "",
@@ -176,7 +176,16 @@ class OpenAIBackend(InlineAgentsBackend):
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
         **kwargs,
     ):
-        turns_to_include = None
+
+        use_components_cached = kwargs.pop("use_components", use_components)
+        rationale_switch_cached = kwargs.pop("rationale_switch", rationale_switch)
+        conversation_turns_to_include_cached = kwargs.pop("conversation_turns_to_include", None)
+        human_support_cached = kwargs.pop("human_support", None)
+        default_supervisor_foundation_model_cached = kwargs.pop("default_supervisor_foundation_model", None)
+        formatter_agent_configurations = kwargs.pop("formatter_agent_configurations", None)
+        rationale_switch = rationale_switch_cached
+        turns_to_include = conversation_turns_to_include_cached
+
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
         session_factory = self._get_session_factory(
             project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
@@ -185,7 +194,14 @@ class OpenAIBackend(InlineAgentsBackend):
             project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
         )
 
-        supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
+        # Use cached data if available, otherwise fall back to Django object
+        # This eliminates the need to query project from database
+        supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(
+            project=project,
+            use_components=use_components_cached,
+            human_support=human_support_cached,
+            default_supervisor_foundation_model=default_supervisor_foundation_model_cached,
+        )
         data_lake_event_adapter = self._get_data_lake_event_adapter()
 
         # Ensure conversation exists and get it for data lake events (skip in preview mode)
@@ -243,6 +259,13 @@ class OpenAIBackend(InlineAgentsBackend):
         jwt_usecase = JWTUsecase()
         auth_token = jwt_usecase.generate_jwt_token(project_uuid)
 
+        # Extract cached data if available from kwargs
+        content_base_uuid_cached = kwargs.pop("content_base_uuid", None)
+        business_rules_cached = kwargs.pop("business_rules", None)
+        instructions_cached = kwargs.pop("instructions", None)
+        agent_data_cached = kwargs.pop("agent_data", None)
+        default_instructions_for_collaborators_cached = kwargs.pop("default_instructions_for_collaborators", None)
+
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
             agents=team,
@@ -263,6 +286,12 @@ class OpenAIBackend(InlineAgentsBackend):
             preview=preview,
             hooks_state=hooks_state,
             event_manager_notify=self._event_manager_notify,
+            # Pass cached data to avoid database queries
+            content_base_uuid=content_base_uuid_cached,
+            business_rules=business_rules_cached,
+            instructions=instructions_cached,
+            agent_data=agent_data_cached,
+            default_instructions_for_collaborators=default_instructions_for_collaborators_cached,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -318,7 +347,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 use_components,
                 grpc_client=grpc_client,
                 grpc_msg_id=grpc_msg_id,
-                formatter_agent_configurations=project.formatter_agent_configurations,
+                formatter_agent_configurations=formatter_agent_configurations,
             )
         )
 

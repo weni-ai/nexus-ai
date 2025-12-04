@@ -4,6 +4,7 @@ Event system with decorator-based observer registration.
 This module uses decorator-based registration to simplify observer setup.
 Observers are registered using @observer decorator on their class definitions.
 """
+import asyncio
 import logging
 
 from nexus.event_domain.decorators import auto_register_observers
@@ -14,6 +15,32 @@ logger = logging.getLogger(__name__)
 # Create event managers - these can be imported without triggering observer imports
 event_manager = EventManager()
 async_event_manager = AsyncEventManager()
+
+
+def notify_async(event: str, **kwargs):
+    """
+    Helper function to call async_event_manager.notify() from synchronous code.
+    
+    This function handles async execution properly, checking if there's an existing
+    event loop and using the appropriate method to run the async code.
+    
+    For cache invalidation events, this allows async observers to be called from
+    synchronous Django views and use cases without blocking.
+    
+    Args:
+        event: The event name
+        **kwargs: Event payload
+    """
+    try:
+        # Try to get the current event loop
+        loop = asyncio.get_running_loop()
+        # If loop is already running, schedule the coroutine as a background task
+        # This is fine for cache invalidation which should run asynchronously
+        asyncio.create_task(async_event_manager.notify(event, **kwargs))
+    except RuntimeError:
+        # No event loop exists or not in async context, create a new one
+        # This is the common case for Django views (synchronous)
+        asyncio.run(async_event_manager.notify(event, **kwargs))
 
 # Import observer modules to trigger decorator registration
 # These imports happen after event managers are created to avoid circular imports
@@ -33,6 +60,12 @@ try:
     import router.traces_observers.rationale.observer  # noqa: F401
     import router.traces_observers.summary  # noqa: F401
     import router.traces_observers.save_traces  # noqa: F401
+
+    # Cache invalidation observers
+    import router.services.cache_invalidation_observers  # noqa: F401
+
+    # Cache usage observers (monitoring)
+    import router.services.cache_usage_observers  # noqa: F401
 
     # Auto-register all decorated observers
     auto_register_observers(event_manager, async_event_manager)

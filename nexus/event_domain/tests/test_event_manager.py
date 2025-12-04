@@ -430,12 +430,12 @@ class MiddlewareTestCase(TestCase):
     def test_performance_middleware_logs_duration(self):
         """Test that performance middleware logs execution time."""
         from unittest.mock import patch
-        from nexus.event_domain.middleware import PerformanceMonitoringMiddleware, MiddlewareChain
+        from nexus.event_domain.middleware import PerformanceLoggingMiddleware, MiddlewareChain
         import time
 
         # Create manager with performance middleware
         chain = MiddlewareChain()
-        chain.add(PerformanceMonitoringMiddleware(enabled=True, slow_threshold=0.1))
+        chain.add(PerformanceLoggingMiddleware(enabled=True, slow_threshold=0.1))
         manager = EventManager(middleware=chain)
 
         manager.subscribe("test_event", observer=self.success_observer)
@@ -454,7 +454,7 @@ class MiddlewareTestCase(TestCase):
         from unittest.mock import MagicMock, patch
         from nexus.event_domain.middleware import (
             SentryErrorMiddleware,
-            PerformanceMonitoringMiddleware,
+            PerformanceLoggingMiddleware,
             MiddlewareChain
         )
 
@@ -466,7 +466,7 @@ class MiddlewareTestCase(TestCase):
 
         chain = MiddlewareChain()
         chain.add(mock_middleware1)
-        chain.add(PerformanceMonitoringMiddleware())
+        chain.add(PerformanceLoggingMiddleware())
 
         manager = EventManager(middleware=chain)
         manager.subscribe("test_event", observer=self.success_observer)
