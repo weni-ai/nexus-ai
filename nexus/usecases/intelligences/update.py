@@ -1,7 +1,7 @@
 import pendulum
 from django.forms.models import model_to_dict
 
-from nexus.events import notify_async
+from nexus.events import event_manager, notify_async
 from nexus.intelligences.models import ContentBase, ContentBaseText
 from nexus.orgs import permissions
 from nexus.projects.permissions import has_project_permission

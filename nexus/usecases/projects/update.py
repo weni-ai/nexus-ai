@@ -1,7 +1,7 @@
 import copy
 
 from nexus.event_driven.publisher.rabbitmq_publisher import RabbitMQPublisher
-from nexus.events import notify_async
+from nexus.events import event_manager, notify_async
 from nexus.projects.models import IntegratedFeature, Project
 from nexus.projects.permissions import has_project_permission
 from nexus.usecases import users

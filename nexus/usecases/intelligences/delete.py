@@ -1,6 +1,6 @@
 from typing import List
 
-from nexus.events import notify_async
+from nexus.events import event_manager, notify_async
 from nexus.intelligences.models import ContentBaseFile, ContentBaseLink
 from nexus.orgs import permissions
 from nexus.usecases import orgs, users
