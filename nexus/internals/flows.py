@@ -4,6 +4,7 @@ import requests
 from django.conf import settings
 
 from nexus.internals import InternalAuthentication, RestClient
+from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 
 
 class FlowsRESTClient(RestClient):
@@ -89,7 +90,11 @@ class FlowsRESTClient(RestClient):
         print("Body: ", body)
         print("Project UUID: ", project_uuid)
 
-        response = requests.post(url, json=body, headers=self.authentication_instance.headers)
+        jwt_usecase = JWTUsecase()
+        jwt_token = jwt_usecase.generate_broadcast_jwt_token()
+        headers = {"Content-Type": "application/json; charset: utf-8", "Authorization": f"Bearer {jwt_token}"}
+
+        response = requests.post(url, json=body, headers=headers)
         print("response status: ", response.status_code)
         print("response: ", response.text)
         print("--------------------------")

@@ -301,6 +301,7 @@ OIDC_DRF_AUTH_BACKEND = env.str(
     default="nexus.authentication.authentication.WeniOIDCAuthenticationBackend",
 )
 OIDC_RP_SCOPES = env.str("OIDC_RP_SCOPES", default="openid email")
+OIDC_RP_EMAIL = env.str("OIDC_RP_EMAIL", default="")
 
 
 REST_FRAMEWORK = {
@@ -642,6 +643,12 @@ BEDROCK_CONVERSE_PROMPT = env.str("BEDROCK_CONVERSE_PROMPT")
 BEDROCK_CONVERSE_MAX_LENGHT = env.int("BEDROCK_CONVERSE_MAX_LENGHT", 4096)
 FORMATTER_AGENT_MODEL = env.str("FORMATTER_AGENT_MODEL", "gpt-4.1-mini")
 FLOW_USER_EMAIL = env.str("FLOW_USER_EMAIL", "")
+
+# gRPC Streaming Configuration
+GRPC_ENABLED = env.bool("GRPC_ENABLED", default=False)
+GRPC_SERVICE_HOST = env.str("GRPC_SERVICE_HOST", default="localhost")
+GRPC_SERVICE_PORT = env.int("GRPC_SERVICE_PORT", default=50051)
+GRPC_USE_TLS = env.bool("GRPC_USE_TLS", default=False)
 
 OPENAI_AGENTS_REASONING_EFFORT = env.str("OPENAI_AGENTS_REASONING_EFFORT", None)
 OPENAI_AGENTS_REASONING_SUMMARY = env.str("OPENAI_AGENTS_REASONING_SUMMARY", "auto")

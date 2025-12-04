@@ -7,7 +7,6 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from nexus.db.models import BaseModel, SoftDeleteModel
-from nexus.inline_agents.models import InlineAgentMessage
 from nexus.orgs.models import Org
 from nexus.projects.models import Project
 
@@ -268,7 +267,7 @@ class Conversation(models.Model):
         return f"Conversation - {self.uuid} - {self.contact_name}"
 
     def get_topic(self):
-        return self.topic.name
+        return self.topic.name if self.topic else None
 
     @property
     def to_json(self):

@@ -1,6 +1,9 @@
+import hashlib
+import secrets
 from enum import Enum
 
 from django.db import models
+from django.utils import timezone
 
 from nexus.db.models import BaseModel, SoftDeleteModel
 from nexus.orgs.models import Org
@@ -25,7 +28,7 @@ class Project(BaseModel, SoftDeleteModel):
         (BEDROCK, "Bedrock"),
     )
 
-    DEFAULT_BACKEND = "BedrockBackend"
+    DEFAULT_BACKEND = "OpenAIBackend"
 
     name = models.CharField(max_length=255)
     org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name="projects")
@@ -64,6 +67,7 @@ class Project(BaseModel, SoftDeleteModel):
     formatter_reasoning_summary = models.CharField(max_length=50, blank=True, null=True, default="auto")
     formatter_send_only_assistant_message = models.BooleanField(default=False)
     formatter_tools_descriptions = models.JSONField(default=dict, null=True, blank=True)
+    audio_orchestration_welcome_message = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.uuid} - Project: {self.name} - Org: {self.org.name}"
@@ -89,7 +93,6 @@ class Project(BaseModel, SoftDeleteModel):
             "formatter_send_only_assistant_message": self.formatter_send_only_assistant_message,
             "formatter_tools_descriptions": self.formatter_tools_descriptions,
         }
-
 
 
 class ProjectAuthorizationRole(Enum):
@@ -134,3 +137,40 @@ class IntegratedFeature(models.Model):
 
     def __str__(self):
         return f"IntegratedFeature - {self.project} - {self.feature_uuid}"
+
+
+class ProjectApiToken(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="api_tokens")
+    name = models.CharField(max_length=255)
+    token_hash = models.CharField(max_length=128)
+    salt = models.CharField(max_length=64)
+    scope = models.CharField(max_length=64, default="read:supervisor_conversations")
+    enabled = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("project", "name")
+
+    def __str__(self):
+        return f"{self.project} - {self.name} - {self.scope}"
+
+    @staticmethod
+    def hash_token(token: str, salt: str) -> str:
+        return hashlib.sha256(f"{salt}{token}".encode()).hexdigest()
+
+    def matches(self, token: str) -> bool:
+        if not self.enabled:
+            return False
+        if self.expires_at and self.expires_at <= timezone.now():
+            return False
+        return self.token_hash == self.hash_token(token, self.salt)
+
+    @staticmethod
+    def generate_token_pair() -> tuple[str, str, str]:
+        token = secrets.token_urlsafe(48)
+        salt = secrets.token_hex(16)
+        token_hash = ProjectApiToken.hash_token(token, salt)
+        return token, salt, token_hash
