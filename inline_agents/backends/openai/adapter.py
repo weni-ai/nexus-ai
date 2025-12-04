@@ -39,8 +39,6 @@ from nexus.inline_agents.models import (
     AgentCredential,
     InlineAgentsConfiguration,
 )
-from nexus.intelligences.models import ContentBase
-from nexus.projects.models import Project
 
 logger = logging.getLogger(__name__)
 
@@ -99,8 +97,6 @@ class OpenAITeamAdapter(TeamAdapter):
         channel_uuid: str,
         supervisor_hooks: SupervisorHooks,
         runner_hooks: RunnerHooks,
-        content_base: ContentBase = None,
-        project: Project = None,
         auth_token: str = "",
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
         # Cached inline agent config data (optional, used to avoid database queries)
@@ -127,44 +123,12 @@ class OpenAITeamAdapter(TeamAdapter):
     ) -> list[dict]:
         agents_as_tools = []
 
-        # Use cached data if provided, otherwise fall back to Django objects
+        # Cached data is always provided from start_inline_agents
         if content_base_uuid is None:
-            if content_base:
-                content_base_uuid = str(content_base.uuid)
-            else:
-                raise ValueError("content_base_uuid must be provided if content_base is None")
+            raise ValueError("content_base_uuid must be provided")
 
-        if business_rules is None:
-            if project:
-                business_rules = project.human_support_prompt
-            else:
-                business_rules = None
-
-        if instructions is None:
-            if content_base:
-                instructions_queryset = content_base.instructions.all()
-                instructions = list(instructions_queryset.values_list("instruction", flat=True))
-            else:
-                instructions = []
-        # else: instructions is already a list from cache
-
-        if agent_data is None:
-            if content_base:
-                try:
-                    agent = content_base.agent
-                    if agent:
-                        agent_data = {
-                            "name": agent.name,
-                            "role": agent.role,
-                            "personality": agent.personality,
-                            "goal": agent.goal,
-                        }
-                    else:
-                        agent_data = None
-                except Exception:
-                    agent_data = None
-            else:
-                agent_data = None
+        # business_rules, instructions, and agent_data can be None if not configured
+        # but they are always provided from cache (may be None if not set in project/content_base)
 
         supervisor_instructions = "\n".join(instructions) if instructions else ""
 
@@ -204,12 +168,6 @@ class OpenAITeamAdapter(TeamAdapter):
         for agent in agents:
             agent_instructions = agent.get("instruction")
 
-            # Use cached data if provided, otherwise fall back to Django object
-            if default_instructions_for_collaborators is None:
-                if isinstance(inline_agent_configuration, InlineAgentsConfiguration):
-                    default_instructions_for_collaborators = (
-                        inline_agent_configuration.default_instructions_for_collaborators
-                    )
             if default_instructions_for_collaborators:
                 agent_instructions += f"\n{default_instructions_for_collaborators}"
 
@@ -603,7 +561,7 @@ class OpenAITeamAdapter(TeamAdapter):
         Clean up the schema recursively to ensure it's valid for OpenAI.
         """
         if not isinstance(schema, dict):
-            return 
+            return
 
         cls._clean_schema_list(schema.get("anyOf"))
         cls._clean_schema_list(schema.get("oneOf"))
@@ -742,18 +700,6 @@ class OpenAITeamAdapter(TeamAdapter):
             .replace("{{CONTENT_BASE_UUID}}", content_base_uuid)
         )
         return instruction
-
-    @classmethod
-    def _get_guardrails(cls, project_uuid: str) -> list[dict]:
-        try:
-            guardrails = Guardrail.objects.get(project__uuid=project_uuid)
-        except Guardrail.DoesNotExist:
-            guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
-
-        return {
-            'guardrailIdentifier': guardrails.identifier,
-            'guardrailVersion': str(guardrails.version)
-        }
 
 
 def create_standardized_event(agent_name, type, tool_name="", original_trace=None):
