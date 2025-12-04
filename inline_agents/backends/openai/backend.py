@@ -176,7 +176,16 @@ class OpenAIBackend(InlineAgentsBackend):
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
         **kwargs,
     ):
-        turns_to_include = None
+
+        use_components_cached = kwargs.pop("use_components", use_components)
+        rationale_switch_cached = kwargs.pop("rationale_switch", rationale_switch)
+        conversation_turns_to_include_cached = kwargs.pop("conversation_turns_to_include", None)
+        human_support_cached = kwargs.pop("human_support", None)
+        default_supervisor_foundation_model_cached = kwargs.pop("default_supervisor_foundation_model", None)
+        formatter_agent_configurations = kwargs.pop("formatter_agent_configurations", None)
+        rationale_switch = rationale_switch_cached
+        turns_to_include = conversation_turns_to_include_cached
+
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
         session_factory = self._get_session_factory(
             project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
@@ -184,12 +193,6 @@ class OpenAIBackend(InlineAgentsBackend):
         session, session_id = self._get_session(
             project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
         )
-
-        # Extract cached project data from kwargs if available
-        use_components_cached = kwargs.pop("use_components", None)
-        human_support_cached = kwargs.pop("human_support", None)
-        default_supervisor_foundation_model_cached = kwargs.pop("default_supervisor_foundation_model", None)
-        formatter_agent_configurations = kwargs.pop("formatter_agent_configurations", None)
 
         # Use cached data if available, otherwise fall back to Django object
         # This eliminates the need to query project from database

@@ -281,33 +281,26 @@ def _invoke_backend(
     This helper function simplifies the backend invocation by grouping
     all cached data and parameters into a cleaner interface.
     """
-    project_dict = cached_data.project_dict
-    invoke_kwargs = cached_data.get_invoke_kwargs()
+    invoke_kwargs = cached_data.get_invoke_kwargs(team=cached_data.team)
 
-    return backend.invoke_agents(
-        team=cached_data.team,
-        input_text=message_obj.text,
-        contact_urn=message_obj.contact_urn,
-        project_uuid=message_obj.project_uuid,
-        preview=preview,
-        rationale_switch=project_dict["rationale_switch"],
-        sanitized_urn=message_obj.sanitized_urn,
-        language=language,
-        user_email=user_email,
-        use_components=project_dict["use_components"],
-        contact_fields=message_obj.contact_fields_as_json,
-        contact_name=message_obj.contact_name,
-        channel_uuid=message_obj.channel_uuid,
-        msg_external_id=processed_message.get("msg_event", {}).get("msg_external_id", ""),
-        turn_off_rationale=turn_off_rationale,
-        use_prompt_creation_configurations=project_dict["use_prompt_creation_configurations"],
-        conversation_turns_to_include=project_dict["conversation_turns_to_include"],
-        exclude_previous_thinking_steps=project_dict["exclude_previous_thinking_steps"],
-        foundation_model=foundation_model,
-        # Django objects (project, content_base, inline_agent_configuration) are optional
-        # and default to None - we omit them since we always use cached data
-        **invoke_kwargs,
-    )
+    # Add non-cached parameters that come from the message/request
+    invoke_kwargs.update({
+        "input_text": message_obj.text,
+        "contact_urn": message_obj.contact_urn,
+        "project_uuid": message_obj.project_uuid,
+        "sanitized_urn": message_obj.sanitized_urn,
+        "contact_fields": message_obj.contact_fields_as_json,
+        "contact_name": message_obj.contact_name,
+        "channel_uuid": message_obj.channel_uuid,
+        "msg_external_id": processed_message.get("msg_event", {}).get("msg_external_id", ""),
+        "preview": preview,
+        "language": language,
+        "user_email": user_email,
+        "foundation_model": foundation_model,
+        "turn_off_rationale": turn_off_rationale,
+    })
+
+    return backend.invoke_agents(**invoke_kwargs)
 
 
 @celery_app.task(
