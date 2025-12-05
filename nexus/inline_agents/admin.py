@@ -143,7 +143,42 @@ class AgentAdmin(admin.ModelAdmin):
                 )
             },
         ),
+        (
+            "Variant & Capabilities",
+            {
+                "fields": (
+                    "variant",
+                    "capabilities",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Regionalization Policies",
+            {
+                "fields": ("policies",),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Tooling",
+            {
+                "fields": ("tooling",),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Catalog Integration",
+            {
+                "fields": ("catalog",),
+                "classes": ("collapse",),
+            },
+        ),
     )
+
+    formfield_overrides = {
+        models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
+    }
 
 
 @admin.register(AgentGroup)
