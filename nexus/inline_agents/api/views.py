@@ -144,6 +144,7 @@ class OfficialAgentsV1(APIView):
             OpenApiParameter(name="group", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(name="category", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="variant", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
         ],
         responses={
             200: OpenApiResponse(description="Agents list", response=OfficialAgentListSerializer),
@@ -159,6 +160,7 @@ class OfficialAgentsV1(APIView):
         group_filter = request.query_params.get("group")
         category_filter = request.query_params.get("category")
         system_filter = request.query_params.get("system")
+        variant_filter = request.query_params.get("variant")
 
         agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
         if name_filter:
@@ -171,6 +173,8 @@ class OfficialAgentsV1(APIView):
             agents = agents.filter(category__slug=category_filter)
         if system_filter:
             agents = agents.filter(systems__slug=system_filter).distinct("uuid")
+        if variant_filter:
+            agents = agents.filter(variant=variant_filter)
 
         serializer = OfficialAgentListSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)

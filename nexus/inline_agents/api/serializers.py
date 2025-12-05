@@ -113,6 +113,11 @@ class OfficialAgentListSerializer(serializers.Serializer):
     category = serializers.CharField(allow_blank=True)
     systems = serializers.ListField(child=serializers.CharField(), allow_empty=True)
     assigned = serializers.BooleanField()
+    variant = serializers.CharField(required=False, allow_null=True)
+    capabilities = serializers.ListField(child=serializers.CharField(), required=False, allow_empty=True)
+    policies = serializers.DictField(required=False)
+    tooling = serializers.DictField(required=False)
+    catalog = serializers.DictField(required=False)
 
     def to_representation(self, obj):
         project_uuid = self.context.get("project_uuid")
@@ -121,7 +126,7 @@ class OfficialAgentListSerializer(serializers.Serializer):
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
         systems = list(obj.systems.values_list("slug", flat=True)) if hasattr(obj, "systems") else []
         group_name = obj.group.slug if getattr(obj, "group", None) else None
-        return {
+        payload = {
             "uuid": obj.uuid,
             "name": obj.name,
             "description": obj.collaboration_instructions,
@@ -131,6 +136,26 @@ class OfficialAgentListSerializer(serializers.Serializer):
             "systems": systems,
             "assigned": assigned,
         }
+
+        # Include operational metadata only when configured on the model
+        variant = getattr(obj, "variant", None)
+        capabilities = getattr(obj, "capabilities", [])
+        policies = getattr(obj, "policies", {})
+        tooling = getattr(obj, "tooling", {})
+        catalog = getattr(obj, "catalog", {})
+
+        if variant is not None:
+            payload["variant"] = variant
+        if isinstance(capabilities, list) and len(capabilities) > 0:
+            payload["capabilities"] = capabilities
+        if isinstance(policies, dict) and len(policies) > 0:
+            payload["policies"] = policies
+        if isinstance(tooling, dict) and len(tooling) > 0:
+            payload["tooling"] = tooling
+        if isinstance(catalog, dict) and len(catalog) > 0:
+            payload["catalog"] = catalog
+
+        return payload
 
     def _get_meta(self, agent: Agent) -> dict:
         mapper = self.context.get("official_mapper", {})
@@ -148,6 +173,11 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
     assigned = serializers.BooleanField()
     MCP = serializers.DictField()
     credentials = serializers.ListField()
+    variant = serializers.CharField(required=False, allow_null=True)
+    capabilities = serializers.ListField(child=serializers.CharField(), required=False, allow_empty=True)
+    policies = serializers.DictField(required=False)
+    tooling = serializers.DictField(required=False)
+    catalog = serializers.DictField(required=False)
 
     def to_representation(self, obj):
         project_uuid = self.context.get("project_uuid")
@@ -162,7 +192,7 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         mcp = mcp_mapper.get(obj.slug, {}).get(selected_system, {})
         creds = cred_mapper.get(obj.slug, {}).get(selected_system, [])
         group_name = obj.group.slug if getattr(obj, "group", None) else None
-        return {
+        payload = {
             "name": obj.name,
             "description": obj.collaboration_instructions,
             "type": (obj.agent_type.slug if getattr(obj, "agent_type", None) else ""),
@@ -174,6 +204,26 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             "MCP": mcp,
             "credentials": creds,
         }
+
+        # Include operational metadata only when configured on the model
+        variant = getattr(obj, "variant", None)
+        capabilities = getattr(obj, "capabilities", [])
+        policies = getattr(obj, "policies", {})
+        tooling = getattr(obj, "tooling", {})
+        catalog = getattr(obj, "catalog", {})
+
+        if variant is not None:
+            payload["variant"] = variant
+        if isinstance(capabilities, list) and len(capabilities) > 0:
+            payload["capabilities"] = capabilities
+        if isinstance(policies, dict) and len(policies) > 0:
+            payload["policies"] = policies
+        if isinstance(tooling, dict) and len(tooling) > 0:
+            payload["tooling"] = tooling
+        if isinstance(catalog, dict) and len(catalog) > 0:
+            payload["catalog"] = catalog
+
+        return payload
 
 
 class CredentialItemSerializer(serializers.Serializer):
