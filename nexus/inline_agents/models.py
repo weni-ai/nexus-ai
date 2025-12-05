@@ -62,6 +62,12 @@ class Agent(models.Model):
     group = models.ForeignKey("AgentGroup", on_delete=models.SET_NULL, null=True, blank=True, related_name="agents")
     systems = models.ManyToManyField("AgentSystem", blank=True, related_name="agents")
 
+    variant = models.CharField(max_length=100, null=True, blank=True)
+    capabilities = models.JSONField(default=list, null=True, blank=True)
+    policies = models.JSONField(default=dict, null=True, blank=True)
+    tooling = models.JSONField(default=dict, null=True, blank=True)
+    catalog = models.JSONField(default=dict, null=True, blank=True)
+
     def __str__(self):
         return self.name
 
