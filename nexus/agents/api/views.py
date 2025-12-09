@@ -455,6 +455,7 @@ class ActiveAgentsViewSet(APIView):
 
             # Fire cache invalidation event for team update (agent assigned) (async observer)
             from nexus.events import notify_async
+
             notify_async(
                 event="cache_invalidation:team",
                 project_uuid=project_uuid,
@@ -467,6 +468,7 @@ class ActiveAgentsViewSet(APIView):
 
         # Fire cache invalidation event for team update (agent unassigned) (async observer)
         from nexus.events import notify_async
+
         notify_async(
             event="cache_invalidation:team",
             project_uuid=project_uuid,
@@ -774,6 +776,7 @@ class RationaleView(APIView):
 
             # Fire cache invalidation event for project update (async observer)
             from nexus.events import notify_async
+
             notify_async(
                 event="cache_invalidation:project",
                 project=project,
@@ -787,6 +790,7 @@ class RationaleView(APIView):
 
             # Fire cache invalidation event for project update (async observer)
             from nexus.events import notify_async
+
             notify_async(
                 event="cache_invalidation:project",
                 project=project,
@@ -871,7 +875,9 @@ class DeleteAgentView(APIView):
         # Check if agent is currently active
         active_agents = ActiveAgent.objects.filter(agent=agent)
         if active_agents.exists():
-            teams = [{"team_uuid": str(aa.team.uuid), "project_name": aa.team.project.name} for aa in active_agents]
+            teams = [
+                {"team_uuid": str(aa.team.project.uuid), "project_name": aa.team.project.name} for aa in active_agents
+            ]
             return Response(
                 {
                     "error": "Cannot delete active agent. Please unassign it first.",

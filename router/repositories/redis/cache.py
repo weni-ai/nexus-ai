@@ -1,8 +1,8 @@
-from typing import Optional, Any
 import json
+from typing import Any, Optional
 
-from redis import Redis
 from django.conf import settings
+from redis import Redis
 
 from router.repositories import Repository
 

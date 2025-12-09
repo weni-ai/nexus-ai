@@ -4,6 +4,7 @@ Decorator-based observer registration.
 This module provides decorators for registering observers directly on their class definitions,
 simplifying the registration process and keeping registration close to the observer implementation.
 """
+
 import logging
 from typing import Callable, List, Optional, Type, Union
 
@@ -56,6 +57,7 @@ def observer(
             def perform(self, **kwargs):
                 ...
     """
+
     def decorator(cls: Type[EventObserver]) -> Type[EventObserver]:
         if not issubclass(cls, EventObserver):
             raise TypeError(f"{cls.__name__} must inherit from EventObserver")
@@ -77,13 +79,15 @@ def observer(
 
         # Store in global registry for auto-registration (one entry per manager)
         for mgr in managers:
-            _decorated_observers.append({
-                'event': event,
-                'manager': mgr,
-                'observer_path': observer_path,
-                'isolate_errors': isolate_errors,
-                'factory': factory,
-            })
+            _decorated_observers.append(
+                {
+                    "event": event,
+                    "manager": mgr,
+                    "observer_path": observer_path,
+                    "isolate_errors": isolate_errors,
+                    "factory": factory,
+                }
+            )
 
         logger.debug(f"Decorated observer: {observer_path} for event '{event}' with managers {managers}")
         return cls
@@ -104,24 +108,20 @@ def auto_register_observers(event_manager, async_event_manager):
     registered_count = 0
     for observer_info in _decorated_observers:
         try:
-            manager = async_event_manager if observer_info['manager'] == 'async' else event_manager
+            manager = async_event_manager if observer_info["manager"] == "async" else event_manager
 
             manager.subscribe(
-                event=observer_info['event'],
-                observer=observer_info['observer_path'],
-                isolate_errors=observer_info['isolate_errors'],
-                factory=observer_info['factory'],
+                event=observer_info["event"],
+                observer=observer_info["observer_path"],
+                isolate_errors=observer_info["isolate_errors"],
+                factory=observer_info["factory"],
             )
             registered_count += 1
             logger.debug(
-                f"Auto-registered observer: {observer_info['observer_path']} "
-                f"for event '{observer_info['event']}'"
+                f"Auto-registered observer: {observer_info['observer_path']} " f"for event '{observer_info['event']}'"
             )
         except Exception as e:
-            logger.error(
-                f"Failed to auto-register observer {observer_info['observer_path']}: {e}",
-                exc_info=True
-            )
+            logger.error(f"Failed to auto-register observer {observer_info['observer_path']}: {e}", exc_info=True)
 
     logger.info(f"Auto-registered {registered_count} observers from decorators")
     return registered_count

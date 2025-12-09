@@ -100,6 +100,7 @@ class CreateContentBaseUseCase:
         if is_router:
             try:
                 from nexus.intelligences.models import IntegratedIntelligence
+
                 integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
                 project = integrated_intelligence.project
                 notify_async(

@@ -130,10 +130,10 @@ class SupervisorPublicConversationsView(APIView):
             page = int(request.query_params.get("page", 1))
             offset = (page - 1) * page_size
             results = []
-            
+
             # Initialize MessageService for fetching messages
             message_service = MessageService()
-            
+
             for conv in qs[offset : offset + page_size]:
                 # Get messages for this conversation
                 messages = []
@@ -164,7 +164,7 @@ class SupervisorPublicConversationsView(APIView):
                         sentry_sdk.set_tag("project_uuid", project_uuid)
                         sentry_sdk.set_tag("conversation_uuid", str(conv.uuid))
                         sentry_sdk.capture_exception(e)
-                
+
                 results.append(
                     {
                         "conversation_uuid": str(conv.uuid),

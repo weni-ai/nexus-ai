@@ -4,6 +4,7 @@ import factory
 from django.conf import settings
 from django.utils import timezone
 
+from nexus.inline_agents.models import InlineAgentMessage
 from nexus.intelligences.models import (
     LLM,
     ContentBase,
@@ -13,7 +14,6 @@ from nexus.intelligences.models import (
     ContentBaseLink,
     ContentBaseText,
     Conversation,
-    InlineAgentMessage,
     IntegratedIntelligence,
     Intelligence,
     SubTopics,

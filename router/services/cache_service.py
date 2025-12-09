@@ -1,4 +1,4 @@
-from typing import Optional, Dict, List, Callable, Any
+from typing import Any, Callable, Dict, List, Optional
 
 from router.repositories import Repository
 
@@ -81,9 +81,7 @@ class CacheService:
         if agents_backend is None:
             agents_backend = project_data.get("agents_backend")
             if not agents_backend:
-                raise ValueError(
-                    f"agents_backend not provided and not found in project data for {project_uuid}"
-                )
+                raise ValueError(f"agents_backend not provided and not found in project data for {project_uuid}")
 
         # Fetch all required data
         all_data = {
@@ -147,9 +145,7 @@ class CacheService:
             self.cache_repository.set(cache_key, data, self.INLINE_AGENT_CONFIG_TTL)
         return data
 
-    def get_instructions_data(
-        self, project_uuid: str, fetch_func: Callable[[str], List[str]]
-    ) -> List[str]:
+    def get_instructions_data(self, project_uuid: str, fetch_func: Callable[[str], List[str]]) -> List[str]:
         """Get content base instructions from cache or fetch and cache."""
         cache_key = self._get_cache_key(project_uuid, "instructions")
         return self._get_or_create(cache_key, fetch_func, self.INSTRUCTIONS_TTL, project_uuid)
@@ -166,9 +162,7 @@ class CacheService:
             self.cache_repository.set(cache_key, data, self.AGENT_DATA_TTL)
         return data
 
-    def cache_workflow_data(
-        self, workflow_id: str, data_type: str, data: Any, ttl: Optional[int] = None
-    ) -> None:
+    def cache_workflow_data(self, workflow_id: str, data_type: str, data: Any, ttl: Optional[int] = None) -> None:
         """Cache data for a specific workflow."""
         cache_key = f"workflow:{workflow_id}:{data_type}"
         self.cache_repository.set(cache_key, data, ttl or self.WORKFLOW_CACHE_TTL)
@@ -181,9 +175,7 @@ class CacheService:
         """Clear all cached data for a workflow."""
         self.cache_repository.delete_pattern(f"workflow:{workflow_id}:*")
 
-    def _refresh_composite_cache_from_individual(
-        self, project_uuid: str, agents_backend: str
-    ) -> Optional[Dict]:
+    def _refresh_composite_cache_from_individual(self, project_uuid: str, agents_backend: str) -> Optional[Dict]:
         """Refresh composite cache from existing individual caches if available."""
         all_data = {}
 
@@ -223,9 +215,7 @@ class CacheService:
         get_methods = {
             "data": lambda: self.get_project_data(project_uuid, fetch_func),
             "content_base": lambda: self.get_content_base_data(project_uuid, fetch_func),
-            "team": lambda: self.get_team_data(project_uuid, agents_backend, fetch_func)
-            if agents_backend
-            else None,
+            "team": lambda: self.get_team_data(project_uuid, agents_backend, fetch_func) if agents_backend else None,
             "guardrails": lambda: self.get_guardrails_config(project_uuid, fetch_func),
             "inline_agent_config": lambda: self.get_inline_agent_config(project_uuid, fetch_func),
             "instructions": lambda: self.get_instructions_data(project_uuid, fetch_func),

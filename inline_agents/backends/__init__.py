@@ -1,8 +1,7 @@
-import os
+from django.conf import settings
 
 from inline_agents.backend import InlineAgentsBackend
 
-from .bedrock.backend import BedrockBackend
 from .exceptions import BackendAlreadyRegistered, UnregisteredBackend
 
 
@@ -14,13 +13,10 @@ class BackendsRegistry:
     @classmethod
     def register(cls, backend: InlineAgentsBackend, set_default: bool = False):
         backend_name = backend.name
-
         if cls._options.get(backend_name) is not None:
             raise BackendAlreadyRegistered(f"Backend: {backend_name} is already registered")
-
         cls._options[backend_name] = backend
         cls._names.append(backend_name)
-
         if set_default:
             cls._default_backend = backend
 
@@ -28,7 +24,6 @@ class BackendsRegistry:
     def get_default_backend(cls) -> InlineAgentsBackend:
         if cls._default_backend is None:
             raise UnregisteredBackend("No default backend is registered")
-
         return cls._default_backend
 
     @classmethod
@@ -36,7 +31,6 @@ class BackendsRegistry:
         backend = cls._options.get(key)
         if backend is None:
             raise UnregisteredBackend(f"Backend with key: {key} is not registered")
-
         return backend
 
     @classmethod
@@ -44,10 +38,12 @@ class BackendsRegistry:
         return cls._names
 
 
-BackendsRegistry.register(BedrockBackend(), set_default=True)
+default_backend = getattr(settings, "AGENTS_BACKENDS", "bedrock").lower()
 
-# Avoid importing OpenAI backend unless explicitly enabled
-if os.environ.get("ENABLE_OPENAI_INLINE_BACKEND") == "1":
-    from .openai.backend import OpenAIBackend
+from .bedrock.backend import BedrockBackend
 
-    BackendsRegistry.register(OpenAIBackend())
+BackendsRegistry.register(BedrockBackend(), set_default=(default_backend == "bedrock"))
+
+from .openai.backend import OpenAIBackend
+
+BackendsRegistry.register(OpenAIBackend(), set_default=(default_backend == "openai"))

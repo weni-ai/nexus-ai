@@ -8,6 +8,7 @@ Currently called directly from start_inline_agents, but designed to be
 easily refactored into a separate Celery task when workflow orchestrator
 is implemented.
 """
+
 import logging
 from typing import Dict, List, Optional, Tuple
 
@@ -402,9 +403,7 @@ class PreGenerationService:
             except Exception as logging_error:
                 logger.warning(f"Failed to log pre-generation performance: {logging_error}", exc_info=True)
 
-    def get_project_objects(
-        self, project_uuid: str
-    ) -> Tuple[object, object, Optional[object]]:
+    def get_project_objects(self, project_uuid: str) -> Tuple[object, object, Optional[object]]:
         """
         Get actual Django model objects (for backward compatibility).
 
@@ -426,6 +425,7 @@ class PreGenerationService:
 
         # Fallback: fetch if objects weren't cached (shouldn't happen in normal flow)
         from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
+
         project_obj, content_base_obj, inline_agent_config_obj = get_project_and_content_base_data(project_uuid)
         self._project_obj = project_obj
         self._content_base_obj = content_base_obj

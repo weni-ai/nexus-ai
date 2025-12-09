@@ -34,7 +34,9 @@ class OpenAISupervisorRepository(SupervisorRepository):
             "human_support_instructions": supervisor.human_support_prompt,
             "tools": cls._get_supervisor_tools(supervisor=supervisor, human_support=human_support_value),
             "foundation_model": cls.get_foundation_model(
-                supervisor=supervisor, foundation_model=foundation_model, default_supervisor_foundation_model=default_supervisor_foundation_model_value
+                supervisor=supervisor,
+                foundation_model=foundation_model,
+                default_supervisor_foundation_model=default_supervisor_foundation_model_value,
             ),
             "knowledge_bases": supervisor.knowledge_bases,
             "prompt_override_configuration": supervisor.prompt_override_configuration,

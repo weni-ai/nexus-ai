@@ -8,7 +8,6 @@ Copy and adapt these patterns for your actual tests.
 from django.test import TestCase
 
 from router.repositories.mocks import MockCacheRepository
-from router.services.cache_service import CacheService
 from router.tests.mocks import MockCacheService
 
 
@@ -29,9 +28,7 @@ class CacheServiceTestCase(TestCase):
         expected_data = {"uuid": project_uuid, "name": "Test Project", "agents_backend": "OpenAIBackend"}
 
         # First call - cache miss, should fetch and cache
-        result = self.cache_service.get_project_data(
-            project_uuid, lambda uuid: expected_data.copy()
-        )
+        result = self.cache_service.get_project_data(project_uuid, lambda uuid: expected_data.copy())
 
         self.assertEqual(result, expected_data)
         self.assertEqual(self.cache_service.get_cache_size(), 1)
@@ -75,9 +72,7 @@ class CacheServiceTestCase(TestCase):
         }
 
         # Get all data
-        result = self.cache_service.get_all_project_data(
-            project_uuid, agents_backend, fetch_funcs
-        )
+        result = self.cache_service.get_all_project_data(project_uuid, agents_backend, fetch_funcs)
 
         # Verify composite key exists
         self.assertIn(f"project:{project_uuid}:all", self.cache_service.get_cache_keys())
@@ -100,9 +95,7 @@ class CacheServiceTestCase(TestCase):
         agents_backend = "OpenAIBackend"
 
         # Cache some data
-        self.cache_service.get_project_data(
-            project_uuid, lambda uuid: {"uuid": project_uuid}
-        )
+        self.cache_service.get_project_data(project_uuid, lambda uuid: {"uuid": project_uuid})
         self.cache_service.get_all_project_data(
             project_uuid,
             agents_backend,

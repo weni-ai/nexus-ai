@@ -1,6 +1,6 @@
 # Mock repositories for unit tests and local development
 
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from router.repositories import Repository
 from router.repositories.entities import ResolutionEntities
@@ -123,9 +123,7 @@ class MockCacheRepository(Repository):
         # Clean expired keys first
         current_time = self._time.time()
         expired_keys = [
-            key
-            for key, (value, expiration) in self._cache.items()
-            if expiration > 0 and current_time >= expiration
+            key for key, (value, expiration) in self._cache.items() if expiration > 0 and current_time >= expiration
         ]
         for key in expired_keys:
             del self._cache[key]

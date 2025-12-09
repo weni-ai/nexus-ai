@@ -4,6 +4,7 @@ Cache usage observers for monitoring cache performance.
 These observers track cache hit/miss rates, performance metrics, and usage patterns
 to help monitor and optimize the cache layer.
 """
+
 import logging
 from typing import Optional
 

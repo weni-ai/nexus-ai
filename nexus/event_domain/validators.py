@@ -4,6 +4,7 @@ Event validation system for observer pattern.
 This module provides validators to ensure event payloads meet expected requirements
 before observers are notified.
 """
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
@@ -62,9 +63,7 @@ class RequiredFieldsValidator(EventValidator):
         """Validate that all required fields are present."""
         missing_fields = [field for field in self.required_fields if field not in payload]
         if missing_fields:
-            raise ValueError(
-                f"Event '{event}' missing required fields: {', '.join(missing_fields)}"
-            )
+            raise ValueError(f"Event '{event}' missing required fields: {', '.join(missing_fields)}")
 
 
 class FieldTypeValidator(EventValidator):
@@ -163,6 +162,6 @@ class ValidatorChain:
             except Exception as e:
                 logger.warning(
                     f"Event '{event}' validation failed: {e}",
-                    extra={'event': event, 'payload_keys': list(payload.keys())}
+                    extra={"event": event, "payload_keys": list(payload.keys())},
                 )
                 raise
