@@ -18,6 +18,7 @@ def _patch_charfield(models):
 
 def _patch_arrayfield(ArrayField):
     import json
+
     from django.db import models as _models
 
     original_array_db_type = ArrayField.db_type
@@ -104,7 +105,6 @@ def _patch_queryset_distinct():
 
 def pytest_configure():
     try:
-
         import redis
         from django.conf import settings
         from django.contrib.postgres.fields import ArrayField

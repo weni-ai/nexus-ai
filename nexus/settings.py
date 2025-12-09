@@ -131,7 +131,9 @@ CHANNEL_LAYERS = {
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {"default": env.db(var="DEFAULT_DATABASE", default="sqlite:///db.sqlite3")}
-if TESTING:
+# Allow CI to opt-out of SQLite during tests by setting USE_SQLITE_FOR_TESTS=false
+USE_SQLITE_FOR_TESTS = env.bool("USE_SQLITE_FOR_TESTS", default=True)
+if TESTING and USE_SQLITE_FOR_TESTS:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
@@ -332,6 +334,11 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "v1.0.0",
     "LICENSE": {"name": "GPL-3.0 License"},
 }
+
+# CI/Test migration controls
+DISABLE_INLINE_AGENTS_MIGRATIONS = env.bool("DISABLE_INLINE_AGENTS_MIGRATIONS", default=False)
+if DISABLE_INLINE_AGENTS_MIGRATIONS:
+    MIGRATION_MODULES = {"inline_agents": None}
 
 
 OPENAI_API_KEY = env.str("OPENAI_API_KEY")

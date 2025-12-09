@@ -4,8 +4,7 @@ import pendulum
 from django.db.models import Count, Q
 from django.utils.dateparse import parse_date
 from mozilla_django_oidc.contrib.drf import OIDCAuthentication
-from rest_framework.permissions import BasePermission, IsAuthenticated, AllowAny
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -194,7 +193,6 @@ class ResolutionRateAverageView(APIView):
                 total_unclassified += ps["unclassified_cnt"]
                 total_has_chat += ps["has_chat_cnt"]
                 total_conversations_all += ps["total_conversations"]
-            
 
         if project_rates:
             resolution_rate = sum(project_rates) / len(project_rates) / 100.0
