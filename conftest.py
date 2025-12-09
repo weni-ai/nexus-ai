@@ -104,11 +104,11 @@ def _patch_queryset_distinct():
 
 def pytest_configure():
     try:
+
+        import redis
         from django.conf import settings
         from django.contrib.postgres.fields import ArrayField
         from django.db import models
-        import types
-        import redis
 
         _disable_migrations(settings)
         _patch_charfield(models)
@@ -158,6 +158,11 @@ def pytest_configure():
 
         try:
             redis.Redis.from_url = _fake_from_url  # type: ignore[attr-defined]
+            redis.from_url = _fake_from_url  # type: ignore[attr-defined]
+            try:
+                _FakeRedis.from_url = staticmethod(_fake_from_url)  # type: ignore[attr-defined]
+            except Exception:
+                pass
         except Exception:
             pass
     except Exception:

@@ -1,5 +1,6 @@
-import json
 import ast
+import json
+
 from django.utils.text import slugify
 
 from inline_agents.team.repository import TeamRepository
@@ -44,7 +45,9 @@ class ORMTeamRepository(TeamRepository):
                 elif not isinstance(skills, list):
                     skills = []
                 try:
-                    print("[DBG] skills type:", type(skills), "len:", len(skills) if hasattr(skills, "__len__") else None)
+                    print(
+                        "[DBG] skills type:", type(skills), "len:", len(skills) if hasattr(skills, "__len__") else None
+                    )
                 except Exception:
                     pass
                 normalized_skills = []
@@ -78,6 +81,10 @@ class ORMTeamRepository(TeamRepository):
                                     parametros_combinados[key] = value
                             function["parameters"] = parametros_combinados
                         elif function.get("parameters") is None:
+                            function["parameters"] = {}
+                        elif isinstance(function.get("parameters"), dict):
+                            pass
+                        else:
                             function["parameters"] = {}
                     processed_skill = {
                         "actionGroupName": slugify(skill.get("actionGroupName", "")),
