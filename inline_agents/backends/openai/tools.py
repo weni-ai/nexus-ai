@@ -1,21 +1,16 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import boto3
-from agents import (
-    Agent,
-    AgentHooks,
-    ModelSettings,
-    RunContextWrapper,
-    function_tool,
-)
+
+if TYPE_CHECKING:
+    pass
 from django.conf import settings
 from openai.types.shared import Reasoning
 
-from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
 
 
-class Supervisor(Agent):
+class Supervisor:  # type: ignore[misc]
     def function_tools(self) -> list:
         return [self.knowledge_base_bedrock]
 
@@ -25,8 +20,8 @@ class Supervisor(Agent):
         instructions: str,
         model: str,
         tools: list[Any],
-        hooks: list[AgentHooks] | None = None,
-        handoffs: list[Agent] | None = None,
+        hooks: list | None = None,
+        handoffs: list | None = None,
         prompt_override_configuration: dict | None = None,
         preview: bool = False,
         max_tokens: int | None = None,
@@ -37,6 +32,8 @@ class Supervisor(Agent):
         reasoning_effort = settings.OPENAI_AGENTS_REASONING_EFFORT
         reasoning_summary = settings.OPENAI_AGENTS_REASONING_SUMMARY
         parallel_tool_calls = settings.OPENAI_AGENTS_PARALLEL_TOOL_CALLS
+
+        from agents import ModelSettings
 
         if model in settings.MODELS_WITH_REASONING and reasoning_effort:
             super().__init__(
@@ -81,8 +78,10 @@ class Supervisor(Agent):
 
         return
 
+    from agents import function_tool
+
     @function_tool
-    def knowledge_base_bedrock(wrapper: RunContextWrapper[Context], question: str) -> str:
+    def knowledge_base_bedrock(wrapper, question: str) -> str:
         """
         Query the AWS Bedrock Knowledge Base and return the most relevant information for a given question.
 

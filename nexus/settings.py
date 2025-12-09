@@ -18,7 +18,12 @@ from .environment import env
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
+# Treat any pytest run or manage.py test as testing
+TESTING = (
+    any("pytest" in arg for arg in sys.argv)
+    or any(arg == "test" for arg in sys.argv)
+    or os.environ.get("PYTEST_CURRENT_TEST") is not None
+)
 
 
 # Quick-start development settings - unsuitable for production
@@ -126,6 +131,13 @@ CHANNEL_LAYERS = {
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {"default": env.db(var="DEFAULT_DATABASE", default="sqlite:///db.sqlite3")}
+if TESTING:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": str(BASE_DIR / "test.sqlite3"),
+        }
+    }
 
 
 # Password validation
