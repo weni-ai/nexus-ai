@@ -1,3 +1,6 @@
+import logging
+
+import sentry_sdk
 from drf_spectacular.utils import (
     OpenApiParameter,
     OpenApiResponse,
@@ -14,6 +17,8 @@ from nexus.projects.api.project_api_token_auth import (
     ProjectApiKeyPermission,
 )
 from router.services.message_service import MessageService
+
+logger = logging.getLogger(__name__)
 
 
 class MessageSerializer(serializers.Serializer):
@@ -144,10 +149,21 @@ class SupervisorPublicConversationsView(APIView):
                             end_date=end_iso,
                             resolution_status=None,
                         )
-                    except Exception:
+                    except Exception as e:
                         # Log error but don't fail the entire request
                         # Messages will be empty list
-                        pass
+                        logger.warning(
+                            f"Error fetching messages for conversation {conv.uuid}: {str(e)}",
+                            extra={
+                                "project_uuid": project_uuid,
+                                "conversation_uuid": str(conv.uuid),
+                                "contact_urn": conv.contact_urn,
+                                "channel_uuid": str(conv.channel_uuid) if conv.channel_uuid else None,
+                            },
+                        )
+                        sentry_sdk.set_tag("project_uuid", project_uuid)
+                        sentry_sdk.set_tag("conversation_uuid", str(conv.uuid))
+                        sentry_sdk.capture_exception(e)
                 
                 results.append(
                     {
