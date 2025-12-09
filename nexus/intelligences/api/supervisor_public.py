@@ -1,3 +1,6 @@
+import logging
+
+import sentry_sdk
 from drf_spectacular.utils import (
     OpenApiParameter,
     OpenApiResponse,
@@ -13,6 +16,15 @@ from nexus.projects.api.project_api_token_auth import (
     ProjectApiKeyAuthentication,
     ProjectApiKeyPermission,
 )
+from router.services.message_service import MessageService
+
+logger = logging.getLogger(__name__)
+
+
+class MessageSerializer(serializers.Serializer):
+    text = serializers.CharField()
+    source = serializers.CharField()
+    created_at = serializers.CharField()
 
 
 class SupervisorPublicConversationItemSerializer(serializers.Serializer):
@@ -22,8 +34,7 @@ class SupervisorPublicConversationItemSerializer(serializers.Serializer):
     status = serializers.CharField()
     topic = serializers.CharField(allow_null=True, allow_blank=True)
     channel_uuid = serializers.UUIDField(allow_null=True)
-    contact_urn = serializers.CharField(allow_null=True, allow_blank=True)
-    contact_name = serializers.CharField(allow_null=True, allow_blank=True)
+    messages = MessageSerializer(many=True)
 
 
 class SupervisorPublicConversationListSerializer(serializers.Serializer):
@@ -119,7 +130,41 @@ class SupervisorPublicConversationsView(APIView):
             page = int(request.query_params.get("page", 1))
             offset = (page - 1) * page_size
             results = []
+            
+            # Initialize MessageService for fetching messages
+            message_service = MessageService()
+            
             for conv in qs[offset : offset + page_size]:
+                # Get messages for this conversation
+                messages = []
+                if conv.contact_urn and conv.channel_uuid and conv.start_date and conv.end_date:
+                    try:
+                        start_iso = conv.start_date.isoformat()
+                        end_iso = conv.end_date.isoformat()
+                        messages = message_service.get_messages_for_conversation(
+                            project_uuid=str(project_uuid),
+                            contact_urn=conv.contact_urn,
+                            channel_uuid=str(conv.channel_uuid),
+                            start_date=start_iso,
+                            end_date=end_iso,
+                            resolution_status=None,
+                        )
+                    except Exception as e:
+                        # Log error but don't fail the entire request
+                        # Messages will be empty list
+                        logger.warning(
+                            f"Error fetching messages for conversation {conv.uuid}: {str(e)}",
+                            extra={
+                                "project_uuid": project_uuid,
+                                "conversation_uuid": str(conv.uuid),
+                                "contact_urn": conv.contact_urn,
+                                "channel_uuid": str(conv.channel_uuid) if conv.channel_uuid else None,
+                            },
+                        )
+                        sentry_sdk.set_tag("project_uuid", project_uuid)
+                        sentry_sdk.set_tag("conversation_uuid", str(conv.uuid))
+                        sentry_sdk.capture_exception(e)
+                
                 results.append(
                     {
                         "conversation_uuid": str(conv.uuid),
@@ -128,9 +173,7 @@ class SupervisorPublicConversationsView(APIView):
                         "status": conv.get_resolution_display(),
                         "topic": conv.get_topic() if conv.topic else None,
                         "channel_uuid": str(conv.channel_uuid) if conv.channel_uuid else None,
-                        # minimize PII exposure
-                        "contact_urn": None,
-                        "contact_name": None,
+                        "messages": messages,
                     }
                 )
 
