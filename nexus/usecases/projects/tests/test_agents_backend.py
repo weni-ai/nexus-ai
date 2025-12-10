@@ -1,3 +1,4 @@
+from unittest import skip
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -163,9 +164,6 @@ class AgentsBackendTestCase(TestCase):
         # Get the backend
         backend = self.usecase.get_agents_backend_by_project(str(self.project.uuid))
         self.assertEqual(backend, "OpenAIBackend")
-
-
-from unittest import skip
 
 
 @skip("temporarily skipped: backend registry and supervisor repositories under stabilization")
