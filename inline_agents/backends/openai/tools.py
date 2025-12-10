@@ -1,16 +1,15 @@
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import boto3
-
-if TYPE_CHECKING:
-    pass
+from agents import Agent
 from django.conf import settings
 from openai.types.shared import Reasoning
 
+from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
 
 
-class Supervisor:  # type: ignore[misc]
+class Supervisor(Agent[Context]):  # type: ignore[misc]
     def function_tools(self) -> list:
         return [self.knowledge_base_bedrock]
 
