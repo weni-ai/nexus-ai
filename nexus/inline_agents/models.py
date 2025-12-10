@@ -45,6 +45,28 @@ class Agent(models.Model):
     foundation_model = models.CharField(max_length=255, null=True, blank=True, default="")  # will be deprecated
     backend_foundation_models = models.JSONField(default=dict)
     source_type = models.CharField(max_length=255, choices=AGENT_TYPE_CHOICES, default=PLATFORM)
+    agent_type = models.ForeignKey(
+        "AgentType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agents",
+    )
+    category = models.ForeignKey(
+        "AgentCategory",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agents",
+    )
+    group = models.ForeignKey("AgentGroup", on_delete=models.SET_NULL, null=True, blank=True, related_name="agents")
+    systems = models.ManyToManyField("AgentSystem", blank=True, related_name="agents")
+
+    variant = models.CharField(max_length=100, null=True, blank=True)
+    capabilities = models.JSONField(default=list, null=True, blank=True)
+    policies = models.JSONField(default=dict, null=True, blank=True)
+    tooling = models.JSONField(default=dict, null=True, blank=True)
+    catalog = models.JSONField(default=dict, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -217,3 +239,35 @@ class InlineAgentsConfiguration(models.Model):
 
         self.audio_orchestration = activate
         self.save()
+class AgentGroup(models.Model):
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True)
+    shared_config = models.JSONField(default=dict)
+
+    def __str__(self):
+        return self.name
+
+
+class AgentSystem(models.Model):
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True)
+    metadata = models.JSONField(default=dict)
+
+    def __str__(self):
+        return self.name
+
+
+class AgentType(models.Model):
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.name
+
+
+class AgentCategory(models.Model):
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True)
+
+    def __str__(self):
+        return self.name
