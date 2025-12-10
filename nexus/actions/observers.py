@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver
 from nexus.event_domain.recent_activity.create import create_recent_activity
 from nexus.event_domain.recent_activity.recent_activities_dto import CreateRecentActivityDTO
@@ -22,6 +23,7 @@ def _update_comparison_fields(
     return action_details
 
 
+@observer("action_activity")
 class ActionsObserver(EventObserver):
     def perform(self, action, action_type: str, **kwargs) -> None:
         content_base = action.content_base
