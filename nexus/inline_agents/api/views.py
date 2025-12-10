@@ -19,6 +19,7 @@ from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
 from nexus.usecases.inline_agents.get import GetInlineAgentsUsecase, GetInlineCredentialsUsecase, GetLogGroupUsecase
+from nexus.events import event_manager, notify_async
 from nexus.usecases.inline_agents.update import UpdateAgentUseCase
 from nexus.usecases.intelligences.get_by_uuid import (
     create_inline_agents_configuration,
@@ -100,6 +101,12 @@ class PushAgents(APIView):
                     print(f"[+ Creating agent {key} +]")
                     agent_usecase.create_agent(key, agents[key], project, files)
 
+            # Fire cache invalidation event for team update (agents are part of team) (async observer)
+            notify_async(
+                event="cache_invalidation:team",
+                project_uuid=project_uuid,
+            )
+
         except Project.DoesNotExist:
             return Response({"error": "Project not found"}, status=404)
 
@@ -119,9 +126,23 @@ class ActiveAgentsView(APIView):
         try:
             if assign:
                 usecase.assign_agent(agent_uuid, project_uuid)
+
+                # Fire cache invalidation event for team update (agent assigned) (async observer)
+                notify_async(
+                    event="cache_invalidation:team",
+                    project_uuid=project_uuid,
+                )
+
                 return Response({"assigned": True}, status=200)
 
             usecase.unassign_agent(agent_uuid, project_uuid)
+
+            # Fire cache invalidation event for team update (agent unassigned) (async observer)
+            notify_async(
+                event="cache_invalidation:team",
+                project_uuid=project_uuid,
+            )
+
             return Response({"assigned": False}, status=200)
         except ValueError as e:
             return Response({"error": str(e)}, status=404)
@@ -384,6 +405,13 @@ class ProjectComponentsView(APIView):
             project = Project.objects.get(uuid=project_uuid)
             project.use_components = use_components
             project.save()
+
+            # Fire cache invalidation event for project update
+            event_manager.notify(
+                event="cache_invalidation:project",
+                project=project,
+            )
+
             return Response({"message": "Project updated successfully", "use_components": use_components})
         except Project.DoesNotExist:
             return Response({"error": "Project not found"}, status=404)
@@ -449,6 +477,13 @@ class MultiAgentView(APIView):
             if not project.use_prompt_creation_configurations:
                 project.use_prompt_creation_configurations = True
             project.save()
+
+            # Fire cache invalidation event for project update (async observer)
+            notify_async(
+                event="cache_invalidation:project",
+                project=project,
+            )
+
             return Response({"message": "Project updated successfully", "multi_agents": multi_agents}, status=200)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -509,6 +544,12 @@ class AgentBuilderAudio(APIView):
 
             elif agent_voice:
                 inline_agents_configuration.set_audio_orchestration_voice(agent_voice)
+
+            # Fire cache invalidation event for project update (inline_agent_config is part of project cache) (async observer)
+            notify_async(
+                event="cache_invalidation:project",
+                project=project,
+            )
 
             return Response(
                 {
