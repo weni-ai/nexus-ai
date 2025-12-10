@@ -121,7 +121,9 @@ class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
                 event="cache_invalidation:project",
                 project=obj.project,
             )
-            logger.info(f"[Admin] Triggered cache invalidation for InlineAgentsConfiguration (project {obj.project.uuid})")
+            logger.info(
+                f"[Admin] Triggered cache invalidation for InlineAgentsConfiguration (project {obj.project.uuid})"
+            )
         except Exception as e:
             logger.warning(f"[Admin] Failed to trigger cache invalidation for InlineAgentsConfiguration: {e}")
 

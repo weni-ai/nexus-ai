@@ -79,8 +79,8 @@ class ProjectAdmin(admin.ModelAdmin):
                     "formatter_send_only_assistant_message",
                     "formatter_tools_descriptions",
                 )
-            }
-        )
+            },
+        ),
     )
 
     def get_form(self, request, obj=None, **kwargs):
