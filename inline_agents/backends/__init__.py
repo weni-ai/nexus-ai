@@ -1,8 +1,7 @@
-import os
+from django.conf import settings
 
 from inline_agents.backend import InlineAgentsBackend
 
-from .bedrock.backend import BedrockBackend
 from .exceptions import BackendAlreadyRegistered, UnregisteredBackend
 
 
@@ -44,10 +43,11 @@ class BackendsRegistry:
         return cls._names
 
 
-BackendsRegistry.register(BedrockBackend(), set_default=True)
+if getattr(settings, "AGENTS_BACKENDS", "bedrock").lower() == "bedrock":
+    from .bedrock.backend import BedrockBackend
 
-# Avoid importing OpenAI backend unless explicitly enabled
-if os.environ.get("ENABLE_OPENAI_INLINE_BACKEND") == "1":
+    BackendsRegistry.register(BedrockBackend(), set_default=True)
+else:
     from .openai.backend import OpenAIBackend
 
-    BackendsRegistry.register(OpenAIBackend())
+    BackendsRegistry.register(OpenAIBackend(), set_default=True)
