@@ -134,11 +134,10 @@ class SupervisorPublicConversationsView(APIView):
                 except Exception:
                     end_dt = end
 
-            # Use overlap logic so any conversation intersecting the range is included
             if start_dt and end_dt:
-                qs = qs.filter(start_date__lte=end_dt, end_date__gte=start_dt)
+                qs = qs.filter(start_date__gte=start_dt, start_date__lte=end_dt)
             elif start_dt:
-                qs = qs.filter(end_date__gte=start_dt)
+                qs = qs.filter(start_date__gte=start_dt)
             elif end_dt:
                 qs = qs.filter(start_date__lte=end_dt)
             if status_param:
@@ -152,12 +151,21 @@ class SupervisorPublicConversationsView(APIView):
             message_service = MessageService()
             for conv in qs[offset : offset + page_size]:
                 messages = []
-                if conv.contact_urn and conv.channel_uuid and conv.start_date and conv.end_date:
+                fetch_start = start_dt or conv.start_date
+                fetch_end = end_dt or conv.end_date
+
+                can_fetch = bool(conv.contact_urn and conv.channel_uuid and fetch_start and fetch_end)
+                if can_fetch:
                     try:
-                        start_bound = start_dt or conv.start_date
-                        end_bound = end_dt or conv.end_date
-                        start_iso = start_bound.isoformat() if hasattr(start_bound, "isoformat") else str(start_bound)
-                        end_iso = end_bound.isoformat() if hasattr(end_bound, "isoformat") else str(end_bound)
+
+                        def _to_utc_iso(val):
+                            try:
+                                return pendulum.parse(str(val)).in_timezone("UTC").format("YYYY-MM-DDTHH:mm:ss")
+                            except Exception:
+                                return str(val)
+
+                        start_iso = _to_utc_iso(fetch_start)
+                        end_iso = _to_utc_iso(fetch_end)
                         messages = message_service.get_messages_for_conversation(
                             project_uuid=str(project_uuid),
                             contact_urn=conv.contact_urn,
@@ -167,8 +175,6 @@ class SupervisorPublicConversationsView(APIView):
                             resolution_status=None,
                         )
                     except Exception as e:
-                        # Log error but don't fail the entire request
-                        # Messages will be empty list
                         logger.warning(
                             f"Error fetching messages for conversation {conv.uuid}: {str(e)}",
                             extra={
