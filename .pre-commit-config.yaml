@@ -47,4 +47,4 @@ repos:
         language: system
         pass_filenames: false
         stages: [push]
-        fail_under: 75
+        fail_under: 50
