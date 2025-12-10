@@ -139,13 +139,11 @@ class ResolutionRateAverageView(APIView):
             except ValueError:
                 return Response({"error": "min_conversations must be a valid integer"}, status=400)
 
-        # Convert date objects to timezone-aware datetime objects for start_date filtering
-        start_datetime = pendulum.datetime(start_date.year, start_date.month, start_date.day)
-        end_datetime = pendulum.datetime(end_date.year, end_date.month, end_date.day)
-
         conversations = (
             Conversation.objects.filter(
-                start_date__gte=start_datetime, start_date__lt=end_datetime, resolution__in=["0", "1", "4"]
+                created_at__date__gte=start_date,
+                created_at__date__lte=end_date,
+                resolution__in=["0", "1", "2", "3", "4"],
             )
             .exclude(resolution__isnull=True)
             .select_related("project")
@@ -162,6 +160,8 @@ class ResolutionRateAverageView(APIView):
             total_conversations=Count("uuid"),
             resolved_cnt=Count("uuid", filter=Q(resolution="0")),
             unresolved_cnt=Count("uuid", filter=Q(resolution="1")),
+            in_progress_cnt=Count("uuid", filter=Q(resolution="2")),
+            unclassified_cnt=Count("uuid", filter=Q(resolution="3")),
             has_chat_cnt=Count("uuid", filter=Q(resolution="4")),
         )
 
@@ -171,37 +171,48 @@ class ResolutionRateAverageView(APIView):
         project_rates = []
         total_resolved = 0
         total_unresolved = 0
+        total_in_progress = 0
+        total_unclassified = 0
         total_has_chat = 0
         total_conversations_all = 0
 
         for ps in project_stats:
-            total_considered = ps["resolved_cnt"] + ps["unresolved_cnt"] + ps["has_chat_cnt"]
+            total_considered = (
+                ps["resolved_cnt"]
+                + ps["unresolved_cnt"]
+                + ps["in_progress_cnt"]
+                + ps["unclassified_cnt"]
+                + ps["has_chat_cnt"]
+            )
             if total_considered > 0:
                 resolution_rate_pct = 100.0 * ps["resolved_cnt"] / total_considered
                 project_rates.append(resolution_rate_pct)
                 total_resolved += ps["resolved_cnt"]
                 total_unresolved += ps["unresolved_cnt"]
+                total_in_progress += ps["in_progress_cnt"]
+                total_unclassified += ps["unclassified_cnt"]
                 total_has_chat += ps["has_chat_cnt"]
                 total_conversations_all += ps["total_conversations"]
 
         if project_rates:
             resolution_rate = sum(project_rates) / len(project_rates) / 100.0
-            total_considered = total_resolved + total_unresolved + total_has_chat
-            unresolved_rate = float(total_unresolved / total_considered) if total_considered > 0 else 0.0
+            unresolved_rate = float(total_unresolved / total_conversations_all) if total_conversations_all > 0 else 0.0
         else:
             resolution_rate = 0.0
             unresolved_rate = 0.0
-            total_considered = 0
+            total_conversations_all = 0
 
         response_data = {
             "resolution_rate": round(resolution_rate, 4),
             "unresolved_rate": round(unresolved_rate, 4),
-            "total_conversations": total_considered,
+            "total_conversations": total_conversations_all,
             "resolved_conversations": total_resolved,
             "unresolved_conversations": total_unresolved,
             "breakdown": {
                 "resolved": total_resolved,
                 "unresolved": total_unresolved,
+                "in_progress": total_in_progress,
+                "unclassified": total_unclassified,
                 "has_chat_room": total_has_chat,
             },
             "filters": {
@@ -237,6 +248,7 @@ class ResolutionRateIndividualView(APIView):
         end_date_str = request.query_params.get("end_date")
         motor = request.query_params.get("motor")
         min_conversations_str = request.query_params.get("min_conversations")
+        project_uuid = request.query_params.get("project_uuid")
         filter_project_uuid = request.query_params.get("filter_project_uuid")
         filter_project_name = request.query_params.get("filter_project_name")
 
@@ -265,11 +277,25 @@ class ResolutionRateIndividualView(APIView):
             except ValueError:
                 return Response({"error": "min_conversations must be a valid integer"}, status=400)
 
+        # Validate project_uuid if provided
+        if project_uuid:
+            try:
+                UUID(project_uuid)
+            except (ValueError, TypeError):
+                return Response(
+                    {"error": "project_uuid must be a valid UUID format"},
+                    status=400,
+                )
+
         # Build base query across all projects
         conversations = Conversation.objects.filter(
             created_at__date__gte=start_date,
             created_at__date__lte=end_date,
         ).select_related("project")
+
+        # Filter by project_uuid if provided
+        if project_uuid:
+            conversations = conversations.filter(project__uuid=project_uuid)
 
         # Filter by motor if provided
         if motor:
@@ -463,6 +489,9 @@ class ProjectsByMotorView(APIView):
         # Prevent database access during schema generation
         if getattr(self, "swagger_fake_view", False):
             return Response({})
+        user = request.user
+        if not user or not getattr(user, "is_authenticated", False):
+            return Response({"detail": "Authentication credentials were not provided."}, status=401)
         """
         GET /api/analytics/projects/by-motor/
 
