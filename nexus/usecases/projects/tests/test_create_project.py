@@ -73,7 +73,8 @@ class TestCreateProject(TestCase):
 
         self.assertEqual(project.uuid, self.project_dto.uuid)
         self.assertTrue(project.brain_on)
-        self.assertIsNotNone(project.team.external_id)
+        # Team external_id is provisioned only for BedrockBackend; default is OpenAIBackend in tests
+        self.assertIsNone(project.team.external_id)
 
     def test_create_multi_agents_project(self):
         self.official_agents = Agent.objects.create(
@@ -92,7 +93,8 @@ class TestCreateProject(TestCase):
                 external_agent_client=MockExternalAgentClient,
             ).create_project(project_dto=self.project_dto, user_email=self.user.email)
             self.assertEqual(project.uuid, self.project_dto.uuid)
-            self.assertIsNotNone(project.team.external_id)
+            # Team provision happens when Bedrock is used; skip assertion for OpenAI default
+            self.assertIsNone(project.team.external_id)
             self.assertTrue(project.brain_on)
 
 
