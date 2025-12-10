@@ -12,6 +12,7 @@ from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from nexus.inline_agents.models import InlineAgentMessage
 from nexus.intelligences.models import Conversation
 from nexus.projects.api.project_api_token_auth import (
     ProjectApiKeyAuthentication,
@@ -174,6 +175,24 @@ class SupervisorPublicConversationsView(APIView):
                             end_date=end_iso,
                             resolution_status=None,
                         )
+                        if not messages:
+                            inline_qs = InlineAgentMessage.objects.filter(
+                                project__uuid=str(project_uuid),
+                                contact_urn=conv.contact_urn,
+                                created_at__range=(
+                                    pendulum.parse(start_iso).in_timezone("UTC"),
+                                    pendulum.parse(end_iso).in_timezone("UTC"),
+                                ),
+                            ).order_by("created_at")
+                            if inline_qs.exists():
+                                messages = [
+                                    {
+                                        "text": m.text,
+                                        "source": "user" if m.source_type == "user" else "agent",
+                                        "created_at": m.created_at.isoformat(),
+                                    }
+                                    for m in inline_qs
+                                ]
                     except Exception as e:
                         logger.warning(
                             f"Error fetching messages for conversation {conv.uuid}: {str(e)}",
