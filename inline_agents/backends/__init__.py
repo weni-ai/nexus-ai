@@ -1,8 +1,10 @@
-from django.conf import settings
+from django.conf import settings  # noqa: F401
 
 from inline_agents.backend import InlineAgentsBackend
 
+from .bedrock.backend import BedrockBackend
 from .exceptions import BackendAlreadyRegistered, UnregisteredBackend
+from .openai.backend import OpenAIBackend
 
 
 class BackendsRegistry:
@@ -43,11 +45,8 @@ class BackendsRegistry:
         return cls._names
 
 
-if getattr(settings, "AGENTS_BACKENDS", "bedrock").lower() == "bedrock":
-    from .bedrock.backend import BedrockBackend
+BackendsRegistry.register(BedrockBackend(), set_default=False)
+BackendsRegistry.register(OpenAIBackend(), set_default=False)
 
-    BackendsRegistry.register(BedrockBackend(), set_default=True)
-else:
-    from .openai.backend import OpenAIBackend
-
-    BackendsRegistry.register(OpenAIBackend(), set_default=True)
+# Always set OpenAI as default backend
+BackendsRegistry._default_backend = BackendsRegistry.get_backend("OpenAIBackend")
