@@ -154,7 +154,7 @@ class SupervisorPublicConversationsView(APIView):
                 fetch_start = start_dt or conv.start_date
                 fetch_end = end_dt or conv.end_date
 
-                can_fetch = bool(conv.contact_urn and conv.channel_uuid and fetch_start and fetch_end)
+                can_fetch = bool(conv.contact_urn and fetch_start and fetch_end)
                 if can_fetch:
                     try:
 
