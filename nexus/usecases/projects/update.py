@@ -1,7 +1,7 @@
 import copy
 
 from nexus.event_driven.publisher.rabbitmq_publisher import RabbitMQPublisher
-from nexus.events import event_manager
+from nexus.events import event_manager, notify_async
 from nexus.projects.models import IntegratedFeature, Project
 from nexus.projects.permissions import has_project_permission
 from nexus.usecases import users
@@ -56,6 +56,12 @@ class ProjectUpdateUseCase:
             old_project_data=old_project_data,
             new_project_data=new_project_data,
             user=user,
+        )
+
+        # Fire cache invalidation event (async observer)
+        notify_async(
+            event="cache_invalidation:project",
+            project=project,
         )
 
         return project

@@ -317,4 +317,3 @@ class AsyncEventManager:
                     self.middleware.on_error(observer, event, e, duration, **kwargs)
                     # Re-raise exception for fail-fast behavior
                     raise
-
