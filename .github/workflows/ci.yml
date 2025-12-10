@@ -13,6 +13,8 @@ env:
   SECRET_KEY: "SK"
   ALLOWED_HOSTS: "*,"
   DJANGO_SETTINGS_MODULE: "nexus.settings"
+  DEFAULT_DATABASE: "postgres://nexus:nexus@postgres:5432/nexus"
+  USE_SQLITE_FOR_TESTS: "false"
 
 jobs:
   container-job:
@@ -55,6 +57,8 @@ jobs:
           poetry config virtualenvs.create false --local
           poetry install
           python contrib/gen_env.py
+      - name: Run Migrations
+        run: python manage.py migrate --noinput
       - name: Run Django Unittests with Coverage
         run: coverage run manage.py test --verbosity=2 --noinput
       - name: Coverage Report
