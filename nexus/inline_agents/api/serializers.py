@@ -25,8 +25,9 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         return obj.agent.collaboration_instructions
 
     def get_skills(self, obj):
-        display_skills = obj.agent.current_version.display_skills
-        return display_skills
+        if obj.agent.current_version:
+            return obj.agent.current_version.display_skills
+        return []
 
     def get_is_official(self, obj):
         return obj.agent.is_official

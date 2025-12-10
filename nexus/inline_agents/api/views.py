@@ -166,15 +166,18 @@ class OfficialAgentsV1(APIView):
         if name_filter:
             agents = agents.filter(name__icontains=name_filter)
         if type_filter:
-            agents = agents.filter(agent_type__slug=type_filter)
+            agents = agents.filter(agent_type__slug__iexact=type_filter)
         if group_filter:
-            agents = agents.filter(group__slug=group_filter)
+            agents = agents.filter(group__slug__iexact=group_filter)
         if category_filter:
-            agents = agents.filter(category__slug=category_filter)
+            if category_filter.lower() == "others":
+                agents = agents.filter(category__isnull=True)
+            else:
+                agents = agents.filter(category__slug__iexact=category_filter)
         if system_filter:
-            agents = agents.filter(systems__slug=system_filter).distinct("uuid")
+            agents = agents.filter(systems__slug__iexact=system_filter).distinct("uuid")
         if variant_filter:
-            agents = agents.filter(variant=variant_filter)
+            agents = agents.filter(variant__iexact=variant_filter)
 
         serializer = OfficialAgentListSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
