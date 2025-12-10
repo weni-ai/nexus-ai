@@ -1,5 +1,6 @@
 import logging
 
+import pendulum
 import sentry_sdk
 from drf_spectacular.utils import (
     OpenApiParameter,
@@ -34,6 +35,7 @@ class SupervisorPublicConversationItemSerializer(serializers.Serializer):
     status = serializers.CharField()
     topic = serializers.CharField(allow_null=True, allow_blank=True)
     channel_uuid = serializers.UUIDField(allow_null=True)
+    contact_urn = serializers.CharField(allow_null=True, allow_blank=True)
     messages = MessageSerializer(many=True)
 
 
@@ -119,10 +121,26 @@ class SupervisorPublicConversationsView(APIView):
             end = request.query_params.get("end")
             status_param = request.query_params.get("status")
 
+            start_dt = None
+            end_dt = None
             if start:
-                qs = qs.filter(start_date__gte=start)
+                try:
+                    start_dt = pendulum.parse(start).start_of("day")
+                except Exception:
+                    start_dt = start
             if end:
-                qs = qs.filter(end_date__lte=end)
+                try:
+                    end_dt = pendulum.parse(end).end_of("day")
+                except Exception:
+                    end_dt = end
+
+            # Use overlap logic so any conversation intersecting the range is included
+            if start_dt and end_dt:
+                qs = qs.filter(start_date__lte=end_dt, end_date__gte=start_dt)
+            elif start_dt:
+                qs = qs.filter(end_date__gte=start_dt)
+            elif end_dt:
+                qs = qs.filter(start_date__lte=end_dt)
             if status_param:
                 qs = qs.filter(resolution=status_param)
 
@@ -130,17 +148,16 @@ class SupervisorPublicConversationsView(APIView):
             page = int(request.query_params.get("page", 1))
             offset = (page - 1) * page_size
             results = []
-            
             # Initialize MessageService for fetching messages
             message_service = MessageService()
-            
             for conv in qs[offset : offset + page_size]:
-                # Get messages for this conversation
                 messages = []
                 if conv.contact_urn and conv.channel_uuid and conv.start_date and conv.end_date:
                     try:
-                        start_iso = conv.start_date.isoformat()
-                        end_iso = conv.end_date.isoformat()
+                        start_bound = start_dt or conv.start_date
+                        end_bound = end_dt or conv.end_date
+                        start_iso = start_bound.isoformat() if hasattr(start_bound, "isoformat") else str(start_bound)
+                        end_iso = end_bound.isoformat() if hasattr(end_bound, "isoformat") else str(end_bound)
                         messages = message_service.get_messages_for_conversation(
                             project_uuid=str(project_uuid),
                             contact_urn=conv.contact_urn,
@@ -164,7 +181,6 @@ class SupervisorPublicConversationsView(APIView):
                         sentry_sdk.set_tag("project_uuid", project_uuid)
                         sentry_sdk.set_tag("conversation_uuid", str(conv.uuid))
                         sentry_sdk.capture_exception(e)
-                
                 results.append(
                     {
                         "conversation_uuid": str(conv.uuid),
@@ -173,6 +189,7 @@ class SupervisorPublicConversationsView(APIView):
                         "status": conv.get_resolution_display(),
                         "topic": conv.get_topic() if conv.topic else None,
                         "channel_uuid": str(conv.channel_uuid) if conv.channel_uuid else None,
+                        "contact_urn": conv.contact_urn,
                         "messages": messages,
                     }
                 )
