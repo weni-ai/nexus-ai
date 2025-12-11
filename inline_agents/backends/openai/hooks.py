@@ -5,6 +5,12 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 import pendulum
 import sentry_sdk
 
+try:
+    from agents import AgentHooks, RunHooks
+except Exception:  # Fallback for test environments where agents fails to import
+    AgentHooks = object  # type: ignore[assignment]
+    RunHooks = object  # type: ignore[assignment]
+
 if TYPE_CHECKING:
     pass
 from django.conf import settings
@@ -94,7 +100,7 @@ class TraceHandler:
         )
 
 
-class RunnerHooks:  # type: ignore[misc]
+class RunnerHooks(RunHooks):  # type: ignore[misc]
     def __init__(
         self,
         supervisor_name: str,
@@ -172,7 +178,7 @@ class RunnerHooks:  # type: ignore[misc]
         await self.trace_handler.send_trace(context_data, agent.name, "model_response_received")
 
 
-class CollaboratorHooks:  # type: ignore[misc]
+class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
     def __init__(
         self,
         agent_name: str,
@@ -411,7 +417,7 @@ class CollaboratorHooks:  # type: ignore[misc]
         await self.trace_handler.send_trace(context_data, agent.name, "forwarding_to_manager", trace_data)
 
 
-class SupervisorHooks:  # type: ignore[misc]
+class SupervisorHooks(AgentHooks):  # type: ignore[misc]
     def __init__(
         self,
         agent_name: str,
