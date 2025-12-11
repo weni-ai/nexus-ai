@@ -4,10 +4,11 @@ import boto3
 
 if TYPE_CHECKING:
     pass
-from agents import Agent
+from agents import Agent, RunContextWrapper
 from django.conf import settings
 from openai.types.shared import Reasoning
 
+from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
 
 
@@ -82,7 +83,7 @@ class Supervisor(Agent):  # type: ignore[misc]
     from agents import function_tool
 
     @function_tool
-    def knowledge_base_bedrock(wrapper, question: str) -> str:
+    def knowledge_base_bedrock(ctx: RunContextWrapper[Context], question: str) -> str:
         """
         Query the AWS Bedrock Knowledge Base and return the most relevant information for a given question.
 
@@ -91,7 +92,7 @@ class Supervisor(Agent):  # type: ignore[misc]
         """
 
         client = boto3.client("bedrock-agent-runtime", region_name=settings.AWS_BEDROCK_REGION_NAME)
-        content_base_uuid: str | None = wrapper.context.content_base.get("uuid")
+        content_base_uuid: str | None = ctx.context.content_base.get("uuid")
 
         retrieve_params = {
             "knowledgeBaseId": settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID,
@@ -104,7 +105,7 @@ class Supervisor(Agent):  # type: ignore[misc]
                 {
                     "equals": {
                         "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": get_datasource_id(wrapper.context.project.get("uuid")),
+                        "value": get_datasource_id(ctx.context.project.get("uuid")),
                     }
                 },
             ]
