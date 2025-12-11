@@ -66,9 +66,9 @@ class AgentsBackendTestCase(TestCase):
         self.project_ab2.save()
 
     def test_get_agents_backend_by_project_default(self):
-        """Test getting agents backend when it's not set (should return BedrockBackend as default)"""
+        """Test getting agents backend when it's not set (should return OpenAIBackend as default)"""
         backend = self.usecase.get_agents_backend_by_project(str(self.project.uuid))
-        self.assertEqual(backend, "BedrockBackend")
+        self.assertEqual(backend, "OpenAIBackend")
 
     def test_get_agents_backend_by_project_with_bedrock(self):
         """Test getting agents backend when it's set to BedrockBackend"""
