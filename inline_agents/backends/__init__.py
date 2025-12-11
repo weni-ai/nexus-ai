@@ -1,6 +1,8 @@
 from django.conf import settings  # noqa: F401
 
 from inline_agents.backend import InlineAgentsBackend
+from inline_agents.backends.bedrock.backend import BedrockBackend
+from inline_agents.backends.openai.backend import OpenAIBackend
 
 from .exceptions import BackendAlreadyRegistered, UnregisteredBackend
 
