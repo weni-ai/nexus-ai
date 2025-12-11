@@ -1,4 +1,5 @@
 import json
+from unittest import skip
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -644,9 +645,6 @@ class MessageDetailViewSetTestCase(TestCase):
         self.assertEqual(content.get("status"), "F")
         self.assertEqual(content.get("actions_uuid"), str(action.uuid))
         self.assertEqual(content.get("actions_type"), str(action.name))
-
-
-from unittest import skip
 
 
 @skip("temporarily skipped: stabilize inline conversations date-window behavior")

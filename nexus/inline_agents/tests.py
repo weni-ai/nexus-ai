@@ -1,5 +1,6 @@
 import json
 from io import BytesIO
+from unittest import skip
 from unittest.mock import Mock, patch
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
@@ -89,10 +90,6 @@ class MockBedrockClient:
 
     def delete_lambda_function(self, function_name):
         return
-
-
-from unittest import skip
-
 
 @skip("temporarily skipped: stabilize inline_agents push tests")
 class TestPushAgents(TestCase):

@@ -1,3 +1,4 @@
+from unittest import skip
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -36,8 +37,6 @@ class MockExternalAgentClient:
     def create_agent_alias(self, **kwargs):
         return "sub_agent_alias_id", "sub_agent_alias_arn", "v1"
 
-
-from unittest import skip
 
 
 @skip("temporarily skipped: team provisioning differs per backend; stabilizing")
