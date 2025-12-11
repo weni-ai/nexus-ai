@@ -110,7 +110,7 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
 
     def test_resolution_rate_with_ab2_project(self):
         """Test average resolution rate for AB 2 project"""
-        url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
+        url = reverse("resolution-rate-average")
         response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
 
         self.assertEqual(response.status_code, 200)
@@ -753,17 +753,19 @@ class QueryOptimizationTestCase(BaseAnalyticsTestCase):
 
     def test_select_related_used(self):
         """Test that select_related is used to avoid N+1 queries"""
-        from django.db import connection
         from django.test.utils import override_settings
 
         url = reverse("resolution-rate-average", kwargs={"project_uuid": self.project_ab2.uuid})
 
         with override_settings(DEBUG=True):
-            initial_queries = len(connection.queries)
-
-            response = self.client.get(url, {"start_date": "2024-01-01", "end_date": "2024-01-31"})
-
-            final_queries = len(connection.queries)
+            response = self.client.get(
+                url,
+                {
+                    "project_uuid": str(self.project_ab2.uuid),
+                    "start_date": "2024-01-01",
+                    "end_date": "2024-01-31",
+                },
+            )
             # Should not have excessive queries (select_related should help)
             # Note: This is a basic check - actual query count depends on implementation
             self.assertEqual(response.status_code, 200)

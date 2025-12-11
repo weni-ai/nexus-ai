@@ -278,8 +278,3 @@ class Conversation(models.Model):
             "topic": self.get_topic(),
             "project": str(self.project.uuid),
         }
-
-    class Meta:
-        indexes = [
-            models.Index(fields=["project", "contact_urn", "start_date", "end_date", "channel_uuid"]),
-        ]
