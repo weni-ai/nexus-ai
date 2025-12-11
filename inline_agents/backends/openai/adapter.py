@@ -1,16 +1,10 @@
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import Any, Callable, Optional
 
 import boto3
 import pendulum
 import sentry_sdk
-
-if TYPE_CHECKING:
-    from agents import (
-        Agent,
-        ModelSettings,
-    )
 from django.conf import settings
 from django.template import Context as TemplateContext
 from django.template import Template
@@ -28,6 +22,7 @@ from inline_agents.backends.openai.hooks import (
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
     AgentCredential,
+    Guardrail,
     InlineAgentsConfiguration,
 )
 from nexus.intelligences.models import ContentBase
@@ -182,6 +177,8 @@ class OpenAITeamAdapter(TeamAdapter):
                 turn_off_rationale=turn_off_rationale,
             )
 
+            from agents import Agent, ModelSettings
+
             openai_agent = Agent[Context](
                 name=agent_name,
                 instructions=agent_instructions,
@@ -207,6 +204,8 @@ class OpenAITeamAdapter(TeamAdapter):
 
         supervisor_tools = cls._get_tools(supervisor["tools"])
         supervisor_tools.extend(agents_as_tools)
+
+        from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
 
         supervisor_agent = SupervisorAgent(
             name="manager",
