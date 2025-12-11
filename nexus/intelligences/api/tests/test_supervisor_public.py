@@ -45,7 +45,7 @@ class TestSupervisorPublicAPI(TestCase):
         self.raw_token = token
         self.client = APIClient()
 
-    @mock.patch("router.services.message_service.MessageService")
+    @mock.patch("nexus.intelligences.api.supervisor_public.MessageService")
     def test_public_supervisor_conversations_filters_and_messages(self, MockMessageService):
         # Mock message service to return messages
         instance = MockMessageService.return_value
