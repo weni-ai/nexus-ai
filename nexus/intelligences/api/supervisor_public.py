@@ -2,6 +2,7 @@ import logging
 
 import pendulum
 import sentry_sdk
+from django.db.models import Q
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -68,11 +69,14 @@ class SupervisorPublicConversationsView(APIView):
                     end_dt = end
 
             if start_dt and end_dt:
-                qs = qs.filter(start_date__gte=start_dt, start_date__lte=end_dt)
+                qs = qs.filter(
+                    Q(start_date__lte=end_dt)
+                    & (Q(end_date__gte=start_dt) | Q(end_date__isnull=True) | Q(start_date__gte=start_dt))
+                )
             elif start_dt:
-                qs = qs.filter(start_date__gte=start_dt)
+                qs = qs.filter(Q(start_date__gte=start_dt) | Q(end_date__gte=start_dt))
             elif end_dt:
-                qs = qs.filter(start_date__lte=end_dt)
+                qs = qs.filter(Q(start_date__lte=end_dt) | Q(end_date__lte=end_dt))
             if status_param:
                 qs = qs.filter(resolution=status_param)
 
