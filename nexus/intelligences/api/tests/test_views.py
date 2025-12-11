@@ -1182,6 +1182,44 @@ class TestSupervisorViewset(TestCase):
         self.assertTrue(response.data["results"][0]["has_chats_room"])
         self.assertEqual(response.data["results"][0]["csat"], "1")
 
+    def test_public_supervisor_conversations_with_filters_and_contact_urn(self):
+        conv = self.conversation1
+        if not conv.channel_uuid:
+            import uuid as _uuid
+
+            conv.channel_uuid = _uuid.uuid4()
+            conv.save(update_fields=["channel_uuid"])
+
+        from nexus.projects.models import ProjectApiToken
+
+        token, salt, token_hash = ProjectApiToken.generate_token_pair()
+        ProjectApiToken.objects.create(
+            project=self.project,
+            name="api-token",
+            token_hash=token_hash,
+            salt=salt,
+            scope="read:supervisor_conversations",
+            enabled=True,
+            created_by=self.user,
+        )
+
+        url = reverse("public-supervisor-conversations", kwargs={"project_uuid": str(self.project.uuid)})
+        start = conv.start_date.date().isoformat()
+        end = conv.end_date.date().isoformat()
+        full_url = f"{url}?start={start}&end={end}&page=1"
+
+        client = APIClient()
+        response = client.get(full_url, HTTP_AUTHORIZATION=f"ApiKey {token}")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        payload = response.json()
+        self.assertIn("results", payload)
+        results = payload["results"]
+        if results:
+            item = results[0]
+            self.assertIn("contact_urn", item)
+            self.assertIn("messages", item)
+
     def test_list_supervisor_data_invalid_project_uuid(self):
         """Test listing supervisor data with invalid project UUID"""
         url = reverse("supervisor", kwargs={"project_uuid": "invalid-uuid"})
