@@ -131,7 +131,7 @@ CHANNEL_LAYERS = {
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {"default": env.db(var="DEFAULT_DATABASE", default="sqlite:///db.sqlite3")}
-# Allow CI to opt-out of SQLite during tests by setting USE_SQLITE_FOR_TESTS=false
+# Allow CI or local env to OPT-IN to sqlite by setting USE_SQLITE_FOR_TESTS=true
 USE_SQLITE_FOR_TESTS = env.bool("USE_SQLITE_FOR_TESTS", default=True)
 if TESTING and USE_SQLITE_FOR_TESTS:
     DATABASES = {
