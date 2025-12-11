@@ -1,8 +1,5 @@
-import os
-
 from inline_agents.backend import InlineAgentsBackend
 
-from .bedrock.backend import BedrockBackend
 from .exceptions import BackendAlreadyRegistered, UnregisteredBackend
 
 
@@ -44,10 +41,8 @@ class BackendsRegistry:
         return cls._names
 
 
-BackendsRegistry.register(BedrockBackend(), set_default=True)
+from .openai.backend import OpenAIBackend
+from .bedrock.backend import BedrockBackend
 
-# Avoid importing OpenAI backend unless explicitly enabled
-if os.environ.get("ENABLE_OPENAI_INLINE_BACKEND") == "1":
-    from .openai.backend import OpenAIBackend
-
-    BackendsRegistry.register(OpenAIBackend())
+BackendsRegistry.register(OpenAIBackend(), set_default=True)
+BackendsRegistry.register(BedrockBackend())

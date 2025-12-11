@@ -2,6 +2,7 @@ import uuid
 from unittest import mock
 
 from django.test import TestCase
+from django.utils import timezone
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -22,6 +23,9 @@ class TestSupervisorPublicAPI(TestCase):
             contact_urn="whatsapp:5511999999999",
             channel_uuid=uuid.uuid4(),
         )
+        self.conversation.start_date = timezone.now()
+        self.conversation.end_date = timezone.now()
+        self.conversation.save()
 
         # Create a valid API token
         token, salt, token_hash = ProjectApiToken.generate_token_pair()
