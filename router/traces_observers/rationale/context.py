@@ -1,6 +1,7 @@
 """
 Context objects for RationaleObserver to reduce parameter passing complexity.
 """
+
 from dataclasses import dataclass
 from typing import Callable, Dict, Optional
 
@@ -66,4 +67,3 @@ class TraceData:
     def is_valid(self) -> bool:
         """Check if trace data is valid."""
         return self.inline_traces is not None and "trace" in self.inline_traces
-

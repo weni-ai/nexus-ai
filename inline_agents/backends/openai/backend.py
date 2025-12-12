@@ -444,7 +444,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 session=session,
             )
             # Only stream events if the result has stream_events method
-            stream_events = getattr(result, 'stream_events', None)
+            stream_events = getattr(result, "stream_events", None)
             if stream_events and callable(stream_events):
                 async for _ in stream_events():
                     pass
@@ -578,7 +578,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 delta_counter = 0
                 try:
                     # Only stream events if the result has stream_events method
-                    stream_events = getattr(result, 'stream_events', None)
+                    stream_events = getattr(result, "stream_events", None)
                     if stream_events and callable(stream_events):
                         async for event in stream_events():
                             delta_counter = self._process_delta_event(
@@ -592,7 +592,9 @@ class OpenAIBackend(InlineAgentsBackend):
                             )
                             if event.type == "run_item_stream_event":
                                 if hasattr(event, "item") and event.item.type == "tool_call_item":
-                                    hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
+                                    hooks_state.tool_calls.update(
+                                        {event.item.raw_item.name: event.item.raw_item.arguments}
+                                    )
                 except openai.APIError as api_error:
                     self._sentry_capture_exception(
                         api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True

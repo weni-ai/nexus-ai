@@ -4,6 +4,7 @@ Observer Registry for lazy loading of observers to avoid circular imports.
 This module provides a registry pattern that stores observer class paths as strings
 and lazily imports them only when needed, breaking circular import dependencies.
 """
+
 import importlib
 import logging
 from typing import Callable, Dict, List, Optional, Type, Union
@@ -45,14 +46,15 @@ class ObserverRegistry:
         observer_path: Union[str, List[str]],
         lazy: bool = True,
         factory: Optional[Callable[[Type], EventObserver]] = None,
-        isolate_errors: bool = False
+        isolate_errors: bool = False,
     ):
         """
         Register an observer for an event.
 
         Args:
             event: The event name to subscribe to
-            observer_path: Full module path to observer class (e.g., 'nexus.intelligences.observer.IntelligenceCreateObserver')
+            observer_path: Full module path to observer class
+                          (e.g., 'nexus.intelligences.observer.IntelligenceCreateObserver')
                           or list of paths. Can also be an instance if lazy=False.
             lazy: If True, store as string path for lazy loading. If False, store instance directly.
             factory: Optional factory function to create observer instance. Overrides default factory.
@@ -91,7 +93,7 @@ class ObserverRegistry:
             Instance of the observer class
         """
         try:
-            module_path, class_name = observer_path.rsplit('.', 1)
+            module_path, class_name = observer_path.rsplit(".", 1)
             module = importlib.import_module(module_path)
             observer_class: Type[EventObserver] = getattr(module, class_name)
 
@@ -145,6 +147,7 @@ class ObserverRegistry:
                 except ImportError as e:
                     # Log error but don't fail completely
                     import logging
+
                     logger = logging.getLogger(__name__)
                     logger.error(f"Failed to load observer for event '{event}': {e}")
 

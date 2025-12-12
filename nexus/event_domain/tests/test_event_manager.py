@@ -7,14 +7,14 @@ Tests cover:
 - Factory pattern (dependency injection support)
 - Backwards compatibility
 """
-import logging
+
 from unittest.mock import MagicMock, Mock, patch
 
 from django.test import TestCase
 
 from nexus.event_domain.event_manager import AsyncEventManager, EventManager
 from nexus.event_domain.event_observer import EventObserver
-from nexus.event_domain.observer_registry import ObserverRegistry, get_registry
+from nexus.event_domain.observer_registry import ObserverRegistry
 
 
 # Test observers
@@ -96,11 +96,7 @@ class ErrorIsolationTestCase(TestCase):
 
     def test_isolated_observer_continues_on_error(self):
         """Test that observers with isolate_errors=True continue on error."""
-        self.manager.subscribe(
-            "test_event",
-            observer=[self.fail_observer, self.success_observer],
-            isolate_errors=True
-        )
+        self.manager.subscribe("test_event", observer=[self.fail_observer, self.success_observer], isolate_errors=True)
 
         # Should not raise exception (errors are isolated)
         self.manager.notify("test_event", data="test")
@@ -113,11 +109,7 @@ class ErrorIsolationTestCase(TestCase):
         """Test mixing isolated and non-isolated observers."""
         fail2 = FailingObserver()
         # First observer: isolated (continue on error)
-        self.manager.subscribe(
-            "test_event",
-            observer=[self.fail_observer],
-            isolate_errors=True
-        )
+        self.manager.subscribe("test_event", observer=[self.fail_observer], isolate_errors=True)
         # Second observer: fail fast (default)
         self.manager.subscribe("test_event", observer=[fail2])
         # Third observer: should not run if second fails
@@ -137,11 +129,7 @@ class ErrorIsolationTestCase(TestCase):
     def test_isolated_error_logging(self):
         """Test that isolated errors are properly logged."""
         with patch("nexus.event_domain.event_manager.logger") as mock_logger:
-            self.manager.subscribe(
-                "test_event",
-                observer=[self.fail_observer],
-                isolate_errors=True
-            )
+            self.manager.subscribe("test_event", observer=[self.fail_observer], isolate_errors=True)
             self.manager.notify("test_event", data="test")
 
             # Verify error was logged
@@ -165,9 +153,7 @@ class ErrorIsolationTestCase(TestCase):
     def test_string_based_registration_with_isolation(self):
         """Test error isolation with string-based observer registration."""
         self.manager.subscribe(
-            "test_event",
-            observer="nexus.event_domain.tests.test_event_manager.FailingObserver",
-            isolate_errors=True
+            "test_event", observer="nexus.event_domain.tests.test_event_manager.FailingObserver", isolate_errors=True
         )
         self.manager.subscribe("test_event", observer=[self.success_observer])
 
@@ -193,6 +179,7 @@ class AsyncErrorIsolationTestCase(TestCase):
         self.manager.subscribe("test_event", observer=[self.fail_observer, self.success_observer])
 
         exception_raised = False
+
         async def run_test():
             nonlocal exception_raised
             try:
@@ -214,11 +201,7 @@ class AsyncErrorIsolationTestCase(TestCase):
         """Test that async observers with isolate_errors=True continue on error."""
         import asyncio
 
-        self.manager.subscribe(
-            "test_event",
-            observer=[self.fail_observer, self.success_observer],
-            isolate_errors=True
-        )
+        self.manager.subscribe("test_event", observer=[self.fail_observer, self.success_observer], isolate_errors=True)
 
         async def run_test():
             # Should not raise exception (errors are isolated)
@@ -235,11 +218,7 @@ class AsyncErrorIsolationTestCase(TestCase):
         import asyncio
 
         with patch("nexus.event_domain.event_manager.logger") as mock_logger:
-            self.manager.subscribe(
-                "test_event",
-                observer=[self.fail_observer],
-                isolate_errors=True
-            )
+            self.manager.subscribe("test_event", observer=[self.fail_observer], isolate_errors=True)
 
             async def run_test():
                 await self.manager.notify("test_event", data="test")
@@ -378,7 +357,7 @@ class FactoryPatternTestCase(TestCase):
         manager.subscribe(
             "test_event",
             observer="nexus.event_domain.tests.test_event_manager.ObserverWithDependencies",
-            factory=factory
+            factory=factory,
         )
 
         # Trigger event to load observer
@@ -401,8 +380,9 @@ class MiddlewareTestCase(TestCase):
 
     def test_sentry_middleware_captures_errors(self):
         """Test that Sentry middleware captures errors."""
-        from unittest.mock import patch, MagicMock
-        from nexus.event_domain.middleware import SentryErrorMiddleware, MiddlewareChain
+        from unittest.mock import patch
+
+        from nexus.event_domain.middleware import MiddlewareChain, SentryErrorMiddleware
 
         # Create manager with Sentry middleware
         chain = MiddlewareChain()
@@ -411,7 +391,7 @@ class MiddlewareTestCase(TestCase):
 
         manager.subscribe("test_event", observer=self.fail_observer)
 
-        with patch('nexus.event_domain.middleware.sentry_sdk') as mock_sentry:
+        with patch("nexus.event_domain.middleware.sentry_sdk") as mock_sentry:
             mock_sentry.capture_exception = MagicMock()
             mock_sentry.set_tag = MagicMock()
             mock_sentry.set_context = MagicMock()
@@ -430,8 +410,8 @@ class MiddlewareTestCase(TestCase):
     def test_performance_middleware_logs_duration(self):
         """Test that performance middleware logs execution time."""
         from unittest.mock import patch
-        from nexus.event_domain.middleware import PerformanceMonitoringMiddleware, MiddlewareChain
-        import time
+
+        from nexus.event_domain.middleware import MiddlewareChain, PerformanceMonitoringMiddleware
 
         # Create manager with performance middleware
         chain = MiddlewareChain()
@@ -440,7 +420,7 @@ class MiddlewareTestCase(TestCase):
 
         manager.subscribe("test_event", observer=self.success_observer)
 
-        with patch('nexus.event_domain.middleware.logger') as mock_logger:
+        with patch("nexus.event_domain.middleware.logger") as mock_logger:
             manager.notify("test_event", data="test")
 
             # Verify performance was logged
@@ -451,11 +431,9 @@ class MiddlewareTestCase(TestCase):
 
     def test_middleware_chain_executes_all(self):
         """Test that middleware chain executes all middleware."""
-        from unittest.mock import MagicMock, patch
         from nexus.event_domain.middleware import (
-            SentryErrorMiddleware,
+            MiddlewareChain,
             PerformanceMonitoringMiddleware,
-            MiddlewareChain
         )
 
         # Create mock middleware
@@ -479,7 +457,6 @@ class MiddlewareTestCase(TestCase):
 
     def test_middleware_on_error_called(self):
         """Test that middleware on_error is called when observer fails."""
-        from unittest.mock import MagicMock
         from nexus.event_domain.middleware import MiddlewareChain
 
         mock_middleware = MagicMock()
@@ -554,15 +531,14 @@ class EventValidatorTestCase(TestCase):
         """Test CompositeValidator."""
         from nexus.event_domain.validators import (
             CompositeValidator,
-            RequiredFieldsValidator,
             FieldTypeValidator,
-            ValidatorChain
+            RequiredFieldsValidator,
+            ValidatorChain,
         )
 
-        composite = CompositeValidator([
-            RequiredFieldsValidator(["project_uuid"]),
-            FieldTypeValidator({"project_uuid": str})
-        ])
+        composite = CompositeValidator(
+            [RequiredFieldsValidator(["project_uuid"]), FieldTypeValidator({"project_uuid": str})]
+        )
 
         chain = ValidatorChain()
         chain.add(composite)
@@ -581,7 +557,7 @@ class EventValidatorTestCase(TestCase):
 
     def test_validator_chain_multiple_validators(self):
         """Test ValidatorChain with multiple validators."""
-        from nexus.event_domain.validators import RequiredFieldsValidator, FieldTypeValidator, ValidatorChain
+        from nexus.event_domain.validators import FieldTypeValidator, RequiredFieldsValidator, ValidatorChain
 
         chain = ValidatorChain()
         chain.add(RequiredFieldsValidator(["project_uuid"]))
@@ -806,7 +782,7 @@ class ObserverRegistryTestCase(TestCase):
             "test_event",
             "nexus.event_domain.tests.test_event_manager.SuccessfulObserver",
             lazy=True,
-            isolate_errors=True
+            isolate_errors=True,
         )
 
         observers = self.registry.get_observers("test_event")
@@ -829,4 +805,3 @@ class ObserverRegistryTestCase(TestCase):
         # Check isolation settings
         self.assertTrue(self.registry.should_isolate_errors(observer1))
         self.assertFalse(self.registry.should_isolate_errors(observer2))
-
