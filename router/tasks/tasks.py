@@ -279,9 +279,7 @@ def get_trace_summary(language, trace):
 
         return response.choices[0].message.content
     except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).error("Error getting trace summary: %s", str(e), exc_info=True)
+        logger.error("Error getting trace summary: %s", str(e), exc_info=True)
         return "Processing your request now"
 
 
@@ -305,14 +303,12 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         return broadcast, flow_start
 
     source = "preview" if preview else "router"
-    import logging
-
-    logging.getLogger(__name__).info("Message source", extra={"source": source})
+    logger.info("Message source", extra={"source": source})
 
     # Initialize Redis client using the REDIS_URL from settings
     redis_client = Redis.from_url(settings.REDIS_URL)
 
-    logging.getLogger(__name__).info("Message received", extra={"has_text": bool(message.get("text"))})
+    logger.info("Message received", extra={"has_text": bool(message.get("text"))})
 
     content_base_repository = ContentBaseORMRepository()
     message_logs_repository = MessageLogsRepository()
@@ -444,9 +440,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         return response
 
     except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).error("START ROUTE error: %s", e, exc_info=True)
+        logger.error("START ROUTE error: %s", e, exc_info=True)
         if message.text:
             log_usecase.update_status("F", exception_text=e)
         raise
@@ -727,9 +721,7 @@ def start_multi_agents(
         # Clean up Redis entries in case of error
         redis_client.delete(pending_response_key)
         redis_client.delete(pending_task_key)
-        import logging
 
-        logger = logging.getLogger(__name__)
         logger.error("Error in start_multi_agents: %s", str(e), exc_info=True)
 
         if user_email:

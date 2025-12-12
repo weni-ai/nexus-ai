@@ -13,6 +13,8 @@ from router.entities import (
     Message,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class Indexer:
     pass
@@ -29,7 +31,6 @@ def call_llm(
     project_uuid: str = "",
 ) -> str:
     try:
-        logger = logging.getLogger(__name__)
         logger.debug("LLM call message", extra={"text_len": len(message.text) if getattr(message, "text", None) else 0})
 
         response = llm_model.request_gpt(

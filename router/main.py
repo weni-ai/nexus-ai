@@ -11,6 +11,8 @@ from router.tasks.invoke import start_inline_agents
 
 from .http_bodies import MessageHTTPBody
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI()
 
 
@@ -37,10 +39,10 @@ def messages(request: Request, message: MessageHTTPBody):
 
     try:
         project = Project.objects.get(uuid=message.project_uuid)
-        logging.getLogger(__name__).info("Message received", extra={"project_uuid": message.project_uuid})
+        logger.info("Message received", extra={"project_uuid": message.project_uuid})
 
         if project.inline_agent_switch:
-            logging.getLogger(__name__).info("Starting Inline Agent")
+            logger.info("Starting Inline Agent")
             start_inline_agents.delay(message.dict())
         else:
             start_route.delay(message.dict())

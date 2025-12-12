@@ -1,3 +1,4 @@
+import logging
 from typing import Dict, List
 
 from router.entities import (
@@ -8,6 +9,8 @@ from router.entities import (
     InstructionDTO,
 )
 from router.repositories import Repository
+
+logger = logging.getLogger(__name__)
 
 
 class ContentBaseTestRepository(Repository):
@@ -143,16 +146,12 @@ class MockBroadcastHTTPClient:
     def send_direct_message(
         self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs
     ):
-        import logging
-
-        logging.getLogger(__name__).debug("Test: Sending direct message", extra={"urns": urns})
+        logger.debug("Test: Sending direct message", extra={"urns": urns})
 
 
 class MockFlowStartHTTPClient:
     def start_flow(self, flow: str, user: str, urns: List, user_message: str, llm_response: str):
-        import logging
-
-        logging.getLogger(__name__).debug("Test: Starting flow", extra={"flow": flow})
+        logger.debug("Test: Starting flow", extra={"flow": flow})
 
 
 class TestException(Exception):

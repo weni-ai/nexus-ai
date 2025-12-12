@@ -1,4 +1,5 @@
 import json
+import logging
 from abc import ABC, abstractmethod
 from typing import Optional
 
@@ -7,6 +8,8 @@ from django.conf import settings
 from redis import Redis
 
 from router.repositories.redis.message import MessageRepository as RedisMessageRepository
+
+logger = logging.getLogger(__name__)
 
 
 class TaskManager(ABC):
@@ -178,11 +181,7 @@ class RedisTaskManager(TaskManager):
             return
 
         if channel_uuid is None:
-            import logging
-
-            logging.getLogger(__name__).info(
-                "Skipping message cache: channel_uuid is None", extra={"contact_urn": contact_urn}
-            )
+            logger.info("Skipping message cache: channel_uuid is None", extra={"contact_urn": contact_urn})
             return
 
         # Check if there are existing cached messages to decide storage method
