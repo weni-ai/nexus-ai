@@ -1,3 +1,5 @@
+import logging
+
 from django.forms.models import model_to_dict
 from rest_framework import serializers
 
@@ -22,6 +24,8 @@ from nexus.task_managers.models import (
     ContentBaseFileTaskManager,
     ContentBaseLinkTaskManager,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class IntelligenceSerializer(serializers.ModelSerializer):
@@ -81,7 +85,7 @@ class ContentBaseLinkSerializer(serializers.ModelSerializer):
             task_manager = obj.upload_tasks.order_by("created_at").last()
             return task_manager.status
         except Exception as e:
-            print(e)
+            logger.error("Serializer exception: %s", e, exc_info=True)
             return ContentBaseLinkTaskManager.STATUS_FAIL
 
 

@@ -94,7 +94,7 @@ class RedisSession:  # type: ignore[misc]
     def __init__(
         self, session_id: str, r: redis.Redis, project_uuid: str, sanitized_urn: str, limit: Optional[int] = None
     ):
-        print(f"[DEBUG] RedisSession: {session_id}")
+        logger.debug("RedisSession", extra={"session_id": session_id})
         self._key = session_id
         self.r = r
         self.project_uuid = project_uuid
@@ -128,7 +128,7 @@ class RedisSession:  # type: ignore[misc]
 
     async def get_items(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         limit = limit or self.limit
-        print(f"\t\t\t[DEBUG] limit: {limit}")
+        logger.debug("Session limit", extra={"limit": limit})
         try:
             with self.r.pipeline() as pipe:
                 if limit is None or limit <= 0:
@@ -204,7 +204,7 @@ class RedisSession:  # type: ignore[misc]
                     )
                     continue
                 except Exception as e:
-                    logger.error(f"Unexpected error parsing item {i} in session {self._key}: {e}")
+                    logger.error("Unexpected error parsing item %s in session %s: %s", i, self._key, e)
                     log_error_to_sentry(
                         e,
                         self._key,
@@ -217,6 +217,8 @@ class RedisSession:  # type: ignore[misc]
                         },
                     )
                     continue
+
+            logger.debug("Session items", extra={"count": len(items)})
             return items
 
         except redis.RedisError as e:
