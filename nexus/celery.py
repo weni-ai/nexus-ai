@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from typing import Optional
@@ -7,6 +8,8 @@ import nest_asyncio
 from celery import Celery, schedules
 from django.conf import settings
 from langfuse import get_client
+
+logger = logging.getLogger(__name__)
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
@@ -65,10 +68,6 @@ if not settings.TESTING:
     langfuse = get_client()
 
     if langfuse.auth_check():
-        import logging
-
-        logging.getLogger(__name__).info("Langfuse client is authenticated and ready!")
+        logger.info("Langfuse client is authenticated and ready!")
     else:
-        import logging
-
-        logging.getLogger(__name__).error("Langfuse authentication failed. Check credentials and host.")
+        logger.error("Langfuse authentication failed. Check credentials and host.")

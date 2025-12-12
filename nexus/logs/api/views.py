@@ -1,3 +1,5 @@
+import logging
+
 import pendulum
 from django.conf import settings
 from django.utils.dateparse import parse_date
@@ -28,6 +30,8 @@ from nexus.usecases.agents.agents import AgentUsecase
 from nexus.usecases.logs.create import CreateLogUsecase
 from nexus.usecases.logs.list import ListLogUsecase
 from nexus.usecases.logs.retrieve import RetrieveMessageLogUseCase
+
+logger = logging.getLogger(__name__)
 
 
 class CustomPageNumberPagination(PageNumberPagination):
@@ -223,9 +227,7 @@ class LogsViewset(ReadOnlyModelViewSet):
         return use_case.list_logs_by_project(project_uuid=project_uuid, order_by=order_by, **params)
 
     def retrieve(self, request, *args, **kwargs):
-        import logging
-
-        logging.getLogger(__name__).debug("Logs retrieve kwargs", extra={"kwargs": kwargs})
+        logger.debug("Logs retrieve kwargs", extra={"kwargs": kwargs})
         self.serializer_class = MessageFullLogSerializer
         return super().retrieve(request, *args, **kwargs)
 
