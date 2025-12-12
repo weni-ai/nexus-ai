@@ -223,7 +223,9 @@ class LogsViewset(ReadOnlyModelViewSet):
         return use_case.list_logs_by_project(project_uuid=project_uuid, order_by=order_by, **params)
 
     def retrieve(self, request, *args, **kwargs):
-        print(kwargs)
+        import logging
+
+        logging.getLogger(__name__).debug("Logs retrieve kwargs", extra={"kwargs": kwargs})
         self.serializer_class = MessageFullLogSerializer
         return super().retrieve(request, *args, **kwargs)
 
