@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import Mock, patch
 
 from django.test import TestCase
@@ -5,6 +6,8 @@ from django.test import TestCase
 from inline_agents.backends.bedrock.adapter import BedrockTeamAdapter
 from inline_agents.backends.bedrock.backend import BedrockBackend
 from inline_agents.backends.tests.inline_factories import SupervisorFactory, VersionFactory
+
+logger = logging.getLogger(__name__)
 
 
 class TestBedrockAdapter(TestCase):
@@ -58,9 +61,7 @@ class TestBedrockAdapter(TestCase):
         external_team = self.team_adapter.to_external(
             self.supervisor_dict, self.agents_dict, "Hello, how are you?", self.contact_urn, self.project.uuid
         )
-        import logging
-
-        logging.getLogger(__name__).debug("External team in test", extra={"keys": list(external_team.keys())})
+        logger.debug("External team in test", extra={"keys": list(external_team.keys())})
 
     def test_handle_rationale_in_response(self):
         rationale_text = "This is a rationale text"

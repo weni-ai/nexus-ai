@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from django.db.models import Q
 from rest_framework.permissions import BasePermission, IsAuthenticated
@@ -25,6 +27,8 @@ from nexus.usecases.intelligences.get_by_uuid import (
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from router.entities import message_factory
 
+logger = logging.getLogger(__name__)
+
 SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
 
 
@@ -43,9 +47,7 @@ class PushAgents(APIView):
         validate_file_size(files)
 
         import json
-        import logging
 
-        logger = logging.getLogger(__name__)
         logger.debug("InlineAgentsView payload", extra={"keys": list(request.data.keys())})
 
         agents = json.loads(request.data.get("agents"))

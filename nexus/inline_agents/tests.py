@@ -15,6 +15,8 @@ from nexus.usecases.inline_agents.get import GetInlineCredentialsUsecase, GetLog
 from nexus.usecases.inline_agents.update import UpdateAgentUseCase
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
+logger = logging.getLogger(__name__)
+
 
 class TestAgentsUsecase(TestCase):
     def setUp(self):
@@ -185,7 +187,6 @@ class TestPushAgents(TestCase):
 
         agent_usecase = CreateAgentUseCase(agent_backend_client=MockBedrockClient)
         update_agent_usecase = UpdateAgentUseCase(agent_backend_client=MockBedrockClient)
-        logger = logging.getLogger(__name__)
         for key in agents:
             logger.info("Creating agent", extra={"key": key})
             agent = agent_usecase.create_agent(key, agents[key], self.project, files)
@@ -342,7 +343,7 @@ class TestGetLogGroup(TestCase):
     def test_get_log_group(self):
         tool_key = "test-tool"
         log_group = self.usecase.get_log_group(self.project.uuid, self.agent.slug, tool_key)
-        logging.getLogger(__name__).info("Log group fetched", extra={"has_tool_name": bool(log_group.get("tool_name"))})
+        logger.info("Log group fetched", extra={"has_tool_name": bool(log_group.get("tool_name"))})
         self.assertEqual(log_group.get("tool_name"), f"{tool_key}-{self.agent.id}")
 
 
