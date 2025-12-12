@@ -1,11 +1,13 @@
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import pendulum
 import redis
 import sentry_sdk
-from agents.memory import Session
+
+if TYPE_CHECKING:
+    pass
 from django.conf import settings
 
 TURN_ROLES = {"user", "assistant"}
@@ -88,7 +90,7 @@ def sanitize_redis_item(item_str: str) -> str:
     return sanitized
 
 
-class RedisSession(Session):
+class RedisSession:  # type: ignore[misc]
     def __init__(
         self, session_id: str, r: redis.Redis, project_uuid: str, sanitized_urn: str, limit: Optional[int] = None
     ):
