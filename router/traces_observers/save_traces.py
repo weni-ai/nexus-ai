@@ -4,11 +4,13 @@ from typing import Dict, List
 import sentry_sdk
 
 from nexus.celery import app as celery_app
+from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver
 from nexus.inline_agents.models import InlineAgentMessage
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
 
 
+@observer("save_inline_trace_events", manager=["sync", "async"])
 class SaveTracesObserver(EventObserver):
     def perform(
         self,

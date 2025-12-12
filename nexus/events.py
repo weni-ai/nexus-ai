@@ -1,57 +1,42 @@
-from nexus.actions.observers import ActionsObserver
-from nexus.event_domain.event_manager import AsyncEventManager, EventManager
-from nexus.intelligences.observer import (
-    ContentBaseAgentObserver,
-    ContentBaseFileObserver,
-    ContentBaseInstructionObserver,
-    ContentBaseLinkObserver,
-    ContentBaseObserver,
-    ContentBaseTextObserver,
-    IntelligenceCreateObserver,
-    LLMUpdateObserver,
-)
-from nexus.logs.observers import (
-    GolfinhoHealthCheckObserver,
-    ZeroShotClassificationHealthCheckObserver,
-    ZeroShotHealthCheckObserver,
-)
-from nexus.projects.observer import ProjectObserver
-from router.traces_observers.rationale_observer import RationaleObserver
-from router.traces_observers.save_traces import SaveTracesObserver
-from router.traces_observers.summary import AsyncSummaryTracesObserver, SummaryTracesObserver
+"""
+Event system with decorator-based observer registration.
 
-# TODO: Refactor to use a registration function to register observers and decorators to fix circular imports.
+This module uses decorator-based registration to simplify observer setup.
+Observers are registered using @observer decorator on their class definitions.
+"""
+
+import logging
+
+from nexus.event_domain.decorators import auto_register_observers
+from nexus.event_domain.event_manager import AsyncEventManager, EventManager
+
+logger = logging.getLogger(__name__)
+
+# Create event managers - these can be imported without triggering observer imports
 event_manager = EventManager()
 async_event_manager = AsyncEventManager()
 
-event_manager.subscribe(event="intelligence_create_activity", observer=[IntelligenceCreateObserver()])
+# Import observer modules to trigger decorator registration
+# These imports happen after event managers are created to avoid circular imports
+# The @observer decorator stores registration info, which is then processed by auto_register_observers()
+try:
+    # Intelligence observers
+    import nexus.actions.observers  # noqa: F401
+    import nexus.intelligences.observer  # noqa: F401
 
-event_manager.subscribe(event="llm_update_activity", observer=[LLMUpdateObserver()])
+    # Health check observers
+    import nexus.logs.observers  # noqa: F401
 
-event_manager.subscribe(event="contentbase_file_activity", observer=[ContentBaseFileObserver()])
+    # Project and action observers
+    import nexus.projects.observer  # noqa: F401
 
-event_manager.subscribe(event="contentbase_agent_activity", observer=[ContentBaseAgentObserver()])
+    # Trace observers
+    import router.traces_observers.rationale.observer  # noqa: F401
+    import router.traces_observers.save_traces  # noqa: F401
+    import router.traces_observers.summary  # noqa: F401
 
-event_manager.subscribe(event="contentbase_instruction_activity", observer=[ContentBaseInstructionObserver()])
-
-event_manager.subscribe(event="contentbase_link_activity", observer=[ContentBaseLinkObserver()])
-
-event_manager.subscribe(event="contentbase_text_activity", observer=[ContentBaseTextObserver()])
-
-event_manager.subscribe(event="contentbase_activity", observer=[ContentBaseObserver()])
-
-event_manager.subscribe(event="health_check", observer=[ZeroShotHealthCheckObserver(), GolfinhoHealthCheckObserver()])
-
-event_manager.subscribe(event="classification_health_check", observer=[ZeroShotClassificationHealthCheckObserver()])
-
-event_manager.subscribe(event="project_activity", observer=[ProjectObserver()])
-
-event_manager.subscribe(event="action_activity", observer=[ActionsObserver()])
-
-event_manager.subscribe(event="inline_trace_observers", observer=[RationaleObserver(), SummaryTracesObserver()])
-
-event_manager.subscribe(event="save_inline_trace_events", observer=[SaveTracesObserver()])
-
-async_event_manager.subscribe(event="inline_trace_observers_async", observer=[AsyncSummaryTracesObserver()])
-
-async_event_manager.subscribe(event="save_inline_trace_events", observer=[SaveTracesObserver()])
+    # Auto-register all decorated observers
+    auto_register_observers(event_manager, async_event_manager)
+except ImportError as e:
+    # If imports fail (e.g., during testing), log but don't crash
+    logger.warning(f"Failed to import some observer modules: {e}. Some observers may not be registered.")
