@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 from django.forms.models import model_to_dict
@@ -6,6 +7,8 @@ from nexus.actions.models import Flow, TemplateAction
 from nexus.events import event_manager
 from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase
 from nexus.users.models import User
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -127,7 +130,5 @@ class UpdateTemplateActionUseCase:
         except TemplateAction.DoesNotExist as e:
             raise ValueError("Template action not found") from e
         except Exception as e:
-            import logging
-
-            logging.getLogger(__name__).error("Error updating template action: %s", e, exc_info=True)
+            logger.error("Error updating template action: %s", e, exc_info=True)
             raise Exception("Error updating template action") from e

@@ -4,6 +4,8 @@ import pendulum
 
 from nexus.logs.models import Message, RecentActivities
 
+logger = logging.getLogger(__name__)
+
 
 class DeleteLogUsecase:
     def delete_logs_routine(self, **kwargs) -> None:
@@ -16,4 +18,4 @@ class DeleteLogUsecase:
         old_activities = RecentActivities.objects.filter(created_at__lt=datetime)
         count = old_activities.count()
         old_activities.delete()
-        logging.getLogger(__name__).info("Deleted old RecentActivities", extra={"count": count})
+        logger.info("Deleted old RecentActivities", extra={"count": count})

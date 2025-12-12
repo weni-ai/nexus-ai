@@ -37,6 +37,8 @@ from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from router.tests.mocks import MockIndexer
 
+logger = logging.getLogger(__name__)
+
 
 class FlowsTestCase(TestCase):
     def setUp(self) -> None:
@@ -421,5 +423,5 @@ class TemplateActionViewSetTestCase(TestCase):
             project_uuid=str(self.project.uuid),
         )
         response.render()
-        logging.getLogger(__name__).info("Response content rendered", extra={"length": len(response.content or b"")})
+        logger.info("Response content rendered", extra={"length": len(response.content or b"")})
         self.assertEqual(response.status_code, 200)

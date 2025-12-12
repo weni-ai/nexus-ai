@@ -1,3 +1,4 @@
+import logging
 from typing import Dict
 
 from celery.exceptions import TaskRevokedError
@@ -49,6 +50,8 @@ from nexus.usecases.intelligences.exceptions import (
 from router.entities import Message as UserMessage
 from router.tasks.invoke import start_inline_agents
 from router.tasks.tasks import start_route
+
+logger = logging.getLogger(__name__)
 
 
 class SearchFlowView(APIView):
@@ -207,9 +210,7 @@ class MessagePreviewView(APIView):
                 metadata=data.get("metadata", {}),
             )
             if project.inline_agent_switch:
-                import logging
-
-                logging.getLogger(__name__).info("Starting Inline Agent")
+                logger.info("Starting Inline Agent")
                 start_inline_agents.apply_async(
                     kwargs={
                         "message": message.dict(),

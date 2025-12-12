@@ -11,6 +11,8 @@ from nexus.usecases.intelligences.get_by_uuid import (
     get_default_content_base_by_project,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class CreateFlowDTO:
@@ -91,7 +93,7 @@ class CreateTemplateActionUseCase:
                 name=name, prompt=prompt, action_type=action_type, group=group, display_prompt=display_prompt
             )
         except Exception as e:
-            logging.getLogger(__name__).error("Error creating template action: %s", str(e), exc_info=True)
+            logger.error("Error creating template action: %s", str(e), exc_info=True)
             raise Exception("Error creating template action") from e
 
 

@@ -13,6 +13,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from tqdm import tqdm
 
+logger = logging.getLogger(__name__)
+
+
 # Constants
 API_VERSION = "v2"
 CONTACTS_ENDPOINT = "contacts.json"
@@ -204,7 +207,7 @@ def format_datetime_br(datetime_str):
             try:
                 dt_obj = datetime.strptime(datetime_str.replace("T", " "), DATE_FORMAT_API_FALLBACK)
             except ValueError:
-                logging.getLogger(__name__).error("Could not parse date string", extra={"datetime_str": datetime_str})
+                logger.error("Could not parse date string", extra={"datetime_str": datetime_str})
                 return None
     return dt_obj.strftime(DATE_FORMAT_BR)
 
@@ -269,7 +272,7 @@ def classify_conversation(messages_list, groups_dict, similarity_threshold=0.1):
             return "Não Classificado", "Não Classificado (Similaridade Baixa)"
 
     except ValueError as e:
-        logging.getLogger(__name__).error("Error during TF-IDF/Similarity calculation", extra={"error": str(e)})
+        logger.error("Error during TF-IDF/Similarity calculation", extra={"error": str(e)})
         if "empty vocabulary" in str(e):
             return "Não Classificado", "Texto Vazio ou Apenas Stopwords"
         return "Não Classificado", "Erro na Classificação"
@@ -281,7 +284,7 @@ def process_contact(contact, base_url, headers, groups):
     """Process a single contact and return its report data."""
     contact_uuid = contact.get("uuid")
     if not contact_uuid:
-        logging.getLogger(__name__).warning("Skipping contact due to missing UUID", extra={"contact": contact})
+        logger.warning("Skipping contact due to missing UUID", extra={"contact": contact})
         return None
 
     messages = get_contact_messages(contact_uuid, base_url, headers)
@@ -290,7 +293,7 @@ def process_contact(contact, base_url, headers, groups):
     last_message_date_br = None
 
     if messages is None:
-        logging.getLogger(__name__).warning(
+        logger.warning(
             "Failed to fetch messages for contact. Skipping classification.", extra={"contact_uuid": contact_uuid}
         )
     else:
@@ -305,13 +308,13 @@ def process_contact(contact, base_url, headers, groups):
                     last_message_date_str = last_message.get("created_on")
                     last_message_date_br = format_datetime_br(last_message_date_str)
                 else:
-                    logging.getLogger(__name__).warning(
+                    logger.warning(
                         "No valid 'created_on' date found in messages for contact.",
                         extra={"contact_uuid": contact_uuid},
                     )
 
             except Exception as e:
-                logging.getLogger(__name__).error(
+                logger.error(
                     "Error processing message dates for contact", extra={"contact_uuid": contact_uuid, "error": str(e)}
                 )
 
@@ -351,7 +354,7 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
                 "flows_token not found in environment variables or .env file. "
                 "Ensure a .env file exists or set flows_token environment variable."
             )
-            logging.getLogger(__name__).error(error_message)
+            logger.error(error_message)
             raise ValueError(error_message)
 
         base_url = BASE_URL.rstrip("/")
@@ -373,15 +376,15 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
             contacts_url += f"?after={yesterday.to_iso8601_string()}&before={now.to_iso8601_string()}"
             email_body = "The attached file contains the report from the last 24 hours."
 
-        logging.getLogger(__name__).info("Fetching contacts", extra={"url": contacts_url})
+        logger.info("Fetching contacts", extra={"url": contacts_url})
         all_contacts = get_paginated_data(contacts_url, headers)
 
         if all_contacts is None:
             error_message = "Failed to fetch contacts."
-            logging.getLogger(__name__).error(error_message)
+            logger.error(error_message)
             raise RuntimeError(error_message)
 
-        logging.getLogger(__name__).info("Fetched contacts", extra={"count": len(all_contacts)})
+        logger.info("Fetched contacts", extra={"count": len(all_contacts)})
 
         report_data = []
         total_contacts = len(all_contacts)
@@ -402,12 +405,10 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
                         report_data.append(result)
                 except Exception as exc:
                     contact_uuid = contact.get("uuid", "unknown")
-                    logging.getLogger(__name__).error(
-                        "Error processing contact", extra={"contact_uuid": contact_uuid, "error": str(exc)}
-                    )
+                    logger.error("Error processing contact", extra={"contact_uuid": contact_uuid, "error": str(exc)})
 
         if not report_data:
-            logging.getLogger(__name__).warning("No data processed")
+            logger.warning("No data processed")
             return []
 
         columns_order = [
@@ -424,11 +425,11 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
         filename = f"contacts_report-{pendulum.yesterday().format('DD-MM-YYYY')}.csv"
         filepath = os.path.join("/tmp", filename)
 
-        logging.getLogger(__name__).info("Generating CSV report", extra={"filename": filename})
+        logger.info("Generating CSV report", extra={"filename": filename})
         df = pd.DataFrame(report_data, columns=columns_order)
 
         df.to_csv(filepath, index=False, encoding="utf-8")
-        logging.getLogger(__name__).info("Successfully generated report", extra={"filepath": filepath})
+        logger.info("Successfully generated report", extra={"filepath": filepath})
 
         email = EmailMessage(
             subject="Contacts Report",
@@ -441,7 +442,7 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
             email.attach(filename, file.read(), "text/csv")
 
         email.send()
-        logging.getLogger(__name__).info("Successfully sent report via email", extra={"filename": filename})
+        logger.info("Successfully sent report via email", extra={"filename": filename})
 
         return True
 
@@ -458,7 +459,7 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
             )
 
         error_message = f"Error processing or sending report: {e}"
-        logging.getLogger(__name__).error(error_message)
+        logger.error(error_message)
         try:
             error_email = EmailMessage(
                 subject="Error in Contacts Report Generation",
@@ -470,11 +471,9 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
                 "From": f"Nexus AI Reports {settings.DEFAULT_FROM_EMAIL}",
             }
             error_email.send()
-            logging.getLogger(__name__).error("Sent error notification email")
+            logger.error("Sent error notification email")
         except Exception as email_error:
-            logging.getLogger(__name__).error(
-                "Failed to send error notification email", extra={"error": str(email_error)}
-            )
+            logger.error("Failed to send error notification email", extra={"error": str(email_error)})
 
         raise Exception(error_message) from None
 
