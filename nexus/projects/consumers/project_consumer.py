@@ -9,6 +9,8 @@ from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
+logger = logging.getLogger(__name__)
+
 
 class ProjectConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
@@ -39,6 +41,3 @@ class ProjectConsumer(EDAConsumer):
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
             logger.error("[ProjectConsumer] Message rejected", exc_info=True)
-
-
-logger = logging.getLogger(__name__)

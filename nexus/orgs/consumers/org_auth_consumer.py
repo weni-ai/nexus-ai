@@ -8,6 +8,8 @@ from nexus.event_driven.parsers import JSONParser
 from nexus.orgs.org_dto import OrgAuthCreationDTO
 from nexus.usecases.orgs.create import CreateOrgAuthUseCase
 
+logger = logging.getLogger(__name__)
+
 
 class OrgAuthConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
@@ -29,6 +31,3 @@ class OrgAuthConsumer(EDAConsumer):
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
             logger.error("[OrgAuthConsumer] Message rejected", exc_info=True)
-
-
-logger = logging.getLogger(__name__)

@@ -9,6 +9,8 @@ from nexus.projects.project_dto import FlowConsumerDTO
 from nexus.usecases.actions import delete, retrieve
 from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 
+logger = logging.getLogger(__name__)
+
 
 class FlowConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
@@ -49,6 +51,3 @@ class FlowConsumer(EDAConsumer):
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
             logger.error("[FlowConsumer] Flow rejected", exc_info=True)
-
-
-logger = logging.getLogger(__name__)

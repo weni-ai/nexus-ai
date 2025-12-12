@@ -7,6 +7,8 @@ from nexus.event_driven.consumer.consumers import EDAConsumer
 from nexus.event_driven.parsers import JSONParser
 from nexus.usecases.projects.create import ProjectAuthUseCase
 
+logger = logging.getLogger(__name__)
+
 
 class ProjectAuthConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
@@ -29,6 +31,3 @@ class ProjectAuthConsumer(EDAConsumer):
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
             logger.error("[ProjectConsumer] Message rejected", exc_info=True)
-
-
-logger = logging.getLogger(__name__)

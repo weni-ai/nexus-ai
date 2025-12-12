@@ -7,6 +7,8 @@ from nexus.users.models import User
 
 from .exceptions import OrgRoleDoesNotExists
 
+logger = logging.getLogger(__name__)
+
 
 def _create_org_auth(org: Org, user: User, role: int):
     if not Role.has_value(role):
@@ -18,7 +20,7 @@ def _create_org_auth(org: Org, user: User, role: int):
             org_auth.save(update_fields=["role"])
     except Exception as exception:
         org_auth = OrgAuth.objects.create(org=org, user=user, role=role)
-        logging.getLogger(__name__).error("[CreateOrgAuthUseCase] error: %s", exception, exc_info=True)
+        logger.error("[CreateOrgAuthUseCase] error: %s", exception, exc_info=True)
     return OrgAuth.objects.get(org=org, user=user)
 
 

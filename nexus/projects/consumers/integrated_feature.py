@@ -10,6 +10,8 @@ from nexus.usecases.projects.delete import delete_integrated_feature
 from nexus.usecases.projects.dto import IntegratedFeatureDTO, IntegratedFeatureFlowDTO
 from nexus.usecases.projects.update import UpdateIntegratedFeatureUseCase
 
+logger = logging.getLogger(__name__)
+
 
 class CreateIntegratedFeatureConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
@@ -94,6 +96,3 @@ class UpdateIntegratedFeatureConsumer(EDAConsumer):
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
             logger.error("[UpdateIntegratedFeature] Message rejected", exc_info=True)
-
-
-logger = logging.getLogger(__name__)
