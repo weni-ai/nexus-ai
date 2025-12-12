@@ -10,10 +10,6 @@ import pendulum
 import sentry_sdk
 
 if TYPE_CHECKING:
-    from agents import Runner
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
     pass
 from django.conf import settings
 from langfuse import get_client
@@ -428,6 +424,8 @@ class OpenAIBackend(InlineAgentsBackend):
         self, formatter_agent, final_response, session, context, formatter_agent_configurations
     ):
         """Run the formatter agent with the final response"""
+        from agents import Runner
+
         try:
             formatter_send_only_assistant_message = (
                 formatter_agent_configurations.get("formatter_send_only_assistant_message") or False
