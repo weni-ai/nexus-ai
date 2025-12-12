@@ -1,3 +1,5 @@
+import logging
+
 import amqp
 from sentry_sdk import capture_exception
 
@@ -10,7 +12,10 @@ from nexus.usecases.projects.get_by_uuid import get_project_by_uuid
 
 class FlowConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
-        print(f"[FlowConsumer] - Consuming a message. Body: {message.body}")
+        logger.debug(
+            "[FlowConsumer] Consuming a message",
+            extra={"body_len": len(message.body) if hasattr(message, "body") else None},
+        )
         try:
             body = JSONParser.parse(message.body)
 
@@ -27,7 +32,7 @@ class FlowConsumer(EDAConsumer):
             dto = delete.DeleteFlowDTO(flow_uuid=flow.entity_uuid)
 
             message.channel.basic_ack(message.delivery_tag)
-            print(f"[FlowConsumer] - Flow readed: {flow}")
+            logger.info("[FlowConsumer] Flow read", extra={"flow": str(flow)})
 
             try:
                 project = get_project_by_uuid(flow.project_uuid)
@@ -36,11 +41,14 @@ class FlowConsumer(EDAConsumer):
                     flow_dto=dto,
                     project=project,
                 )
-                print(f"[FlowConsumer] - Flow {flow.entity_name} deleted")
+                logger.info("[FlowConsumer] Flow deleted", extra={"entity_name": flow.entity_name})
             except retrieve.FlowDoesNotExist:
-                print(f"[FlowConsumer] - Flow {flow.entity_name} not found")
+                logger.warning("[FlowConsumer] Flow not found", extra={"entity_name": flow.entity_name})
 
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
-            print(f"[FlowConsumer] - Flow rejected by: {exception}")
+            logger.error("[FlowConsumer] Flow rejected", exc_info=True)
+
+
+logger = logging.getLogger(__name__)
