@@ -10,6 +10,8 @@ import sentry_sdk
 from nexus.internals.flows import FlowsRESTClient
 from router.direct_message import DirectMessage, exceptions
 
+logger = logging.getLogger(__name__)
+
 
 class SendMessageHTTPClient(DirectMessage):
     def __init__(self, host: str, access_token: str) -> None:
@@ -27,7 +29,7 @@ class SendMessageHTTPClient(DirectMessage):
         payload = json.dumps(payload).encode("utf-8")
 
         response = requests.post(url, data=payload, headers=headers)
-        logging.getLogger(__name__).debug("SendMessage response", extra={"text_len": len(response.text or "")})
+        logger.debug("SendMessage response", extra={"text_len": len(response.text or "")})
         try:
             response.raise_for_status()
         except Exception as error:

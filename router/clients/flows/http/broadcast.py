@@ -5,6 +5,8 @@ import requests
 
 from router.direct_message import DirectMessage, exceptions
 
+logger = logging.getLogger(__name__)
+
 
 class BroadcastHTTPClient(DirectMessage):
     def __init__(self, host: str, access_token: str) -> None:
@@ -17,10 +19,10 @@ class BroadcastHTTPClient(DirectMessage):
         payload = {"user": user, "project": project_uuid, "urns": urns, "text": text}
         params = {"token": self.__access_token}
 
-        logging.getLogger(__name__).debug("Broadcast payload", extra={"payload_keys": list(payload.keys())})
+        logger.debug("Broadcast payload", extra={"payload_keys": list(payload.keys())})
 
         response = requests.post(url, data=payload, params=params)
-        logging.getLogger(__name__).debug("Broadcast response", extra={"text_len": len(response.text or "")})
+        logger.debug("Broadcast response", extra={"text_len": len(response.text or "")})
         try:
             response.raise_for_status()
         except Exception as error:

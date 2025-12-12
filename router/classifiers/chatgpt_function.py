@@ -8,6 +8,8 @@ from openai import OpenAI
 from router.classifiers.interfaces import Classifier, OpenAIClientInterface
 from router.entities.flow import FlowDTO
 
+logger = logging.getLogger(__name__)
+
 
 class OpenAIClient(OpenAIClientInterface):  # pragma: no cover
     def __init__(self, api_key: str):
@@ -66,7 +68,7 @@ class ChatGPTFunctionClassifier(Classifier):
         return tools
 
     def predict(self, message: str, flows: List[FlowDTO], language: str = "por") -> str:
-        logging.getLogger(__name__).info(
+        logger.info(
             "ChatGPT message function classification", extra={"language": language, "message_len": len(message or "")}
         )
 

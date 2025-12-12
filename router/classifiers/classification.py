@@ -1,3 +1,5 @@
+import logging
+
 from router.classifiers import classify
 from router.classifiers.interfaces import Classifier
 from router.entities import (
@@ -6,6 +8,8 @@ from router.entities import (
 )
 from router.flow_start.interfaces import FlowStart
 from router.repositories.orm import FlowsORMRepository
+
+logger = logging.getLogger(__name__)
 
 
 class Classification:
@@ -32,9 +36,7 @@ class Classification:
         user_message: str = None,
         attachments: list = None,
     ):
-        import logging
-
-        logging.getLogger(__name__).info("Classification Direct Flow", extra={"uuid": flow_dto.uuid})
+        logger.info("Classification Direct Flow", extra={"uuid": flow_dto.uuid})
 
         if start_flow:
             self.flow_start.start_flow(

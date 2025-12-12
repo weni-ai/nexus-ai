@@ -7,6 +7,8 @@ from router.classifiers.interfaces import Classifier
 from router.clients.zeroshot import NexusZeroshotClient, ZeroshotClient
 from router.entities.flow import FlowDTO
 
+logger = logging.getLogger(__name__)
+
 
 class ZeroshotException(Exception):
     pass
@@ -22,7 +24,7 @@ class ZeroshotClassifier(Classifier):
 
     def predict(self, message: str, flows: List[FlowDTO], language: str = "por") -> str:
         try:
-            logging.getLogger(__name__).info(
+            logger.info(
                 "Zeroshot message classification", extra={"language": language, "message_len": len(message or "")}
             )
             flows_list = []
@@ -44,7 +46,7 @@ class ZeroshotClassifier(Classifier):
             return response.get("classification")
         except Exception as e:
             message = f"Zeroshot Error: {e}"
-            logging.getLogger(__name__).error(message)
+            logger.error(message)
             raise ZeroshotException(message) from e
 
 
