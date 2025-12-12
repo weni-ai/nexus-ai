@@ -36,10 +36,13 @@ class ConversationFilter(filters.FilterSet):
 
     def filter_start_date(self, queryset, name, value):
         """Filter by start date with default value if not provided"""
-        print(f"DEBUG: filter_start_date called with value: {value}, type: {type(value)}")
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.debug("filter_start_date called", extra={"value": str(value), "type": str(type(value))})
         if value:
             result = queryset.filter(start_date__date__gte=value)
-            print(f"DEBUG: start_date filter result count: {result.count()}")
+            logger.debug("start_date filter result count", extra={"count": result.count()})
             return result
         # Only apply default if no start_date parameter was provided at all
         # Don't apply default if the parameter was provided but invalid
@@ -47,12 +50,15 @@ class ConversationFilter(filters.FilterSet):
 
     def filter_end_date(self, queryset, name, value):
         """Filter by end date with default value if not provided"""
-        print(f"DEBUG: filter_end_date called with value: {value}, type: {type(value)}")
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.debug("filter_end_date called", extra={"value": str(value), "type": str(type(value))})
         if value:
             from django.db.models import Q
 
             result = queryset.filter(Q(end_date__date__lte=value) | Q(start_date__date__lte=value))
-            print(f"DEBUG: end_date filter result count: {result.count()}")
+            logger.debug("end_date filter result count", extra={"count": result.count()})
             return result
         # Only apply default if no end_date parameter was provided at all
         # Don't apply default if the parameter was provided but invalid
@@ -60,19 +66,22 @@ class ConversationFilter(filters.FilterSet):
 
     def filter(self, queryset):
         """Override filter method to handle validation errors gracefully"""
-        print(f"DEBUG: filter method called, initial queryset count: {queryset.count()}")
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.debug("filter method called", extra={"initial_count": queryset.count()})
         try:
             result = super().filter(queryset)
-            print(f"DEBUG: filter method result count: {result.count()}")
+            logger.debug("filter method result count", extra={"count": result.count()})
 
             # Debug: Check what resolution values are in the database
             if "resolution" in self.data:
-                print(f"DEBUG: Resolution filter requested: {self.data['resolution']}")
+                logger.debug("Resolution filter requested", extra={"resolution": self.data["resolution"]})
                 resolutions = list(queryset.values_list("resolution", flat=True))
-                print(f"DEBUG: Available resolutions in DB: {resolutions}")
+                logger.debug("Available resolutions in DB", extra={"resolutions": resolutions})
 
             return result
         except Exception as e:
-            print(f"DEBUG: filter method exception: {type(e).__name__}: {e}")
+            logger.error("filter method exception: %s: %s", type(e).__name__, e)
             # Return empty queryset for validation errors
             return queryset.none()
