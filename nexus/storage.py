@@ -5,6 +5,8 @@ import boto3
 from django.conf import settings
 from storages.backends.s3boto3 import S3Boto3Storage
 
+logger = logging.getLogger(__name__)
+
 
 def validate_mime_type(content_type: str) -> bool:
     image = ["image/png", "image/jpeg", "image/gif", "image/webp"]
@@ -48,5 +50,5 @@ class DeleteStorageFile:
             )
             return response
         except Exception as e:
-            logging.getLogger(__name__).error("Error deleting file", extra={"file_name": file_name, "error": str(e)})
+            logger.error("Error deleting file", extra={"file_name": file_name, "error": str(e)})
             return None

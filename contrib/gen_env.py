@@ -8,6 +8,8 @@ import os
 
 from django.core.management.utils import get_random_secret_key
 
+logger = logging.getLogger(__name__)
+
 
 def dict_to_config_string(data: dict) -> str:
     config_string = ""
