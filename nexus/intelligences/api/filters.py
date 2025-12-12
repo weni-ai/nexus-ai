@@ -1,6 +1,10 @@
+import logging
+
 from django_filters import rest_framework as filters
 
 from nexus.intelligences.models import Conversation
+
+logger = logging.getLogger(__name__)
 
 
 class ConversationFilter(filters.FilterSet):
@@ -36,9 +40,6 @@ class ConversationFilter(filters.FilterSet):
 
     def filter_start_date(self, queryset, name, value):
         """Filter by start date with default value if not provided"""
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.debug("filter_start_date called", extra={"value": str(value), "type": str(type(value))})
         if value:
             result = queryset.filter(start_date__date__gte=value)
@@ -50,9 +51,6 @@ class ConversationFilter(filters.FilterSet):
 
     def filter_end_date(self, queryset, name, value):
         """Filter by end date with default value if not provided"""
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.debug("filter_end_date called", extra={"value": str(value), "type": str(type(value))})
         if value:
             from django.db.models import Q
@@ -66,9 +64,6 @@ class ConversationFilter(filters.FilterSet):
 
     def filter(self, queryset):
         """Override filter method to handle validation errors gracefully"""
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.debug("filter method called", extra={"initial_count": queryset.count()})
         try:
             result = super().filter(queryset)

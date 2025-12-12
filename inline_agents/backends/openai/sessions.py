@@ -94,9 +94,7 @@ class RedisSession:  # type: ignore[misc]
     def __init__(
         self, session_id: str, r: redis.Redis, project_uuid: str, sanitized_urn: str, limit: Optional[int] = None
     ):
-        import logging
-
-        logging.getLogger(__name__).debug("RedisSession", extra={"session_id": session_id})
+        logger.debug("RedisSession", extra={"session_id": session_id})
         self._key = session_id
         self.r = r
         self.project_uuid = project_uuid
@@ -130,9 +128,7 @@ class RedisSession:  # type: ignore[misc]
 
     async def get_items(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         limit = limit or self.limit
-        import logging
-
-        logging.getLogger(__name__).debug("Session limit", extra={"limit": limit})
+        logger.debug("Session limit", extra={"limit": limit})
         try:
             with self.r.pipeline() as pipe:
                 if limit is None or limit <= 0:
@@ -221,9 +217,8 @@ class RedisSession:  # type: ignore[misc]
                         },
                     )
                     continue
-            import logging
 
-            logging.getLogger(__name__).debug("Session items", extra={"count": len(items)})
+            logger.debug("Session items", extra={"count": len(items)})
             return items
 
         except redis.RedisError as e:
