@@ -13,6 +13,8 @@ env:
   SECRET_KEY: "SK"
   ALLOWED_HOSTS: "*,"
   DJANGO_SETTINGS_MODULE: "nexus.settings"
+  DEFAULT_DATABASE: "postgres://nexus:nexus@postgres:5432/nexus"
+  USE_SQLITE_FOR_TESTS: "false"
 
 jobs:
   container-job:
