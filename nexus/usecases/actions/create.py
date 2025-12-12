@@ -1,4 +1,5 @@
 import json
+import logging
 from dataclasses import dataclass
 
 import requests
@@ -90,7 +91,7 @@ class CreateTemplateActionUseCase:
                 name=name, prompt=prompt, action_type=action_type, group=group, display_prompt=display_prompt
             )
         except Exception as e:
-            print("error", str(e))
+            logging.getLogger(__name__).error("Error creating template action: %s", str(e), exc_info=True)
             raise Exception("Error creating template action") from e
 
 
