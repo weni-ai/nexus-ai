@@ -4,6 +4,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from nexus.agents.models import ActiveAgent, Agent, AgentSkills, AgentVersion, Team
+from nexus.projects.models import ProjectAuth, ProjectAuthorizationRole
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
@@ -18,6 +19,8 @@ class DeleteAgentTestCase(TestCase):
         self.project = ProjectFactory()
         self.project.agents_backend = "BedrockBackend"
         self.project.save()
+
+        ProjectAuth.objects.create(user=self.user, project=self.project, role=ProjectAuthorizationRole.MODERATOR.value)
 
         # Create team
         self.team = Team.objects.create(
@@ -64,7 +67,7 @@ class DeleteAgentTestCase(TestCase):
 
     def test_delete_nonexistent_agent(self):
         """Test deleting an agent that doesn't exist"""
-        url = f"/api/project/{self.project.uuid}/agents/nonexistent-uuid"
+        url = f"/api/project/{self.project.uuid}/agents/00000000-0000-0000-0000-000000000000"
         response = self.client.delete(url)
 
         self.assertEqual(response.status_code, 404)
@@ -138,6 +141,8 @@ class DeleteAgentTestCase(TestCase):
 
     def test_delete_openai_agent_success(self):
         """Test successful deletion of OpenAI agent (no Lambda cleanup)"""
+        self.project.agents_backend = "OpenAIBackend"
+        self.project.save()
         url = f"/api/project/{self.project.uuid}/agents/{self.openai_agent.uuid}"
         response = self.client.delete(url)
 
@@ -154,6 +159,8 @@ class DeleteAgentTestCase(TestCase):
 
         usecase = AgentUsecase()
         self.assertTrue(usecase.is_bedrock_agent(self.bedrock_agent))
+        self.project.agents_backend = "OpenAIBackend"
+        self.project.save()
         self.assertFalse(usecase.is_bedrock_agent(self.openai_agent))
 
     def test_backend_detection_by_lambda_presence(self):
@@ -189,8 +196,8 @@ class DeleteAgentTestCase(TestCase):
             alias_id="v1", alias_name="v1", metadata={}, agent=self.bedrock_agent, created_by=self.user
         )
 
-        skill_id = self.skill.id
-        version_id = version.id
+        skill_uuid = self.skill.uuid
+        version_uuid = version.uuid
 
         url = f"/api/project/{self.project.uuid}/agents/{self.bedrock_agent.uuid}"
         response = self.client.delete(url)
@@ -198,5 +205,5 @@ class DeleteAgentTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
 
         # Verify CASCADE deleted related records
-        self.assertFalse(AgentSkills.objects.filter(id=skill_id).exists())
-        self.assertFalse(AgentVersion.objects.filter(id=version_id).exists())
+        self.assertFalse(AgentSkills.objects.filter(uuid=skill_uuid).exists())
+        self.assertFalse(AgentVersion.objects.filter(uuid=version_uuid).exists())

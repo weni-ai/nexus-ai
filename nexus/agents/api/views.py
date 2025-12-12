@@ -845,7 +845,9 @@ class DeleteAgentView(APIView):
         # Check if agent is currently active
         active_agents = ActiveAgent.objects.filter(agent=agent)
         if active_agents.exists():
-            teams = [{"team_uuid": str(aa.team.uuid), "project_name": aa.team.project.name} for aa in active_agents]
+            teams = [
+                {"team_uuid": str(aa.team.project.uuid), "project_name": aa.team.project.name} for aa in active_agents
+            ]
             return Response(
                 {
                     "error": "Cannot delete active agent. Please unassign it first.",
