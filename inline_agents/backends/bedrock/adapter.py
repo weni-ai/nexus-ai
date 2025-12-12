@@ -75,7 +75,7 @@ class BedrockTeamAdapter(TeamAdapter):
             channel_uuid=channel_uuid,
         )
 
-        print(f"[ + DEBUG + ] auth_token: {auth_token}")
+        logger.debug("Auth token present", extra={"token_len": len(auth_token or "")})
 
         credentials = self._get_credentials(project_uuid)
 
@@ -113,7 +113,7 @@ class BedrockTeamAdapter(TeamAdapter):
             "idleSessionTTLInSeconds": settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS,
         }
 
-        print(f"[ + DEBUG + ] external_team: {external_team}")
+        logger.debug("External team built", extra={"agents_count": len(external_team.get("agents", []))})
 
         return external_team
 

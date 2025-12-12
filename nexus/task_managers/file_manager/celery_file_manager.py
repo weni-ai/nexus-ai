@@ -1,3 +1,5 @@
+import logging
+
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import status as http_status
 
@@ -15,6 +17,8 @@ from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.usecases.task_managers.celery_task_manager import (
     CeleryTaskManagerUseCase,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class CeleryFileManager:
@@ -168,7 +172,7 @@ class CeleryFileManager:
             indexer_database = Project.SENTENX
 
         if indexer_database == Project.BEDROCK:
-            print("[+ 🦑 Using BEDROCK 🦑 +]")
+            logger.info("Using BEDROCK for file upload")
             tasks_bedrock.bedrock_upload_file.delay(
                 bytes_file, content_base_uuid, user_email, str(content_base_file.uuid), filename=filename
             )
@@ -213,7 +217,7 @@ class CeleryFileManager:
             indexer_database = Project.SENTENX
 
         if indexer_database == Project.BEDROCK:
-            print("[+ 🦑 Using BEDROCK 🦑 +]")
+            logger.info("Using BEDROCK for inline file upload")
             tasks_bedrock.bedrock_upload_inline_file.delay(
                 bytes_file, content_base_uuid, user_email, str(content_base_file.uuid), filename=filename
             )
