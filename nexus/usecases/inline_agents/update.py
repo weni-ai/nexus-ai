@@ -1,3 +1,4 @@
+import logging
 from typing import Dict
 
 from nexus.agents.encryption import encrypt_value
@@ -40,7 +41,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             is_confidential = credential.get("is_confidential", True)
 
             if key in existing_credentials:
-                print(f"[+ 🧠 Updating credential {key} +]")
+                logging.getLogger(__name__).info("Updating credential", extra={"key": key})
                 cred = existing_credentials[key]
                 cred.label = credential.get("label", key)
                 cred.placeholder = credential.get("placeholder", "")
@@ -50,7 +51,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                     cred.agents.add(agent)
                 del existing_credentials[key]
             else:
-                print(f"[+ 🧠 Creating credential {key} +]")
+                logging.getLogger(__name__).info("Creating credential", extra={"key": key})
                 cred = AgentCredential.objects.create(
                     project=project,
                     key=key,
@@ -64,10 +65,14 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             agents = list(cred.agents.all())
 
             if len(agents) <= 0:
-                print(f"[+ 🧠 Deleting empty credential {cred.key} {project.uuid} +]")
+                logging.getLogger(__name__).info(
+                    "Deleting empty credential", extra={"key": cred.key, "project_uuid": str(project.uuid)}
+                )
                 cred.delete()
             elif len(agents) == 1 and agent in agents:
-                print(f"[+ 🧠 Deleting credential {cred.key} {project.uuid} +]")
+                logging.getLogger(__name__).info(
+                    "Deleting credential", extra={"key": cred.key, "project_uuid": str(project.uuid)}
+                )
                 cred.delete()
             elif agent in agents:
                 cred.agents.remove(agent)
