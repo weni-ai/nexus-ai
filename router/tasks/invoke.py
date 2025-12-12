@@ -12,6 +12,7 @@ from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
 from nexus.inline_agents.team.repository import ORMTeamRepository
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
+from nexus.usecases.guardrails.guardrails_usecase import GuardrailsUsecase
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 from router.dispatcher import dispatch
@@ -411,7 +412,13 @@ def start_inline_agents(
     except (openai.APIError, EmptyFinalResponseException) as e:
         if self.request.retries < 2:
             task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
-            raise self.retry(exc=e, countdown=2**self.request.retries, max_retries=2, priority=0, jitter=False)
+            raise self.retry(
+                exc=e,
+                countdown=2**self.request.retries,
+                max_retries=2,
+                priority=0,
+                jitter=False,
+            ) from e
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
     except Exception as e:
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)

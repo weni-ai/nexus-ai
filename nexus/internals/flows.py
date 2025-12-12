@@ -7,6 +7,8 @@ from django.conf import settings
 from nexus.internals import InternalAuthentication, RestClient
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 
+logger = logging.getLogger(__name__)
+
 
 class FlowsRESTClient(RestClient):
     def __init__(self):
@@ -108,6 +110,3 @@ class FlowsRESTClient(RestClient):
             },
         )
         return response
-
-
-logger = logging.getLogger(__name__)

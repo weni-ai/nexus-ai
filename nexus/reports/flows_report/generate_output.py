@@ -1,8 +1,7 @@
 import concurrent.futures
+import logging
 import os
 import re
-import sys
-import logging
 from datetime import datetime
 
 import pandas as pd
@@ -205,8 +204,8 @@ def format_datetime_br(datetime_str):
             try:
                 dt_obj = datetime.strptime(datetime_str.replace("T", " "), DATE_FORMAT_API_FALLBACK)
             except ValueError:
-            logging.getLogger(__name__).error("Could not parse date string", extra={"datetime_str": datetime_str})
-            return None
+                logging.getLogger(__name__).error("Could not parse date string", extra={"datetime_str": datetime_str})
+                return None
     return dt_obj.strftime(DATE_FORMAT_BR)
 
 
@@ -307,7 +306,8 @@ def process_contact(contact, base_url, headers, groups):
                     last_message_date_br = format_datetime_br(last_message_date_str)
                 else:
                     logging.getLogger(__name__).warning(
-                        "No valid 'created_on' date found in messages for contact.", extra={"contact_uuid": contact_uuid}
+                        "No valid 'created_on' date found in messages for contact.",
+                        extra={"contact_uuid": contact_uuid},
                     )
 
             except Exception as e:
@@ -402,7 +402,9 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
                         report_data.append(result)
                 except Exception as exc:
                     contact_uuid = contact.get("uuid", "unknown")
-                    logging.getLogger(__name__).error("Error processing contact", extra={"contact_uuid": contact_uuid, "error": str(exc)})
+                    logging.getLogger(__name__).error(
+                        "Error processing contact", extra={"contact_uuid": contact_uuid, "error": str(exc)}
+                    )
 
         if not report_data:
             logging.getLogger(__name__).warning("No data processed")
@@ -470,7 +472,9 @@ def main(auth_token: str, start_date: str = None, end_date: str = None):
             error_email.send()
             logging.getLogger(__name__).error("Sent error notification email")
         except Exception as email_error:
-            logging.getLogger(__name__).error("Failed to send error notification email", extra={"error": str(email_error)})
+            logging.getLogger(__name__).error(
+                "Failed to send error notification email", extra={"error": str(email_error)}
+            )
 
         raise Exception(error_message) from None
 

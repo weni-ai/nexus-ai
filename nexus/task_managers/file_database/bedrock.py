@@ -27,6 +27,8 @@ from nexus.agents.models import Agent, Credential, Team
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 from nexus.utils import get_datasource_id
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from nexus.intelligences.models import ContentBase
     from router.entities import Message
@@ -696,11 +698,15 @@ class BedrockFileDatabase(FileDataBase):
         )
 
         function_schema = base_action_group_response["agentActionGroup"]["functionSchema"]["functions"]
-        logger.debug("Function schema fetched", extra={"function_count": len(function_schema) if function_schema else 0})
+        logger.debug(
+            "Function schema fetched", extra={"function_count": len(function_schema) if function_schema else 0}
+        )
         for function in function_schema:
             function["name"] = "".join(c for c in function["name"] if c.isalnum() or c in "_-")
 
-        logger.debug("Function schema sanitized", extra={"function_count": len(function_schema) if function_schema else 0})
+        logger.debug(
+            "Function schema sanitized", extra={"function_count": len(function_schema) if function_schema else 0}
+        )
 
         self.bedrock_agent.create_agent_action_group(
             actionGroupExecutor={"lambda": lambda_arn},
