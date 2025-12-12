@@ -1,10 +1,10 @@
 # ruff: noqa: E501
 import json
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
-import logging
 
 from django.conf import settings
 from django.template.defaultfilters import slugify
@@ -191,7 +191,9 @@ class AgentUsecase:
                 else:
                     value_type = contact_field.get("value_type")
 
-                logging.getLogger(__name__).info("Creating contact field", extra={"key": contact_field.get('key'), "value_type": value_type})
+                logging.getLogger(__name__).info(
+                    "Creating contact field", extra={"key": contact_field.get("key"), "value_type": value_type}
+                )
                 ContactField.objects.create(
                     project_id=project_uuid,
                     key=contact_field.get("key"),
@@ -278,6 +280,7 @@ class AgentUsecase:
 
     def create_agent_version(self, agent_external_id, user, agent, team):
         import logging
+
         logging.getLogger(__name__).info("Creating a new agent version")
 
         if agent.list_versions.count() >= 9:
@@ -310,6 +313,7 @@ class AgentUsecase:
 
     def create_team_version(self, agent_external_id, user, team):
         import logging
+
         logging.getLogger(__name__).info("Creating a new team version")
 
         if team.list_versions.count() >= 9:
@@ -425,19 +429,26 @@ class AgentUsecase:
                 FunctionName=function_name, Name=alias_name, FunctionVersion=version, Description=description
             )
             import logging
+
             logging.getLogger(__name__).info("Created alias", extra={"alias": alias_name, "function": function_name})
             return response
         except self.external_agent_client.lambda_client.exceptions.ResourceConflictException:
             # If alias already exists, update it
             import logging
-            logging.getLogger(__name__).info("Alias already exists, updating", extra={"alias": alias_name, "function": function_name})
+
+            logging.getLogger(__name__).info(
+                "Alias already exists, updating", extra={"alias": alias_name, "function": function_name}
+            )
             response = self.external_agent_client.lambda_client.update_alias(
                 FunctionName=function_name, Name=alias_name, FunctionVersion=version, Description=description
             )
             return response
         except Exception as e:
             import logging
-            logging.getLogger(__name__).error("Error creating/updating alias", extra={"function": function_name, "error": str(e)})
+
+            logging.getLogger(__name__).error(
+                "Error creating/updating alias", extra={"function": function_name, "error": str(e)}
+            )
             raise
 
     def delete_agent(self, agent_external_id: str):
@@ -457,6 +468,7 @@ class AgentUsecase:
         Updates the code for an existing Lambda function associated with an agent skill.
         """
         import logging
+
         logging.getLogger(__name__).info("Starting update Lambda function")
 
         # Get the agent and skill instances first
@@ -523,6 +535,7 @@ class AgentUsecase:
         )
 
         import logging
+
         logging.getLogger(__name__).info("Updated Lambda function")
 
         # Update skill information with new data while preserving existing fields
@@ -548,7 +561,10 @@ class AgentUsecase:
         skill_object.save()
 
         import logging
-        logging.getLogger(__name__).info("Updated skill", extra={"skill": skill_object.display_name, "agent": agent.display_name})
+
+        logging.getLogger(__name__).info(
+            "Updated skill", extra={"skill": skill_object.display_name, "agent": agent.display_name}
+        )
 
         warnings = []
         if skill_object.skill["skill_handler"] != skill_handler:
@@ -836,6 +852,7 @@ class AgentUsecase:
             try:
                 AgentSkills.objects.get(unique_name=lambda_name, agent=agent)
                 import logging
+
                 logging.getLogger(__name__).info("Updating existing skill", extra={"lambda_name": lambda_name})
                 warnings = self.update_skill(
                     file_name=lambda_name,
@@ -849,6 +866,7 @@ class AgentUsecase:
                 return warnings
             except AgentSkills.DoesNotExist:
                 import logging
+
                 logging.getLogger(__name__).info("Creating new skill", extra={"lambda_name": lambda_name})
                 self.create_skill(
                     agent_external_id=agent.external_id,
@@ -925,7 +943,10 @@ class AgentUsecase:
                 agentId=agent_id, agentVersion=version.metadata["supervisor_alias_version"]
             )
             import logging
-            logging.getLogger(__name__).debug("Deleted supervisor alias", extra={"response_keys": list(response.keys())})
+
+            logging.getLogger(__name__).debug(
+                "Deleted supervisor alias", extra={"response_keys": list(response.keys())}
+            )
             version.delete()
             return response
         except self.external_agent_client.bedrock_agent.exceptions.ResourceNotFoundException:
@@ -1064,6 +1085,7 @@ class AgentUsecase:
 
         supervisor = self.external_agent_client.bedrock_agent.get_agent(agentId=supervisor_id)
         import logging
+
         logging.getLogger(__name__).info("Got supervisor agent")
         current_instructions = supervisor["agent"].get("instruction", "")
         new_instructions = self._insert_human_support_instructions(current_instructions)
@@ -1079,6 +1101,7 @@ class AgentUsecase:
 
         if principles_pos == -1:
             import logging
+
             logging.getLogger(__name__).warning("Could not find principles tag in supervisor instructions")
             return None
 
@@ -1095,6 +1118,7 @@ class AgentUsecase:
 
         if start_pos == -1:
             import logging
+
             logging.getLogger(__name__).warning("Could not find human support instructions to remove")
             return None
 
@@ -1122,15 +1146,22 @@ class AgentUsecase:
             action_groups = [action_groups]
 
         import logging
-        logging.getLogger(__name__).info("Action groups to process", extra={"count": len(action_groups) if isinstance(action_groups, list) else 1})
+
+        logging.getLogger(__name__).info(
+            "Action groups to process", extra={"count": len(action_groups) if isinstance(action_groups, list) else 1}
+        )
 
         for action_group_id in action_groups:
             import logging
+
             logging.getLogger(__name__).info("Processing action group", extra={"action_group_id": action_group_id})
             action_data = self._get_action_group_data(human_support_agent_id, action_group_id)
             if not action_data:
                 import logging
-                logging.getLogger(__name__).warning("Failed to get data for action group", extra={"action_group_id": action_group_id})
+
+                logging.getLogger(__name__).warning(
+                    "Failed to get data for action group", extra={"action_group_id": action_group_id}
+                )
                 continue
 
             function_schema = self._prepare_function_schema(action_data)
@@ -1149,12 +1180,16 @@ class AgentUsecase:
                 created_action_group_id = response["agentActionGroup"]["actionGroupId"]
                 created_action_groups.append(created_action_group_id)
                 import logging
+
                 logging.getLogger(__name__).info("Created action group", extra={"id": created_action_group_id})
 
         # Update team metadata with created action groups
         if created_action_groups:
             import logging
-            logging.getLogger(__name__).info("Saving action groups to team metadata", extra={"count": len(created_action_groups)})
+
+            logging.getLogger(__name__).info(
+                "Saving action groups to team metadata", extra={"count": len(created_action_groups)}
+            )
             if "human_support_action_groups" in team.metadata:
                 team.metadata["human_support_action_groups"].extend(created_action_groups)
             else:
@@ -1216,6 +1251,7 @@ class AgentUsecase:
 
         if not action_groups:
             import logging
+
             logging.getLogger(__name__).warning("No human support action groups found to remove")
             return
 
@@ -1224,6 +1260,7 @@ class AgentUsecase:
         for action_group_id in action_groups:
             try:
                 import logging
+
                 logging.getLogger(__name__).info("Disabling action group", extra={"action_group_id": action_group_id})
                 # First get the action group details
                 action_group = self.external_agent_client.get_agent_action_group(
@@ -1233,7 +1270,10 @@ class AgentUsecase:
                 # Extract just the functions list from the schema
                 function_schema = action_group["agentActionGroup"]["functionSchema"]["functions"]
                 import logging
-                logging.getLogger(__name__).debug("Function schema for update", extra={"functions": len(function_schema)})
+
+                logging.getLogger(__name__).debug(
+                    "Function schema for update", extra={"functions": len(function_schema)}
+                )
 
                 # Disable the action group
                 self.external_agent_client.update_agent_action_group(
@@ -1255,6 +1295,7 @@ class AgentUsecase:
                 )
                 # Now delete the disabled action group
                 import logging
+
                 logging.getLogger(__name__).info("Deleting action group", extra={"action_group_id": action_group_id})
                 self.external_agent_client.delete_agent_action_group(
                     agent_id=team.external_id, agent_version="DRAFT", action_group_id=action_group_id
@@ -1263,11 +1304,17 @@ class AgentUsecase:
                 # Add to successfully removed list only if both disable and delete succeeded
                 successfully_removed.append(action_group_id)
                 import logging
-                logging.getLogger(__name__).info("Successfully removed action group", extra={"action_group_id": action_group_id})
+
+                logging.getLogger(__name__).info(
+                    "Successfully removed action group", extra={"action_group_id": action_group_id}
+                )
 
             except Exception as e:
                 import logging
-                logging.getLogger(__name__).error("Error removing action group", extra={"action_group_id": action_group_id, "error": str(e)})
+
+                logging.getLogger(__name__).error(
+                    "Error removing action group", extra={"action_group_id": action_group_id, "error": str(e)}
+                )
                 continue
 
         # Update metadata to remove only the successfully deleted action groups
@@ -1279,7 +1326,10 @@ class AgentUsecase:
                 team.metadata.pop("human_support_action_groups", None)
             team.save(update_fields=["metadata"])
             import logging
-            logging.getLogger(__name__).info("Removed action groups from metadata", extra={"count": len(successfully_removed)})
+
+            logging.getLogger(__name__).info(
+                "Removed action groups from metadata", extra={"count": len(successfully_removed)}
+            )
 
     def is_bedrock_agent(self, agent: Agent) -> bool:
         """Determine if agent uses Bedrock or OpenAI backend"""

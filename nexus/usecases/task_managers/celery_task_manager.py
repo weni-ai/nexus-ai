@@ -68,7 +68,10 @@ class CeleryTaskManagerUseCase:
             content_base_file=content_base_file,
         )
         import logging
-        logging.getLogger(__name__).info("Creating ContentBaseFileTaskManager", extra={"uuid": str(content_base_task_manager.uuid)})
+
+        logging.getLogger(__name__).info(
+            "Creating ContentBaseFileTaskManager", extra={"uuid": str(content_base_task_manager.uuid)}
+        )
         return content_base_task_manager
 
     def create_celery_text_file_manager(self, content_base_text: ContentBaseText) -> ContentBaseTextTaskManager:
@@ -79,7 +82,10 @@ class CeleryTaskManagerUseCase:
             content_base_text=content_base_text,
         )
         import logging
-        logging.getLogger(__name__).info("Creating ContentBaseTextTaskManager", extra={"uuid": str(content_base_task_manager.uuid)})
+
+        logging.getLogger(__name__).info(
+            "Creating ContentBaseTextTaskManager", extra={"uuid": str(content_base_task_manager.uuid)}
+        )
         return content_base_task_manager
 
     def get_task_manager_by_uuid(self, task_uuid, file_type: str) -> TaskManager:
@@ -101,5 +107,8 @@ class CeleryTaskManagerUseCase:
             content_base_link=content_base_link,
         )
         import logging
-        logging.getLogger(__name__).info("Creating ContentBaseLinkTaskManager", extra={"uuid": str(content_base_task_manager.uuid)})
+
+        logging.getLogger(__name__).info(
+            "Creating ContentBaseLinkTaskManager", extra={"uuid": str(content_base_task_manager.uuid)}
+        )
         return content_base_task_manager

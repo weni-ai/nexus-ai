@@ -1,3 +1,10 @@
+exclude: |
+  (?x)(
+    ^inline_agents/backends/openai/grpc/message_stream_service\.proto$
+    |^inline_agents/backends/openai/grpc/generated/message_stream_service_pb2\.py$
+    |^inline_agents/backends/openai/grpc/generated/message_stream_service_pb2_grpc\.py$
+    |.*/migrations/.*
+  )
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v3.2.0
@@ -33,12 +40,11 @@ repos:
         language: system
         files: \.py$
         entry: poetry run ruff check --fix
-        pass_filenames: true
 
       - id: check-coverage
         name: Check code coverage
         entry: coverage run --source='.' manage.py test --keepdb
         language: system
         pass_filenames: false
-        always_run: true
+        stages: [push]
         fail_under: 75

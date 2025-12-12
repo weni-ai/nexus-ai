@@ -1,11 +1,10 @@
 import json
+import logging
 import os
 import time
 import uuid
 from dataclasses import dataclass
 from io import BytesIO
-import logging
-logger = logging.getLogger(__name__)
 from os.path import basename
 from typing import (
     TYPE_CHECKING,
@@ -25,6 +24,8 @@ from nexus.agents.components import get_all_formats_list
 from nexus.agents.models import Agent, Credential, Team
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 from nexus.utils import get_datasource_id
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from nexus.intelligences.models import ContentBase
@@ -189,7 +190,7 @@ class BedrockFileDatabase(FileDataBase):
 
             logger.info("Upload finished", extra={"location": response["Location"]})
             return file_name, response["Location"]
-        
+
         except Exception as e:
             logger.error("Error on upload: %s", e, exc_info=True)
             s3_client.abort_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id)
@@ -229,12 +230,15 @@ class BedrockFileDatabase(FileDataBase):
             }
             sub_agents.append(agent_association_data)
 
-            logger.debug("Agent association data", extra={
-                "supervisor_id": supervisor_id,
-                "alias_arn_suffix": agent_association_data["sub_agent_alias_arn"][ -10: ],
-                "association_name": agent_association_data["sub_agent_association_name"],
-                "relay_history": agent_association_data["relay_conversation_history"],
-            })
+            logger.debug(
+                "Agent association data",
+                extra={
+                    "supervisor_id": supervisor_id,
+                    "alias_arn_suffix": agent_association_data["sub_agent_alias_arn"][-10:],
+                    "association_name": agent_association_data["sub_agent_association_name"],
+                    "relay_history": agent_association_data["relay_conversation_history"],
+                },
+            )
 
             response = self.bedrock_agent.associate_agent_collaborator(
                 agentId=supervisor_id,
@@ -892,7 +896,10 @@ class BedrockFileDatabase(FileDataBase):
             # Get the new version number from the response
             new_version = response["Version"]
 
-            logger.info("Updating alias to new version", extra={"lambda_name": lambda_name, "alias": "live", "version": new_version})
+            logger.info(
+                "Updating alias to new version",
+                extra={"lambda_name": lambda_name, "alias": "live", "version": new_version},
+            )
 
             try:
                 # Try to update the alias

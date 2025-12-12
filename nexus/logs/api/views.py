@@ -224,6 +224,7 @@ class LogsViewset(ReadOnlyModelViewSet):
 
     def retrieve(self, request, *args, **kwargs):
         import logging
+
         logging.getLogger(__name__).debug("Logs retrieve kwargs", extra={"kwargs": kwargs})
         self.serializer_class = MessageFullLogSerializer
         return super().retrieve(request, *args, **kwargs)

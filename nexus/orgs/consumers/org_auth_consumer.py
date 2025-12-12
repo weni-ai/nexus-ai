@@ -1,5 +1,6 @@
-import amqp
 import logging
+
+import amqp
 from sentry_sdk import capture_exception
 
 from nexus.event_driven.consumer.consumers import EDAConsumer
@@ -10,7 +11,10 @@ from nexus.usecases.orgs.create import CreateOrgAuthUseCase
 
 class OrgAuthConsumer(EDAConsumer):
     def consume(self, message: amqp.Message):
-        logger.debug("[OrgAuthConsumer] Consuming a message", extra={"body_len": len(message.body) if hasattr(message, "body") else None})
+        logger.debug(
+            "[OrgAuthConsumer] Consuming a message",
+            extra={"body_len": len(message.body) if hasattr(message, "body") else None},
+        )
         try:
             body = JSONParser.parse(message.body)
             org_auth_dto = OrgAuthCreationDTO(
@@ -25,4 +29,6 @@ class OrgAuthConsumer(EDAConsumer):
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
             logger.error("[OrgAuthConsumer] Message rejected", exc_info=True)
+
+
 logger = logging.getLogger(__name__)

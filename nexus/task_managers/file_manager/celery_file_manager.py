@@ -169,6 +169,7 @@ class CeleryFileManager:
 
         if indexer_database == Project.BEDROCK:
             import logging
+
             logging.getLogger(__name__).info("Using BEDROCK for file upload")
             tasks_bedrock.bedrock_upload_file.delay(
                 bytes_file, content_base_uuid, user_email, str(content_base_file.uuid), filename=filename
@@ -215,6 +216,7 @@ class CeleryFileManager:
 
         if indexer_database == Project.BEDROCK:
             import logging
+
             logging.getLogger(__name__).info("Using BEDROCK for inline file upload")
             tasks_bedrock.bedrock_upload_inline_file.delay(
                 bytes_file, content_base_uuid, user_email, str(content_base_file.uuid), filename=filename

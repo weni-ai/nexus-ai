@@ -1,5 +1,6 @@
-import pendulum
 import logging
+
+import pendulum
 
 from nexus.logs.models import Message, RecentActivities
 

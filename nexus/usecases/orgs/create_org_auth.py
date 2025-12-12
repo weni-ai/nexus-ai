@@ -1,5 +1,6 @@
-from nexus.orgs.models import Org, OrgAuth, Role
 import logging
+
+from nexus.orgs.models import Org, OrgAuth, Role
 from nexus.orgs.org_dto import OrgAuthCreationDTO
 from nexus.usecases import orgs, users
 from nexus.users.models import User

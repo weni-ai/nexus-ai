@@ -1,8 +1,8 @@
+import logging
 import uuid
 
 import boto3
 from django.conf import settings
-import logging
 from storages.backends.s3boto3 import S3Boto3Storage
 
 

@@ -37,6 +37,7 @@ class ConversationFilter(filters.FilterSet):
     def filter_start_date(self, queryset, name, value):
         """Filter by start date with default value if not provided"""
         import logging
+
         logger = logging.getLogger(__name__)
         logger.debug("filter_start_date called", extra={"value": str(value), "type": str(type(value))})
         if value:
@@ -50,6 +51,7 @@ class ConversationFilter(filters.FilterSet):
     def filter_end_date(self, queryset, name, value):
         """Filter by end date with default value if not provided"""
         import logging
+
         logger = logging.getLogger(__name__)
         logger.debug("filter_end_date called", extra={"value": str(value), "type": str(type(value))})
         if value:
@@ -65,6 +67,7 @@ class ConversationFilter(filters.FilterSet):
     def filter(self, queryset):
         """Override filter method to handle validation errors gracefully"""
         import logging
+
         logger = logging.getLogger(__name__)
         logger.debug("filter method called", extra={"initial_count": queryset.count()})
         try:
@@ -73,7 +76,7 @@ class ConversationFilter(filters.FilterSet):
 
             # Debug: Check what resolution values are in the database
             if "resolution" in self.data:
-                logger.debug("Resolution filter requested", extra={"resolution": self.data['resolution']})
+                logger.debug("Resolution filter requested", extra={"resolution": self.data["resolution"]})
                 resolutions = list(queryset.values_list("resolution", flat=True))
                 logger.debug("Available resolutions in DB", extra={"resolutions": resolutions})
 

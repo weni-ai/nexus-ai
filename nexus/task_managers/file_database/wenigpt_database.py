@@ -59,6 +59,7 @@ class WeniGPTDatabase(GPTDatabase):
         except Exception as e:
             response = {"error": str(e)}
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error("wenigpt_database error: %s", response)
 

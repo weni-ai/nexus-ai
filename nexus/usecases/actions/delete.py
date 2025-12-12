@@ -45,5 +45,6 @@ def delete_template_action(template_action_uuid: str) -> bool:
         raise ValueError("Template action not found") from e
     except Exception as e:
         import logging
+
         logging.getLogger(__name__).error("Error deleting template action: %s", e, exc_info=True)
         raise Exception("Error deleting template action") from e

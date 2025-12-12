@@ -1,5 +1,5 @@
-from typing import Dict
 import logging
+from typing import Dict
 
 import sentry_sdk
 from django.conf import settings

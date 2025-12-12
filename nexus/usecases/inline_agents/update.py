@@ -1,5 +1,5 @@
-from typing import Dict
 import logging
+from typing import Dict
 
 from nexus.agents.encryption import encrypt_value
 from nexus.inline_agents.models import Agent, AgentCredential, InlineAgentMessage
@@ -65,10 +65,14 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             agents = list(cred.agents.all())
 
             if len(agents) <= 0:
-                logging.getLogger(__name__).info("Deleting empty credential", extra={"key": cred.key, "project_uuid": str(project.uuid)})
+                logging.getLogger(__name__).info(
+                    "Deleting empty credential", extra={"key": cred.key, "project_uuid": str(project.uuid)}
+                )
                 cred.delete()
             elif len(agents) == 1 and agent in agents:
-                logging.getLogger(__name__).info("Deleting credential", extra={"key": cred.key, "project_uuid": str(project.uuid)})
+                logging.getLogger(__name__).info(
+                    "Deleting credential", extra={"key": cred.key, "project_uuid": str(project.uuid)}
+                )
                 cred.delete()
             elif agent in agents:
                 cred.agents.remove(agent)

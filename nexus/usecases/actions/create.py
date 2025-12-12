@@ -1,9 +1,9 @@
 import json
+import logging
 from dataclasses import dataclass
 
 import requests
 from django.conf import settings
-import logging
 
 from nexus.actions.models import Flow, TemplateAction
 from nexus.events import event_manager

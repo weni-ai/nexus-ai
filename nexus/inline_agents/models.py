@@ -186,10 +186,13 @@ class InlineAgentMessage(models.Model):
 
 
 class InlineAgentsConfiguration(models.Model):
+    valid_voices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer", "verse"]
     # TODO: Move inline agents configuration from project model to this model
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="inline_agent_configurations")
     agents_backend = models.CharField(max_length=100)
     default_instructions_for_collaborators = models.TextField(null=True, blank=True)
+    audio_orchestration = models.BooleanField(default=False)
+    audio_orchestration_voice = models.CharField(null=True, blank=True, default="shimmer")
 
     class Meta:
         verbose_name = "Inline agents configurations for a project"
@@ -198,3 +201,19 @@ class InlineAgentsConfiguration(models.Model):
 
     def __str__(self):
         return f"Project: {self.project.name} - Agents backend: {self.agents_backend}"
+
+    def set_audio_orchestration_voice(self, voice: str):
+        if voice not in self.valid_voices:
+            raise ValueError
+        self.audio_orchestration_voice = voice
+        self.save()
+
+    def set_audio_orchestration(self, activate: bool, voice: str = None):
+        if voice:
+            try:
+                self.set_audio_orchestration_voice(voice)
+            except ValueError:
+                raise
+
+        self.audio_orchestration = activate
+        self.save()

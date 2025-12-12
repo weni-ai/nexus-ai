@@ -44,6 +44,7 @@ def add_file(task_manager_uuid: str, file_type: str, load_type: str = None) -> b
         task_manager.update_status(ContentBaseFileTaskManager.STATUS_LOADING)
     except Exception as err:
         import logging
+
         logging.getLogger(__name__).error("Error updating task manager status: %s", err, exc_info=True)
         return False
 
@@ -208,10 +209,12 @@ def create_wenigpt_logs(log: Dict):
         )
         UserQuestion.objects.create(text=log.question, content_base_log=log)
         import logging
+
         logging.getLogger(__name__).info("Creating log")
         return log
     except Exception as e:
         import logging
+
         logging.getLogger(__name__).error("Error creating log: %s", e, exc_info=True)
         return False
 

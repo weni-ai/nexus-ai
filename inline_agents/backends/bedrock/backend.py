@@ -58,12 +58,7 @@ class BedrockBackend(InlineAgentsBackend):
         return self._data_lake_event_adapter
 
     def _ensure_conversation(
-        self,
-        project_uuid: str,
-        contact_urn: str,
-        contact_name: str,
-        channel_uuid: str,
-        preview: bool = False
+        self, project_uuid: str, contact_urn: str, contact_name: str, channel_uuid: str, preview: bool = False
     ) -> Optional[object]:
         """Ensure conversation exists and return it, or None if creation fails or channel_uuid is missing."""
         # Don't create conversations in preview mode
@@ -74,17 +69,19 @@ class BedrockBackend(InlineAgentsBackend):
             # channel_uuid is None - log to Sentry for debugging
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_tag("contact_urn", contact_urn)
-            sentry_sdk.set_context("conversation_creation", {
-                "project_uuid": project_uuid,
-                "contact_urn": contact_urn,
-                "contact_name": contact_name,
-                "channel_uuid": None,
-                "backend": "bedrock",
-                "reason": "channel_uuid is None"
-            })
+            sentry_sdk.set_context(
+                "conversation_creation",
+                {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "contact_name": contact_name,
+                    "channel_uuid": None,
+                    "backend": "bedrock",
+                    "reason": "channel_uuid is None",
+                },
+            )
             sentry_sdk.capture_message(
-                "Conversation not created: channel_uuid is None (Bedrock backend)",
-                level="warning"
+                "Conversation not created: channel_uuid is None (Bedrock backend)", level="warning"
             )
             return None
 
@@ -93,23 +90,23 @@ class BedrockBackend(InlineAgentsBackend):
 
             conversation_service = ConversationService()
             return conversation_service.ensure_conversation_exists(
-                project_uuid=project_uuid,
-                contact_urn=contact_urn,
-                contact_name=contact_name,
-                channel_uuid=channel_uuid
+                project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
             )
         except Exception as e:
             # If conversation lookup/creation fails, continue without it but log to Sentry
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_tag("contact_urn", contact_urn)
             sentry_sdk.set_tag("channel_uuid", channel_uuid)
-            sentry_sdk.set_context("conversation_creation", {
-                "project_uuid": project_uuid,
-                "contact_urn": contact_urn,
-                "contact_name": contact_name,
-                "channel_uuid": channel_uuid,
-                "backend": "bedrock"
-            })
+            sentry_sdk.set_context(
+                "conversation_creation",
+                {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "contact_name": contact_name,
+                    "channel_uuid": channel_uuid,
+                    "backend": "bedrock",
+                },
+            )
             sentry_sdk.capture_exception(e)
             return None
 
@@ -151,7 +148,7 @@ class BedrockBackend(InlineAgentsBackend):
             contact_urn=contact_urn,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
-            preview=preview
+            preview=preview,
         )
 
         typing_usecase = TypingUsecase()

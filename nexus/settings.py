@@ -49,7 +49,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "django_prometheus",
     "rest_framework",
-    "drf_yasg",
+    "drf_spectacular",
     "elasticapm.contrib.django",
     # apps
     "nexus.users",
@@ -301,17 +301,26 @@ OIDC_DRF_AUTH_BACKEND = env.str(
     default="nexus.authentication.authentication.WeniOIDCAuthenticationBackend",
 )
 OIDC_RP_SCOPES = env.str("OIDC_RP_SCOPES", default="openid email")
+OIDC_RP_EMAIL = env.str("OIDC_RP_EMAIL", default="")
 
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["mozilla_django_oidc.contrib.drf.OIDCAuthentication"],
     "EXCEPTION_HANDLER": "rest_framework.views.exception_handler",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 if TESTING:
     REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"].append("rest_framework.authentication.TokenAuthentication")
 
 CORS_ORIGIN_ALLOW_ALL = True
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "API Documentation",
+    "VERSION": "v1.0.0",
+    "LICENSE": {"name": "GPL-3.0 License"},
+}
+
 
 OPENAI_API_KEY = env.str("OPENAI_API_KEY")
 CHATGPT_MODEL = env.str("CHATGPT_MODEL")
@@ -545,15 +554,53 @@ BEDROCK_AGENT_INLINE_CLIENT_SECRET = env.str("BEDROCK_AGENT_INLINE_CLIENT_SECRET
 TRACE_SUMMARY_DELAY = env.bool("TRACE_SUMMARY_DELAY", False)
 PROJECT_COMPONENTS = env.list("PROJECT_COMPONENTS", [])
 
-# Rationale agents
-AWS_RATIONALE_MODEL = env.str("AWS_RATIONALE_MODEL", "amazon.nova-pro-v1:0")
+WENIGPT_BEDROCK_CONVERSATION_CUSTOM_MODEL_ID = env.str("WENIGPT_BEDROCK_CONVERSATION_CUSTOM_MODEL_ID")
+USE_BEDROCK_CONVERSE = env.bool("USE_BEDROCK_CONVERSE", True)
+BEDROCK_CONVERSE_PROMPT = env.str("BEDROCK_CONVERSE_PROMPT")
+BEDROCK_CONVERSE_MAX_LENGHT = env.int("BEDROCK_CONVERSE_MAX_LENGHT", 4096)
+FORMATTER_AGENT_MODEL = env.str("FORMATTER_AGENT_MODEL", "gpt-4.1-mini")
+FLOW_USER_EMAIL = env.str("FLOW_USER_EMAIL", "")
 
-COLLABORATORS_DEFAULT_INSTRUCTIONS = env.str("COLLABORATORS_DEFAULT_INSTRUCTIONS", "")
+# Logging configuration
+LOG_LEVEL = env.str("LOG_LEVEL", "INFO")
 
-# Project auth
-PROJECT_AUTH_API_BASE_URL = env.str("PROJECT_AUTH_API_BASE_URL", "")
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}
 
-SUPERVISOR_SERVICE_AVAILABLE = env.bool("SUPERVISOR_SERVICE_AVAILABLE", False)
+# gRPC Streaming Configuration
+GRPC_ENABLED = env.bool("GRPC_ENABLED", default=False)
+GRPC_SERVICE_HOST = env.str("GRPC_SERVICE_HOST", default="localhost")
+GRPC_SERVICE_PORT = env.int("GRPC_SERVICE_PORT", default=50051)
+GRPC_USE_TLS = env.bool("GRPC_USE_TLS", default=False)
+
+OPENAI_AGENTS_REASONING_EFFORT = env.str("OPENAI_AGENTS_REASONING_EFFORT", None)
+OPENAI_AGENTS_REASONING_SUMMARY = env.str("OPENAI_AGENTS_REASONING_SUMMARY", "auto")
+OPENAI_AGENTS_PARALLEL_TOOL_CALLS = env.bool("OPENAI_AGENTS_PARALLEL_TOOL_CALLS", True)
+OPENAI_AGENTS_MAX_TURNS = env.int("OPENAI_AGENTS_MAX_TURNS", 10)
 SUPERVISOR_SERVICE_AVAILABLE_PROJECTS = env.list("SUPERVISOR_SERVICE_AVAILABLE_PROJECTS", [])
 
 REPORT_RECIPIENT_EMAILS = env.list("REPORT_RECIPIENT_EMAILS", [])
@@ -634,33 +681,3 @@ BEDROCK_CONVERSE_PROMPT = env.str("BEDROCK_CONVERSE_PROMPT")
 BEDROCK_CONVERSE_MAX_LENGHT = env.int("BEDROCK_CONVERSE_MAX_LENGHT", 4096)
 FORMATTER_AGENT_MODEL = env.str("FORMATTER_AGENT_MODEL", "gpt-4.1-mini")
 FLOW_USER_EMAIL = env.str("FLOW_USER_EMAIL", "")
-
-# Logging configuration
-LOG_LEVEL = env.str("LOG_LEVEL", "INFO")
-
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "standard": {
-            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
-        },
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "standard",
-        },
-    },
-    "root": {
-        "handlers": ["console"],
-        "level": LOG_LEVEL,
-    },
-    "loggers": {
-        "django": {
-            "handlers": ["console"],
-            "level": LOG_LEVEL,
-            "propagate": False,
-        },
-    },
-}

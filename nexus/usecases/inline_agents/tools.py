@@ -1,6 +1,6 @@
+import logging
 from io import BytesIO
 from typing import Dict, List, Tuple
-import logging
 
 from django.conf import settings
 
