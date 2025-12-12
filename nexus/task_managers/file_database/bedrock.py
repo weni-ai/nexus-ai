@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 import time
 import uuid
 from dataclasses import dataclass
 from io import BytesIO
+
+logger = logging.getLogger(__name__)
 from os.path import basename
 from typing import (
     TYPE_CHECKING,
@@ -23,6 +26,8 @@ from nexus.agents.components import get_all_formats_list
 from nexus.agents.models import Agent, Credential, Team
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 from nexus.utils import get_datasource_id
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from nexus.intelligences.models import ContentBase
@@ -144,7 +149,8 @@ class BedrockFileDatabase(FileDataBase):
     def add_metadata_json_file(self, filename: str, content_base_uuid: str, file_uuid: str):
         from io import BytesIO
 
-        print("[+ BEDROCK: Adding metadata.json file +]")
+        logger = logging.getLogger(__name__)
+        logger.info("[Bedrock] Adding metadata.json file")
 
         data = {
             "metadataAttributes": {"contentBaseUuid": content_base_uuid, "filename": filename, "fileUuid": file_uuid}
@@ -152,10 +158,7 @@ class BedrockFileDatabase(FileDataBase):
 
         filename_metadata_json = f"{filename}.metadata.json"
         key = f"{content_base_uuid}/{filename_metadata_json}"
-        print("\n\n\n\n\n")
-        print(filename_metadata_json)
-        print(key)
-        print("\n\n\n\n\n")
+        logger.debug("Bedrock metadata file", extra={"filename": filename_metadata_json, "key": key})
         bytes_stream = BytesIO(json.dumps(data).encode("utf-8"))
         self.s3_client.upload_fileobj(bytes_stream, self.bucket_name, key)
 
@@ -187,16 +190,16 @@ class BedrockFileDatabase(FileDataBase):
                 Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={"Parts": parts}
             )
 
-            print(f"Upload finalizado: {response['Location']}")
+            logger.info("Upload finished", extra={"location": response["Location"]})
             return file_name, response["Location"]
 
         except Exception as e:
-            print(f"Erro no upload: {e}")
+            logger.error("Error on upload: %s", e, exc_info=True)
             s3_client.abort_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id)
 
     def add_file(self, file, content_base_uuid: str, file_uuid: str) -> FileResponseDTO:
         try:
-            print("[+ BEDROCK: Adding file to bucket +]")
+            logger.info("[Bedrock] Adding file to bucket")
 
             file_name = self.__create_unique_filename(basename(file.name))
             file_path = f"{content_base_uuid}/{file_name}"
@@ -229,14 +232,15 @@ class BedrockFileDatabase(FileDataBase):
             }
             sub_agents.append(agent_association_data)
 
-            print("---------------------------------------")
-            print(supervisor_id)
-            print("DRAFT")
-            print({"aliasArn": agent_association_data["sub_agent_alias_arn"]})
-            print(agent_association_data["sub_agent_association_name"])
-            print(agent_association_data["sub_agent_instruction"])
-            print(agent_association_data["relay_conversation_history"])
-            print("---------------------------------------")
+            logger.debug(
+                "Agent association data",
+                extra={
+                    "supervisor_id": supervisor_id,
+                    "alias_arn_suffix": agent_association_data["sub_agent_alias_arn"][-10:],
+                    "association_name": agent_association_data["sub_agent_association_name"],
+                    "relay_history": agent_association_data["relay_conversation_history"],
+                },
+            )
 
             response = self.bedrock_agent.associate_agent_collaborator(
                 agentId=supervisor_id,
@@ -358,7 +362,7 @@ class BedrockFileDatabase(FileDataBase):
 
         if prompt_override_configuration:
             kwargs["promptOverrideConfiguration"] = prompt_override_configuration
-            print(prompt_override_configuration)
+            logger.debug("promptOverrideConfiguration present", extra={"has": True})
 
         if memory_configuration:
             kwargs["memoryConfiguration"] = memory_configuration
@@ -387,14 +391,14 @@ class BedrockFileDatabase(FileDataBase):
                 self.wait_agent_status_update(_agent_id)
 
             except Exception as e:
-                print(f"Error creating agent: {e}\n. Retrying in case it was just waiting to be deleted.")
+                logger.error("Error creating agent: %s. Retrying if pending deletion.", e)
                 _num_tries += 1
 
                 if _num_tries <= 2:
                     time.sleep(4)
                     pass
                 else:
-                    print("Giving up on agent creation after 2 tries.")
+                    logger.error("Giving up on agent creation after 2 tries.")
                     raise e
 
         return agent_id
@@ -413,9 +417,9 @@ class BedrockFileDatabase(FileDataBase):
 
         # lambda_role = self._create_lambda_iam_role(agent_external_id)
         lambda_role = settings.AGENT_RESOURCE_ROLE_ARN
-        print("LAMBDA ROLE: ", lambda_role)
+        logger.info("Lambda role configured", extra={"role_suffix": str(lambda_role)[-8:]})
 
-        print("CREATING LAMBDA FUNCTION")
+        logger.info("Creating Lambda function")
 
         lambda_function = self.lambda_client.create_function(
             FunctionName=lambda_name,
@@ -429,7 +433,7 @@ class BedrockFileDatabase(FileDataBase):
         lambda_arn = lambda_function.get("FunctionArn")
         action_group_name = f"{lambda_name}_action_group"
 
-        print("ATTACHING LAMBDA FUNCTION TO AGENT")
+        logger.info("Attaching Lambda function to agent")
         self.attach_lambda_function(
             agent_external_id=agent_external_id,
             action_group_name=action_group_name,
@@ -442,7 +446,7 @@ class BedrockFileDatabase(FileDataBase):
         return lambda_function
 
     def delete_file_and_metadata(self, content_base_uuid: str, filename: str):
-        print("[+ BEDROCK: Deleteing File and its Metadata +]")
+        logger.info("[Bedrock] Deleting file and metadata")
 
         file = f"{content_base_uuid}/{filename}"
         self.s3_client.delete_object(Bucket=self.bucket_name, Key=file)
@@ -506,7 +510,7 @@ class BedrockFileDatabase(FileDataBase):
         content_base: "ContentBase",
         message: "Message",
     ):
-        print("Invoking supervisor with streaming")
+        logger.info("Invoking supervisor with streaming")
 
         content_base_uuid = str(content_base.uuid)
         agent = content_base.agent
@@ -529,7 +533,7 @@ class BedrockFileDatabase(FileDataBase):
             for credential in agent_credentials:
                 credentials[credential.key] = credential.decrypted_value
         except Exception as e:
-            print(f"[DEBUG] Error fetching credentials: {str(e)}")
+            logger.error("Error fetching credentials: %s", str(e))
 
         sessionState["sessionAttributes"] = {"credentials": json.dumps(credentials, default=str)}
 
@@ -592,16 +596,14 @@ class BedrockFileDatabase(FileDataBase):
                         trace_data = event["trace"]
                         yield {"type": "trace", "content": trace_data}
                     else:
-                        print(f"[DEBUG] Unknown event structure: {event}")
+                        logger.debug("Unknown event structure", extra={"event_keys": list(event.keys())})
 
         except Exception as e:
-            print(f"[DEBUG] Error invoking supervisor stream: {str(e)}")
-            print(f"[DEBUG] Error type: {type(e)}")
-            print(f"[DEBUG] Error details: {e.__dict__ if hasattr(e, '__dict__') else 'No details available'}")
+            logger.error("Error invoking supervisor stream: %s", str(e), exc_info=True)
             raise
 
     def start_bedrock_ingestion(self) -> str:
-        print("[+ Bedrock: Starting ingestion job +]")
+        logger.info("[Bedrock] Starting ingestion job")
         response = self.bedrock_agent.start_ingestion_job(
             dataSourceId=self.data_source_id, knowledgeBaseId=self.knowledge_base_id
         )
@@ -642,9 +644,7 @@ class BedrockFileDatabase(FileDataBase):
         # create_agent_alias is not returning agent version
         agent_alias_version = "DRAFT"
         for version in response["agentVersionSummaries"]:
-            print("-----------------Agent Version------------------")
-            print(version)
-            print("------------------------------------------------")
+            logger.debug("Agent version", extra={"version": version})
             created_at = pendulum.instance(version["createdAt"])
             if start <= created_at <= end:
                 agent_alias_version = version["agentVersion"]
@@ -698,11 +698,15 @@ class BedrockFileDatabase(FileDataBase):
         )
 
         function_schema = base_action_group_response["agentActionGroup"]["functionSchema"]["functions"]
-        # print("FUNCTION SCHEMA: ", function_schema)
+        logger.debug(
+            "Function schema fetched", extra={"function_count": len(function_schema) if function_schema else 0}
+        )
         for function in function_schema:
             function["name"] = "".join(c for c in function["name"] if c.isalnum() or c in "_-")
 
-        # print("FUNCTION SCHEMA SANITIZED: ", function_schema)
+        logger.debug(
+            "Function schema sanitized", extra={"function_count": len(function_schema) if function_schema else 0}
+        )
 
         self.bedrock_agent.create_agent_action_group(
             actionGroupExecutor={"lambda": lambda_arn},
@@ -857,7 +861,7 @@ class BedrockFileDatabase(FileDataBase):
         agent_status = response["agent"]["agentStatus"]
         _waited_at_least_once = False
         while agent_status.endswith("ING"):
-            print(f"Waiting for agent status to change. Current status {agent_status}")
+            logger.info("Waiting for agent status to change", extra={"status": agent_status})
             time.sleep(5)
             _waited_at_least_once = True
             try:
@@ -866,7 +870,7 @@ class BedrockFileDatabase(FileDataBase):
             except self.bedrock_agent.exceptions.ResourceNotFoundException:
                 agent_status = "DELETED"
         if _waited_at_least_once:
-            print(f"Agent id {agent_id} current status: {agent_status}")
+            logger.info("Agent current status", extra={"agent_id": agent_id, "status": agent_status})
 
     def update_lambda_function(
         self,
@@ -891,22 +895,24 @@ class BedrockFileDatabase(FileDataBase):
             )
 
             # Wait for the function to be updated
-            print(" WAITING FOR FUNCTION TO BE UPDATED ...")
+            logger.info("Waiting for function to be updated")
             waiter = self.lambda_client.get_waiter("function_updated")
             waiter.wait(FunctionName=lambda_name, WaiterConfig={"Delay": 5, "MaxAttempts": 60})
 
             # Get the new version number from the response
             new_version = response["Version"]
 
-            print(" UPDATING ALIAS TO POINT TO THE NEW VERSION ...")
-            print("ALIAS ARGS: ", lambda_name, "live", new_version)
+            logger.info(
+                "Updating alias to new version",
+                extra={"lambda_name": lambda_name, "alias": "live", "version": new_version},
+            )
 
             try:
                 # Try to update the alias
                 self.lambda_client.update_alias(FunctionName=lambda_name, Name="live", FunctionVersion=new_version)
             except self.lambda_client.exceptions.ResourceNotFoundException:
                 # If alias doesn't exist, create it
-                print(f"Alias 'live' not found for function {lambda_name}, creating...")
+                logger.info("Alias 'live' not found, creating", extra={"lambda_name": lambda_name})
                 self.lambda_client.create_alias(
                     FunctionName=lambda_name,
                     Name="live",
@@ -917,7 +923,7 @@ class BedrockFileDatabase(FileDataBase):
             return response
 
         except Exception as e:
-            print(f"Error updating Lambda function {lambda_name}: {str(e)}")
+            logger.error("Error updating Lambda function %s: %s", lambda_name, str(e), exc_info=True)
             raise
 
     def update_agent_action_group(
@@ -933,7 +939,7 @@ class BedrockFileDatabase(FileDataBase):
         """
         Updates an existing action group for an agent.
         """
-        print("SCHEMA UPDATE: ", function_schema)
+        logger.debug("Schema update", extra={"function_count": len(function_schema) if function_schema else 0})
         response = self.bedrock_agent.update_agent_action_group(
             actionGroupExecutor={"lambda": lambda_arn},
             actionGroupName=action_group_name,
@@ -1047,11 +1053,11 @@ class BedrockFileDatabase(FileDataBase):
             self.bedrock_agent.delete_agent_action_group(
                 agentId=agent_id, agentVersion=agent_version, actionGroupId=action_group_id
             )
-            print(f"Successfully deleted action group {action_group_id}")
+            logger.info("Successfully deleted action group", extra={"action_group_id": action_group_id})
         except self.bedrock_agent.exceptions.ResourceNotFoundException:
-            print(f"Action group {action_group_id} not found")
+            logger.warning("Action group not found", extra={"action_group_id": action_group_id})
         except Exception as e:
-            print(f"Error deleting action group: {e}")
+            logger.error("Error deleting action group: %s", e, exc_info=True)
             raise
 
     def delete_lambda_function(self, function_name: str):
@@ -1086,5 +1092,5 @@ class BedrockFileDatabase(FileDataBase):
             response = self.bedrock_agent.list_agent_action_groups(agentId=agent_id, agentVersion=agent_version)
             return response
         except Exception as e:
-            print(f"Error listing action groups: {e}")
+            logger.error("Error listing action groups: %s", e, exc_info=True)
             raise
