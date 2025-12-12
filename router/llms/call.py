@@ -1,3 +1,4 @@
+import logging
 from typing import List
 
 from django.conf import settings
@@ -28,7 +29,8 @@ def call_llm(
     project_uuid: str = "",
 ) -> str:
     try:
-        print(f"\n\n[+ Message: {message.text} +]\n\n")
+        logger = logging.getLogger(__name__)
+        logger.debug("LLM call message", extra={"text_len": len(message.text) if getattr(message, "text", None) else 0})
 
         response = llm_model.request_gpt(
             instructions=instructions,

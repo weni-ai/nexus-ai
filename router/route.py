@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Dict, List
 
@@ -71,7 +72,7 @@ def route(
             flow: FlowDTO = flows_repository.get_project_flow_by_name(name=classification)
 
         if not flow or flow.send_to_llm:
-            print("[ + Fallback + ]")
+            logging.getLogger(__name__).info("Fallback flow triggered")
 
             fallback_flow: FlowDTO = flows_repository.project_flow_fallback(fallback=True)
 
@@ -95,7 +96,9 @@ def route(
 
             full_chunks: List[Dict] = get_chunks(indexer, text=message.text, content_base_uuid=content_base.uuid)
 
-            print(f"[+ Instructions: {instructions} +]")
+            logging.getLogger(__name__).info(
+                "Instructions ready", extra={"count": len(instructions) if instructions else 0}
+            )
 
             chunks: List[str] = []
             for chunk in full_chunks:
@@ -109,7 +112,7 @@ def route(
 
                 chunk["full_page"] = full_page
 
-            print(f"[ + Chunks: {chunks} + ]")
+            logging.getLogger(__name__).info("Chunks ready", extra={"count": len(chunks)})
 
             llm_response: str = call_llm(
                 chunks=chunks,
@@ -124,7 +127,9 @@ def route(
 
             llm_response = bad_words_filter(llm_response)
 
-            print(f"[+ LLM Response: {llm_response} +]")
+            logging.getLogger(__name__).info(
+                "LLM response generated", extra={"length": len(llm_response) if llm_response else 0}
+            )
 
             if message_log:
                 run_reflection_task.delay(
