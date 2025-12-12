@@ -2,12 +2,7 @@ import logging
 
 import pendulum
 import sentry_sdk
-from drf_spectacular.utils import (
-    OpenApiParameter,
-    OpenApiResponse,
-    OpenApiTypes,
-    extend_schema,
-)
+from django.db.models import Q
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -51,68 +46,6 @@ class SupervisorPublicConversationsView(APIView):
     authentication_classes = [ProjectApiKeyAuthentication]
     permission_classes = [ProjectApiKeyPermission]
 
-    @extend_schema(
-        operation_id="supervisor_public_conversations",
-        summary="List public supervisor conversations",
-        description=(
-            "Returns paginated, PII-minimized supervisor conversations for a project.\n\n"
-            "Filters: start (YYYY-MM-DD), end (YYYY-MM-DD), status. Supports pagination via page and page_size."
-        ),
-        parameters=[
-            OpenApiParameter(
-                name="project_uuid",
-                location=OpenApiParameter.PATH,
-                description="Project UUID",
-                required=True,
-                type=OpenApiTypes.STR,
-            ),
-            OpenApiParameter(
-                name="start",
-                location=OpenApiParameter.QUERY,
-                description="Start date (YYYY-MM-DD)",
-                required=False,
-                type=OpenApiTypes.STR,
-            ),
-            OpenApiParameter(
-                name="end",
-                location=OpenApiParameter.QUERY,
-                description="End date (YYYY-MM-DD)",
-                required=False,
-                type=OpenApiTypes.STR,
-            ),
-            OpenApiParameter(
-                name="status",
-                location=OpenApiParameter.QUERY,
-                description="Resolution status",
-                required=False,
-                type=OpenApiTypes.STR,
-            ),
-            OpenApiParameter(
-                name="page",
-                location=OpenApiParameter.QUERY,
-                description="Page number",
-                required=False,
-                type=OpenApiTypes.INT,
-            ),
-            OpenApiParameter(
-                name="page_size",
-                location=OpenApiParameter.QUERY,
-                description="Results per page",
-                required=False,
-                type=OpenApiTypes.INT,
-            ),
-        ],
-        responses={
-            200: OpenApiResponse(
-                description="Paginated list of conversations",
-                response=SupervisorPublicConversationListSerializer,
-            ),
-            400: OpenApiResponse(description="Bad request"),
-            401: OpenApiResponse(description="Unauthorized"),
-            403: OpenApiResponse(description="Forbidden"),
-        },
-        tags=["Supervisor Public"],
-    )
     def get(self, request, project_uuid):
         try:
             qs = Conversation.objects.filter(project__uuid=project_uuid).order_by("-created_at")
@@ -136,11 +69,14 @@ class SupervisorPublicConversationsView(APIView):
                     end_dt = end
 
             if start_dt and end_dt:
-                qs = qs.filter(start_date__gte=start_dt, start_date__lte=end_dt)
+                qs = qs.filter(
+                    Q(start_date__lte=end_dt)
+                    & (Q(end_date__gte=start_dt) | Q(end_date__isnull=True) | Q(start_date__gte=start_dt))
+                )
             elif start_dt:
-                qs = qs.filter(start_date__gte=start_dt)
+                qs = qs.filter(Q(start_date__gte=start_dt) | Q(end_date__gte=start_dt))
             elif end_dt:
-                qs = qs.filter(start_date__lte=end_dt)
+                qs = qs.filter(Q(start_date__lte=end_dt) | Q(end_date__lte=end_dt))
             if status_param:
                 qs = qs.filter(resolution=status_param)
 
