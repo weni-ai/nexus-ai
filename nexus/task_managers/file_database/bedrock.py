@@ -5,8 +5,6 @@ import time
 import uuid
 from dataclasses import dataclass
 from io import BytesIO
-
-logger = logging.getLogger(__name__)
 from os.path import basename
 from typing import (
     TYPE_CHECKING,
@@ -149,7 +147,6 @@ class BedrockFileDatabase(FileDataBase):
     def add_metadata_json_file(self, filename: str, content_base_uuid: str, file_uuid: str):
         from io import BytesIO
 
-        logger = logging.getLogger(__name__)
         logger.info("[Bedrock] Adding metadata.json file")
 
         data = {
@@ -1062,10 +1059,6 @@ class BedrockFileDatabase(FileDataBase):
 
     def delete_lambda_function(self, function_name: str):
         """Delete Lambda function and all its aliases"""
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         try:
             # List and delete all aliases first
             list_aliases = self.lambda_client.list_aliases(FunctionName=function_name)

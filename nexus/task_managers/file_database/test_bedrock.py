@@ -1,4 +1,5 @@
 import json
+import logging
 from unittest import skip
 from unittest.mock import patch
 from uuid import uuid4
@@ -34,6 +35,8 @@ from nexus.usecases.task_managers.celery_task_manager import CeleryTaskManagerUs
 from router.entities import ProjectDTO
 from router.repositories.orm import ProjectORMRepository
 
+logger = logging.getLogger(__name__)
+
 
 @skip("Development tests for bedrock")
 class BedrockFileDatabaseTestCase(TestCase):
@@ -51,9 +54,7 @@ class BedrockFileDatabaseTestCase(TestCase):
                 content_base_uuid=self.content_base_uuid,
                 file_uuid=self.file_uuid,
             )
-            import logging
-
-            logging.getLogger(__name__).debug("Filename: %s", response.file_name)
+            logger.debug("Filename: %s", response.file_name)
             self.assertEqual(response.status, 0)
             self.assertIsNone(response.err)
 
@@ -64,9 +65,7 @@ class BedrockFileDatabaseTestCase(TestCase):
 
     def test_start_ingestion_job(self):
         job_id = self.bedrock.start_bedrock_ingestion()
-        import logging
-
-        logging.getLogger(__name__).debug("Job ID: %s", job_id)
+        logger.debug("Job ID: %s", job_id)
         self.assertIsInstance(job_id, str)
 
     def test_get_ingestion_job_status(self):
@@ -74,37 +73,27 @@ class BedrockFileDatabaseTestCase(TestCase):
         status = "COMPLETE"
         response = self.bedrock.get_bedrock_ingestion_status(job_id)
 
-        import logging
-
-        logging.getLogger(__name__).debug("Status: %s", response)
+        logger.debug("Status: %s", response)
 
         self.assertIsInstance(response, str)
         self.assertEqual(response, status)
 
     def test_list_bedrock_ingestion(self):
         response = self.bedrock.list_bedrock_ingestion()
-        import logging
-
-        logging.getLogger(__name__).debug("Response: %s", response)
+        logger.debug("Response: %s", response)
         self.assertEqual(response, [])
 
     def test_search_data(self):
         response = self.bedrock.search_data(content_base_uuid=self.content_base_uuid, text="Test")
-        import logging
-
-        logging.getLogger(__name__).debug("Response: %s", response)
+        logger.debug("Response: %s", response)
         self.assertListEqual(["status", "data"], list(response.keys()))
 
     def test_create_presigned_url(self):
         filename = "test_file-7d6f95ab-5143-4a58-920b-68d56c83a5be.txt"
         url = self.bedrock.create_presigned_url(filename)
-        import logging
-
-        logging.getLogger(__name__).debug("URL: %s", url)
+        logger.debug("URL: %s", url)
         response = requests.get(url)
-        import logging
-
-        logging.getLogger(__name__).debug("Response text: %s", response.text[:100])
+        logger.debug("Response text: %s", response.text[:100])
         self.assertIsInstance(url, str)
         self.assertEqual(response.status_code, 200)
 
@@ -171,9 +160,7 @@ class TestBedrockTasksTestCase(TestCase):
         start_ingestion_job(self.celery_task_manager_uuid, file_type=file_type)
 
         self.task_manager.refresh_from_db()
-        import logging
-
-        logging.getLogger(__name__).debug("Job id: %s", self.task_manager.ingestion_job_id)
+        logger.debug("Job id: %s", self.task_manager.ingestion_job_id)
         self.assertEqual(self.task_manager.status, TaskManager.STATUS_PROCESSING)
 
 
@@ -220,9 +207,7 @@ class TestContentBaseBedrockTestCase(TestCase):
         response = client.post(url, data, format="json")
         response.render()
         content = json.loads(response.content)
-        import logging
-
-        logging.getLogger(__name__).debug("Content base uuid: %s", str(self.content_base.uuid))
+        logger.debug("Content base uuid: %s", str(self.content_base.uuid))
 
         file_uuid = content.get("uuid")
 
@@ -238,9 +223,7 @@ class TestContentBaseBedrockTestCase(TestCase):
         response = client.post(url, data, format="json")
         response.render()
         content = json.loads(response.content)
-        import logging
-
-        logging.getLogger(__name__).debug("Content base uuid: %s", str(self.content_base.uuid))
+        logger.debug("Content base uuid: %s", str(self.content_base.uuid))
 
         file_uuid = content.get("uuid")
 
@@ -343,6 +326,4 @@ class TestContentBaseBedrockTestCase(TestCase):
         )
         response = client.put(url, data, format="json")
         response.render()
-        import logging
-
-        logging.getLogger(__name__).debug("Response: %s", response)
+        logger.debug("Response: %s", response)

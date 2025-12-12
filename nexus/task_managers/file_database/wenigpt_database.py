@@ -1,3 +1,4 @@
+import logging
 from typing import List
 
 from django.conf import settings
@@ -6,6 +7,8 @@ from nexus.intelligences.llms import WeniGPTClient
 from nexus.task_managers.file_database import GPTDatabase
 from nexus.usecases.intelligences.intelligences_dto import ContentBaseLogsDTO
 from router.entities.intelligences import LLMSetupDTO
+
+logger = logging.getLogger(__name__)
 
 
 class WeniGPTDatabase(GPTDatabase):
@@ -58,9 +61,6 @@ class WeniGPTDatabase(GPTDatabase):
             return {"answers": [{"text": text_answer}], "id": "0", "question_uuid": str(log.user_question.uuid)}
         except Exception as e:
             response = {"error": str(e)}
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.error("wenigpt_database error: %s", response)
 
         return {"answers": None, "id": "0", "message": "No context found for this question"}

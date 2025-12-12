@@ -196,9 +196,6 @@ class BedrockBackend(InlineAgentsBackend):
             contact_name=contact_name,
             channel_uuid=channel_uuid,
         )
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.debug("Session ID", extra={"session_id": session_id})
         logger.debug("Log present", extra={"has_log": log is not None})
         logger.debug("External team built", extra={"agents_count": len(external_team.get("agents", []))})
@@ -235,9 +232,7 @@ class BedrockBackend(InlineAgentsBackend):
                         message_data={"type": "chunk", "content": chunk, "session_id": session_id},
                     )
 
-                import logging
-
-                logging.getLogger(__name__).debug("Chunk event")
+                logger.debug("Chunk event")
 
             if "trace" in event:
                 # Store the trace event for potential use
@@ -311,9 +306,7 @@ class BedrockBackend(InlineAgentsBackend):
                         preview=preview,
                     )
 
-                import logging
-
-                logging.getLogger(__name__).debug("Stream event")
+                logger.debug("Stream event")
 
         # Saving traces on s3
         self._event_manager_notify(
