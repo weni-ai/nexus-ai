@@ -61,16 +61,7 @@ class EventManager:
             # String-based registration (lazy loading)
             self.registry.register(event, observer, lazy=True, isolate_errors=isolate_errors, factory=factory)
         else:
-            # Direct instance registration (backwards compatible)
-            if event not in self.observers:
-                self.observers[event] = []
-
-            if isinstance(observer, list):
-                self.observers[event].extend(observer)
-            else:
-                self.observers[event].append(observer)
-
-            # Also register in registry for consistency
+            # Direct instance registration
             self.registry.register(event, observer, lazy=False, isolate_errors=isolate_errors, factory=factory)
 
     def add_validator(self, event: str, validator_chain: ValidatorChain) -> None:
@@ -106,9 +97,8 @@ class EventManager:
                 logger.error(f"Event '{event}' validation failed: {e}", extra={"event": event, "kwargs": kwargs})
                 raise
 
-        # Get observers from both sources
-        observers = self.observers.get(event, []).copy()
-        observers.extend(self.registry.get_observers(event))
+        # Get observers from registry only (subscribe() registers all observers there)
+        observers = self.registry.get_observers(event)
 
         for observer in observers:
             # Check if this observer should have isolated errors
@@ -209,16 +199,7 @@ class AsyncEventManager:
             # String-based registration (lazy loading)
             self.registry.register(event, observer, lazy=True, isolate_errors=isolate_errors, factory=factory)
         else:
-            # Direct instance registration (backwards compatible)
-            if event not in self.observers:
-                self.observers[event] = []
-
-            if isinstance(observer, list):
-                self.observers[event].extend(observer)
-            else:
-                self.observers[event].append(observer)
-
-            # Also register in registry for consistency
+            # Direct instance registration
             self.registry.register(event, observer, lazy=False, isolate_errors=isolate_errors, factory=factory)
 
     def add_validator(self, event: str, validator_chain: ValidatorChain) -> None:
@@ -254,9 +235,8 @@ class AsyncEventManager:
                 logger.error(f"Event '{event}' validation failed: {e}", extra={"event": event, "kwargs": kwargs})
                 raise
 
-        # Get observers from both sources
-        observers = self.observers.get(event, []).copy()
-        observers.extend(self.registry.get_observers(event))
+        # Get observers from registry only (subscribe() registers all observers there)
+        observers = self.registry.get_observers(event)
 
         for observer in observers:
             # Check if this observer should have isolated errors

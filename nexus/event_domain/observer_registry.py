@@ -60,8 +60,10 @@ class ObserverRegistry:
             factory: Optional factory function to create observer instance. Overrides default factory.
             isolate_errors: If True, errors in this observer won't stop other observers. Default False (fail fast).
         """
+        # Initialize storage for this event if needed
         if event not in self._observer_paths:
             self._observer_paths[event] = []
+        if event not in self._observer_instances:
             self._observer_instances[event] = []
 
         if not lazy:
@@ -146,9 +148,6 @@ class ObserverRegistry:
                     self._loaded_paths[event].add(observer_path)
                 except ImportError as e:
                     # Log error but don't fail completely
-                    import logging
-
-                    logger = logging.getLogger(__name__)
                     logger.error(f"Failed to load observer for event '{event}': {e}")
 
         return observers
