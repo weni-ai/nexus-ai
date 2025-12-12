@@ -1,5 +1,3 @@
-import json
-
 from django.conf import settings
 from django.db.models import Q
 from rest_framework.permissions import BasePermission, IsAuthenticated
@@ -45,8 +43,10 @@ class PushAgents(APIView):
         validate_file_size(files)
 
         import json
+        import logging
 
-        print(json.dumps(request.data, indent=4, default=str))
+        logger = logging.getLogger(__name__)
+        logger.debug("InlineAgentsView payload", extra={"keys": list(request.data.keys())})
 
         agents = json.loads(request.data.get("agents"))
         project_uuid = request.data.get("project_uuid")
@@ -74,8 +74,8 @@ class PushAgents(APIView):
 
         agents = agents["agents"]
 
-        print(json.dumps(agents, indent=4, default=str))
-        print(files)
+        logger.debug("Agents payload", extra={"agent_keys": list(agents.keys()) if isinstance(agents, dict) else None})
+        logger.debug("Files payload", extra={"file_count": len(files) if hasattr(files, "__len__") else None})
         official_agent_key = self._check_can_edit_official_agent(agents=agents, user_email=request.user.email)
         if official_agent_key is not None:
             return Response(
@@ -94,10 +94,10 @@ class PushAgents(APIView):
                 agent_qs = Agent.objects.filter(slug=key, project=project)
                 existing_agent = agent_qs.exists()
                 if existing_agent:
-                    print(f"[+ Updating agent {key} +]")
+                    logger.info("Updating agent", extra={"key": key})
                     update_agent_usecase.update_agent(agent_qs.first(), agents[key], project, files)
                 else:
-                    print(f"[+ Creating agent {key} +]")
+                    logger.info("Creating agent", extra={"key": key})
                     agent_usecase.create_agent(key, agents[key], project, files)
 
         except Project.DoesNotExist:
