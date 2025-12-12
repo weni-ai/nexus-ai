@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import TYPE_CHECKING, Any, Dict
 
-from agents import Session
+if TYPE_CHECKING:
+    from agents import Session
 from pydantic import BaseModel, Field
 
 
@@ -82,7 +83,7 @@ class Context:
     contact: dict
     project: dict
     content_base: dict
-    session: Session
+    session: "Session"
     hooks_state: HooksState
 
 
