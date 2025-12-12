@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 import boto3
@@ -47,5 +48,5 @@ class DeleteStorageFile:
             )
             return response
         except Exception as e:
-            print(f"Error deleting file {file_name}: {e}")
+            logging.getLogger(__name__).error("Error deleting file", extra={"file_name": file_name, "error": str(e)})
             return None

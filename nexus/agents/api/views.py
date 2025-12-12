@@ -54,7 +54,9 @@ class PushAgents(APIView):
             return []
 
         warnings = []
-        print("-----------------Agent Credentials------------------")
+        import logging
+
+        logging.getLogger(__name__).info("Agent Credentials start")
         for credential_dict in agent_dto.credentials:
             for key, properties in credential_dict.items():
                 props = {}
@@ -96,15 +98,17 @@ class PushAgents(APIView):
 
                     credential.agents.add(agent)
 
-                    print(key)
+                    logging.getLogger(__name__).debug("Credential key", extra={"key": key})
 
                 except Exception as e:
                     error_message = str(e)
                     warnings.append(f"Error processing credential '{key}': {error_message}")
-                    print(f"Error processing credential '{key}': {error_message}")
+                    logging.getLogger(__name__).error(
+                        "Error processing credential", extra={"key": key, "error": error_message}
+                    )
                     continue
 
-        print("----------------------------------------------------")
+        logging.getLogger(__name__).info("Agent Credentials end")
         return warnings
 
     def _validate_request(self, request):
@@ -449,7 +453,7 @@ class ActiveAgentsViewSet(APIView):
         usecase = AgentUsecase()
 
         if assign:
-            print("------------------------ UPDATING AGENT ---------------------")
+            logging.getLogger(__name__).info("Updating agent")
             usecase.assign_agent(agent_uuid=agent_uuid, project_uuid=project_uuid, created_by=user)
             usecase.create_supervisor_version(project_uuid, user)
             return Response({"assigned": True})
@@ -632,7 +636,7 @@ class AgentTracesView(APIView):
         project_uuid = request.query_params.get("project_uuid")
         log_id = request.query_params.get("log_id")
 
-        print(project_uuid, log_id)
+        logging.getLogger(__name__).debug("Log retrieve", extra={"project_uuid": project_uuid, "log_id": log_id})
 
         if not log_id:
             return Response({"error": "log_id is required"}, status=400)
