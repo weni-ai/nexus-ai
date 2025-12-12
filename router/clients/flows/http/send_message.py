@@ -1,5 +1,6 @@
 import ast
 import json
+import logging
 import re
 from typing import Dict, List
 
@@ -8,6 +9,8 @@ import sentry_sdk
 
 from nexus.internals.flows import FlowsRESTClient
 from router.direct_message import DirectMessage, exceptions
+
+logger = logging.getLogger(__name__)
 
 
 class SendMessageHTTPClient(DirectMessage):
@@ -26,7 +29,7 @@ class SendMessageHTTPClient(DirectMessage):
         payload = json.dumps(payload).encode("utf-8")
 
         response = requests.post(url, data=payload, headers=headers)
-        print("Resposta: ", response.text)
+        logger.debug("SendMessage response", extra={"text_len": len(response.text or "")})
         try:
             response.raise_for_status()
         except Exception as error:
@@ -72,7 +75,6 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
                 return obj
             except json.JSONDecodeError:
                 try:
-                    # print(f"Error parsing JSON: {json_str}")
                     obj = ast.literal_eval(json_str)
                     return obj
                 except Exception:
