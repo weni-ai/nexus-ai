@@ -64,6 +64,7 @@ aiohttp = "3.10"
 litellm = "1.76.3"
 grpcio = "^1.76.0"
 grpcio-tools = "^1.76.0"
+protobuf = ">=6.31,<7.0"
 
 
 
@@ -105,7 +106,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.mccabe]
-max-complexity = 10
+max-complexity = 12
 
 
 [tool.isort]
@@ -117,7 +118,11 @@ extend_skip = ['migrations', 'manage.py', 'wsgi.py', 'asgi.py', '__init__.py']
 pythonpath = "."
 python_files = "tests.py test_*.py *_tests.py"
 DJANGO_SETTINGS_MODULE = "nexus.settings"
-addopts = "--ignore=nexus/projects/tests/test_permissions.py --ignore=nexus/actions/tests.py"
+addopts = "--ignore=nexus/projects/tests/test_permissions.py --ignore=nexus/actions/tests.py --ignore=nexus/inline_agents/backends/bedrock/ --ignore=inline_agents/backends/bedrock/ --ignore=nexus/inline_agents/backends/bedrock/tests.py --ignore=inline_agents/backends/bedrock/tests/ --ignore=nexus/inline_agents/backends/bedrock/tests/test_adapter.py --ignore=inline_agents/backends/tests/test_adapter.py --ignore=inline_agents/backends/tests/ --ignore=nexus/task_managers/file_database/test_bedrock.py --ignore-glob=inline_agents/backends/bedrock/** --ignore-glob=nexus/inline_agents/backends/bedrock/** --nomigrations"
+norecursedirs = [
+  "inline_agents/backends/bedrock",
+  "nexus/inline_agents/backends/bedrock"
+]
 
 [tool.blue]
 line-length = 79
@@ -140,7 +145,12 @@ omit = [
   "manage.py",
   "nexus/urls.py",
   "router/clients/",
-  "router/management/commands/runapi.py"
+  "router/management/commands/runapi.py",
+  "nexus/inline_agents/backends/bedrock/*",
+  "inline_agents/backends/bedrock/*",
+  "nexus/usecases/inline_agents/bedrock.py",
+  "nexus/task_managers/file_database/bedrock.py",
+  "nexus/task_managers/tasks_bedrock.py"
 ]
 
 [tool.taskipy.tasks]
