@@ -1,8 +1,11 @@
+import logging
 from dataclasses import dataclass
 
 from nexus.actions.models import TemplateAction
 from nexus.events import event_manager
 from nexus.usecases.actions.retrieve import RetrieveFlowsUseCase
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -44,5 +47,5 @@ def delete_template_action(template_action_uuid: str) -> bool:
     except TemplateAction.DoesNotExist as e:
         raise ValueError("Template action not found") from e
     except Exception as e:
-        print("Error deleting template action: ", e)
+        logger.error("Error deleting template action: %s", e, exc_info=True)
         raise Exception("Error deleting template action") from e
