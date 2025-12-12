@@ -1,3 +1,4 @@
+import logging
 import os
 
 from fastapi import FastAPI, HTTPException, Request
@@ -9,6 +10,8 @@ from router.tasks import start_route
 from router.tasks.invoke import start_inline_agents
 
 from .http_bodies import MessageHTTPBody
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -36,12 +39,10 @@ def messages(request: Request, message: MessageHTTPBody):
 
     try:
         project = Project.objects.get(uuid=message.project_uuid)
-        print("[+ Message received +]")
-        print(message)
-        print("[+ ----------------- +]")
+        logger.info("Message received", extra={"project_uuid": message.project_uuid})
 
         if project.inline_agent_switch:
-            print("[+ Starting Inline Agent +]")
+            logger.info("Starting Inline Agent")
             start_inline_agents.delay(message.dict())
         else:
             start_route.delay(message.dict())
