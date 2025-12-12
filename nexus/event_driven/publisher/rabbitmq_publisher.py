@@ -1,4 +1,5 @@
 import json
+import logging
 from time import sleep
 from typing import Dict
 
@@ -6,6 +7,8 @@ import amqp
 from django.conf import settings
 
 from nexus.event_driven.connection.rabbitmq_connection import RabbitMQConnection
+
+logger = logging.getLogger(__name__)
 
 
 class RabbitMQPublisher:
@@ -27,6 +30,6 @@ class RabbitMQPublisher:
                 )
                 sended = True
             except Exception as err:
-                print(f"error: {err}")
+                logger.error("RabbitMQ publish error: %s", err, exc_info=True)
                 self.rabbitmq_connection._establish_connection()
                 sleep(settings.EDA_WAIT_TIME_RETRY)

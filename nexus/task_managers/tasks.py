@@ -43,7 +43,7 @@ def add_file(task_manager_uuid: str, file_type: str, load_type: str = None) -> b
         )
         task_manager.update_status(ContentBaseFileTaskManager.STATUS_LOADING)
     except Exception as err:
-        print(err)
+        logger.error("Error updating task manager status: %s", err, exc_info=True)
         return False
 
     file_database = s3FileDatabase()
@@ -206,10 +206,10 @@ def create_wenigpt_logs(log: Dict):
             wenigpt_version=settings.WENIGPT_VERSION,
         )
         UserQuestion.objects.create(text=log.question, content_base_log=log)
-        print("[Creating Log]")
+        logger.info("Creating log")
         return log
     except Exception as e:
-        print(e)
+        logger.error("Error creating log: %s", e, exc_info=True)
         return False
 
 

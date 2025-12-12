@@ -24,9 +24,9 @@ from nexus.agents.models import Agent, Credential, Team
 from nexus.task_managers.file_database.file_database import FileDataBase, FileResponseDTO
 from nexus.utils import get_datasource_id
 
-if TYPE_CHECKING:
-    from nexus.intelligences.models import ContentBase
-    from router.entities import Message
+if TYPE_CHECKING:  # noqa: E402
+    from nexus.intelligences.models import ContentBase  # noqa: E402
+    from router.entities import Message  # noqa: E402
 
 
 @dataclass
@@ -142,8 +142,6 @@ class BedrockFileDatabase(FileDataBase):
         return _update_agent_response
 
     def add_metadata_json_file(self, filename: str, content_base_uuid: str, file_uuid: str):
-        from io import BytesIO
-
         print("[+ BEDROCK: Adding metadata.json file +]")
 
         data = {
