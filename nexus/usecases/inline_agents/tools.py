@@ -9,6 +9,8 @@ from nexus.internals.flows import FlowsRESTClient
 from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 
+logger = logging.getLogger(__name__)
+
 
 class ToolsUseCase:
     # skills will be renamed to tools
@@ -19,7 +21,7 @@ class ToolsUseCase:
         self.agent_backend_client = agent_backend_client()
 
     def create_lambda_function(self, tool: Dict, tool_file, project_uuid: str, tool_name: str) -> Dict[str, str]:
-        logging.getLogger(__name__).info("Creating lambda function", extra={"tool_name": tool_name})
+        logger.info("Creating lambda function", extra={"tool_name": tool_name})
         zip_buffer = BytesIO(tool_file.read())
         lambda_role = settings.AGENT_RESOURCE_ROLE_ARN
         skill_handler = tool.get("source").get("entrypoint")
@@ -112,8 +114,8 @@ class ToolsUseCase:
         action_group_executor: Dict[str, str],
         agent_uuid: str,
     ) -> Tuple[Dict, Dict]:
-        logging.getLogger(__name__).debug("Formatting tool response", extra={"tool_name": tool_name})
-        logging.getLogger(__name__).debug("Tool parameters", extra={"params_keys": list(agent_tool.keys())})
+        logger.debug("Formatting tool response", extra={"tool_name": tool_name})
+        logger.debug("Tool parameters", extra={"params_keys": list(agent_tool.keys())})
         function = {"name": tool_name, "parameters": parameters, "requireConfirmation": "DISABLED"}
         skill = {
             "actionGroupExecutor": action_group_executor,
@@ -143,10 +145,10 @@ class ToolsUseCase:
                 if contact_field:
                     fields_to_keep.append(field_name)
                     if field_name not in existing_field_keys and field_name not in db_existing_fields:
-                        logging.getLogger(__name__).info("Creating contact field", extra={"field_name": field_name})
+                        logger.info("Creating contact field", extra={"field_name": field_name})
                         self.create_contact_field(agent_obj, project, field_name, parameter, external_create=True)
                     elif field_name in existing_field_keys and field_name not in db_existing_fields:
-                        logging.getLogger(__name__).info("Creating contact field", extra={"field_name": field_name})
+                        logger.info("Creating contact field", extra={"field_name": field_name})
                         self.create_contact_field(agent_obj, project, field_name, parameter, external_create=False)
 
                 field_data.pop("contact_field", None)
@@ -159,12 +161,12 @@ class ToolsUseCase:
         existing_contact_fields = ContactField.objects.filter(agent=agent, project=project)
         for field in existing_contact_fields:
             if field.key not in fields_to_keep:
-                logging.getLogger(__name__).info("Deleting contact field", extra={"field_name": field.key})
+                logger.info("Deleting contact field", extra={"field_name": field.key})
                 field.delete()
                 # flows_client.delete_project_contact_field(project_uuid, field.key)
 
     def handle_tools(self, agent: Agent, project: Project, agent_tools: List[Dict], files: dict, project_uuid: str):
-        logging.getLogger(__name__).info("Handling tools for agent", extra={"agent_slug": agent.slug})
+        logger.info("Handling tools for agent", extra={"agent_slug": agent.slug})
         display_skills = []
         existing_skills = []
 
@@ -199,7 +201,7 @@ class ToolsUseCase:
             skill_file = files[f"{agent.slug}:{agent_skill['key']}"]
 
             if skill_name in skills_to_create:
-                logging.getLogger(__name__).info("Creating tool", extra={"skill_name": skill_name})
+                logger.info("Creating tool", extra={"skill_name": skill_name})
                 skill_file = files[f"{agent.slug}:{agent_skill['key']}"]
                 tool, display_tool = self.create_tool(agent, project, agent_skill, skill_file, skill_name)
 
@@ -207,13 +209,13 @@ class ToolsUseCase:
                 new_agent_display_tools.append(display_tool)
 
             elif skill_name in skills_to_update:
-                logging.getLogger(__name__).info("Updating tool", extra={"skill_name": skill_name})
+                logger.info("Updating tool", extra={"skill_name": skill_name})
                 tool, display_tool = self.update_tool(agent, project, agent_skill, skill_file, skill_name)
                 new_agent_tools.append(tool)
                 new_agent_display_tools.append(display_tool)
 
         for skill_name in skills_to_delete:
-            logging.getLogger(__name__).info("Deleting tool", extra={"skill_name": skill_name})
+            logger.info("Deleting tool", extra={"skill_name": skill_name})
             self.delete_tool(agent, project, agent_skill, skill_file, skill_name)
 
         agent.versions.create(

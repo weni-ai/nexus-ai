@@ -9,6 +9,8 @@ from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 from nexus.usecases.inline_agents.tools import ToolsUseCase
 
+logger = logging.getLogger(__name__)
+
 
 class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
     def __init__(self, agent_backend_client=BedrockClient):
@@ -41,7 +43,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             is_confidential = credential.get("is_confidential", True)
 
             if key in existing_credentials:
-                logging.getLogger(__name__).info("Updating credential", extra={"key": key})
+                logger.info("Updating credential", extra={"key": key})
                 cred = existing_credentials[key]
                 cred.label = credential.get("label", key)
                 cred.placeholder = credential.get("placeholder", "")
@@ -51,7 +53,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                     cred.agents.add(agent)
                 del existing_credentials[key]
             else:
-                logging.getLogger(__name__).info("Creating credential", extra={"key": key})
+                logger.info("Creating credential", extra={"key": key})
                 cred = AgentCredential.objects.create(
                     project=project,
                     key=key,
@@ -65,14 +67,10 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             agents = list(cred.agents.all())
 
             if len(agents) <= 0:
-                logging.getLogger(__name__).info(
-                    "Deleting empty credential", extra={"key": cred.key, "project_uuid": str(project.uuid)}
-                )
+                logger.info("Deleting empty credential", extra={"key": cred.key, "project_uuid": str(project.uuid)})
                 cred.delete()
             elif len(agents) == 1 and agent in agents:
-                logging.getLogger(__name__).info(
-                    "Deleting credential", extra={"key": cred.key, "project_uuid": str(project.uuid)}
-                )
+                logger.info("Deleting credential", extra={"key": cred.key, "project_uuid": str(project.uuid)})
                 cred.delete()
             elif agent in agents:
                 cred.agents.remove(agent)

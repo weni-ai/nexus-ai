@@ -12,13 +12,14 @@ from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 from nexus.usecases.inline_agents.tools import ToolsUseCase
 
+logger = logging.getLogger(__name__)
+
 
 class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
     def __init__(self, agent_backend_client=BedrockClient):
         self.agent_backend_client = agent_backend_client()
 
     def create_agent(self, agent_key: str, agent: dict, project: Project, files: dict):
-        logger = logging.getLogger(__name__)
         logger.info("Creating agent", extra={"agent_key": agent_key})
         instructions: str = self.handle_instructions(
             agent.get("instructions", []), agent.get("guardrails", []), agent.get("components", [])
@@ -43,7 +44,6 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             return
 
         for key, credential in credentials.items():
-            logger = logging.getLogger(__name__)
             logger.info("Creating credential", extra={"key": key})
             is_confidential = credential.get("is_confidential", True)
 
