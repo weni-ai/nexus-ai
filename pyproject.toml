@@ -150,7 +150,10 @@ omit = [
   "inline_agents/backends/bedrock/*",
   "nexus/usecases/inline_agents/bedrock.py",
   "nexus/task_managers/file_database/bedrock.py",
-  "nexus/task_managers/tasks_bedrock.py"
+  "nexus/task_managers/tasks_bedrock.py",
+  "**/test_*.py",
+  "**/*_tests.py",
+  "**/tests.py"
 ]
 
 [tool.taskipy.tasks]
