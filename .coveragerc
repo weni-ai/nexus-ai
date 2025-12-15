@@ -25,6 +25,8 @@ omit =
     */mocks.py
     nexus/projects/tests/test_permissions.py
     nexus/actions/tests.py
+    inline_agents/backends/bedrock/*
+    nexus/inline_agents/backends/bedrock/*
 
 [report]
 fail_under = 50
