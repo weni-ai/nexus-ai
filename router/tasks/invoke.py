@@ -5,6 +5,7 @@ from typing import Dict, Optional, Tuple
 
 import boto3
 import botocore
+import elasticapm
 import openai
 import sentry_sdk
 from django.conf import settings
@@ -23,6 +24,13 @@ from router.tasks.redis_task_manager import RedisTaskManager
 from .actions_client import get_action_clients
 
 logger = logging.getLogger(__name__)
+
+
+def _apm_set_context(**kwargs):
+    try:
+        elasticapm.set_custom_context(kwargs)
+    except:
+        pass
 
 
 def get_task_manager() -> RedisTaskManager:
@@ -293,6 +301,8 @@ def start_inline_agents(
     user_email: str = "",
     task_manager: Optional[RedisTaskManager] = None,
 ) -> bool:  # pragma: no cover
+    _apm_set_context(message=message, preview=preview)
+
     task_manager = task_manager or get_task_manager()
 
     try:
