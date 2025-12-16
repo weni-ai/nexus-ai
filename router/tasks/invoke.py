@@ -260,7 +260,6 @@ def _handle_task_error(
     if task_manager:
         task_manager.clear_pending_tasks(project_uuid, contact_urn)
 
-    logger = logger
     logger.error("Error in start_inline_agents: %s", str(exc), exc_info=True)
 
     if isinstance(exc, botocore.exceptions.EventStreamError) and "throttlingException" in str(exc):
