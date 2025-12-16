@@ -16,6 +16,20 @@ from inline_agents.backends.openai.grpc.generated import (
 
 logger = logging.getLogger(__name__)
 
+# ANSI color codes for gRPC logs - makes them easy to spot in terminal
+CYAN = "\033[96m"
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
+
+# Colored prefixes for easy identification
+GRPC_PREFIX = f"{BOLD}{CYAN}[gRPC]{RESET}"
+GRPC_OK = f"{GREEN}✓{RESET}"
+GRPC_FAIL = f"{RED}✗{RESET}"
+GRPC_HINT = f"{YELLOW}💡{RESET}"
+
 
 def is_grpc_enabled() -> bool:
     return bool(settings.GRPC_ENABLED)
@@ -52,6 +66,7 @@ class MessageStreamingClient:
         self.host = host
         self.port = port
         self.target = f"{host}:{port}"
+        self.use_secure_channel = use_secure_channel
 
         options = [
             ("grpc.max_send_message_length", max_message_length),
@@ -69,16 +84,67 @@ class MessageStreamingClient:
             self.channel = grpc.insecure_channel(self.target, options=options)
 
         self.stub = message_stream_service_pb2_grpc.MessageStreamServiceStub(self.channel)
-        logger.info(f"Client initialized for {self.target}")
+        logger.info(
+            f"{GRPC_PREFIX} {GRPC_OK} Client initialized | {CYAN}target={self.target}{RESET} | "
+            f"secure={use_secure_channel} | max_msg_size={max_message_length}"
+        )
 
     def check_connection(self, timeout: int = 5) -> bool:
         """Test if server is reachable."""
         try:
             grpc.channel_ready_future(self.channel).result(timeout=timeout)
+            logger.info(f"{GRPC_PREFIX} {GRPC_OK} Connection OK | {CYAN}target={self.target}{RESET}")
             return True
-        except Exception as e:
-            logger.error(f"Connection failed: {e}")
+        except grpc.FutureTimeoutError:
+            logger.error(
+                f"{GRPC_PREFIX} {GRPC_FAIL} {RED}Connection timeout{RESET} | "
+                f"{CYAN}target={self.target}{RESET} | timeout={timeout}s | secure={self.use_secure_channel}"
+            )
             return False
+        except Exception as e:
+            logger.error(
+                f"{GRPC_PREFIX} {GRPC_FAIL} {RED}Connection failed{RESET} | "
+                f"{CYAN}target={self.target}{RESET} | secure={self.use_secure_channel} | "
+                f"error={type(e).__name__}: {e}"
+            )
+            return False
+
+    def _log_grpc_error(self, operation: str, e: grpc.RpcError) -> None:
+        """Log detailed gRPC error information for debugging."""
+        error_code = e.code()
+        error_details = e.details() or "No details"
+
+        # Extract additional debug info if available
+        debug_info = ""
+        try:
+            trailing_metadata = e.trailing_metadata()
+            if trailing_metadata:
+                debug_info = f" | trailing_metadata={dict(trailing_metadata)}"
+        except Exception:
+            pass
+
+        # Common error explanations to help server owners debug
+        error_hints = {
+            grpc.StatusCode.UNAVAILABLE: (
+                "Server unreachable. Check: 1) Server is running, 2) Host/port correct, "
+                "3) Firewall/network allows connection, 4) TLS settings match"
+            ),
+            grpc.StatusCode.DEADLINE_EXCEEDED: "Request timed out. Server may be overloaded or slow.",
+            grpc.StatusCode.UNAUTHENTICATED: "Authentication failed. Check credentials/tokens.",
+            grpc.StatusCode.PERMISSION_DENIED: "Not authorized. Check permissions on server.",
+            grpc.StatusCode.UNIMPLEMENTED: "Method not implemented on server. Check proto compatibility.",
+            grpc.StatusCode.INTERNAL: "Server internal error. Check server logs.",
+            grpc.StatusCode.RESOURCE_EXHAUSTED: "Server resources exhausted (rate limit, memory, etc).",
+        }
+        hint = error_hints.get(error_code, "")
+
+        logger.error(
+            f"{GRPC_PREFIX} {GRPC_FAIL} {RED}{operation} FAILED{RESET} | "
+            f"{CYAN}target={self.target}{RESET} | secure={self.use_secure_channel} | "
+            f"code={RED}{error_code.name}{RESET} ({error_code.value[0]}) | details={error_details}{debug_info}"
+        )
+        if hint:
+            logger.error(f"{GRPC_PREFIX} {GRPC_HINT} {YELLOW}{hint}{RESET}")
 
     def send_setup_message(
         self,
@@ -93,7 +159,7 @@ class MessageStreamingClient:
 
         Returns dict with: success, session_id, message, error_message
         """
-        logger.info(f"Sending setup for {contact_urn}")
+        logger.info(f"{GRPC_PREFIX} Sending setup | {CYAN}target={self.target}{RESET} | contact_urn={contact_urn}")
 
         request = message_stream_service_pb2.SetupRequest(
             msg_id=msg_id,
@@ -105,6 +171,10 @@ class MessageStreamingClient:
 
         try:
             response = self.stub.Setup(request, timeout=30)
+            logger.info(
+                f"{GRPC_PREFIX} {GRPC_OK} Setup response | {GREEN}success={response.success}{RESET} | "
+                f"session_id={response.session_id}"
+            )
             return {
                 "success": response.success,
                 "session_id": response.session_id,
@@ -112,7 +182,7 @@ class MessageStreamingClient:
                 "error_message": response.error_message if not response.success else None,
             }
         except grpc.RpcError as e:
-            logger.error(f"Setup error: {e.code()} - {e.details()}")
+            self._log_grpc_error("Setup", e)
             return {
                 "success": False,
                 "session_id": None,
@@ -159,7 +229,11 @@ class MessageStreamingClient:
                 )
                 print(f"Delta {i} status: {response['status']}")
         """
-        logger.info(f"Sending delta message: {msg_id}")
+        content_len = len(content) if content else 0
+        logger.info(
+            f"{GRPC_PREFIX} Sending delta | {CYAN}target={self.target}{RESET} | "
+            f"msg_id={msg_id} | content_len={content_len}"
+        )
 
         message = message_stream_service_pb2.StreamMessage(
             type="delta",
@@ -174,6 +248,9 @@ class MessageStreamingClient:
 
         try:
             response = self.stub.SendMessage(message, timeout=timeout)
+            logger.info(
+                f"{GRPC_PREFIX} {GRPC_OK} Delta sent | msg_id={msg_id} | {GREEN}status={response.status}{RESET}"
+            )
             return {
                 "status": response.status,
                 "msg_id": response.msg_id,
@@ -183,7 +260,7 @@ class MessageStreamingClient:
                 "data": dict(response.data) if response.data else {},
             }
         except grpc.RpcError as e:
-            logger.error(f"Delta message error: {e.code()} - {e.details()}")
+            self._log_grpc_error("Delta message", e)
             return {
                 "status": "error",
                 "msg_id": msg_id,
@@ -237,7 +314,11 @@ class MessageStreamingClient:
             )
             print(f"Completed: {response['status']}")
         """
-        logger.info(f"Sending completed message: {msg_id}")
+        content_len = len(content) if content else 0
+        logger.info(
+            f"{GRPC_PREFIX} Sending completed | {CYAN}target={self.target}{RESET} | "
+            f"msg_id={msg_id} | content_len={content_len}"
+        )
 
         message = message_stream_service_pb2.StreamMessage(
             type="completed",
@@ -252,6 +333,9 @@ class MessageStreamingClient:
 
         try:
             response = self.stub.SendMessage(message, timeout=timeout)
+            logger.info(
+                f"{GRPC_PREFIX} {GRPC_OK} Completed sent | msg_id={msg_id} | {GREEN}status={response.status}{RESET}"
+            )
             return {
                 "status": response.status,
                 "msg_id": response.msg_id,
@@ -261,7 +345,7 @@ class MessageStreamingClient:
                 "data": dict(response.data) if response.data else {},
             }
         except grpc.RpcError as e:
-            logger.error(f"Completed message error: {e.code()} - {e.details()}")
+            self._log_grpc_error("Completed message", e)
             return {
                 "status": "error",
                 "msg_id": msg_id,
@@ -306,7 +390,10 @@ class MessageStreamingClient:
                 if response['is_final']:
                     break
         """
-        logger.info(f"Starting stream for {contact_urn}")
+        logger.info(
+            f"{GRPC_PREFIX} Starting stream | {CYAN}target={self.target}{RESET} | "
+            f"contact_urn={contact_urn} | msg_id={msg_id}"
+        )
 
         def message_generator():
             """Generate messages to stream."""
@@ -358,7 +445,7 @@ class MessageStreamingClient:
                     break
 
         except grpc.RpcError as e:
-            logger.error(f"Streaming error: {e.code()} - {e.details()}")
+            self._log_grpc_error("Streaming", e)
             yield {
                 "status": "error",
                 "msg_id": msg_id,
@@ -381,7 +468,7 @@ class MessageStreamingClient:
         metadata: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Send a single message (unary RPC)."""
-        logger.info(f"Sending single message: {msg_id}")
+        logger.info(f"{GRPC_PREFIX} Sending single message | {CYAN}target={self.target}{RESET} | msg_id={msg_id}")
 
         message = message_stream_service_pb2.StreamMessage(
             type=message_type,
@@ -396,6 +483,9 @@ class MessageStreamingClient:
 
         try:
             response = self.stub.SendMessage(message, timeout=30)
+            logger.info(
+                f"{GRPC_PREFIX} {GRPC_OK} Single message sent | msg_id={msg_id} | {GREEN}status={response.status}{RESET}"
+            )
             return {
                 "status": response.status,
                 "msg_id": response.msg_id,
@@ -405,7 +495,7 @@ class MessageStreamingClient:
                 "data": dict(response.data) if response.data else {},
             }
         except grpc.RpcError as e:
-            logger.error(f"Error: {e.code()} - {e.details()}")
+            self._log_grpc_error("Single message", e)
             return {
                 "status": "error",
                 "msg_id": msg_id,
@@ -417,7 +507,7 @@ class MessageStreamingClient:
     def close(self):
         """Close the gRPC channel."""
         if self.channel:
-            logger.info(f"Closing channel to {self.target}")
+            logger.info(f"{GRPC_PREFIX} Closing channel | {CYAN}target={self.target}{RESET}")
             self.channel.close()
 
     def __enter__(self):
