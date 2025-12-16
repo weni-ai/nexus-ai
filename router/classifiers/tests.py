@@ -163,6 +163,50 @@ class TestClassification(TestCase):
         res = cls.non_custom_actions(source="route")
         assert isinstance(res, bool)
 
+    def test_custom_actions_returns_other_when_no_flows(self):
+        class EmptyRepo:
+            def project_flows(self, action_type: str, fallback: bool):
+                return []
+
+        repo = EmptyRepo()
+        msg = Message(project_uuid="p", text="t", contact_urn="u")
+        cls = Classification(
+            flows_repository=repo, message=msg, msg_event={}, flow_start=StubFlowStart(), user_email="user"
+        )
+
+        class DummyClassifier:
+            def predict(self, message, flows, language="por"):
+                return "x"
+
+        out = cls.custom_actions(classifier=DummyClassifier(), language="en")
+        assert out == "other"
+
+    def test_custom_actions_calls_classify_when_flows_exist(self):
+        repo = StubFlowsRepo()
+        msg = Message(project_uuid="p", text="t", contact_urn="u")
+        cls = Classification(
+            flows_repository=repo, message=msg, msg_event={}, flow_start=StubFlowStart(), user_email="user"
+        )
+        called = {"c": False}
+
+        def fake_classify(classifier, message, flows, language):
+            called["c"] = True
+            return "ok"
+
+        import router.classifiers.classification as classification_module
+
+        original = classification_module.classify
+        classification_module.classify = fake_classify
+
+        class DummyClassifier:
+            def predict(self, message, flows, language="por"):
+                return "x"
+
+        out = cls.custom_actions(classifier=DummyClassifier(), language="en")
+        assert out == "ok"
+        assert called["c"] is True
+        classification_module.classify = original
+
 
 class TestGroundednessClassifier(TestCase):
     def setUp(self) -> None:
