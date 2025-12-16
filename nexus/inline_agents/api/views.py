@@ -234,10 +234,10 @@ class OfficialAgentsV1(APIView):
     def _handle_assignment(self, agent_uuid: str, project_uuid: str, assigned: bool) -> dict:
         usecase = AssignAgentsUsecase()
         if assigned:
-            created, _ = usecase.assign_agent(agent_uuid, project_uuid)
-            return {"assigned": True, "assigned_created": created}
-        deleted, _ = usecase.unassign_agent(agent_uuid, project_uuid)
-        return {"assigned": False, "assigned_deleted": deleted}
+            usecase.assign_agent(agent_uuid, project_uuid)
+            return {"assigned": True}
+        usecase.unassign_agent(agent_uuid, project_uuid)
+        return {"assigned": False}
 
     def _handle_credentials(
         self,

@@ -119,6 +119,9 @@ class OfficialAgentListSerializer(serializers.Serializer):
     policies = serializers.DictField(required=False)
     tooling = serializers.DictField(required=False)
     catalog = serializers.DictField(required=False)
+    slug = serializers.CharField()
+    is_official = serializers.BooleanField()
+    credentials = serializers.ListField(child=serializers.DictField(), required=False)
 
     def to_representation(self, obj):
         project_uuid = self.context.get("project_uuid")
@@ -127,6 +130,20 @@ class OfficialAgentListSerializer(serializers.Serializer):
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
         systems = list(obj.systems.values_list("slug", flat=True)) if hasattr(obj, "systems") else []
         group_name = obj.group.slug if getattr(obj, "group", None) else None
+
+        credentials = []
+        if hasattr(obj, "agentcredential_set"):
+            creds = obj.agentcredential_set.all().distinct("key")
+            credentials = [
+                {
+                    "name": credential.key,
+                    "label": credential.label,
+                    "placeholder": credential.placeholder,
+                    "is_confidential": credential.is_confidential,
+                }
+                for credential in creds
+            ]
+
         payload = {
             "uuid": obj.uuid,
             "name": obj.name,
@@ -136,6 +153,9 @@ class OfficialAgentListSerializer(serializers.Serializer):
             "category": (obj.category.slug if getattr(obj, "category", None) else ""),
             "systems": systems,
             "assigned": assigned,
+            "slug": obj.slug,
+            "is_official": obj.is_official,
+            "credentials": credentials,
         }
 
         # Include operational metadata only when configured on the model
