@@ -25,8 +25,9 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         return obj.agent.collaboration_instructions
 
     def get_skills(self, obj):
-        display_skills = obj.agent.current_version.display_skills
-        return display_skills
+        if obj.agent.current_version:
+            return obj.agent.current_version.display_skills
+        return []
 
     def get_is_official(self, obj):
         return obj.agent.is_official
@@ -102,3 +103,168 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
         if obj.is_confidential:
             return obj.value
         return obj.decrypted_value
+
+
+class OfficialAgentListSerializer(serializers.Serializer):
+    uuid = serializers.UUIDField()
+    name = serializers.CharField()
+    description = serializers.CharField()
+    type = serializers.CharField()
+    group = serializers.CharField(allow_null=True)
+    category = serializers.CharField(allow_blank=True)
+    systems = serializers.ListField(child=serializers.CharField(), allow_empty=True)
+    assigned = serializers.BooleanField()
+    variant = serializers.CharField(required=False, allow_null=True)
+    capabilities = serializers.ListField(child=serializers.CharField(), required=False, allow_empty=True)
+    policies = serializers.DictField(required=False)
+    tooling = serializers.DictField(required=False)
+    catalog = serializers.DictField(required=False)
+    slug = serializers.CharField()
+    is_official = serializers.BooleanField()
+    credentials = serializers.ListField(child=serializers.DictField(), required=False)
+
+    def to_representation(self, obj):
+        project_uuid = self.context.get("project_uuid")
+        assigned = False
+        if project_uuid:
+            assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
+        systems = list(obj.systems.values_list("slug", flat=True)) if hasattr(obj, "systems") else []
+        group_name = obj.group.slug if getattr(obj, "group", None) else None
+
+        credentials = []
+        if hasattr(obj, "agentcredential_set"):
+            creds = obj.agentcredential_set.all().distinct("key")
+            credentials = [
+                {
+                    "name": credential.key,
+                    "label": credential.label,
+                    "placeholder": credential.placeholder,
+                    "is_confidential": credential.is_confidential,
+                }
+                for credential in creds
+            ]
+
+        payload = {
+            "uuid": obj.uuid,
+            "name": obj.name,
+            "description": obj.collaboration_instructions,
+            "type": (obj.agent_type.slug if getattr(obj, "agent_type", None) else ""),
+            "group": group_name,
+            "category": (obj.category.slug if getattr(obj, "category", None) else ""),
+            "systems": systems,
+            "assigned": assigned,
+            "slug": obj.slug,
+            "is_official": obj.is_official,
+            "credentials": credentials,
+        }
+
+        # Include operational metadata only when configured on the model
+        variant = getattr(obj, "variant", None)
+        capabilities = getattr(obj, "capabilities", [])
+        policies = getattr(obj, "policies", {})
+        tooling = getattr(obj, "tooling", {})
+        catalog = getattr(obj, "catalog", {})
+
+        if variant is not None:
+            payload["variant"] = variant
+        if isinstance(capabilities, list) and len(capabilities) > 0:
+            payload["capabilities"] = capabilities
+        if isinstance(policies, dict) and len(policies) > 0:
+            payload["policies"] = policies
+        if isinstance(tooling, dict) and len(tooling) > 0:
+            payload["tooling"] = tooling
+        if isinstance(catalog, dict) and len(catalog) > 0:
+            payload["catalog"] = catalog
+
+        return payload
+
+    def _get_meta(self, agent: Agent) -> dict:
+        mapper = self.context.get("official_mapper", {})
+        return mapper.get(agent.slug, {})
+
+
+class OfficialAgentDetailSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    description = serializers.CharField()
+    type = serializers.CharField()
+    group = serializers.CharField()
+    category = serializers.CharField()
+    system = serializers.CharField()
+    systems = serializers.ListField(child=serializers.CharField(), allow_empty=True)
+    assigned = serializers.BooleanField()
+    MCP = serializers.DictField()
+    credentials = serializers.ListField()
+    variant = serializers.CharField(required=False, allow_null=True)
+    capabilities = serializers.ListField(child=serializers.CharField(), required=False, allow_empty=True)
+    policies = serializers.DictField(required=False)
+    tooling = serializers.DictField(required=False)
+    catalog = serializers.DictField(required=False)
+
+    def to_representation(self, obj):
+        project_uuid = self.context.get("project_uuid")
+        system = self.context.get("system")
+        mcp_mapper = self.context.get("mcp_mapper", {})
+        cred_mapper = self.context.get("credentials_mapper", {})
+        available_systems = list(obj.systems.values_list("slug", flat=True)) if hasattr(obj, "systems") else []
+        selected_system = system or (available_systems[0] if available_systems else "")
+        assigned = False
+        if project_uuid:
+            assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
+        mcp = mcp_mapper.get(obj.slug, {}).get(selected_system, {})
+        creds = cred_mapper.get(obj.slug, {}).get(selected_system, [])
+        group_name = obj.group.slug if getattr(obj, "group", None) else None
+        payload = {
+            "name": obj.name,
+            "description": obj.collaboration_instructions,
+            "type": (obj.agent_type.slug if getattr(obj, "agent_type", None) else ""),
+            "group": group_name,
+            "category": (obj.category.slug if getattr(obj, "category", None) else ""),
+            "system": selected_system,
+            "systems": available_systems,
+            "assigned": assigned,
+            "MCP": mcp,
+            "credentials": creds,
+        }
+
+        # Include operational metadata only when configured on the model
+        variant = getattr(obj, "variant", None)
+        capabilities = getattr(obj, "capabilities", [])
+        policies = getattr(obj, "policies", {})
+        tooling = getattr(obj, "tooling", {})
+        catalog = getattr(obj, "catalog", {})
+
+        if variant is not None:
+            payload["variant"] = variant
+        if isinstance(capabilities, list) and len(capabilities) > 0:
+            payload["capabilities"] = capabilities
+        if isinstance(policies, dict) and len(policies) > 0:
+            payload["policies"] = policies
+        if isinstance(tooling, dict) and len(tooling) > 0:
+            payload["tooling"] = tooling
+        if isinstance(catalog, dict) and len(catalog) > 0:
+            payload["catalog"] = catalog
+
+        return payload
+
+
+class CredentialItemSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    label = serializers.CharField()
+    placeholder = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    is_confidential = serializers.BooleanField()
+    value = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+
+
+class OfficialAgentsAssignRequestSerializer(serializers.Serializer):
+    project_uuid = serializers.UUIDField()
+    agent_uuid = serializers.UUIDField()
+    assigned = serializers.BooleanField(required=False)
+    system = serializers.CharField(required=False)
+    credentials = serializers.ListField(child=CredentialItemSerializer(), required=False)
+
+
+class OfficialAgentsAssignResponseSerializer(serializers.Serializer):
+    assigned = serializers.BooleanField(required=False)
+    assigned_created = serializers.BooleanField(required=False)
+    assigned_deleted = serializers.BooleanField(required=False)
+    created_credentials = serializers.ListField(child=serializers.CharField(), required=False)

@@ -2,14 +2,29 @@ import json
 
 from django.conf import settings
 from django.db.models import Q
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    OpenApiTypes,
+    extend_schema,
+)
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from inline_agents.backends import BackendsRegistry
+try:
+    from inline_agents.backends import BackendsRegistry
+except Exception:
+    BackendsRegistry = None
+from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.inline_agents.api.mappers import CREDENTIALS_MAPPER, MCP_MAPPER
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     IntegratedAgentSerializer,
+    OfficialAgentDetailSerializer,
+    OfficialAgentListSerializer,
+    OfficialAgentsAssignRequestSerializer,
+    OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
 )
 from nexus.inline_agents.models import Agent
@@ -104,6 +119,263 @@ class PushAgents(APIView):
             return Response({"error": "Project not found"}, status=404)
 
         return Response({})
+
+
+class OfficialAgentsV1(APIView):
+    authentication_classes = AUTHENTICATION_CLASSES
+    permission_classes = [CombinedExternalProjectPermission]
+
+    @extend_schema(
+        operation_id="v1_official_agents_list",
+        summary="List official agents",
+        description=(
+            "Returns available official agents. Optional filters: "
+            "`type`, `group`, `category`, `system`. Use `project_uuid` to mark `assigned`."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="project_uuid",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.STR,
+            ),
+            OpenApiParameter(name="name", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="type", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="group", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="category", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="variant", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+        ],
+        responses={
+            200: OpenApiResponse(description="Agents list", response=OfficialAgentListSerializer),
+            401: OpenApiResponse(description="Unauthorized"),
+            403: OpenApiResponse(description="Forbidden"),
+        },
+        tags=["Agents"],
+    )
+    def get(self, request, *args, **kwargs):
+        project_uuid = request.query_params.get("project_uuid")
+        name_filter = request.query_params.get("name")
+        type_filter = request.query_params.get("type")
+        group_filter = request.query_params.get("group")
+        category_filter = request.query_params.get("category")
+        system_filter = request.query_params.get("system")
+        variant_filter = request.query_params.get("variant")
+
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+        if name_filter:
+            agents = agents.filter(name__icontains=name_filter)
+        if type_filter:
+            agents = agents.filter(agent_type__slug__iexact=type_filter)
+        if group_filter:
+            agents = agents.filter(group__slug__iexact=group_filter)
+        if category_filter:
+            if category_filter.lower() == "others":
+                agents = agents.filter(category__isnull=True)
+            else:
+                agents = agents.filter(category__slug__iexact=category_filter)
+        if system_filter:
+            agents = agents.filter(systems__slug__iexact=system_filter).distinct("uuid")
+        if variant_filter:
+            agents = agents.filter(variant__iexact=variant_filter)
+
+        serializer = OfficialAgentListSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        return Response(serializer.data)
+
+    @extend_schema(
+        operation_id="v1_official_agents_assign",
+        summary="Assign official agent to project and/or configure credentials",
+        description=(
+            "Assigns or removes an official agent (`assigned`) and optionally creates credentials. "
+            "When `system` is provided, `credentials` must follow the system template."
+        ),
+        request=OfficialAgentsAssignRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="Operation performed", response=OfficialAgentsAssignResponseSerializer),
+            400: OpenApiResponse(description="Bad request"),
+            404: OpenApiResponse(description="Not found"),
+            422: OpenApiResponse(description="Unprocessable Entity"),
+        },
+        tags=["Agents"],
+    )
+    def post(self, request, *args, **kwargs):
+        project_uuid = request.data.get("project_uuid")
+        agent_uuid = request.data.get("agent_uuid")
+        assigned = request.data.get("assigned")
+        credentials_data = request.data.get("credentials", [])
+        system = request.data.get("system")
+
+        if not project_uuid or not agent_uuid:
+            return Response({"error": "project_uuid and agent_uuid are required"}, status=400)
+
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+            agent = Agent.objects.get(
+                uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM, slug__in=["product_concierge"]
+            )
+        except Project.DoesNotExist:
+            return Response({"error": "Project not found"}, status=404)
+        except Agent.DoesNotExist:
+            return Response({"error": "Agent not found"}, status=404)
+
+        result = {}
+
+        if assigned is not None:
+            result.update(self._handle_assignment(agent_uuid, project_uuid, assigned))
+
+        if credentials_data:
+            creds_result = self._handle_credentials(agent, project, credentials_data, system)
+            if isinstance(creds_result, Response):
+                return creds_result
+            result.update(creds_result)
+
+        return Response(result or {"message": "No changes applied"}, status=200)
+
+    def _handle_assignment(self, agent_uuid: str, project_uuid: str, assigned: bool) -> dict:
+        usecase = AssignAgentsUsecase()
+        if assigned:
+            usecase.assign_agent(agent_uuid, project_uuid)
+            return {"assigned": True}
+        usecase.unassign_agent(agent_uuid, project_uuid)
+        return {"assigned": False}
+
+    def _handle_credentials(
+        self,
+        agent: Agent,
+        project: Project,
+        credentials_data: list,
+        system: str | None,
+    ) -> dict | Response:
+        invalid_system = self._validate_system(agent, system)
+        if invalid_system:
+            return invalid_system
+
+        expected_templates = self._get_expected_templates(agent, system)
+        names_error = self._validate_credentials_names(credentials_data, expected_templates, system)
+        if names_error:
+            return names_error
+
+        fields_error = self._validate_credentials_fields(credentials_data)
+        if fields_error:
+            return fields_error
+
+        payload = self._format_credentials_payload(credentials_data)
+        created = CreateAgentUseCase().create_credentials(agent, project, payload)
+        return {"created_credentials": created}
+
+    def _validate_system(self, agent: Agent, system: str | None) -> Response | None:
+        available = list(agent.systems.values_list("slug", flat=True))
+        if system and system not in available:
+            return Response({"error": "Invalid system"}, status=422)
+        return None
+
+    def _get_expected_templates(self, agent: Agent, system: str | None) -> list:
+        templates = CREDENTIALS_MAPPER.get(agent.slug, {})
+        return templates.get(system, []) if system else []
+
+    def _validate_credentials_names(
+        self, credentials_data: list, expected_templates: list, system: str | None
+    ) -> Response | None:
+        if not system:
+            return None
+        if system and not expected_templates:
+            return Response({"error": "Credentials template not found for system"}, status=422)
+        expected_names = {tpl.get("name") for tpl in expected_templates}
+        provided_names = {item.get("name") for item in credentials_data}
+        missing = sorted(list(expected_names - provided_names))
+        extra = sorted(list(provided_names - expected_names))
+        if missing:
+            return Response({"error": "Missing credentials", "missing": missing}, status=422)
+        if extra:
+            return Response({"error": "Unexpected credentials", "extra": extra}, status=422)
+        return None
+
+    def _validate_credentials_fields(self, credentials_data: list) -> Response | None:
+        for item in credentials_data:
+            name = item.get("name")
+            label = item.get("label")
+            placeholder = item.get("placeholder")
+            is_confidential = item.get("is_confidential", True)
+            value = item.get("value")
+
+            if not isinstance(name, str) or not name:
+                return Response({"error": "Invalid credential name"}, status=422)
+            if not isinstance(label, str) or not label:
+                return Response({"error": f"Invalid label for {name}"}, status=422)
+            if placeholder is not None and not isinstance(placeholder, str):
+                return Response({"error": f"Invalid placeholder for {name}"}, status=422)
+            if not isinstance(is_confidential, bool):
+                return Response({"error": f"Invalid is_confidential for {name}"}, status=422)
+            if value is not None and not isinstance(value, str):
+                return Response({"error": f"Invalid value type for {name}"}, status=422)
+        return None
+
+    def _format_credentials_payload(self, credentials_data: list) -> dict:
+        payload = {}
+        for cred_item in credentials_data:
+            payload.update(
+                {
+                    cred_item.get("name"): {
+                        "label": cred_item.get("label"),
+                        "placeholder": cred_item.get("placeholder"),
+                        "is_confidential": cred_item.get("is_confidential", True),
+                        "value": cred_item.get("value"),
+                    }
+                }
+            )
+        return payload
+
+
+class OfficialAgentDetailV1(APIView):
+    authentication_classes = AUTHENTICATION_CLASSES
+    permission_classes = [CombinedExternalProjectPermission]
+
+    @extend_schema(
+        operation_id="v1_official_agent_detail",
+        summary="Get official agent details",
+        description=(
+            "Returns details of the official agent, MCP and expected credentials for the selected `system`. "
+            "Provide `project_uuid` to check if it is `assigned`."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="project_uuid",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.STR,
+            ),
+            OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="agent_uuid", location=OpenApiParameter.PATH, required=True, type=OpenApiTypes.STR),
+        ],
+        responses={
+            200: OpenApiResponse(description="Agent detail", response=OfficialAgentDetailSerializer),
+            404: OpenApiResponse(description="Agent not found"),
+        },
+        tags=["Agents"],
+    )
+    def get(self, request, *args, **kwargs):
+        agent_uuid = kwargs.get("agent_uuid")
+        project_uuid = request.query_params.get("project_uuid")
+        system = request.query_params.get("system")
+
+        try:
+            agent = Agent.objects.get(uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM)
+        except Agent.DoesNotExist:
+            return Response({"error": "Agent not found"}, status=404)
+
+        mcp_mapper = MCP_MAPPER
+        credentials_mapper = CREDENTIALS_MAPPER
+
+        serializer = OfficialAgentDetailSerializer(
+            agent,
+            context={
+                "project_uuid": project_uuid,
+                "system": system,
+                "mcp_mapper": mcp_mapper,
+                "credentials_mapper": credentials_mapper,
+            },
+        )
+        return Response(serializer.data)
 
 
 class ActiveAgentsView(APIView):
@@ -466,7 +738,7 @@ class AgentEndSessionView(APIView):
 
         projects_use_case = ProjectsUseCase()
         agents_backend = projects_use_case.get_agents_backend_by_project(project_uuid)
-        backend = BackendsRegistry.get_backend(agents_backend)
+        backend = BackendsRegistry.get_backend(agents_backend) if BackendsRegistry else None
         backend.end_session(message_obj.project_uuid, message_obj.sanitized_urn)
         return Response({"message": "Agent session ended successfully"})
 
