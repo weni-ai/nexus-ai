@@ -1,3 +1,5 @@
+import logging
+
 import pendulum
 
 from nexus.intelligences.models import (
@@ -16,6 +18,8 @@ from nexus.usecases.task_managers.exceptions import (
     ContentBaseLinkTaskManagerNotExists,
     ContentBaseTextTaskManagerNotExists,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class CeleryTaskManagerUseCase:
@@ -67,7 +71,7 @@ class CeleryTaskManagerUseCase:
             end_at=pendulum.now(),
             content_base_file=content_base_file,
         )
-        print(f"[ CeleryTaskManagerUseCase ] - creating {content_base_task_manager.uuid}")
+        logger.info("Creating ContentBaseFileTaskManager", extra={"uuid": str(content_base_task_manager.uuid)})
         return content_base_task_manager
 
     def create_celery_text_file_manager(self, content_base_text: ContentBaseText) -> ContentBaseTextTaskManager:
@@ -77,7 +81,7 @@ class CeleryTaskManagerUseCase:
             end_at=pendulum.now(),
             content_base_text=content_base_text,
         )
-        print(f"[ CeleryTaskManagerUseCase ] - creating {content_base_task_manager.uuid}")
+        logger.info("Creating ContentBaseTextTaskManager", extra={"uuid": str(content_base_task_manager.uuid)})
         return content_base_task_manager
 
     def get_task_manager_by_uuid(self, task_uuid, file_type: str) -> TaskManager:
@@ -98,5 +102,5 @@ class CeleryTaskManagerUseCase:
             end_at=pendulum.now(),
             content_base_link=content_base_link,
         )
-        print(f"[ CeleryTaskManagerUseCase ] - creating {content_base_task_manager.uuid}")
+        logger.info("Creating ContentBaseLinkTaskManager", extra={"uuid": str(content_base_task_manager.uuid)})
         return content_base_task_manager
