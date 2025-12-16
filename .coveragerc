@@ -3,6 +3,11 @@ omit =
     ./manage.py
     nexus/*/migrations/*
     */tests/*
+    tests/**
+    **/test_*.py
+    **/*_tests.py
+    **/tests.py
+    **/conftest.py
     */__init__.py
     Dockerfile
     */settings.py
