@@ -118,10 +118,11 @@ extend_skip = ['migrations', 'manage.py', 'wsgi.py', 'asgi.py', '__init__.py']
 pythonpath = "."
 python_files = "tests.py test_*.py *_tests.py"
 DJANGO_SETTINGS_MODULE = "nexus.settings"
-addopts = "--ignore=nexus/projects/tests/test_permissions.py --ignore=nexus/actions/tests.py --ignore=nexus/inline_agents/backends/bedrock/ --ignore=inline_agents/backends/bedrock/ --ignore=nexus/inline_agents/backends/bedrock/tests.py --ignore=inline_agents/backends/bedrock/tests/ --ignore=nexus/inline_agents/backends/bedrock/tests/test_adapter.py --ignore=inline_agents/backends/tests/test_adapter.py --ignore=inline_agents/backends/tests/ --ignore=nexus/task_managers/file_database/test_bedrock.py --ignore-glob=inline_agents/backends/bedrock/** --ignore-glob=nexus/inline_agents/backends/bedrock/** --nomigrations"
+addopts = "--ignore=nexus/projects/tests/test_permissions.py --ignore=nexus/actions/tests.py --ignore=nexus/inline_agents/backends/bedrock/ --ignore=inline_agents/backends/bedrock/ --ignore=nexus/inline_agents/backends/bedrock/tests.py --ignore=inline_agents/backends/bedrock/tests/ --ignore=nexus/inline_agents/backends/bedrock/tests/test_adapter.py --ignore=inline_agents/backends/tests/test_adapter.py --ignore=inline_agents/backends/tests/ --ignore=nexus/task_managers/file_database/test_bedrock.py --ignore-glob=inline_agents/backends/bedrock/** --ignore-glob=nexus/inline_agents/backends/bedrock/** --ignore-glob=nexus/staticfiles/** --nomigrations"
 norecursedirs = [
   "inline_agents/backends/bedrock",
-  "nexus/inline_agents/backends/bedrock"
+  "nexus/inline_agents/backends/bedrock",
+  "nexus/staticfiles"
 ]
 
 [tool.blue]
