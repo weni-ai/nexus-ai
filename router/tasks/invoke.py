@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import Dict, Optional, Tuple
 
@@ -20,6 +21,8 @@ from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextExcept
 from router.tasks.redis_task_manager import RedisTaskManager
 
 from .actions_client import get_action_clients
+
+logger = logging.getLogger(__name__)
 
 
 def get_task_manager() -> RedisTaskManager:
@@ -67,7 +70,10 @@ def complexity_layer(input_text: str) -> str | None:
             if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
                 payload = json.loads(response["Payload"].read().decode("utf-8"))
                 classification = payload.get("body").get("classification")
-                print(f"[DEBUG] Message: {input_text} - Classification: {classification}")
+                logger.debug(
+                    "Message classification",
+                    extra={"text_len": len(input_text or ""), "classification": classification},
+                )
                 return classification
             else:
                 error_msg = (
@@ -116,7 +122,10 @@ def dispatch_preview(
 
 
 def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
-    print(f"[DEBUG] Guardrails complexity layer: {input_text}, {guardrail_id}, {guardrail_version}")
+    logger.debug(
+        "Guardrails complexity layer",
+        extra={"text_len": len(input_text or ""), "guardrail_id": guardrail_id, "guardrail_version": guardrail_version},
+    )
     try:
         payload = {
             "first_input": input_text,
@@ -130,7 +139,8 @@ def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_ve
         )
         if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
             payload = json.loads(response["Payload"].read().decode("utf-8"))
-            print(f"[DEBUG] Guardrails complexity layer response: {payload}")
+
+            logger.debug("Guardrails complexity layer response", extra={"keys": list(payload.keys())})
             response = payload
             status_code = payload.get("statusCode")
             if status_code == 200:
@@ -174,7 +184,9 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
     else:
         pass
         # guardrails: Dict[str, str] = GuardrailsUsecase.get_guardrail_as_dict(message.get("project_uuid"))
-        # guardrails_message = guardrails_complexity_layer(text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion"))
+        # guardrails_message = guardrails_complexity_layer(
+        #     text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion")
+        # )
         # if guardrails_message:
         #     raise UnsafeMessageException(guardrails_message)
 
@@ -248,9 +260,7 @@ def _handle_task_error(
     if task_manager:
         task_manager.clear_pending_tasks(project_uuid, contact_urn)
 
-    print(f"[DEBUG] Error in start_inline_agents: {str(exc)}")
-    print(f"[DEBUG] Error type: {type(exc)}")
-    print(f"[DEBUG] Full exception details: {exc.__dict__}")
+    logger.error("Error in start_inline_agents: %s", str(exc), exc_info=True)
 
     if isinstance(exc, botocore.exceptions.EventStreamError) and "throttlingException" in str(exc):
         raise ThrottlingException(str(exc))
@@ -318,7 +328,8 @@ def start_inline_agents(
             contact_name=processed_message.get("contact_name", ""),
             channel_uuid=processed_message.get("channel_uuid", ""),
         )
-        print(f"[DEBUG] Message: {message_obj}")
+
+        logger.debug("Message object built", extra={"has_text": bool(message_obj.text)})
 
         message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
 
@@ -393,7 +404,13 @@ def start_inline_agents(
     except (openai.APIError, EmptyFinalResponseException) as e:
         if self.request.retries < 2:
             task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
-            raise self.retry(exc=e, countdown=2**self.request.retries, max_retries=2, priority=0, jitter=False)
+            raise self.retry(
+                exc=e,
+                countdown=2**self.request.retries,
+                max_retries=2,
+                priority=0,
+                jitter=False,
+            ) from e
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
     except Exception as e:
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
