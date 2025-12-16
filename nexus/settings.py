@@ -573,46 +573,10 @@ BEDROCK_AGENT_INLINE_CLIENT_SECRET = env.str("BEDROCK_AGENT_INLINE_CLIENT_SECRET
 TRACE_SUMMARY_DELAY = env.bool("TRACE_SUMMARY_DELAY", False)
 PROJECT_COMPONENTS = env.list("PROJECT_COMPONENTS", [])
 
-WENIGPT_BEDROCK_CONVERSATION_CUSTOM_MODEL_ID = env.str("WENIGPT_BEDROCK_CONVERSATION_CUSTOM_MODEL_ID")
-USE_BEDROCK_CONVERSE = env.bool("USE_BEDROCK_CONVERSE", True)
-BEDROCK_CONVERSE_PROMPT = env.str("BEDROCK_CONVERSE_PROMPT")
-BEDROCK_CONVERSE_MAX_LENGHT = env.int("BEDROCK_CONVERSE_MAX_LENGHT", 4096)
-FORMATTER_AGENT_MODEL = env.str("FORMATTER_AGENT_MODEL", "gpt-4.1-mini")
-FLOW_USER_EMAIL = env.str("FLOW_USER_EMAIL", "")
 AWS_RATIONALE_MODEL = env.str("AWS_RATIONALE_MODEL", "amazon.nova-pro-v1:0")
 COLLABORATORS_DEFAULT_INSTRUCTIONS = env.str("COLLABORATORS_DEFAULT_INSTRUCTIONS", "")
 PROJECT_AUTH_API_BASE_URL = env.str("PROJECT_AUTH_API_BASE_URL", "")
 SUPERVISOR_SERVICE_AVAILABLE = env.bool("SUPERVISOR_SERVICE_AVAILABLE", False)
-
-# Logging configuration
-LOG_LEVEL = env.str("LOG_LEVEL", "INFO")
-
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "standard": {
-            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
-        },
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "standard",
-        },
-    },
-    "root": {
-        "handlers": ["console"],
-        "level": LOG_LEVEL,
-    },
-    "loggers": {
-        "django": {
-            "handlers": ["console"],
-            "level": LOG_LEVEL,
-            "propagate": False,
-        },
-    },
-}
 
 # gRPC Streaming Configuration
 GRPC_ENABLED = env.bool("GRPC_ENABLED", default=False)
