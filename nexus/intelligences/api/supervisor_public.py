@@ -2,16 +2,12 @@ import logging
 
 import pendulum
 import sentry_sdk
-from drf_spectacular.utils import (
-    OpenApiParameter,
-    OpenApiResponse,
-    OpenApiTypes,
-    extend_schema,
-)
+from django.db.models import Q
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from nexus.inline_agents.models import InlineAgentMessage
 from nexus.intelligences.models import Conversation
 from nexus.projects.api.project_api_token_auth import (
     ProjectApiKeyAuthentication,
@@ -50,68 +46,6 @@ class SupervisorPublicConversationsView(APIView):
     authentication_classes = [ProjectApiKeyAuthentication]
     permission_classes = [ProjectApiKeyPermission]
 
-    @extend_schema(
-        operation_id="supervisor_public_conversations",
-        summary="List public supervisor conversations",
-        description=(
-            "Returns paginated, PII-minimized supervisor conversations for a project.\n\n"
-            "Filters: start (YYYY-MM-DD), end (YYYY-MM-DD), status. Supports pagination via page and page_size."
-        ),
-        parameters=[
-            OpenApiParameter(
-                name="project_uuid",
-                location=OpenApiParameter.PATH,
-                description="Project UUID",
-                required=True,
-                type=OpenApiTypes.STR,
-            ),
-            OpenApiParameter(
-                name="start",
-                location=OpenApiParameter.QUERY,
-                description="Start date (YYYY-MM-DD)",
-                required=False,
-                type=OpenApiTypes.STR,
-            ),
-            OpenApiParameter(
-                name="end",
-                location=OpenApiParameter.QUERY,
-                description="End date (YYYY-MM-DD)",
-                required=False,
-                type=OpenApiTypes.STR,
-            ),
-            OpenApiParameter(
-                name="status",
-                location=OpenApiParameter.QUERY,
-                description="Resolution status",
-                required=False,
-                type=OpenApiTypes.STR,
-            ),
-            OpenApiParameter(
-                name="page",
-                location=OpenApiParameter.QUERY,
-                description="Page number",
-                required=False,
-                type=OpenApiTypes.INT,
-            ),
-            OpenApiParameter(
-                name="page_size",
-                location=OpenApiParameter.QUERY,
-                description="Results per page",
-                required=False,
-                type=OpenApiTypes.INT,
-            ),
-        ],
-        responses={
-            200: OpenApiResponse(
-                description="Paginated list of conversations",
-                response=SupervisorPublicConversationListSerializer,
-            ),
-            400: OpenApiResponse(description="Bad request"),
-            401: OpenApiResponse(description="Unauthorized"),
-            403: OpenApiResponse(description="Forbidden"),
-        },
-        tags=["Supervisor Public"],
-    )
     def get(self, request, project_uuid):
         try:
             qs = Conversation.objects.filter(project__uuid=project_uuid).order_by("-created_at")
@@ -134,13 +68,15 @@ class SupervisorPublicConversationsView(APIView):
                 except Exception:
                     end_dt = end
 
-            # Use overlap logic so any conversation intersecting the range is included
             if start_dt and end_dt:
-                qs = qs.filter(start_date__lte=end_dt, end_date__gte=start_dt)
+                qs = qs.filter(
+                    Q(start_date__lte=end_dt)
+                    & (Q(end_date__gte=start_dt) | Q(end_date__isnull=True) | Q(start_date__gte=start_dt))
+                )
             elif start_dt:
-                qs = qs.filter(end_date__gte=start_dt)
+                qs = qs.filter(Q(start_date__gte=start_dt) | Q(end_date__gte=start_dt))
             elif end_dt:
-                qs = qs.filter(start_date__lte=end_dt)
+                qs = qs.filter(Q(start_date__lte=end_dt) | Q(end_date__lte=end_dt))
             if status_param:
                 qs = qs.filter(resolution=status_param)
 
@@ -152,12 +88,21 @@ class SupervisorPublicConversationsView(APIView):
             message_service = MessageService()
             for conv in qs[offset : offset + page_size]:
                 messages = []
-                if conv.contact_urn and conv.channel_uuid and conv.start_date and conv.end_date:
+                fetch_start = start_dt or conv.start_date
+                fetch_end = end_dt or conv.end_date
+
+                can_fetch = bool(conv.contact_urn and fetch_start and fetch_end)
+                if can_fetch:
                     try:
-                        start_bound = start_dt or conv.start_date
-                        end_bound = end_dt or conv.end_date
-                        start_iso = start_bound.isoformat() if hasattr(start_bound, "isoformat") else str(start_bound)
-                        end_iso = end_bound.isoformat() if hasattr(end_bound, "isoformat") else str(end_bound)
+
+                        def _to_utc_iso(val):
+                            try:
+                                return pendulum.parse(str(val)).in_timezone("UTC").format("YYYY-MM-DDTHH:mm:ss")
+                            except Exception:
+                                return str(val)
+
+                        start_iso = _to_utc_iso(fetch_start)
+                        end_iso = _to_utc_iso(fetch_end)
                         messages = message_service.get_messages_for_conversation(
                             project_uuid=str(project_uuid),
                             contact_urn=conv.contact_urn,
@@ -166,9 +111,25 @@ class SupervisorPublicConversationsView(APIView):
                             end_date=end_iso,
                             resolution_status=None,
                         )
+                        if not messages:
+                            inline_qs = InlineAgentMessage.objects.filter(
+                                project__uuid=str(project_uuid),
+                                contact_urn=conv.contact_urn,
+                                created_at__range=(
+                                    pendulum.parse(start_iso).in_timezone("UTC"),
+                                    pendulum.parse(end_iso).in_timezone("UTC"),
+                                ),
+                            ).order_by("created_at")
+                            if inline_qs.exists():
+                                messages = [
+                                    {
+                                        "text": m.text,
+                                        "source": "user" if m.source_type == "user" else "agent",
+                                        "created_at": m.created_at.isoformat(),
+                                    }
+                                    for m in inline_qs
+                                ]
                     except Exception as e:
-                        # Log error but don't fail the entire request
-                        # Messages will be empty list
                         logger.warning(
                             f"Error fetching messages for conversation {conv.uuid}: {str(e)}",
                             extra={

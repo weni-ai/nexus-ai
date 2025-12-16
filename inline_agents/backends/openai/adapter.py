@@ -5,15 +5,6 @@ from typing import Any, Callable, Optional
 import boto3
 import pendulum
 import sentry_sdk
-from agents import (
-    Agent,
-    FunctionTool,
-    ModelSettings,
-    RunContextWrapper,
-    Runner,
-    Session,
-    function_tool,
-)
 from django.conf import settings
 from django.template import Context as TemplateContext
 from django.template import Template
@@ -28,15 +19,10 @@ from inline_agents.backends.openai.hooks import (
     RunnerHooks,
     SupervisorHooks,
 )
-from inline_agents.backends.openai.sessions import (
-    get_watermark,
-    only_turns,
-    set_watermark,
-)
-from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
     AgentCredential,
+    Guardrail,
     InlineAgentsConfiguration,
 )
 from nexus.intelligences.models import ContentBase
@@ -45,7 +31,11 @@ from nexus.projects.models import Project
 logger = logging.getLogger(__name__)
 
 
-def make_agent_proxy_tool(agent: Agent[Context], tool_name: str, tool_description: str, session_factory: Callable):
+def make_agent_proxy_tool(agent, tool_name: str, tool_description: str, session_factory: Callable):
+    from agents import RunContextWrapper, Runner, function_tool
+
+    from inline_agents.backends.openai.sessions import get_watermark, only_turns, set_watermark
+
     @function_tool
     async def _proxy(ctx: RunContextWrapper[Context], question: str) -> str:
         """
@@ -104,7 +94,7 @@ class OpenAITeamAdapter(TeamAdapter):
         auth_token: str = "",
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
         session_factory: Callable = None,
-        session: Session = None,
+        session: Any = None,
         data_lake_event_adapter: DataLakeEventAdapter = None,
         preview: bool = False,
         hooks_state: HooksState = None,
@@ -187,6 +177,8 @@ class OpenAITeamAdapter(TeamAdapter):
                 turn_off_rationale=turn_off_rationale,
             )
 
+            from agents import Agent, ModelSettings
+
             openai_agent = Agent[Context](
                 name=agent_name,
                 instructions=agent_instructions,
@@ -212,6 +204,8 @@ class OpenAITeamAdapter(TeamAdapter):
 
         supervisor_tools = cls._get_tools(supervisor["tools"])
         supervisor_tools.extend(agents_as_tools)
+
+        from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
 
         supervisor_agent = SupervisorAgent(
             name="manager",
@@ -256,7 +250,7 @@ class OpenAITeamAdapter(TeamAdapter):
         content_base_uuid: str,
         contact_fields: str,
         globals_dict: Optional[dict] = None,
-        session: Optional[Session] = None,
+        session: Optional[Any] = None,
         input_text: str = "",
         hooks_state: Optional[HooksState] = None,
     ) -> Context:
@@ -319,7 +313,7 @@ class OpenAITeamAdapter(TeamAdapter):
         globals: dict,
         contact: dict,
         project: dict,
-        ctx: RunContextWrapper[Context],
+        ctx,
     ) -> str:
         try:
             lambda_client = boto3.client("lambda", region_name="us-east-1")
@@ -479,7 +473,9 @@ class OpenAITeamAdapter(TeamAdapter):
 
     def create_function_tool(
         cls, function_name: str, function_arn: str, function_description: str, json_schema: dict
-    ) -> FunctionTool:
+    ) -> Any:
+        from agents import FunctionTool, RunContextWrapper
+
         async def invoke_specific_lambda(ctx: RunContextWrapper[Context], args: str) -> str:
             parsed = tool_function_args.model_validate_json(args)
             payload = parsed.model_dump()
