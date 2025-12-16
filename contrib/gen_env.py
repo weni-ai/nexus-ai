@@ -263,4 +263,3 @@ def generate_env():
 
 if __name__ == "__main__":
     generate_env()
-logger = logging.getLogger(__name__)
