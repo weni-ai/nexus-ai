@@ -57,3 +57,11 @@ def test_preprocess_message_empty_raises():
     msg = {"project_uuid": "p", "contact_urn": "u", "text": " ", "attachments": []}
     with pytest.raises(Exception):
         _preprocess_message_input(msg, backend="OpenAIBackend")
+
+
+def test_preprocess_message_attachments_turn_off_rationale():
+    msg = {"project_uuid": "p", "contact_urn": "u", "text": "", "attachments": ["a.pdf"]}
+    processed, foundation_model, turn_off = _preprocess_message_input(msg, backend="OpenAIBackend")
+    assert "['a.pdf']" in processed["text"]
+    assert foundation_model is None
+    assert turn_off is True

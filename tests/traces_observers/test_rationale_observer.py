@@ -62,3 +62,10 @@ def test_rationale_observer_perform_preview_sends_typing_and_store_message(monke
     )
     assert typing_called["called"] is True
     assert saved["called"] is True
+
+
+def test_rationale_observer_validity_and_accents():
+    obs = RationaleObserver(bedrock_client=None, model_id="m")
+    assert obs._is_valid_rationale("válido") is True
+    assert obs._is_valid_rationale("Invalid step") is False
+    assert obs._remove_accents("ação rápida") == "acao rapida"
