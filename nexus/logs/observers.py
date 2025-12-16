@@ -14,9 +14,11 @@ class ZeroShotClassificationHealthCheckObserver(EventObserver):  # pragma: no co
         self.url = os.environ.get("HC_ZEROSHOT_URL")
         self.token = os.environ.get("HC_WENI_TOKEN")
         self.service_name = "zeroshot_classification"
-        self.service_health = Gauge(
-            "service_zeroshot_classification_health", "Health status of services", ["service_name"]
-        )
+        if not hasattr(ZeroShotClassificationHealthCheckObserver, "_service_health"):
+            ZeroShotClassificationHealthCheckObserver._service_health = Gauge(
+                "service_zeroshot_classification_health", "Health status of services", ["service_name"]
+            )
+        self.service_health = ZeroShotClassificationHealthCheckObserver._service_health
 
     def perform(self):
         if os.environ.get("ENVIRONMENT") == "production":
