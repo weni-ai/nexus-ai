@@ -17,17 +17,15 @@ try:
 except Exception:
     BackendsRegistry = None
 from nexus.authentication import AUTHENTICATION_CLASSES
-from nexus.inline_agents.api.mappers import CREDENTIALS_MAPPER, MCP_MAPPER
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     IntegratedAgentSerializer,
     OfficialAgentDetailSerializer,
-    OfficialAgentListSerializer,
     OfficialAgentsAssignRequestSerializer,
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
 )
-from nexus.inline_agents.models import Agent
+from nexus.inline_agents.models import MCP, Agent, MCPCredentialTemplate
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
@@ -121,73 +119,114 @@ class PushAgents(APIView):
         return Response({})
 
 
+def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
+    """
+    Get MCPs for an agent/system combination from database models.
+    """
+    from nexus.inline_agents.models import Agent, AgentSystem
+
+    agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
+    system = AgentSystem.objects.filter(slug=system_slug).first()
+
+    if not agent or not system:
+        return []
+
+    mcps = (
+        MCP.objects.filter(agent=agent, system=system, is_active=True)
+        .select_related()
+        .prefetch_related("config_options")
+    )
+    result = []
+    for mcp in mcps:
+        mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
+        # Add config options
+        for config_option in mcp.config_options.all():
+            mcp_data["config"].append(
+                {
+                    "name": config_option.name,
+                    "label": config_option.label,
+                    "type": config_option.type,
+                    "options": config_option.options,
+                }
+            )
+        result.append(mcp_data)
+    return result
+
+
+def get_credentials_for_mcp(agent_slug: str, system_slug: str, mcp_name: str) -> list:
+    """
+    Get credential templates for an MCP from database models.
+    """
+    from nexus.inline_agents.models import Agent, AgentSystem
+
+    agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
+    system = AgentSystem.objects.filter(slug=system_slug).first()
+
+    if not agent or not system:
+        return []
+
+    mcp = MCP.objects.filter(agent=agent, system=system, name=mcp_name, is_active=True).first()
+    if not mcp:
+        return []
+
+    templates = MCPCredentialTemplate.objects.filter(mcp=mcp)
+    result = []
+    for template in templates:
+        result.append(
+            {
+                "name": template.name,
+                "label": template.label,
+                "placeholder": template.placeholder,
+                "is_confidential": template.is_confidential,
+            }
+        )
+    return result
+
+
+def get_all_mcps_for_agent(agent_slug: str) -> dict:
+    """
+    Get all MCPs for an agent organized by system, from database models.
+    """
+    from nexus.inline_agents.models import Agent
+
+    agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
+    if not agent:
+        return {}
+
+    mcps = MCP.objects.filter(agent=agent, is_active=True).select_related("system").prefetch_related("config_options")
+    result = {}
+    for mcp in mcps:
+        system_slug = mcp.system.slug
+        if system_slug not in result:
+            result[system_slug] = []
+
+        mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
+        # Add config options
+        for config_option in mcp.config_options.all():
+            mcp_data["config"].append(
+                {
+                    "name": config_option.name,
+                    "label": config_option.label,
+                    "type": config_option.type,
+                    "options": config_option.options,
+                }
+            )
+        result[system_slug].append(mcp_data)
+    return result
+
+
 class OfficialAgentsV1(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
-
-    @extend_schema(
-        operation_id="v1_official_agents_list",
-        summary="List official agents",
-        description=(
-            "Returns available official agents. Optional filters: "
-            "`type`, `group`, `category`, `system`. Use `project_uuid` to mark `assigned`."
-        ),
-        parameters=[
-            OpenApiParameter(
-                name="project_uuid",
-                location=OpenApiParameter.QUERY,
-                required=False,
-                type=OpenApiTypes.STR,
-            ),
-            OpenApiParameter(name="name", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
-            OpenApiParameter(name="type", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
-            OpenApiParameter(name="group", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
-            OpenApiParameter(name="category", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
-            OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
-            OpenApiParameter(name="variant", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
-        ],
-        responses={
-            200: OpenApiResponse(description="Agents list", response=OfficialAgentListSerializer),
-            401: OpenApiResponse(description="Unauthorized"),
-            403: OpenApiResponse(description="Forbidden"),
-        },
-        tags=["Agents"],
-    )
-    def get(self, request, *args, **kwargs):
-        project_uuid = request.query_params.get("project_uuid")
-        name_filter = request.query_params.get("name")
-        type_filter = request.query_params.get("type")
-        group_filter = request.query_params.get("group")
-        category_filter = request.query_params.get("category")
-        system_filter = request.query_params.get("system")
-        variant_filter = request.query_params.get("variant")
-
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
-        if name_filter:
-            agents = agents.filter(name__icontains=name_filter)
-        if type_filter:
-            agents = agents.filter(agent_type__slug__iexact=type_filter)
-        if group_filter:
-            agents = agents.filter(group__slug__iexact=group_filter)
-        if category_filter:
-            if category_filter.lower() == "others":
-                agents = agents.filter(category__isnull=True)
-            else:
-                agents = agents.filter(category__slug__iexact=category_filter)
-        if system_filter:
-            agents = agents.filter(systems__slug__iexact=system_filter).distinct("uuid")
-        if variant_filter:
-            agents = agents.filter(variant__iexact=variant_filter)
-
-        serializer = OfficialAgentListSerializer(agents, many=True, context={"project_uuid": project_uuid})
-        return Response(serializer.data)
 
     @extend_schema(
         operation_id="v1_official_agents_assign",
         summary="Assign official agent to project and/or configure credentials",
         description=(
             "Assigns or removes an official agent (`assigned`) and optionally creates credentials. "
-            "When `system` is provided, `credentials` must follow the system template."
+            "When `system` is provided, `credentials` must follow the system template. "
+            "When `mcp` is provided, `credentials` must follow the MCP-specific template for that system. "
+            "The `mcp` and `mcp_config` values are persisted in the `IntegratedAgent.metadata` field when assigning an agent."
         ),
         request=OfficialAgentsAssignRequestSerializer,
         responses={
@@ -204,15 +243,15 @@ class OfficialAgentsV1(APIView):
         assigned = request.data.get("assigned")
         credentials_data = request.data.get("credentials", [])
         system = request.data.get("system")
+        mcp = request.data.get("mcp")
+        mcp_config = request.data.get("mcp_config", {})
 
         if not project_uuid or not agent_uuid:
             return Response({"error": "project_uuid and agent_uuid are required"}, status=400)
 
         try:
             project = Project.objects.get(uuid=project_uuid)
-            agent = Agent.objects.get(
-                uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM, slug__in=["product_concierge"]
-            )
+            agent = Agent.objects.get(uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM)
         except Project.DoesNotExist:
             return Response({"error": "Project not found"}, status=404)
         except Agent.DoesNotExist:
@@ -221,23 +260,45 @@ class OfficialAgentsV1(APIView):
         result = {}
 
         if assigned is not None:
-            result.update(self._handle_assignment(agent_uuid, project_uuid, assigned))
+            assignment_result = self._handle_assignment(agent_uuid, project_uuid, assigned, mcp, mcp_config)
+            if isinstance(assignment_result, Response):
+                return assignment_result
+            result.update(assignment_result)
 
         if credentials_data:
-            creds_result = self._handle_credentials(agent, project, credentials_data, system)
+            creds_result = self._handle_credentials(agent, project, credentials_data, system, mcp)
             if isinstance(creds_result, Response):
                 return creds_result
             result.update(creds_result)
 
         return Response(result or {"message": "No changes applied"}, status=200)
 
-    def _handle_assignment(self, agent_uuid: str, project_uuid: str, assigned: bool) -> dict:
+    def _handle_assignment(
+        self, agent_uuid: str, project_uuid: str, assigned: bool, mcp: str | None = None, mcp_config: dict | None = None
+    ) -> dict | Response:
         usecase = AssignAgentsUsecase()
         if assigned:
-            usecase.assign_agent(agent_uuid, project_uuid)
-            return {"assigned": True}
-        usecase.unassign_agent(agent_uuid, project_uuid)
-        return {"assigned": False}
+            try:
+                created, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
+
+                # Persist MCP selection and configuration in metadata
+                if mcp or mcp_config:
+                    if not integrated_agent.metadata:
+                        integrated_agent.metadata = {}
+                    if mcp:
+                        integrated_agent.metadata["mcp"] = mcp
+                    if mcp_config:
+                        integrated_agent.metadata["mcp_config"] = mcp_config
+                    integrated_agent.save(update_fields=["metadata"])
+
+                return {"assigned": True, "assigned_created": created}
+            except ValueError as e:
+                return Response({"error": str(e)}, status=404)
+        try:
+            usecase.unassign_agent(agent_uuid, project_uuid)
+            return {"assigned": False}
+        except ValueError as e:
+            return Response({"error": str(e)}, status=404)
 
     def _handle_credentials(
         self,
@@ -245,12 +306,19 @@ class OfficialAgentsV1(APIView):
         project: Project,
         credentials_data: list,
         system: str | None,
+        mcp: str | None = None,
     ) -> dict | Response:
         invalid_system = self._validate_system(agent, system)
         if invalid_system:
             return invalid_system
 
-        expected_templates = self._get_expected_templates(agent, system)
+        # Validate MCP if provided
+        if mcp and system:
+            mcp_error = self._validate_mcp(agent, system, mcp)
+            if mcp_error:
+                return mcp_error
+
+        expected_templates = self._get_expected_templates(agent, system, mcp)
         names_error = self._validate_credentials_names(credentials_data, expected_templates, system)
         if names_error:
             return names_error
@@ -269,9 +337,23 @@ class OfficialAgentsV1(APIView):
             return Response({"error": "Invalid system"}, status=422)
         return None
 
-    def _get_expected_templates(self, agent: Agent, system: str | None) -> list:
-        templates = CREDENTIALS_MAPPER.get(agent.slug, {})
-        return templates.get(system, []) if system else []
+    def _get_expected_templates(self, agent: Agent, system: str | None, mcp: str | None = None) -> list:
+        if not system or not mcp:
+            return []
+
+        return get_credentials_for_mcp(agent.slug, system, mcp)
+
+    def _validate_mcp(self, agent: Agent, system: str, mcp: str) -> Response | None:
+        """Validate that the MCP exists for the given agent and system."""
+        mcps = get_mcps_for_agent_system(agent.slug, system)
+
+        if not isinstance(mcps, list):
+            return Response({"error": "Invalid MCP configuration"}, status=422)
+
+        available_mcp_names = [m.get("name") for m in mcps if isinstance(m, dict) and m.get("name")]
+        if mcp not in available_mcp_names:
+            return Response({"error": "Invalid MCP", "available_mcps": available_mcp_names}, status=422)
+        return None
 
     def _validate_credentials_names(
         self, credentials_data: list, expected_templates: list, system: str | None
@@ -334,8 +416,11 @@ class OfficialAgentDetailV1(APIView):
         operation_id="v1_official_agent_detail",
         summary="Get official agent details",
         description=(
-            "Returns details of the official agent, MCP and expected credentials for the selected `system`. "
-            "Provide `project_uuid` to check if it is `assigned`."
+            "Returns details of the official agent, MCPs and expected credentials for the selected `system`. "
+            "MCPs are loaded from the database (configured via Django admin). "
+            "Provide `project_uuid` to check if it is `assigned`. "
+            "Provide `mcp` to get details for a specific MCP (returns single MCP object with credentials), "
+            "otherwise returns all available MCPs for the system (returns MCPs list without credentials)."
         ),
         parameters=[
             OpenApiParameter(
@@ -345,6 +430,13 @@ class OfficialAgentDetailV1(APIView):
                 type=OpenApiTypes.STR,
             ),
             OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(
+                name="mcp",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.STR,
+                description="Specific MCP name to retrieve (e.g., 'Default', 'Trade Policy', 'Marketplace'). If not provided, returns all available MCPs.",
+            ),
             OpenApiParameter(name="agent_uuid", location=OpenApiParameter.PATH, required=True, type=OpenApiTypes.STR),
         ],
         responses={
@@ -357,22 +449,19 @@ class OfficialAgentDetailV1(APIView):
         agent_uuid = kwargs.get("agent_uuid")
         project_uuid = request.query_params.get("project_uuid")
         system = request.query_params.get("system")
+        mcp = request.query_params.get("mcp")
 
         try:
             agent = Agent.objects.get(uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM)
         except Agent.DoesNotExist:
             return Response({"error": "Agent not found"}, status=404)
 
-        mcp_mapper = MCP_MAPPER
-        credentials_mapper = CREDENTIALS_MAPPER
-
         serializer = OfficialAgentDetailSerializer(
             agent,
             context={
                 "project_uuid": project_uuid,
                 "system": system,
-                "mcp_mapper": mcp_mapper,
-                "credentials_mapper": credentials_mapper,
+                "mcp": mcp,
             },
         )
         return Response(serializer.data)
