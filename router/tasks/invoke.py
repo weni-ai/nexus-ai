@@ -95,7 +95,9 @@ def complexity_layer(input_text: str) -> str | None:
             return None
 
 
-def dispatch_preview(response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str) -> str:
+def dispatch_preview(
+    response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str
+) -> str:
     response_msg = dispatch(
         llm_response=response,
         message=message_obj,
@@ -126,7 +128,7 @@ def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_ve
             Payload=json.dumps(payload).encode("utf-8"),
         )
         if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
-            payload = json.loads(response['Payload'].read().decode('utf-8'))
+            payload = json.loads(response["Payload"].read().decode("utf-8"))
             print(f"[DEBUG] Guardrails complexity layer response: {payload}")
             response = payload
             status_code = payload.get("statusCode")
@@ -170,8 +172,10 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
         foundation_model = complexity_layer(text)
     else:
         pass
-        # guardrails: Dict[str, str] = GuardrailsUsecase.get_guardrail_as_dict(message.get("project_uuid"))
-        # guardrails_message = guardrails_complexity_layer(text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion"))
+        # guardrails: Dict[str, str] = GuardrailsUsecase.get_guardrail_as_dict(...)
+        # guardrails_message = guardrails_complexity_layer(
+        #     text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion")
+        # )
         # if guardrails_message:
         #     raise UnsafeMessageException(guardrails_message)
 
@@ -281,21 +285,23 @@ def _invoke_backend(
     invoke_kwargs = cached_data.get_invoke_kwargs(team=cached_data.team)
 
     # Add non-cached parameters that come from the message/request
-    invoke_kwargs.update({
-        "input_text": message_obj.text,
-        "contact_urn": message_obj.contact_urn,
-        "project_uuid": message_obj.project_uuid,
-        "sanitized_urn": message_obj.sanitized_urn,
-        "contact_fields": message_obj.contact_fields_as_json,
-        "contact_name": message_obj.contact_name,
-        "channel_uuid": message_obj.channel_uuid,
-        "msg_external_id": processed_message.get("msg_event", {}).get("msg_external_id", ""),
-        "preview": preview,
-        "language": language,
-        "user_email": user_email,
-        "foundation_model": foundation_model,
-        "turn_off_rationale": turn_off_rationale,
-    })
+    invoke_kwargs.update(
+        {
+            "input_text": message_obj.text,
+            "contact_urn": message_obj.contact_urn,
+            "project_uuid": message_obj.project_uuid,
+            "sanitized_urn": message_obj.sanitized_urn,
+            "contact_fields": message_obj.contact_fields_as_json,
+            "contact_name": message_obj.contact_name,
+            "channel_uuid": message_obj.channel_uuid,
+            "msg_external_id": processed_message.get("msg_event", {}).get("msg_external_id", ""),
+            "preview": preview,
+            "language": language,
+            "user_email": user_email,
+            "foundation_model": foundation_model,
+            "turn_off_rationale": turn_off_rationale,
+        }
+    )
 
     return backend.invoke_agents(**invoke_kwargs)
 
@@ -319,6 +325,19 @@ def start_inline_agents(
     user_email: str = "",
     task_manager: Optional[RedisTaskManager] = None,
 ) -> bool:  # pragma: no cover
+    # Feature flag for new workflow architecture
+    if getattr(settings, "USE_WORKFLOW_ARCHITECTURE", False):
+        from router.tasks.workflow_orchestrator import inline_agent_workflow
+
+        return inline_agent_workflow.apply(
+            args=[message],
+            kwargs={
+                "preview": preview,
+                "language": language,
+                "user_email": user_email,
+            },
+        ).get()
+
     task_manager = task_manager or get_task_manager()
 
     try:
