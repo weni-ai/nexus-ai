@@ -117,6 +117,19 @@ class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
     fieldsets = ((None, {"fields": ("project", "agents_backend", "default_instructions_for_collaborators")}),)
 
 
+class MCPInline(admin.TabularInline):
+    """Inline to show and manage MCPs for an Agent"""
+
+    model = MCP
+    extra = 1
+    fields = ("name", "system", "description", "order", "is_active")
+    autocomplete_fields = ["system"]
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("system").order_by("system__slug", "order", "name")
+
+
 @admin.register(Agent)
 class AgentAdmin(admin.ModelAdmin):
     list_display = ("uuid", "name", "project", "is_official", "agent_type", "category")
@@ -124,6 +137,7 @@ class AgentAdmin(admin.ModelAdmin):
     search_fields = ("name", "project__name", "project__uuid", "slug")
     ordering = ("project__name",)
     autocomplete_fields = ["project", "group", "systems", "agent_type", "category"]
+    inlines = [MCPInline]
 
     fieldsets = (
         (
