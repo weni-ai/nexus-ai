@@ -6,6 +6,7 @@ from nexus.admin_widgets import PrettyJSONWidget
 from nexus.inline_agents.backends.bedrock.models import Supervisor
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor
 from nexus.inline_agents.models import (
+    MCP,
     Agent,
     AgentCategory,
     AgentGroup,
@@ -13,7 +14,6 @@ from nexus.inline_agents.models import (
     AgentType,
     Guardrail,
     InlineAgentsConfiguration,
-    MCP,
     MCPConfigOption,
     MCPCredentialTemplate,
 )
@@ -271,9 +271,7 @@ class MCPAdmin(admin.ModelAdmin):
     autocomplete_fields = ["agent", "system"]
     inlines = [MCPConfigOptionInline, MCPCredentialTemplateInline]
 
-    fieldsets = (
-        (None, {"fields": ("name", "description", "agent", "system", "order", "is_active")}),
-    )
+    fieldsets = ((None, {"fields": ("name", "description", "agent", "system", "order", "is_active")}),)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)

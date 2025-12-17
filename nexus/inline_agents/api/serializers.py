@@ -132,9 +132,10 @@ class OfficialAgentListSerializer(serializers.Serializer):
         group_name = obj.group.slug if getattr(obj, "group", None) else None
 
         from nexus.inline_agents.api.views import get_all_mcps_for_agent
+
         agent_mcps = get_all_mcps_for_agent(obj.slug)
         has_multiple_mcps = False
-        
+
         for system_slug in systems:
             system_mcps = agent_mcps.get(system_slug, [])
             if isinstance(system_mcps, list) and len(system_mcps) > 1:
@@ -223,10 +224,11 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         assigned = False
         if project_uuid:
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
-        
-        from nexus.inline_agents.api.views import get_mcps_for_agent_system, get_credentials_for_mcp
+
+        from nexus.inline_agents.api.views import get_credentials_for_mcp, get_mcps_for_agent_system
+
         system_mcps = get_mcps_for_agent_system(obj.slug, selected_system) if selected_system else []
-        
+
         # If a specific MCP is requested, return only that one
         if mcp_name and system_mcps:
             selected_mcp = next((mcp for mcp in system_mcps if mcp.get("name") == mcp_name), None)
@@ -238,7 +240,7 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         else:
             selected_mcp = None
             creds = []
-        
+
         group_name = obj.group.slug if getattr(obj, "group", None) else None
         payload = {
             "name": obj.name,

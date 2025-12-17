@@ -17,17 +17,15 @@ try:
 except Exception:
     BackendsRegistry = None
 from nexus.authentication import AUTHENTICATION_CLASSES
-from nexus.inline_agents.models import MCP, MCPConfigOption, MCPCredentialTemplate
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     IntegratedAgentSerializer,
     OfficialAgentDetailSerializer,
-    OfficialAgentListSerializer,
     OfficialAgentsAssignRequestSerializer,
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
 )
-from nexus.inline_agents.models import Agent
+from nexus.inline_agents.models import MCP, Agent, MCPCredentialTemplate
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
@@ -126,29 +124,31 @@ def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
     Get MCPs for an agent/system combination from database models.
     """
     from nexus.inline_agents.models import Agent, AgentSystem
-    
+
     agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
     system = AgentSystem.objects.filter(slug=system_slug).first()
-    
+
     if not agent or not system:
         return []
-    
-    mcps = MCP.objects.filter(agent=agent, system=system, is_active=True).select_related().prefetch_related('config_options')
+
+    mcps = (
+        MCP.objects.filter(agent=agent, system=system, is_active=True)
+        .select_related()
+        .prefetch_related("config_options")
+    )
     result = []
     for mcp in mcps:
-        mcp_data = {
-            "name": mcp.name,
-            "description": mcp.description,
-            "config": []
-        }
+        mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
         # Add config options
         for config_option in mcp.config_options.all():
-            mcp_data["config"].append({
-                "name": config_option.name,
-                "label": config_option.label,
-                "type": config_option.type,
-                "options": config_option.options,
-            })
+            mcp_data["config"].append(
+                {
+                    "name": config_option.name,
+                    "label": config_option.label,
+                    "type": config_option.type,
+                    "options": config_option.options,
+                }
+            )
         result.append(mcp_data)
     return result
 
@@ -158,26 +158,28 @@ def get_credentials_for_mcp(agent_slug: str, system_slug: str, mcp_name: str) ->
     Get credential templates for an MCP from database models.
     """
     from nexus.inline_agents.models import Agent, AgentSystem
-    
+
     agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
     system = AgentSystem.objects.filter(slug=system_slug).first()
-    
+
     if not agent or not system:
         return []
-    
+
     mcp = MCP.objects.filter(agent=agent, system=system, name=mcp_name, is_active=True).first()
     if not mcp:
         return []
-    
+
     templates = MCPCredentialTemplate.objects.filter(mcp=mcp)
     result = []
     for template in templates:
-        result.append({
-            "name": template.name,
-            "label": template.label,
-            "placeholder": template.placeholder,
-            "is_confidential": template.is_confidential,
-        })
+        result.append(
+            {
+                "name": template.name,
+                "label": template.label,
+                "placeholder": template.placeholder,
+                "is_confidential": template.is_confidential,
+            }
+        )
     return result
 
 
@@ -186,31 +188,29 @@ def get_all_mcps_for_agent(agent_slug: str) -> dict:
     Get all MCPs for an agent organized by system, from database models.
     """
     from nexus.inline_agents.models import Agent
-    
+
     agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
     if not agent:
         return {}
-    
-    mcps = MCP.objects.filter(agent=agent, is_active=True).select_related('system').prefetch_related('config_options')
+
+    mcps = MCP.objects.filter(agent=agent, is_active=True).select_related("system").prefetch_related("config_options")
     result = {}
     for mcp in mcps:
         system_slug = mcp.system.slug
         if system_slug not in result:
             result[system_slug] = []
-        
-        mcp_data = {
-            "name": mcp.name,
-            "description": mcp.description,
-            "config": []
-        }
+
+        mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
         # Add config options
         for config_option in mcp.config_options.all():
-            mcp_data["config"].append({
-                "name": config_option.name,
-                "label": config_option.label,
-                "type": config_option.type,
-                "options": config_option.options,
-            })
+            mcp_data["config"].append(
+                {
+                    "name": config_option.name,
+                    "label": config_option.label,
+                    "type": config_option.type,
+                    "options": config_option.options,
+                }
+            )
         result[system_slug].append(mcp_data)
     return result
 
@@ -218,7 +218,7 @@ def get_all_mcps_for_agent(agent_slug: str) -> dict:
 class OfficialAgentsV1(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
-    
+
     @extend_schema(
         operation_id="v1_official_agents_assign",
         summary="Assign official agent to project and/or configure credentials",
@@ -251,9 +251,7 @@ class OfficialAgentsV1(APIView):
 
         try:
             project = Project.objects.get(uuid=project_uuid)
-            agent = Agent.objects.get(
-                uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM
-            )
+            agent = Agent.objects.get(uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM)
         except Project.DoesNotExist:
             return Response({"error": "Project not found"}, status=404)
         except Agent.DoesNotExist:
@@ -282,7 +280,7 @@ class OfficialAgentsV1(APIView):
         if assigned:
             try:
                 created, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
-                
+
                 # Persist MCP selection and configuration in metadata
                 if mcp or mcp_config:
                     if not integrated_agent.metadata:
@@ -292,7 +290,7 @@ class OfficialAgentsV1(APIView):
                     if mcp_config:
                         integrated_agent.metadata["mcp_config"] = mcp_config
                     integrated_agent.save(update_fields=["metadata"])
-                
+
                 return {"assigned": True, "assigned_created": created}
             except ValueError as e:
                 return Response({"error": str(e)}, status=404)
@@ -342,21 +340,19 @@ class OfficialAgentsV1(APIView):
     def _get_expected_templates(self, agent: Agent, system: str | None, mcp: str | None = None) -> list:
         if not system or not mcp:
             return []
-        
+
         return get_credentials_for_mcp(agent.slug, system, mcp)
-    
+
     def _validate_mcp(self, agent: Agent, system: str, mcp: str) -> Response | None:
         """Validate that the MCP exists for the given agent and system."""
         mcps = get_mcps_for_agent_system(agent.slug, system)
-        
+
         if not isinstance(mcps, list):
             return Response({"error": "Invalid MCP configuration"}, status=422)
-        
+
         available_mcp_names = [m.get("name") for m in mcps if isinstance(m, dict) and m.get("name")]
         if mcp not in available_mcp_names:
-            return Response(
-                {"error": "Invalid MCP", "available_mcps": available_mcp_names}, status=422
-            )
+            return Response({"error": "Invalid MCP", "available_mcps": available_mcp_names}, status=422)
         return None
 
     def _validate_credentials_names(

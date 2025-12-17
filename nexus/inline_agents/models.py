@@ -240,6 +240,8 @@ class InlineAgentsConfiguration(models.Model):
 
         self.audio_orchestration = activate
         self.save()
+
+
 class AgentGroup(models.Model):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
@@ -276,6 +278,7 @@ class AgentCategory(models.Model):
 
 class MCP(models.Model):
     """Micro-Capability Package - Represents a specific capability configuration for an agent/system combination"""
+
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     agent = models.ForeignKey(
@@ -302,6 +305,7 @@ class MCP(models.Model):
 
 class MCPConfigOption(models.Model):
     """Configuration options for an MCP (e.g., REGIONALIZATION checkbox, PRICE_SOURCE select)"""
+
     CHECKBOX = "CHECKBOX"
     SELECT = "SELECT"
     TEXT = "TEXT"
@@ -335,6 +339,7 @@ class MCPConfigOption(models.Model):
 
 class MCPCredentialTemplate(models.Model):
     """Credential templates required for an MCP"""
+
     mcp = models.ForeignKey(MCP, on_delete=models.CASCADE, related_name="credential_templates")
     name = models.CharField(max_length=255, help_text="Credential key (e.g., BASE_URL)")
     label = models.CharField(max_length=255, help_text="Display label")
