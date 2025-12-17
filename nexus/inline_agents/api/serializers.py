@@ -131,18 +131,30 @@ class OfficialAgentListSerializer(serializers.Serializer):
         systems = list(obj.systems.values_list("slug", flat=True)) if hasattr(obj, "systems") else []
         group_name = obj.group.slug if getattr(obj, "group", None) else None
 
+        from nexus.inline_agents.api.views import get_all_mcps_for_agent
+        agent_mcps = get_all_mcps_for_agent(obj.slug)
+        has_multiple_mcps = False
+        
+        for system_slug in systems:
+            system_mcps = agent_mcps.get(system_slug, [])
+            if isinstance(system_mcps, list) and len(system_mcps) > 1:
+                has_multiple_mcps = True
+                break
+
         credentials = []
-        if hasattr(obj, "agentcredential_set"):
-            creds = obj.agentcredential_set.all().distinct("key")
-            credentials = [
-                {
-                    "name": credential.key,
-                    "label": credential.label,
-                    "placeholder": credential.placeholder,
-                    "is_confidential": credential.is_confidential,
-                }
-                for credential in creds
-            ]
+
+        if not has_multiple_mcps:
+            if hasattr(obj, "agentcredential_set"):
+                creds = obj.agentcredential_set.all().distinct("key")
+                credentials = [
+                    {
+                        "name": credential.key,
+                        "label": credential.label,
+                        "placeholder": credential.placeholder,
+                        "is_confidential": credential.is_confidential,
+                    }
+                    for credential in creds
+                ]
 
         payload = {
             "uuid": obj.uuid,
@@ -192,7 +204,9 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
     system = serializers.CharField()
     systems = serializers.ListField(child=serializers.CharField(), allow_empty=True)
     assigned = serializers.BooleanField()
-    MCP = serializers.DictField()
+    MCPs = serializers.ListField(child=serializers.DictField(), required=False)
+    MCP = serializers.DictField(required=False)
+    selected_mcp = serializers.CharField(required=False, allow_null=True)
     credentials = serializers.ListField()
     variant = serializers.CharField(required=False, allow_null=True)
     capabilities = serializers.ListField(child=serializers.CharField(), required=False, allow_empty=True)
@@ -203,15 +217,28 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
     def to_representation(self, obj):
         project_uuid = self.context.get("project_uuid")
         system = self.context.get("system")
-        mcp_mapper = self.context.get("mcp_mapper", {})
-        cred_mapper = self.context.get("credentials_mapper", {})
+        mcp_name = self.context.get("mcp")
         available_systems = list(obj.systems.values_list("slug", flat=True)) if hasattr(obj, "systems") else []
         selected_system = system or (available_systems[0] if available_systems else "")
         assigned = False
         if project_uuid:
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
-        mcp = mcp_mapper.get(obj.slug, {}).get(selected_system, {})
-        creds = cred_mapper.get(obj.slug, {}).get(selected_system, [])
+        
+        from nexus.inline_agents.api.views import get_mcps_for_agent_system, get_credentials_for_mcp
+        system_mcps = get_mcps_for_agent_system(obj.slug, selected_system) if selected_system else []
+        
+        # If a specific MCP is requested, return only that one
+        if mcp_name and system_mcps:
+            selected_mcp = next((mcp for mcp in system_mcps if mcp.get("name") == mcp_name), None)
+            if selected_mcp:
+                creds = get_credentials_for_mcp(obj.slug, selected_system, mcp_name)
+            else:
+                creds = []
+                selected_mcp = {}
+        else:
+            selected_mcp = None
+            creds = []
+        
         group_name = obj.group.slug if getattr(obj, "group", None) else None
         payload = {
             "name": obj.name,
@@ -222,11 +249,16 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             "system": selected_system,
             "systems": available_systems,
             "assigned": assigned,
-            "MCP": mcp,
             "credentials": creds,
         }
 
-        # Include operational metadata only when configured on the model
+        # Add MCPs or single MCP based on whether mcp_name is provided
+        if mcp_name and selected_mcp:
+            payload["MCP"] = selected_mcp
+            payload["selected_mcp"] = mcp_name
+        else:
+            payload["MCPs"] = system_mcps
+
         variant = getattr(obj, "variant", None)
         capabilities = getattr(obj, "capabilities", [])
         policies = getattr(obj, "policies", {})
@@ -260,6 +292,8 @@ class OfficialAgentsAssignRequestSerializer(serializers.Serializer):
     agent_uuid = serializers.UUIDField()
     assigned = serializers.BooleanField(required=False)
     system = serializers.CharField(required=False)
+    mcp = serializers.CharField(required=False)
+    mcp_config = serializers.DictField(required=False)
     credentials = serializers.ListField(child=CredentialItemSerializer(), required=False)
 
 

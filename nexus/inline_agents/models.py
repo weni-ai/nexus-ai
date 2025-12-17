@@ -96,6 +96,7 @@ class IntegratedAgent(models.Model):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="integrated_agents")
     created_on = models.DateTimeField(auto_now_add=True)
+    metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:
         unique_together = ("agent", "project")
@@ -271,3 +272,79 @@ class AgentCategory(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class MCP(models.Model):
+    """Micro-Capability Package - Represents a specific capability configuration for an agent/system combination"""
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    agent = models.ForeignKey(
+        Agent,
+        on_delete=models.CASCADE,
+        related_name="mcps",
+        limit_choices_to={"is_official": True},
+    )
+    system = models.ForeignKey(
+        AgentSystem,
+        on_delete=models.CASCADE,
+        related_name="mcps",
+    )
+    order = models.PositiveIntegerField(default=0, help_text="Order for display")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ("agent", "system", "name")
+        ordering = ["order", "name"]
+
+    def __str__(self):
+        return f"{self.agent.slug} - {self.system.slug} - {self.name}"
+
+
+class MCPConfigOption(models.Model):
+    """Configuration options for an MCP (e.g., REGIONALIZATION checkbox, PRICE_SOURCE select)"""
+    CHECKBOX = "CHECKBOX"
+    SELECT = "SELECT"
+    TEXT = "TEXT"
+    NUMBER = "NUMBER"
+
+    TYPE_CHOICES = (
+        (CHECKBOX, "Checkbox"),
+        (SELECT, "Select"),
+        (TEXT, "Text"),
+        (NUMBER, "Number"),
+    )
+
+    mcp = models.ForeignKey(MCP, on_delete=models.CASCADE, related_name="config_options")
+    name = models.CharField(max_length=255, help_text="Internal name (e.g., REGIONALIZATION)")
+    label = models.CharField(max_length=255, help_text="Display label")
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=SELECT)
+    options = models.JSONField(
+        default=list,
+        help_text="For SELECT type: [{'name': 'Display', 'value': 'internal'}]",
+    )
+    order = models.PositiveIntegerField(default=0)
+    is_required = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ("mcp", "name")
+        ordering = ["order", "name"]
+
+    def __str__(self):
+        return f"{self.mcp} - {self.label}"
+
+
+class MCPCredentialTemplate(models.Model):
+    """Credential templates required for an MCP"""
+    mcp = models.ForeignKey(MCP, on_delete=models.CASCADE, related_name="credential_templates")
+    name = models.CharField(max_length=255, help_text="Credential key (e.g., BASE_URL)")
+    label = models.CharField(max_length=255, help_text="Display label")
+    placeholder = models.CharField(max_length=255, blank=True)
+    is_confidential = models.BooleanField(default=False)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ("mcp", "name")
+        ordering = ["order", "name"]
+
+    def __str__(self):
+        return f"{self.mcp} - {self.label}"

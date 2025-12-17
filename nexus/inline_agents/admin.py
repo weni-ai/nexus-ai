@@ -13,6 +13,9 @@ from nexus.inline_agents.models import (
     AgentType,
     Guardrail,
     InlineAgentsConfiguration,
+    MCP,
+    MCPConfigOption,
+    MCPCredentialTemplate,
 )
 
 
@@ -242,3 +245,36 @@ class AgentCategoryAdmin(admin.ModelAdmin):
     list_display = ("name", "slug")
     search_fields = ("name", "slug")
     ordering = ("name",)
+
+
+class MCPConfigOptionInline(admin.TabularInline):
+    model = MCPConfigOption
+    extra = 0
+    fields = ("name", "label", "type", "options", "order", "is_required")
+    formfield_overrides = {
+        models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 5, "cols": 60, "class": "vLargeTextField"})},
+    }
+
+
+class MCPCredentialTemplateInline(admin.TabularInline):
+    model = MCPCredentialTemplate
+    extra = 0
+    fields = ("name", "label", "placeholder", "is_confidential", "order")
+
+
+@admin.register(MCP)
+class MCPAdmin(admin.ModelAdmin):
+    list_display = ("name", "agent", "system", "order", "is_active")
+    list_filter = ("is_active", "system", "agent")
+    search_fields = ("name", "description", "agent__name", "agent__slug", "system__name", "system__slug")
+    ordering = ("agent", "system", "order", "name")
+    autocomplete_fields = ["agent", "system"]
+    inlines = [MCPConfigOptionInline, MCPCredentialTemplateInline]
+
+    fieldsets = (
+        (None, {"fields": ("name", "description", "agent", "system", "order", "is_active")}),
+    )
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("agent", "system")
