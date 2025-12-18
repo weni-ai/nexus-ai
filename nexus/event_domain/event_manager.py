@@ -16,7 +16,7 @@ class EventManager:
         self,
         registry: Optional[ObserverRegistry] = None,
         middleware: Optional[MiddlewareChain] = None,
-        validators: Optional[Dict[str, ValidatorChain]] = None
+        validators: Optional[Dict[str, ValidatorChain]] = None,
     ):
         """
         Initialize EventManager.
@@ -40,7 +40,7 @@ class EventManager:
         observer: Union[EventObserver, List[EventObserver], str, List[str]] = None,
         observer_path: Union[str, List[str]] = None,
         isolate_errors: bool = False,
-        factory: Optional[Callable] = None
+        factory: Optional[Callable] = None,
     ):
         """
         Subscribe an observer to an event.
@@ -61,16 +61,7 @@ class EventManager:
             # String-based registration (lazy loading)
             self.registry.register(event, observer, lazy=True, isolate_errors=isolate_errors, factory=factory)
         else:
-            # Direct instance registration (backwards compatible)
-            if event not in self.observers:
-                self.observers[event] = []
-
-            if isinstance(observer, list):
-                self.observers[event].extend(observer)
-            else:
-                self.observers[event].append(observer)
-
-            # Also register in registry for consistency
+            # Direct instance registration
             self.registry.register(event, observer, lazy=False, isolate_errors=isolate_errors, factory=factory)
 
     def add_validator(self, event: str, validator_chain: ValidatorChain) -> None:
@@ -103,15 +94,11 @@ class EventManager:
             try:
                 self.validators[event].validate(event, kwargs)
             except Exception as e:
-                logger.error(
-                    f"Event '{event}' validation failed: {e}",
-                    extra={'event': event, 'kwargs': kwargs}
-                )
+                logger.error(f"Event '{event}' validation failed: {e}", extra={"event": event, "kwargs": kwargs})
                 raise
 
-        # Get observers from both sources
-        observers = self.observers.get(event, []).copy()
-        observers.extend(self.registry.get_observers(event))
+        # Get observers from registry only (subscribe() registers all observers there)
+        observers = self.registry.get_observers(event)
 
         for observer in observers:
             # Check if this observer should have isolated errors
@@ -132,7 +119,7 @@ class EventManager:
                     self.middleware.after_perform(observer, event, duration, **kwargs)
                 except Exception as e:
                     duration = time.time() - start_time
-                    observer_name = getattr(observer.__class__, '__name__', 'Unknown')
+                    observer_name = getattr(observer.__class__, "__name__", "Unknown")
 
                     # Call on_error hooks (includes Sentry capture)
                     self.middleware.on_error(observer, event, e, duration, **kwargs)
@@ -141,10 +128,10 @@ class EventManager:
                         f"Observer '{observer_name}' failed for event '{event}' (isolated): {e}",
                         exc_info=True,
                         extra={
-                            'event': event,
-                            'observer': observer_name,
-                            'kwargs': kwargs,
-                        }
+                            "event": event,
+                            "observer": observer_name,
+                            "kwargs": kwargs,
+                        },
                     )
                     # Continue with next observer
             else:
@@ -167,7 +154,7 @@ class AsyncEventManager:
         self,
         registry: Optional[ObserverRegistry] = None,
         middleware: Optional[MiddlewareChain] = None,
-        validators: Optional[Dict[str, ValidatorChain]] = None
+        validators: Optional[Dict[str, ValidatorChain]] = None,
     ):
         """
         Initialize AsyncEventManager.
@@ -191,7 +178,7 @@ class AsyncEventManager:
         observer: Union[EventObserver, List[EventObserver], str, List[str]] = None,
         observer_path: Union[str, List[str]] = None,
         isolate_errors: bool = False,
-        factory: Optional[Callable] = None
+        factory: Optional[Callable] = None,
     ):
         """
         Subscribe an observer to an event.
@@ -212,16 +199,7 @@ class AsyncEventManager:
             # String-based registration (lazy loading)
             self.registry.register(event, observer, lazy=True, isolate_errors=isolate_errors, factory=factory)
         else:
-            # Direct instance registration (backwards compatible)
-            if event not in self.observers:
-                self.observers[event] = []
-
-            if isinstance(observer, list):
-                self.observers[event].extend(observer)
-            else:
-                self.observers[event].append(observer)
-
-            # Also register in registry for consistency
+            # Direct instance registration
             self.registry.register(event, observer, lazy=False, isolate_errors=isolate_errors, factory=factory)
 
     def add_validator(self, event: str, validator_chain: ValidatorChain) -> None:
@@ -254,15 +232,11 @@ class AsyncEventManager:
             try:
                 self.validators[event].validate(event, kwargs)
             except Exception as e:
-                logger.error(
-                    f"Event '{event}' validation failed: {e}",
-                    extra={'event': event, 'kwargs': kwargs}
-                )
+                logger.error(f"Event '{event}' validation failed: {e}", extra={"event": event, "kwargs": kwargs})
                 raise
 
-        # Get observers from both sources
-        observers = self.observers.get(event, []).copy()
-        observers.extend(self.registry.get_observers(event))
+        # Get observers from registry only (subscribe() registers all observers there)
+        observers = self.registry.get_observers(event)
 
         for observer in observers:
             # Check if this observer should have isolated errors
@@ -286,7 +260,7 @@ class AsyncEventManager:
                     self.middleware.after_perform(observer, event, duration, **kwargs)
                 except Exception as e:
                     duration = time.time() - start_time
-                    observer_name = getattr(observer.__class__, '__name__', 'Unknown')
+                    observer_name = getattr(observer.__class__, "__name__", "Unknown")
 
                     # Call on_error hooks (includes Sentry capture)
                     self.middleware.on_error(observer, event, e, duration, **kwargs)
@@ -295,10 +269,10 @@ class AsyncEventManager:
                         f"Observer '{observer_name}' failed for event '{event}' (isolated): {e}",
                         exc_info=True,
                         extra={
-                            'event': event,
-                            'observer': observer_name,
-                            'kwargs': kwargs,
-                        }
+                            "event": event,
+                            "observer": observer_name,
+                            "kwargs": kwargs,
+                        },
                     )
                     # Continue with next observer
             else:

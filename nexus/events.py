@@ -88,6 +88,7 @@ def notify_async_sync(event: str, **kwargs):
 # The @observer decorator stores registration info, which is then processed by auto_register_observers()
 try:
     # Intelligence observers
+    import nexus.actions.observers  # noqa: F401
     import nexus.intelligences.observer  # noqa: F401
 
     # Health check observers
@@ -95,12 +96,11 @@ try:
 
     # Project and action observers
     import nexus.projects.observer  # noqa: F401
-    import nexus.actions.observers  # noqa: F401
 
     # Trace observers
     import router.traces_observers.rationale.observer  # noqa: F401
-    import router.traces_observers.summary  # noqa: F401
     import router.traces_observers.save_traces  # noqa: F401
+    import router.traces_observers.summary  # noqa: F401
 
     # Cache invalidation observers
     import router.services.cache_invalidation_observers  # noqa: F401

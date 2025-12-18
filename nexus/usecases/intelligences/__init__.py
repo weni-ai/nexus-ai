@@ -20,9 +20,7 @@ def _lazy_import(module_name, item_name):
         return attr
     except (ImportError, AttributeError) as e:
         # Re-raise with more context for debugging
-        raise AttributeError(
-            f"Failed to lazy import {item_name!r} from {module_name!r}: {e}"
-        ) from e
+        raise AttributeError(f"Failed to lazy import {item_name!r} from {module_name!r}: {e}") from e
 
 
 # Define __getattr__ for lazy imports

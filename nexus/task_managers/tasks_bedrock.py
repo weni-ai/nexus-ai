@@ -47,7 +47,7 @@ def check_ingestion_job_status(
     elif ingestion_job_status == "COMPLETE":
         try:
             task_manager = task_manager_usecase.get_task_manager_by_uuid(celery_task_manager_uuid, file_type)
-            
+
             if hasattr(task_manager, "content_base_file") and task_manager.content_base_file:
                 content_base_uuid = str(task_manager.content_base_file.content_base.uuid)
             elif hasattr(task_manager, "content_base_text") and task_manager.content_base_text:
@@ -59,25 +59,23 @@ def check_ingestion_job_status(
                 logger.error(f"  Task Manager UUID: {celery_task_manager_uuid}, File Type: {file_type}")
                 logger.error(f"  Task Manager Type: {type(task_manager).__name__}")
                 return True
-            
-            file_database.search_data(
-                content_base_uuid=content_base_uuid,
-                text="test",
-                number_of_results=1
+
+            file_database.search_data(content_base_uuid=content_base_uuid, text="test", number_of_results=1)
+            logger.info(
+                f"🦑 BEDROCK: Knowledge base is accessible for content_base_uuid {content_base_uuid}, marking as success"
             )
-            logger.info(f"🦑 BEDROCK: Knowledge base is accessible for content_base_uuid {content_base_uuid}, marking as success")
             task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
-            
+
         except Exception as e:
             logger.warning(f"🦑 BEDROCK: Knowledge base not yet accessible or data not indexed, will retry. Error: {e}")
             processing_status = TaskManager.status_map.get("IN_PROGRESS")
             task_manager_usecase.update_task_status(celery_task_manager_uuid, processing_status, file_type)
             check_ingestion_job_status.delay(
-                celery_task_manager_uuid, 
-                ingestion_job_id, 
+                celery_task_manager_uuid,
+                ingestion_job_id,
                 waiting_time=30,
-                file_type=file_type, 
-                project_uuid=project_uuid
+                file_type=file_type,
+                project_uuid=project_uuid,
             )
     elif ingestion_job_status == "FAILED":
         task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
@@ -119,8 +117,7 @@ def start_ingestion_job(
     except ClientError as e:
         if e.response["Error"]["Code"] == "ConflictException":
             logger.warning(
-                "🦑 BEDROCK: Filter didn't catch in progress Ingestion Job. "
-                "Waiting to start new IngestionJob ..."
+                "🦑 BEDROCK: Filter didn't catch in progress Ingestion Job. " "Waiting to start new IngestionJob ..."
             )
             sleep(15)
             return start_ingestion_job.delay(celery_task_manager_uuid, file_type=file_type, project_uuid=project_uuid)

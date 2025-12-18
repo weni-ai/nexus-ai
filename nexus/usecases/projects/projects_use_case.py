@@ -1,6 +1,7 @@
 import json
 
 import pendulum
+import sentry_sdk
 from django.conf import settings
 
 from nexus.events import event_manager, notify_async
@@ -110,9 +111,7 @@ class ProjectsUseCase:
         user = get_by_email(user_email=user_email)
         org = orgs.get_by_uuid(org_uuid=project_dto.org_uuid)
 
-        backend = "OpenAIBackend"  # Default
-        if project_dto.indexer_database == Project.BEDROCK:
-            backend = "BedrockBackend"
+        backend = "OpenAIBackend"
 
         template_type = None
         if project_dto.is_template:
@@ -133,6 +132,27 @@ class ProjectsUseCase:
 
         self.create_brain_project_base(project_dto=project_dto, user_email=user_email, project=project)
 
+        if project.brain_on and project.agents_backend == "BedrockBackend":
+            sentry_sdk.set_tag("bedrock_supervisor_provisioned", True)
+            sentry_sdk.set_context(
+                "bedrock_provisioning",
+                {
+                    "project_uuid": str(project.uuid),
+                    "agents_backend": project.agents_backend,
+                },
+            )
+            sentry_sdk.capture_message("Provisioning Bedrock supervisor on project creation", level="info")
+            supervisor_name = f"Supervisor for {project.name}"
+            supervisor_description = "Default supervisor description."
+            supervisor_instructions = "Default supervisor instructions."
+
+            self.create_multi_agents_base(
+                project_uuid=str(project.uuid),
+                supervisor_name=supervisor_name,
+                supervisor_description=supervisor_description,
+                supervisor_instructions=supervisor_instructions,
+                user=user,
+            )
         auths = project_dto.authorizations
         auth_usecase = ProjectAuthUseCase()
         for auth in auths:

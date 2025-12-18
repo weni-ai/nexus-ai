@@ -1,0 +1,68 @@
+// Protocol Buffer definition for message streaming service
+
+syntax = "proto3";
+
+package nexus.message_stream;
+
+// ============================================================================
+// MESSAGES
+// ============================================================================
+
+// StreamMessage - Main message for streaming
+message StreamMessage {
+  string type = 1;           // "setup", "content", "control", etc.
+  string msg_id = 2;         // Unique message ID
+  string content = 3;        // Message content (empty for setup)
+  string channel_uuid = 4;   // Channel UUID
+  string contact_urn = 5;    // Contact URN (e.g., "whatsapp:+5511999999999")
+  map<string, string> metadata = 6;
+  string timestamp = 7;
+  string project_uuid = 8;
+}
+
+// StreamResponse - Response from server
+message StreamResponse {
+  string status = 1;         // "success", "error", "processing", etc.
+  string msg_id = 2;         // Message ID this refers to
+  string message = 3;        // Response message
+  int32 sequence = 4;        // Sequence number
+  bool is_final = 5;         // Whether this is the last response
+  string error_code = 6;     // Error code if status is "error"
+  string error_message = 7;  // Error details if status is "error"
+  map<string, string> data = 8;
+}
+
+// SetupRequest - Initial setup message
+message SetupRequest {
+  string msg_id = 1;
+  string channel_uuid = 2;
+  string contact_urn = 3;
+  string project_uuid = 4;
+  map<string, string> config = 5;
+}
+
+// SetupResponse - Response to setup
+message SetupResponse {
+  bool success = 1;
+  string session_id = 2;
+  string message = 3;
+  string error_message = 4;
+}
+
+// ============================================================================
+// SERVICE
+// ============================================================================
+
+service MessageStreamService {
+  // Setup - Initialize streaming session
+  rpc Setup(SetupRequest) returns (SetupResponse);
+  
+  // StreamMessages - Bidirectional streaming (main method)
+  rpc StreamMessages(stream StreamMessage) returns (stream StreamResponse);
+  
+  // SendMessage - Single message (unary)
+  rpc SendMessage(StreamMessage) returns (StreamResponse);
+  
+  // StreamToServer - Client streams, server responds once
+  rpc StreamToServer(stream StreamMessage) returns (StreamResponse);
+}
