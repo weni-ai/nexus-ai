@@ -65,6 +65,14 @@ def handle_product_items(text: str, product_items: list) -> str:
     return text
 
 
+def handle_overwrite_message(text: str, overwrite_message: str) -> str:
+    if text:
+        text = f"{text} {overwrite_message}"
+    else:
+        text = overwrite_message
+    return text
+
+
 def complexity_layer(input_text: str) -> str | None:
     if input_text:
         try:
@@ -185,6 +193,7 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
     text = message.get("text", "")
     attachments = message.get("attachments", [])
     product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
+    overwrite_message = message.get("metadata", {}).get("overwrite_message")
     foundation_model = None
 
     if backend == "BedrockBackend":
@@ -208,6 +217,9 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
             f"Text is empty after processing. Original text: '{message.get('text', '')}', "
             f"attachments: {attachments}, product_items: {product_items}"
         )
+
+    if overwrite_message:
+        text = handle_overwrite_message(text, overwrite_message)
 
     processed_message = message.copy()
     processed_message["text"] = text
