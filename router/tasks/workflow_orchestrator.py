@@ -398,7 +398,7 @@ def inline_agent_workflow(
     """
     Main workflow orchestrator for inline agents.
 
-    This task replaces start_inline_agents when USE_WORKFLOW_ARCHITECTURE is enabled.
+    This task replaces start_inline_agents when project is in WORKFLOW_ARCHITECTURE_PROJECTS.
     It orchestrates the workflow through three phases:
     1. Pre-Generation (via pre_generation_task)
     2. Generation (inline for now, will be generation_task)

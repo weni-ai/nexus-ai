@@ -325,8 +325,12 @@ def start_inline_agents(
     user_email: str = "",
     task_manager: Optional[RedisTaskManager] = None,
 ) -> bool:  # pragma: no cover
-    # Feature flag for new workflow architecture
-    if getattr(settings, "USE_WORKFLOW_ARCHITECTURE", False):
+    project_uuid = message.get("project_uuid")
+
+    workflow_projects = settings.WORKFLOW_ARCHITECTURE_PROJECTS
+    use_workflow = project_uuid in workflow_projects or "*" in workflow_projects
+
+    if use_workflow:
         from router.tasks.workflow_orchestrator import inline_agent_workflow
 
         return inline_agent_workflow.apply(
@@ -341,8 +345,6 @@ def start_inline_agents(
     task_manager = task_manager or get_task_manager()
 
     try:
-        project_uuid = message.get("project_uuid")
-
         TypingUsecase().send_typing_message(
             contact_urn=message.get("contact_urn"),
             msg_external_id=message.get("msg_event", {}).get("msg_external_id", ""),
