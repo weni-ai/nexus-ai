@@ -21,6 +21,7 @@ from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     IntegratedAgentSerializer,
     OfficialAgentDetailSerializer,
+    OfficialAgentListSerializer,
     OfficialAgentsAssignRequestSerializer,
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
@@ -220,6 +221,63 @@ def get_all_mcps_for_agent(agent_slug: str) -> dict:
 class OfficialAgentsV1(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
+
+    @extend_schema(
+        operation_id="v1_official_agents_list",
+        summary="List official agents",
+        description=(
+            "Returns available official agents. Optional filters: "
+            "`type`, `group`, `category`, `system`. Use `project_uuid` to mark `assigned`."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="project_uuid",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.STR,
+            ),
+            OpenApiParameter(name="name", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="type", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="group", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="category", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="variant", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+        ],
+        responses={
+            200: OpenApiResponse(description="Agents list", response=OfficialAgentListSerializer),
+            401: OpenApiResponse(description="Unauthorized"),
+            403: OpenApiResponse(description="Forbidden"),
+        },
+        tags=["Agents"],
+    )
+    def get(self, request, *args, **kwargs):
+        project_uuid = request.query_params.get("project_uuid")
+        name_filter = request.query_params.get("name")
+        type_filter = request.query_params.get("type")
+        group_filter = request.query_params.get("group")
+        category_filter = request.query_params.get("category")
+        system_filter = request.query_params.get("system")
+        variant_filter = request.query_params.get("variant")
+
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+        if name_filter:
+            agents = agents.filter(name__icontains=name_filter)
+        if type_filter:
+            agents = agents.filter(agent_type__slug__iexact=type_filter)
+        if group_filter:
+            agents = agents.filter(group__slug__iexact=group_filter)
+        if category_filter:
+            if category_filter.lower() == "others":
+                agents = agents.filter(category__isnull=True)
+            else:
+                agents = agents.filter(category__slug__iexact=category_filter)
+        if system_filter:
+            agents = agents.filter(systems__slug__iexact=system_filter).distinct("uuid")
+        if variant_filter:
+            agents = agents.filter(variant__iexact=variant_filter)
+
+        serializer = OfficialAgentListSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        return Response(serializer.data)
 
     @extend_schema(
         operation_id="v1_official_agents_assign",
