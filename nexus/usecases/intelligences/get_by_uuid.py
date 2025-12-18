@@ -191,13 +191,19 @@ def get_project_and_content_base_data(
         raise ValidationError(message="Invalid UUID") from e
 
 
-def create_inline_agents_configuration(project: Project, agents_backend: str = "OpenAIBackend", audio_orchestration: bool = False, audio_orchestration_voice: str = None) -> InlineAgentsConfiguration:
+def create_inline_agents_configuration(
+    project: Project,
+    agents_backend: str = "OpenAIBackend",
+    audio_orchestration: bool = False,
+    audio_orchestration_voice: str = None,
+) -> InlineAgentsConfiguration:
     return InlineAgentsConfiguration.objects.create(
         project=project,
         agents_backend=agents_backend,
         audio_orchestration=audio_orchestration,
         audio_orchestration_voice=audio_orchestration_voice,
     )
+
 
 def get_llm_by_project_uuid(project_uuid: str) -> LLM:
     try:

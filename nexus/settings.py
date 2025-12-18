@@ -18,7 +18,12 @@ from .environment import env
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-TESTING = len(sys.argv) > 1 and sys.argv[1] == "test"
+# Treat any pytest run or manage.py test as testing
+TESTING = (
+    any("pytest" in arg for arg in sys.argv)
+    or any(arg == "test" for arg in sys.argv)
+    or os.environ.get("PYTEST_CURRENT_TEST") is not None
+)
 
 
 # Quick-start development settings - unsuitable for production
@@ -126,6 +131,15 @@ CHANNEL_LAYERS = {
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {"default": env.db(var="DEFAULT_DATABASE", default="sqlite:///db.sqlite3")}
+# Allow CI or local env to OPT-IN to sqlite by setting USE_SQLITE_FOR_TESTS=true
+USE_SQLITE_FOR_TESTS = env.bool("USE_SQLITE_FOR_TESTS", default=True)
+if TESTING and USE_SQLITE_FOR_TESTS:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": str(BASE_DIR / "test.sqlite3"),
+        }
+    }
 
 
 # Password validation
@@ -301,6 +315,7 @@ OIDC_DRF_AUTH_BACKEND = env.str(
     default="nexus.authentication.authentication.WeniOIDCAuthenticationBackend",
 )
 OIDC_RP_SCOPES = env.str("OIDC_RP_SCOPES", default="openid email")
+OIDC_RP_EMAIL = env.str("OIDC_RP_EMAIL", default="")
 
 
 REST_FRAMEWORK = {
@@ -319,6 +334,11 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "v1.0.0",
     "LICENSE": {"name": "GPL-3.0 License"},
 }
+
+# CI/Test migration controls
+DISABLE_INLINE_AGENTS_MIGRATIONS = env.bool("DISABLE_INLINE_AGENTS_MIGRATIONS", default=False)
+if DISABLE_INLINE_AGENTS_MIGRATIONS:
+    MIGRATION_MODULES = {"inline_agents": None}
 
 
 OPENAI_API_KEY = env.str("OPENAI_API_KEY")
@@ -553,14 +573,9 @@ BEDROCK_AGENT_INLINE_CLIENT_SECRET = env.str("BEDROCK_AGENT_INLINE_CLIENT_SECRET
 TRACE_SUMMARY_DELAY = env.bool("TRACE_SUMMARY_DELAY", False)
 PROJECT_COMPONENTS = env.list("PROJECT_COMPONENTS", [])
 
-# Rationale agents
 AWS_RATIONALE_MODEL = env.str("AWS_RATIONALE_MODEL", "amazon.nova-pro-v1:0")
-
 COLLABORATORS_DEFAULT_INSTRUCTIONS = env.str("COLLABORATORS_DEFAULT_INSTRUCTIONS", "")
-
-# Project auth
 PROJECT_AUTH_API_BASE_URL = env.str("PROJECT_AUTH_API_BASE_URL", "")
-
 SUPERVISOR_SERVICE_AVAILABLE = env.bool("SUPERVISOR_SERVICE_AVAILABLE", False)
 SUPERVISOR_SERVICE_AVAILABLE_PROJECTS = env.list("SUPERVISOR_SERVICE_AVAILABLE_PROJECTS", [])
 
@@ -642,6 +657,42 @@ BEDROCK_CONVERSE_PROMPT = env.str("BEDROCK_CONVERSE_PROMPT")
 BEDROCK_CONVERSE_MAX_LENGHT = env.int("BEDROCK_CONVERSE_MAX_LENGHT", 4096)
 FORMATTER_AGENT_MODEL = env.str("FORMATTER_AGENT_MODEL", "gpt-4.1-mini")
 FLOW_USER_EMAIL = env.str("FLOW_USER_EMAIL", "")
+
+# Logging configuration
+LOG_LEVEL = env.str("LOG_LEVEL", "INFO")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+}
+
+# gRPC Streaming Configuration
+GRPC_ENABLED = env.bool("GRPC_ENABLED", default=False)
+GRPC_SERVICE_HOST = env.str("GRPC_SERVICE_HOST", default="localhost")
+GRPC_SERVICE_PORT = env.int("GRPC_SERVICE_PORT", default=50051)
+GRPC_USE_TLS = env.bool("GRPC_USE_TLS", default=False)
 
 OPENAI_AGENTS_REASONING_EFFORT = env.str("OPENAI_AGENTS_REASONING_EFFORT", None)
 OPENAI_AGENTS_REASONING_SUMMARY = env.str("OPENAI_AGENTS_REASONING_SUMMARY", "auto")

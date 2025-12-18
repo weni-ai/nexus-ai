@@ -1,3 +1,4 @@
+import logging
 import os
 
 import sentry_sdk
@@ -94,6 +95,8 @@ from .serializers import (
     SupervisorDataSerializer,
     TopicsSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class IntelligencesViewset(ModelViewSet):
@@ -1441,13 +1444,13 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
                 data = serializer.data
                 return Response(data=data, status=status.HTTP_200_OK)
             else:
-                print("Serializer errors:", serializer.errors)
+                logger.error("Serializer errors", extra={"errors": serializer.errors})
                 return Response(data=serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         except IntelligencePermissionDenied:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
-            print(f"Error updating personalization: {str(e)}")
+            logger.error("Error updating personalization: %s", str(e), exc_info=True)
             return Response(data={"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def destroy(self, request, *args, **kwargs):
@@ -1749,7 +1752,7 @@ class SupervisorViewset(ModelViewSet):
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.capture_exception(e)
 
-            print(f"Error retrieving supervisor data: {str(e)}")
+            logger.error("Error retrieving supervisor data: %s", str(e), exc_info=True)
             return Response(
                 {"error": f"Error retrieving supervisor data: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -1789,9 +1792,10 @@ class InstructionsClassificationAPIView(APIView):
     )
     def post(self, request, project_uuid):
         try:
-            instruction = request.data.get("instruction", "")
-            if not instruction:
-                return Response({"error": "Instruction is required"}, status=status.HTTP_400_BAD_REQUEST)
+            serializer = InstructionClassificationRequestSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            instruction = serializer.validated_data["instruction"]
+            language = serializer.validated_data["language"]
 
             user = request.user
             name = user.name or user.email.split("@")[0]
@@ -1819,6 +1823,7 @@ class InstructionsClassificationAPIView(APIView):
                 adjective=adjective,
                 instructions=instructions,
                 instruction_to_classify=instruction,
+                language=language,
             )
 
             return Response({"classification": classification, "suggestion": suggestion}, status=status.HTTP_200_OK)

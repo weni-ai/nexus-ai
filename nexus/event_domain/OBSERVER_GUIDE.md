@@ -162,10 +162,10 @@ class TrackOrderObserver(EventObserver):
 def create_rationale_observer(observer_class):
     from nexus.usecases.inline_agents.typing import TypingUsecase
     import boto3
-    
+
     bedrock_client = boto3.client("bedrock-runtime", ...)
     typing_usecase = TypingUsecase()
-    
+
     return observer_class(
         bedrock_client=bedrock_client,
         typing_usecase=typing_usecase,
@@ -179,7 +179,7 @@ class RationaleObserver(EventObserver):
         self.bedrock_client = bedrock_client
         self.typing_usecase = typing_usecase
         self.model_id = model_id
-    
+
     def perform(self, **kwargs):
         # Use dependencies
         pass
@@ -338,7 +338,7 @@ def create_my_observer(observer_class):
 class MyObserver(EventObserver):
     def __init__(self, dependency):
         self.dependency = dependency
-    
+
     def perform(self, **kwargs):
         self.dependency.do_something()
 ```
@@ -368,10 +368,10 @@ class MyObserverTest(TestCase):
     def test_observer_execution(self):
         # Create test data
         test_data = {"key": "value"}
-        
+
         # Trigger event
         event_manager.notify("my_event", data=test_data)
-        
+
         # Assert expected behavior
         # ...
 ```
@@ -384,15 +384,15 @@ from unittest.mock import Mock, patch
 def test_observer_with_mocked_dependency():
     # Mock the dependency
     mock_dependency = Mock()
-    
+
     # Create factory that uses mock
     def create_observer(observer_class):
         return observer_class(dependency=mock_dependency)
-    
+
     # Test observer
     observer = create_observer(MyObserver)
     observer.perform(data="test")
-    
+
     # Assert mock was called
     mock_dependency.do_something.assert_called_once()
 ```
@@ -464,10 +464,10 @@ def create_complex_observer(observer_class):
     # Lazy imports to avoid circular dependencies
     from module1 import Service1
     from module2 import Service2
-    
+
     service1 = Service1()
     service2 = Service2()
-    
+
     return observer_class(service1=service1, service2=service2)
 
 @observer("complex_event", factory=create_complex_observer)
@@ -475,7 +475,7 @@ class ComplexObserver(EventObserver):
     def __init__(self, service1, service2):
         self.service1 = service1
         self.service2 = service2
-    
+
     def perform(self, **kwargs):
         result = self.service1.process(kwargs)
         self.service2.save(result)

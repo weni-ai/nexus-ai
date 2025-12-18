@@ -1,7 +1,10 @@
+import logging
 import time
 
 import amqp
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 class RabbitMQConnection:
@@ -28,7 +31,7 @@ class RabbitMQConnection:
             if not hasattr(self, "connection"):
                 self._establish_connection()
         except Exception as e:
-            print("Error while connecting to RabbitMQ:", str(e))
+            logger.error("Error while connecting to RabbitMQ: %s", str(e), exc_info=True)
             time.sleep(5)  # Wait until try to reconnect
             self._establish_connection()
 
