@@ -65,12 +65,18 @@ def handle_product_items(text: str, product_items: list) -> str:
     return text
 
 
-def handle_overwrite_message(text: str, overwrite_message: str) -> str:
-    if text:
-        text = f"{text} {overwrite_message}"
+def handle_overwrite_message(text: str, overwrite_message: dict | list | str) -> str:
+    """
+    Handles overwrite_message from metadata.
+    If it's a dict/object, formats it with a label (like product_items).
+    If it's a string, uses it as-is.
+    """
+    if isinstance(overwrite_message, (dict, list)):
+        formatted = f"overwrite message: {str(overwrite_message)}"
     else:
-        text = overwrite_message
-    return text
+        formatted = str(overwrite_message)
+
+    return f"{text} {formatted}" if text else formatted
 
 
 def complexity_layer(input_text: str) -> str | None:
