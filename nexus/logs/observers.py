@@ -4,17 +4,21 @@ import os
 import requests
 from prometheus_client import Gauge
 
+from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver
 
 
+@observer("classification_health_check")
 class ZeroShotClassificationHealthCheckObserver(EventObserver):  # pragma: no cover
     def __init__(self):
         self.url = os.environ.get("HC_ZEROSHOT_URL")
         self.token = os.environ.get("HC_WENI_TOKEN")
         self.service_name = "zeroshot_classification"
-        self.service_health = Gauge(
-            "service_zeroshot_classification_health", "Health status of services", ["service_name"]
-        )
+        if not hasattr(ZeroShotClassificationHealthCheckObserver, "_service_health"):
+            ZeroShotClassificationHealthCheckObserver._service_health = Gauge(
+                "service_zeroshot_classification_health", "Health status of services", ["service_name"]
+            )
+        self.service_health = ZeroShotClassificationHealthCheckObserver._service_health
 
     def perform(self):
         if os.environ.get("ENVIRONMENT") == "production":
@@ -37,6 +41,7 @@ class ZeroShotClassificationHealthCheckObserver(EventObserver):  # pragma: no co
                 self.service_health.labels(service_name=self.service_name).set(0)
 
 
+@observer("health_check")
 class ZeroShotHealthCheckObserver(EventObserver):  # pragma: no cover
     def __init__(self):
         self.url = os.environ.get("HC_ZEROSHOT_URL")
@@ -62,6 +67,7 @@ class ZeroShotHealthCheckObserver(EventObserver):  # pragma: no cover
                 self.service_health.labels(service_name=self.service_name).set(0)
 
 
+@observer("health_check")
 class GolfinhoHealthCheckObserver(EventObserver):  # pragma: no cover
     def __init__(self):
         self.url = os.environ.get("HC_GOLFINHO_URL")
