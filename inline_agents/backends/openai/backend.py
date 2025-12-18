@@ -379,7 +379,9 @@ class OpenAIBackend(InlineAgentsBackend):
             formatter_instructions
             or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
         )
-        print(formatter_agent_configurations)
+        logger.debug(
+            "Formatter agent configurations", extra={"keys": list((formatter_agent_configurations or {}).keys())}
+        )
         # Handle None case for formatter_agent_configurations
         if formatter_agent_configurations is None:
             formatter_agent_configurations = {}
@@ -449,8 +451,8 @@ class OpenAIBackend(InlineAgentsBackend):
                     pass
             return self._get_final_response(result)
         except Exception as e:
-            logger.error(f"Error in formatter agent: {e}", exc_info=True)
-            print(f"Error in formatter agent: {e}")
+            logger.error("Error in formatter agent: %s", e, exc_info=True)
+            # Return the original response if formatter fails
             return final_response
 
     def _initialize_grpc_client(
