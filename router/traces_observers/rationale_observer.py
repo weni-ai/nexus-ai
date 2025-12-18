@@ -4,9 +4,9 @@ import unicodedata
 from typing import Callable, Dict, List, Optional
 
 import boto3
+from celery import shared_task
 from django.conf import settings
 
-from nexus.celery import app as celery_app
 from nexus.environment import env
 from nexus.event_domain.event_observer import EventObserver
 from nexus.usecases.inline_agents.typing import TypingUsecase
@@ -71,6 +71,11 @@ class RationaleObserver(EventObserver):
             message_data={"type": "preview", "content": preview_response},
         )
 
+    def _get_celery_app(self):
+        from nexus.celery import app as celery_app
+
+        return celery_app
+
     def perform(
         self,
         inline_traces: Dict,
@@ -91,6 +96,7 @@ class RationaleObserver(EventObserver):
         if not rationale_switch or turn_off_rationale:
             return
 
+        self.celery_app = self._get_celery_app()
         self.redis_task_manager = self._get_redis_task_manager()
 
         try:
@@ -404,7 +410,7 @@ class RationaleObserver(EventObserver):
             return rationale_text
 
     @staticmethod
-    @celery_app.task
+    @shared_task
     def task_send_rationale_message(
         text: str,
         urns: list,
