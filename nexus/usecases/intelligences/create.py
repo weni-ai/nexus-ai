@@ -2,7 +2,7 @@ import pendulum
 from django.conf import settings
 from django.core.exceptions import ValidationError
 
-from nexus.events import event_manager
+from nexus.events import event_manager, notify_async
 from nexus.intelligences.models import (
     LLM,
     ContentBase,
@@ -95,6 +95,19 @@ class CreateContentBaseUseCase:
         intelligence.increase_content_bases_count()
 
         self.event_manager_notify(event="contentbase_activity", contentbase=contentbase, action_type="C", user=user)
+
+        # Fire cache invalidation event if this is a router content base (project-level)
+        if is_router:
+            try:
+                from nexus.intelligences.models import IntegratedIntelligence
+
+                IntegratedIntelligence.objects.get(intelligence=intelligence)  # Validates it's integrated
+                notify_async(
+                    event="cache_invalidation:content_base",
+                    contentbase=contentbase,
+                )
+            except Exception:
+                pass  # Skip if no project (org-level content base)
 
         return contentbase
 

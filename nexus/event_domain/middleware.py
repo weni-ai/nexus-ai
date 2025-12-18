@@ -5,6 +5,7 @@ This module provides middleware for cross-cutting concerns like error tracking,
 performance monitoring, and logging.
 """
 
+import contextvars
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
@@ -12,6 +13,10 @@ from typing import Any, Dict, Optional
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+# Context variable to store Sentry transaction for performance monitoring
+# This allows us to track transactions across async boundaries
+_sentry_transaction: contextvars.ContextVar[Optional[Any]] = contextvars.ContextVar("sentry_transaction", default=None)
 
 
 class ObserverMiddleware(ABC):
@@ -154,11 +159,15 @@ class SentryErrorMiddleware(ObserverMiddleware):
         return sanitized
 
 
-class PerformanceMonitoringMiddleware(ObserverMiddleware):
+class PerformanceLoggingMiddleware(ObserverMiddleware):
     """
-    Middleware that monitors observer performance.
+    Middleware that logs observer performance to Python logging.
 
-    Logs execution time for observers, with optional threshold warnings.
+    Logs execution time for observers to log files/console, with optional
+    threshold warnings. Useful for local debugging and log analysis.
+
+    Note: For production monitoring with dashboards and alerting, use
+    SentryPerformanceMiddleware instead.
     """
 
     def __init__(self, enabled: bool = True, slow_threshold: float = 1.0):
@@ -222,6 +231,135 @@ class PerformanceMonitoringMiddleware(ObserverMiddleware):
         )
 
 
+class SentryPerformanceMiddleware(ObserverMiddleware):
+    """
+    Middleware that sends observer performance data to Sentry Performance Monitoring.
+
+    Creates Sentry transactions/spans for observer execution, allowing you to
+    track performance metrics in Sentry dashboards, set up alerts, and correlate
+    errors with performance issues.
+
+    This is the production-ready performance monitoring solution that integrates
+    with Sentry's full performance monitoring features.
+    """
+
+    def __init__(self, enabled: bool = True, sample_rate: float = 1.0):
+        """
+        Initialize Sentry performance middleware.
+
+        Args:
+            enabled: Whether to send performance data to Sentry. Default True.
+                    Can be disabled if USE_SENTRY is False.
+            sample_rate: Rate at which to sample transactions (0.0 to 1.0).
+                        Default 1.0 (100% sampling).
+        """
+        self.enabled = enabled and getattr(settings, "USE_SENTRY", False)
+        self.sample_rate = sample_rate
+
+    def before_perform(self, observer, event: str, **kwargs) -> None:
+        """Start Sentry transaction for observer execution."""
+        if not self.enabled:
+            return
+
+        try:
+            import sentry_sdk
+
+            observer_name = getattr(observer.__class__, "__name__", "Unknown")
+
+            # Create transaction name
+            transaction_name = f"observer.{observer_name}.{event}"
+
+            # Start Sentry transaction
+            transaction = sentry_sdk.start_transaction(
+                name=transaction_name,
+                op="observer.execute",
+                sampled=self._should_sample(),
+            )
+
+            # Transaction might be None if not sampled or Sentry not initialized
+            if not transaction:
+                return
+
+            # Set tags for filtering in Sentry
+            transaction.set_tag("observer", observer_name)
+            transaction.set_tag("event", event)
+            transaction.set_tag("observer_performance", True)
+
+            # Try to extract project_uuid if available
+            project_uuid = kwargs.get("project_uuid")
+            if not project_uuid and kwargs.get("project"):
+                project = kwargs.get("project")
+                if hasattr(project, "uuid"):
+                    project_uuid = str(project.uuid)
+            if project_uuid:
+                transaction.set_tag("project_uuid", str(project_uuid))
+
+            # Store transaction in context variable for later retrieval
+            _sentry_transaction.set(transaction)
+
+        except Exception as e:
+            # Don't let Sentry middleware errors break the observer system
+            logger.warning(f"Failed to start Sentry transaction: {e}", exc_info=True)
+
+    def after_perform(self, observer, event: str, duration: float, **kwargs) -> None:
+        """Finish Sentry transaction with success status."""
+        if not self.enabled:
+            return
+
+        try:
+            transaction = _sentry_transaction.get()
+            if transaction:
+                # Set duration measurement
+                transaction.set_measurement("duration", duration, unit="second")
+
+                # Set status to success
+                transaction.set_status("ok")
+
+                # Finish transaction
+                transaction.finish()
+
+                # Clear context variable
+                _sentry_transaction.set(None)
+
+        except Exception as e:
+            # Don't let Sentry middleware errors break the observer system
+            logger.warning(f"Failed to finish Sentry transaction: {e}", exc_info=True)
+
+    def on_error(self, observer, event: str, error: Exception, duration: float, **kwargs) -> None:
+        """Finish Sentry transaction with error status."""
+        if not self.enabled:
+            return
+
+        try:
+            transaction = _sentry_transaction.get()
+            if transaction:
+                # Set duration measurement
+                transaction.set_measurement("duration", duration, unit="second")
+
+                # Set status to error
+                transaction.set_status("internal_error")
+
+                # Add error context
+                transaction.set_data("error_type", type(error).__name__)
+                transaction.set_data("error_message", str(error))
+
+                # Finish transaction
+                transaction.finish()
+
+                # Clear context variable
+                _sentry_transaction.set(None)
+
+        except Exception as e:
+            # Don't let Sentry middleware errors break the observer system
+            logger.warning(f"Failed to finish Sentry transaction on error: {e}", exc_info=True)
+
+    def _should_sample(self) -> bool:
+        """Determine if transaction should be sampled."""
+        import random
+
+        return random.random() < self.sample_rate
+
+
 class MiddlewareChain:
     """
     Chain of middleware to execute in order.
@@ -279,7 +417,10 @@ def create_default_middleware_chain() -> MiddlewareChain:
     # Add Sentry error tracking
     chain.add(SentryErrorMiddleware())
 
-    # Add performance monitoring
-    chain.add(PerformanceMonitoringMiddleware())
+    # Add Sentry performance monitoring (sends to Sentry dashboards)
+    chain.add(SentryPerformanceMiddleware())
+
+    # Add performance logging (logs to Python logging)
+    chain.add(PerformanceLoggingMiddleware())
 
     return chain

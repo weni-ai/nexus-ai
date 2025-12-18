@@ -21,7 +21,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
 from nexus.authentication import AUTHENTICATION_CLASSES
-from nexus.events import event_manager
+from nexus.events import event_manager, notify_async
 from nexus.intelligences.api.filters import ConversationFilter
 from nexus.intelligences.models import (
     ContentBase,
@@ -1290,6 +1290,12 @@ class RouterRetailViewSet(views.APIView):
 
         project.inline_agent_switch = True
         project.save()
+
+        # Fire cache invalidation event for project update (async observer)
+        notify_async(
+            event="cache_invalidation:project",
+            project=project,
+        )
 
         response = {"personalization": personalization_serializer.data, "links": created_links}
 
