@@ -256,4 +256,3 @@ class RationaleObserver(EventObserver):
         broadcast.send_direct_message(
             text=text, urns=urns, project_uuid=project_uuid, user=user, full_chunks=full_chunks
         )
-
