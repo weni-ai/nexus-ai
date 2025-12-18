@@ -101,9 +101,6 @@ try:
     # Cache invalidation observers
     import router.services.cache_invalidation_observers  # noqa: F401
 
-    # Cache usage observers (monitoring)
-    import router.services.cache_usage_observers  # noqa: F401
-
     # Trace observers
     import router.traces_observers.rationale.observer  # noqa: F401
     import router.traces_observers.save_traces  # noqa: F401
