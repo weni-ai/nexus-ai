@@ -172,7 +172,6 @@ class OpenAIBackend(InlineAgentsBackend):
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
         **kwargs,
     ):
-
         use_components_cached = kwargs.pop("use_components", use_components)
         rationale_switch_cached = kwargs.pop("rationale_switch", rationale_switch)
         conversation_turns_to_include_cached = kwargs.pop("conversation_turns_to_include", None)

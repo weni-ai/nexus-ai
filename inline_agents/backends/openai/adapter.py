@@ -716,6 +716,7 @@ class OpenAITeamAdapter(TeamAdapter):
 
         return {"guardrailIdentifier": guardrails.identifier, "guardrailVersion": str(guardrails.version)}
 
+
 def create_standardized_event(agent_name, type, tool_name="", original_trace=None):
     return {
         "type": "trace_update",

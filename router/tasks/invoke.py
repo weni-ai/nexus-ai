@@ -17,8 +17,8 @@ from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.services.pre_generation_service import PreGenerationService
-from router.tasks.invocation_context import CachedProjectData
 from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
+from router.tasks.invocation_context import CachedProjectData
 from router.tasks.redis_task_manager import RedisTaskManager
 
 from .actions_client import get_action_clients
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 def _apm_set_context(**kwargs):
     try:
         elasticapm.set_custom_context(kwargs)
-    except:
+    except Exception:
         pass
 
 
@@ -302,21 +302,23 @@ def _invoke_backend(
     invoke_kwargs = cached_data.get_invoke_kwargs(team=cached_data.team)
 
     # Add non-cached parameters that come from the message/request
-    invoke_kwargs.update({
-        "input_text": message_obj.text,
-        "contact_urn": message_obj.contact_urn,
-        "project_uuid": message_obj.project_uuid,
-        "sanitized_urn": message_obj.sanitized_urn,
-        "contact_fields": message_obj.contact_fields_as_json,
-        "contact_name": message_obj.contact_name,
-        "channel_uuid": message_obj.channel_uuid,
-        "msg_external_id": processed_message.get("msg_event", {}).get("msg_external_id", ""),
-        "preview": preview,
-        "language": language,
-        "user_email": user_email,
-        "foundation_model": foundation_model,
-        "turn_off_rationale": turn_off_rationale,
-    })
+    invoke_kwargs.update(
+        {
+            "input_text": message_obj.text,
+            "contact_urn": message_obj.contact_urn,
+            "project_uuid": message_obj.project_uuid,
+            "sanitized_urn": message_obj.sanitized_urn,
+            "contact_fields": message_obj.contact_fields_as_json,
+            "contact_name": message_obj.contact_name,
+            "channel_uuid": message_obj.channel_uuid,
+            "msg_external_id": processed_message.get("msg_event", {}).get("msg_external_id", ""),
+            "preview": preview,
+            "language": language,
+            "user_email": user_email,
+            "foundation_model": foundation_model,
+            "turn_off_rationale": turn_off_rationale,
+        }
+    )
 
     return backend.invoke_agents(**invoke_kwargs)
 
