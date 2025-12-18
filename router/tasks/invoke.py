@@ -218,14 +218,14 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
     if len(product_items) > 0:
         text = handle_product_items(text, product_items)
 
+    if overwrite_message:
+        text = handle_overwrite_message(text, overwrite_message)
+
     if not text.strip():
         raise EmptyTextException(
             f"Text is empty after processing. Original text: '{message.get('text', '')}', "
             f"attachments: {attachments}, product_items: {product_items}"
         )
-
-    if overwrite_message:
-        text = handle_overwrite_message(text, overwrite_message)
 
     processed_message = message.copy()
     processed_message["text"] = text
