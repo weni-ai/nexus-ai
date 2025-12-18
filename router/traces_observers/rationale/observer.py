@@ -5,6 +5,7 @@ This observer extracts, improves, and sends rationale messages to users.
 It has been refactored to reduce cyclomatic complexity by extracting
 logic into separate handler classes and context objects.
 """
+
 import logging
 import os
 from typing import Callable, Dict, Optional
@@ -171,9 +172,7 @@ class RationaleObserver(EventObserver):
         if self._should_handle_first_rationale_with_agent(trace_data, session_data):
             self._handle_first_rationale_with_agent(context, session_data)
 
-    def _handle_subsequent_rationale(
-        self, rationale_text: str, context: RationaleContext, session_data: Dict
-    ) -> None:
+    def _handle_subsequent_rationale(self, rationale_text: str, context: RationaleContext, session_data: Dict) -> None:
         """Handle subsequent rationale processing."""
         handler = SubsequentRationaleHandler(
             self._message_sender, self._text_improver, self._validator, self.redis_task_manager
