@@ -29,6 +29,8 @@ from nexus.usecases.agents import (
 )
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 
+logger = logging.getLogger(__name__)
+
 
 class InternalCommunicationPermission(BasePermission):
     def has_permission(self, request, view):
@@ -54,7 +56,7 @@ class PushAgents(APIView):
             return []
 
         warnings = []
-        print("-----------------Agent Credentials------------------")
+        logger.info("Agent Credentials start")
         for credential_dict in agent_dto.credentials:
             for key, properties in credential_dict.items():
                 props = {}
@@ -96,15 +98,15 @@ class PushAgents(APIView):
 
                     credential.agents.add(agent)
 
-                    print(key)
+                    logger.debug("Credential key", extra={"key": key})
 
                 except Exception as e:
                     error_message = str(e)
                     warnings.append(f"Error processing credential '{key}': {error_message}")
-                    print(f"Error processing credential '{key}': {error_message}")
+                    logger.error("Error processing credential", extra={"key": key, "error": error_message})
                     continue
 
-        print("----------------------------------------------------")
+        logger.info("Agent Credentials end")
         return warnings
 
     def _validate_request(self, request):
@@ -175,7 +177,6 @@ class PushAgents(APIView):
         agents_usecase = AgentUsecase()
         response_warnings = []
         created_agent = None
-        logger = logging.getLogger(__name__)
 
         try:
             # Create external agent first
@@ -274,8 +275,6 @@ class PushAgents(APIView):
 
     def _rollback_agent_creation(self, agent, external_id):
         """Rollback agent creation in case of failure"""
-        logger = logging.getLogger(__name__)
-
         logger.warning(f"Rolling back agent creation for agent {agent.slug} (external_id: {external_id})")
         agents_usecase = AgentUsecase()
 
@@ -337,7 +336,6 @@ class PushAgents(APIView):
 
         except Exception as e:
             # Log the error and return appropriate error response
-            logger = logging.getLogger(__name__)
             logger.error(f"Error in PushAgents: {e}", exc_info=True)
             error_message = f"{e.__class__.__name__}: {str(e)}" if str(e) else str(e.__class__.__name__)
             return Response({"error": error_message}, status=500)
@@ -449,7 +447,7 @@ class ActiveAgentsViewSet(APIView):
         usecase = AgentUsecase()
 
         if assign:
-            print("------------------------ UPDATING AGENT ---------------------")
+            logger.info("Updating agent")
             usecase.assign_agent(agent_uuid=agent_uuid, project_uuid=project_uuid, created_by=user)
             usecase.create_supervisor_version(project_uuid, user)
             return Response({"assigned": True})
@@ -632,7 +630,7 @@ class AgentTracesView(APIView):
         project_uuid = request.query_params.get("project_uuid")
         log_id = request.query_params.get("log_id")
 
-        print(project_uuid, log_id)
+        logger.debug("Log retrieve", extra={"project_uuid": project_uuid, "log_id": log_id})
 
         if not log_id:
             return Response({"error": "log_id is required"}, status=400)
@@ -789,7 +787,6 @@ class DeleteAgentView(APIView):
         - Validates agent is not active/integrated
         - Deletes database records
         """
-        logger = logging.getLogger(__name__)
         agent_uuid = kwargs.get("agent_uuid")
         project_uuid = kwargs.get("project_uuid")
 

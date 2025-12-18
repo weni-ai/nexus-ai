@@ -128,7 +128,7 @@ def improve_rationale_text(
             modelId=model_id, messages=conversation, inferenceConfig={"maxTokens": 150, "temperature": 0.5, "topP": 0.9}
         )
 
-        print(f"Improvement Response: {response}")
+        logger.debug("Improvement response", extra={"length": len(str(response or ""))})
         # Extract the response text
         response_text = response["output"]["message"]["content"][0]["text"]
 
@@ -140,7 +140,7 @@ def improve_rationale_text(
         # Remove any quotes from the response
         return response_text.strip().strip("\"'")
     except Exception as e:
-        logger.error(f"Error improving rationale text: {str(e)}")
+        logger.error("Error improving rationale text: %s", str(e))
         return rationale_text  # Return original text if transformation fails
 
 
@@ -279,7 +279,7 @@ def get_trace_summary(language, trace):
 
         return response.choices[0].message.content
     except Exception as e:
-        print(f"Error getting trace summary: {str(e)}")
+        logger.error("Error getting trace summary: %s", str(e), exc_info=True)
         return "Processing your request now"
 
 
@@ -303,12 +303,12 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         return broadcast, flow_start
 
     source = "preview" if preview else "router"
-    print(f"[+ Message from: {source} +]")
+    logger.info("Message source", extra={"source": source})
 
     # Initialize Redis client using the REDIS_URL from settings
     redis_client = Redis.from_url(settings.REDIS_URL)
 
-    print(f"[+ Message received: {message} +]")
+    logger.info("Message received", extra={"has_text": bool(message.get("text"))})
 
     content_base_repository = ContentBaseORMRepository()
     message_logs_repository = MessageLogsRepository()
@@ -440,7 +440,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         return response
 
     except Exception as e:
-        print(f"[- START ROUTE - Error: {e} -]")
+        logger.error("START ROUTE error: %s", e, exc_info=True)
         if message.text:
             log_usecase.update_status("F", exception_text=e)
         raise
@@ -652,7 +652,7 @@ def start_multi_agents(
     try:
         # Stream supervisor response
         broadcast, _ = get_action_clients(preview, multi_agents=True, project_use_components=project_use_components)
-        print("[+ Starting multi-agents +]")
+        logger.info("Starting multi-agents")
 
         full_chunks = []
         rationale_history = []
@@ -722,9 +722,7 @@ def start_multi_agents(
         redis_client.delete(pending_response_key)
         redis_client.delete(pending_task_key)
 
-        print(f"[DEBUG] Error in start_multi_agents: {str(e)}")
-        print(f"[DEBUG] Error type: {type(e)}")
-        print(f"[DEBUG] Full exception details: {e.__dict__}")
+        logger.error("Error in start_multi_agents: %s", str(e), exc_info=True)
 
         if user_email:
             # Send error status through WebSocket
