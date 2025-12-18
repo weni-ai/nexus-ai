@@ -156,3 +156,35 @@ class MockFlowStartHTTPClient:
 
 class TestException(Exception):
     pass
+
+
+class MockCacheService:
+    """Mock CacheService for testing.
+
+    Uses MockCacheRepository internally for in-memory caching.
+    Useful for tests that need to verify cache behavior without Redis.
+    """
+
+    def __init__(self):
+        from router.repositories.mocks import MockCacheRepository
+        from router.services.cache_service import CacheService
+
+        mock_repository = MockCacheRepository()
+        self.cache_service = CacheService(cache_repository=mock_repository)
+        self.repository = mock_repository  # Expose repository for direct inspection
+
+    def __getattr__(self, name):
+        """Delegate all method calls to the actual CacheService."""
+        return getattr(self.cache_service, name)
+
+    def clear_all(self) -> None:
+        """Clear all cache (useful for test teardown)."""
+        self.repository.clear()
+
+    def get_cache_keys(self) -> List[str]:
+        """Get all cache keys (useful for testing)."""
+        return self.repository.get_all_keys()
+
+    def get_cache_size(self) -> int:
+        """Get number of cached items (useful for testing)."""
+        return len(self.repository.get_all_keys())
