@@ -100,8 +100,8 @@ class CreateContentBaseUseCase:
         if is_router:
             try:
                 from nexus.intelligences.models import IntegratedIntelligence
-                integrated_intelligence = IntegratedIntelligence.objects.get(intelligence=intelligence)
-                project = integrated_intelligence.project
+
+                IntegratedIntelligence.objects.get(intelligence=intelligence)  # Validates it's integrated
                 notify_async(
                     event="cache_invalidation:content_base",
                     contentbase=contentbase,

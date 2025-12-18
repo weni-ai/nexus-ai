@@ -4,35 +4,34 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0020_project_default_formatter_foundation_model'),
+        ("projects", "0020_project_default_formatter_foundation_model"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='project',
-            name='formatter_instructions',
+            model_name="project",
+            name="formatter_instructions",
             field=models.TextField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='project',
-            name='formatter_reasoning_effort',
+            model_name="project",
+            name="formatter_reasoning_effort",
             field=models.CharField(blank=True, max_length=50, null=True),
         ),
         migrations.AddField(
-            model_name='project',
-            name='formatter_reasoning_summary',
-            field=models.CharField(blank=True, default='auto', max_length=50, null=True),
+            model_name="project",
+            name="formatter_reasoning_summary",
+            field=models.CharField(blank=True, default="auto", max_length=50, null=True),
         ),
         migrations.AddField(
-            model_name='project',
-            name='formatter_send_only_assistant_message',
+            model_name="project",
+            name="formatter_send_only_assistant_message",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='project',
-            name='formatter_tools_descriptions',
+            model_name="project",
+            name="formatter_tools_descriptions",
             field=models.JSONField(default=dict),
         ),
     ]

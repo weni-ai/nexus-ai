@@ -1,19 +1,10 @@
 import json
 import logging
-from typing import Callable, Optional, Any
+from typing import Any, Callable, Optional
 
 import boto3
 import pendulum
 import sentry_sdk
-from agents import (
-    Agent,
-    FunctionTool,
-    ModelSettings,
-    RunContextWrapper,
-    Runner,
-    Session,
-    function_tool,
-)
 from django.conf import settings
 from django.template import Context as TemplateContext
 from django.template import Template
@@ -21,31 +12,28 @@ from pydantic import BaseModel, Field, create_model
 
 from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.data_lake import send_data_lake_event
-from inline_agents.data_lake.event_service import DataLakeEventService
-from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.entities import Context, HooksState
+from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.hooks import (
     CollaboratorHooks,
     RunnerHooks,
     SupervisorHooks,
 )
-from inline_agents.backends.openai.sessions import (
-    get_watermark,
-    only_turns,
-    set_watermark,
-)
-from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
+from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
     AgentCredential,
+    Guardrail,
     InlineAgentsConfiguration,
 )
-from nexus.intelligences.models import ContentBase
-from nexus.projects.models import Project
 
 logger = logging.getLogger(__name__)
 
 
-def make_agent_proxy_tool(agent: Agent[Context], tool_name: str, tool_description: str, session_factory: Callable):
+def make_agent_proxy_tool(agent, tool_name: str, tool_description: str, session_factory: Callable):
+    from agents import RunContextWrapper, Runner, function_tool
+
+    from inline_agents.backends.openai.sessions import get_watermark, only_turns, set_watermark
+
     @function_tool
     async def _proxy(ctx: RunContextWrapper[Context], question: str) -> str:
         """
@@ -99,12 +87,12 @@ class OpenAITeamAdapter(TeamAdapter):
         channel_uuid: str,
         supervisor_hooks: SupervisorHooks,
         runner_hooks: RunnerHooks,
-        content_base: ContentBase,
-        project: Project,
         auth_token: str = "",
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
+        # Cached inline agent config data (optional, used to avoid database queries)
+        default_instructions_for_collaborators: str = None,
         session_factory: Callable = None,
-        session: Session = None,
+        session: Any = None,
         data_lake_event_adapter: DataLakeEventAdapter = None,
         preview: bool = False,
         hooks_state: HooksState = None,
@@ -116,32 +104,43 @@ class OpenAITeamAdapter(TeamAdapter):
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
         use_components: bool = False,
+        # Cached data parameters (optional, used to avoid database queries)
+        content_base_uuid: str = None,
+        business_rules: str = None,
+        instructions: list[str] = None,
+        agent_data: dict = None,
         **kwargs,
     ) -> list[dict]:
         agents_as_tools = []
 
-        content_base_uuid = str(content_base.uuid)
-        business_rules = project.human_support_prompt
+        # Cached data is always provided from start_inline_agents
+        if content_base_uuid is None:
+            raise ValueError("content_base_uuid must be provided")
 
-        instructions = content_base.instructions.all()
-        agent_data = content_base.agent
+        # business_rules, instructions, and agent_data can be None if not configured
+        # but they are always provided from cache (may be None if not set in project/content_base)
 
-        supervisor_instructions = list(instructions.values_list("instruction", flat=True))
-        supervisor_instructions = "\n".join(supervisor_instructions)
+        supervisor_instructions = "\n".join(instructions) if instructions else ""
 
         time_now = pendulum.now("America/Sao_Paulo")
         llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
 
         max_tokens = supervisor.get("max_tokens", 2048)
 
+        # Extract agent data fields (agent_data is a dict from cache)
+        agent_name = agent_data.get("name")
+        agent_role = agent_data.get("role")
+        agent_goal = agent_data.get("goal")
+        agent_personality = agent_data.get("personality")
+
         instruction = cls.get_supervisor_instructions(
             instruction=supervisor["instruction"],
             date_time_now=llm_formatted_time,
             contact_fields=contact_fields,
-            supervisor_name=agent_data.name,
-            supervisor_role=agent_data.role,
-            supervisor_goal=agent_data.goal,
-            supervisor_adjective=agent_data.personality,
+            supervisor_name=agent_name,
+            supervisor_role=agent_role,
+            supervisor_goal=agent_goal,
+            supervisor_adjective=agent_personality,
             supervisor_instructions=supervisor_instructions if supervisor_instructions else "",
             business_rules=business_rules if business_rules else "",
             project_id=project_uuid,
@@ -159,10 +158,7 @@ class OpenAITeamAdapter(TeamAdapter):
         for agent in agents:
             agent_instructions = agent.get("instruction")
 
-            if isinstance(inline_agent_configuration, InlineAgentsConfiguration):
-                default_instructions_for_collaborators = (
-                    inline_agent_configuration.default_instructions_for_collaborators
-                )
+            if default_instructions_for_collaborators:
                 agent_instructions += f"\n{default_instructions_for_collaborators}"
 
             supervisor_default_collaborator_instructions = supervisor.get("default_instructions_for_collaborators", "")
@@ -186,6 +182,8 @@ class OpenAITeamAdapter(TeamAdapter):
                 msg_external_id=msg_external_id,
                 turn_off_rationale=turn_off_rationale,
             )
+
+            from agents import Agent, ModelSettings
 
             openai_agent = Agent[Context](
                 name=agent_name,
@@ -212,6 +210,8 @@ class OpenAITeamAdapter(TeamAdapter):
 
         supervisor_tools = cls._get_tools(supervisor["tools"])
         supervisor_tools.extend(agents_as_tools)
+
+        from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
 
         supervisor_agent = SupervisorAgent(
             name="manager",
@@ -240,6 +240,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 session=session,
                 input_text=input_text,
                 hooks_state=hooks_state,
+                contact_fields=contact_fields,
             ),
             "formatter_agent_instructions": supervisor.get("formatter_agent_components_instructions", ""),
         }
@@ -253,15 +254,22 @@ class OpenAITeamAdapter(TeamAdapter):
         channel_uuid: str,
         contact_name: str,
         content_base_uuid: str,
+        contact_fields: str,
         globals_dict: Optional[dict] = None,
-        session: Optional[Session] = None,
+        session: Optional[Any] = None,
         input_text: str = "",
         hooks_state: Optional[HooksState] = None,
     ) -> Context:
         if globals_dict is None:
             globals_dict = {}
+
+        try:
+            contact_fields = json.loads(contact_fields)
+        except json.JSONDecodeError:
+            contact_fields = {}
+
         credentials = cls._get_credentials(project_uuid)
-        contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name}
+        contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name, "fields": contact_fields}
         project = {"uuid": project_uuid, "auth_token": auth_token}
         content_base = {"uuid": content_base_uuid}
 
@@ -311,7 +319,7 @@ class OpenAITeamAdapter(TeamAdapter):
         globals: dict,
         contact: dict,
         project: dict,
-        ctx: RunContextWrapper[Context],
+        ctx,
     ) -> str:
         try:
             lambda_client = boto3.client("lambda", region_name="us-east-1")
@@ -364,9 +372,9 @@ class OpenAITeamAdapter(TeamAdapter):
                     f"Contact: {contact.get('urn', 'unknown')}, "
                     f"Project: {project.get('uuid', 'unknown')}"
                 )
-                return json.dumps({
-                    "error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"
-                })
+                return json.dumps(
+                    {"error": f"FunctionError on lambda: {error_details.get('errorMessage', 'Unknown error')}"}
+                )
 
             session_attributes = result.get("response", {}).get("sessionAttributes", {})
 
@@ -391,26 +399,25 @@ class OpenAITeamAdapter(TeamAdapter):
                     f"Contact: {contact.get('urn', 'unknown')}, "
                     f"Project: {project.get('uuid', 'unknown')}"
                 )
-                sentry_sdk.set_context("missing_lambda_events", {
-                    "function_name": function_name,
-                    "contact_urn": contact.get('urn', 'unknown'),
-                    "project_uuid": project.get('uuid', 'unknown'),
-                    "response_keys": list(result.get("response", {}).keys()) if isinstance(result.get("response"), dict) else []
-                })
-                sentry_sdk.capture_message(
-                    f"Lambda '{function_name}' did not return events",
-                    level="warning"
+                sentry_sdk.set_context(
+                    "missing_lambda_events",
+                    {
+                        "function_name": function_name,
+                        "contact_urn": contact.get("urn", "unknown"),
+                        "project_uuid": project.get("uuid", "unknown"),
+                        "response_keys": list(result.get("response", {}).keys())
+                        if isinstance(result.get("response"), dict)
+                        else [],
+                    },
                 )
+                sentry_sdk.capture_message(f"Lambda '{function_name}' did not return events", level="warning")
             else:
                 logger.info(
                     f"Lambda '{function_name}' returned {len(events)} event(s). "
                     f"Contact: {contact.get('urn', 'unknown')}"
                 )
 
-            ctx.context.hooks_state.add_tool_info(
-                function_name,
-                session_attributes
-            )
+            ctx.context.hooks_state.add_tool_info(function_name, session_attributes)
 
             return result["response"]["functionResponse"]["responseBody"]["TEXT"]["body"]
         except Exception as e:
@@ -419,13 +426,16 @@ class OpenAITeamAdapter(TeamAdapter):
                 f"Contact: {contact.get('urn', 'unknown')}, "
                 f"Project: {project.get('uuid', 'unknown')}"
             )
-            sentry_sdk.set_context("lambda_invocation_error", {
-                "function_name": function_name,
-                "function_arn": function_arn,
-                "contact_urn": contact.get('urn', 'unknown'),
-                "project_uuid": project.get('uuid', 'unknown'),
-                "error": str(e)
-            })
+            sentry_sdk.set_context(
+                "lambda_invocation_error",
+                {
+                    "function_name": function_name,
+                    "function_arn": function_arn,
+                    "contact_urn": contact.get("urn", "unknown"),
+                    "project_uuid": project.get("uuid", "unknown"),
+                    "error": str(e),
+                },
+            )
             sentry_sdk.capture_exception(e)
             return json.dumps({"error": f"Error on lambda: {str(e)}"})
 
@@ -469,7 +479,9 @@ class OpenAITeamAdapter(TeamAdapter):
 
     def create_function_tool(
         cls, function_name: str, function_arn: str, function_description: str, json_schema: dict
-    ) -> FunctionTool:
+    ) -> Any:
+        from agents import FunctionTool, RunContextWrapper
+
         async def invoke_specific_lambda(ctx: RunContextWrapper[Context], args: str) -> str:
             parsed = tool_function_args.model_validate_json(args)
             payload = parsed.model_dump()
@@ -555,7 +567,7 @@ class OpenAITeamAdapter(TeamAdapter):
         Clean up the schema recursively to ensure it's valid for OpenAI.
         """
         if not isinstance(schema, dict):
-            return 
+            return
 
         cls._clean_schema_list(schema.get("anyOf"))
         cls._clean_schema_list(schema.get("oneOf"))
@@ -702,10 +714,7 @@ class OpenAITeamAdapter(TeamAdapter):
         except Guardrail.DoesNotExist:
             guardrails = Guardrail.objects.filter(current_version=True).order_by("created_on").last()
 
-        return {
-            'guardrailIdentifier': guardrails.identifier,
-            'guardrailVersion': str(guardrails.version)
-        }
+        return {"guardrailIdentifier": guardrails.identifier, "guardrailVersion": str(guardrails.version)}
 
 
 def create_standardized_event(agent_name, type, tool_name="", original_trace=None):
@@ -770,10 +779,7 @@ def process_openai_trace(event):
 class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
     """Adapter for transforming OpenAI traces to data lake event format."""
 
-    def __init__(
-        self,
-        send_data_lake_event_task: callable = None
-    ):
+    def __init__(self, send_data_lake_event_task: callable = None):
         if send_data_lake_event_task is None:
             send_data_lake_event_task = self._get_send_data_lake_event_task()
         self._event_service = DataLakeEventService(send_data_lake_event_task)
@@ -826,7 +832,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     use_delay=False,
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
-                    conversation=conversation
+                    conversation=conversation,
                 )
                 return validated_event
 
@@ -841,7 +847,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     use_delay=True,
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
-                    conversation=conversation
+                    conversation=conversation,
                 )
                 return validated_event
 
@@ -862,10 +868,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         conversation: Optional[object] = None,
     ):
         """Delegate custom event processing to the service."""
-        trace_data = {
-            "project_uuid": project_uuid,
-            "contact_urn": contact_urn
-        }
+        trace_data = {"project_uuid": project_uuid, "contact_urn": contact_urn}
         extractor = OpenAIEventExtractor(event_data=event_data, agent_name=agent_name)
         self._event_service.process_custom_events(
             trace_data=trace_data,
@@ -874,7 +877,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             channel_uuid=channel_uuid,
             extractor=extractor,
             preview=preview,
-            conversation=conversation
+            conversation=conversation,
         )
 
     def to_data_lake_custom_event(
@@ -882,12 +885,14 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         event_data: dict,
         project_uuid: str,
         contact_urn: str,
-        channel_uuid: Optional[str] = None
+        channel_uuid: Optional[str] = None,
+        conversation: Optional[object] = None,
     ) -> Optional[dict]:
         """Send a single custom event to data lake (for direct event sending, not from traces)."""
         return self._event_service.send_custom_event(
             event_data=event_data,
             project_uuid=project_uuid,
             contact_urn=contact_urn,
-            channel_uuid=channel_uuid
+            channel_uuid=channel_uuid,
+            conversation=conversation,
         )
