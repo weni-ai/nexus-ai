@@ -416,10 +416,11 @@ class MiddlewareTestCase(TestCase):
     def test_performance_middleware_logs_duration(self):
         """Test that performance middleware logs execution time."""
         from unittest.mock import patch
-        from nexus.event_domain.middleware import PerformanceLoggingMiddleware, MiddlewareChain
-        import time
 
-        from nexus.event_domain.middleware import MiddlewareChain, PerformanceMonitoringMiddleware
+        from nexus.event_domain.middleware import (
+            MiddlewareChain,
+            PerformanceLoggingMiddleware,
+        )
 
         # Create manager with performance middleware
         chain = MiddlewareChain()
@@ -439,10 +440,7 @@ class MiddlewareTestCase(TestCase):
 
     def test_middleware_chain_executes_all(self):
         """Test that middleware chain executes all middleware."""
-        from nexus.event_domain.middleware import (
-            PerformanceLoggingMiddleware,
-            MiddlewareChain
-        )
+        from nexus.event_domain.middleware import MiddlewareChain, PerformanceLoggingMiddleware
 
         # Create mock middleware
         mock_middleware1 = MagicMock()

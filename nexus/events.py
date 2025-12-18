@@ -4,6 +4,7 @@ Event system with decorator-based observer registration.
 This module uses decorator-based registration to simplify observer setup.
 Observers are registered using @observer decorator on their class definitions.
 """
+
 import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -97,16 +98,16 @@ try:
     # Project and action observers
     import nexus.projects.observer  # noqa: F401
 
-    # Trace observers
-    import router.traces_observers.rationale.observer  # noqa: F401
-    import router.traces_observers.save_traces  # noqa: F401
-    import router.traces_observers.summary  # noqa: F401
-
     # Cache invalidation observers
     import router.services.cache_invalidation_observers  # noqa: F401
 
     # Cache usage observers (monitoring)
     import router.services.cache_usage_observers  # noqa: F401
+
+    # Trace observers
+    import router.traces_observers.rationale.observer  # noqa: F401
+    import router.traces_observers.save_traces  # noqa: F401
+    import router.traces_observers.summary  # noqa: F401
 
     # Auto-register all decorated observers
     auto_register_observers(event_manager, async_event_manager)

@@ -453,6 +453,7 @@ class ActiveAgentsViewSet(APIView):
 
             # Fire cache invalidation event for team update (agent assigned) (async observer)
             from nexus.events import notify_async
+
             notify_async(
                 event="cache_invalidation:team",
                 project_uuid=project_uuid,
@@ -465,6 +466,7 @@ class ActiveAgentsViewSet(APIView):
 
         # Fire cache invalidation event for team update (agent unassigned) (async observer)
         from nexus.events import notify_async
+
         notify_async(
             event="cache_invalidation:team",
             project_uuid=project_uuid,
@@ -772,6 +774,7 @@ class RationaleView(APIView):
 
             # Fire cache invalidation event for project update (async observer)
             from nexus.events import notify_async
+
             notify_async(
                 event="cache_invalidation:project",
                 project=project,
@@ -785,6 +788,7 @@ class RationaleView(APIView):
 
             # Fire cache invalidation event for project update (async observer)
             from nexus.events import notify_async
+
             notify_async(
                 event="cache_invalidation:project",
                 project=project,

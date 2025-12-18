@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from inline_agents.backends import BackendsRegistry
+from nexus.events import event_manager, notify_async
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     IntegratedAgentSerializer,
@@ -19,7 +20,6 @@ from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
 from nexus.usecases.inline_agents.get import GetInlineAgentsUsecase, GetInlineCredentialsUsecase, GetLogGroupUsecase
-from nexus.events import event_manager, notify_async
 from nexus.usecases.inline_agents.update import UpdateAgentUseCase
 from nexus.usecases.intelligences.get_by_uuid import (
     create_inline_agents_configuration,
@@ -545,7 +545,7 @@ class AgentBuilderAudio(APIView):
             elif agent_voice:
                 inline_agents_configuration.set_audio_orchestration_voice(agent_voice)
 
-            # Fire cache invalidation event for project update (inline_agent_config is part of project cache) (async observer)
+            # Fire cache invalidation event for project update (async observer)
             notify_async(
                 event="cache_invalidation:project",
                 project=project,
