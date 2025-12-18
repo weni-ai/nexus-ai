@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('inline_agents', '0016_openaisupervisor_exclude_tools_from_audio_orchestration_and_more'),
+        ("inline_agents", "0016_openaisupervisor_exclude_tools_from_audio_orchestration_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='inlineagentsconfiguration',
-            name='audio_orchestration',
+            model_name="inlineagentsconfiguration",
+            name="audio_orchestration",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='inlineagentsconfiguration',
-            name='audio_orchestration_voice',
-            field=models.CharField(blank=True, default='shimmer', null=True),
+            model_name="inlineagentsconfiguration",
+            name="audio_orchestration_voice",
+            field=models.CharField(blank=True, default="shimmer", null=True),
         ),
     ]

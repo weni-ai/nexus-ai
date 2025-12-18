@@ -2,9 +2,8 @@ from django.urls import path
 
 from nexus.agents.api.views import AgentTracesView, DeleteAgentView, RationaleView
 from nexus.inline_agents.api.views import ActiveAgentsView as ActiveInlineAgentsView
-from nexus.inline_agents.api.views import AgentBuilderAudio, AgentEndSessionView
+from nexus.inline_agents.api.views import AgentBuilderAudio, AgentEndSessionView, LogGroupView, MultiAgentView
 from nexus.inline_agents.api.views import AgentsView as InlineAgentsView
-from nexus.inline_agents.api.views import LogGroupView, MultiAgentView
 from nexus.inline_agents.api.views import OfficialAgentsView as InlineOfficialAgentsView
 from nexus.inline_agents.api.views import ProjectComponentsView as InlineProjectComponentsView
 from nexus.inline_agents.api.views import ProjectCredentialsView as InlineProjectCredentialsView

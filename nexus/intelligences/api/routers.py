@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from .supervisor_public import SupervisorPublicConversationsView
 from .views import (
     CommerceHasAgentBuilder,
     ContentBaseFilePreview,
@@ -15,6 +16,7 @@ from .views import (
     InlineContentBaseFileViewset,
     InlineContentBaseLinkViewset,
     InlineContentBaseTextViewset,
+    InstructionsClassificationAPIView,
     IntelligencesViewset,
     LLMDefaultViewset,
     LLMViewset,
@@ -25,7 +27,6 @@ from .views import (
     SentenxIndexerUpdateFile,
     SubTopicsViewSet,
     SupervisorViewset,
-    InstructionsClassificationAPIView,
     TopicsViewSet,
     UploadFileView,
 )
@@ -74,8 +75,13 @@ urlpatterns = [
     ),
     path(
         "<project_uuid>/topics/<topic_uuid>/subtopics/",
-        SubTopicsViewSet.as_view({"get": "list", "post": "create", "put": "update", "delete": "destroy"}),
+        SubTopicsViewSet.as_view({"get": "list", "post": "create"}),
         name="subtopics",
+    ),
+    path(
+        "<project_uuid>/topics/<topic_uuid>/subtopics/<uuid>/",
+        SubTopicsViewSet.as_view({"get": "retrieve", "put": "update", "delete": "destroy"}),
+        name="subtopic-detail",
     ),
     path(
         "v1/intelligences/content_bases/<project_uuid>/",
@@ -95,5 +101,14 @@ urlpatterns = [
     path("<project_uuid>/upload-file", UploadFileView.as_view(), name="upload-file"),
     path("commerce/check-exists-agent-builder", CommerceHasAgentBuilder.as_view(), name="check-exists-agent-builder"),
     path("<project_uuid>/supervisor/", SupervisorViewset.as_view({"get": "list"}), name="supervisor"),
-    path("<project_uuid>/instructions-classification/", InstructionsClassificationAPIView.as_view(), name="instructions-classification"),
+    path(
+        "public/<project_uuid>/supervisor/conversations",
+        SupervisorPublicConversationsView.as_view(),
+        name="public-supervisor-conversations",
+    ),
+    path(
+        "<project_uuid>/instructions-classification/",
+        InstructionsClassificationAPIView.as_view(),
+        name="instructions-classification",
+    ),
 ]

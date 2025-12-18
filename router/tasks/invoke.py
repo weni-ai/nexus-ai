@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 from typing import Dict, Optional, Tuple
 
 import boto3
 import botocore
+import elasticapm
+import openai
 import sentry_sdk
 from django.conf import settings
 
@@ -11,15 +14,23 @@ from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
 from nexus.inline_agents.team.repository import ORMTeamRepository
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
-from nexus.usecases.guardrails.guardrails_usecase import GuardrailsUsecase
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 from router.dispatcher import dispatch
 from router.entities import message_factory
-from router.tasks.exceptions import EmptyTextException
+from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
 from router.tasks.redis_task_manager import RedisTaskManager
 
 from .actions_client import get_action_clients
+
+logger = logging.getLogger(__name__)
+
+
+def _apm_set_context(**kwargs):
+    try:
+        elasticapm.set_custom_context(kwargs)
+    except:
+        pass
 
 
 def get_task_manager() -> RedisTaskManager:
@@ -67,7 +78,10 @@ def complexity_layer(input_text: str) -> str | None:
             if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
                 payload = json.loads(response["Payload"].read().decode("utf-8"))
                 classification = payload.get("body").get("classification")
-                print(f"[DEBUG] Message: {input_text} - Classification: {classification}")
+                logger.debug(
+                    "Message classification",
+                    extra={"text_len": len(input_text or ""), "classification": classification},
+                )
                 return classification
             else:
                 error_msg = (
@@ -96,7 +110,9 @@ def complexity_layer(input_text: str) -> str | None:
             return None
 
 
-def dispatch_preview(response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str) -> str:
+def dispatch_preview(
+    response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str
+) -> str:
     response_msg = dispatch(
         llm_response=response,
         message=message_obj,
@@ -114,7 +130,10 @@ def dispatch_preview(response: str, message_obj: Dict, broadcast: Dict, user_ema
 
 
 def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
-    print(f"[DEBUG] Guardrails complexity layer: {input_text}, {guardrail_id}, {guardrail_version}")
+    logger.debug(
+        "Guardrails complexity layer",
+        extra={"text_len": len(input_text or ""), "guardrail_id": guardrail_id, "guardrail_version": guardrail_version},
+    )
     try:
         payload = {
             "first_input": input_text,
@@ -127,8 +146,9 @@ def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_ve
             Payload=json.dumps(payload).encode("utf-8"),
         )
         if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
-            payload = json.loads(response['Payload'].read().decode('utf-8'))
-            print(f"[DEBUG] Guardrails complexity layer response: {payload}")
+            payload = json.loads(response["Payload"].read().decode("utf-8"))
+
+            logger.debug("Guardrails complexity layer response", extra={"keys": list(payload.keys())})
             response = payload
             status_code = payload.get("statusCode")
             if status_code == 200:
@@ -172,7 +192,9 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
     else:
         pass
         # guardrails: Dict[str, str] = GuardrailsUsecase.get_guardrail_as_dict(message.get("project_uuid"))
-        # guardrails_message = guardrails_complexity_layer(text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion"))
+        # guardrails_message = guardrails_complexity_layer(
+        #     text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion")
+        # )
         # if guardrails_message:
         #     raise UnsafeMessageException(guardrails_message)
 
@@ -197,7 +219,7 @@ def _manage_pending_task(task_manager: RedisTaskManager, message_obj, current_ta
     Handles revoking old tasks and concatenating messages for rapid inputs.
     """
     pending_task_id = task_manager.get_pending_task_id(message_obj.project_uuid, message_obj.contact_urn)
-    if pending_task_id:
+    if pending_task_id and pending_task_id != current_task_id:
         celery_app.control.revoke(pending_task_id, terminate=True)
 
     final_message_text = task_manager.handle_pending_response(
@@ -246,9 +268,7 @@ def _handle_task_error(
     if task_manager:
         task_manager.clear_pending_tasks(project_uuid, contact_urn)
 
-    print(f"[DEBUG] Error in start_inline_agents: {str(exc)}")
-    print(f"[DEBUG] Error type: {type(exc)}")
-    print(f"[DEBUG] Full exception details: {exc.__dict__}")
+    logger.error("Error in start_inline_agents: %s", str(exc), exc_info=True)
 
     if isinstance(exc, botocore.exceptions.EventStreamError) and "throttlingException" in str(exc):
         raise ThrottlingException(str(exc))
@@ -281,6 +301,8 @@ def start_inline_agents(
     user_email: str = "",
     task_manager: Optional[RedisTaskManager] = None,
 ) -> bool:  # pragma: no cover
+    _apm_set_context(message=message, preview=preview)
+
     task_manager = task_manager or get_task_manager()
 
     try:
@@ -291,7 +313,9 @@ def start_inline_agents(
             preview=preview,
         )
 
-        project, content_base, inline_agent_configuration = get_project_and_content_base_data(message.get("project_uuid"))
+        project, content_base, inline_agent_configuration = get_project_and_content_base_data(
+            message.get("project_uuid")
+        )
         agents_backend = project.agents_backend
 
         broadcast, _ = get_action_clients(
@@ -314,7 +338,8 @@ def start_inline_agents(
             contact_name=processed_message.get("contact_name", ""),
             channel_uuid=processed_message.get("channel_uuid", ""),
         )
-        print(f"[DEBUG] Message: {message_obj}")
+
+        logger.debug("Message object built", extra={"has_text": bool(message_obj.text)})
 
         message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
 
@@ -345,6 +370,9 @@ def start_inline_agents(
             foundation_model=foundation_model,
             inline_agent_configuration=inline_agent_configuration,
         )
+
+        if response is None or response == "":
+            raise EmptyFinalResponseException("Final response is empty")
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
 
@@ -383,5 +411,16 @@ def start_inline_agents(
             backend=agents_backend,
         )
 
+    except (openai.APIError, EmptyFinalResponseException) as e:
+        if self.request.retries < 2:
+            task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
+            raise self.retry(
+                exc=e,
+                countdown=2**self.request.retries,
+                max_retries=2,
+                priority=0,
+                jitter=False,
+            ) from e
+        _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
     except Exception as e:
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)

@@ -4,6 +4,7 @@ Middleware system for observer execution hooks.
 This module provides middleware for cross-cutting concerns like error tracking,
 performance monitoring, and logging.
 """
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
@@ -77,7 +78,7 @@ class SentryErrorMiddleware(ObserverMiddleware):
             enabled: Whether to capture errors to Sentry. Default True.
                     Can be disabled if USE_SENTRY is False.
         """
-        self.enabled = enabled and getattr(settings, 'USE_SENTRY', False)
+        self.enabled = enabled and getattr(settings, "USE_SENTRY", False)
 
     def before_perform(self, observer, event: str, **kwargs) -> None:
         """No action needed before perform."""
@@ -95,7 +96,7 @@ class SentryErrorMiddleware(ObserverMiddleware):
         try:
             import sentry_sdk
 
-            observer_name = getattr(observer.__class__, '__name__', 'Unknown')
+            observer_name = getattr(observer.__class__, "__name__", "Unknown")
 
             # Set tags for filtering in Sentry
             sentry_sdk.set_tag("observer", observer_name)
@@ -111,7 +112,7 @@ class SentryErrorMiddleware(ObserverMiddleware):
             }
 
             # Try to extract project_uuid if available
-            project_uuid = kwargs.get('project_uuid') or kwargs.get('project')
+            project_uuid = kwargs.get("project_uuid") or kwargs.get("project")
             if project_uuid:
                 sentry_sdk.set_tag("project_uuid", str(project_uuid))
                 context["project_uuid"] = str(project_uuid)
@@ -137,7 +138,7 @@ class SentryErrorMiddleware(ObserverMiddleware):
         """
         # Remove potentially large or sensitive data
         sanitized = {}
-        skip_keys = {'trace_events', 'inline_traces', 'agent_response', 'text', 'message'}
+        skip_keys = {"trace_events", "inline_traces", "agent_response", "text", "message"}
 
         for key, value in kwargs.items():
             if key in skip_keys:
@@ -181,27 +182,27 @@ class PerformanceMonitoringMiddleware(ObserverMiddleware):
         if not self.enabled:
             return
 
-        observer_name = getattr(observer.__class__, '__name__', 'Unknown')
+        observer_name = getattr(observer.__class__, "__name__", "Unknown")
 
         if duration >= self.slow_threshold:
             logger.warning(
                 f"Slow observer execution: '{observer_name}' for event '{event}' "
                 f"took {duration:.3f}s (threshold: {self.slow_threshold}s)",
                 extra={
-                    'observer': observer_name,
-                    'event': event,
-                    'duration': duration,
-                    'slow': True,
-                }
+                    "observer": observer_name,
+                    "event": event,
+                    "duration": duration,
+                    "slow": True,
+                },
             )
         else:
             logger.debug(
                 f"Observer '{observer_name}' for event '{event}' took {duration:.3f}s",
                 extra={
-                    'observer': observer_name,
-                    'event': event,
-                    'duration': duration,
-                }
+                    "observer": observer_name,
+                    "event": event,
+                    "duration": duration,
+                },
             )
 
     def on_error(self, observer, event: str, error: Exception, duration: float, **kwargs) -> None:
@@ -209,15 +210,15 @@ class PerformanceMonitoringMiddleware(ObserverMiddleware):
         if not self.enabled:
             return
 
-        observer_name = getattr(observer.__class__, '__name__', 'Unknown')
+        observer_name = getattr(observer.__class__, "__name__", "Unknown")
         logger.debug(
             f"Observer '{observer_name}' for event '{event}' failed after {duration:.3f}s",
             extra={
-                'observer': observer_name,
-                'event': event,
-                'duration': duration,
-                'error': True,
-            }
+                "observer": observer_name,
+                "event": event,
+                "duration": duration,
+                "error": True,
+            },
         )
 
 

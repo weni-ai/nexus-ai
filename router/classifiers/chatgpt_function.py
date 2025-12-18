@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import Dict, List
 
@@ -6,6 +7,8 @@ from openai import OpenAI
 
 from router.classifiers.interfaces import Classifier, OpenAIClientInterface
 from router.entities.flow import FlowDTO
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAIClient(OpenAIClientInterface):  # pragma: no cover
@@ -65,7 +68,9 @@ class ChatGPTFunctionClassifier(Classifier):
         return tools
 
     def predict(self, message: str, flows: List[FlowDTO], language: str = "por") -> str:
-        print(f"[+ ChatGPT message function classification: {message} ({language}) +]")
+        logger.info(
+            "ChatGPT message function classification", extra={"language": language, "message_len": len(message or "")}
+        )
 
         formated_prompt = self.get_prompt()
 

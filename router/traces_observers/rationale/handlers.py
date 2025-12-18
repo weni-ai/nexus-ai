@@ -3,6 +3,7 @@ Handler classes for different rationale processing scenarios.
 
 This module extracts complex logic from RationaleObserver to reduce cyclomatic complexity.
 """
+
 import logging
 from typing import Callable, Dict, Optional
 
@@ -16,7 +17,9 @@ class RationaleMessageSender:
         self.typing_usecase = typing_usecase
         self.flows_user_email = flows_user_email
 
-    def send_typing_if_needed(self, message_external_id: str, contact_urn: str, project_uuid: str, preview: bool) -> None:
+    def send_typing_if_needed(
+        self, message_external_id: str, contact_urn: str, project_uuid: str, preview: bool
+    ) -> None:
         """Send typing indicator if message_external_id is provided."""
         if not message_external_id:
             return
@@ -77,7 +80,9 @@ class RationaleTextImprover:
             instruction_content = settings.RATIONALE_IMPROVEMENT_INSTRUCTIONS
 
             if user_input:
-                instruction_content += f"\n                    <user_message>{user_input}</user_message>\n                "
+                instruction_content += (
+                    f"\n                    <user_message>{user_input}</user_message>\n                "
+                )
 
             instruction_content += f"\n                <thought>{rationale_text}</thought>\n            "
 
@@ -243,4 +248,3 @@ class SubsequentRationaleHandler(RationaleHandler):
         self.message_sender.send_typing_if_needed(
             context.message_external_id, context.contact_urn, context.project_uuid, context.preview
         )
-

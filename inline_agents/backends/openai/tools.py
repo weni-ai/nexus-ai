@@ -1,13 +1,10 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import boto3
-from agents import (
-    Agent,
-    AgentHooks,
-    ModelSettings,
-    RunContextWrapper,
-    function_tool,
-)
+
+if TYPE_CHECKING:
+    pass
+from agents import Agent, RunContextWrapper
 from django.conf import settings
 from openai.types.shared import Reasoning
 
@@ -15,7 +12,7 @@ from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
 
 
-class Supervisor(Agent):
+class Supervisor(Agent):  # type: ignore[misc]
     def function_tools(self) -> list:
         return [self.knowledge_base_bedrock]
 
@@ -25,8 +22,8 @@ class Supervisor(Agent):
         instructions: str,
         model: str,
         tools: list[Any],
-        hooks: list[AgentHooks] | None = None,
-        handoffs: list[Agent] | None = None,
+        hooks: list | None = None,
+        handoffs: list | None = None,
         prompt_override_configuration: dict | None = None,
         preview: bool = False,
         max_tokens: int | None = None,
@@ -37,6 +34,8 @@ class Supervisor(Agent):
         reasoning_effort = settings.OPENAI_AGENTS_REASONING_EFFORT
         reasoning_summary = settings.OPENAI_AGENTS_REASONING_SUMMARY
         parallel_tool_calls = settings.OPENAI_AGENTS_PARALLEL_TOOL_CALLS
+
+        from agents import ModelSettings
 
         if model in settings.MODELS_WITH_REASONING and reasoning_effort:
             super().__init__(
@@ -81,8 +80,10 @@ class Supervisor(Agent):
 
         return
 
+    from agents import function_tool
+
     @function_tool
-    def knowledge_base_bedrock(wrapper: RunContextWrapper[Context], question: str) -> str:
+    def knowledge_base_bedrock(ctx: RunContextWrapper[Context], question: str) -> str:
         """
         Query the AWS Bedrock Knowledge Base and return the most relevant information for a given question.
 
@@ -91,7 +92,7 @@ class Supervisor(Agent):
         """
 
         client = boto3.client("bedrock-agent-runtime", region_name=settings.AWS_BEDROCK_REGION_NAME)
-        content_base_uuid: str | None = wrapper.context.content_base.get("uuid")
+        content_base_uuid: str | None = ctx.context.content_base.get("uuid")
 
         retrieve_params = {
             "knowledgeBaseId": settings.AWS_BEDROCK_KNOWLEDGE_BASE_ID,
@@ -104,7 +105,7 @@ class Supervisor(Agent):
                 {
                     "equals": {
                         "key": "x-amz-bedrock-kb-data-source-id",
-                        "value": get_datasource_id(wrapper.context.project.get("uuid")),
+                        "value": get_datasource_id(ctx.context.project.get("uuid")),
                     }
                 },
             ]
