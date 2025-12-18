@@ -5,13 +5,15 @@ This file demonstrates testing patterns for CacheService.
 Copy and adapt these patterns for your actual tests.
 """
 
-from django.test import TestCase
+import time
+
+from django.test import SimpleTestCase
 
 from router.repositories.mocks import MockCacheRepository
 from router.tests.mocks import MockCacheService
 
 
-class CacheServiceTestCase(TestCase):
+class CacheServiceTestCase(SimpleTestCase):
     """Example test case using MockCacheService."""
 
     def setUp(self):
@@ -167,7 +169,7 @@ class CacheServiceTestCase(TestCase):
         self.assertIsNone(result)
 
 
-class CacheRepositoryTestCase(TestCase):
+class CacheRepositoryTestCase(SimpleTestCase):
     """Example test case using MockCacheRepository directly."""
 
     def setUp(self):
@@ -214,8 +216,6 @@ class CacheRepositoryTestCase(TestCase):
 
     def test_ttl_expiration(self):
         """Test that TTL expiration works."""
-        import time
-
         key = "test:key"
         value = {"test": "data"}
 
