@@ -1,25 +1,36 @@
 import json
+import logging
 import os
 from typing import Dict, Optional, Tuple
 
 import boto3
 import botocore
+import elasticapm
 import openai
 import sentry_sdk
 from django.conf import settings
 
 from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
-from nexus.inline_agents.team.repository import ORMTeamRepository
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.inline_agents.typing import TypingUsecase
-from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 from router.dispatcher import dispatch
 from router.entities import message_factory
+from router.services.pre_generation_service import PreGenerationService
 from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
+from router.tasks.invocation_context import CachedProjectData
 from router.tasks.redis_task_manager import RedisTaskManager
 
 from .actions_client import get_action_clients
+
+logger = logging.getLogger(__name__)
+
+
+def _apm_set_context(**kwargs):
+    try:
+        elasticapm.set_custom_context(kwargs)
+    except Exception:
+        pass
 
 
 def get_task_manager() -> RedisTaskManager:
@@ -67,7 +78,10 @@ def complexity_layer(input_text: str) -> str | None:
             if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
                 payload = json.loads(response["Payload"].read().decode("utf-8"))
                 classification = payload.get("body").get("classification")
-                print(f"[DEBUG] Message: {input_text} - Classification: {classification}")
+                logger.debug(
+                    "Message classification",
+                    extra={"text_len": len(input_text or ""), "classification": classification},
+                )
                 return classification
             else:
                 error_msg = (
@@ -116,7 +130,10 @@ def dispatch_preview(
 
 
 def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
-    print(f"[DEBUG] Guardrails complexity layer: {input_text}, {guardrail_id}, {guardrail_version}")
+    logger.debug(
+        "Guardrails complexity layer",
+        extra={"text_len": len(input_text or ""), "guardrail_id": guardrail_id, "guardrail_version": guardrail_version},
+    )
     try:
         payload = {
             "first_input": input_text,
@@ -130,7 +147,8 @@ def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_ve
         )
         if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
             payload = json.loads(response["Payload"].read().decode("utf-8"))
-            print(f"[DEBUG] Guardrails complexity layer response: {payload}")
+
+            logger.debug("Guardrails complexity layer response", extra={"keys": list(payload.keys())})
             response = payload
             status_code = payload.get("statusCode")
             if status_code == 200:
@@ -174,7 +192,9 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
     else:
         pass
         # guardrails: Dict[str, str] = GuardrailsUsecase.get_guardrail_as_dict(message.get("project_uuid"))
-        # guardrails_message = guardrails_complexity_layer(text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion"))
+        # guardrails_message = guardrails_complexity_layer(
+        #     text, guardrails.get("guardrailIdentifier"), guardrails.get("guardrailVersion")
+        # )
         # if guardrails_message:
         #     raise UnsafeMessageException(guardrails_message)
 
@@ -248,9 +268,7 @@ def _handle_task_error(
     if task_manager:
         task_manager.clear_pending_tasks(project_uuid, contact_urn)
 
-    print(f"[DEBUG] Error in start_inline_agents: {str(exc)}")
-    print(f"[DEBUG] Error type: {type(exc)}")
-    print(f"[DEBUG] Full exception details: {exc.__dict__}")
+    logger.error("Error in start_inline_agents: %s", str(exc), exc_info=True)
 
     if isinstance(exc, botocore.exceptions.EventStreamError) and "throttlingException" in str(exc):
         raise ThrottlingException(str(exc))
@@ -262,6 +280,47 @@ def _handle_task_error(
 
     sentry_sdk.capture_exception(exc)
     raise exc
+
+
+def _invoke_backend(
+    backend,
+    cached_data: CachedProjectData,
+    message_obj,
+    processed_message: Dict,
+    preview: bool,
+    language: str,
+    user_email: str,
+    foundation_model: Optional[str],
+    turn_off_rationale: bool,
+):
+    """
+    Invoke backend with cached data to avoid database queries.
+
+    This helper function simplifies the backend invocation by grouping
+    all cached data and parameters into a cleaner interface.
+    """
+    invoke_kwargs = cached_data.get_invoke_kwargs(team=cached_data.team)
+
+    # Add non-cached parameters that come from the message/request
+    invoke_kwargs.update(
+        {
+            "input_text": message_obj.text,
+            "contact_urn": message_obj.contact_urn,
+            "project_uuid": message_obj.project_uuid,
+            "sanitized_urn": message_obj.sanitized_urn,
+            "contact_fields": message_obj.contact_fields_as_json,
+            "contact_name": message_obj.contact_name,
+            "channel_uuid": message_obj.channel_uuid,
+            "msg_external_id": processed_message.get("msg_event", {}).get("msg_external_id", ""),
+            "preview": preview,
+            "language": language,
+            "user_email": user_email,
+            "foundation_model": foundation_model,
+            "turn_off_rationale": turn_off_rationale,
+        }
+    )
+
+    return backend.invoke_agents(**invoke_kwargs)
 
 
 @celery_app.task(
@@ -283,23 +342,42 @@ def start_inline_agents(
     user_email: str = "",
     task_manager: Optional[RedisTaskManager] = None,
 ) -> bool:  # pragma: no cover
+    _apm_set_context(message=message, preview=preview)
+
     task_manager = task_manager or get_task_manager()
 
     try:
+        project_uuid = message.get("project_uuid")
+
         TypingUsecase().send_typing_message(
             contact_urn=message.get("contact_urn"),
             msg_external_id=message.get("msg_event", {}).get("msg_external_id", ""),
-            project_uuid=message.get("project_uuid"),
+            project_uuid=project_uuid,
             preview=preview,
         )
 
-        project, content_base, inline_agent_configuration = get_project_and_content_base_data(
-            message.get("project_uuid")
-        )
-        agents_backend = project.agents_backend
+        # Pre-Generation: Fetch and cache all project data
+        # This uses CacheService to minimize database queries
+        # Performance tracking is handled inside PreGenerationService
+        # TODO: When workflow orchestrator is implemented, this will be a separate Celery task
+        pre_generation_service = PreGenerationService()
+        (
+            project_dict,
+            content_base_dict,
+            team_cached,
+            guardrails_config,
+            inline_agent_config_dict,
+            agents_backend,
+            instructions_cached,
+            agent_cached,
+        ) = pre_generation_service.fetch_pre_generation_data(project_uuid)
 
+        # All data is now cached - no need to fetch Django objects
+        # Backend will use cached data passed via kwargs
+
+        # Use cached dict value instead of accessing Django object
         broadcast, _ = get_action_clients(
-            preview=preview, multi_agents=True, project_use_components=project.use_components
+            preview=preview, multi_agents=True, project_use_components=project_dict["use_components"]
         )
 
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
@@ -318,36 +396,34 @@ def start_inline_agents(
             contact_name=processed_message.get("contact_name", ""),
             channel_uuid=processed_message.get("channel_uuid", ""),
         )
-        print(f"[DEBUG] Message: {message_obj}")
+
+        logger.debug("Message object built", extra={"has_text": bool(message_obj.text)})
 
         message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
 
-        backend = BackendsRegistry.get_backend(agents_backend)
-        team = ORMTeamRepository(agents_backend=agents_backend, project=project).get_team(message_obj.project_uuid)
+        # Prepare cached data context
+        cached_data = CachedProjectData.from_pre_generation_data(
+            project_dict=project_dict,
+            content_base_dict=content_base_dict,
+            team=team_cached,
+            guardrails_config=guardrails_config,
+            inline_agent_config_dict=inline_agent_config_dict,
+            instructions=instructions_cached,
+            agent_data=agent_cached,
+        )
 
-        response = backend.invoke_agents(
-            team=team,
-            input_text=message_obj.text,
-            contact_urn=message_obj.contact_urn,
-            project_uuid=message_obj.project_uuid,
+        # Invoke backend with simplified parameters
+        backend = BackendsRegistry.get_backend(agents_backend)
+        response = _invoke_backend(
+            backend=backend,
+            cached_data=cached_data,
+            message_obj=message_obj,
+            processed_message=processed_message,
             preview=preview,
-            rationale_switch=project.rationale_switch,
-            sanitized_urn=message_obj.sanitized_urn,
             language=language,
             user_email=user_email,
-            use_components=project.use_components,
-            contact_fields=message_obj.contact_fields_as_json,
-            contact_name=message_obj.contact_name,
-            channel_uuid=message_obj.channel_uuid,
-            msg_external_id=processed_message.get("msg_event", {}).get("msg_external_id", ""),
-            turn_off_rationale=turn_off_rationale,
-            use_prompt_creation_configurations=project.use_prompt_creation_configurations,
-            conversation_turns_to_include=project.conversation_turns_to_include,
-            exclude_previous_thinking_steps=project.exclude_previous_thinking_steps,
-            project=project,
-            content_base=content_base,
             foundation_model=foundation_model,
-            inline_agent_configuration=inline_agent_configuration,
+            turn_off_rationale=turn_off_rationale,
         )
 
         if response is None or response == "":
@@ -393,7 +469,13 @@ def start_inline_agents(
     except (openai.APIError, EmptyFinalResponseException) as e:
         if self.request.retries < 2:
             task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
-            raise self.retry(exc=e, countdown=2**self.request.retries, max_retries=2, priority=0, jitter=False)
+            raise self.retry(
+                exc=e,
+                countdown=2**self.request.retries,
+                max_retries=2,
+                priority=0,
+                jitter=False,
+            ) from e
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
     except Exception as e:
         _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
