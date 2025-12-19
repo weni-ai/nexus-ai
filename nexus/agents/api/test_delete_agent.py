@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 from rest_framework.test import APIClient
@@ -12,6 +12,35 @@ from nexus.usecases.users.tests.user_factory import UserFactory
 class DeleteAgentTestCase(TestCase):
     def setUp(self):
         """Set up test fixtures"""
+        # Mock boto3 clients to avoid AWS credentials requirement
+        self.mock_sts = MagicMock()
+        self.mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
+
+        # Create mocks for all boto3 clients
+        self.mock_s3 = MagicMock()
+        self.mock_lambda = MagicMock()
+        self.mock_iam = MagicMock()
+        self.mock_bedrock_agent = MagicMock()
+        self.mock_bedrock_agent_runtime = MagicMock()
+        self.mock_bedrock_runtime = MagicMock()
+
+        def mock_boto3_client(service_name, **kwargs):
+            """Return appropriate mock based on service name"""
+            mocks = {
+                "sts": self.mock_sts,
+                "s3": self.mock_s3,
+                "lambda": self.mock_lambda,
+                "iam": self.mock_iam,
+                "bedrock-agent": self.mock_bedrock_agent,
+                "bedrock-agent-runtime": self.mock_bedrock_agent_runtime,
+                "bedrock-runtime": self.mock_bedrock_runtime,
+            }
+            return mocks.get(service_name, MagicMock())
+
+        self.mock_boto3_patcher = patch("nexus.task_managers.file_database.bedrock.boto3.client")
+        self.mock_boto3 = self.mock_boto3_patcher.start()
+        self.mock_boto3.side_effect = mock_boto3_client
+
         # Create user
         self.user = UserFactory()
 
@@ -207,3 +236,7 @@ class DeleteAgentTestCase(TestCase):
         # Verify CASCADE deleted related records
         self.assertFalse(AgentSkills.objects.filter(uuid=skill_uuid).exists())
         self.assertFalse(AgentVersion.objects.filter(uuid=version_uuid).exists())
+
+    def tearDown(self):
+        """Clean up after tests"""
+        self.mock_boto3_patcher.stop()
