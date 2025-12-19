@@ -1,13 +1,22 @@
-import logging
-
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
 from nexus.admin_widgets import PrettyJSONWidget
 from nexus.inline_agents.backends.bedrock.models import Supervisor
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor
-from nexus.inline_agents.models import Agent, Guardrail, InlineAgentsConfiguration
+from nexus.inline_agents.models import (
+    MCP,
+    Agent,
+    AgentCategory,
+    AgentGroup,
+    AgentSystem,
+    AgentType,
+    Guardrail,
+    InlineAgentsConfiguration,
+    MCPConfigOption,
+    MCPCredentialTemplate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -128,13 +137,27 @@ class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
             logger.warning(f"[Admin] Failed to trigger cache invalidation for InlineAgentsConfiguration: {e}")
 
 
+class MCPInline(admin.TabularInline):
+    """Inline to show and manage MCPs for an Agent"""
+
+    model = MCP
+    extra = 1
+    fields = ("name", "system", "description", "order", "is_active")
+    autocomplete_fields = ["system"]
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("system").order_by("system__slug", "order", "name")
+
+
 @admin.register(Agent)
 class AgentAdmin(admin.ModelAdmin):
-    list_display = ("uuid", "name", "project", "is_official")
-    list_filter = ("is_official", "source_type")
+    list_display = ("uuid", "name", "project", "is_official", "agent_type", "category")
+    list_filter = ("is_official", "source_type", "agent_type", "category")
     search_fields = ("name", "project__name", "project__uuid", "slug")
     ordering = ("project__name",)
-    autocomplete_fields = ["project"]
+    autocomplete_fields = ["project", "group", "systems", "agent_type", "category"]
+    inlines = [MCPInline]
 
     fieldsets = (
         (
@@ -142,14 +165,50 @@ class AgentAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "name",
+                    "slug",
                     "project",
                     "is_official",
+                    "agent_type",
+                    "category",
+                    "group",
+                    "systems",
                     "instruction",
                     "collaboration_instructions",
                     "foundation_model",
                     "backend_foundation_models",
                     "source_type",
                 )
+            },
+        ),
+        (
+            "Variant & Capabilities",
+            {
+                "fields": (
+                    "variant",
+                    "capabilities",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Regionalization Policies",
+            {
+                "fields": ("policies",),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Tooling",
+            {
+                "fields": ("tooling",),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Catalog Integration",
+            {
+                "fields": ("catalog",),
+                "classes": ("collapse",),
             },
         ),
     )
@@ -189,3 +248,101 @@ class AgentAdmin(admin.ModelAdmin):
                 logger.info(f"[Admin] Triggered cache invalidation after Agent deletion (project {project_uuid})")
             except Exception as e:
                 logger.warning(f"[Admin] Failed to trigger cache invalidation after Agent deletion: {e}")
+
+    formfield_overrides = {
+        models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
+    }
+
+
+@admin.register(AgentGroup)
+class AgentGroupAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug")
+    search_fields = ("name", "slug")
+    ordering = ("name",)
+    formfield_overrides = {
+        models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
+    }
+    actions = ["apply_shared_config_to_agents"]
+
+    def apply_shared_config_to_agents(self, request, queryset):
+        updated_count = 0
+        for group in queryset:
+            shared = group.shared_config or {}
+            for agent in group.agents.all():
+                changed = False
+                if "backend_foundation_models" in shared and isinstance(shared["backend_foundation_models"], dict):
+                    agent.backend_foundation_models = shared["backend_foundation_models"]
+                    changed = True
+                if "foundation_model" in shared and isinstance(shared["foundation_model"], str):
+                    agent.foundation_model = shared["foundation_model"]
+                    changed = True
+                if "instruction" in shared and isinstance(shared["instruction"], str):
+                    agent.instruction = shared["instruction"]
+                    changed = True
+                if "collaboration_instructions" in shared and isinstance(shared["collaboration_instructions"], str):
+                    agent.collaboration_instructions = shared["collaboration_instructions"]
+                    changed = True
+                if "source_type" in shared and isinstance(shared["source_type"], str):
+                    agent.source_type = shared["source_type"]
+                    changed = True
+                if changed:
+                    agent.save()
+                    updated_count += 1
+        messages.success(request, f"Configuration applied. Agents updated: {updated_count}")
+
+    apply_shared_config_to_agents.short_description = "Apply shared_config to agents"
+
+
+@admin.register(AgentSystem)
+class AgentSystemAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug")
+    search_fields = ("name", "slug")
+    ordering = ("name",)
+    formfield_overrides = {
+        models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
+    }
+
+
+@admin.register(AgentType)
+class AgentTypeAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug")
+    search_fields = ("name", "slug")
+    ordering = ("name",)
+
+
+@admin.register(AgentCategory)
+class AgentCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "slug")
+    search_fields = ("name", "slug")
+    ordering = ("name",)
+
+
+class MCPConfigOptionInline(admin.TabularInline):
+    model = MCPConfigOption
+    extra = 0
+    fields = ("name", "label", "type", "options", "order", "is_required")
+    formfield_overrides = {
+        models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 5, "cols": 60, "class": "vLargeTextField"})},
+    }
+
+
+class MCPCredentialTemplateInline(admin.TabularInline):
+    model = MCPCredentialTemplate
+    extra = 0
+    fields = ("name", "label", "placeholder", "is_confidential", "order")
+
+
+@admin.register(MCP)
+class MCPAdmin(admin.ModelAdmin):
+    list_display = ("name", "agent", "system", "order", "is_active")
+    list_filter = ("is_active", "system", "agent")
+    search_fields = ("name", "description", "agent__name", "agent__slug", "system__name", "system__slug")
+    ordering = ("agent", "system", "order", "name")
+    autocomplete_fields = ["agent", "system"]
+    inlines = [MCPConfigOptionInline, MCPCredentialTemplateInline]
+
+    fieldsets = ((None, {"fields": ("name", "description", "agent", "system", "order", "is_active")}),)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.select_related("agent", "system")
