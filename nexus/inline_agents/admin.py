@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import admin
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
@@ -6,6 +8,8 @@ from nexus.admin_widgets import PrettyJSONWidget
 from nexus.inline_agents.backends.bedrock.models import Supervisor
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor
 from nexus.inline_agents.models import Agent, Guardrail, InlineAgentsConfiguration
+
+logger = logging.getLogger(__name__)
 
 
 @admin.register(Guardrail)
@@ -105,6 +109,24 @@ class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
 
     fieldsets = ((None, {"fields": ("project", "agents_backend", "default_instructions_for_collaborators")}),)
 
+    def save_model(self, request, obj, form, change):
+        """Save model and trigger cache invalidation."""
+        super().save_model(request, obj, form, change)
+
+        # Fire cache invalidation event for project update (inline_agent_config is part of project cache)
+        try:
+            from nexus.events import notify_async
+
+            notify_async(
+                event="cache_invalidation:project",
+                project=obj.project,
+            )
+            logger.info(
+                f"[Admin] Triggered cache invalidation for InlineAgentsConfiguration (project {obj.project.uuid})"
+            )
+        except Exception as e:
+            logger.warning(f"[Admin] Failed to trigger cache invalidation for InlineAgentsConfiguration: {e}")
+
 
 @admin.register(Agent)
 class AgentAdmin(admin.ModelAdmin):
@@ -131,3 +153,39 @@ class AgentAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+    def save_model(self, request, obj, form, change):
+        """Save model and trigger cache invalidation."""
+        super().save_model(request, obj, form, change)
+
+        # Fire cache invalidation event for team update (agents are part of team)
+        try:
+            from nexus.events import notify_async
+
+            project_uuid = str(obj.project.uuid)
+            notify_async(
+                event="cache_invalidation:team",
+                project_uuid=project_uuid,
+            )
+            logger.info(f"[Admin] Triggered cache invalidation for Agent {obj.name} (project {project_uuid})")
+        except Exception as e:
+            logger.warning(f"[Admin] Failed to trigger cache invalidation for Agent: {e}")
+
+    def delete_model(self, request, obj):
+        """Delete model and trigger cache invalidation."""
+        project_uuid = str(obj.project.uuid) if obj.project else None
+
+        super().delete_model(request, obj)
+
+        # Fire cache invalidation event for team update
+        if project_uuid:
+            try:
+                from nexus.events import notify_async
+
+                notify_async(
+                    event="cache_invalidation:team",
+                    project_uuid=project_uuid,
+                )
+                logger.info(f"[Admin] Triggered cache invalidation after Agent deletion (project {project_uuid})")
+            except Exception as e:
+                logger.warning(f"[Admin] Failed to trigger cache invalidation after Agent deletion: {e}")
