@@ -1,4 +1,4 @@
-import json
+import logging
 
 from django.conf import settings
 from django.db.models import Q
@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from inline_agents.backends import BackendsRegistry
+from nexus.events import event_manager, notify_async
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     IntegratedAgentSerializer,
@@ -19,7 +20,6 @@ from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
 from nexus.usecases.inline_agents.get import GetInlineAgentsUsecase, GetInlineCredentialsUsecase, GetLogGroupUsecase
-from nexus.events import event_manager, notify_async
 from nexus.usecases.inline_agents.update import UpdateAgentUseCase
 from nexus.usecases.intelligences.get_by_uuid import (
     create_inline_agents_configuration,
@@ -27,6 +27,8 @@ from nexus.usecases.intelligences.get_by_uuid import (
 )
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from router.entities import message_factory
+
+logger = logging.getLogger(__name__)
 
 SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
 
@@ -47,7 +49,7 @@ class PushAgents(APIView):
 
         import json
 
-        print(json.dumps(request.data, indent=4, default=str))
+        logger.debug("InlineAgentsView payload", extra={"keys": list(request.data.keys())})
 
         agents = json.loads(request.data.get("agents"))
         project_uuid = request.data.get("project_uuid")
@@ -75,8 +77,8 @@ class PushAgents(APIView):
 
         agents = agents["agents"]
 
-        print(json.dumps(agents, indent=4, default=str))
-        print(files)
+        logger.debug("Agents payload", extra={"agent_keys": list(agents.keys()) if isinstance(agents, dict) else None})
+        logger.debug("Files payload", extra={"file_count": len(files) if hasattr(files, "__len__") else None})
         official_agent_key = self._check_can_edit_official_agent(agents=agents, user_email=request.user.email)
         if official_agent_key is not None:
             return Response(
@@ -95,10 +97,10 @@ class PushAgents(APIView):
                 agent_qs = Agent.objects.filter(slug=key, project=project)
                 existing_agent = agent_qs.exists()
                 if existing_agent:
-                    print(f"[+ Updating agent {key} +]")
+                    logger.info("Updating agent", extra={"key": key})
                     update_agent_usecase.update_agent(agent_qs.first(), agents[key], project, files)
                 else:
-                    print(f"[+ Creating agent {key} +]")
+                    logger.info("Creating agent", extra={"key": key})
                     agent_usecase.create_agent(key, agents[key], project, files)
 
             # Fire cache invalidation event for team update (agents are part of team) (async observer)
@@ -510,31 +512,29 @@ class AgentBuilderAudio(APIView):
     def get(self, request, project_uuid):
         _, _, inline_agents_configuration = get_project_and_content_base_data(project_uuid=project_uuid)
         if inline_agents_configuration:
-            return Response({
-                "audio_orchestration": inline_agents_configuration.audio_orchestration,
-                "agent_voice": inline_agents_configuration.audio_orchestration_voice
-            })
+            return Response(
+                {
+                    "audio_orchestration": inline_agents_configuration.audio_orchestration,
+                    "agent_voice": inline_agents_configuration.audio_orchestration_voice,
+                }
+            )
 
-        return Response({
-            "audio_orchestration": False,
-            "agent_voice": None
-        })
+        return Response({"audio_orchestration": False, "agent_voice": None})
 
     def post(self, request, project_uuid):
         agent_voice = request.data.get("agent_voice")
         audio_orchestration = request.data.get("audio_orchestration")
 
         if not agent_voice and audio_orchestration is None:
-            return Response(
-                {"error": "At least one of 'audio_orchestration' or 'agent_voice' is required"},
-                status=400
-            )
+            return Response({"error": "At least one of 'audio_orchestration' or 'agent_voice' is required"}, status=400)
 
         try:
             project, _, inline_agents_configuration = get_project_and_content_base_data(project_uuid=project_uuid)
 
             if inline_agents_configuration is None:
-                inline_agents_configuration = create_inline_agents_configuration(project, audio_orchestration=audio_orchestration, audio_orchestration_voice=agent_voice)
+                inline_agents_configuration = create_inline_agents_configuration(
+                    project, audio_orchestration=audio_orchestration, audio_orchestration_voice=agent_voice
+                )
 
             if audio_orchestration is not None and agent_voice:
                 inline_agents_configuration.set_audio_orchestration(audio_orchestration, agent_voice)
@@ -545,7 +545,7 @@ class AgentBuilderAudio(APIView):
             elif agent_voice:
                 inline_agents_configuration.set_audio_orchestration_voice(agent_voice)
 
-            # Fire cache invalidation event for project update (inline_agent_config is part of project cache) (async observer)
+            # Fire cache invalidation event for project update (async observer)
             notify_async(
                 event="cache_invalidation:project",
                 project=project,
@@ -554,9 +554,9 @@ class AgentBuilderAudio(APIView):
             return Response(
                 {
                     "audio_orchestration": inline_agents_configuration.audio_orchestration,
-                    "agent_voice": inline_agents_configuration.audio_orchestration_voice
+                    "agent_voice": inline_agents_configuration.audio_orchestration_voice,
                 },
-                status=200
+                status=200,
             )
 
         except ValueError:

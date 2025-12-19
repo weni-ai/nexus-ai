@@ -21,6 +21,7 @@ Safe top-level imports (no circular risk):
 This pattern ensures scalability: as the codebase grows and dependencies
 change, we avoid circular import issues without needing to refactor observers.
 """
+
 import logging
 
 from nexus.event_domain.decorators import observer

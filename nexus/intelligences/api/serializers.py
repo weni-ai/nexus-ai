@@ -1,3 +1,5 @@
+import logging
+
 from django.forms.models import model_to_dict
 from rest_framework import serializers
 
@@ -22,6 +24,8 @@ from nexus.task_managers.models import (
     ContentBaseFileTaskManager,
     ContentBaseLinkTaskManager,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class IntelligenceSerializer(serializers.ModelSerializer):
@@ -81,7 +85,7 @@ class ContentBaseLinkSerializer(serializers.ModelSerializer):
             task_manager = obj.upload_tasks.order_by("created_at").last()
             return task_manager.status
         except Exception as e:
-            print(e)
+            logger.error("Serializer exception: %s", e, exc_info=True)
             return ContentBaseLinkTaskManager.STATUS_FAIL
 
 
@@ -430,7 +434,11 @@ class InstructionClassificationRequestSerializer(serializers.Serializer):
 
     instruction = serializers.CharField(
         required=True,
-        help_text="The instruction text to classify. This instruction will be analyzed against existing instructions in the content base.",
+        help_text=("Instruction text to classify against existing content base instructions."),
+    )
+    language = serializers.CharField(
+        required=True,
+        help_text=("Language code for classification context (e.g., pt-br, en, es)."),
     )
 
 
@@ -452,11 +460,11 @@ class InstructionClassificationResponseSerializer(serializers.Serializer):
 
     classification = ClassificationItemSerializer(
         many=True,
-        help_text="List of classifications assigned to the instruction. Each classification includes a category and optional reason.",
+        help_text="Classifications for the instruction; each has category and optional reason.",
     )
     suggestion = serializers.CharField(
         required=False,
         allow_null=True,
         allow_blank=True,
-        help_text="Optional suggestion for improving or modifying the instruction",
+        help_text="Optional suggestion to improve or modify the instruction",
     )

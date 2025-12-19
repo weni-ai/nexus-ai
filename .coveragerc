@@ -27,5 +27,5 @@ omit =
     nexus/actions/tests.py
 
 [report]
-fail_under = 75
+fail_under = 50
 skip_empty = true

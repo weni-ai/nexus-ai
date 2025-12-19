@@ -4,6 +4,7 @@ Factory functions for creating observer instances with proper dependencies.
 These factories enable dependency injection for observers, making them easier to test
 and allowing for better separation of concerns.
 """
+
 import logging
 from typing import Type
 
@@ -32,6 +33,7 @@ def create_rationale_observer(observer_class: Type[EventObserver]) -> EventObser
     """
     # Lazy imports to avoid circular dependencies
     from django.conf import settings
+
     from nexus.usecases.inline_agents.typing import TypingUsecase
 
     # Create bedrock client
