@@ -418,6 +418,8 @@ if TESTING:
         "ENABLED": False,
         "DISABLE_SEND": True,
     }
+    # Use custom test runner that closes connections before teardown
+    TEST_RUNNER = "nexus.test_runner.NexusTestRunner"
 
 # TODO: temporary solution, undo later
 
