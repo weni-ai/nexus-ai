@@ -303,6 +303,8 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
 
         context_data = context.context
         project_uuid = context_data.project.get("uuid")
+        tool_info = self.hooks_state.get_tool_info(tool.name)
+        parameters = tool_info.get("parameters", [])
 
         if isinstance(result, str):
             try:
@@ -387,6 +389,8 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                     "observation": {
                         "actionGroupInvocationOutput": {
                             "text": result,
+                            "tool_name": tool.name,
+                            "parameters": parameters,
                         },
                     }
                 }
@@ -548,6 +552,8 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
 
         context_data = context.context
         project_uuid = context_data.project.get("uuid")
+        tool_info = self.hooks_state.get_tool_info(tool.name)
+        parameters = tool_info.get("parameters", [])
 
         if tool.name == self.knowledge_base_tool:
             trace_data = {
@@ -639,6 +645,8 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                         "observation": {
                             "actionGroupInvocationOutput": {
                                 "text": result,
+                                "tool_name": tool.name,
+                                "parameters": parameters,
                             },
                         }
                     }
