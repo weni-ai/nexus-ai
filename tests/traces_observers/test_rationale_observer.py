@@ -1,4 +1,4 @@
-from router.traces_observers.rationale_observer import RationaleObserver
+from router.traces_observers.rationale.observer import RationaleObserver
 
 
 def test_rationale_observer_perform_preview_sends_typing_and_store_message(monkeypatch):
@@ -21,21 +21,21 @@ def test_rationale_observer_perform_preview_sends_typing_and_store_message(monke
         def save_rationale_session_data(self, session_id, data):
             pass
 
-    monkeypatch.setattr("router.traces_observers.rationale_observer.TypingUsecase", FakeTypingUsecase)
+    monkeypatch.setattr("router.traces_observers.rationale.observer.TypingUsecase", FakeTypingUsecase)
     monkeypatch.setattr(
-        "router.traces_observers.rationale_observer.save_inline_message_to_database",
+        "router.traces_observers.save_traces.save_inline_message_to_database",
         fake_save_inline_message_to_database,
     )
     monkeypatch.setattr(
-        "router.traces_observers.rationale_observer.RationaleObserver._get_redis_task_manager",
+        "router.traces_observers.rationale.observer.RationaleObserver._get_redis_task_manager",
         lambda self: StubManager(),
     )
     monkeypatch.setattr(
-        "router.traces_observers.rationale_observer.RationaleObserver._handle_preview_message",
+        "router.traces_observers.rationale.observer.RationaleObserver._handle_preview_message",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
-        "router.traces_observers.rationale_observer.SendMessageHTTPClient",
+        "router.traces_observers.rationale.observer.SendMessageHTTPClient",
         type("C", (), {"__init__": lambda *a, **k: None, "send_direct_message": lambda *a, **k: None}),
     )
 
