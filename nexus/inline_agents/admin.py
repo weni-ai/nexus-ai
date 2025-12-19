@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import admin, messages
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
