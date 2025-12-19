@@ -1,3 +1,4 @@
+from unittest import skip
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -7,6 +8,7 @@ from nexus.inline_agents.backends.bedrock.repository import BedrockSupervisorRep
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
+@skip("Bedrock backend is being deprecated")
 class TestBedrockSupervisorRepository(TestCase):
     def setUp(self):
         self.project = ProjectFactory()

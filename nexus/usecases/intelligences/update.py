@@ -1,7 +1,7 @@
 import pendulum
 from django.forms.models import model_to_dict
 
-from nexus.events import event_manager
+from nexus.events import event_manager, notify_async
 from nexus.intelligences.models import ContentBase, ContentBaseText
 from nexus.orgs import permissions
 from nexus.projects.permissions import has_project_permission
@@ -100,6 +100,12 @@ class UpdateContentBaseUseCase:
             new_contentbase_data=new_contentbase_data,
             user=user,
             action_type="U",
+        )
+
+        # Fire cache invalidation event (async observer)
+        notify_async(
+            event="cache_invalidation:content_base",
+            contentbase=contentbase,
         )
 
         return contentbase
