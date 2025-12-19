@@ -1,7 +1,7 @@
 import logging
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import SimpleTestCase
 
 from router.tasks.redis_task_manager import RedisTaskManager
 from router.tasks.workflow_orchestrator import (
@@ -36,7 +36,7 @@ class MockRedisClient:
             self.data.pop(key, None)
 
 
-class WorkflowContextTestCase(TestCase):
+class WorkflowContextTestCase(SimpleTestCase):
     """Tests for WorkflowContext dataclass."""
 
     def test_workflow_context_creation(self):
@@ -66,7 +66,7 @@ class WorkflowContextTestCase(TestCase):
         self.assertIsNone(ctx.agents_backend)
 
 
-class CreateWorkflowContextTestCase(TestCase):
+class CreateWorkflowContextTestCase(SimpleTestCase):
     """Tests for _create_workflow_context helper."""
 
     def test_create_workflow_context(self):
@@ -107,7 +107,7 @@ class CreateWorkflowContextTestCase(TestCase):
         self.assertTrue(ctx.preview)
 
 
-class InitializeWorkflowTestCase(TestCase):
+class InitializeWorkflowTestCase(SimpleTestCase):
     """Tests for _initialize_workflow helper."""
 
     @patch("router.tasks.workflow_orchestrator.notify_async")
@@ -164,7 +164,7 @@ class InitializeWorkflowTestCase(TestCase):
         mock_notify_async.assert_called_once()
 
 
-class FinalizeWorkflowTestCase(TestCase):
+class FinalizeWorkflowTestCase(SimpleTestCase):
     """Tests for _finalize_workflow helper."""
 
     def test_finalize_workflow(self):
@@ -199,7 +199,7 @@ class FinalizeWorkflowTestCase(TestCase):
         self.assertIsNone(state)
 
 
-class HandleWorkflowErrorTestCase(TestCase):
+class HandleWorkflowErrorTestCase(SimpleTestCase):
     """Tests for _handle_workflow_error helper."""
 
     @patch("router.tasks.workflow_orchestrator.sentry_sdk")

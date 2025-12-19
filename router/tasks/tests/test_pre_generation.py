@@ -11,13 +11,13 @@ Tests cover:
 import logging
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import SimpleTestCase
 
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
 
 
-class PreGenerationTaskTestCase(TestCase):
+class PreGenerationTaskTestCase(SimpleTestCase):
     """Tests for pre_generation_task."""
 
     def setUp(self):
@@ -168,7 +168,7 @@ class PreGenerationTaskTestCase(TestCase):
         mock_task_manager.update_workflow_status.assert_not_called()
 
 
-class DeserializeCachedDataTestCase(TestCase):
+class DeserializeCachedDataTestCase(SimpleTestCase):
     """Tests for deserialize_cached_data function."""
 
     def test_deserialize_cached_data_full(self):
@@ -225,7 +225,7 @@ class DeserializeCachedDataTestCase(TestCase):
         self.assertIsNone(result.content_base_dict)
 
 
-class CachedProjectDataTestCase(TestCase):
+class CachedProjectDataTestCase(SimpleTestCase):
     """Tests for CachedProjectData dataclass."""
 
     def test_from_pre_generation_data(self):

@@ -1,7 +1,7 @@
 import logging
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import SimpleTestCase
 
 from router.tasks.redis_task_manager import RedisTaskManager
 
@@ -36,7 +36,7 @@ class MockRedisClient:
         self.ttls.clear()
 
 
-class WorkflowStateTestCase(TestCase):
+class WorkflowStateTestCase(SimpleTestCase):
     """Tests for workflow state management methods."""
 
     def setUp(self):
@@ -132,7 +132,7 @@ class WorkflowStateTestCase(TestCase):
         self.assertIsNone(state)
 
 
-class WorkflowStatusUpdateTestCase(TestCase):
+class WorkflowStatusUpdateTestCase(SimpleTestCase):
     """Tests for workflow status update method."""
 
     def setUp(self):
@@ -202,7 +202,7 @@ class WorkflowStatusUpdateTestCase(TestCase):
         self.assertFalse(result)
 
 
-class WorkflowTaskRevocationTestCase(TestCase):
+class WorkflowTaskRevocationTestCase(SimpleTestCase):
     """Tests for workflow task revocation method."""
 
     def setUp(self):
@@ -279,7 +279,7 @@ class WorkflowTaskRevocationTestCase(TestCase):
         self.assertIn("task-1", revoked)
 
 
-class WorkflowMessageConcatenationTestCase(TestCase):
+class WorkflowMessageConcatenationTestCase(SimpleTestCase):
     """Tests for workflow message concatenation."""
 
     def setUp(self):
@@ -387,7 +387,7 @@ class WorkflowMessageConcatenationTestCase(TestCase):
         mock_celery_app.control.revoke.assert_called_with("legacy-task-id", terminate=True)
 
 
-class LegacyPendingTasksTestCase(TestCase):
+class LegacyPendingTasksTestCase(SimpleTestCase):
     """Tests for backwards-compatible legacy pending task methods."""
 
     def setUp(self):
