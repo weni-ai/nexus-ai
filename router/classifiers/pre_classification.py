@@ -74,7 +74,7 @@ class PreClassification:
         return self.flow_started
 
     def pre_classification_preview(self) -> dict:
-        logger.info("Pre Classification Preview", extra={"message": str(self.message)})
+        logger.info("Pre Classification Preview", extra={"msg_content": str(self.message)})
 
         if self.message_text:
             flow_dto = self.safety_check(start_flow=False)
