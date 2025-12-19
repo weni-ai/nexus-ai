@@ -28,7 +28,7 @@ class MessageStreamingClient:
     Usage:
         with MessageStreamingClient(host='service.com', port=50051) as client:
             for response in client.stream_messages_with_setup(...):
-                print(response)
+                logger.debug("Setup response", extra={"success": response.success, "message": response.message})
     """
 
     def __init__(
@@ -157,7 +157,7 @@ class MessageStreamingClient:
                     channel_uuid="uuid",
                     contact_urn="whatsapp:+5511999999999"
                 )
-                print(f"Delta {i} status: {response['status']}")
+                logger.debug("Delta status", extra={"index": i, "status": response["status"]})
         """
         logger.info(f"Sending delta message: {msg_id}")
 
@@ -235,7 +235,7 @@ class MessageStreamingClient:
                 channel_uuid="uuid",
                 contact_urn="whatsapp:+5511999999999"
             )
-            print(f"Completed: {response['status']}")
+            logger.debug("Completed status", extra={"status": response["status"]})
         """
         logger.info(f"Sending completed message: {msg_id}")
 
@@ -352,6 +352,7 @@ class MessageStreamingClient:
                     "error_message": response.error_message if response.error_message else None,
                     "data": dict(response.data) if response.data else {},
                 }
+                logger.debug("Stream response", extra={"sequence": result["sequence"], "status": result["status"]})
                 yield result
 
                 if response.is_final:
