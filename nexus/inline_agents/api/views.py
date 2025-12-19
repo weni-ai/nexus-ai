@@ -1,4 +1,4 @@
-import json
+import logging
 
 from django.conf import settings
 from django.db.models import Q
@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from inline_agents.backends import BackendsRegistry
+from nexus.events import event_manager, notify_async
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     IntegratedAgentSerializer,
@@ -27,6 +28,8 @@ from nexus.usecases.intelligences.get_by_uuid import (
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from router.entities import message_factory
 
+logger = logging.getLogger(__name__)
+
 SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
 
 
@@ -46,7 +49,7 @@ class PushAgents(APIView):
 
         import json
 
-        print(json.dumps(request.data, indent=4, default=str))
+        logger.debug("InlineAgentsView payload", extra={"keys": list(request.data.keys())})
 
         agents = json.loads(request.data.get("agents"))
         project_uuid = request.data.get("project_uuid")
@@ -74,8 +77,8 @@ class PushAgents(APIView):
 
         agents = agents["agents"]
 
-        print(json.dumps(agents, indent=4, default=str))
-        print(files)
+        logger.debug("Agents payload", extra={"agent_keys": list(agents.keys()) if isinstance(agents, dict) else None})
+        logger.debug("Files payload", extra={"file_count": len(files) if hasattr(files, "__len__") else None})
         official_agent_key = self._check_can_edit_official_agent(agents=agents, user_email=request.user.email)
         if official_agent_key is not None:
             return Response(
@@ -94,11 +97,17 @@ class PushAgents(APIView):
                 agent_qs = Agent.objects.filter(slug=key, project=project)
                 existing_agent = agent_qs.exists()
                 if existing_agent:
-                    print(f"[+ Updating agent {key} +]")
+                    logger.info("Updating agent", extra={"key": key})
                     update_agent_usecase.update_agent(agent_qs.first(), agents[key], project, files)
                 else:
-                    print(f"[+ Creating agent {key} +]")
+                    logger.info("Creating agent", extra={"key": key})
                     agent_usecase.create_agent(key, agents[key], project, files)
+
+            # Fire cache invalidation event for team update (agents are part of team) (async observer)
+            notify_async(
+                event="cache_invalidation:team",
+                project_uuid=project_uuid,
+            )
 
         except Project.DoesNotExist:
             return Response({"error": "Project not found"}, status=404)
@@ -119,9 +128,23 @@ class ActiveAgentsView(APIView):
         try:
             if assign:
                 usecase.assign_agent(agent_uuid, project_uuid)
+
+                # Fire cache invalidation event for team update (agent assigned) (async observer)
+                notify_async(
+                    event="cache_invalidation:team",
+                    project_uuid=project_uuid,
+                )
+
                 return Response({"assigned": True}, status=200)
 
             usecase.unassign_agent(agent_uuid, project_uuid)
+
+            # Fire cache invalidation event for team update (agent unassigned) (async observer)
+            notify_async(
+                event="cache_invalidation:team",
+                project_uuid=project_uuid,
+            )
+
             return Response({"assigned": False}, status=200)
         except ValueError as e:
             return Response({"error": str(e)}, status=404)
@@ -384,6 +407,13 @@ class ProjectComponentsView(APIView):
             project = Project.objects.get(uuid=project_uuid)
             project.use_components = use_components
             project.save()
+
+            # Fire cache invalidation event for project update
+            event_manager.notify(
+                event="cache_invalidation:project",
+                project=project,
+            )
+
             return Response({"message": "Project updated successfully", "use_components": use_components})
         except Project.DoesNotExist:
             return Response({"error": "Project not found"}, status=404)
@@ -449,6 +479,13 @@ class MultiAgentView(APIView):
             if not project.use_prompt_creation_configurations:
                 project.use_prompt_creation_configurations = True
             project.save()
+
+            # Fire cache invalidation event for project update (async observer)
+            notify_async(
+                event="cache_invalidation:project",
+                project=project,
+            )
+
             return Response({"message": "Project updated successfully", "multi_agents": multi_agents}, status=200)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
@@ -507,6 +544,12 @@ class AgentBuilderAudio(APIView):
 
             elif agent_voice:
                 inline_agents_configuration.set_audio_orchestration_voice(agent_voice)
+
+            # Fire cache invalidation event for project update (async observer)
+            notify_async(
+                event="cache_invalidation:project",
+                project=project,
+            )
 
             return Response(
                 {
