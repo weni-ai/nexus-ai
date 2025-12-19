@@ -96,7 +96,7 @@ class IntegratedAgent(models.Model):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="integrated_agents")
     created_on = models.DateTimeField(auto_now_add=True)
-    metadata = models.JSONField(default=dict, blank=True)
+    metadata = models.JSONField(default=dict, null=True, blank=True)
 
     class Meta:
         unique_together = ("agent", "project")
