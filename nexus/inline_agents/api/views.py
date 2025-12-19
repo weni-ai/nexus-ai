@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from inline_agents.backends import BackendsRegistry
+from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import event_manager, notify_async
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
