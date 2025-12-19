@@ -3,8 +3,8 @@ import logging
 from typing import Dict, List
 
 import sentry_sdk
+from celery import shared_task
 
-from nexus.celery import app as celery_app
 from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver
 from nexus.inline_agents.models import InlineAgentMessage
@@ -53,7 +53,7 @@ def trace_events_to_json(trace_event):
     return json.dumps(trace_event, default=str)
 
 
-@celery_app.task()
+@shared_task
 def save_inline_trace_events(
     trace_events: List[Dict],
     project_uuid: str,
