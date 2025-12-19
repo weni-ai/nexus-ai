@@ -115,6 +115,15 @@ def pytest_configure():
         _patch_arrayfield(ArrayField)
         _patch_queryset_distinct()
 
+        # Disable ElasticAPM during tests to prevent connection leaks
+        try:
+            settings.ELASTIC_APM = {
+                "ENABLED": False,
+                "DISABLE_SEND": True,
+            }
+        except Exception:
+            pass
+
         # Use local memory cache in tests to avoid external Redis
         try:
             settings.CACHES = {
@@ -165,5 +174,17 @@ def pytest_configure():
                 pass
         except Exception:
             pass
+    except Exception:
+        pass
+
+
+def pytest_unconfigure():
+    """Close all database connections after tests to allow test database cleanup."""
+    try:
+        from django.db import connections
+
+        # Close all database connections
+        for conn in connections.all():
+            conn.close()
     except Exception:
         pass
