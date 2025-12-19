@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('projects', '0019_project_default_collaborators_foundation_model'),
+        ("projects", "0019_project_default_collaborators_foundation_model"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='project',
-            name='default_formatter_foundation_model',
+            model_name="project",
+            name="default_formatter_foundation_model",
             field=models.CharField(blank=True, max_length=100, null=True),
         ),
     ]

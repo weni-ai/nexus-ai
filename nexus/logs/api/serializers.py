@@ -1,3 +1,7 @@
+import json
+import logging
+
+import sentry_sdk
 from rest_framework import serializers
 
 from nexus.inline_agents.models import InlineAgentMessage
@@ -5,6 +9,35 @@ from nexus.logs.models import Message, MessageLog, RecentActivities
 from nexus.usecases.actions.retrieve import FlowDoesNotExist
 from router.classifiers import Classifier
 from router.repositories.orm import FlowsORMRepository
+
+logger = logging.getLogger(__name__)
+
+
+def _json_like(text: str) -> bool:
+    text = text.lstrip()
+    return bool(text) and text[0] in "[{"
+
+
+def _extract_display(parsed) -> str | None:
+    def _build_display(msg: dict) -> str | None:
+        header = msg.get("header")
+        header_text = header.get("text") if isinstance(header, dict) else None
+        footer = msg.get("footer")
+        base_text = msg.get("text") or msg.get("message_text")
+        parts = [p for p in [header_text, base_text, footer] if p]
+        return "\n".join(parts) if parts else None
+
+    if isinstance(parsed, list) and parsed:
+        item = parsed[0]
+        if isinstance(item, dict):
+            msg = item.get("msg") or item
+            if isinstance(msg, dict):
+                return _build_display(msg)
+    elif isinstance(parsed, dict):
+        msg = parsed.get("msg") or parsed
+        if isinstance(msg, dict):
+            return _build_display(msg)
+    return None
 
 
 class TagPercentageSerializer(serializers.Serializer):
@@ -202,3 +235,32 @@ class InlineConversationSerializer(serializers.ModelSerializer):
             "source_type",
             "created_at",
         ]
+
+    text = serializers.SerializerMethodField()
+
+    def get_text(self, obj: InlineAgentMessage) -> str:
+        uuid = obj.uuid
+        text = obj.text
+        logger.info(
+            "inline_conversation_text_received",
+            extra={"uuid": str(uuid), "text_len": len(text), "text_head": text[:200]},
+        )
+
+        normalized = text.strip()
+        if not _json_like(normalized):
+            return text
+
+        try:
+            parsed = json.loads(normalized)
+            display = _extract_display(parsed)
+            if display is not None:
+                return display
+            if isinstance(parsed, (dict, list)):
+                return normalized
+            return str(parsed)
+        except json.JSONDecodeError as e:
+            logger.warning("inline_conversation_text_decode_error", exc_info=True)
+            sentry_sdk.set_tag("inline_message_uuid", str(uuid))
+            sentry_sdk.set_context("inline_message_text", {"text": text})
+            sentry_sdk.capture_exception(e)
+            return text

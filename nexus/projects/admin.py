@@ -1,10 +1,12 @@
 import logging
+from datetime import timedelta
 
 from django.contrib import admin
 from django.db.models import JSONField
+from django.utils import timezone
 
 from nexus.admin_widgets import PrettyJSONWidget
-from nexus.projects.models import Project
+from nexus.projects.models import Project, ProjectApiToken
 
 logger = logging.getLogger(__name__)
 
@@ -104,3 +106,78 @@ class ProjectAdmin(admin.ModelAdmin):
             logger.info(f"[Admin] Triggered cache invalidation for project {obj.uuid}")
         except Exception as e:
             logger.warning(f"[Admin] Failed to trigger cache invalidation for project {obj.uuid}: {e}")
+
+    @admin.action(description="Generate API token for project (expires in 1 year)")
+    def generate_api_token(self, request, queryset):
+        from django.contrib import messages
+
+        from nexus.projects.models import ProjectApiToken
+
+        created = 0
+        for project in queryset:
+            token, salt, token_hash = ProjectApiToken.generate_token_pair()
+            api_token = ProjectApiToken.objects.create(
+                project=project,
+                name=f"Auto {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                salt=salt,
+                token_hash=token_hash,
+                created_by=request.user,
+                expires_at=timezone.now() + timedelta(days=365),
+            )
+            messages.add_message(
+                request,
+                messages.INFO,
+                f"Project {project.name}: token generated '{api_token.name}': {token}. Expires in 1 year.",
+            )
+            created += 1
+
+        self.message_user(request, f"{created} token(s) created.")
+
+    actions = ["generate_api_token"]
+
+
+@admin.register(ProjectApiToken)
+class ProjectApiTokenAdmin(admin.ModelAdmin):
+    list_display = ("project", "name", "scope", "enabled", "expires_at", "last_used_at")
+    list_filter = ("scope", "enabled")
+    search_fields = ("project__uuid", "project__name", "name")
+    readonly_fields = ("token_hash", "salt", "created_at", "last_used_at")
+
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "project",
+                    "name",
+                    "scope",
+                    "enabled",
+                    "expires_at",
+                    "created_by",
+                    "token_hash",
+                    "salt",
+                )
+            },
+        ),
+    )
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            from nexus.projects.models import ProjectApiToken
+
+            token, salt, token_hash = ProjectApiToken.generate_token_pair()
+            obj.salt = salt
+            obj.token_hash = token_hash
+            obj.created_by = request.user
+            if not obj.expires_at:
+                obj.expires_at = timezone.now() + timedelta(days=365)
+            super().save_model(request, obj, form, change)
+            from django.contrib import messages
+
+            messages.add_message(
+                request,
+                messages.INFO,
+                f"Token gerado para '{obj.name}': {token}. Guarde-o com segurança; não será mostrado novamente.",
+            )
+        else:
+            super().save_model(request, obj, form, change)

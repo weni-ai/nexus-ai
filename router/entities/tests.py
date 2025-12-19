@@ -1,9 +1,15 @@
+import importlib.util
 import json
 import re
+from pathlib import Path
+from unittest import TestCase
 
-from django.test import TestCase
-
-from .mailroom import message_factory
+_MAILROOM_PATH = Path(__file__).resolve().parent / "mailroom.py"
+_SPEC = importlib.util.spec_from_file_location("router.entities.mailroom", str(_MAILROOM_PATH))
+_MAILROOM = importlib.util.module_from_spec(_SPEC)
+assert _SPEC and _SPEC.loader
+_SPEC.loader.exec_module(_MAILROOM)
+message_factory = _MAILROOM.message_factory
 
 
 class MailroomMessageTest(TestCase):
@@ -12,7 +18,10 @@ class MailroomMessageTest(TestCase):
             project_uuid="123",
             text="Hello",
             contact_urn="123",
-            contact_fields={"cpf": {"value": "123456", "type": "text"}, "age": {"value": 26, "type": "number"}},
+            contact_fields={
+                "cpf": {"value": "123456", "type": "text"},
+                "age": {"value": 26, "type": "number"},
+            },
         )
 
         expected_result = json.dumps({"cpf": "123456", "age": 26})
@@ -23,14 +32,22 @@ class MailroomMessageTest(TestCase):
             project_uuid="123",
             text="Hello",
             contact_urn="123",
-            contact_fields={"cpf": None, "age": {"value": 26, "type": "number"}},
+            contact_fields={
+                "cpf": None,
+                "age": {"value": 26, "type": "number"},
+            },
         )
 
         expected_result = json.dumps({"cpf": None, "age": 26})
         self.assertEqual(message.contact_fields_as_json, expected_result)
 
     def test_empty_contact_fields(self):
-        message = message_factory(project_uuid="123", text="Hello", contact_urn="123", contact_fields={})
+        message = message_factory(
+            project_uuid="123",
+            text="Hello",
+            contact_urn="123",
+            contact_fields={},
+        )
 
         expected_result = json.dumps({})
         self.assertEqual(message.contact_fields_as_json, expected_result)
@@ -42,7 +59,12 @@ class MailroomMessageTest(TestCase):
         self.assertEqual(message.contact_fields_as_json, expected_result)
 
     def test_metadata_serialization_with_values(self):
-        message = message_factory(project_uuid="123", text="Hello", contact_urn="123", metadata={"123": "12"})
+        message = message_factory(
+            project_uuid="123",
+            text="Hello",
+            contact_urn="123",
+            metadata={"123": "12"},
+        )
 
         self.assertIsNotNone(message.metadata)
         self.assertEqual(message.metadata, {"123": "12"})
