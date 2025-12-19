@@ -412,6 +412,13 @@ ELASTIC_APM = {
     ],
 }
 
+# Disable ElasticAPM during tests to prevent connection leaks
+if TESTING:
+    ELASTIC_APM = {
+        "ENABLED": False,
+        "DISABLE_SEND": True,
+    }
+
 # TODO: temporary solution, undo later
 
 IRC_UUID = env.str("IRC_UUID")
