@@ -518,7 +518,9 @@ class TestRetailRouterViewset(APITestCase):
         self.user.user_permissions.add(permission)
 
     @mock.patch("django.conf.settings.DEFAULT_RETAIL_INSTRUCTIONS", ["Try to use emojis", "Dont change the subject"])
-    def test_list(self):
+    @mock.patch("nexus.task_managers.tasks.send_link.delay")
+    @mock.patch("nexus.task_managers.tasks_bedrock.bedrock_send_link.delay")
+    def test_list(self, mock_bedrock_send_link, mock_send_link):
         data = {
             "agent": {
                 "name": "test",
