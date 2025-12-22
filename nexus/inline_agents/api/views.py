@@ -216,6 +216,174 @@ def get_all_mcps_for_agent(agent_slug: str) -> dict:
     return result
 
 
+def get_all_mcps_for_group(group_slug: str) -> dict:
+    """
+    Get all MCPs for all agents in a group, organized by system.
+    Consolidates MCPs from all agents in the group.
+    """
+    from nexus.inline_agents.models import AgentGroup
+
+    group = AgentGroup.objects.filter(slug=group_slug).first()
+    if not group:
+        return {}
+
+    agents = Agent.objects.filter(group=group, is_official=True, source_type=Agent.PLATFORM)
+    result = {}
+
+    for agent in agents:
+        agent_mcps = get_all_mcps_for_agent(agent.slug)
+        for system_slug, mcps in agent_mcps.items():
+            if system_slug not in result:
+                result[system_slug] = []
+            # Add MCPs, avoiding duplicates by name
+            existing_mcp_names = {mcp["name"] for mcp in result[system_slug]}
+            for mcp in mcps:
+                if mcp["name"] not in existing_mcp_names:
+                    result[system_slug].append(mcp)
+                    existing_mcp_names.add(mcp["name"])
+
+    return result
+
+
+def get_all_credentials_for_group(group_slug: str) -> list:
+    """
+    Get all credentials for all agents in a group.
+    Consolidates credentials from all agents in the group.
+    """
+    from nexus.inline_agents.models import AgentGroup
+
+    group = AgentGroup.objects.filter(slug=group_slug).first()
+    if not group:
+        return []
+
+    agents = Agent.objects.filter(group=group, is_official=True, source_type=Agent.PLATFORM)
+    all_credentials = []
+    seen_credential_keys = set()
+
+    for agent in agents:
+        if hasattr(agent, "agentcredential_set"):
+            creds = agent.agentcredential_set.all().distinct("key")
+            for credential in creds:
+                if credential.key not in seen_credential_keys:
+                    all_credentials.append(
+                        {
+                            "name": credential.key,
+                            "label": credential.label,
+                            "placeholder": credential.placeholder,
+                            "is_confidential": credential.is_confidential,
+                        }
+                    )
+                    seen_credential_keys.add(credential.key)
+
+    return all_credentials
+
+
+def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dict:
+    """
+    Consolidate agents that belong to the same group into a single entry.
+    Returns a dict with 'legacy' and 'new' keys separating legacy agents from grouped agents.
+    """
+    from collections import defaultdict
+
+    from nexus.inline_agents.api.serializers import OfficialAgentListSerializer
+    from nexus.inline_agents.models import IntegratedAgent
+
+    agents_by_group = defaultdict(list)
+    for agent in agents_queryset:
+        if agent.group:
+            agents_by_group[agent.group.slug].append(agent)
+        else:
+            agents_by_group[None].append(agent)
+
+    legacy_agents = []
+    new_agents = []
+
+    for group_slug, group_agents in agents_by_group.items():
+        if group_slug is None:
+            for agent in group_agents:
+                serializer = OfficialAgentListSerializer(agent, context={"project_uuid": project_uuid})
+                legacy_agents.append(serializer.data)
+        else:
+            if not group_agents:
+                continue
+
+            base_agent = group_agents[0]
+
+            assigned = False
+            if project_uuid:
+                agent_uuids = [agent.uuid for agent in group_agents]
+                assigned = IntegratedAgent.objects.filter(
+                    project__uuid=project_uuid, agent__uuid__in=agent_uuids
+                ).exists()
+
+            all_systems = set()
+            for agent in group_agents:
+                agent_systems = list(agent.systems.values_list("slug", flat=True))
+                all_systems.update(agent_systems)
+
+            group_mcps = get_all_mcps_for_group(group_slug)
+            has_multiple_mcps = False
+            for system_slug in all_systems:
+                system_mcps = group_mcps.get(system_slug, [])
+                if isinstance(system_mcps, list) and len(system_mcps) > 1:
+                    has_multiple_mcps = True
+                    break
+
+            credentials = []
+            if not has_multiple_mcps:
+                credentials = get_all_credentials_for_group(group_slug)
+
+            payload = {
+                "uuid": base_agent.uuid,
+                "name": base_agent.name,
+                "description": base_agent.collaboration_instructions,
+                "type": (base_agent.agent_type.slug if getattr(base_agent, "agent_type", None) else ""),
+                "group": group_slug,
+                "category": (base_agent.category.slug if getattr(base_agent, "category", None) else ""),
+                "systems": sorted(list(all_systems)),
+                "assigned": assigned,
+                "slug": base_agent.slug,
+                "is_official": base_agent.is_official,
+                "credentials": credentials,
+            }
+
+            variant = getattr(base_agent, "variant", None)
+            capabilities = getattr(base_agent, "capabilities", [])
+            policies = getattr(base_agent, "policies", {})
+            tooling = getattr(base_agent, "tooling", {})
+            catalog = getattr(base_agent, "catalog", {})
+
+            all_capabilities = set(capabilities) if isinstance(capabilities, list) else set()
+            all_policies = policies.copy() if isinstance(policies, dict) else {}
+            all_tooling = tooling.copy() if isinstance(tooling, dict) else {}
+            all_catalog = catalog.copy() if isinstance(catalog, dict) else {}
+
+            for agent in group_agents[1:]:
+                if isinstance(agent.capabilities, list):
+                    all_capabilities.update(agent.capabilities)
+                if isinstance(agent.policies, dict):
+                    all_policies.update(agent.policies)
+                if isinstance(agent.tooling, dict):
+                    all_tooling.update(agent.tooling)
+                if isinstance(agent.catalog, dict):
+                    all_catalog.update(agent.catalog)
+
+            if variant is not None:
+                payload["variant"] = variant
+            if len(all_capabilities) > 0:
+                payload["capabilities"] = sorted(list(all_capabilities))
+            if len(all_policies) > 0:
+                payload["policies"] = all_policies
+            if len(all_tooling) > 0:
+                payload["tooling"] = all_tooling
+            if len(all_catalog) > 0:
+                payload["catalog"] = all_catalog
+
+            new_agents.append(payload)
+
+    return {"legacy": legacy_agents, "new": new_agents}
+
+
 class OfficialAgentsV1(APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
@@ -224,8 +392,10 @@ class OfficialAgentsV1(APIView):
         operation_id="v1_official_agents_list",
         summary="List official agents",
         description=(
-            "Returns available official agents. Optional filters: "
-            "`type`, `group`, `category`, `system`. Use `project_uuid` to mark `assigned`."
+            "Returns available official agents separated into 'legacy' and 'new' keys. "
+            "Legacy agents (without group) are returned individually. "
+            "New agents (with group) are consolidated by group with consolidated systems, MCPs, and credentials. "
+            "Optional filters: `type`, `group`, `category`, `system`. Use `project_uuid` to mark `assigned`."
         ),
         parameters=[
             OpenApiParameter(
@@ -274,8 +444,9 @@ class OfficialAgentsV1(APIView):
         if variant_filter:
             agents = agents.filter(variant__iexact=variant_filter)
 
-        serializer = OfficialAgentListSerializer(agents, many=True, context={"project_uuid": project_uuid})
-        return Response(serializer.data)
+        consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
+
+        return Response(consolidated_data)
 
     @extend_schema(
         operation_id="v1_official_agents_assign",
@@ -284,7 +455,6 @@ class OfficialAgentsV1(APIView):
             "Assigns or removes an official agent (`assigned`) and optionally creates credentials. "
             "When `system` is provided, `credentials` must follow the system template. "
             "When `mcp` is provided, `credentials` must follow the MCP-specific template for that system. "
-            "The `mcp` and `mcp_config` values are persisted in the `IntegratedAgent.metadata` field when assigning an agent."
         ),
         request=OfficialAgentsAssignRequestSerializer,
         responses={
@@ -493,7 +663,7 @@ class OfficialAgentDetailV1(APIView):
                 location=OpenApiParameter.QUERY,
                 required=False,
                 type=OpenApiTypes.STR,
-                description="Specific MCP name to retrieve (e.g., 'Default', 'Trade Policy', 'Marketplace'). If not provided, returns all available MCPs.",
+                description="Specific MCP name to retrieve. If not provided, returns all available MCPs.",
             ),
             OpenApiParameter(name="agent_uuid", location=OpenApiParameter.PATH, required=True, type=OpenApiTypes.STR),
         ],
