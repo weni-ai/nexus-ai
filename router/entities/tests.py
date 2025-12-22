@@ -161,3 +161,12 @@ class MailroomMessageTest(TestCase):
             message = message_factory(project_uuid="123", text="Hello", contact_urn=input_urn)
             result = message.sanitized_urn
             assert result == expected, f"Input: {input_urn}\nExpected: {expected}\nGot: {result}"
+
+    def test_contact_fields_non_text_types(self):
+        message = message_factory(
+            project_uuid="123",
+            text="Hello",
+            contact_urn="123",
+            contact_fields={"flag": {"value": True, "type": "boolean"}, "score": {"value": 9.5, "type": "float"}},
+        )
+        assert json.loads(message.contact_fields_as_json) == {"flag": True, "score": 9.5}
