@@ -229,15 +229,20 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
 
         system_mcps = get_mcps_for_agent_system(obj.slug, selected_system) if selected_system else []
 
-        # If a specific MCP is requested, return only that one
         if mcp_name and system_mcps:
             selected_mcp = next((mcp for mcp in system_mcps if mcp.get("name") == mcp_name), None)
             if selected_mcp:
                 creds = get_credentials_for_mcp(obj.slug, selected_system, mcp_name)
+                selected_mcp["credentials"] = creds
             else:
                 creds = []
                 selected_mcp = {}
         else:
+            if system_mcps:
+                for mcp in system_mcps:
+                    mcp_name_for_creds = mcp.get("name")
+                    mcp_creds = get_credentials_for_mcp(obj.slug, selected_system, mcp_name_for_creds)
+                    mcp["credentials"] = mcp_creds
             selected_mcp = None
             creds = []
 

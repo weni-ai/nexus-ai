@@ -363,11 +363,16 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 if project_uuid:
                     variant_assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent).exists()
 
+                variant_systems = (
+                    list(agent.systems.values_list("slug", flat=True)) if hasattr(agent, "systems") else []
+                )
+
                 variant_data = {
                     "uuid": agent.uuid,
                     "name": agent.name,
                     "slug": agent.slug,
                     "variant": getattr(agent, "variant", None),
+                    "systems": variant_systems,
                     "assigned": variant_assigned,
                 }
                 variants.append(variant_data)
