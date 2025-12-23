@@ -286,8 +286,9 @@ def get_all_credentials_for_group(group_slug: str) -> list:
 
 def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dict:
     """
-    Consolidate agents that belong to the same group into a single entry.
+    Consolidate agents that belong to the same group into a single entry with variants list.
     Returns a dict with 'legacy' and 'new' keys separating legacy agents from grouped agents.
+    For grouped agents, returns consolidated group data with a list of available variants.
     """
     from collections import defaultdict
 
@@ -313,12 +314,19 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
             if not group_agents:
                 continue
 
-            base_agent = group_agents[0]
+            base_agent = None
+            for agent in group_agents:
+                variant = getattr(agent, "variant", None)
+                if not variant:
+                    base_agent = agent
+                    break
+            if not base_agent:
+                base_agent = group_agents[0]
 
-            assigned = False
+            group_assigned = False
             if project_uuid:
                 agent_uuids = [agent.uuid for agent in group_agents]
-                assigned = IntegratedAgent.objects.filter(
+                group_assigned = IntegratedAgent.objects.filter(
                     project__uuid=project_uuid, agent__uuid__in=agent_uuids
                 ).exists()
 
@@ -339,43 +347,54 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
             if not has_multiple_mcps:
                 credentials = get_all_credentials_for_group(group_slug)
 
-            payload = {
-                "uuid": base_agent.uuid,
-                "name": base_agent.name,
-                "description": base_agent.collaboration_instructions,
-                "type": (base_agent.agent_type.slug if getattr(base_agent, "agent_type", None) else ""),
-                "group": group_slug,
-                "category": (base_agent.category.slug if getattr(base_agent, "category", None) else ""),
-                "systems": sorted(list(all_systems)),
-                "assigned": assigned,
-                "slug": base_agent.slug,
-                "is_official": base_agent.is_official,
-                "credentials": credentials,
-            }
+            # Consolidate capabilities, policies, tooling, catalog from all agents
+            all_capabilities = set()
+            all_policies = {}
+            all_tooling = {}
+            all_catalog = {}
 
-            variant = getattr(base_agent, "variant", None)
-            capabilities = getattr(base_agent, "capabilities", [])
-            policies = getattr(base_agent, "policies", {})
-            tooling = getattr(base_agent, "tooling", {})
-            catalog = getattr(base_agent, "catalog", {})
-
-            all_capabilities = set(capabilities) if isinstance(capabilities, list) else set()
-            all_policies = policies.copy() if isinstance(policies, dict) else {}
-            all_tooling = tooling.copy() if isinstance(tooling, dict) else {}
-            all_catalog = catalog.copy() if isinstance(catalog, dict) else {}
-
-            for agent in group_agents[1:]:
-                if isinstance(agent.capabilities, list):
+            for agent in group_agents:
+                if isinstance(getattr(agent, "capabilities", []), list):
                     all_capabilities.update(agent.capabilities)
-                if isinstance(agent.policies, dict):
+                if isinstance(getattr(agent, "policies", {}), dict):
                     all_policies.update(agent.policies)
-                if isinstance(agent.tooling, dict):
+                if isinstance(getattr(agent, "tooling", {}), dict):
                     all_tooling.update(agent.tooling)
-                if isinstance(agent.catalog, dict):
+                if isinstance(getattr(agent, "catalog", {}), dict):
                     all_catalog.update(agent.catalog)
 
-            if variant is not None:
-                payload["variant"] = variant
+            variants = []
+            for agent in group_agents:
+                variant_assigned = False
+                if project_uuid:
+                    variant_assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent).exists()
+
+                variant_data = {
+                    "uuid": agent.uuid,
+                    "name": agent.name,
+                    "slug": agent.slug,
+                    "variant": getattr(agent, "variant", None),
+                    "assigned": variant_assigned,
+                }
+                variants.append(variant_data)
+
+            generic_name = base_agent.name
+            if "(" in generic_name:
+                generic_name = generic_name.split("(")[0].strip()
+
+            payload = {
+                "group": group_slug,
+                "name": generic_name,
+                "description": base_agent.collaboration_instructions,
+                "type": (base_agent.agent_type.slug if getattr(base_agent, "agent_type", None) else ""),
+                "category": (base_agent.category.slug if getattr(base_agent, "category", None) else ""),
+                "systems": sorted(list(all_systems)),
+                "assigned": group_assigned,
+                "is_official": base_agent.is_official,
+                "credentials": credentials,
+                "variants": variants,  # List of available variants
+            }
+
             if len(all_capabilities) > 0:
                 payload["capabilities"] = sorted(list(all_capabilities))
             if len(all_policies) > 0:
@@ -401,6 +420,8 @@ class OfficialAgentsV1(APIView):
             "Returns available official agents separated into 'legacy' and 'new' keys. "
             "Legacy agents (without group) are returned individually. "
             "New agents (with group) are consolidated by group with consolidated systems, MCPs, and credentials. "
+            "Each grouped agent includes a 'variants' array listing all available variants with their UUIDs, "
+            "allowing the frontend to select which variant to view details for. "
             "Optional filters: `type`, `group`, `category`, `system`. Use `project_uuid` to mark `assigned`."
         ),
         parameters=[
