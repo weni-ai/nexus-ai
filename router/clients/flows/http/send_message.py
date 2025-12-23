@@ -139,9 +139,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
         try:
             msgs = json.loads(msg)
         except Exception as error:
-            # Wrap non-JSON response in proper dict structure (like Bedrock does)
-            # This prevents ValueError when body.update(msg) is called with a string
-            msgs = [{"msg": {"text": str(msg)}}]
+            msgs = msg
             sentry_context = {
                 "message": msg,
                 "error_type": type(error).__name__,
