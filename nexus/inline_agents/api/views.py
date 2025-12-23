@@ -274,9 +274,23 @@ class VtexAppActiveAgentsView(APIView):
         try:
             if assign:
                 usecase.assign_agent(agent_uuid, project_uuid)
+
+                # Fire cache invalidation event for team update (agent assigned)
+                notify_async(
+                    event="cache_invalidation:team",
+                    project_uuid=project_uuid,
+                )
+
                 return Response({"assigned": True}, status=200)
 
             usecase.unassign_agent(agent_uuid, project_uuid)
+
+            # Fire cache invalidation event for team update (agent unassigned)
+            notify_async(
+                event="cache_invalidation:team",
+                project_uuid=project_uuid,
+            )
+
             return Response({"assigned": False}, status=200)
         except ValueError as e:
             return Response({"error": str(e)}, status=404)
