@@ -119,6 +119,8 @@ class OpenAITeamAdapter(TeamAdapter):
 
         # business_rules, instructions, and agent_data can be None if not configured
         # but they are always provided from cache (may be None if not set in project/content_base)
+        # Normalize agent_data to empty dict to prevent AttributeError on .get() calls
+        agent_data = agent_data or {}
 
         supervisor_instructions = "\n".join(instructions) if instructions else ""
 
