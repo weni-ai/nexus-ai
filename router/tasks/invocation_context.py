@@ -17,7 +17,7 @@ class CachedProjectData:
     inline_agent_config_dict: Optional[Dict]
     instructions: List[str]
     agent_data: Optional[Dict]
-    formatter_agent_configurations: Optional[Dict]
+    formatter_agent_configurations: Dict  # Always a dict (matches old @property behavior)
 
     @classmethod
     def from_pre_generation_data(
@@ -32,16 +32,16 @@ class CachedProjectData:
     ) -> "CachedProjectData":
         """Create CachedProjectData from pre-generation service output."""
         # Construct formatter_agent_configurations from cached project_dict
-        formatter_agent_configurations = None
-        if project_dict.get("default_formatter_foundation_model") or project_dict.get("formatter_instructions"):
-            formatter_agent_configurations = {
-                "formatter_foundation_model": project_dict.get("default_formatter_foundation_model"),
-                "formatter_instructions": project_dict.get("formatter_instructions"),
-                "formatter_reasoning_effort": project_dict.get("formatter_reasoning_effort"),
-                "formatter_reasoning_summary": project_dict.get("formatter_reasoning_summary"),
-                "formatter_send_only_assistant_message": project_dict.get("formatter_send_only_assistant_message"),
-                "formatter_tools_descriptions": project_dict.get("formatter_tools_descriptions"),
-            }
+        # Always return a dict with all keys (matching old @property behavior)
+        # Values may be None if not configured, but the dict is always present
+        formatter_agent_configurations = {
+            "formatter_foundation_model": project_dict.get("default_formatter_foundation_model"),
+            "formatter_instructions": project_dict.get("formatter_instructions"),
+            "formatter_reasoning_effort": project_dict.get("formatter_reasoning_effort"),
+            "formatter_reasoning_summary": project_dict.get("formatter_reasoning_summary"),
+            "formatter_send_only_assistant_message": project_dict.get("formatter_send_only_assistant_message"),
+            "formatter_tools_descriptions": project_dict.get("formatter_tools_descriptions"),
+        }
 
         return cls(
             project_dict=project_dict,
