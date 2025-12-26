@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import uuid
+from datetime import datetime
 from typing import Dict, Optional, Tuple
 
 import boto3
@@ -375,6 +377,27 @@ def start_inline_agents(
             raise EmptyFinalResponseException("Final response is empty")
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
+
+        # Send message.sent event to Conversation MS
+        if not preview and response:
+            try:
+                from nexus.event_driven.services.conversation_event_service import ConversationEventService
+
+                event_service = ConversationEventService()
+                event_service.send_message_sent_event(
+                    project_uuid=message_obj.project_uuid,
+                    contact_urn=message_obj.contact_urn,
+                    channel_uuid=message_obj.channel_uuid,
+                    message_text=response,
+                    message_id=str(uuid.uuid4()),
+                    message_created_at=datetime.utcnow(),
+                )
+            except Exception as e:
+                logger.warning(
+                    "[start_inline_agents] Failed to send message.sent event to Conversation MS",
+                    extra={"error": str(e), "project_uuid": message_obj.project_uuid},
+                    exc_info=True,
+                )
 
         if preview:
             return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)

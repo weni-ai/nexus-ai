@@ -191,6 +191,19 @@ weni-scripts/
 .streamlit/
 *.sqlite
 
+# SQS
+sqs_*
+sqs-*
+
+# Scripts
+scripts/
+
+# Nexus
+nexus/
+
+# Router
+router/
+
 # Celery
 
 celerybeat-schedule.*

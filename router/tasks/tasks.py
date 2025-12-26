@@ -3,6 +3,8 @@ import json
 import logging
 import os
 import time
+import uuid
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from django.conf import settings
@@ -327,6 +329,29 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
     mailroom_msg_event["attachments"] = mailroom_msg_event.get("attachments") or []
     mailroom_msg_event["metadata"] = mailroom_msg_event.get("metadata") or {}
 
+    # Send message.received event to Conversation MS (async, non-blocking)
+    if not preview:
+        try:
+            from nexus.event_driven.services.conversation_event_service import ConversationEventService
+
+            event_service = ConversationEventService()
+            event_service.send_message_received_event(
+                project_uuid=message.project_uuid,
+                contact_urn=message.contact_urn,
+                channel_uuid=message.channel_uuid,
+                message_text=message.text,
+                message_id=str(uuid.uuid4()),
+                message_source="user",
+                message_created_at=datetime.utcnow(),
+                contact_name=message.contact_name,
+            )
+        except Exception as e:
+            logger.warning(
+                "[start_route] Failed to send message.received event to Conversation MS",
+                extra={"error": str(e), "project_uuid": message.project_uuid},
+                exc_info=True,
+            )
+
     log_usecase = CreateLogUsecase()
 
     try:
@@ -430,6 +455,29 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             log_usecase=log_usecase,
             message_log=message_log,
         )
+
+        # Send message.sent event to Conversation MS
+        if not preview and response:
+            try:
+                from nexus.event_driven.services.conversation_event_service import ConversationEventService
+
+                event_service = ConversationEventService()
+                response_text = response.get("message", response.get("text", ""))
+                if response_text:
+                    event_service.send_message_sent_event(
+                        project_uuid=message.project_uuid,
+                        contact_urn=message.contact_urn,
+                        channel_uuid=message.channel_uuid,
+                        message_text=response_text,
+                        message_id=str(uuid.uuid4()),
+                        message_created_at=datetime.utcnow(),
+                    )
+            except Exception as e:
+                logger.warning(
+                    "[start_route] Failed to send message.sent event to Conversation MS",
+                    extra={"error": str(e), "project_uuid": message.project_uuid},
+                    exc_info=True,
+                )
 
         # If response generation completes, remove from Redis
         redis_client.delete(pending_response_key)

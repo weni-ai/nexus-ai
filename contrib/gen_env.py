@@ -255,6 +255,10 @@ def generate_env():
         "TURN_SERVER_URL": "",
         "TURN_SERVER_USERNAME": "",
         "TURN_SERVER_PASSWORD": "",
+        "SQS_CONVERSATION_QUEUE_URL": "",
+        "SQS_CONVERSATION_DLQ_URL": "       ",
+        "SQS_CONVERSATION_REGION": "",
+        "SQS_CONVERSATION_ENABLED": "",
     }
 
     with open(env_path, "w") as configfile:
