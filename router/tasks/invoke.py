@@ -65,6 +65,20 @@ def handle_product_items(text: str, product_items: list) -> str:
     return text
 
 
+def handle_overwrite_message(text: str, overwrite_message: dict | list | str) -> str:
+    """
+    Handles overwrite_message from metadata.
+    If it's a dict/object, formats it with a label (like product_items).
+    If it's a string, uses it as-is.
+    """
+    if isinstance(overwrite_message, (dict, list)):
+        formatted = f"overwrite message: {str(overwrite_message)}"
+    else:
+        formatted = str(overwrite_message)
+
+    return f"{text} {formatted}" if text else formatted
+
+
 def complexity_layer(input_text: str) -> str | None:
     if input_text:
         try:
@@ -185,7 +199,20 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
     text = message.get("text", "")
     attachments = message.get("attachments", [])
     product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
+    overwrite_message = message.get("metadata", {}).get("overwrite_message")
     foundation_model = None
+
+    if overwrite_message:
+        logger.debug(
+            "Overwrite message received",
+            extra={
+                "project_uuid": message.get("project_uuid"),
+                "contact_urn": message.get("contact_urn"),
+                "overwrite_message_type": type(overwrite_message).__name__,
+                "overwrite_message_value": str(overwrite_message)[:500],
+                "original_text": text,
+            },
+        )
 
     if backend == "BedrockBackend":
         foundation_model = complexity_layer(text)
@@ -203,10 +230,24 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
     if len(product_items) > 0:
         text = handle_product_items(text, product_items)
 
+    if overwrite_message:
+        text_before = text
+        text = handle_overwrite_message(text, overwrite_message)
+        logger.debug(
+            "Overwrite message processed",
+            extra={
+                "project_uuid": message.get("project_uuid"),
+                "contact_urn": message.get("contact_urn"),
+                "text_before": text_before,
+                "text_after": text,
+            },
+        )
+
     if not text.strip():
         raise EmptyTextException(
             f"Text is empty after processing. Original text: '{message.get('text', '')}', "
-            f"attachments: {attachments}, product_items: {product_items}"
+            f"attachments: {attachments}, product_items: {product_items}, "
+            f"overwrite_message: {overwrite_message}"
         )
 
     processed_message = message.copy()
@@ -348,6 +389,17 @@ def start_inline_agents(
 
     try:
         project_uuid = message.get("project_uuid")
+        logger.debug(
+            "Message received in start_inline_agents",
+            extra={
+                "project_uuid": message.get("project_uuid"),
+                "contact_urn": message.get("contact_urn"),
+                "has_metadata": bool(message.get("metadata")),
+                "metadata_keys": list(message.get("metadata", {}).keys()) if message.get("metadata") else [],
+                "has_overwrite_message": bool(message.get("metadata", {}).get("overwrite_message")),
+                "text": message.get("text", ""),
+            },
+        )
 
         TypingUsecase().send_typing_message(
             contact_urn=message.get("contact_urn"),
