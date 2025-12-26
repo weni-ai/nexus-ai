@@ -1,7 +1,7 @@
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 import pendulum
 from django.conf import settings
@@ -50,11 +50,207 @@ class RedisTaskManager(TaskManager):
     """Redis-specific task manager with repository-agnostic message cache methods."""
 
     CACHE_TIMEOUT = 300  # 5 minutes in seconds
+    WORKFLOW_CACHE_TIMEOUT = 600  # 10 minutes for workflow state
 
     def __init__(self, redis_client: Optional[Redis] = None):
         self.redis_client = redis_client or Redis.from_url(settings.REDIS_URL)
         self.message_repository = RedisMessageRepository(self.redis_client)
         self._conversation_service = None
+
+    # ==================== Workflow State Management ====================
+
+    def get_workflow_state(self, project_uuid: str, contact_urn: str) -> Optional[Dict]:
+        """
+        Get current workflow state for a contact.
+
+        Args:
+            project_uuid: Project UUID
+            contact_urn: Contact URN
+
+        Returns:
+            Workflow state dict or None if not found
+        """
+        workflow_key = f"workflow:{project_uuid}:{contact_urn}"
+        state = self.redis_client.get(workflow_key)
+        if state:
+            return json.loads(state.decode("utf-8"))
+        return None
+
+    def store_workflow_state(self, workflow_state: Dict) -> None:
+        """
+        Store workflow state in Redis.
+
+        Args:
+            workflow_state: Workflow state dict containing project_uuid, contact_urn, etc.
+        """
+        workflow_key = f"workflow:{workflow_state['project_uuid']}:{workflow_state['contact_urn']}"
+        self.redis_client.setex(workflow_key, self.WORKFLOW_CACHE_TIMEOUT, json.dumps(workflow_state, default=str))
+
+    def update_workflow_status(
+        self, project_uuid: str, contact_urn: str, status: str, task_phase: str = None, task_id: str = None
+    ) -> bool:
+        """
+        Update workflow status and optionally task ID.
+
+        Args:
+            project_uuid: Project UUID
+            contact_urn: Contact URN
+            status: New status (e.g., "pre_generation", "generation", "completed", "failed")
+            task_phase: Task phase to update (e.g., "pre_generation", "generation")
+            task_id: Task ID to store for the phase
+
+        Returns:
+            True if updated, False if workflow not found
+        """
+        workflow_state = self.get_workflow_state(project_uuid, contact_urn)
+        if workflow_state:
+            workflow_state["status"] = status
+            workflow_state["updated_at"] = pendulum.now().to_iso8601_string()
+            if task_phase and task_id:
+                workflow_state["task_ids"][task_phase] = task_id
+            self.store_workflow_state(workflow_state)
+            return True
+        return False
+
+    def revoke_workflow_tasks(self, workflow_state: Dict) -> List[str]:
+        """
+        Revoke all tasks in a workflow.
+
+        Args:
+            workflow_state: Workflow state dict
+
+        Returns:
+            List of revoked task IDs
+        """
+        from nexus.celery import app as celery_app
+
+        revoked = []
+        task_ids = workflow_state.get("task_ids", {})
+
+        for phase, task_id in task_ids.items():
+            if task_id:
+                try:
+                    celery_app.control.revoke(task_id, terminate=True)
+                    revoked.append(task_id)
+                    logger.info(f"[Workflow] Revoked task {task_id} (phase: {phase})")
+                except Exception as e:
+                    logger.warning(f"[Workflow] Failed to revoke task {task_id}: {e}")
+
+        return revoked
+
+    def clear_workflow_state(self, project_uuid: str, contact_urn: str) -> None:
+        """
+        Clear workflow state for a contact.
+
+        Also clears old single-task keys for backwards compatibility.
+
+        Args:
+            project_uuid: Project UUID
+            contact_urn: Contact URN
+        """
+        workflow_key = f"workflow:{project_uuid}:{contact_urn}"
+        self.redis_client.delete(workflow_key)
+        # Also clear old single-task keys for backwards compatibility
+        self.clear_pending_tasks(project_uuid, contact_urn)
+
+    def create_workflow_state(
+        self,
+        workflow_id: str,
+        project_uuid: str,
+        contact_urn: str,
+        message_text: str,
+    ) -> Dict:
+        """
+        Create a new workflow state.
+
+        Args:
+            workflow_id: Unique workflow ID
+            project_uuid: Project UUID
+            contact_urn: Contact URN
+            message_text: Final message text (after concatenation)
+
+        Returns:
+            Created workflow state dict
+        """
+        workflow_state = {
+            "workflow_id": workflow_id,
+            "project_uuid": project_uuid,
+            "contact_urn": contact_urn,
+            "status": "created",
+            "task_ids": {
+                "pre_generation": None,
+                "generation": None,
+                "post_generation": None,
+            },
+            "created_at": pendulum.now().to_iso8601_string(),
+            "updated_at": pendulum.now().to_iso8601_string(),
+            "final_message_text": message_text,
+        }
+        self.store_workflow_state(workflow_state)
+        logger.info(f"[Workflow] Created workflow {workflow_id} for project {project_uuid}")
+        return workflow_state
+
+    def handle_workflow_message_concatenation(
+        self, project_uuid: str, contact_urn: str, new_message_text: str
+    ) -> Tuple[str, bool]:
+        """
+        Handle message concatenation for workflows.
+
+        If an existing workflow exists:
+        - Revoke all its tasks
+        - Concatenate pending message with new message
+        - Clear old workflow state
+
+        Also handles backwards compatibility with old single-task format.
+
+        Args:
+            project_uuid: Project UUID
+            contact_urn: Contact URN
+            new_message_text: New message text
+
+        Returns:
+            Tuple of (final_message_text, had_existing_workflow)
+        """
+        from nexus.celery import app as celery_app
+
+        workflow_state = self.get_workflow_state(project_uuid, contact_urn)
+
+        if workflow_state:
+            # Revoke existing workflow tasks
+            revoked = self.revoke_workflow_tasks(workflow_state)
+            if revoked:
+                logger.info(f"[Workflow] Revoked {len(revoked)} tasks for {contact_urn}")
+
+            # Get pending message from workflow state
+            pending_text = workflow_state.get("final_message_text", "")
+            if pending_text and pending_text != new_message_text:
+                final_message = f"{pending_text}\n{new_message_text}"
+            else:
+                final_message = new_message_text
+
+            # Clear old workflow state
+            self.clear_workflow_state(project_uuid, contact_urn)
+            return final_message, True
+        else:
+            # Check old single-task format for backwards compatibility
+            pending_response = self.get_pending_response(project_uuid, contact_urn)
+            pending_task_id = self.get_pending_task_id(project_uuid, contact_urn)
+
+            if pending_task_id:
+                try:
+                    celery_app.control.revoke(pending_task_id, terminate=True)
+                    logger.info(f"[Workflow] Revoked legacy task {pending_task_id}")
+                except Exception as e:
+                    logger.warning(f"[Workflow] Failed to revoke legacy task: {e}")
+
+            if pending_response:
+                final_message = f"{pending_response}\n{new_message_text}"
+                self.clear_pending_tasks(project_uuid, contact_urn)
+                return final_message, True
+            else:
+                return new_message_text, False
+
+    # ==================== Legacy Pending Task Methods ====================
 
     def get_pending_response(self, project_uuid: str, contact_urn: str) -> Optional[str]:
         """Get the pending response for a contact."""
