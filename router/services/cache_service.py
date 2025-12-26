@@ -249,11 +249,13 @@ class CacheService:
         agents_backend: Optional[str] = None,
     ) -> None:
         """Invalidate and refresh all project-level caches."""
+        # ALWAYS delete composite and individual caches first to ensure fresh data
+        self.cache_repository.delete(f"project:{project_uuid}:all")
+        self.cache_repository.delete_pattern(f"project:{project_uuid}:*")
+
+        # Now fetch fresh data if fetch_funcs provided (cache is empty, will fetch from DB)
         if fetch_funcs and agents_backend:
             self.get_all_project_data(project_uuid, agents_backend, fetch_funcs)
-        else:
-            self.cache_repository.delete(f"project:{project_uuid}:all")
-            self.cache_repository.delete_pattern(f"project:{project_uuid}:*")
 
     def invalidate_content_base_cache(
         self,
