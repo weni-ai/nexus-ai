@@ -225,14 +225,23 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         if project_uuid:
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
 
-        from nexus.inline_agents.api.views import get_credentials_for_mcp, get_mcps_for_agent_system
+        from nexus.inline_agents.api.views import (
+            get_all_mcps_for_group,
+            get_credentials_for_mcp,
+            get_mcps_for_agent_system,
+        )
 
-        system_mcps = get_mcps_for_agent_system(obj.slug, selected_system) if selected_system else []
+        group_name = obj.group.slug if getattr(obj, "group", None) else None
+        if group_name:
+            all_group_mcps = get_all_mcps_for_group(group_name)
+            system_mcps = all_group_mcps.get(selected_system, []) if selected_system else []
+        else:
+            system_mcps = get_mcps_for_agent_system(obj.slug, selected_system) if selected_system else []
 
         if mcp_name and system_mcps:
             selected_mcp = next((mcp for mcp in system_mcps if mcp.get("name") == mcp_name), None)
             if selected_mcp:
-                creds = get_credentials_for_mcp(obj.slug, selected_system, mcp_name)
+                creds = get_credentials_for_mcp(obj.slug, selected_system, mcp_name, group_slug=group_name)
                 selected_mcp["credentials"] = creds
             else:
                 creds = []
@@ -241,12 +250,13 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             if system_mcps:
                 for mcp in system_mcps:
                     mcp_name_for_creds = mcp.get("name")
-                    mcp_creds = get_credentials_for_mcp(obj.slug, selected_system, mcp_name_for_creds)
+                    mcp_creds = get_credentials_for_mcp(
+                        obj.slug, selected_system, mcp_name_for_creds, group_slug=group_name
+                    )
                     mcp["credentials"] = mcp_creds
             selected_mcp = None
             creds = []
 
-        group_name = obj.group.slug if getattr(obj, "group", None) else None
         payload = {
             "name": obj.name,
             "description": obj.collaboration_instructions,
