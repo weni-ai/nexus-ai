@@ -310,12 +310,16 @@ class MCPConfigOption(models.Model):
     SELECT = "SELECT"
     TEXT = "TEXT"
     NUMBER = "NUMBER"
+    SWITCH = "SWITCH"
+    RADIO = "RADIO"
 
     TYPE_CHOICES = (
         (CHECKBOX, "Checkbox"),
         (SELECT, "Select"),
         (TEXT, "Text"),
         (NUMBER, "Number"),
+        (SWITCH, "Switch"),
+        (RADIO, "Radio"),
     )
 
     mcp = models.ForeignKey(MCP, on_delete=models.CASCADE, related_name="config_options")
@@ -324,7 +328,13 @@ class MCPConfigOption(models.Model):
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=SELECT)
     options = models.JSONField(
         default=list,
-        help_text="For SELECT type: [{'name': 'Display', 'value': 'internal'}]",
+        help_text="For SELECT/RADIO type: [{'name': 'Display', 'value': 'internal'}]",
+    )
+    default_value = models.JSONField(
+        default=None,
+        null=True,
+        blank=True,
+        help_text="Default value. Type depends on field type (str, int, bool, etc.)",
     )
     order = models.PositiveIntegerField(default=0)
     is_required = models.BooleanField(default=False)
