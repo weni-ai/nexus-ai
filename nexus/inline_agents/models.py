@@ -328,6 +328,7 @@ class MCPConfigOption(models.Model):
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=SELECT)
     options = models.JSONField(
         default=list,
+        blank=True,
         help_text="For SELECT/RADIO type: [{'name': 'Display', 'value': 'internal'}]",
     )
     default_value = models.JSONField(

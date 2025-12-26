@@ -168,19 +168,32 @@ def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
     return result
 
 
-def get_credentials_for_mcp(agent_slug: str, system_slug: str, mcp_name: str) -> list:
+def get_credentials_for_mcp(agent_slug: str, system_slug: str, mcp_name: str, group_slug: str = None) -> list:
     """
     Get credential templates for an MCP from database models.
+    If group_slug is provided, searches across all agents in the group to find the MCP.
     """
-    from nexus.inline_agents.models import Agent, AgentSystem
+    from nexus.inline_agents.models import Agent, AgentGroup, AgentSystem
 
-    agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
     system = AgentSystem.objects.filter(slug=system_slug).first()
-
-    if not agent or not system:
+    if not system:
         return []
 
-    mcp = MCP.objects.filter(agent=agent, system=system, name=mcp_name, is_active=True).first()
+    mcp = None
+
+    if group_slug:
+        group = AgentGroup.objects.filter(slug=group_slug).first()
+        if group:
+            agents = Agent.objects.filter(group=group, is_official=True, source_type=Agent.PLATFORM)
+            for agent in agents:
+                mcp = MCP.objects.filter(agent=agent, system=system, name=mcp_name, is_active=True).first()
+                if mcp:
+                    break
+    else:
+        agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
+        if agent:
+            mcp = MCP.objects.filter(agent=agent, system=system, name=mcp_name, is_active=True).first()
+
     if not mcp:
         return []
 
@@ -617,11 +630,19 @@ class OfficialAgentsV1(APIView):
         if not system or not mcp:
             return []
 
-        return get_credentials_for_mcp(agent.slug, system, mcp)
+        # If agent has a group, search across all agents in the group
+        group_slug = agent.group.slug if getattr(agent, "group", None) else None
+        return get_credentials_for_mcp(agent.slug, system, mcp, group_slug=group_slug)
 
     def _validate_mcp(self, agent: Agent, system: str, mcp: str) -> Response | None:
         """Validate that the MCP exists for the given agent and system."""
-        mcps = get_mcps_for_agent_system(agent.slug, system)
+        # If agent has a group, get MCPs from all agents in the group
+        group_slug = agent.group.slug if getattr(agent, "group", None) else None
+        if group_slug:
+            all_group_mcps = get_all_mcps_for_group(group_slug)
+            mcps = all_group_mcps.get(system, [])
+        else:
+            mcps = get_mcps_for_agent_system(agent.slug, system)
 
         if not isinstance(mcps, list):
             return Response({"error": "Invalid MCP configuration"}, status=422)
