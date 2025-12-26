@@ -148,14 +148,16 @@ def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
         mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
         # Add config options
         for config_option in mcp.config_options.all():
-            mcp_data["config"].append(
-                {
-                    "name": config_option.name,
-                    "label": config_option.label,
-                    "type": config_option.type,
-                    "options": config_option.options,
-                }
-            )
+            config_item = {
+                "name": config_option.name,
+                "label": config_option.label,
+                "type": config_option.type,
+                "options": config_option.options,
+            }
+            # Add default_value if it exists
+            if config_option.default_value is not None:
+                config_item["default_value"] = config_option.default_value
+            mcp_data["config"].append(config_item)
         result.append(mcp_data)
     return result
 
@@ -210,14 +212,16 @@ def get_all_mcps_for_agent(agent_slug: str) -> dict:
         mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
         # Add config options
         for config_option in mcp.config_options.all():
-            mcp_data["config"].append(
-                {
-                    "name": config_option.name,
-                    "label": config_option.label,
-                    "type": config_option.type,
-                    "options": config_option.options,
-                }
-            )
+            config_item = {
+                "name": config_option.name,
+                "label": config_option.label,
+                "type": config_option.type,
+                "options": config_option.options,
+            }
+            # Add default_value if it exists
+            if config_option.default_value is not None:
+                config_item["default_value"] = config_option.default_value
+            mcp_data["config"].append(config_item)
         result[system_slug].append(mcp_data)
     return result
 
