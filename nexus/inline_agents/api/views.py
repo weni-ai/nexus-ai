@@ -142,11 +142,17 @@ def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
         mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
         # Add config options
         for config_option in mcp.config_options.all():
+            # For SWITCH, NUMBER, TEXT, CHECKBOX - ensure options is always an empty list
+            options = config_option.options
+            if config_option.type in ["SWITCH", "NUMBER", "TEXT", "CHECKBOX"]:
+                if not isinstance(options, list):
+                    options = []
+
             config_item = {
                 "name": config_option.name,
                 "label": config_option.label,
                 "type": config_option.type,
-                "options": config_option.options,
+                "options": options,
             }
             # Add default_value if it exists
             if config_option.default_value is not None:
@@ -206,11 +212,17 @@ def get_all_mcps_for_agent(agent_slug: str) -> dict:
         mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
         # Add config options
         for config_option in mcp.config_options.all():
+            # For SWITCH, NUMBER, TEXT, CHECKBOX - ensure options is always an empty list
+            options = config_option.options
+            if config_option.type in ["SWITCH", "NUMBER", "TEXT", "CHECKBOX"]:
+                if not isinstance(options, list):
+                    options = []
+
             config_item = {
                 "name": config_option.name,
                 "label": config_option.label,
                 "type": config_option.type,
-                "options": config_option.options,
+                "options": options,
             }
             # Add default_value if it exists
             if config_option.default_value is not None:

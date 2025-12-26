@@ -346,6 +346,13 @@ class MCPConfigOption(models.Model):
     def __str__(self):
         return f"{self.mcp} - {self.label}"
 
+    def save(self, *args, **kwargs):
+        """Normalize options field based on type before saving."""
+        if self.type in [self.SWITCH, self.NUMBER, self.TEXT, self.CHECKBOX]:
+            if not isinstance(self.options, list):
+                self.options = []
+        super().save(*args, **kwargs)
+
 
 class MCPCredentialTemplate(models.Model):
     """Credential templates required for an MCP"""
