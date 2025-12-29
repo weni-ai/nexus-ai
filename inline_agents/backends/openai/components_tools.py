@@ -880,14 +880,12 @@ async def create_simple_text_with_quick_replies(ctx: RunContextWrapper[Any], arg
     """
     parsed = SimpleTextWithQuickRepliesArgs.model_validate_json(args)
 
-    # First message (simple_text)
     msg1 = {"text": parsed.text}
     if parsed.header_text:
         msg1["header"] = {"type": "text", "text": parsed.header_text}
     if parsed.footer:
         msg1["footer"] = parsed.footer
 
-    # Second message (quick_replies)
     msg2 = {"text": parsed.quick_replies_text, "quick_replies": parsed.quick_replies}
     if parsed.quick_replies_header_text:
         msg2["header"] = {"type": "text", "text": parsed.quick_replies_header_text}
@@ -905,14 +903,12 @@ async def create_simple_text_with_list(ctx: RunContextWrapper[Any], args: str) -
     """
     parsed = SimpleTextWithListArgs.model_validate_json(args)
 
-    # First message (simple_text)
     msg1 = {"text": parsed.text}
     if parsed.header_text:
         msg1["header"] = {"type": "text", "text": parsed.header_text}
     if parsed.footer:
         msg1["footer"] = parsed.footer
 
-    # Second message (list_message)
     list_items = []
     for item in parsed.list_items:
         item_uuid = str(uuid.uuid4())
@@ -939,14 +935,12 @@ async def create_simple_text_with_cta(ctx: RunContextWrapper[Any], args: str) ->
     """
     parsed = SimpleTextWithCtaArgs.model_validate_json(args)
 
-    # First message (simple_text)
     msg1 = {"text": parsed.text}
     if parsed.header_text:
         msg1["header"] = {"type": "text", "text": parsed.header_text}
     if parsed.footer:
         msg1["footer"] = parsed.footer
 
-    # Second message (cta_message)
     msg2 = {
         "text": parsed.cta_text,
         "interaction_type": "cta_url",
@@ -1031,3 +1025,44 @@ async def create_simple_text_with_catalog(ctx: RunContextWrapper[Any], args: str
 
 
 # Tools for combined components
+simple_text_with_quick_replies_tool = FunctionTool(
+    name="create_simple_text_with_quick_replies",
+    description="TWO messages: simple text + quick replies.\n\nUSE WHEN: Text >1024 chars AND quick_replies conditions apply.\n\nMANDATORY: Must use when text exceeds 1024 chars (cannot use single quick_replies).\n\nLIMITS: text <=4096 chars, quick_replies_text <=1024 chars",
+    params_json_schema=SimpleTextWithQuickRepliesArgs.model_json_schema(),
+    on_invoke_tool=create_simple_text_with_quick_replies,
+)
+
+simple_text_with_list_tool = FunctionTool(
+    name="create_simple_text_with_list",
+    description="TWO messages: simple text + list.\n\nUSE WHEN: Text >1024 chars AND list conditions apply.\n\nMANDATORY: Must use when text exceeds 1024 chars (cannot use single list_message).\n\nLIMITS: text <=4096 chars, list_text <=1024 chars",
+    params_json_schema=SimpleTextWithListArgs.model_json_schema(),
+    on_invoke_tool=create_simple_text_with_list,
+)
+
+simple_text_with_cta_tool = FunctionTool(
+    name="create_simple_text_with_cta",
+    description="TWO messages: simple text + CTA button.\n\nUSE WHEN: Text >1024 chars AND exactly 1 URL present.\n\nMANDATORY: Must use when text exceeds 1024 chars (cannot use single cta_message).\n\nLIMITS: text <=4096 chars, cta_text <=1024 chars",
+    params_json_schema=SimpleTextWithCtaArgs.model_json_schema(),
+    on_invoke_tool=create_simple_text_with_cta,
+)
+
+simple_text_with_catalog_tool = FunctionTool(
+    name="create_simple_text_with_catalog",
+    description="TWO messages: simple text + product catalog.\n\nUSE WHEN: \n1. Text > 1024 chars AND products with SKUs present.\n2. OR: When there is IMPORTANT context/advice/questions before or after the product list that must be preserved.\n\nMANDATORY: Use this whenever the supervisor provides advice, \"combo\" recommendations, or closing questions along with the products. The single 'create_catalog_message' cannot hold this rich context.\n\nLIMITS: text <=4096 chars (for the rich context), catalog_text <=1024 chars (brief intro only)",
+    params_json_schema=SimpleTextWithCatalogArgs.model_json_schema(),
+    on_invoke_tool=create_simple_text_with_catalog,
+)
+
+
+COMPONENT_TOOLS = [
+    simple_text_tool,
+    quick_replies_tool,
+    list_message_tool,
+    cta_message_tool,
+    catalog_message_tool,
+    # Combined components
+    simple_text_with_quick_replies_tool,
+    simple_text_with_list_tool,
+    simple_text_with_cta_tool,
+    simple_text_with_catalog_tool,
+]
