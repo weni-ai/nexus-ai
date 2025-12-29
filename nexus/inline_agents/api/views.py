@@ -516,7 +516,25 @@ class OfficialAgentsV1(APIView):
             "Assigns or removes an official agent (`assigned`) and optionally creates credentials. "
             "When `system` is provided, `credentials` must follow the system template. "
             "When `mcp` is provided, `credentials` must follow the MCP-specific template for that system. "
+            "`project_uuid` and `agent_uuid` are required query parameters. "
+            "All other fields (`assigned`, `credentials`, `system`, `mcp`, `mcp_config`) are sent in the request body."
         ),
+        parameters=[
+            OpenApiParameter(
+                name="project_uuid",
+                location=OpenApiParameter.QUERY,
+                required=True,
+                type=OpenApiTypes.UUID,
+                description="Project UUID to assign the agent to",
+            ),
+            OpenApiParameter(
+                name="agent_uuid",
+                location=OpenApiParameter.QUERY,
+                required=True,
+                type=OpenApiTypes.UUID,
+                description="Official agent UUID to assign",
+            ),
+        ],
         request=OfficialAgentsAssignRequestSerializer,
         responses={
             200: OpenApiResponse(description="Operation performed", response=OfficialAgentsAssignResponseSerializer),
@@ -527,8 +545,8 @@ class OfficialAgentsV1(APIView):
         tags=["Agents"],
     )
     def post(self, request, *args, **kwargs):
-        project_uuid = request.data.get("project_uuid")
-        agent_uuid = request.data.get("agent_uuid")
+        project_uuid = request.query_params.get("project_uuid")
+        agent_uuid = request.query_params.get("agent_uuid")
         assigned = request.data.get("assigned")
         credentials_data = request.data.get("credentials", [])
         system = request.data.get("system")
