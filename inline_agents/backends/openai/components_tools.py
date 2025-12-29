@@ -579,94 +579,40 @@ async def create_catalog_message(ctx: RunContextWrapper[Any], args: str) -> str:
     return json.dumps(response, ensure_ascii=False)
 
 
-def get_component_tools(formatter_tools_descriptions: dict | None = None):
-    simple_text_tool = FunctionTool(
-        name="create_simple_text_message",
-        description="Pure informational text without interactive elements.\n\nUSE WHEN: No products with SKUs, no single URL, no imperative directive with options, or 2+ URLs present.\n\nLIMITS: text <=4096 chars",
-        params_json_schema=SimpleTextArgs.model_json_schema(),
-        on_invoke_tool=create_simple_text_message,
-    )
+simple_text_tool = FunctionTool(
+    name="create_simple_text_message",
+    description="Pure informational text without interactive elements.\n\nUSE WHEN: No products with SKUs, no single URL, no imperative directive with options, or 2+ URLs present.\n\nLIMITS: text <=4096 chars",
+    params_json_schema=SimpleTextArgs.model_json_schema(),
+    on_invoke_tool=create_simple_text_message,
+)
 
-    quick_replies_tool = FunctionTool(
-        name="create_quick_replies_message",
-        description="Message with 2-3 simple quick reply buttons.\n\nUSE WHEN: Imperative directive + exactly 2-3 simple options (<=20 chars each) + NO descriptions.\n\nDO NOT USE: If ANY option has description -> use list_message. If 4+ options -> use list_message. If products with SKUs -> use catalog.\n\nLIMITS: text <=1024 chars, 2-3 buttons <=20 chars each",
-        params_json_schema=QuickRepliesArgs.model_json_schema(),
-        on_invoke_tool=create_quick_replies_message,
-    )
+quick_replies_tool = FunctionTool(
+    name="create_quick_replies_message",
+    description="Message with 2-3 simple quick reply buttons.\n\nUSE WHEN: Imperative directive + exactly 2-3 simple options (<=20 chars each) + NO descriptions.\n\nDO NOT USE: If ANY option has description -> use list_message. If 4+ options -> use list_message. If products with SKUs -> use catalog.\n\nLIMITS: text <=1024 chars, 2-3 buttons <=20 chars each",
+    params_json_schema=QuickRepliesArgs.model_json_schema(),
+    on_invoke_tool=create_quick_replies_message,
+)
 
-    list_message_tool = FunctionTool(
-        name="create_list_message",
-        description="Message with 2-10 detailed list items (title + description).\n\nUSE WHEN: 4+ options (mandatory), OR 2-3 options with descriptions, OR options >20 chars.\n\nDO NOT USE: If products with SKUs -> use catalog. If 2-3 simple options without descriptions -> use quick_replies.\n\nLIMITS: text <=1024 chars, title <=24 chars, description <=72 chars, button_text <=20 chars",
-        params_json_schema=ListMessageArgs.model_json_schema(),
-        on_invoke_tool=create_list_message,
-    )
+list_message_tool = FunctionTool(
+    name="create_list_message",
+    description="Message with 2-10 detailed list items (title + description).\n\nUSE WHEN: 4+ options (mandatory), OR 2-3 options with descriptions, OR options >20 chars.\n\nDO NOT USE: If products with SKUs -> use catalog. If 2-3 simple options without descriptions -> use quick_replies.\n\nLIMITS: text <=1024 chars, title <=24 chars, description <=72 chars, button_text <=20 chars",
+    params_json_schema=ListMessageArgs.model_json_schema(),
+    on_invoke_tool=create_list_message,
+)
 
-    cta_message_tool = FunctionTool(
-        name="create_cta_message",
-        description="Message with single Call-to-Action URL button.\n\nUSE WHEN: Exactly 1 URL present + NO products with SKUs.\n\nDO NOT USE: If 2+ URLs -> use simple_text. If products with SKUs -> use catalog.\n\nLIMITS: text <=1024 chars, display_text <=20 chars",
-        params_json_schema=CtaMessageArgs.model_json_schema(),
-        on_invoke_tool=create_cta_message,
-    )
+cta_message_tool = FunctionTool(
+    name="create_cta_message",
+    description="Message with single Call-to-Action URL button.\n\nUSE WHEN: Exactly 1 URL present + NO products with SKUs.\n\nDO NOT USE: If 2+ URLs -> use simple_text. If products with SKUs -> use catalog.\n\nLIMITS: text <=1024 chars, display_text <=20 chars",
+    params_json_schema=CtaMessageArgs.model_json_schema(),
+    on_invoke_tool=create_cta_message,
+)
 
-    catalog_message_tool = FunctionTool(
-        name="create_catalog_message",
-        description="Product catalog with SKUs (HIGHEST PRIORITY when products present).\n\nUSE WHEN: Products with SKU codes (containing '#') found in history or message.\n\nPRIORITY: Always use catalog over other components when products with SKUs exist.\n\nTEXT OPTIMIZATION: Brief conversational intro only (catalog displays full product data).\n\nLIMITS: text <=1024 chars (single-line, no \\n), max 10 categories, header REQUIRED <=60 chars",
-        params_json_schema=CatalogMessageArgs.model_json_schema(),
-        on_invoke_tool=create_catalog_message,
-    )
-
-    tools = [
-        simple_text_tool,
-        quick_replies_tool,
-        list_message_tool,
-        cta_message_tool,
-        catalog_message_tool,
-    ]
-
-    simple_text_with_quick_replies_tool = FunctionTool(
-        name="create_simple_text_with_quick_replies",
-        description="TWO messages: simple text + quick replies.\n\nUSE WHEN: Text >1024 chars AND quick_replies conditions apply.\n\nMANDATORY: Must use when text exceeds 1024 chars (cannot use single quick_replies).\n\nLIMITS: text <=4096 chars, quick_replies_text <=1024 chars",
-        params_json_schema=SimpleTextWithQuickRepliesArgs.model_json_schema(),
-        on_invoke_tool=create_simple_text_with_quick_replies,
-    )
-
-    simple_text_with_list_tool = FunctionTool(
-        name="create_simple_text_with_list",
-        description="TWO messages: simple text + list.\n\nUSE WHEN: Text >1024 chars AND list conditions apply.\n\nMANDATORY: Must use when text exceeds 1024 chars (cannot use single list_message).\n\nLIMITS: text <=4096 chars, list_text <=1024 chars",
-        params_json_schema=SimpleTextWithListArgs.model_json_schema(),
-        on_invoke_tool=create_simple_text_with_list,
-    )
-
-    simple_text_with_cta_tool = FunctionTool(
-        name="create_simple_text_with_cta",
-        description="TWO messages: simple text + CTA button.\n\nUSE WHEN: Text >1024 chars AND exactly 1 URL present.\n\nMANDATORY: Must use when text exceeds 1024 chars (cannot use single cta_message).\n\nLIMITS: text <=4096 chars, cta_text <=1024 chars",
-        params_json_schema=SimpleTextWithCtaArgs.model_json_schema(),
-        on_invoke_tool=create_simple_text_with_cta,
-    )
-
-    simple_text_with_catalog_tool = FunctionTool(
-        name="create_simple_text_with_catalog",
-        description="TWO messages: simple text + product catalog.\n\nUSE WHEN: \n1. Text > 1024 chars AND products with SKUs present.\n2. OR: When there is IMPORTANT context/advice/questions before or after the product list that must be preserved.\n\nMANDATORY: Use this whenever the supervisor provides advice, \"combo\" recommendations, or closing questions along with the products. The single 'create_catalog_message' cannot hold this rich context.\n\nLIMITS: text <=4096 chars (for the rich context), catalog_text <=1024 chars (brief intro only)",
-        params_json_schema=SimpleTextWithCatalogArgs.model_json_schema(),
-        on_invoke_tool=create_simple_text_with_catalog,
-    )
-
-    tools.extend(
-        [
-            simple_text_with_quick_replies_tool,
-            simple_text_with_list_tool,
-            simple_text_with_cta_tool,
-            simple_text_with_catalog_tool,
-        ]
-    )
-
-    if formatter_tools_descriptions:
-        for index, tool in enumerate(tools):
-            tool_description = formatter_tools_descriptions.get(tool.name)
-            if tool_description:
-                tools[index].description = tool_description
-
-    return tools
+catalog_message_tool = FunctionTool(
+    name="create_catalog_message",
+    description="Product catalog with SKUs (HIGHEST PRIORITY when products present).\n\nUSE WHEN: Products with SKU codes (containing '#') found in history or message.\n\nPRIORITY: Always use catalog over other components when products with SKUs exist.\n\nTEXT OPTIMIZATION: Brief conversational intro only (catalog displays full product data).\n\nLIMITS: text <=1024 chars (single-line, no \\n), max 10 categories, header REQUIRED <=60 chars",
+    params_json_schema=CatalogMessageArgs.model_json_schema(),
+    on_invoke_tool=create_catalog_message,
+)
 
 
 # Classes for combined components (simple_text + another component)
