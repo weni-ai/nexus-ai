@@ -305,8 +305,11 @@ class CredentialItemSerializer(serializers.Serializer):
 
 
 class OfficialAgentsAssignRequestSerializer(serializers.Serializer):
-    project_uuid = serializers.UUIDField()
-    agent_uuid = serializers.UUIDField()
+    """Request body for POST /api/v1/official/agents.
+
+    Note: project_uuid and agent_uuid are passed as query parameters, not in the body.
+    """
+
     assigned = serializers.BooleanField(required=False)
     system = serializers.CharField(required=False)
     mcp = serializers.CharField(required=False)
