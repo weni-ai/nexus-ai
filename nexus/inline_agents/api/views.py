@@ -505,6 +505,8 @@ class OfficialAgentsV1(APIView):
         if variant_filter:
             agents = agents.filter(variant__iexact=variant_filter)
 
+        agents = agents.prefetch_related("systems")
+
         consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
 
         return Response(consolidated_data)
