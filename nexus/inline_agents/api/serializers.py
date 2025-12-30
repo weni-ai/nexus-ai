@@ -128,7 +128,11 @@ class OfficialAgentListSerializer(serializers.Serializer):
         assigned = False
         if project_uuid:
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
-        systems = list(obj.systems.values_list("slug", flat=True)) if hasattr(obj, "systems") else []
+        # Buscar systems diretamente do relacionamento do modelo, não do queryset filtrado
+        # Isso garante que todos os systems sejam retornados, mesmo quando há filtro
+        systems = (
+            list(Agent.objects.get(pk=obj.pk).systems.values_list("slug", flat=True)) if hasattr(obj, "systems") else []
+        )
         group_name = obj.group.slug if getattr(obj, "group", None) else None
 
         from nexus.inline_agents.api.views import get_all_mcps_for_agent
