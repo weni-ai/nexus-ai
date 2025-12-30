@@ -4,12 +4,25 @@ import boto3
 
 if TYPE_CHECKING:
     pass
-from agents import Agent, RunContextWrapper
+from agents import Agent, ModelSettings, RunContextWrapper, function_tool
+from agents.extensions.models.litellm_model import LitellmModel, Model
 from django.conf import settings
 from openai.types.shared import Reasoning
 
 from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
+
+
+def get_model(model_name: str, use_components: bool) -> Model | str:
+    is_litellm = model_name.startswith("litellm/")
+    if is_litellm and not use_components:
+        clean_model_name = model_name.replace("litellm/", "")
+        model = LitellmModel(model=clean_model_name)
+        print(f"LitellmModel: {model}")
+    else:
+        model = model_name
+
+    return model
 
 
 class Supervisor(Agent):  # type: ignore[misc]
@@ -35,9 +48,10 @@ class Supervisor(Agent):  # type: ignore[misc]
         reasoning_summary = settings.OPENAI_AGENTS_REASONING_SUMMARY
         parallel_tool_calls = settings.OPENAI_AGENTS_PARALLEL_TOOL_CALLS
 
-        from agents import ModelSettings
+        model_name = model
+        model = get_model(model_name, use_components)
 
-        if model in settings.MODELS_WITH_REASONING and reasoning_effort:
+        if model_name in settings.MODELS_WITH_REASONING and reasoning_effort:
             super().__init__(
                 name=name,
                 instructions=instructions,
@@ -79,8 +93,6 @@ class Supervisor(Agent):  # type: ignore[misc]
         )
 
         return
-
-    from agents import function_tool
 
     @function_tool
     def knowledge_base_bedrock(ctx: RunContextWrapper[Context], question: str) -> str:
