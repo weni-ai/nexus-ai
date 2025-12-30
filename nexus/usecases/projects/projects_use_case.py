@@ -266,7 +266,13 @@ class ProjectsUseCase:
 
     def _get_supervisor_data(self, project: Project, backend) -> dict:
         foundation_model = project.default_supervisor_foundation_model
-        return backend.supervisor_repository.get_supervisor(project, foundation_model)
+        if project.agents_backend == "BedrockBackend":
+            return backend.supervisor_repository.get_supervisor(project, foundation_model)
+        else:
+            return backend.supervisor_repository.get_supervisor(
+                foundation_model=foundation_model,
+                default_supervisor_foundation_model=project.default_supervisor_foundation_model,
+            )
 
     def _build_contact_fields_json(self, project: Project) -> str:
         contact_fields = ContactField.objects.filter(project=project).values("key", "value_type")
