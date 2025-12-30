@@ -163,7 +163,6 @@ class MessageStreamingClient:
                 )
                 logger.debug("Delta status", extra={"index": i, "status": response["status"]})
         """
-        logger.info(f"Sending delta message: {msg_id}")
 
         message = message_stream_service_pb2.StreamMessage(
             type="delta",
