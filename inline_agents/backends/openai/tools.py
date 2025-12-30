@@ -18,7 +18,6 @@ def get_model(model_name: str, use_components: bool) -> Model | str:
     if is_litellm and not use_components:
         clean_model_name = model_name.replace("litellm/", "")
         model = LitellmModel(model=clean_model_name)
-        print(f"LitellmModel: {model}")
     else:
         model = model_name
 
