@@ -292,6 +292,7 @@ def _invoke_backend(
     user_email: str,
     foundation_model: Optional[str],
     turn_off_rationale: bool,
+    channel_type: str = "",
 ):
     """
     Invoke backend with cached data to avoid database queries.
@@ -317,6 +318,7 @@ def _invoke_backend(
             "user_email": user_email,
             "foundation_model": foundation_model,
             "turn_off_rationale": turn_off_rationale,
+            "channel_type": channel_type,
         }
     )
 
@@ -424,6 +426,7 @@ def start_inline_agents(
             user_email=user_email,
             foundation_model=foundation_model,
             turn_off_rationale=turn_off_rationale,
+            channel_type=message.get("channel_type", ""),
         )
 
         if response is None or response == "":

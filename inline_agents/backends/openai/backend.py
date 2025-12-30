@@ -164,6 +164,7 @@ class OpenAIBackend(InlineAgentsBackend):
         contact_name: str = "",
         contact_urn: str = "",
         channel_uuid: str = "",
+        channel_type: str = "",
         use_components: bool = False,
         user_email: str = None,
         rationale_switch: bool = False,
@@ -315,6 +316,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 session_id=session_id,
                 project_uuid=project_uuid,
                 language=language,
+                channel_type=channel_type,
             )
 
         result = asyncio.run(
@@ -477,10 +479,26 @@ class OpenAIBackend(InlineAgentsBackend):
             return final_response
 
     def _initialize_grpc_client(
-        self, channel_uuid: str, contact_urn: str, session_id: str, project_uuid: str, language: str
+        self,
+        channel_uuid: str,
+        contact_urn: str,
+        session_id: str,
+        project_uuid: str,
+        language: str,
+        channel_type: str = "",
     ) -> tuple[Optional[MessageStreamingClient], Optional[str]]:
         """Initialize gRPC client and send setup message."""
-        if not is_grpc_enabled() or not contact_urn:
+        if not is_grpc_enabled(project_uuid) or not contact_urn:
+            return None, None
+
+        if not channel_type:
+            logger.info(
+                "channel_type is empty, skipping gRPC initialization",
+                extra={"project_uuid": project_uuid, "contact_urn": contact_urn},
+            )
+            return None, None
+
+        if channel_type != "WWC":
             return None, None
 
         if not channel_uuid:
