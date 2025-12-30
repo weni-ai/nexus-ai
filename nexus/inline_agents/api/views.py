@@ -133,7 +133,7 @@ def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
     from nexus.inline_agents.models import Agent, AgentSystem
 
     agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
-    system = AgentSystem.objects.filter(slug=system_slug).first()
+    system = AgentSystem.objects.filter(slug__iexact=system_slug).first()
 
     if not agent or not system:
         return []
@@ -175,7 +175,7 @@ def get_credentials_for_mcp(agent_slug: str, system_slug: str, mcp_name: str, gr
     """
     from nexus.inline_agents.models import Agent, AgentGroup, AgentSystem
 
-    system = AgentSystem.objects.filter(slug=system_slug).first()
+    system = AgentSystem.objects.filter(slug__iexact=system_slug).first()
     if not system:
         return []
 
@@ -583,6 +583,11 @@ class OfficialAgentsV1(APIView):
 
         result = {}
 
+        from nexus.inline_agents.api.serializers import OfficialAgentListSerializer
+
+        agent_serializer = OfficialAgentListSerializer(agent, context={"project_uuid": project_uuid})
+        result["agent"] = agent_serializer.data
+
         if assigned is not None:
             assignment_result = self._handle_assignment(agent_uuid, project_uuid, assigned, mcp, mcp_config)
             if isinstance(assignment_result, Response):
@@ -595,7 +600,7 @@ class OfficialAgentsV1(APIView):
                 return creds_result
             result.update(creds_result)
 
-        return Response(result or {"message": "No changes applied"}, status=200)
+        return Response(result or {"message": "No changes applied", "agent": agent_serializer.data}, status=200)
 
     def _handle_assignment(
         self, agent_uuid: str, project_uuid: str, assigned: bool, mcp: str | None = None, mcp_config: dict | None = None
@@ -632,17 +637,19 @@ class OfficialAgentsV1(APIView):
         system: str | None,
         mcp: str | None = None,
     ) -> dict | Response:
-        invalid_system = self._validate_system(agent, system)
+        system_normalized = system.lower() if system else None
+
+        invalid_system = self._validate_system(agent, system_normalized)
         if invalid_system:
             return invalid_system
 
         # Validate MCP if provided
-        if mcp and system:
-            mcp_error = self._validate_mcp(agent, system, mcp)
+        if mcp and system_normalized:
+            mcp_error = self._validate_mcp(agent, system_normalized, mcp)
             if mcp_error:
                 return mcp_error
 
-        expected_templates = self._get_expected_templates(agent, system, mcp)
+        expected_templates = self._get_expected_templates(agent, system_normalized, mcp)
         names_error = self._validate_credentials_names(credentials_data, expected_templates, system)
         if names_error:
             return names_error
@@ -674,13 +681,21 @@ class OfficialAgentsV1(APIView):
 
     def _validate_mcp(self, agent: Agent, system: str, mcp: str) -> Response | None:
         """Validate that the MCP exists for the given agent and system."""
+        system_lower = system.lower() if system else None
+
         # If agent has a group, get MCPs from all agents in the group
         group_slug = agent.group.slug if getattr(agent, "group", None) else None
         if group_slug:
             all_group_mcps = get_all_mcps_for_group(group_slug)
-            mcps = all_group_mcps.get(system, [])
+            mcps = None
+            for sys_key in all_group_mcps.keys():
+                if sys_key.lower() == system_lower:
+                    mcps = all_group_mcps[sys_key]
+                    break
+            if mcps is None:
+                mcps = []
         else:
-            mcps = get_mcps_for_agent_system(agent.slug, system)
+            mcps = get_mcps_for_agent_system(agent.slug, system_lower)
 
         if not isinstance(mcps, list):
             return Response({"error": "Invalid MCP configuration"}, status=422)
