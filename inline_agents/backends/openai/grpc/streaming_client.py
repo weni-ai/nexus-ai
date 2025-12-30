@@ -17,8 +17,12 @@ from inline_agents.backends.openai.grpc.generated import (
 logger = logging.getLogger(__name__)
 
 
-def is_grpc_enabled() -> bool:
-    return bool(settings.GRPC_ENABLED)
+def is_grpc_enabled(project_uuid: str = None) -> bool:
+    if not project_uuid:
+        return False
+
+    enabled_projects = getattr(settings, "GRPC_ENABLED_PROJECTS", [])
+    return str(project_uuid) in enabled_projects
 
 
 class MessageStreamingClient:
@@ -159,7 +163,6 @@ class MessageStreamingClient:
                 )
                 logger.debug("Delta status", extra={"index": i, "status": response["status"]})
         """
-        logger.info(f"Sending delta message: {msg_id}")
 
         message = message_stream_service_pb2.StreamMessage(
             type="delta",
