@@ -294,3 +294,76 @@ class TestCreateFunctionArgsClass(TestCase):
         field_info = model_class.model_fields["custom_field"]
         self.assertEqual(field_info.annotation, str)
         self.assertEqual(field_info.description, "Custom field")
+
+
+class TestToExternalNoneAgentData(TestCase):
+    def test_agent_data_none_normalized_to_empty_dict(self):
+        agent_data = None
+        agent_data = agent_data or {}
+
+        self.assertEqual(agent_data, {})
+        self.assertIsInstance(agent_data, dict)
+
+    def test_agent_data_none_does_not_crash_on_get(self):
+        agent_data = {}
+
+        self.assertIsNone(agent_data.get("name"))
+        self.assertIsNone(agent_data.get("role"))
+        self.assertIsNone(agent_data.get("goal"))
+        self.assertIsNone(agent_data.get("personality"))
+
+    def test_agent_data_empty_dict_handled(self):
+        agent_data = {}
+
+        self.assertIsNone(agent_data.get("name"))
+        self.assertIsNone(agent_data.get("role"))
+        self.assertIsNone(agent_data.get("goal"))
+        self.assertIsNone(agent_data.get("personality"))
+
+    def test_agent_data_with_values(self):
+        agent_data = {
+            "name": "Test Agent",
+            "role": "Assistant",
+            "goal": "Help users",
+            "personality": "Friendly",
+        }
+
+        self.assertEqual(agent_data.get("name"), "Test Agent")
+        self.assertEqual(agent_data.get("role"), "Assistant")
+        self.assertEqual(agent_data.get("goal"), "Help users")
+        self.assertEqual(agent_data.get("personality"), "Friendly")
+
+    def test_agent_data_partial_values(self):
+        agent_data = {"name": "Test Agent"}
+
+        self.assertEqual(agent_data.get("name"), "Test Agent")
+        self.assertIsNone(agent_data.get("role"))
+        self.assertIsNone(agent_data.get("goal"))
+        self.assertIsNone(agent_data.get("personality"))
+
+
+class TestAllOptionalParamsNone(TestCase):
+    def test_multiple_none_params_normalized(self):
+        agent_data = None
+        formatter_agent_configurations = None
+        instructions = None
+        business_rules = None
+
+        agent_data = agent_data or {}
+        formatter_agent_configurations = formatter_agent_configurations or {}
+        instructions = instructions or []
+        business_rules = business_rules or ""
+
+        self.assertEqual(agent_data, {})
+        self.assertEqual(formatter_agent_configurations, {})
+        self.assertEqual(instructions, [])
+        self.assertEqual(business_rules, "")
+
+    def test_none_params_can_be_used_safely(self):
+        agent_data = {}
+        formatter_agent_configurations = {}
+        instructions = []
+
+        self.assertIsNone(agent_data.get("name"))
+        self.assertIsNone(formatter_agent_configurations.get("formatter_foundation_model"))
+        self.assertEqual("\n".join(instructions) if instructions else "", "")

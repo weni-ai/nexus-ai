@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from django.contrib import admin
@@ -6,6 +7,8 @@ from django.utils import timezone
 
 from nexus.admin_widgets import PrettyJSONWidget
 from nexus.projects.models import Project, ProjectApiToken
+
+logger = logging.getLogger(__name__)
 
 
 @admin.register(Project)
@@ -87,6 +90,22 @@ class ProjectAdmin(admin.ModelAdmin):
         if form.base_fields.get("guardrail"):
             form.base_fields["guardrail"].widget.can_delete_related = False
         return form
+
+    def save_model(self, request, obj, form, change):
+        """Save model and trigger cache invalidation."""
+        super().save_model(request, obj, form, change)
+
+        # Fire cache invalidation event for project update
+        try:
+            from nexus.events import notify_async
+
+            notify_async(
+                event="cache_invalidation:project",
+                project=obj,
+            )
+            logger.info(f"[Admin] Triggered cache invalidation for project {obj.uuid}")
+        except Exception as e:
+            logger.warning(f"[Admin] Failed to trigger cache invalidation for project {obj.uuid}: {e}")
 
     @admin.action(description="Generate API token for project (expires in 1 year)")
     def generate_api_token(self, request, queryset):

@@ -1,13 +1,15 @@
 import ast
 import json
+import logging
 import re
 from typing import Dict, List
 
 import requests
-import sentry_sdk
 
 from nexus.internals.flows import FlowsRESTClient
 from router.direct_message import DirectMessage, exceptions
+
+logger = logging.getLogger(__name__)
 
 
 class SendMessageHTTPClient(DirectMessage):
@@ -26,7 +28,7 @@ class SendMessageHTTPClient(DirectMessage):
         payload = json.dumps(payload).encode("utf-8")
 
         response = requests.post(url, data=payload, headers=headers)
-        print("Resposta: ", response.text)
+        logger.debug("SendMessage response", extra={"text_len": len(response.text or "")})
         try:
             response.raise_for_status()
         except Exception as error:
@@ -72,7 +74,6 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
                 return obj
             except json.JSONDecodeError:
                 try:
-                    # print(f"Error parsing JSON: {json_str}")
                     obj = ast.literal_eval(json_str)
                     return obj
                 except Exception:
@@ -134,20 +135,16 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
     def format_message_for_openai(
         self, msg: Dict, urns: List, project_uuid: str, user: str, full_chunks: List[Dict]
     ) -> Dict:
-        try:
-            msgs = json.loads(msg)
-        except Exception as error:
+        msgs = None
+
+        if isinstance(msg, str):
+            try:
+                msgs = json.loads(msg)
+            except json.JSONDecodeError:
+                # Plain text message, not JSON - this is expected behavior
+                msgs = {"msg": {"text": msg}}
+        else:
             msgs = msg
-            sentry_context = {
-                "message": msg,
-                "error_type": type(error).__name__,
-                "error_message": str(error),
-                "project_uuid": project_uuid,
-                "preview": False,
-            }
-            sentry_sdk.set_tag("project_uuid", project_uuid)
-            sentry_sdk.set_context("session_error", sentry_context)
-            sentry_sdk.capture_exception(error)
 
         if not isinstance(msgs, list):
             msgs = [msgs]

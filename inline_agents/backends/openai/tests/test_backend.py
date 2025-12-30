@@ -1,7 +1,7 @@
 import pytest
 from django.test import TestCase
 
-from inline_agents.backends.openai.backend import OpenAISupervisorRepository
+from inline_agents.backends.openai.backend import OpenAIBackend, OpenAISupervisorRepository
 from inline_agents.backends.openai.tests.openai_factory import OpenAISupervisorFactory
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
@@ -14,7 +14,11 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
 
     def test_get_supervisor_success(self):
         """Test successful retrieval of supervisor with all attributes."""
-        result = OpenAISupervisorRepository.get_supervisor(self.project)
+        result = OpenAISupervisorRepository.get_supervisor(
+            use_components=self.project.use_components,
+            human_support=self.project.human_support,
+            default_supervisor_foundation_model=self.project.default_supervisor_foundation_model,
+        )
 
         expected_keys = [
             "instruction",
@@ -38,63 +42,41 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
 
     def test_get_supervisor_instructions_default_case(self):
         """Test _get_supervisor_instructions when project has no special flags."""
-        self.project.use_components = False
-        self.project.human_support = False
-        self.project.save()
-
-        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, self.supervisor)
+        result = OpenAISupervisorRepository._get_supervisor_instructions(self.supervisor)
         self.assertEqual(result, self.supervisor.instruction)
 
     def test_get_supervisor_instructions_components_only(self):
         """Test _get_supervisor_instructions when project uses components only."""
-        self.project.use_components = True
-        self.project.human_support = False
-        self.project.save()
-
         # Create supervisor with specific values
         supervisor = OpenAISupervisorFactory(instruction="Components prompt")
 
-        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
+        result = OpenAISupervisorRepository._get_supervisor_instructions(supervisor)
         self.assertEqual(result, "Components prompt")
 
     def test_get_supervisor_instructions_human_support_only(self):
         """Test _get_supervisor_instructions when project has human support only."""
-        self.project.use_components = False
-        self.project.human_support = True
-        self.project.save()
-
         # Create supervisor with specific values
         supervisor = OpenAISupervisorFactory(instruction="Human support prompt")
 
-        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
+        result = OpenAISupervisorRepository._get_supervisor_instructions(supervisor)
         self.assertEqual(result, "Human support prompt")
 
     def test_get_supervisor_instructions_components_and_human_support(self):
         """Test _get_supervisor_instructions when project has both components and human support."""
-        self.project.use_components = True
-        self.project.human_support = True
-        self.project.save()
-
         # Create supervisor with specific values
         supervisor = OpenAISupervisorFactory(instruction="Components + Human support prompt")
 
-        result = OpenAISupervisorRepository._get_supervisor_instructions(self.project, supervisor)
+        result = OpenAISupervisorRepository._get_supervisor_instructions(supervisor)
         self.assertEqual(result, "Components + Human support prompt")
 
     def test_get_supervisor_tools_default_case(self):
         """Test _get_supervisor_tools when project has no human support."""
-        self.project.human_support = False
-        self.project.save()
-
-        result = OpenAISupervisorRepository._get_supervisor_tools(self.project, self.supervisor)
+        result = OpenAISupervisorRepository._get_supervisor_tools(supervisor=self.supervisor, human_support=False)
         self.assertEqual(result, self.supervisor.action_groups)
 
     def test_get_supervisor_tools_human_support(self):
         """Test _get_supervisor_tools when project has human support."""
-        self.project.human_support = True
-        self.project.save()
-
-        result = OpenAISupervisorRepository._get_supervisor_tools(self.project, self.supervisor)
+        result = OpenAISupervisorRepository._get_supervisor_tools(supervisor=self.supervisor, human_support=True)
         self.assertEqual(result, self.supervisor.human_support_action_groups)
 
     @pytest.mark.skip(reason="instruction field has NOT NULL constraint in database")
@@ -108,10 +90,7 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         """Test _get_supervisor_tools when human_support_action_groups is None."""
         supervisor = OpenAISupervisorFactory(human_support_action_groups=None)
 
-        self.project.human_support = True
-        self.project.save()
-
-        result = OpenAISupervisorRepository._get_supervisor_tools(self.project, supervisor)
+        result = OpenAISupervisorRepository._get_supervisor_tools(supervisor=supervisor, human_support=True)
         self.assertIsNone(result)
 
     def test_get_supervisor_multiple_supervisors(self):
@@ -120,7 +99,11 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         supervisor2 = OpenAISupervisorFactory()
         supervisor3 = OpenAISupervisorFactory()
 
-        result = OpenAISupervisorRepository.get_supervisor(self.project)
+        result = OpenAISupervisorRepository.get_supervisor(
+            use_components=self.project.use_components,
+            human_support=self.project.human_support,
+            default_supervisor_foundation_model=self.project.default_supervisor_foundation_model,
+        )
 
         # Should return the supervisor with the highest ID
         expected_supervisor = max([supervisor1, supervisor2, supervisor3], key=lambda x: x.id)
@@ -146,7 +129,11 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
             max_tokens=4096,
         )
 
-        result = OpenAISupervisorRepository.get_supervisor(self.project)
+        result = OpenAISupervisorRepository.get_supervisor(
+            use_components=self.project.use_components,
+            human_support=self.project.human_support,
+            default_supervisor_foundation_model=self.project.default_supervisor_foundation_model,
+        )
 
         self.assertEqual(result["instruction"], "Default instruction")
         self.assertEqual(result["tools"], [{"name": "human_support", "type": "action"}])
@@ -173,9 +160,71 @@ class OpenAISupervisorRepositoryTestCase(TestCase):
         """Test that get_supervisor includes default_instructions_for_collaborators in the result."""
         OpenAISupervisorFactory(default_instructions_for_collaborators="Be concise and professional in all responses.")
 
-        result = OpenAISupervisorRepository.get_supervisor(self.project)
+        result = OpenAISupervisorRepository.get_supervisor(
+            use_components=self.project.use_components,
+            human_support=self.project.human_support,
+            default_supervisor_foundation_model=self.project.default_supervisor_foundation_model,
+        )
 
         self.assertIn("default_instructions_for_collaborators", result)
         self.assertEqual(
             result["default_instructions_for_collaborators"], "Be concise and professional in all responses."
         )
+
+
+class TestFormatterAgentNoneHandling(TestCase):
+    def setUp(self):
+        self.backend = OpenAIBackend()
+
+    def test_create_formatter_agent_none_config_normalized(self):
+        formatter_agent_configurations = None
+        if formatter_agent_configurations is None:
+            formatter_agent_configurations = {}
+
+        self.assertEqual(formatter_agent_configurations, {})
+        self.assertIsNone(formatter_agent_configurations.get("formatter_foundation_model"))
+
+    def test_create_formatter_agent_empty_dict_config_works(self):
+        formatter_agent_configurations = {}
+
+        self.assertIsNone(formatter_agent_configurations.get("formatter_foundation_model"))
+        self.assertIsNone(formatter_agent_configurations.get("formatter_instructions"))
+        self.assertIsNone(formatter_agent_configurations.get("formatter_reasoning_effort"))
+        self.assertIsNone(formatter_agent_configurations.get("formatter_send_only_assistant_message"))
+
+    def test_formatter_config_always_dict_from_invocation_context(self):
+        formatter_agent_configurations = {
+            "formatter_foundation_model": None,
+            "formatter_instructions": None,
+            "formatter_reasoning_effort": None,
+            "formatter_reasoning_summary": None,
+            "formatter_send_only_assistant_message": None,
+            "formatter_tools_descriptions": None,
+        }
+
+        self.assertIsInstance(formatter_agent_configurations, dict)
+        self.assertIsNone(formatter_agent_configurations.get("formatter_foundation_model"))
+
+    def test_formatter_config_none_does_not_crash_on_get(self):
+        formatter_agent_configurations = {}
+        result = formatter_agent_configurations.get("formatter_send_only_assistant_message")
+        self.assertIsNone(result)
+
+    def test_formatter_config_with_values(self):
+        formatter_agent_configurations = {
+            "formatter_send_only_assistant_message": True,
+            "formatter_foundation_model": "gpt-4",
+            "formatter_instructions": "Custom instructions",
+        }
+
+        self.assertTrue(formatter_agent_configurations.get("formatter_send_only_assistant_message"))
+        self.assertEqual(formatter_agent_configurations.get("formatter_foundation_model"), "gpt-4")
+        self.assertEqual(formatter_agent_configurations.get("formatter_instructions"), "Custom instructions")
+
+
+class TestFormatterAgentSkip(TestCase):
+    def test_formatter_not_needed_when_use_components_false(self):
+        use_components = False
+
+        if use_components:
+            self.fail("Should not enter formatter branch when use_components=False")

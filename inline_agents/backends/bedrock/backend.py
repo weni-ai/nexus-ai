@@ -196,9 +196,9 @@ class BedrockBackend(InlineAgentsBackend):
             contact_name=contact_name,
             channel_uuid=channel_uuid,
         )
-        print(f"[DEBUG] Session ID: {session_id}")
-        print(f"[DEBUG] Log: {log}")
-        print(f"[DEBUG] External team: {external_team}")
+        logger.debug("Session ID", extra={"session_id": session_id})
+        logger.debug("Log present", extra={"has_log": log is not None})
+        logger.debug("External team built", extra={"agents_count": len(external_team.get("agents", []))})
 
         # Send initial status message if in preview mode and user_email is provided
         if preview and user_email:
@@ -232,9 +232,7 @@ class BedrockBackend(InlineAgentsBackend):
                         message_data={"type": "chunk", "content": chunk, "session_id": session_id},
                     )
 
-                print("------------------------------------------")
-                print("Chunk: ", event)
-                print("------------------------------------------")
+                logger.debug("Chunk event")
 
             if "trace" in event:
                 # Store the trace event for potential use
@@ -308,9 +306,7 @@ class BedrockBackend(InlineAgentsBackend):
                         preview=preview,
                     )
 
-                print("------------------------------------------")
-                print("Event: ", event)
-                print("------------------------------------------")
+                logger.debug("Stream event")
 
         # Saving traces on s3
         self._event_manager_notify(
