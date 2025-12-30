@@ -361,7 +361,8 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
 
             all_systems = set()
             for agent in group_agents:
-                agent_systems = list(Agent.objects.get(pk=agent.pk).systems.values_list("slug", flat=True))
+                agent.refresh_from_db()
+                agent_systems = list(agent.systems.all().values_list("slug", flat=True))
                 all_systems.update(agent_systems)
 
             group_mcps = get_all_mcps_for_group(group_slug)
@@ -398,10 +399,9 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 if project_uuid:
                     variant_assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent).exists()
 
+                agent.refresh_from_db()
                 variant_systems = (
-                    list(Agent.objects.get(pk=agent.pk).systems.values_list("slug", flat=True))
-                    if hasattr(agent, "systems")
-                    else []
+                    list(agent.systems.all().values_list("slug", flat=True)) if hasattr(agent, "systems") else []
                 )
 
                 variant_data = {
@@ -490,7 +490,7 @@ class OfficialAgentsV1(APIView):
         system_filter = request.query_params.get("system")
         variant_filter = request.query_params.get("variant")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).prefetch_related("systems")
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
         if name_filter:
             agents = agents.filter(name__icontains=name_filter)
         if type_filter:
