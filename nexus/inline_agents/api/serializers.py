@@ -131,7 +131,7 @@ class OfficialAgentListSerializer(serializers.Serializer):
         from nexus.inline_agents.models import AgentSystem
 
         systems = (
-            list(AgentSystem.objects.filter(agents=obj).values_list("slug", flat=True))
+            list(AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct())
             if hasattr(obj, "systems")
             else []
         )
