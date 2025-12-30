@@ -479,7 +479,7 @@ class OpenAIBackend(InlineAgentsBackend):
         self, channel_uuid: str, contact_urn: str, session_id: str, project_uuid: str, language: str
     ) -> tuple[Optional[MessageStreamingClient], Optional[str]]:
         """Initialize gRPC client and send setup message."""
-        if not is_grpc_enabled() or not contact_urn:
+        if not is_grpc_enabled(project_uuid) or not contact_urn:
             return None, None
 
         if not channel_uuid:
