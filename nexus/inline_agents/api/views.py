@@ -361,11 +361,8 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
 
             all_systems = set()
             for agent in group_agents:
-                from nexus.inline_agents.models import AgentSystem
-
-                agent_systems = list(
-                    AgentSystem.objects.filter(agents__uuid=agent.uuid).values_list("slug", flat=True).distinct()
-                )
+                fresh_agent = Agent.objects.only("uuid").get(uuid=agent.uuid)
+                agent_systems = list(fresh_agent.systems.all().values_list("slug", flat=True))
                 all_systems.update(agent_systems)
 
             group_mcps = get_all_mcps_for_group(group_slug)
@@ -402,12 +399,9 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 if project_uuid:
                     variant_assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent).exists()
 
-                from nexus.inline_agents.models import AgentSystem
-
+                fresh_agent = Agent.objects.only("uuid").get(uuid=agent.uuid)
                 variant_systems = (
-                    list(AgentSystem.objects.filter(agents__uuid=agent.uuid).values_list("slug", flat=True).distinct())
-                    if hasattr(agent, "systems")
-                    else []
+                    list(fresh_agent.systems.all().values_list("slug", flat=True)) if hasattr(agent, "systems") else []
                 )
 
                 variant_data = {
