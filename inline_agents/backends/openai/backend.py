@@ -39,6 +39,7 @@ from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
+from router.traces_observers.save_traces import save_inline_message_async
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +200,7 @@ class OpenAIBackend(InlineAgentsBackend):
 
         hooks_state = HooksState(agents=team)
 
-        save_inline_message_to_database(
+        save_inline_message_async.delay(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             text=input_text,
