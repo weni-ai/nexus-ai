@@ -128,8 +128,9 @@ class OfficialAgentListSerializer(serializers.Serializer):
         assigned = False
         if project_uuid:
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
-        fresh_agent = Agent.objects.only("uuid").get(uuid=obj.uuid)
-        systems = list(fresh_agent.systems.all().values_list("slug", flat=True)) if hasattr(obj, "systems") else []
+        from nexus.inline_agents.models import AgentSystem
+
+        systems = list(AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct())
         group_name = obj.group.slug if getattr(obj, "group", None) else None
 
         from nexus.inline_agents.api.views import get_all_mcps_for_agent
@@ -220,7 +221,11 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         project_uuid = self.context.get("project_uuid")
         system = self.context.get("system")
         mcp_name = self.context.get("mcp")
-        available_systems = list(obj.systems.values_list("slug", flat=True)) if hasattr(obj, "systems") else []
+        from nexus.inline_agents.models import AgentSystem
+
+        available_systems = list(
+            AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct()
+        )
         selected_system = system or (available_systems[0] if available_systems else "")
         assigned = False
         if project_uuid:

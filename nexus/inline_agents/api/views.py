@@ -24,7 +24,7 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
 )
-from nexus.inline_agents.models import MCP, Agent, MCPCredentialTemplate
+from nexus.inline_agents.models import MCP, Agent, AgentSystem, MCPCredentialTemplate
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
@@ -359,11 +359,19 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                     project__uuid=project_uuid, agent__uuid__in=agent_uuids
                 ).exists()
 
-            all_systems = set()
-            for agent in group_agents:
-                fresh_agent = Agent.objects.only("uuid").get(uuid=agent.uuid)
-                agent_systems = list(fresh_agent.systems.all().values_list("slug", flat=True))
-                all_systems.update(agent_systems)
+            # Get all systems for all agents in this group by querying the intermediate table directly
+            # This avoids any influence from the filtered queryset
+            all_group_agent_uuids = list(
+                Agent.objects.filter(group__slug=group_slug, is_official=True, source_type=Agent.PLATFORM).values_list(
+                    "uuid", flat=True
+                )
+            )
+            # Query AgentSystem directly through the intermediate table, bypassing any queryset cache
+            all_systems = set(
+                AgentSystem.objects.filter(agents__uuid__in=all_group_agent_uuids)
+                .values_list("slug", flat=True)
+                .distinct()
+            )
 
             group_mcps = get_all_mcps_for_group(group_slug)
             has_multiple_mcps = False
@@ -399,9 +407,10 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 if project_uuid:
                     variant_assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent).exists()
 
-                fresh_agent = Agent.objects.only("uuid").get(uuid=agent.uuid)
-                variant_systems = (
-                    list(fresh_agent.systems.all().values_list("slug", flat=True)) if hasattr(agent, "systems") else []
+                # Query systems directly through the intermediate table for this specific agent
+                # This ensures we get all systems regardless of any filters applied to the queryset
+                variant_systems = list(
+                    AgentSystem.objects.filter(agents__uuid=agent.uuid).values_list("slug", flat=True).distinct()
                 )
 
                 variant_data = {
@@ -503,7 +512,13 @@ class OfficialAgentsV1(APIView):
             else:
                 agents = agents.filter(category__slug__iexact=category_filter)
         if system_filter:
-            agents = agents.filter(systems__slug__iexact=system_filter).distinct("uuid")
+            # Extract UUIDs from filtered queryset, then fetch agents again without the systems filter
+            # This prevents the filtered queryset from affecting subsequent system queries
+            agent_uuids = list(
+                agents.filter(systems__slug__iexact=system_filter).distinct("uuid").values_list("uuid", flat=True)
+            )
+            # Fetch agents again without the systems filter to avoid queryset state issues
+            agents = Agent.objects.filter(uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM)
         if variant_filter:
             agents = agents.filter(variant__iexact=variant_filter)
 
@@ -641,9 +656,12 @@ class OfficialAgentsV1(APIView):
         return {"created_credentials": created}
 
     def _validate_system(self, agent: Agent, system: str | None) -> Response | None:
-        available = list(agent.systems.values_list("slug", flat=True))
-        if system and system not in available:
-            return Response({"error": "Invalid system"}, status=422)
+        available = list(AgentSystem.objects.filter(agents__uuid=agent.uuid).values_list("slug", flat=True).distinct())
+        if system:
+            system_lower = system.lower()
+            available_lower = [s.lower() for s in available]
+            if system_lower not in available_lower:
+                return Response({"error": "Invalid system"}, status=422)
         return None
 
     def _get_expected_templates(self, agent: Agent, system: str | None, mcp: str | None = None) -> list:
