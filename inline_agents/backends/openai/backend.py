@@ -175,12 +175,12 @@ class OpenAIBackend(InlineAgentsBackend):
     ):
         use_components_cached = kwargs.pop("use_components", use_components)
         rationale_switch_cached = kwargs.pop("rationale_switch", rationale_switch)
-        conversation_turns_to_include_cached = kwargs.pop("conversation_turns_to_include", None)
         human_support_cached = kwargs.pop("human_support", None)
         default_supervisor_foundation_model_cached = kwargs.pop("default_supervisor_foundation_model", None)
         formatter_agent_configurations = kwargs.pop("formatter_agent_configurations", None)
         rationale_switch = rationale_switch_cached
-        turns_to_include = conversation_turns_to_include_cached
+
+        turns_to_include = None
 
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
         session_factory = self._get_session_factory(
