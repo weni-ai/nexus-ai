@@ -98,6 +98,37 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
         ("Metadata", {"fields": ("created_on",), "classes": ("collapse",)}),
     )
 
+    def save_model(self, request, obj, form, change):
+        """Save model and trigger cache invalidation."""
+        super().save_model(request, obj, form, change)
+
+        # Invalidate OpenAI Supervisor cache
+        try:
+            from router.services.openai_supervisor_cache_service import OpenAISupervisorCacheService
+
+            cache_service = OpenAISupervisorCacheService()
+            cache_service.invalidate_cache(refresh=True)
+            logger.info(f"[Admin] Invalidated OpenAI Supervisor cache (ID: {obj.id}, Name: {obj.name})")
+        except Exception as e:
+            logger.warning(f"[Admin] Failed to invalidate OpenAI Supervisor cache: {e}")
+
+    def delete_model(self, request, obj):
+        """Delete model and trigger cache invalidation."""
+        supervisor_id = obj.id
+        supervisor_name = obj.name
+
+        super().delete_model(request, obj)
+
+        # Invalidate OpenAI Supervisor cache after deletion
+        try:
+            from router.services.openai_supervisor_cache_service import OpenAISupervisorCacheService
+
+            cache_service = OpenAISupervisorCacheService()
+            cache_service.invalidate_cache(refresh=True)
+            logger.info(f"[Admin] Invalidated OpenAI Supervisor cache after deletion (ID: {supervisor_id}, Name: {supervisor_name})")
+        except Exception as e:
+            logger.warning(f"[Admin] Failed to invalidate OpenAI Supervisor cache after deletion: {e}")
+
 
 @admin.register(InlineAgentsConfiguration)
 class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
