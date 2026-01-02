@@ -24,6 +24,8 @@ class ConversationSQSConsumer:
         queue_url: Optional[str] = None,
         region: str = "us-east-1",
         processing_delay: float = 0.01,  # Reduzido para 10ms (mais rápido para testes)
+        consumer_id: Optional[str] = None,  # ID único do consumer
+        expected_total_messages: Optional[int] = None,  # Total esperado de mensagens
     ):
         """
         Initialize SQS Consumer.
@@ -32,11 +34,28 @@ class ConversationSQSConsumer:
             queue_url: SQS FIFO queue URL (defaults to env var)
             region: AWS region (defaults to us-east-1)
             processing_delay: Delay in seconds to simulate DB insertion (default: 0.1s)
+            consumer_id: ID único do consumer (default: gera automaticamente com PID + timestamp)
+            expected_total_messages: Total esperado de mensagens para mostrar progresso
         """
         self.queue_url = queue_url or os.environ.get("SQS_CONVERSATION_QUEUE_URL", "")
         self.region = region
         self.processing_delay = float(os.environ.get("SQS_PROCESSING_DELAY", processing_delay))
         self.running = False
+
+        # ID único do consumer (PID + timestamp)
+        if consumer_id:
+            self.consumer_id = consumer_id
+        else:
+            import os as os_module
+
+            pid = os_module.getpid()
+            timestamp = int(time.time())
+            self.consumer_id = f"consumer_{pid}_{timestamp}"
+
+        # Total esperado de mensagens
+        self.expected_total_messages = expected_total_messages or int(
+            os.environ.get("SQS_EXPECTED_TOTAL_MESSAGES", "0")
+        )
 
         # Message counters for validation
         self.processed_messages = []
@@ -50,7 +69,11 @@ class ConversationSQSConsumer:
 
         # Métricas de performance
         self.processing_times = []  # Tempo de processamento de cada mensagem
-        self.report_file = os.environ.get("SQS_CONSUMER_REPORT_FILE", CONSUMER_REPORT_FILE)
+        # Arquivos com ID único do consumer
+        base_report_file = os.environ.get("SQS_CONSUMER_REPORT_FILE", CONSUMER_REPORT_FILE)
+        # Remover extensão e adicionar ID
+        base_name = base_report_file.replace(".json", "")
+        self.report_file = f"{base_name}_{self.consumer_id}.json"
         self.lock = threading.Lock()  # Para thread-safety
         self.empty_polls = 0  # Contador de polls vazios
 
@@ -62,30 +85,72 @@ class ConversationSQSConsumer:
         if not self.queue_url:
             raise ValueError("SQS_CONVERSATION_QUEUE_URL must be set")
 
+        logger.info(f"[ConversationSQSConsumer] Initializing SQS client (region: {self.region})...")
+        import sys
+
+        sys.stdout.flush()
+
         # Initialize SQS client
-        self.sqs_client = boto3.client("sqs", region_name=self.region)
+        try:
+            self.sqs_client = boto3.client("sqs", region_name=self.region)
+            logger.info("[ConversationSQSConsumer] SQS client initialized successfully")
+            sys.stdout.flush()
+        except Exception as e:
+            logger.error(f"[ConversationSQSConsumer] Error initializing SQS client: {e}")
+            sys.stdout.flush()
+            raise
 
         logger.info(
             "[ConversationSQSConsumer] Initialized",
             extra={
+                "consumer_id": self.consumer_id,
                 "queue_url": self.queue_url,
                 "region": self.region,
                 "processing_delay": self.processing_delay,
+                "report_file": self.report_file,
+                "expected_total_messages": self.expected_total_messages,
             },
         )
+        sys.stdout.flush()
+
+        logger.info(f"[ConversationSQSConsumer] Consumer ID: {self.consumer_id}")
+        sys.stdout.flush()
+
+        logger.info(f"[ConversationSQSConsumer] Report file: {self.report_file}")
+        sys.stdout.flush()
+
+        if self.expected_total_messages > 0:
+            logger.info(f"[ConversationSQSConsumer] Expected total messages: {self.expected_total_messages:,}")
+            sys.stdout.flush()
 
     def start_consuming(self):
         """Start consuming messages from SQS FIFO queue."""
+        import sys
+
+        sys.stdout.flush()
+
         self.running = True
         self.start_time = time.time()
-        logger.info("[ConversationSQSConsumer] Starting to consume messages")
+        logger.info(f"[{self.consumer_id}] Starting to consume messages")
+        sys.stdout.flush()
+
+        if self.expected_total_messages > 0:
+            logger.info(f"[{self.consumer_id}] Expected total messages: {self.expected_total_messages:,}")
+            sys.stdout.flush()
 
         # Iniciar atualização periódica do relatório
+        logger.info(f"[{self.consumer_id}] Starting periodic report updates...")
+        sys.stdout.flush()
+
         self.start_periodic_report_update()
+
+        logger.info(f"[{self.consumer_id}] Entering message consumption loop...")
+        sys.stdout.flush()
 
         while self.running:
             try:
                 # Receive messages from FIFO queue (processar até 10 mensagens por vez para melhor throughput)
+                logger.debug(f"[{self.consumer_id}] Polling SQS for messages...")
                 response = self.sqs_client.receive_message(
                     QueueUrl=self.queue_url,
                     MaxNumberOfMessages=10,  # Processar até 10 mensagens por vez (máximo do SQS)
@@ -100,10 +165,19 @@ class ConversationSQSConsumer:
                     # Log a cada 3 polls vazios (aproximadamente 1 minuto)
                     if self.empty_polls % 3 == 0:
                         elapsed = time.time() - self.start_time if self.start_time else 0
+                        progress_info = ""
+                        if self.expected_total_messages > 0:
+                            remaining = max(0, self.expected_total_messages - self.processed_count)
+                            progress_pct = (
+                                (self.processed_count / self.expected_total_messages) * 100
+                                if self.expected_total_messages > 0
+                                else 0
+                            )
+                            progress_info = f" | Progress: {self.processed_count:,}/{self.expected_total_messages:,} ({progress_pct:.1f}%) | Remaining: {remaining:,}"
                         logger.info(
-                            f"[ConversationSQSConsumer] Waiting for messages... "
-                            f"(empty polls: {self.empty_polls}, processed: {self.processed_count}, "
-                            f"duration: {elapsed:.0f}s)"
+                            f"[{self.consumer_id}] Waiting for messages... "
+                            f"(empty polls: {self.empty_polls}, processed: {self.processed_count:,}, "
+                            f"duration: {elapsed:.0f}s)" + progress_info
                         )
                     continue
 
@@ -358,6 +432,7 @@ class ConversationSQSConsumer:
         elapsed = time.time() - self.start_time if self.start_time else 0
         with self.lock:
             return {
+                "consumer_id": self.consumer_id,
                 "processed_count": self.processed_count,
                 "error_count": self.error_count,
                 "duplicate_count": self.duplicate_count,
@@ -365,7 +440,8 @@ class ConversationSQSConsumer:
                 "out_of_order_messages": self.out_of_order_messages,
                 "duration_seconds": elapsed,
                 "throughput_msg_per_sec": self.processed_count / elapsed if elapsed > 0 else 0,
-                "processed_messages": self.processed_messages,
+                "processed_messages": self.processed_messages,  # Apenas campos essenciais (já otimizado)
+                "note": "Only essential fields stored (test_index, correlation_id, message_group_id, window_number, processed_at, processing_time_ms) to reduce file size while maintaining full validation capability",
             }
 
     def _process_message(self, message: Dict) -> Optional[str]:
@@ -456,34 +532,46 @@ class ConversationSQSConsumer:
                     group_key = f"{project_uuid}:{contact_urn}"
 
                 # Verificar se a mensagem está em ordem dentro do grupo
-                last_index = self.last_test_index.get(group_key, -1)
+                # IMPORTANTE: Com paralelismo, cada grupo tem seu próprio rastreamento de índices
+                # Não comparamos test_index globalmente, apenas dentro de cada grupo
+                # Com paralelismo, cada mensagem está em um grupo diferente, então não há problema
+                # de ordem entre grupos diferentes - apenas dentro do mesmo grupo
+                with self.lock:
+                    # Obter último índice processado para este grupo específico
+                    last_index = self.last_test_index.get(group_key, -1)
 
-                if test_index <= last_index:
-                    # Mensagem fora de ordem detectada!
-                    self.out_of_order_count += 1
-                    out_of_order_info = {
-                        "test_index": test_index,
-                        "last_index": last_index,
-                        "message_id": message_id,
-                        "group_key": group_key,
-                        "correlation_id": correlation_id,
-                        "timestamp": time.time(),
-                    }
-                    self.out_of_order_messages.append(out_of_order_info)
-
-                    logger.warning(
-                        "[ConversationSQSConsumer] Message out of order detected",
-                        extra={
+                    # IMPORTANTE: Com paralelismo (--parallelism), cada mensagem está em um grupo diferente
+                    # então não devemos validar ordem globalmente. Apenas validar se dentro do mesmo
+                    # grupo há mensagens fora de ordem (o que não deveria acontecer com paralelismo).
+                    # Se last_index == -1, é a primeira mensagem deste grupo, então está OK.
+                    if last_index != -1 and test_index <= last_index:
+                        # Mensagem fora de ordem detectada DENTRO do mesmo grupo!
+                        # Isso só acontece se duas mensagens do mesmo grupo chegam fora de ordem
+                        self.out_of_order_count += 1
+                        out_of_order_info = {
                             "test_index": test_index,
                             "last_index": last_index,
-                            "group_key": group_key,
                             "message_id": message_id,
-                            "expected_next": last_index + 1,
-                        },
-                    )
-                else:
-                    # Ordem correta, atualizar último índice processado
-                    self.last_test_index[group_key] = test_index
+                            "group_key": group_key,
+                            "correlation_id": correlation_id,
+                            "timestamp": time.time(),
+                        }
+                        self.out_of_order_messages.append(out_of_order_info)
+
+                        logger.warning(
+                            "[ConversationSQSConsumer] Message out of order detected within group",
+                            extra={
+                                "test_index": test_index,
+                                "last_index": last_index,
+                                "group_key": group_key,
+                                "message_id": message_id,
+                                "expected_next": last_index + 1,
+                            },
+                        )
+                    else:
+                        # Ordem correta dentro do grupo (ou primeira mensagem do grupo)
+                        # Atualizar último índice processado para este grupo
+                        self.last_test_index[group_key] = test_index
 
             if event_type == "message.received":
                 self._handle_message_received(event_data)
@@ -529,18 +617,17 @@ class ConversationSQSConsumer:
                         self.message_groups_detail[message_group_id]["indices"].append(test_index)
                     self.message_groups_detail[message_group_id]["last_seen"] = time.time()
 
-                self.processed_messages.append(
-                    {
-                        "message_id": message_id,
-                        "correlation_id": correlation_id,
-                        "event_type": event_type,
-                        "test_index": event_data.get("data", {}).get("test_index"),
-                        "message_group_id": message_group_id,  # Adicionar Message Group ID
-                        "window_number": window_number,  # Adicionar window number
-                        "processed_at": time.time(),
-                        "processing_time_ms": processing_time_ms,
-                    }
-                )
+                # Salvar apenas campos essenciais para validação (reduz tamanho do arquivo drasticamente)
+                # Mantém todos os dados necessários para validação completa
+                essential_message_data = {
+                    "test_index": test_index,
+                    "correlation_id": correlation_id,
+                    "message_group_id": message_group_id,
+                    "window_number": window_number,
+                    "processed_at": time.time(),
+                    "processing_time_ms": processing_time_ms,
+                }
+                self.processed_messages.append(essential_message_data)
 
             # Log progress every 100 messages
             if self.processed_count % 100 == 0:
@@ -553,10 +640,18 @@ class ConversationSQSConsumer:
                     if self.processing_times
                     else 0
                 )
+
+                # Calcular progresso se total esperado foi informado
+                progress_info = ""
+                if self.expected_total_messages > 0:
+                    remaining = max(0, self.expected_total_messages - self.processed_count)
+                    progress_pct = (self.processed_count / self.expected_total_messages) * 100
+                    progress_info = f" | Progress: {self.processed_count:,}/{self.expected_total_messages:,} ({progress_pct:.1f}%) | Remaining: {remaining:,}"
+
                 logger.info(
-                    f"[ConversationSQSConsumer] Processed {self.processed_count} messages "
+                    f"[{self.consumer_id}] Processed {self.processed_count:,} messages "
                     f"(throughput: {throughput:.2f} msg/s, avg processing: {avg_processing_time:.2f}ms, "
-                    f"duplicates: {self.duplicate_count}, out of order: {self.out_of_order_count})"
+                    f"duplicates: {self.duplicate_count}, out of order: {self.out_of_order_count})" + progress_info
                 )
 
             # Retornar receipt_handle para deleção em batch (mais eficiente)
@@ -591,6 +686,8 @@ class ConversationSQSConsumer:
         Args:
             event_data: Event data dictionary
         """
+        from conversation_ms.services.message_service import MessageService
+
         logger.info(
             "[ConversationSQSConsumer] Handling message.received event",
             extra={
@@ -600,22 +697,9 @@ class ConversationSQSConsumer:
             },
         )
 
-        data = event_data.get("data", {})
-        project_uuid = data.get("project_uuid")
-        contact_urn = data.get("contact_urn")
-        channel_uuid = data.get("channel_uuid")
-        message = data.get("message", {})
-
-        logger.debug(
-            "[ConversationSQSConsumer] Message received details",
-            extra={
-                "project_uuid": project_uuid,
-                "contact_urn": contact_urn,
-                "channel_uuid": channel_uuid,
-                "message_id": message.get("message_id"),
-                "message_text": message.get("text")[:100] if message.get("text") else None,
-            },
-        )
+        # Processar mensagem usando MessageService
+        message_service = MessageService()
+        message_service.process_message_received(event_data)
 
     def _handle_message_sent(self, event_data: Dict):
         """
@@ -624,6 +708,8 @@ class ConversationSQSConsumer:
         Args:
             event_data: Event data dictionary
         """
+        from conversation_ms.services.message_service import MessageService
+
         logger.info(
             "[ConversationSQSConsumer] Handling message.sent event",
             extra={
@@ -633,19 +719,6 @@ class ConversationSQSConsumer:
             },
         )
 
-        data = event_data.get("data", {})
-        project_uuid = data.get("project_uuid")
-        contact_urn = data.get("contact_urn")
-        channel_uuid = data.get("channel_uuid")
-        message = data.get("message", {})
-
-        logger.debug(
-            "[ConversationSQSConsumer] Message sent details",
-            extra={
-                "project_uuid": project_uuid,
-                "contact_urn": contact_urn,
-                "channel_uuid": channel_uuid,
-                "message_id": message.get("message_id"),
-                "message_text": message.get("text")[:100] if message.get("text") else None,
-            },
-        )
+        # Processar mensagem usando MessageService
+        message_service = MessageService()
+        message_service.process_message_sent(event_data)
