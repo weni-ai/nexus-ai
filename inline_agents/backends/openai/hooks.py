@@ -606,6 +606,37 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                 },
             }
             await self.trace_handler.send_trace(context_data, agent.name, "search_result_received", trace_data)
+
+            # Send tool result event to data lake (same condition as tool_call)
+            try:
+                result_value = result
+                if isinstance(result, str):
+                    try:
+                        result_json = json.loads(result)
+                        result_value = result_json
+                    except (json.JSONDecodeError, TypeError):
+                        result_value = result
+                elif isinstance(result, dict):
+                    result_value = result
+
+                self.data_lake_event_adapter.to_data_lake_event(
+                    project_uuid=project_uuid,
+                    contact_urn=context_data.contact.get("urn"),
+                    tool_result_data={
+                        "tool_name": tool.name,
+                        "result": result_value,
+                        "parameters": parameters,
+                        "function_name": None,  # knowledge base doesn't have function_name
+                    },
+                    agent_data={"agent_name": agent.name},
+                    foundation_model=agent.model,
+                    backend="openai",
+                    channel_uuid=context_data.contact.get("channel_uuid"),
+                    conversation=self.conversation,
+                )
+            except Exception as e:
+                logger.error(f"Error sending tool result event for tool '{tool.name}': {str(e)}")
+                sentry_sdk.capture_exception(e)
         elif tool.name not in self.hooks_state.agents_names:
             if isinstance(result, str):
                 try:
