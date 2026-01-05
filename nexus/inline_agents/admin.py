@@ -176,10 +176,13 @@ class VersionInline(admin.TabularInline):
 class AgentAdminForm(forms.ModelForm):
     """Custom form to handle skill file uploads"""
 
-    skill_files = forms.FileField(
+    skill_file = forms.FileField(
         required=False,
-        widget=forms.ClearableFileInput(attrs={"multiple": True}),
-        help_text="Upload .py files for skills. Lambda functions will be created automatically.",
+        widget=forms.FileInput(),
+        help_text=(
+            "Upload a .py file to create a Lambda function. "
+            "The Lambda ARN and metadata will be stored in Version.skills."
+        ),
     )
 
     class Meta:
@@ -240,9 +243,9 @@ class AgentAdmin(admin.ModelAdmin):
         (
             "Skills",
             {
-                "fields": ("skill_files",),
+                "fields": ("skill_file",),
                 "description": (
-                    "Upload .py files to create Lambda functions. "
+                    "Upload a .py file to create a Lambda function. "
                     "The Lambda ARN and metadata will be stored in Version.skills. "
                     "The actual .py code is stored in AWS Lambda, not in the database."
                 ),
@@ -327,14 +330,18 @@ class AgentAdmin(admin.ModelAdmin):
         # Save the agent first (this will create empty Version if needed via Agent.save())
         super().save_model(request, obj, form, change)
 
-        # Process skill files if any were uploaded
-        skill_files = request.FILES.getlist("skill_files")
-        if skill_files and obj.is_official:
-            self._process_skill_files(obj, skill_files, request)
+        # Process skill file if one was uploaded
+        skill_file = request.FILES.get("skill_file")
+        if skill_file and obj.is_official:
+            self._process_skill_file(obj, skill_file, request)
 
-    def _process_skill_files(self, agent, skill_files, request):
-        """Process uploaded skill files and create Lambda functions"""
+    def _process_skill_file(self, agent, skill_file, request):
+        """Process uploaded skill file and create Lambda function"""
         from nexus.usecases.inline_agents.tools import ToolsUseCase
+
+        if not skill_file.name.endswith(".py"):
+            messages.error(request, "Only .py files are allowed for skills.")
+            return
 
         tools_usecase = ToolsUseCase()
         project = agent.project
@@ -343,62 +350,53 @@ class AgentAdmin(admin.ModelAdmin):
         if not agent.current_version:
             agent.versions.create(skills=[], display_skills=[])
 
-        agent_tools = []
-        files_dict = {}
+        # Extract skill name from filename
+        skill_slug = skill_file.name.replace(".py", "")
+        skill_name = skill_slug.replace("_", " ").title()
 
-        for skill_file in skill_files:
-            if not skill_file.name.endswith(".py"):
-                continue
+        # Read file content
+        skill_file.seek(0)
+        file_content = skill_file.read()
 
-            # Extract skill name from filename
-            skill_slug = skill_file.name.replace(".py", "")
-            skill_name = skill_slug.replace("_", " ").title()
+        # Create zip from .py file (Lambda expects zip)
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.writestr("lambda_function.py", file_content)
+        zip_buffer.seek(0)
 
-            # Read file content
-            skill_file.seek(0)
-            file_content = skill_file.read()
+        # Create tool metadata
+        agent_tool = {
+            "key": skill_slug,
+            "name": skill_name,
+            "slug": skill_slug,
+            "description": f"Skill: {skill_name}",
+            "parameters": [],
+            "source": {
+                "entrypoint": "lambda_function.lambda_handler",
+            },
+        }
 
-            # Create zip from .py file (Lambda expects zip)
-            zip_buffer = BytesIO()
-            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                zip_file.writestr("lambda_function.py", file_content)
-            zip_buffer.seek(0)
+        files_dict = {f"{agent.slug}:{skill_slug}": zip_buffer}
 
-            # Create tool metadata
-            agent_tool = {
-                "key": skill_slug,
-                "name": skill_name,
-                "slug": skill_slug,
-                "description": f"Skill: {skill_name}",
-                "parameters": [],
-                "source": {
-                    "entrypoint": "lambda_function.lambda_handler",
-                },
-            }
-
-            agent_tools.append(agent_tool)
-            files_dict[f"{agent.slug}:{skill_slug}"] = zip_buffer
-
-        # Process tools if any were uploaded
-        if agent_tools:
-            try:
-                tools_usecase.handle_tools(
-                    agent=agent,
-                    project=project,
-                    agent_tools=agent_tools,
-                    files=files_dict,
-                    project_uuid=str(project.uuid),
-                )
-                messages.success(
-                    request,
-                    f"Successfully processed {len(agent_tools)} skill file(s). Lambda functions created.",
-                )
-            except Exception as e:
-                logger.error(f"Error processing skill files for agent {agent.slug}: {e}", exc_info=True)
-                messages.error(
-                    request,
-                    f"Error processing skill files: {str(e)}. Please check the logs for details.",
-                )
+        # Process tool
+        try:
+            tools_usecase.handle_tools(
+                agent=agent,
+                project=project,
+                agent_tools=[agent_tool],
+                files=files_dict,
+                project_uuid=str(project.uuid),
+            )
+            messages.success(
+                request,
+                f"Successfully processed skill file '{skill_file.name}'. Lambda function created.",
+            )
+        except Exception as e:
+            logger.error(f"Error processing skill file for agent {agent.slug}: {e}", exc_info=True)
+            messages.error(
+                request,
+                f"Error processing skill file: {str(e)}. Please check the logs for details.",
+            )
 
 
 @admin.register(AgentGroup)
