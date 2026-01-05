@@ -1,5 +1,8 @@
 import logging
+import zipfile
+from io import BytesIO
 
+from django import forms
 from django.contrib import admin, messages
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
@@ -18,6 +21,7 @@ from nexus.inline_agents.models import (
     InlineAgentsConfiguration,
     MCPConfigOption,
     MCPCredentialTemplate,
+    Version,
 )
 
 logger = logging.getLogger(__name__)
@@ -152,14 +156,65 @@ class MCPInline(admin.TabularInline):
         return qs.select_related("system").order_by("system__slug", "order", "name")
 
 
+class VersionInline(admin.TabularInline):
+    """Inline to manage Versions of an Agent"""
+
+    model = Version
+    extra = 0
+    fields = ("created_on", "skills", "display_skills")
+    readonly_fields = ("created_on",)
+    formfield_overrides = {
+        ArrayField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
+    }
+
+    def get_queryset(self, request):
+        """Order by creation date (most recent first)"""
+        qs = super().get_queryset(request)
+        return qs.order_by("-created_on")
+
+
+class AgentAdminForm(forms.ModelForm):
+    """Custom form to handle skill file uploads"""
+
+    skill_files = forms.FileField(
+        required=False,
+        widget=forms.ClearableFileInput(attrs={"multiple": True}),
+        help_text="Upload .py files for skills. Lambda functions will be created automatically.",
+    )
+
+    class Meta:
+        model = Agent
+        fields = [
+            "name",
+            "slug",
+            "project",
+            "is_official",
+            "agent_type",
+            "category",
+            "group",
+            "systems",
+            "instruction",
+            "collaboration_instructions",
+            "foundation_model",
+            "backend_foundation_models",
+            "source_type",
+            "variant",
+            "capabilities",
+            "policies",
+            "tooling",
+            "catalog",
+        ]
+
+
 @admin.register(Agent)
 class AgentAdmin(admin.ModelAdmin):
+    form = AgentAdminForm
     list_display = ("uuid", "name", "project", "is_official", "agent_type", "category")
     list_filter = ("is_official", "source_type", "agent_type", "category")
     search_fields = ("name", "project__name", "project__uuid", "slug")
     ordering = ("project__name",)
     autocomplete_fields = ["project", "group", "systems", "agent_type", "category"]
-    inlines = [MCPInline]
+    inlines = [MCPInline, VersionInline]
 
     fieldsets = (
         (
@@ -180,6 +235,18 @@ class AgentAdmin(admin.ModelAdmin):
                     "backend_foundation_models",
                     "source_type",
                 )
+            },
+        ),
+        (
+            "Skills",
+            {
+                "fields": ("skill_files",),
+                "description": (
+                    "Upload .py files to create Lambda functions. "
+                    "The Lambda ARN and metadata will be stored in Version.skills. "
+                    "The actual .py code is stored in AWS Lambda, not in the database."
+                ),
+                "classes": ("collapse",),
             },
         ),
         (
@@ -254,6 +321,84 @@ class AgentAdmin(admin.ModelAdmin):
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
+
+    def save_model(self, request, obj, form, change):
+        """Override save to create empty Version and process skill files"""
+        # Save the agent first (this will create empty Version if needed via Agent.save())
+        super().save_model(request, obj, form, change)
+
+        # Process skill files if any were uploaded
+        skill_files = request.FILES.getlist("skill_files")
+        if skill_files and obj.is_official:
+            self._process_skill_files(obj, skill_files, request)
+
+    def _process_skill_files(self, agent, skill_files, request):
+        """Process uploaded skill files and create Lambda functions"""
+        from nexus.usecases.inline_agents.tools import ToolsUseCase
+
+        tools_usecase = ToolsUseCase()
+        project = agent.project
+
+        # Ensure agent has a Version
+        if not agent.current_version:
+            agent.versions.create(skills=[], display_skills=[])
+
+        agent_tools = []
+        files_dict = {}
+
+        for skill_file in skill_files:
+            if not skill_file.name.endswith(".py"):
+                continue
+
+            # Extract skill name from filename
+            skill_slug = skill_file.name.replace(".py", "")
+            skill_name = skill_slug.replace("_", " ").title()
+
+            # Read file content
+            skill_file.seek(0)
+            file_content = skill_file.read()
+
+            # Create zip from .py file (Lambda expects zip)
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                zip_file.writestr("lambda_function.py", file_content)
+            zip_buffer.seek(0)
+
+            # Create tool metadata
+            agent_tool = {
+                "key": skill_slug,
+                "name": skill_name,
+                "slug": skill_slug,
+                "description": f"Skill: {skill_name}",
+                "parameters": [],
+                "source": {
+                    "entrypoint": "lambda_function.lambda_handler",
+                },
+            }
+
+            agent_tools.append(agent_tool)
+            files_dict[f"{agent.slug}:{skill_slug}"] = zip_buffer
+
+        # Process tools if any were uploaded
+        if agent_tools:
+            try:
+                tools_usecase.handle_tools(
+                    agent=agent,
+                    project=project,
+                    agent_tools=agent_tools,
+                    files=files_dict,
+                    project_uuid=str(project.uuid),
+                )
+                messages.success(
+                    request,
+                    f"Successfully processed {len(agent_tools)} skill file(s). Lambda functions created.",
+                )
+            except Exception as e:
+                logger.error(f"Error processing skill files for agent {agent.slug}: {e}", exc_info=True)
+                messages.error(
+                    request,
+                    f"Error processing skill files: {str(e)}. Please check the logs for details.",
+                )
 
 
 @admin.register(AgentGroup)

@@ -26,7 +26,7 @@ class ORMTeamRepository(TeamRepository):
                 agent = integrated_agent.agent
                 skills = []
 
-                skills = agent.current_version.skills
+                skills = agent.current_version.skills or []
                 for index, skill in enumerate(skills):
                     for function in skill["functionSchema"]["functions"]:
                         if "parameters" in function and isinstance(function["parameters"], list):
