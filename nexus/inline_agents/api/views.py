@@ -430,6 +430,7 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
             payload = {
                 "group": group_slug,
                 "name": generic_name,
+                "slug": base_agent.slug,
                 "description": base_agent.collaboration_instructions,
                 "type": (base_agent.agent_type.slug if getattr(base_agent, "agent_type", None) else ""),
                 "category": (base_agent.category.slug if getattr(base_agent, "category", None) else ""),
