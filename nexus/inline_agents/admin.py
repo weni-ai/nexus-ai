@@ -185,6 +185,15 @@ class AgentAdminForm(forms.ModelForm):
         ),
     )
 
+    requirements_file = forms.FileField(
+        required=False,
+        widget=forms.FileInput(),
+        help_text=(
+            "Optional: Upload a requirements.txt file with Python dependencies. "
+            "Dependencies will be included in the Lambda deployment package."
+        ),
+    )
+
     class Meta:
         model = Agent
         fields = [
@@ -243,9 +252,10 @@ class AgentAdmin(admin.ModelAdmin):
         (
             "Skills",
             {
-                "fields": ("skill_file",),
+                "fields": ("skill_file", "requirements_file"),
                 "description": (
                     "Upload a .py file to create a Lambda function. "
+                    "Optionally include a requirements.txt file for dependencies. "
                     "The Lambda ARN and metadata will be stored in Version.skills. "
                     "The actual .py code is stored in AWS Lambda, not in the database."
                 ),
@@ -332,19 +342,106 @@ class AgentAdmin(admin.ModelAdmin):
 
         # Process skill file if one was uploaded
         skill_file = request.FILES.get("skill_file")
+        requirements_file = request.FILES.get("requirements_file")
         if skill_file and obj.is_official:
-            self._process_skill_file(obj, skill_file, request)
+            self._process_skill_file(obj, skill_file, requirements_file, request)
 
-    def _process_skill_file(self, agent, skill_file, request):
+    def _validate_skill_files(self, skill_file, requirements_file, request) -> bool:
+        """Validate uploaded skill files"""
+        if not skill_file.name.endswith(".py"):
+            messages.error(request, "Only .py files are allowed for skills.")
+            return False
+
+        if requirements_file and not requirements_file.name.endswith(".txt"):
+            messages.error(request, "Requirements file must be a .txt file.")
+            return False
+
+        return True
+
+    def _read_skill_file_content(self, skill_file, request):
+        """Read skill file content with robust encoding handling"""
+        skill_file.seek(0)
+        try:
+            return skill_file.read().decode("utf-8")
+        except UnicodeDecodeError:
+            # Try with latin-1 as fallback (handles most encodings)
+            skill_file.seek(0)
+            try:
+                return skill_file.read().decode("latin-1")
+            except UnicodeDecodeError:
+                messages.error(request, "Could not decode skill file. Please ensure it's UTF-8 encoded.")
+                return None
+
+    def _detect_tool_class(self, file_content: str):
+        """Detect if code uses Tool class from weni and return class name"""
+        import ast
+        import re
+
+        uses_tool_class = False
+        tool_class_name = None
+
+        try:
+            # Check if imports Tool from weni
+            if "from weni import Tool" in file_content or "from weni.tool import Tool" in file_content:
+                uses_tool_class = True
+
+                # Try to find the Tool class definition
+                tree = ast.parse(file_content)
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ClassDef):
+                        # Check if class inherits from Tool
+                        for base in node.bases:
+                            if isinstance(base, ast.Name) and base.id == "Tool":
+                                tool_class_name = node.name
+                                break
+                            elif isinstance(base, ast.Attribute):
+                                if base.attr == "Tool":
+                                    tool_class_name = node.name
+                                    break
+
+                # If no class found, try regex fallback
+                if not tool_class_name:
+                    match = re.search(r"class\s+(\w+)\s*\([^)]*Tool", file_content)
+                    if match:
+                        tool_class_name = match.group(1)
+        except (SyntaxError, Exception) as e:
+            logger.warning(f"Could not parse Python file to detect Tool class: {e}")
+
+        return uses_tool_class, tool_class_name
+
+    def _create_skill_zip(self, file_content: str, uses_tool_class: bool, tool_class_name, requirements_file):
+        """Create ZIP file with skill code and return buffer and entrypoint"""
+        zip_buffer = BytesIO()
+        module_name = "main"
+
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            if uses_tool_class and tool_class_name:
+                # Create wrapper lambda_function.py for Tool class
+                wrapper_code = self._create_tool_wrapper(module_name, tool_class_name)
+                zip_file.writestr("lambda_function.py", wrapper_code)
+                # Include original file as main.py
+                zip_file.writestr("main.py", file_content.encode("utf-8"))
+                entrypoint = "lambda_function.lambda_handler"
+            else:
+                # Use file directly as lambda_function.py
+                zip_file.writestr("lambda_function.py", file_content.encode("utf-8"))
+                entrypoint = "lambda_function.lambda_handler"
+
+            # Include requirements.txt if provided
+            if requirements_file:
+                requirements_file.seek(0)
+                requirements_content = requirements_file.read()
+                zip_file.writestr("requirements.txt", requirements_content)
+
+        zip_buffer.seek(0)
+        return zip_buffer, entrypoint
+
+    def _process_skill_file(self, agent, skill_file, requirements_file, request):
         """Process uploaded skill file and create Lambda function"""
         from nexus.usecases.inline_agents.tools import ToolsUseCase
 
-        if not skill_file.name.endswith(".py"):
-            messages.error(request, "Only .py files are allowed for skills.")
+        if not self._validate_skill_files(skill_file, requirements_file, request):
             return
-
-        tools_usecase = ToolsUseCase()
-        project = agent.project
 
         # Ensure agent has a Version
         if not agent.current_version:
@@ -355,14 +452,17 @@ class AgentAdmin(admin.ModelAdmin):
         skill_name = skill_slug.replace("_", " ").title()
 
         # Read file content
-        skill_file.seek(0)
-        file_content = skill_file.read()
+        file_content = self._read_skill_file_content(skill_file, request)
+        if file_content is None:
+            return
 
-        # Create zip from .py file (Lambda expects zip)
-        zip_buffer = BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            zip_file.writestr("lambda_function.py", file_content)
-        zip_buffer.seek(0)
+        # Detect if code uses Tool class
+        uses_tool_class, tool_class_name = self._detect_tool_class(file_content)
+
+        # Create zip with appropriate structure
+        zip_buffer, entrypoint = self._create_skill_zip(
+            file_content, uses_tool_class, tool_class_name, requirements_file
+        )
 
         # Create tool metadata
         agent_tool = {
@@ -372,13 +472,16 @@ class AgentAdmin(admin.ModelAdmin):
             "description": f"Skill: {skill_name}",
             "parameters": [],
             "source": {
-                "entrypoint": "lambda_function.lambda_handler",
+                "entrypoint": entrypoint,
             },
         }
 
         files_dict = {f"{agent.slug}:{skill_slug}": zip_buffer}
 
         # Process tool
+        tools_usecase = ToolsUseCase()
+        project = agent.project
+
         try:
             tools_usecase.handle_tools(
                 agent=agent,
@@ -387,16 +490,180 @@ class AgentAdmin(admin.ModelAdmin):
                 files=files_dict,
                 project_uuid=str(project.uuid),
             )
-            messages.success(
-                request,
-                f"Successfully processed skill file '{skill_file.name}'. Lambda function created.",
-            )
+            success_msg = f"Successfully processed skill file '{skill_file.name}'. Lambda function created."
+            if uses_tool_class:
+                success_msg += f" Detected Tool class '{tool_class_name}' and created wrapper."
+            messages.success(request, success_msg)
         except Exception as e:
             logger.error(f"Error processing skill file for agent {agent.slug}: {e}", exc_info=True)
             messages.error(
                 request,
                 f"Error processing skill file: {str(e)}. Please check the logs for details.",
             )
+
+    def _create_tool_wrapper(self, module_name: str, class_name: str) -> str:
+        """Create a lambda_handler wrapper for Tool class"""
+        return f'''import json
+import os
+import sys
+from types import MappingProxyType
+
+# Add current directory to path to import main module
+sys.path.insert(0, os.path.dirname(__file__))
+
+try:
+    from weni.context import Context as WeniContext
+    from weni.events import Event
+    WENI_AVAILABLE = True
+except ImportError:
+    # Fallback if weni package is not available (shouldn't happen in Lambda with layer)
+    WENI_AVAILABLE = False
+    WeniContext = None
+    Event = None
+
+from {module_name} import {class_name}
+
+
+def lambda_handler(event, context):
+    """
+    AWS Lambda handler wrapper for {class_name} Tool class.
+
+    Converts Lambda event payload to weni Context and calls Tool(context).
+    Tool.__new__ returns (result, format, events) tuple.
+    """
+    try:
+        # Parse event (can be dict or JSON string)
+        if isinstance(event, str):
+            event = json.loads(event)
+
+        # Extract parameters from event
+        parameters = {{}}
+        if "parameters" in event:
+            for param in event.get("parameters", []):
+                if isinstance(param, dict) and "name" in param and "value" in param:
+                    parameters[param["name"]] = param["value"]
+
+        # Extract session attributes
+        session_attrs = event.get("sessionAttributes", {{}})
+
+        # Parse JSON strings in session attributes
+        credentials = {{}}
+        globals_data = {{}}
+        contact = {{}}
+        project = {{}}
+
+        if isinstance(session_attrs, dict):
+            if "credentials" in session_attrs:
+                try:
+                    creds_str = session_attrs["credentials"]
+                    credentials = json.loads(creds_str) if isinstance(creds_str, str) else creds_str
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            if "globals" in session_attrs:
+                try:
+                    globals_str = session_attrs["globals"]
+                    globals_data = json.loads(globals_str) if isinstance(globals_str, str) else globals_str
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            if "contact" in session_attrs:
+                try:
+                    contact_str = session_attrs["contact"]
+                    contact = json.loads(contact_str) if isinstance(contact_str, str) else contact_str
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            if "project" in session_attrs:
+                try:
+                    project_str = session_attrs["project"]
+                    project = json.loads(project_str) if isinstance(project_str, str) else project_str
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        # Create Context object
+        if WENI_AVAILABLE and WeniContext:
+            # Use real weni Context if available
+            context_obj = WeniContext(
+                credentials=credentials,
+                parameters=parameters,
+                globals=globals_data,
+                contact=contact,
+                project=project
+            )
+        else:
+            # Fallback: create simple Context-like object
+            class SimpleContext:
+                def __init__(self, credentials, parameters, globals_data, contact, project):
+                    # Try to use MappingProxyType for immutability (like weni Context)
+                    try:
+                        self.credentials = MappingProxyType(credentials)
+                        self.parameters = MappingProxyType(parameters)
+                        self.globals = MappingProxyType(globals_data)
+                        self.contact = MappingProxyType(contact)
+                        self.project = MappingProxyType(project)
+                    except (TypeError, AttributeError):
+                        # Fallback to regular dicts if MappingProxyType fails
+                        self.credentials = credentials
+                        self.parameters = parameters
+                        self.globals = globals_data
+                        self.contact = contact
+                        self.project = project
+            context_obj = SimpleContext(credentials, parameters, globals_data, contact, project)
+
+        # Call Tool class - Tool.__new__ returns (result, format, events)
+        # Note: Tool.__new__ receives context and returns tuple
+        result, format_dict, events = {class_name}(context_obj)
+
+        # Ensure result is JSON serializable
+        # Convert result to dict if it's a TextResponse or other object
+        if hasattr(result, "to_dict"):
+            result = result.to_dict()
+        elif hasattr(result, "__dict__"):
+            result = result.__dict__
+        elif not isinstance(result, (dict, list, str, int, float, bool, type(None))):
+            # For other types, try to convert to string representation
+            result = str(result)
+
+        # Ensure format_dict is a dict
+        if not isinstance(format_dict, dict):
+            format_dict = {{}} if format_dict is None else {{"format": str(format_dict)}}
+
+        # Ensure events is a list
+        if not isinstance(events, list):
+            events = [] if events is None else [events]
+
+        # Format response for Lambda (matching expected structure from adapter.py)
+        # The adapter expects: result.get("response", {{}}).get("sessionAttributes", {{}}).get("events", [])
+        # Or: result.get("response", {{}}).get("events", [])
+        return {{
+            "response": {{
+                "sessionAttributes": {{
+                    "events": events
+                }},
+                "events": events,  # Fallback location
+                "functionResponse": {{
+                    "responseBody": result,
+                    "format": format_dict
+                }}
+            }}
+        }}
+
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        traceback_str = traceback.format_exc()
+
+        return {{
+            "response": {{
+                "error": error_msg,
+                "errorType": type(e).__name__,
+                "traceback": traceback_str,
+                "sessionAttributes": {{}},
+                "events": []
+            }}
+        }}
+'''
 
 
 @admin.register(AgentGroup)
