@@ -111,10 +111,12 @@ def _initialize_workflow(ctx: WorkflowContext) -> None:
     )
 
     # Handle message concatenation and revoke existing workflow
+    # Pass current_task_id to avoid revoking self on retry
     final_message_text, had_existing = ctx.task_manager.handle_workflow_message_concatenation(
         project_uuid=ctx.project_uuid,
         contact_urn=ctx.contact_urn,
         new_message_text=ctx.message.get("text", ""),
+        current_task_id=ctx.task_id,
     )
 
     if had_existing:
