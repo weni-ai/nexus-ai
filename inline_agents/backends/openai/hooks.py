@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 import pendulum
 import sentry_sdk
-from django.utils.text import slugify
 
 try:
     from agents import AgentHooks, RunHooks
@@ -29,8 +28,12 @@ def _get_agent_slug(agent) -> str:
     (from repository where agentName = agent.slug).
     For supervisor agent, it uses name="manager" which is a fixed value.
     """
-    # agent.name should already be the slug when created from repository
-    # where agentName = agent.slug. But we use agent.name directly.
+
+    if " " not in agent.name:
+        return agent.name
+
+    from django.utils.text import slugify
+
     return slugify(agent.name)
 
 
