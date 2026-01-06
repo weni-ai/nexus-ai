@@ -220,14 +220,13 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
     """
     logger.info(f"[Workflow] Executing pre-generation for {ctx.workflow_id}")
 
-    result = pre_generation_task.apply(
-        args=[ctx.message],
-        kwargs={
-            "preview": ctx.preview,
-            "language": ctx.language,
-            "workflow_id": ctx.workflow_id,
-        },
-    ).get()
+    # Call directly using .run() to avoid Celery's "never call .get() within a task" error
+    result = pre_generation_task.run(
+        ctx.message,
+        preview=ctx.preview,
+        language=ctx.language,
+        workflow_id=ctx.workflow_id,
+    )
 
     if result["status"] == "failed":
         error_msg = result.get("error", "Unknown error")
