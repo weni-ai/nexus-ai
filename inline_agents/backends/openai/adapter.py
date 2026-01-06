@@ -925,8 +925,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                 foundation_model=foundation_model,
             )
 
-            # Send to Celery in non-blocking way (only .delay() runs in thread)
-            await asyncio.to_thread(self._event_service.send_data_lake_event_task.delay, payload)
+            self._event_service.send_data_lake_event_task.delay(payload)
 
         except Exception as e:
             logger.error(f"Error processing data lake event async: {str(e)}")
