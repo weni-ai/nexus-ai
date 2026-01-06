@@ -28,8 +28,17 @@ def _get_agent_slug(agent, hooks_state=None) -> str:
     For Response Formatter Agent, use the last active agent slug if available.
     """
     # Response Formatter Agent should use the slug of the last agent that executed
-    if agent.name == "Response Formatter Agent" and hooks_state and hooks_state.last_active_agent_slug:
-        return hooks_state.last_active_agent_slug
+    if agent.name == "Response Formatter Agent" and hooks_state:
+        if hooks_state.last_active_agent_slug:
+            logger.debug(
+                f"[_get_agent_slug] Formatter agent using last_active_agent_slug: {hooks_state.last_active_agent_slug}"
+            )
+            return hooks_state.last_active_agent_slug
+        else:
+            logger.warning(
+                "[_get_agent_slug] Formatter agent but last_active_agent_slug is None. "
+                "This may indicate that no collaborator executed before the formatter."
+            )
 
     if " " not in agent.name:
         return agent.name
@@ -282,6 +291,8 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         parameters = tool_info.get("parameters", [])
 
         agent_slug = _get_agent_slug(agent, self.hooks_state)
+        # Update last_active_agent_slug when collaborator executes tools
+        self.hooks_state.last_active_agent_slug = agent_slug
         logger.info(f"[HOOK] Executando ferramenta '{tool.name}'.")
         logger.info(f"[HOOK] Agente '{agent_slug}' vai usar a ferramenta '{tool.name}'.")
         trace_data = {
@@ -406,6 +417,8 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                     )
 
         agent_slug = _get_agent_slug(agent, self.hooks_state)
+        # Update last_active_agent_slug when collaborator receives tool results
+        self.hooks_state.last_active_agent_slug = agent_slug
         trace_data = {
             "collaboratorName": agent_slug,
             "eventTime": pendulum.now().to_iso8601_string(),
@@ -427,6 +440,9 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
     async def on_end(self, context, agent, output):
         logger.info(f"[HOOK] Enviando resposta ao manager. {output}")
         context_data = context.context
+        agent_slug = _get_agent_slug(agent, self.hooks_state)
+        # Update last_active_agent_slug when collaborator finishes
+        self.hooks_state.last_active_agent_slug = agent_slug
         trace_data = {
             "eventTime": pendulum.now().to_iso8601_string(),
             "sessionId": context_data.session.get_session_id(),
@@ -434,7 +450,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                 "orchestrationTrace": {
                     "observation": {
                         "agentCollaboratorInvocationOutput": {
-                            "agentCollaboratorName": _get_agent_slug(agent, self.hooks_state),
+                            "agentCollaboratorName": agent_slug,
                             "output": {"text": output, "type": "TEXT"},
                         },
                         "type": "AGENT_COLLABORATOR",
@@ -442,9 +458,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                 }
             },
         }
-        await self.trace_handler.send_trace(
-            context_data, _get_agent_slug(agent, self.hooks_state), "forwarding_to_manager", trace_data
-        )
+        await self.trace_handler.send_trace(context_data, agent_slug, "forwarding_to_manager", trace_data)
 
 
 class SupervisorHooks(AgentHooks):  # type: ignore[misc]
