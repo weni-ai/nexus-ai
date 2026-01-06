@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Any, Callable, Optional
@@ -837,10 +838,12 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     event_data=event_data,
                     project_uuid=project_uuid,
                     contact_urn=contact_urn,
-                    use_delay=False,
+                    use_delay=True,
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
                     conversation=conversation,
+                    backend=backend,
+                    foundation_model=foundation_model,
                 )
                 return validated_event
 
@@ -856,6 +859,8 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
                     conversation=conversation,
+                    backend=backend,
+                    foundation_model=foundation_model,
                 )
                 return validated_event
 
@@ -864,6 +869,74 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.capture_exception(e)
             return None
+
+    async def to_data_lake_event_async(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        agent_data: Optional[dict] = None,
+        tool_call_data: Optional[dict] = None,
+        preview: bool = False,
+        backend: str = "openai",
+        foundation_model: str = "",
+        channel_uuid: Optional[str] = None,
+        conversation: Optional[object] = None,
+    ) -> None:
+        """
+        Async version of to_data_lake_event that doesn't block the event loop.
+        
+        Prepares data synchronously (fast, no DB queries) and sends to Celery
+        in a non-blocking way. DB queries are executed in the Celery worker.
+        """
+        if agent_data is None:
+            agent_data = {}
+        if tool_call_data is None:
+            tool_call_data = {}
+        if preview or (not agent_data and not tool_call_data):
+            return
+
+        try:
+            event_data = {
+                "event_name": "weni_nexus_data",
+                "date": pendulum.now("America/Sao_Paulo").to_iso8601_string(),
+                "project": project_uuid,
+                "contact_urn": contact_urn,
+                "value_type": "string",
+                "metadata": {"backend": backend, "foundation_model": foundation_model},
+            }
+
+            agent_identifier = None
+            if agent_data:
+                agent_identifier = agent_data.get("agent_name")
+
+            if tool_call_data:
+                event_data["metadata"]["tool_call"] = tool_call_data
+                event_data["key"] = "tool_call"
+                event_data["value"] = tool_call_data["tool_name"]
+            elif agent_data:
+                event_data["metadata"]["agent_collaboration"] = agent_data
+                event_data["key"] = "agent_invocation"
+                event_data["value"] = agent_data["agent_name"]
+            else:
+                return
+
+            payload = self._event_service._prepare_event_payload(
+                event_data=event_data,
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                channel_uuid=channel_uuid,
+                agent_identifier=agent_identifier,
+                conversation=conversation,
+                backend=backend,
+                foundation_model=foundation_model,
+            )
+
+            self._event_service.send_data_lake_event_task.delay(payload)
+
+        except Exception as e:
+            logger.error(f"Error processing data lake event async: {str(e)}")
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.capture_exception(e)
 
     def custom_event_data(
         self,

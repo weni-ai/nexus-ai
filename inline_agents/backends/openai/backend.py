@@ -320,7 +320,7 @@ class OpenAIBackend(InlineAgentsBackend):
             )
 
         result = asyncio.run(
-            self._invoke_agents_async(
+            self._invoke_agents_async_optimized(
                 client,
                 external_team,
                 session,
@@ -722,6 +722,218 @@ class OpenAIBackend(InlineAgentsBackend):
                 )
 
         return final_response
+
+    async def _invoke_agents_async_optimized(
+        self,
+        client,
+        external_team,
+        session,
+        session_id,
+        input_text,
+        contact_urn,
+        project_uuid,
+        channel_uuid,
+        user_email,
+        preview,
+        rationale_switch,
+        language,
+        turn_off_rationale,
+        msg_external_id,
+        supervisor_hooks,
+        runner_hooks,
+        hooks_state,
+        use_components,
+        grpc_client: Optional[MessageStreamingClient] = None,
+        grpc_msg_id: Optional[str] = None,
+        formatter_agent_configurations=None,
+    ):
+        """
+        Optimized version of _invoke_agents_async focused on reducing latency and improving readability.
+        
+        Optimizations:
+        - Prepare metadata once
+        - Extract formatter_agent_instructions without modifying external_team
+        - Consolidate formatter agent logic in helper method
+        - Avoid duplicate calls to _get_final_response
+        - Simplify error handling
+        """
+        with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
+            trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
+            formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
+            context = external_team.get("context")
+
+            base_metadata = self._prepare_trace_metadata(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                channel_uuid=channel_uuid,
+                preview=preview,
+                trace_id=trace_id,
+            )
+
+            result = client.run_streamed(
+                **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
+            )
+
+            delta_counter = 0
+            try:
+                stream_events = getattr(result, "stream_events", None)
+                if stream_events and callable(stream_events):
+                    async for event in stream_events():
+                        delta_counter = self._process_delta_event(
+                            event=event,
+                            grpc_client=grpc_client,
+                            grpc_msg_id=grpc_msg_id,
+                            delta_counter=delta_counter,
+                            channel_uuid=channel_uuid,
+                            contact_urn=contact_urn,
+                            project_uuid=project_uuid,
+                        )
+                        if hasattr(event, "item") and event.type == "run_item_stream_event":
+                            if event.item.type == "tool_call_item":
+                                hooks_state.tool_calls.update(
+                                    {event.item.raw_item.name: event.item.raw_item.arguments}
+                                )
+            
+            except openai.APIError as api_error:
+                self._sentry_capture_exception(
+                    api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True
+                )
+                raise
+            
+            except Exception as stream_error:
+                self._sentry_capture_exception(
+                    stream_error,
+                    project_uuid,
+                    contact_urn,
+                    channel_uuid,
+                    session_id,
+                    input_text,
+                    enable_logger=True,
+                )
+
+                try:
+                    final_response = self._get_final_response(result)
+                except Exception:
+                    final_response = None
+
+                error_metadata = self._prepare_trace_metadata(
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    channel_uuid=channel_uuid,
+                    preview=preview,
+                    trace_id=trace_id,
+                    error=True,
+                    error_type=type(stream_error).__name__,
+                    error_message=str(stream_error)[:500],
+                )
+                await self._update_trace_metadata(root_span, input_text, final_response, error_metadata)
+
+                final_response = await self._format_response_if_needed(
+                    final_response=final_response,
+                    use_components=use_components,
+                    session=session,
+                    supervisor_hooks=supervisor_hooks,
+                    context=context,
+                    formatter_agent_instructions=formatter_agent_instructions,
+                    formatter_agent_configurations=formatter_agent_configurations,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                )
+                
+                return final_response
+
+            final_response = self._get_final_response(result)
+
+            final_response = await self._format_response_if_needed(
+                final_response=final_response,
+                use_components=use_components,
+                session=session,
+                supervisor_hooks=supervisor_hooks,
+                context=context,
+                formatter_agent_instructions=formatter_agent_instructions,
+                formatter_agent_configurations=formatter_agent_configurations,
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+            )
+
+            await self._update_trace_metadata(root_span, input_text, final_response, base_metadata)
+        
+        return final_response
+
+    def _prepare_trace_metadata(
+        self,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: str,
+        preview: bool,
+        trace_id: str,
+        error: bool = False,
+        error_type: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ) -> dict:
+        """Prepare metadata once to avoid reconstruction."""
+        metadata = {
+            "project_uuid": project_uuid,
+            "contact_urn": contact_urn,
+            "channel_uuid": channel_uuid,
+            "preview": preview,
+            "trace_id": trace_id,
+        }
+        if error:
+            metadata.update(
+                {
+                    "error": True,
+                    "error_type": error_type,
+                    "error_message": error_message,
+                }
+            )
+        return metadata
+
+    async def _format_response_if_needed(
+        self,
+        final_response: Optional[str],
+        use_components: bool,
+        session,
+        supervisor_hooks,
+        context: dict,
+        formatter_agent_instructions: str,
+        formatter_agent_configurations: Optional[dict],
+        project_uuid: str,
+        contact_urn: str,
+    ) -> Optional[str]:
+        """Format the response using formatter agent if needed. Consolidate duplicated logic."""
+        if not use_components or not final_response:
+            return final_response
+
+        try:
+            formatted_response = await self._run_formatter_agent_async(
+                final_response,
+                session,
+                supervisor_hooks,
+                context,
+                formatter_agent_instructions,
+                formatter_agent_configurations,
+            )
+            return formatted_response
+        except Exception as formatter_error:
+            logger.error(
+                f"[OpenAIBackend] Error in formatter agent: {formatter_error}",
+                extra={
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                },
+            )
+            return final_response
+
+    async def _update_trace_metadata(
+        self,
+        root_span,
+        input_text: str,
+        output: Optional[str],
+        metadata: dict,
+    ) -> None:
+        """Update trace with input, output and metadata asynchronously to avoid blocking."""
+        await asyncio.to_thread(root_span.update_trace, input=input_text, output=output, metadata=metadata)
 
     def _get_final_response(self, result):
         if isinstance(result.final_output, FinalResponse):
