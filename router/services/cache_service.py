@@ -223,7 +223,13 @@ class CacheService:
         }
 
         if fetch_func:
-            # Refresh individual cache
+            # DELETE existing cache first, then refresh
+            key = self._get_cache_key(project_uuid, cache_type, agents_backend)
+            self.cache_repository.delete(key)
+            # Also delete composite cache so it gets rebuilt with fresh data
+            self.cache_repository.delete(f"project:{project_uuid}:all")
+
+            # Now fetch fresh data and cache it
             if cache_type in get_methods:
                 get_methods[cache_type]()
 

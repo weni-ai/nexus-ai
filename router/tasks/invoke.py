@@ -65,6 +65,20 @@ def handle_product_items(text: str, product_items: list) -> str:
     return text
 
 
+def handle_overwrite_message(text: str, overwrite_message: dict | list | str) -> str:
+    """
+    Handles overwrite_message from metadata.
+    If it's a dict/object, formats it with a label (like product_items).
+    If it's a string, uses it as-is.
+    """
+    if isinstance(overwrite_message, (dict, list)):
+        formatted = f"overwrite message: {str(overwrite_message)}"
+    else:
+        formatted = str(overwrite_message)
+
+    return f"{text} {formatted}" if text else formatted
+
+
 def complexity_layer(input_text: str) -> str | None:
     if input_text:
         try:
@@ -185,6 +199,7 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
     text = message.get("text", "")
     attachments = message.get("attachments", [])
     product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
+    overwrite_message = message.get("metadata", {}).get("overwrite_message")
     foundation_model = None
 
     if backend == "BedrockBackend":
@@ -202,6 +217,9 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
 
     if len(product_items) > 0:
         text = handle_product_items(text, product_items)
+
+    if overwrite_message:
+        text = handle_overwrite_message(text, overwrite_message)
 
     if not text.strip():
         raise EmptyTextException(
@@ -292,6 +310,7 @@ def _invoke_backend(
     user_email: str,
     foundation_model: Optional[str],
     turn_off_rationale: bool,
+    channel_type: str = "",
 ):
     """
     Invoke backend with cached data to avoid database queries.
@@ -317,6 +336,7 @@ def _invoke_backend(
             "user_email": user_email,
             "foundation_model": foundation_model,
             "turn_off_rationale": turn_off_rationale,
+            "channel_type": channel_type,
         }
     )
 
@@ -424,6 +444,7 @@ def start_inline_agents(
             user_email=user_email,
             foundation_model=foundation_model,
             turn_off_rationale=turn_off_rationale,
+            channel_type=message.get("channel_type", ""),
         )
 
         if response is None or response == "":
