@@ -278,3 +278,20 @@ class Conversation(models.Model):
             "topic": self.get_topic(),
             "project": str(self.project.uuid),
         }
+
+
+class ConversationMessages(models.Model):
+    conversation = models.OneToOneField(
+        Conversation, on_delete=models.CASCADE, related_name="messages_data", primary_key=True
+    )
+    messages = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Conversation Messages"
+        verbose_name_plural = "Conversation Messages"
+        db_table = "intelligences_conversationmessages"
+
+    def __str__(self):
+        return f"ConversationMessages - {self.conversation.uuid} - {len(self.messages)} messages"

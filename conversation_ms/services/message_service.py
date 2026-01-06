@@ -5,6 +5,7 @@ import sentry_sdk
 from conversation_ms.models.events import MessageReceivedEvent, MessageSentEvent
 from conversation_ms.repositories.message_repository import MessageRepository
 from conversation_ms.services.conversation_service import ConversationService
+from conversation_ms.services.csat_nps_service import CSATNPSService
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,7 @@ class MessageService:
     def __init__(self):
         self.conversation_service = ConversationService()
         self.message_repository = MessageRepository()
+        self.csat_nps_service = CSATNPSService()
 
     def process_message_received(self, event_data: dict):
         try:
@@ -47,6 +49,8 @@ class MessageService:
                 return
 
             self.message_repository.save_received_message(conversation=conversation, event=event)
+
+            self._handle_special_events(event_data, conversation, event.project_uuid, event.contact_urn)
 
             logger.info(
                 "[MessageService] Message.received processed successfully",
@@ -109,6 +113,8 @@ class MessageService:
 
             self.message_repository.save_sent_message(conversation=conversation, event=event)
 
+            self._handle_special_events(event_data, conversation, event.project_uuid, event.contact_urn)
+
             logger.info(
                 "[MessageService] Message.sent processed successfully",
                 extra={
@@ -135,3 +141,32 @@ class MessageService:
                 exc_info=True,
             )
             raise
+
+    def _handle_special_events(self, event_data: dict, conversation, project_uuid: str, contact_urn: str):
+        try:
+            event_key = event_data.get("key") or event_data.get("data", {}).get("key")
+            event_value = event_data.get("value") or event_data.get("data", {}).get("value")
+
+            if not event_key:
+                return
+
+            if event_key == "weni_csat":
+                self.csat_nps_service.process_csat_event(
+                    event_data={"value": event_value, **event_data},
+                    conversation=conversation,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                )
+            elif event_key == "weni_nps":
+                self.csat_nps_service.process_nps_event(
+                    event_data={"value": event_value, **event_data},
+                    conversation=conversation,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                )
+        except Exception as e:
+            logger.warning(
+                "[MessageService] Error handling special events",
+                extra={"event_data": event_data, "error": str(e)},
+                exc_info=True,
+            )
