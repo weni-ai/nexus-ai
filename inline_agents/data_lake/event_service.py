@@ -145,6 +145,44 @@ class DataLakeEventService:
                 )
                 sentry_sdk.capture_message(f"IntegratedAgent not found: {agent_identifier}", level="warning")
 
+    def _prepare_event_payload(
+        self,
+        event_data: dict,
+        project_uuid: str,
+        contact_urn: str,
+        channel_uuid: Optional[str] = None,
+        agent_identifier: Optional[str] = None,
+        conversation: Optional[object] = None,
+        backend: str = "openai",
+        foundation_model: str = "",
+    ) -> dict:
+        """
+        Prepare payload for sending to Celery without making DB queries.
+        The queries will be made inside the Celery task.
+        
+        Returns:
+            Dict with all the data needed to the task process
+        """
+        conversation_uuid = None
+        if conversation and hasattr(conversation, "uuid"):
+            conversation_uuid = str(conversation.uuid)
+
+        payload_event_data = event_data.copy()
+        payload_event_data.setdefault("project", project_uuid)
+        payload_event_data.setdefault("contact_urn", contact_urn)
+        payload_event_data.setdefault("event_name", "weni_nexus_data")
+
+        return {
+            "event_data": payload_event_data,
+            "project_uuid": project_uuid,
+            "contact_urn": contact_urn,
+            "channel_uuid": channel_uuid,
+            "agent_identifier": agent_identifier,
+            "conversation_uuid": conversation_uuid,
+            "backend": backend,
+            "foundation_model": foundation_model,
+        }
+
     def _prepare_and_validate_event(
         self,
         event_data: dict,
@@ -286,30 +324,45 @@ class DataLakeEventService:
         channel_uuid: Optional[str] = None,
         agent_identifier: Optional[str] = None,
         conversation: Optional[object] = None,
+        backend: str = "openai",
+        foundation_model: str = "",
     ) -> Optional[dict]:
-        """Send a validated event to data lake."""
+        """
+        Send a validated event to data lake.
+        
+        When use_delay=True: Send payload to Celery (queries will be made in the worker)
+        When use_delay=False: Process immediately (compatibility with synchronous code)
+        """
         try:
-            # Extract agent_identifier from event_data if not provided
             if not agent_identifier:
                 metadata = event_data.get("metadata", {})
                 if "agent_collaboration" in metadata:
                     agent_identifier = metadata["agent_collaboration"].get("agent_name")
 
-            validated_event = self._prepare_and_validate_event(
-                event_data=event_data,
-                project_uuid=project_uuid,
-                contact_urn=contact_urn,
-                channel_uuid=channel_uuid,
-                agent_identifier=agent_identifier,
-                conversation=conversation,
-            )
-
             if use_delay:
-                self.send_data_lake_event_task.delay(validated_event)
+                payload = self._prepare_event_payload(
+                    event_data=event_data,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    channel_uuid=channel_uuid,
+                    agent_identifier=agent_identifier,
+                    conversation=conversation,
+                    backend=backend,
+                    foundation_model=foundation_model,
+                )
+                self.send_data_lake_event_task.delay(payload)
+                return event_data
             else:
+                validated_event = self._prepare_and_validate_event(
+                    event_data=event_data,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    channel_uuid=channel_uuid,
+                    agent_identifier=agent_identifier,
+                    conversation=conversation,
+                )
                 self.send_data_lake_event_task(validated_event)
-
-            return validated_event
+                return validated_event
         except (ValueError, TypeError) as e:
             logger.error(f"Event validation failed: {str(e)}")
             sentry_sdk.set_context("event validation error", {"event_data": event_data, "validation_error": str(e)})
