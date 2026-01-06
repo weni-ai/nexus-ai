@@ -15,6 +15,7 @@ class HooksState:
         self.trace_data = []
         self.tool_info = {}
         self.tool_info_index = {}
+        self.last_active_agent_slug = None  # Track the last agent that executed before formatter
 
         for agent in self.agents:
             self.agents_names.append(agent.get("agentName"))
