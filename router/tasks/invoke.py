@@ -396,14 +396,13 @@ def start_inline_agents(
     if use_workflow:
         from router.tasks.workflow_orchestrator import inline_agent_workflow
 
-        return inline_agent_workflow.apply(
-            args=[message],
-            kwargs={
-                "preview": preview,
-                "language": language,
-                "user_email": user_email,
-            },
-        ).get()
+        # Call directly using .run() to avoid Celery's "never call .get() within a task" error
+        return inline_agent_workflow.run(
+            message,
+            preview=preview,
+            language=language,
+            user_email=user_email,
+        )
 
     task_manager = task_manager or get_task_manager()
 
