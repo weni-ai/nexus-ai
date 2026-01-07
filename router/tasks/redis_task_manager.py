@@ -112,12 +112,13 @@ class RedisTaskManager(TaskManager):
             return True
         return False
 
-    def revoke_workflow_tasks(self, workflow_state: Dict) -> List[str]:
+    def revoke_workflow_tasks(self, workflow_state: Dict, exclude_task_id: Optional[str] = None) -> List[str]:
         """
         Revoke all tasks in a workflow.
 
         Args:
             workflow_state: Workflow state dict
+            exclude_task_id: Task ID to exclude from revocation (e.g., current task on retry)
 
         Returns:
             List of revoked task IDs
@@ -128,7 +129,7 @@ class RedisTaskManager(TaskManager):
         task_ids = workflow_state.get("task_ids", {})
 
         for phase, task_id in task_ids.items():
-            if task_id:
+            if task_id and task_id != exclude_task_id:
                 try:
                     celery_app.control.revoke(task_id, terminate=True)
                     revoked.append(task_id)
@@ -191,13 +192,13 @@ class RedisTaskManager(TaskManager):
         return workflow_state
 
     def handle_workflow_message_concatenation(
-        self, project_uuid: str, contact_urn: str, new_message_text: str
+        self, project_uuid: str, contact_urn: str, new_message_text: str, current_task_id: Optional[str] = None
     ) -> Tuple[str, bool]:
         """
         Handle message concatenation for workflows.
 
         If an existing workflow exists:
-        - Revoke all its tasks
+        - Revoke all its tasks (except the current one, to support retries)
         - Concatenate pending message with new message
         - Clear old workflow state
 
@@ -207,6 +208,7 @@ class RedisTaskManager(TaskManager):
             project_uuid: Project UUID
             contact_urn: Contact URN
             new_message_text: New message text
+            current_task_id: Current task ID (to avoid revoking self on retry)
 
         Returns:
             Tuple of (final_message_text, had_existing_workflow)
@@ -216,8 +218,8 @@ class RedisTaskManager(TaskManager):
         workflow_state = self.get_workflow_state(project_uuid, contact_urn)
 
         if workflow_state:
-            # Revoke existing workflow tasks
-            revoked = self.revoke_workflow_tasks(workflow_state)
+            # Revoke existing workflow tasks, excluding current task (for retry support)
+            revoked = self.revoke_workflow_tasks(workflow_state, exclude_task_id=current_task_id)
             if revoked:
                 logger.info(f"[Workflow] Revoked {len(revoked)} tasks for {contact_urn}")
 
@@ -236,7 +238,8 @@ class RedisTaskManager(TaskManager):
             pending_response = self.get_pending_response(project_uuid, contact_urn)
             pending_task_id = self.get_pending_task_id(project_uuid, contact_urn)
 
-            if pending_task_id:
+            # Only revoke if it's a different task (not a retry of the same task)
+            if pending_task_id and pending_task_id != current_task_id:
                 try:
                     celery_app.control.revoke(pending_task_id, terminate=True)
                     logger.info(f"[Workflow] Revoked legacy task {pending_task_id}")
