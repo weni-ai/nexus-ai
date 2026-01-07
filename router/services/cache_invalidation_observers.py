@@ -264,32 +264,17 @@ class ContentBaseInstructionCacheInvalidationObserver(EventObserver):
 
     async def perform(self, **kwargs):
         """Refresh content base cache when instructions are updated."""
-        content_base_instruction = kwargs.get("content_base_instruction")
         project_uuid = kwargs.get("project_uuid")
 
-        if not content_base_instruction and not project_uuid:
-            return
+        if not project_uuid:
+            raise ValueError("Project UUID is required")
 
         try:
-            # Lazy imports to avoid circular dependencies
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
             from router.services.cache_service import CacheService
 
             cache_service = CacheService()
 
-            # Get project_uuid if not provided directly
-            if not project_uuid and content_base_instruction:
-                content_base = content_base_instruction.content_base
-                try:
-                    project_uuid = str(content_base.intelligence.project.uuid)
-                except AttributeError:
-                    logger.debug(f"Content base {content_base.uuid} has no project, skipping cache invalidation")
-                    return
-
-            if not project_uuid:
-                return
-
-            # Get fresh data
             project_obj, content_base_obj, _ = get_project_and_content_base_data(project_uuid)
             agents_backend = project_obj.agents_backend
 
@@ -306,7 +291,6 @@ class ContentBaseInstructionCacheInvalidationObserver(EventObserver):
                 except Exception:
                     return []
 
-            # Refresh content base cache and instructions cache separately
             cache_service.invalidate_content_base_cache(
                 project_uuid=project_uuid,
                 fetch_func=lambda uuid: _content_base_to_dict(content_base_obj),
