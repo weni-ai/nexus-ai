@@ -108,8 +108,7 @@ class MockMessageStreamingClient:
                 }
             )
 
-        for response in responses:
-            yield response
+        yield from responses
 
     def send_delta_message(
         self, msg_id: str, content: str, channel_uuid: str, contact_urn: str, **kwargs

@@ -104,7 +104,7 @@ class DataLakeEventService:
         agent_identifier: Optional[str] = None,
         conversation: Optional[object] = None,
     ) -> None:
-        """Enrich event metadata with agent_uuid, conversation_uuid, conversation_start_date, and conversation_end_date."""
+        """Enrich event metadata with agent_uuid, conversation_uuid and date fields."""
         event_data.setdefault("metadata", {})
         metadata = event_data["metadata"]
 
