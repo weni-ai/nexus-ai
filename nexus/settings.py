@@ -74,6 +74,8 @@ INSTALLED_APPS = [
     "nexus.inline_agents",
     "nexus.reports",
     "nexus.analytics",
+    # Observer registration - MUST be last to ensure all apps are loaded first
+    "nexus.observers",
 ]
 
 MIDDLEWARE = [

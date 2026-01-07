@@ -1,15 +1,17 @@
 """
 Event system with decorator-based observer registration.
 
-This module uses decorator-based registration to simplify observer setup.
+This module provides event managers for the observer pattern.
 Observers are registered using @observer decorator on their class definitions.
+
+IMPORTANT: Observer registration happens in nexus.event_driven.apps.EventDrivenConfig.ready()
+This avoids circular imports by deferring registration until all Django apps are loaded.
 """
 
 import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-from nexus.event_domain.decorators import auto_register_observers
 from nexus.event_domain.event_manager import AsyncEventManager, EventManager
 
 logger = logging.getLogger(__name__)
@@ -75,7 +77,8 @@ def notify_async_sync(event: str, **kwargs):
         # This shouldn't happen in Django shell, but if it does, we need to handle it differently
         # For now, raise an error to indicate this case needs special handling
         raise RuntimeError(
-            "Cannot use notify_async_sync in an async context. Use notify_async() or await async_event_manager.notify()"
+            "Cannot use notify_async_sync in an async context. "
+            "Use notify_async() or await async_event_manager.notify()"
         )
     except RuntimeError as e:
         if "Cannot use notify_async_sync" in str(e):
@@ -84,33 +87,5 @@ def notify_async_sync(event: str, **kwargs):
         asyncio.run(async_event_manager.notify(event, **kwargs))
 
 
-# Import observer modules to trigger decorator registration
-# These imports happen after event managers are created to avoid circular imports
-# The @observer decorator stores registration info, which is then processed by auto_register_observers()
-try:
-    # Intelligence observers
-    import nexus.actions.observers  # noqa: F401
-    import nexus.intelligences.observer  # noqa: F401
-
-    # Health check observers
-    import nexus.logs.observers  # noqa: F401
-
-    # Project and action observers
-    import nexus.projects.observer  # noqa: F401
-
-    # Cache invalidation observers
-    import router.services.cache_invalidation_observers  # noqa: F401
-
-    # Workflow observers (typing indicator, etc.)
-    import router.tasks.workflow_observers  # noqa: F401
-
-    # Trace observers
-    import router.traces_observers.rationale.observer  # noqa: F401
-    import router.traces_observers.save_traces  # noqa: F401
-    import router.traces_observers.summary  # noqa: F401
-
-    # Auto-register all decorated observers
-    auto_register_observers(event_manager, async_event_manager)
-except ImportError as e:
-    # If imports fail (e.g., during testing), log but don't crash
-    logger.warning(f"Failed to import some observer modules: {e}. Some observers may not be registered.")
+# NOTE: Observer registration is handled in nexus.event_driven.apps.EventDrivenConfig.ready()
+# This avoids circular imports that occur when importing observer modules at module load time.

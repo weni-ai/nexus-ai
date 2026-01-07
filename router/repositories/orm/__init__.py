@@ -20,7 +20,12 @@ from router.repositories import Repository
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
-django.setup()
+# Only call django.setup() if not already in progress
+# This prevents "populate() isn't reentrant" errors when imported during app initialization
+try:
+    django.setup()
+except RuntimeError:
+    pass  # Django is already setting up or configured
 
 
 class ContentBaseORMRepository(Repository):
