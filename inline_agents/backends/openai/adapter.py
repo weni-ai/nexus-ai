@@ -831,7 +831,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     event_data=event_data,
                     project_uuid=project_uuid,
                     contact_urn=contact_urn,
-                    use_delay=False,
+                    use_delay=True,
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
                     conversation=conversation,
