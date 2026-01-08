@@ -92,17 +92,11 @@ def _initialize_workflow(ctx: WorkflowContext) -> None:
     sentry_sdk.set_tag("task_id", ctx.task_id)
 
     logger.info(
-        f"[Workflow] Starting workflow {ctx.workflow_id} for project {ctx.project_uuid}",
-        extra={
-            "workflow_id": ctx.workflow_id,
-            "project_uuid": ctx.project_uuid,
-            "contact_urn": ctx.contact_urn,
-            "preview": ctx.preview,
-        },
+        f"[Workflow] Starting workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
     )
 
     # Send typing indicator (async, non-blocking)
-    logger.info(f"[Workflow] Dispatching typing indicator for {ctx.project_uuid}")
+    logger.info(f"[Workflow] Dispatching typing indicator for project {ctx.project_uuid}, contact {ctx.contact_urn}")
     notify_async(
         event="workflow:send_typing_indicator",
         contact_urn=ctx.contact_urn,
@@ -122,8 +116,7 @@ def _initialize_workflow(ctx: WorkflowContext) -> None:
 
     if had_existing:
         logger.info(
-            f"[Workflow] Revoked existing workflow for {ctx.contact_urn}",
-            extra={"workflow_id": ctx.workflow_id, "project_uuid": ctx.project_uuid},
+            f"[Workflow] Revoked existing workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
         )
 
     # Update message with concatenated text
@@ -147,25 +140,13 @@ def _finalize_workflow(ctx: WorkflowContext, status: str = "completed") -> None:
     )
     ctx.task_manager.clear_workflow_state(ctx.project_uuid, ctx.contact_urn)
 
-    logger.info(
-        f"[Workflow] {status.capitalize()} workflow {ctx.workflow_id}",
-        extra={
-            "workflow_id": ctx.workflow_id,
-            "project_uuid": ctx.project_uuid,
-            "status": status,
-        },
-    )
+    logger.info(f"[Workflow] {status.capitalize()} workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}")
 
 
 def _handle_workflow_error(ctx: WorkflowContext, error: Exception) -> None:
     """Handle generic workflow errors: log, report to Sentry, notify preview."""
     logger.error(
-        f"[Workflow] Failed workflow {ctx.workflow_id}: {error}",
-        extra={
-            "workflow_id": ctx.workflow_id,
-            "project_uuid": ctx.project_uuid,
-            "error": str(error),
-        },
+        f"[Workflow] Failed workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}: {error}",
         exc_info=True,
     )
     sentry_sdk.capture_exception(error)
@@ -184,8 +165,7 @@ def _handle_workflow_error(ctx: WorkflowContext, error: Exception) -> None:
 def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException) -> Any:
     """Handle guardrails block: dispatch the blocked message response."""
     logger.warning(
-        f"[Workflow] Unsafe message in workflow {ctx.workflow_id}: {error.message}",
-        extra={"workflow_id": ctx.workflow_id, "project_uuid": ctx.project_uuid},
+        f"[Workflow] Unsafe message in workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}: {error.message}"
     )
 
     message_obj = _create_message_object(ctx.message)
@@ -221,7 +201,7 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
 
     Returns the pre-generation result dict with cached_data and agents_backend.
     """
-    logger.info(f"[Workflow] Executing pre-generation for {ctx.workflow_id}")
+    logger.info(f"[Workflow] Executing pre-generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}")
 
     # Call directly using .run() to avoid Celery's "never call .get() within a task" error
     result = pre_generation_task.run(
@@ -233,7 +213,7 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
 
     if result["status"] == "failed":
         error_msg = result.get("error", "Unknown error")
-        logger.error(f"[Workflow] Pre-generation failed: {error_msg}")
+        logger.error(f"[Workflow] Pre-generation failed for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}: {error_msg}")
         raise Exception(f"Pre-generation failed: {error_msg}")
 
     # Populate context with results
@@ -265,7 +245,7 @@ def _run_generation(ctx: WorkflowContext) -> str:
         task_id=ctx.task_id,
     )
 
-    logger.info(f"[Workflow] Executing generation for {ctx.workflow_id}")
+    logger.info(f"[Workflow] Executing generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}")
 
     # Preprocess message
     processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(ctx.message, ctx.agents_backend)
@@ -305,7 +285,7 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
         status="post_generation",
     )
 
-    logger.info(f"[Workflow] Executing post-generation for {ctx.workflow_id}")
+    logger.info(f"[Workflow] Executing post-generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}")
 
     message_obj = _create_message_object(ctx.message)
 
