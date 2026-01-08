@@ -286,6 +286,7 @@ def _run_generation(ctx: WorkflowContext) -> str:
         user_email=ctx.user_email,
         foundation_model=foundation_model,
         turn_off_rationale=turn_off_rationale,
+        channel_type=ctx.message.get("channel_type", ""),
     )
 
     return response
