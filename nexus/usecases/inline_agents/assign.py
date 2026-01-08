@@ -12,6 +12,7 @@ class AssignAgentsUsecase:
             integrated_agent, created = IntegratedAgent.objects.get_or_create(
                 agent=agent,
                 project=project,
+                defaults={"metadata": {}},
             )
             return created, integrated_agent
         except Agent.DoesNotExist as e:

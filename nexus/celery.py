@@ -63,7 +63,8 @@ logfire.configure(
     send_to_logfire=False,
 )
 
-if not settings.TESTING:
+enable_instrumentation = os.environ.get("ENABLE_LOGFIRE_OPENAI_AGENTS") == "1"
+if enable_instrumentation:
     logfire.instrument_openai_agents()
     langfuse = get_client()
 
