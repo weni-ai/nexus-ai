@@ -696,7 +696,7 @@ class AgentCategoryAdmin(admin.ModelAdmin):
 class MCPConfigOptionInline(admin.TabularInline):
     model = MCPConfigOption
     extra = 0
-    fields = ("name", "label", "type", "options", "order", "is_required")
+    fields = ("name", "label", "type", "options", "default_value", "order", "is_required")
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 5, "cols": 60, "class": "vLargeTextField"})},
     }
