@@ -102,6 +102,7 @@ def _initialize_workflow(ctx: WorkflowContext) -> None:
     )
 
     # Send typing indicator (async, non-blocking)
+    logger.info(f"[Workflow] Dispatching typing indicator for {ctx.project_uuid}")
     notify_async(
         event="workflow:send_typing_indicator",
         contact_urn=ctx.contact_urn,
@@ -285,6 +286,7 @@ def _run_generation(ctx: WorkflowContext) -> str:
         user_email=ctx.user_email,
         foundation_model=foundation_model,
         turn_off_rationale=turn_off_rationale,
+        channel_type=ctx.message.get("channel_type", ""),
     )
 
     return response
