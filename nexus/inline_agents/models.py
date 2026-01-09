@@ -71,29 +71,10 @@ class Agent(models.Model):
     def __str__(self):
         return self.name
 
-    def save(self, *args, **kwargs):
-        """Override save to automatically create empty Version for official agents."""
-        is_new = self.pk is None
-        super().save(*args, **kwargs)
-
-        # If this is a new official agent and has no versions, create an empty one
-        if is_new and self.is_official and not self.versions.exists():
-            self.versions.create(
-                skills=[],
-                display_skills=[],
-            )
-
     @property
     def current_version(self):
-        version = self.versions.order_by("created_on").last()
-        # Fallback: if no version exists, create one lazily to prevent errors
-        # This ensures agents created in admin (without skills) can still be used
-        if version is None:
-            version = self.versions.create(
-                skills=[],
-                display_skills=[],
-            )
-        return version
+        """Get the most recent version of the agent. Versions are created via weni-cli push."""
+        return self.versions.order_by("created_on").last()
 
     def __get_default_value_fallback(self, agents_backend):
         if agents_backend == "BedrockBackend":
