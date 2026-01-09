@@ -36,6 +36,7 @@ app.conf.event_serializer = "json"
 app.conf.task_serializer = "json"
 app.conf.result_serializer = "json"
 app.conf.accept_content = ["application/json"]
+app.conf.worker_disable_prefetch = True
 
 app.conf.beat_schedule = {
     "log_cleanup_routine": {"task": "log_cleanup_routine", "schedule": schedules.crontab(hour=23, minute=0)},
