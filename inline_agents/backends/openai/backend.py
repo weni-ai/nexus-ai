@@ -36,7 +36,6 @@ from nexus.inline_agents.backends.openai.repository import (
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
-from router.traces_observers.save_traces import save_inline_message_to_database
 from router.traces_observers.save_traces import save_inline_message_async
 
 logger = logging.getLogger(__name__)
@@ -702,6 +701,13 @@ class OpenAIBackend(InlineAgentsBackend):
                     formatter_agent_configurations,
                 )
                 final_response = formatted_response
+
+                # Flush Langfuse to ensure all buffered spans are sent
+                if hasattr(self.langfuse_c, "flush"):
+                    self.langfuse_c.flush()
+                else:
+                    # Fallback: wait a bit for async operations
+                    await asyncio.sleep(0.3)
 
             root_span.update_trace(
                 input=input_text,
