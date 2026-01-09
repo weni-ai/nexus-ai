@@ -417,11 +417,14 @@ class MiddlewareTestCase(TestCase):
         """Test that performance middleware logs execution time."""
         from unittest.mock import patch
 
-        from nexus.event_domain.middleware import MiddlewareChain, PerformanceMonitoringMiddleware
+        from nexus.event_domain.middleware import (
+            MiddlewareChain,
+            PerformanceLoggingMiddleware,
+        )
 
         # Create manager with performance middleware
         chain = MiddlewareChain()
-        chain.add(PerformanceMonitoringMiddleware(enabled=True, slow_threshold=0.1))
+        chain.add(PerformanceLoggingMiddleware(enabled=True, slow_threshold=0.1))
         manager = EventManager(middleware=chain)
 
         manager.subscribe("test_event", observer=self.success_observer)
@@ -437,10 +440,7 @@ class MiddlewareTestCase(TestCase):
 
     def test_middleware_chain_executes_all(self):
         """Test that middleware chain executes all middleware."""
-        from nexus.event_domain.middleware import (
-            MiddlewareChain,
-            PerformanceMonitoringMiddleware,
-        )
+        from nexus.event_domain.middleware import MiddlewareChain, PerformanceLoggingMiddleware
 
         # Create mock middleware
         mock_middleware1 = MagicMock()
@@ -450,7 +450,7 @@ class MiddlewareTestCase(TestCase):
 
         chain = MiddlewareChain()
         chain.add(mock_middleware1)
-        chain.add(PerformanceMonitoringMiddleware())
+        chain.add(PerformanceLoggingMiddleware())
 
         # Use fresh registry and middleware chain
         manager = EventManager(registry=ObserverRegistry(), middleware=chain)

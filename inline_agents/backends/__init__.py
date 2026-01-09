@@ -1,3 +1,5 @@
+import os
+
 from django.conf import settings  # noqa: F401
 
 from inline_agents.backend import InlineAgentsBackend

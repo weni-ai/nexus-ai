@@ -156,3 +156,92 @@ class MockFlowStartHTTPClient:
 
 class TestException(Exception):
     pass
+
+
+class MockCacheService:
+    """Mock CacheService for testing.
+
+    Uses MockCacheRepository internally for in-memory caching.
+    Useful for tests that need to verify cache behavior without Redis.
+    """
+
+    def __init__(self):
+        from router.repositories.mocks import MockCacheRepository
+        from router.services.cache_service import CacheService
+
+        mock_repository = MockCacheRepository()
+        self.cache_service = CacheService(cache_repository=mock_repository)
+        self.repository = mock_repository  # Expose repository for direct inspection
+
+    def __getattr__(self, name):
+        """Delegate all method calls to the actual CacheService."""
+        return getattr(self.cache_service, name)
+
+    def clear_all(self) -> None:
+        """Clear all cache (useful for test teardown)."""
+        self.repository.clear()
+
+    def get_cache_keys(self) -> List[str]:
+        """Get all cache keys (useful for testing)."""
+        return self.repository.get_all_keys()
+
+    def get_cache_size(self) -> int:
+        """Get number of cached items (useful for testing)."""
+        return len(self.repository.get_all_keys())
+
+
+class MockTypingUsecase:
+    def __init__(self, should_fail: bool = False, fail_message: str = "Mock failure"):
+        """
+        Initialize mock usecase.
+
+        Args:
+            should_fail: If True, send_typing_message will raise an exception
+            fail_message: The exception message when should_fail is True
+        """
+        self.calls: List[Dict] = []
+        self.should_fail = should_fail
+        self.fail_message = fail_message
+
+    def send_typing_message(
+        self,
+        contact_urn: str,
+        msg_external_id: str,
+        project_uuid: str,
+        preview: bool = False,
+    ) -> None:
+        """Mock send_typing_message that records calls instead of sending."""
+        call_data = {
+            "contact_urn": contact_urn,
+            "msg_external_id": msg_external_id,
+            "project_uuid": project_uuid,
+            "preview": preview,
+        }
+        self.calls.append(call_data)
+
+        if self.should_fail:
+            raise Exception(self.fail_message)
+
+    def reset(self) -> None:
+        """Clear all recorded calls."""
+        self.calls.clear()
+
+    def assert_called(self) -> None:
+        """Assert that send_typing_message was called at least once."""
+        assert len(self.calls) > 0, "Expected send_typing_message to be called"
+
+    def assert_called_once(self) -> None:
+        """Assert that send_typing_message was called exactly once."""
+        assert len(self.calls) == 1, f"Expected 1 call, got {len(self.calls)}"
+
+    def assert_called_with(self, **expected_kwargs) -> None:
+        """Assert the last call was made with the expected arguments."""
+        assert len(self.calls) > 0, "Expected send_typing_message to be called"
+        last_call = self.calls[-1]
+        for key, value in expected_kwargs.items():
+            assert key in last_call, f"Expected '{key}' in call arguments"
+            assert last_call[key] == value, f"Expected {key}={value}, got {last_call[key]}"
+
+    def assert_not_called(self) -> None:
+        """Assert that send_typing_message was never called."""
+        assert len(self.calls) == 0, f"Expected no calls, got {len(self.calls)}"

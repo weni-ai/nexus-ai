@@ -102,6 +102,37 @@ def save_inline_trace_events(
         sentry_sdk.set_context("trace_events", trace_events)
 
 
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=2)
+def save_inline_message_async(
+    self,
+    project_uuid: str,
+    contact_urn: str,
+    text: str,
+    preview: bool,
+    session_id: str,
+    source_type: str,
+    contact_name: str,
+    channel_uuid: str = None,
+):
+    try:
+        save_inline_message_to_database(
+            project_uuid=project_uuid,
+            contact_urn=contact_urn,
+            text=text,
+            preview=preview,
+            session_id=session_id,
+            source_type=source_type,
+            contact_name=contact_name,
+            channel_uuid=channel_uuid,
+        )
+    except Exception as e:
+        logger.warning(f"Error saving message to database (attempt {self.request.retries + 1}/{self.max_retries}): {e}")
+        sentry_sdk.set_tag("project_uuid", project_uuid)
+        sentry_sdk.set_tag("contact_urn", contact_urn)
+        sentry_sdk.capture_exception(e)
+        raise self.retry(exc=e)
+
+
 def _get_message_service():
     from router.services.message_service import MessageService
 

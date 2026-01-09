@@ -1,42 +1,48 @@
-"""
-Event system with decorator-based observer registration.
-
-This module uses decorator-based registration to simplify observer setup.
-Observers are registered using @observer decorator on their class definitions.
-"""
-
+import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
-from nexus.event_domain.decorators import auto_register_observers
 from nexus.event_domain.event_manager import AsyncEventManager, EventManager
 
 logger = logging.getLogger(__name__)
 
-# Create event managers - these can be imported without triggering observer imports
 event_manager = EventManager()
 async_event_manager = AsyncEventManager()
 
-# Import observer modules to trigger decorator registration
-# These imports happen after event managers are created to avoid circular imports
-# The @observer decorator stores registration info, which is then processed by auto_register_observers()
-try:
-    # Intelligence observers
-    import nexus.actions.observers  # noqa: F401
-    import nexus.intelligences.observer  # noqa: F401
+_executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="async_event")
 
-    # Health check observers
-    import nexus.logs.observers  # noqa: F401
 
-    # Project and action observers
-    import nexus.projects.observer  # noqa: F401
+def notify_async(event: str, **kwargs):
+    """
+    Call async_event_manager.notify() from synchronous code.
+    Runs in background thread to avoid blocking.
+    """
+    try:
+        asyncio.get_running_loop()
+        asyncio.create_task(async_event_manager.notify(event, **kwargs))
+    except RuntimeError:
 
-    # Trace observers
-    import router.traces_observers.rationale.observer  # noqa: F401
-    import router.traces_observers.save_traces  # noqa: F401
-    import router.traces_observers.summary  # noqa: F401
+        def run_async():
+            try:
+                asyncio.run(async_event_manager.notify(event, **kwargs))
+            except Exception as e:
+                logger.error(f"Error in async event notification for {event}: {e}", exc_info=True)
 
-    # Auto-register all decorated observers
-    auto_register_observers(event_manager, async_event_manager)
-except ImportError as e:
-    # If imports fail (e.g., during testing), log but don't crash
-    logger.warning(f"Failed to import some observer modules: {e}. Some observers may not be registered.")
+        _executor.submit(run_async)
+
+
+def notify_async_sync(event: str, **kwargs):
+    """
+    Synchronous version that blocks until async observers complete.
+    Use only in interactive contexts (Django shell, scripts).
+    """
+    try:
+        asyncio.get_running_loop()
+        raise RuntimeError(
+            "Cannot use notify_async_sync in an async context. "
+            "Use notify_async() or await async_event_manager.notify()"
+        )
+    except RuntimeError as e:
+        if "Cannot use notify_async_sync" in str(e):
+            raise
+        asyncio.run(async_event_manager.notify(event, **kwargs))

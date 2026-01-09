@@ -12,13 +12,13 @@ from django.conf import settings
 
 from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
-from nexus.inline_agents.team.repository import ORMTeamRepository
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.inline_agents.typing import TypingUsecase
-from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
 from router.dispatcher import dispatch
 from router.entities import message_factory
+from router.services.pre_generation_service import PreGenerationService
 from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
+from router.tasks.invocation_context import CachedProjectData
 from router.tasks.redis_task_manager import RedisTaskManager
 
 from .actions_client import get_action_clients
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 def _apm_set_context(**kwargs):
     try:
         elasticapm.set_custom_context(kwargs)
-    except:
+    except Exception:
         pass
 
 
@@ -63,6 +63,20 @@ def handle_product_items(text: str, product_items: list) -> str:
     else:
         text = f"product items: {str(product_items)}"
     return text
+
+
+def handle_overwrite_message(text: str, overwrite_message: dict | list | str) -> str:
+    """
+    Handles overwrite_message from metadata.
+    If it's a dict/object, formats it with a label (like product_items).
+    If it's a string, uses it as-is.
+    """
+    if isinstance(overwrite_message, (dict, list)):
+        formatted = f"overwrite message: {str(overwrite_message)}"
+    else:
+        formatted = str(overwrite_message)
+
+    return f"{text} {formatted}" if text else formatted
 
 
 def complexity_layer(input_text: str) -> str | None:
@@ -185,6 +199,7 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
     text = message.get("text", "")
     attachments = message.get("attachments", [])
     product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
+    overwrite_message = message.get("metadata", {}).get("overwrite_message")
     foundation_model = None
 
     if backend == "BedrockBackend":
@@ -202,6 +217,9 @@ def _preprocess_message_input(message: Dict, backend: str) -> Tuple[Dict, Option
 
     if len(product_items) > 0:
         text = handle_product_items(text, product_items)
+
+    if overwrite_message:
+        text = handle_overwrite_message(text, overwrite_message)
 
     if not text.strip():
         raise EmptyTextException(
@@ -282,6 +300,49 @@ def _handle_task_error(
     raise exc
 
 
+def _invoke_backend(
+    backend,
+    cached_data: CachedProjectData,
+    message_obj,
+    processed_message: Dict,
+    preview: bool,
+    language: str,
+    user_email: str,
+    foundation_model: Optional[str],
+    turn_off_rationale: bool,
+    channel_type: str = "",
+):
+    """
+    Invoke backend with cached data to avoid database queries.
+
+    This helper function simplifies the backend invocation by grouping
+    all cached data and parameters into a cleaner interface.
+    """
+    invoke_kwargs = cached_data.get_invoke_kwargs(team=cached_data.team)
+
+    # Add non-cached parameters that come from the message/request
+    invoke_kwargs.update(
+        {
+            "input_text": message_obj.text,
+            "contact_urn": message_obj.contact_urn,
+            "project_uuid": message_obj.project_uuid,
+            "sanitized_urn": message_obj.sanitized_urn,
+            "contact_fields": message_obj.contact_fields_as_json,
+            "contact_name": message_obj.contact_name,
+            "channel_uuid": message_obj.channel_uuid,
+            "msg_external_id": processed_message.get("msg_event", {}).get("msg_external_id", ""),
+            "preview": preview,
+            "language": language,
+            "user_email": user_email,
+            "foundation_model": foundation_model,
+            "turn_off_rationale": turn_off_rationale,
+            "channel_type": channel_type,
+        }
+    )
+
+    return backend.invoke_agents(**invoke_kwargs)
+
+
 @celery_app.task(
     bind=True,
     soft_time_limit=300,
@@ -302,6 +363,23 @@ def start_inline_agents(
     task_manager: Optional[RedisTaskManager] = None,
 ) -> bool:  # pragma: no cover
     _apm_set_context(message=message, preview=preview)
+    project_uuid = message.get("project_uuid")
+
+    # Feature flag: list of project UUIDs that use new workflow architecture
+    # Set WORKFLOW_ARCHITECTURE_PROJECTS=["uuid1", "uuid2"] or ["*"] for all
+    workflow_projects = getattr(settings, "WORKFLOW_ARCHITECTURE_PROJECTS", [])
+    use_workflow = project_uuid in workflow_projects or "*" in workflow_projects
+
+    if use_workflow:
+        from router.tasks.workflow_orchestrator import inline_agent_workflow
+
+        # Call directly using .run() to avoid Celery's "never call .get() within a task" error
+        return inline_agent_workflow.run(
+            message,
+            preview=preview,
+            language=language,
+            user_email=user_email,
+        )
 
     task_manager = task_manager or get_task_manager()
 
@@ -309,17 +387,32 @@ def start_inline_agents(
         TypingUsecase().send_typing_message(
             contact_urn=message.get("contact_urn"),
             msg_external_id=message.get("msg_event", {}).get("msg_external_id", ""),
-            project_uuid=message.get("project_uuid"),
+            project_uuid=project_uuid,
             preview=preview,
         )
 
-        project, content_base, inline_agent_configuration = get_project_and_content_base_data(
-            message.get("project_uuid")
-        )
-        agents_backend = project.agents_backend
+        # Pre-Generation: Fetch and cache all project data
+        # This uses CacheService to minimize database queries
+        # Performance tracking is handled inside PreGenerationService
+        # TODO: When workflow orchestrator is implemented, this will be a separate Celery task
+        pre_generation_service = PreGenerationService()
+        (
+            project_dict,
+            content_base_dict,
+            team_cached,
+            guardrails_config,
+            inline_agent_config_dict,
+            agents_backend,
+            instructions_cached,
+            agent_cached,
+        ) = pre_generation_service.fetch_pre_generation_data(project_uuid)
 
+        # All data is now cached - no need to fetch Django objects
+        # Backend will use cached data passed via kwargs
+
+        # Use cached dict value instead of accessing Django object
         broadcast, _ = get_action_clients(
-            preview=preview, multi_agents=True, project_use_components=project.use_components
+            preview=preview, multi_agents=True, project_use_components=project_dict["use_components"]
         )
 
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
@@ -343,32 +436,30 @@ def start_inline_agents(
 
         message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
 
-        backend = BackendsRegistry.get_backend(agents_backend)
-        team = ORMTeamRepository(agents_backend=agents_backend, project=project).get_team(message_obj.project_uuid)
+        # Prepare cached data context
+        cached_data = CachedProjectData.from_pre_generation_data(
+            project_dict=project_dict,
+            content_base_dict=content_base_dict,
+            team=team_cached,
+            guardrails_config=guardrails_config,
+            inline_agent_config_dict=inline_agent_config_dict,
+            instructions=instructions_cached,
+            agent_data=agent_cached,
+        )
 
-        response = backend.invoke_agents(
-            team=team,
-            input_text=message_obj.text,
-            contact_urn=message_obj.contact_urn,
-            project_uuid=message_obj.project_uuid,
+        # Invoke backend with simplified parameters
+        backend = BackendsRegistry.get_backend(agents_backend)
+        response = _invoke_backend(
+            backend=backend,
+            cached_data=cached_data,
+            message_obj=message_obj,
+            processed_message=processed_message,
             preview=preview,
-            rationale_switch=project.rationale_switch,
-            sanitized_urn=message_obj.sanitized_urn,
             language=language,
             user_email=user_email,
-            use_components=project.use_components,
-            contact_fields=message_obj.contact_fields_as_json,
-            contact_name=message_obj.contact_name,
-            channel_uuid=message_obj.channel_uuid,
-            msg_external_id=processed_message.get("msg_event", {}).get("msg_external_id", ""),
-            turn_off_rationale=turn_off_rationale,
-            use_prompt_creation_configurations=project.use_prompt_creation_configurations,
-            conversation_turns_to_include=project.conversation_turns_to_include,
-            exclude_previous_thinking_steps=project.exclude_previous_thinking_steps,
-            project=project,
-            content_base=content_base,
             foundation_model=foundation_model,
-            inline_agent_configuration=inline_agent_configuration,
+            turn_off_rationale=turn_off_rationale,
+            channel_type=message.get("channel_type", ""),
         )
 
         if response is None or response == "":

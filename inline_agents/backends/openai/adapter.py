@@ -25,8 +25,6 @@ from nexus.inline_agents.models import (
     Guardrail,
     InlineAgentsConfiguration,
 )
-from nexus.intelligences.models import ContentBase
-from nexus.projects.models import Project
 
 logger = logging.getLogger(__name__)
 
@@ -89,10 +87,10 @@ class OpenAITeamAdapter(TeamAdapter):
         channel_uuid: str,
         supervisor_hooks: SupervisorHooks,
         runner_hooks: RunnerHooks,
-        content_base: ContentBase,
-        project: Project,
         auth_token: str = "",
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
+        # Cached inline agent config data (optional, used to avoid database queries)
+        default_instructions_for_collaborators: str = None,
         session_factory: Callable = None,
         session: Any = None,
         data_lake_event_adapter: DataLakeEventAdapter = None,
@@ -106,32 +104,45 @@ class OpenAITeamAdapter(TeamAdapter):
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
         use_components: bool = False,
+        # Cached data parameters (optional, used to avoid database queries)
+        content_base_uuid: str = None,
+        business_rules: str = None,
+        instructions: list[str] = None,
+        agent_data: dict = None,
         **kwargs,
     ) -> list[dict]:
         agents_as_tools = []
 
-        content_base_uuid = str(content_base.uuid)
-        business_rules = project.human_support_prompt
+        # Cached data is always provided from start_inline_agents
+        if content_base_uuid is None:
+            raise ValueError("content_base_uuid must be provided")
 
-        instructions = content_base.instructions.all()
-        agent_data = content_base.agent
+        # business_rules, instructions, and agent_data can be None if not configured
+        # but they are always provided from cache (may be None if not set in project/content_base)
+        # Normalize agent_data to empty dict to prevent AttributeError on .get() calls
+        agent_data = agent_data or {}
 
-        supervisor_instructions = list(instructions.values_list("instruction", flat=True))
-        supervisor_instructions = "\n".join(supervisor_instructions)
+        supervisor_instructions = "\n".join(instructions) if instructions else ""
 
         time_now = pendulum.now("America/Sao_Paulo")
         llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
 
         max_tokens = supervisor.get("max_tokens", 2048)
 
+        # Extract agent data fields (agent_data is a dict from cache)
+        agent_name = agent_data.get("name")
+        agent_role = agent_data.get("role")
+        agent_goal = agent_data.get("goal")
+        agent_personality = agent_data.get("personality")
+
         instruction = cls.get_supervisor_instructions(
             instruction=supervisor["instruction"],
             date_time_now=llm_formatted_time,
             contact_fields=contact_fields,
-            supervisor_name=agent_data.name,
-            supervisor_role=agent_data.role,
-            supervisor_goal=agent_data.goal,
-            supervisor_adjective=agent_data.personality,
+            supervisor_name=agent_name,
+            supervisor_role=agent_role,
+            supervisor_goal=agent_goal,
+            supervisor_adjective=agent_personality,
             supervisor_instructions=supervisor_instructions if supervisor_instructions else "",
             business_rules=business_rules if business_rules else "",
             project_id=project_uuid,
@@ -149,10 +160,7 @@ class OpenAITeamAdapter(TeamAdapter):
         for agent in agents:
             agent_instructions = agent.get("instruction")
 
-            if isinstance(inline_agent_configuration, InlineAgentsConfiguration):
-                default_instructions_for_collaborators = (
-                    inline_agent_configuration.default_instructions_for_collaborators
-                )
+            if default_instructions_for_collaborators:
                 agent_instructions += f"\n{default_instructions_for_collaborators}"
 
             supervisor_default_collaborator_instructions = supervisor.get("default_instructions_for_collaborators", "")
@@ -841,7 +849,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     event_data=event_data,
                     project_uuid=project_uuid,
                     contact_urn=contact_urn,
-                    use_delay=False,
+                    use_delay=True,
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
                     conversation=conversation,

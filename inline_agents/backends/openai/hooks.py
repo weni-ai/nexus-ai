@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 import pendulum
 import sentry_sdk
+from django.utils.text import slugify
 
 try:
     from agents import AgentHooks, RunHooks
@@ -19,6 +20,31 @@ from inline_agents.adapter import DataLakeEventAdapter
 from inline_agents.backends.openai.entities import FinalResponse, HooksState
 
 logger = logging.getLogger(__name__)
+
+
+def _get_agent_slug(agent, hooks_state=None) -> str:
+    """
+    Get the agent slug from the agent object.
+    For supervisor agent, it uses name="manager" which is a fixed value.
+    For Response Formatter Agent, use the last active agent slug if available.
+    """
+    # Response Formatter Agent should use the slug of the last agent that executed
+    if agent.name == "Response Formatter Agent" and hooks_state:
+        if hooks_state.last_active_agent_slug:
+            logger.debug(
+                f"[_get_agent_slug] Formatter agent using last_active_agent_slug: {hooks_state.last_active_agent_slug}"
+            )
+            return hooks_state.last_active_agent_slug
+        else:
+            logger.warning(
+                "[_get_agent_slug] Formatter agent but last_active_agent_slug is None. "
+                "This may indicate that no collaborator executed before the formatter."
+            )
+
+    if " " not in agent.name:
+        return agent.name
+
+    return slugify(agent.name)
 
 
 class TraceHandler:
@@ -152,7 +178,9 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
     async def on_llm_start(self, context, agent, system_prompt, input_items) -> None:
         logger.info("[HOOK] Acionando o modelo.")
         context_data = context.context
-        await self.trace_handler.send_trace(context_data, agent.name, "invoking_model")
+        await self.trace_handler.send_trace(
+            context_data, _get_agent_slug(agent, self.trace_handler.hooks_state), "invoking_model"
+        )
 
     async def on_llm_end(self, context, agent, response, **kwargs):
         context_data = context.context
@@ -173,9 +201,13 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                             }
                         },
                     }
-                    await self.trace_handler.send_trace(context_data, agent.name, "thinking", trace_data)
+                    await self.trace_handler.send_trace(
+                        context_data, _get_agent_slug(agent, self.trace_handler.hooks_state), "thinking", trace_data
+                    )
         logger.info("[HOOK] Resposta do modelo recebida.")
-        await self.trace_handler.send_trace(context_data, agent.name, "model_response_received")
+        await self.trace_handler.send_trace(
+            context_data, _get_agent_slug(agent, self.trace_handler.hooks_state), "model_response_received"
+        )
 
 
 class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
@@ -212,8 +244,10 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         self.conversation = conversation
 
     async def on_start(self, context, agent):
-        logger.info(f"[HOOK] Atribuindo tarefa ao agente '{agent.name}'.")
-        input_text = self.hooks_state.tool_calls.get(agent.name, {})
+        agent_slug = _get_agent_slug(agent, self.hooks_state)
+        self.hooks_state.last_active_agent_slug = agent_slug
+        logger.info(f"[HOOK] Atribuindo tarefa ao agente '{agent_slug}'.")
+        input_text = self.hooks_state.tool_calls.get(agent_slug, {})
         if isinstance(input_text, str):
             try:
                 input_text = json.loads(input_text).get("question", "")
@@ -224,8 +258,8 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
             "orchestrationTrace": {
                 "invocationInput": {
                     "agentCollaboratorInvocationInput": {
-                        "agentCollaboratorAliasArn": f"INLINE_AGENT/{agent.name}",
-                        "agentCollaboratorName": agent.name,
+                        "agentCollaboratorAliasArn": f"INLINE_AGENT/{agent_slug}",
+                        "agentCollaboratorName": agent_slug,
                         "input": {
                             "text": input_text,
                             "type": "TEXT",
@@ -236,12 +270,12 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
             }
         }
         context_data = context.context
-        await self.trace_handler.send_trace(context_data, agent.name, "delegating_to_agent", trace_data)
+        await self.trace_handler.send_trace(context_data, agent_slug, "delegating_to_agent", trace_data)
         self.data_lake_event_adapter.to_data_lake_event(
             project_uuid=context_data.project.get("uuid"),
             contact_urn=context_data.contact.get("urn"),
             agent_data={
-                "agent_name": agent.name,
+                "agent_name": _get_agent_slug(agent, self.hooks_state),
                 "input_text": context_data.input_text,
             },
             foundation_model=agent.model,
@@ -255,10 +289,13 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         tool_info = self.hooks_state.get_tool_info(tool.name)
         parameters = tool_info.get("parameters", [])
 
+        agent_slug = _get_agent_slug(agent, self.hooks_state)
+        # Update last_active_agent_slug when collaborator executes tools
+        self.hooks_state.last_active_agent_slug = agent_slug
         logger.info(f"[HOOK] Executando ferramenta '{tool.name}'.")
-        logger.info(f"[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.")
+        logger.info(f"[HOOK] Agente '{agent_slug}' vai usar a ferramenta '{tool.name}'.")
         trace_data = {
-            "collaboratorName": agent.name,
+            "collaboratorName": agent_slug,
             "eventTime": pendulum.now().to_iso8601_string(),
             "sessionId": context_data.session.get_session_id(),
             "trace": {
@@ -279,7 +316,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         logger.debug(f"Tool info: {self.hooks_state.tool_info}")
         logger.debug(f"Trace data: {trace_data}")
         logger.debug("==========================================")
-        await self.trace_handler.send_trace(context_data, agent.name, "executing_tool", trace_data, tool_name=tool.name)
+        await self.trace_handler.send_trace(context_data, agent_slug, "executing_tool", trace_data, tool_name=tool.name)
         self.data_lake_event_adapter.to_data_lake_event(
             project_uuid=context_data.project.get("uuid"),
             contact_urn=context_data.contact.get("urn"),
@@ -288,7 +325,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                 "parameters": parameters,
                 "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
             },
-            agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
+            agent_data={"agent_name": agent_slug},  # Pass agent_data for agent_uuid enrichment
             foundation_model=agent.model,
             backend="openai",
             channel_uuid=context_data.contact.get("channel_uuid"),
@@ -365,7 +402,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                         project_uuid=project_uuid,
                         contact_urn=context_data.contact.get("urn"),
                         channel_uuid=context_data.contact.get("channel_uuid"),
-                        agent_name=agent.name,
+                        agent_name=_get_agent_slug(agent, self.hooks_state),
                         preview=self.preview,
                         conversation=self.conversation,
                     )
@@ -418,8 +455,11 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
             )
             sentry_sdk.capture_exception(e)
 
+        agent_slug = _get_agent_slug(agent, self.hooks_state)
+        # Update last_active_agent_slug when collaborator receives tool results
+        self.hooks_state.last_active_agent_slug = agent_slug
         trace_data = {
-            "collaboratorName": agent.name,
+            "collaboratorName": agent_slug,
             "eventTime": pendulum.now().to_iso8601_string(),
             "sessionId": context_data.session.get_session_id(),
             "trace": {
@@ -435,12 +475,15 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
             },
         }
         await self.trace_handler.send_trace(
-            context_data, agent.name, "tool_result_received", trace_data, tool_name=tool.name
+            context_data, agent_slug, "tool_result_received", trace_data, tool_name=tool.name
         )
 
     async def on_end(self, context, agent, output):
         logger.info(f"[HOOK] Enviando resposta ao manager. {output}")
         context_data = context.context
+        agent_slug = _get_agent_slug(agent, self.hooks_state)
+        # Update last_active_agent_slug when collaborator finishes
+        self.hooks_state.last_active_agent_slug = agent_slug
         trace_data = {
             "eventTime": pendulum.now().to_iso8601_string(),
             "sessionId": context_data.session.get_session_id(),
@@ -448,7 +491,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                 "orchestrationTrace": {
                     "observation": {
                         "agentCollaboratorInvocationOutput": {
-                            "agentCollaboratorName": agent.name,
+                            "agentCollaboratorName": agent_slug,
                             "output": {"text": output, "type": "TEXT"},
                         },
                         "type": "AGENT_COLLABORATOR",
@@ -456,7 +499,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                 }
             },
         }
-        await self.trace_handler.send_trace(context_data, agent.name, "forwarding_to_manager", trace_data)
+        await self.trace_handler.send_trace(context_data, agent_slug, "forwarding_to_manager", trace_data)
 
 
 class SupervisorHooks(AgentHooks):  # type: ignore[misc]
@@ -510,7 +553,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
         self.knowledge_base_tool = knowledge_base_tool
 
     async def on_start(self, context, agent):
-        logger.info(f"[HOOK] Agente '{agent.name}' iniciado.")
+        logger.info(f"[HOOK] Agente '{_get_agent_slug(agent, self.hooks_state)}' iniciado.")
 
     async def tool_started(self, context, agent, tool):
         context_data = context.context
@@ -523,7 +566,9 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                 project_uuid=context_data.project.get("uuid"),
                 contact_urn=context_data.contact.get("urn"),
                 tool_call_data=tool_call_data,
-                agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
+                agent_data={
+                    "agent_name": _get_agent_slug(agent, self.hooks_state)
+                },  # Pass agent_data for agent_uuid enrichment
                 foundation_model=agent.model,
                 backend="openai",
                 channel_uuid=context_data.contact.get("channel_uuid"),
@@ -544,11 +589,14 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                     }
                 },
             }
-            await self.trace_handler.send_trace(context_data, agent.name, "searching_knowledge_base", trace_data)
+            await self.trace_handler.send_trace(
+                context_data, _get_agent_slug(agent, self.hooks_state), "searching_knowledge_base", trace_data
+            )
         elif tool.name not in self.hooks_state.agents_names:
-            logger.info(f"[HOOK] Agente '{agent.name}' vai usar a ferramenta '{tool.name}'.")
+            agent_slug = _get_agent_slug(agent, self.hooks_state)
+            logger.info(f"[HOOK] Agente '{agent_slug}' vai usar a ferramenta '{tool.name}'.")
             trace_data = {
-                "collaboratorName": agent.name,
+                "collaboratorName": agent_slug,
                 "eventTime": pendulum.now().to_iso8601_string(),
                 "sessionId": context_data.session.get_session_id(),
                 "trace": {
@@ -565,7 +613,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                 },
             }
             await self.trace_handler.send_trace(
-                context_data, agent.name, "executing_tool", trace_data, tool_name=tool.name
+                context_data, agent_slug, "executing_tool", trace_data, tool_name=tool.name
             )
             self.data_lake_event_adapter.to_data_lake_event(
                 project_uuid=context_data.project.get("uuid"),
@@ -575,7 +623,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                     "parameters": parameters,
                     "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
                 },
-                agent_data={"agent_name": agent.name},  # Pass agent_data for agent_uuid enrichment
+                agent_data={"agent_name": agent_slug},  # Pass agent_data for agent_uuid enrichment
                 foundation_model=agent.model,
                 backend="openai",
                 channel_uuid=context_data.contact.get("channel_uuid"),
@@ -637,6 +685,9 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
             except Exception as e:
                 logger.error(f"Error sending tool result event for tool '{tool.name}': {str(e)}")
                 sentry_sdk.capture_exception(e)
+            await self.trace_handler.send_trace(
+                context_data, _get_agent_slug(agent, self.hooks_state), "search_result_received", trace_data
+            )
         elif tool.name not in self.hooks_state.agents_names:
             if isinstance(result, str):
                 try:
@@ -697,7 +748,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                             project_uuid=project_uuid,
                             contact_urn=context_data.contact.get("urn"),
                             channel_uuid=context_data.contact.get("channel_uuid"),
-                            agent_name=agent.name,
+                            agent_name=_get_agent_slug(agent, self.hooks_state),
                             preview=self.preview,
                             conversation=self.conversation,
                         )
@@ -743,8 +794,9 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                 )
                 sentry_sdk.capture_exception(e)
 
+            agent_slug = _get_agent_slug(agent, self.hooks_state)
             trace_data = {
-                "collaboratorName": agent.name,
+                "collaboratorName": agent_slug,
                 "eventTime": pendulum.now().to_iso8601_string(),
                 "sessionId": context_data.session.get_session_id(),
                 "trace": {
@@ -760,7 +812,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                 },
             }
             await self.trace_handler.send_trace(
-                context_data, agent.name, "tool_result_received", trace_data, tool_name=tool.name
+                context_data, agent_slug, "tool_result_received", trace_data, tool_name=tool.name
             )
 
     async def on_end(self, context, agent, output):
@@ -779,7 +831,9 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                 "orchestrationTrace": {"observation": {"finalResponse": {"text": final_response}, "type": "FINISH"}}
             },
         }
-        await self.trace_handler.send_trace(context_data, agent.name, "sending_response", trace_data)
+        await self.trace_handler.send_trace(
+            context_data, _get_agent_slug(agent, self.hooks_state), "sending_response", trace_data
+        )
 
         if (self.use_components and self.save_components_trace) or not self.use_components:
             await self.trace_handler.save_trace_data(

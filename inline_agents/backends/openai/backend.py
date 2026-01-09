@@ -34,11 +34,10 @@ from nexus.inline_agents.backends.openai.repository import (
     OpenAISupervisorRepository,
 )
 from nexus.inline_agents.models import InlineAgentsConfiguration
-from nexus.intelligences.models import ContentBase
-from nexus.projects.models import Project
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_to_database
+from router.traces_observers.save_traces import save_inline_message_async
 
 logger = logging.getLogger(__name__)
 
@@ -160,13 +159,12 @@ class OpenAIBackend(InlineAgentsBackend):
         project_uuid: str,
         sanitized_urn: str,
         contact_fields: str,
-        project: Project,
-        content_base: ContentBase,
         preview: bool = False,
         language: str = "en",
         contact_name: str = "",
         contact_urn: str = "",
         channel_uuid: str = "",
+        channel_type: str = "",
         use_components: bool = False,
         user_email: str = None,
         rationale_switch: bool = False,
@@ -176,7 +174,15 @@ class OpenAIBackend(InlineAgentsBackend):
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
         **kwargs,
     ):
+        use_components_cached = kwargs.pop("use_components", use_components)
+        rationale_switch_cached = kwargs.pop("rationale_switch", rationale_switch)
+        human_support_cached = kwargs.pop("human_support", None)
+        default_supervisor_foundation_model_cached = kwargs.pop("default_supervisor_foundation_model", None)
+        formatter_agent_configurations = kwargs.pop("formatter_agent_configurations", None)
+        rationale_switch = rationale_switch_cached
+
         turns_to_include = None
+
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
         session_factory = self._get_session_factory(
             project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
@@ -185,7 +191,12 @@ class OpenAIBackend(InlineAgentsBackend):
             project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
         )
 
-        supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(project=project)
+        # Cached data is always provided from start_inline_agents
+        supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(
+            use_components=use_components_cached,
+            human_support=human_support_cached,
+            default_supervisor_foundation_model=default_supervisor_foundation_model_cached,
+        )
         data_lake_event_adapter = self._get_data_lake_event_adapter()
 
         # Ensure conversation exists and get it for data lake events (skip in preview mode)
@@ -199,7 +210,7 @@ class OpenAIBackend(InlineAgentsBackend):
 
         hooks_state = HooksState(agents=team)
 
-        save_inline_message_to_database(
+        save_inline_message_async.delay(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             text=input_text,
@@ -243,6 +254,13 @@ class OpenAIBackend(InlineAgentsBackend):
         jwt_usecase = JWTUsecase()
         auth_token = jwt_usecase.generate_jwt_token(project_uuid)
 
+        # Extract cached data if available from kwargs
+        content_base_uuid_cached = kwargs.pop("content_base_uuid", None)
+        business_rules_cached = kwargs.pop("business_rules", None)
+        instructions_cached = kwargs.pop("instructions", None)
+        agent_data_cached = kwargs.pop("agent_data", None)
+        default_instructions_for_collaborators_cached = kwargs.pop("default_instructions_for_collaborators", None)
+
         external_team = self.team_adapter.to_external(
             supervisor=supervisor,
             agents=team,
@@ -254,8 +272,6 @@ class OpenAIBackend(InlineAgentsBackend):
             channel_uuid=channel_uuid,
             supervisor_hooks=supervisor_hooks,
             runner_hooks=runner_hooks,
-            project=project,
-            content_base=content_base,
             inline_agent_configuration=inline_agent_configuration,
             session_factory=session_factory,
             session=session,
@@ -263,6 +279,12 @@ class OpenAIBackend(InlineAgentsBackend):
             preview=preview,
             hooks_state=hooks_state,
             event_manager_notify=self._event_manager_notify,
+            # Pass cached data to avoid database queries
+            content_base_uuid=content_base_uuid_cached,
+            business_rules=business_rules_cached,
+            instructions=instructions_cached,
+            agent_data=agent_data_cached,
+            default_instructions_for_collaborators=default_instructions_for_collaborators_cached,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -287,13 +309,14 @@ class OpenAIBackend(InlineAgentsBackend):
             )
 
         grpc_client, grpc_msg_id = None, None
-        if not preview:
+        if not preview and not use_components:
             grpc_client, grpc_msg_id = self._initialize_grpc_client(
                 channel_uuid=channel_uuid,
                 contact_urn=contact_urn,
                 session_id=session_id,
                 project_uuid=project_uuid,
                 language=language,
+                channel_type=channel_type,
             )
 
         result = asyncio.run(
@@ -318,7 +341,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 use_components,
                 grpc_client=grpc_client,
                 grpc_msg_id=grpc_msg_id,
-                formatter_agent_configurations=project.formatter_agent_configurations,
+                formatter_agent_configurations=formatter_agent_configurations,
             )
         )
 
@@ -456,10 +479,26 @@ class OpenAIBackend(InlineAgentsBackend):
             return final_response
 
     def _initialize_grpc_client(
-        self, channel_uuid: str, contact_urn: str, session_id: str, project_uuid: str, language: str
+        self,
+        channel_uuid: str,
+        contact_urn: str,
+        session_id: str,
+        project_uuid: str,
+        language: str,
+        channel_type: str = "",
     ) -> tuple[Optional[MessageStreamingClient], Optional[str]]:
         """Initialize gRPC client and send setup message."""
-        if not is_grpc_enabled() or not contact_urn:
+        if not is_grpc_enabled(project_uuid) or not contact_urn:
+            return None, None
+
+        if not channel_type:
+            logger.info(
+                "channel_type is empty, skipping gRPC initialization",
+                extra={"project_uuid": project_uuid, "contact_urn": contact_urn},
+            )
+            return None, None
+
+        if channel_type != "WWC":
             return None, None
 
         if not channel_uuid:

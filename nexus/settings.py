@@ -74,6 +74,8 @@ INSTALLED_APPS = [
     "nexus.inline_agents",
     "nexus.reports",
     "nexus.analytics",
+    # Observer registration - MUST be last to ensure all apps are loaded first
+    "nexus.observers",
 ]
 
 MIDDLEWARE = [
@@ -208,7 +210,7 @@ CACHES = {
 
 # Celery config
 
-CELERY_RESULT_BACKEND = "django-db"
+CELERY_RESULT_BACKEND = None
 CELERY_BROKER_URL = REDIS_URL
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_RESULT_SERIALIZER = "json"
@@ -635,6 +637,8 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("CELERY_WORKER_PREFETCH_MULTIPLIER",
 PROJECTS_WITH_SPECIAL_SESSION_ID = env.list("PROJECTS_WITH_SPECIAL_SESSION_ID", [])
 PROJECTS_WITH_LARGE_DATASOURCE = env.list("PROJECTS_WITH_LARGE_DATASOURCE", [])
 
+WORKFLOW_ARCHITECTURE_PROJECTS = env.list("WORKFLOW_ARCHITECTURE_PROJECTS", default=[])
+
 
 def get_datasource_id(project_uuid: str | None) -> str:
     if project_uuid in PROJECTS_WITH_LARGE_DATASOURCE:
@@ -689,7 +693,7 @@ LOGGING = {
 }
 
 # gRPC Streaming Configuration
-GRPC_ENABLED = env.bool("GRPC_ENABLED", default=False)
+GRPC_ENABLED_PROJECTS = env.list("GRPC_ENABLED_PROJECTS", default=[])
 GRPC_SERVICE_HOST = env.str("GRPC_SERVICE_HOST", default="localhost")
 GRPC_SERVICE_PORT = env.int("GRPC_SERVICE_PORT", default=50051)
 GRPC_USE_TLS = env.bool("GRPC_USE_TLS", default=False)
