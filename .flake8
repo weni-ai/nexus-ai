@@ -7,6 +7,7 @@ exclude =
   weni-script-*.py
   nexus/staticfiles/*
   nexus/asgi.py
+  */migrations/*
 
 per-file-ignores =
   *__init__.py: F401

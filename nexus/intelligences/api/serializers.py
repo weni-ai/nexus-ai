@@ -290,7 +290,6 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                             user=self.context.get("request").user,
                         )
 
-
                     else:
                         created_instruction = instance.instructions.create(
                             instruction=instruction_data.get("instruction")

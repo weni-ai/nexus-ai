@@ -309,7 +309,7 @@ class OpenAIBackend(InlineAgentsBackend):
             )
 
         grpc_client, grpc_msg_id = None, None
-        if not preview:
+        if not preview and not use_components:
             grpc_client, grpc_msg_id = self._initialize_grpc_client(
                 channel_uuid=channel_uuid,
                 contact_urn=contact_urn,

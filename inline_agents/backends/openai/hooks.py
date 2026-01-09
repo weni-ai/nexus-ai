@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 import pendulum
 import sentry_sdk
+from django.utils.text import slugify
 
 try:
     from agents import AgentHooks, RunHooks
@@ -43,8 +44,6 @@ def _get_agent_slug(agent, hooks_state=None) -> str:
 
     if " " not in agent.name:
         return agent.name
-
-    from django.utils.text import slugify
 
     return slugify(agent.name)
 

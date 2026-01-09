@@ -88,6 +88,8 @@ class TypingIndicatorObserver(EventObserver):
         project_uuid = kwargs.get("project_uuid")
         preview = kwargs.get("preview", False)
 
+        logger.info(f"[TypingIndicatorObserver] Starting for project {project_uuid}")
+
         if not contact_urn or not project_uuid:
             logger.warning(
                 "[TypingIndicatorObserver] Missing required parameters",
@@ -111,10 +113,7 @@ class TypingIndicatorObserver(EventObserver):
                 preview=False,  # Already checked above
             )
 
-            logger.debug(
-                f"[TypingIndicatorObserver] Typing indicator sent for {project_uuid}",
-                extra={"project_uuid": project_uuid, "contact_urn": contact_urn},
-            )
+            logger.info(f"[TypingIndicatorObserver] Completed for {project_uuid}")
         except Exception as e:
             # Errors are isolated - don't affect workflow
             logger.error(
