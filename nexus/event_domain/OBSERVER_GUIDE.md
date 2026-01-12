@@ -33,7 +33,15 @@ event_manager.notify(
 )
 ```
 
-That's it! The observer is automatically registered and will be called when the event is triggered.
+**Important:** For the observer to be registered, its module must be listed in `nexus/observers/apps.py`:
+
+```python
+# nexus/observers/apps.py
+OBSERVER_MODULES = [
+    # ... existing modules ...
+    "your_app.observers",  # Add your module here
+]
+```
 
 ## Core Concepts
 
@@ -52,6 +60,23 @@ event_manager.notify("event_name", **kwargs)
 
 # Asynchronous events
 await async_event_manager.notify("event_name", **kwargs)
+
+# Call async observers from sync code (non-blocking)
+from nexus.events import notify_async
+notify_async("event_name", **kwargs)  # Runs in background thread
+```
+
+### notify_async Helper
+
+Use `notify_async()` to call async observers from synchronous code (e.g., Django views, Celery tasks):
+
+```python
+from nexus.events import notify_async
+
+# In a Django view or Celery task
+def my_sync_function():
+    # This won't block - runs async observers in background thread
+    notify_async("cache_invalidation:project", project_uuid=str(project.uuid))
 ```
 
 ### EventObserver
@@ -74,9 +99,14 @@ class MyObserver(EventObserver):
 **When to use:** Always. This is the simplest and recommended way to register observers.
 
 **How it works:**
-- Use the `@observer` decorator on your observer class
-- The observer is automatically registered when the module is imported
-- No manual registration needed
+1. Use the `@observer` decorator on your observer class
+2. Add your module to `OBSERVER_MODULES` in `nexus/observers/apps.py`
+3. Observers are automatically registered at Django startup via `AppConfig.ready()`
+
+**Why this approach:**
+- Avoids circular import issues (registration happens after all apps load)
+- Centralized list of all observer modules
+- Graceful error handling (one failing module doesn't break others)
 
 **Example:**
 ```python
@@ -400,28 +430,94 @@ def test_observer_with_mocked_dependency():
 ## File Structure
 
 ```
-nexus/event_domain/
-├── event_observer.py          # Base EventObserver class
-├── event_manager.py           # EventManager and AsyncEventManager
-├── observer_registry.py       # Lazy loading registry
-├── observer_factories.py      # Factory functions
-├── decorators.py              # @observer decorator
-├── middleware.py              # Middleware system
-├── validators.py              # Event validation
-└── tests/
-    └── test_event_manager.py  # Comprehensive tests
+nexus/
+├── events.py                  # Event managers and notify_async helper
+├── observers/                 # Observer registration app
+│   ├── __init__.py
+│   └── apps.py               # OBSERVER_MODULES list and AppConfig.ready()
+└── event_domain/
+    ├── event_observer.py      # Base EventObserver class
+    ├── event_manager.py       # EventManager and AsyncEventManager
+    ├── observer_registry.py   # Lazy loading registry
+    ├── observer_factories.py  # Factory functions
+    ├── decorators.py          # @observer decorator
+    ├── middleware.py          # Middleware system
+    ├── validators.py          # Event validation
+    └── tests/
+        └── test_event_manager.py  # Comprehensive tests
 ```
+
+**Observer Implementations (examples):**
+```
+router/
+├── tasks/workflow_observers.py           # Typing indicator observer
+├── services/cache_invalidation_observers.py  # Cache invalidation
+└── traces_observers/
+    ├── rationale/observer.py             # Rationale observer
+    ├── save_traces.py                    # Save traces observer
+    └── summary.py                        # Summary observer
+
+nexus/
+├── intelligences/observer.py             # Intelligence activity observer
+├── projects/observer.py                  # Project activity observer
+├── actions/observers.py                  # Actions observer
+└── logs/observers.py                     # Logs observer
+```
+
+## Adding a New Observer
+
+### Step 1: Create the Observer
+
+```python
+# your_app/observers.py
+from nexus.event_domain.decorators import observer
+from nexus.event_domain.event_observer import EventObserver
+
+@observer("your_event_name", isolate_errors=True)
+class YourObserver(EventObserver):
+    def perform(self, **kwargs):
+        # Your logic here
+        pass
+```
+
+### Step 2: Register the Module
+
+Add your module to `OBSERVER_MODULES` in `nexus/observers/apps.py`:
+
+```python
+# nexus/observers/apps.py
+OBSERVER_MODULES = [
+    # ... existing modules ...
+    "your_app.observers",  # Add this line
+]
+```
+
+### Step 3: Trigger the Event
+
+```python
+from nexus.events import event_manager, notify_async
+
+# Synchronous
+event_manager.notify("your_event_name", data={"key": "value"})
+
+# Async observers from sync code
+notify_async("your_event_name", data={"key": "value"})
+```
+
+---
 
 ## Best Practices
 
 1. **Use Decorator Registration**: Always use `@observer` decorator - it's the simplest approach
-2. **Fail-Fast for Critical Logic**: Use default behavior (fail-fast) for data validation and critical business logic
-3. **Isolate Non-Critical Observers**: Use `isolate_errors=True` for logging, metrics, and notifications
-4. **Use Factories for Dependencies**: Makes testing easier and avoids circular imports
-5. **Validate Event Payloads**: Use validators to catch errors early and document expected structure
-6. **Monitor Isolated Errors**: Check logs regularly for failures in isolated observers
-7. **Keep Observers Focused**: Each observer should do one thing well
-8. **Use Type Hints**: Helps document expected payload structure
+2. **Register Your Module**: Add your observer module to `nexus/observers/apps.py`
+3. **Fail-Fast for Critical Logic**: Use default behavior (fail-fast) for data validation and critical business logic
+4. **Isolate Non-Critical Observers**: Use `isolate_errors=True` for logging, metrics, and notifications
+5. **Use `notify_async` for Async Observers**: When calling async observers from sync code (Django views, Celery tasks)
+6. **Use Factories for Dependencies**: Makes testing easier and avoids circular imports
+7. **Validate Event Payloads**: Use validators to catch errors early and document expected structure
+8. **Monitor Isolated Errors**: Check logs regularly for failures in isolated observers
+9. **Keep Observers Focused**: Each observer should do one thing well
+10. **Use Type Hints**: Helps document expected payload structure
 
 ## Common Patterns
 

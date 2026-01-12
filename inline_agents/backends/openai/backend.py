@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 import openai
 import pendulum
 import sentry_sdk
-from agents import set_default_openai_client, set_default_openai_key
+from agents import set_default_openai_client, set_default_openai_key, trace
 from django.conf import settings
 from langfuse import get_client
 from openai import AsyncOpenAI
@@ -312,7 +312,7 @@ class OpenAIBackend(InlineAgentsBackend):
             )
 
         grpc_client, grpc_msg_id = None, None
-        if not preview:
+        if not preview and not use_components:
             grpc_client, grpc_msg_id = self._initialize_grpc_client(
                 channel_uuid=channel_uuid,
                 contact_urn=contact_urn,
@@ -588,15 +588,19 @@ class OpenAIBackend(InlineAgentsBackend):
 
     def _set_openai_client(self, user_model_credentials: Dict[str, str]) -> None:
         if user_model_credentials:
+
+            api_key = user_model_credentials.get("api_key", "")
+            base_url = user_model_credentials.get("api_base", "")
+
             if user_model_credentials.get("api_base", ""):
                 client = AsyncOpenAI(
-                    base_url=user_model_credentials.get("api_base", ""),
-                    api_key=user_model_credentials.get("api_key", ""),
+                    base_url=base_url,
+                    api_key=api_key,
                 )
                 set_default_openai_client(client)
                 return
 
-            set_default_openai_key(user_model_credentials.get("api_key", ""))
+            set_default_openai_key(api_key)
 
     async def _invoke_agents_async(
         self,
@@ -630,65 +634,124 @@ class OpenAIBackend(InlineAgentsBackend):
 
             self._set_openai_client(user_model_credentials)
 
-            result = client.run_streamed(
-                **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
-            )
-            delta_counter = 0
-            try:
-                # Only stream events if the result has stream_events method
-                stream_events = getattr(result, "stream_events", None)
-                if stream_events and callable(stream_events):
-                    async for event in stream_events():
-                        delta_counter = self._process_delta_event(
-                            event=event,
-                            grpc_client=grpc_client,
-                            grpc_msg_id=grpc_msg_id,
-                            delta_counter=delta_counter,
-                            channel_uuid=channel_uuid,
-                            contact_urn=contact_urn,
-                            project_uuid=project_uuid,
-                        )
-                        if hasattr(event, "item") and event.type == "run_item_stream_event":
-                            if event.item.type == "tool_call_item":
-                                hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
-            except openai.APIError as api_error:
-                self._sentry_capture_exception(
-                    api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True
-                )
-                raise
-            except Exception as stream_error:
-                self._sentry_capture_exception(
-                    stream_error,
-                    project_uuid,
-                    contact_urn,
-                    channel_uuid,
-                    session_id,
-                    input_text,
-                    enable_logger=True,
-                )
-                # Try to get final_response even if streaming failed
+            with trace(workflow_name=project_uuid, trace_id=trace_id):
+                result = client.run_streamed(
+                    **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS)
+                delta_counter = 0
                 try:
-                    final_response = self._get_final_response(result)
-                except Exception:
-                    final_response = None
+                    # Only stream events if the result has stream_events method
+                    stream_events = getattr(result, "stream_events", None)
+                    if stream_events and callable(stream_events):
+                        async for event in stream_events():
+                            delta_counter = self._process_delta_event(
+                                event=event,
+                                grpc_client=grpc_client,
+                                grpc_msg_id=grpc_msg_id,
+                                delta_counter=delta_counter,
+                                channel_uuid=channel_uuid,
+                                contact_urn=contact_urn,
+                                project_uuid=project_uuid,
+                            )
+                            if hasattr(event, "item") and event.type == "run_item_stream_event":
+                                if event.item.type == "tool_call_item":
+                                    hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
+                except openai.APIError as api_error:
+                    self._sentry_capture_exception(
+                        api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True
+                    )
+                    raise
+                except Exception as stream_error:
+                    self._sentry_capture_exception(
+                        stream_error,
+                        project_uuid,
+                        contact_urn,
+                        channel_uuid,
+                        session_id,
+                        input_text,
+                        enable_logger=True,
+                    )
 
-                root_span.update_trace(
-                    input=input_text,
-                    output=final_response,
-                    metadata={
-                        "project_uuid": project_uuid,
-                        "contact_urn": contact_urn,
-                        "channel_uuid": channel_uuid,
-                        "preview": preview,
-                        "trace_id": trace_id,
-                        "error": True,
-                        "error_type": type(stream_error).__name__,
-                        "error_message": str(stream_error)[:500],
-                    },
-                )
-
-                if use_components and final_response:
+                    delta_counter = 0
                     try:
+                        # Only stream events if the result has stream_events method
+                        stream_events = getattr(result, "stream_events", None)
+                        if stream_events and callable(stream_events):
+                            async for event in stream_events():
+                                delta_counter = self._process_delta_event(
+                                    event=event,
+                                    grpc_client=grpc_client,
+                                    grpc_msg_id=grpc_msg_id,
+                                    delta_counter=delta_counter,
+                                    channel_uuid=channel_uuid,
+                                    contact_urn=contact_urn,
+                                    project_uuid=project_uuid,
+                                )
+                                if hasattr(event, "item") and event.type == "run_item_stream_event":
+                                    if event.item.type == "tool_call_item":
+                                        hooks_state.tool_calls.update(
+                                            {event.item.raw_item.name: event.item.raw_item.arguments}
+                                        )
+                    except openai.APIError as api_error:
+                        self._sentry_capture_exception(
+                            api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True
+                        )
+                        raise
+                    except Exception as stream_error:
+                        self._sentry_capture_exception(
+                            stream_error,
+                            project_uuid,
+                            contact_urn,
+                            channel_uuid,
+                            session_id,
+                            input_text,
+                            enable_logger=True,
+                        )
+                        # Try to get final_response even if streaming failed
+                        try:
+                            final_response = self._get_final_response(result)
+                        except Exception:
+                            final_response = None
+
+                        root_span.update_trace(
+                            input=input_text,
+                            output=final_response,
+                            metadata={
+                                "project_uuid": project_uuid,
+                                "contact_urn": contact_urn,
+                                "channel_uuid": channel_uuid,
+                                "preview": preview,
+                                "trace_id": trace_id,
+                                "error": True,
+                                "error_type": type(stream_error).__name__,
+                                "error_message": str(stream_error)[:500],
+                            },
+                        )
+
+                        if use_components and final_response:
+                            try:
+                                formatted_response = await self._run_formatter_agent_async(
+                                    final_response,
+                                    session,
+                                    supervisor_hooks,
+                                    external_team["context"],
+                                    formatter_agent_instructions,
+                                    formatter_agent_configurations,
+                                )
+                                final_response = formatted_response
+                            except Exception as formatter_error:
+                                logger.error(
+                                    f"[OpenAIBackend] Error in formatter agent after streaming error: {formatter_error}",
+                                    extra={
+                                        "project_uuid": project_uuid,
+                                        "contact_urn": contact_urn,
+                                    },
+                                )
+
+                        return final_response
+
+                    final_response = self._get_final_response(result)
+
+                    if use_components:
                         formatted_response = await self._run_formatter_agent_async(
                             final_response,
                             session,
@@ -698,43 +761,20 @@ class OpenAIBackend(InlineAgentsBackend):
                             formatter_agent_configurations,
                         )
                         final_response = formatted_response
-                    except Exception as formatter_error:
-                        logger.error(
-                            f"[OpenAIBackend] Error in formatter agent after streaming error: {formatter_error}",
-                            extra={
-                                "project_uuid": project_uuid,
-                                "contact_urn": contact_urn,
-                            },
-                        )
 
-                return final_response
+                    root_span.update_trace(
+                        input=input_text,
+                        output=final_response,
+                        metadata={
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "preview": preview,
+                            "trace_id": trace_id,
+                        },
+                    )
 
-            final_response = self._get_final_response(result)
-
-            if use_components:
-                formatted_response = await self._run_formatter_agent_async(
-                    final_response,
-                    session,
-                    supervisor_hooks,
-                    external_team["context"],
-                    formatter_agent_instructions,
-                    formatter_agent_configurations,
-                )
-                final_response = formatted_response
-
-            root_span.update_trace(
-                input=input_text,
-                output=final_response,
-                metadata={
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "channel_uuid": channel_uuid,
-                    "preview": preview,
-                    "trace_id": trace_id,
-                },
-            )
-
-        return final_response
+            return final_response
 
     def _get_final_response(self, result):
         if isinstance(result.final_output, FinalResponse):

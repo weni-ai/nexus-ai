@@ -798,6 +798,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         contact_urn: str,
         agent_data: Optional[dict] = None,
         tool_call_data: Optional[dict] = None,
+        tool_result_data: Optional[dict] = None,
         preview: bool = False,
         backend: str = "openai",
         foundation_model: str = "",
@@ -808,7 +809,9 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             agent_data = {}
         if tool_call_data is None:
             tool_call_data = {}
-        if preview or (not agent_data and not tool_call_data):
+        if tool_result_data is None:
+            tool_result_data = {}
+        if preview or (not agent_data and not tool_call_data and not tool_result_data):
             return
 
         try:
@@ -826,6 +829,21 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             if agent_data:
                 agent_identifier = agent_data.get("agent_name")
 
+            if tool_result_data:
+                event_data["metadata"]["tool_result"] = tool_result_data
+                event_data["key"] = "tool_result"
+                event_data["value"] = tool_result_data.get("tool_name", "")
+                validated_event = self._event_service.send_validated_event(
+                    event_data=event_data,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    use_delay=False,
+                    channel_uuid=channel_uuid,
+                    agent_identifier=agent_identifier,
+                    conversation=conversation,
+                )
+                return validated_event
+
             if tool_call_data:
                 event_data["metadata"]["tool_call"] = tool_call_data
                 event_data["key"] = "tool_call"
@@ -834,7 +852,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     event_data=event_data,
                     project_uuid=project_uuid,
                     contact_urn=contact_urn,
-                    use_delay=False,
+                    use_delay=True,
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
                     conversation=conversation,
