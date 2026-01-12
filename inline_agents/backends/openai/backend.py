@@ -636,7 +636,8 @@ class OpenAIBackend(InlineAgentsBackend):
 
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 result = client.run_streamed(
-                    **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS)
+                    **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
+                )
                 delta_counter = 0
                 try:
                     # Only stream events if the result has stream_events method
@@ -654,7 +655,9 @@ class OpenAIBackend(InlineAgentsBackend):
                             )
                             if hasattr(event, "item") and event.type == "run_item_stream_event":
                                 if event.item.type == "tool_call_item":
-                                    hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
+                                    hooks_state.tool_calls.update(
+                                        {event.item.raw_item.name: event.item.raw_item.arguments}
+                                    )
                 except openai.APIError as api_error:
                     self._sentry_capture_exception(
                         api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True
@@ -693,7 +696,13 @@ class OpenAIBackend(InlineAgentsBackend):
                                         )
                     except openai.APIError as api_error:
                         self._sentry_capture_exception(
-                            api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True
+                            api_error,
+                            project_uuid,
+                            contact_urn,
+                            channel_uuid,
+                            session_id,
+                            input_text,
+                            enable_logger=True,
                         )
                         raise
                     except Exception as stream_error:
