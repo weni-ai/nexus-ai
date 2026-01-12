@@ -208,7 +208,7 @@ CACHES = {
 
 # Celery config
 
-CELERY_RESULT_BACKEND = "django-db"
+CELERY_RESULT_BACKEND = None
 CELERY_BROKER_URL = REDIS_URL
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_RESULT_SERIALIZER = "json"
@@ -689,7 +689,7 @@ LOGGING = {
 }
 
 # gRPC Streaming Configuration
-GRPC_ENABLED = env.bool("GRPC_ENABLED", default=False)
+GRPC_ENABLED_PROJECTS = env.list("GRPC_ENABLED_PROJECTS", default=[])
 GRPC_SERVICE_HOST = env.str("GRPC_SERVICE_HOST", default="localhost")
 GRPC_SERVICE_PORT = env.int("GRPC_SERVICE_PORT", default=50051)
 GRPC_USE_TLS = env.bool("GRPC_USE_TLS", default=False)

@@ -8,6 +8,7 @@ class MessageHTTPBody(BaseModel):
     text: str
     contact_urn: str
     channel_uuid: Optional[str] = None
+    channel_type: Optional[str] = None
     contact_name: Optional[str] = None
     metadata: Optional[Dict] = {}
     attachments: Optional[List] = []

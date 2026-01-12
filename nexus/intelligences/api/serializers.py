@@ -244,15 +244,12 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 )
 
                 # Fire cache invalidation event
-                try:
-                    project_uuid = str(instance.intelligence.project.uuid)
-                    notify_async(
-                        event="cache_invalidation:content_base_agent",
-                        content_base_agent=agent,
-                        project_uuid=project_uuid,
-                    )
-                except AttributeError:
-                    pass  # Skip if no project
+                notify_async(
+                    event="cache_invalidation:content_base_agent",
+                    content_base_agent=agent,
+                    project_uuid=project_uuid,
+                )
+
             except ContentBaseAgent.DoesNotExist:
                 created_agent = ContentBaseAgent.objects.create(
                     name=agent_data.get("name"),
@@ -263,15 +260,12 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 )
 
                 # Fire cache invalidation event for agent creation
-                try:
-                    project_uuid = str(instance.intelligence.project.uuid)
-                    notify_async(
-                        event="cache_invalidation:content_base_agent",
-                        content_base_agent=created_agent,
-                        project_uuid=project_uuid,
-                    )
-                except AttributeError:
-                    pass  # Skip if no project
+
+                notify_async(
+                    event="cache_invalidation:content_base_agent",
+                    content_base_agent=created_agent,
+                    project_uuid=project_uuid,
+                )
 
         # Handle instructions updates
         if instructions_data:
@@ -296,16 +290,6 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                             user=self.context.get("request").user,
                         )
 
-                        # Fire cache invalidation event
-                        try:
-                            project_uuid = str(instance.intelligence.project.uuid)
-                            notify_async(
-                                event="cache_invalidation:content_base_instruction",
-                                content_base_instruction=instruction,
-                                project_uuid=project_uuid,
-                            )
-                        except AttributeError:
-                            pass  # Skip if no project
                     else:
                         created_instruction = instance.instructions.create(
                             instruction=instruction_data.get("instruction")
@@ -318,16 +302,10 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                             user=self.context.get("request").user,
                         )
 
-                        # Fire cache invalidation event
-                        try:
-                            project_uuid = str(instance.intelligence.project.uuid)
-                            notify_async(
-                                event="cache_invalidation:content_base_instruction",
-                                content_base_instruction=created_instruction,
-                                project_uuid=project_uuid,
-                            )
-                        except AttributeError:
-                            pass  # Skip if no project
+            notify_async(
+                event="cache_invalidation:content_base_instruction",
+                project_uuid=project_uuid,
+            )
 
         instance.refresh_from_db()
         return instance
