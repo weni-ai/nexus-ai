@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 import boto3
 import pendulum
@@ -19,6 +19,8 @@ from inline_agents.backends.openai.hooks import (
     RunnerHooks,
     SupervisorHooks,
 )
+from inline_agents.backends.openai.tools import Collaborator as CollaboratorAgent
+from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
     AgentCredential,
@@ -111,6 +113,8 @@ class OpenAITeamAdapter(TeamAdapter):
         agent_data: dict = None,
         **kwargs,
     ) -> list[dict]:
+        user_model_credentials = supervisor.get("user_model_credentials", {})
+
         agents_as_tools = []
 
         # Cached data is always provided from start_inline_agents
@@ -127,7 +131,9 @@ class OpenAITeamAdapter(TeamAdapter):
         time_now = pendulum.now("America/Sao_Paulo")
         llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
 
-        max_tokens = supervisor.get("max_tokens", 2048)
+        max_tokens: Dict[str, int] = supervisor.get("max_tokens")
+        max_tokens_supervisor: int = max_tokens.get("supervisor", 2048)
+        max_tokens_collaborator: int = max_tokens.get("collaborator", 2048)
 
         # Extract agent data fields (agent_data is a dict from cache)
         agent_name = agent_data.get("name")
@@ -185,17 +191,15 @@ class OpenAITeamAdapter(TeamAdapter):
                 turn_off_rationale=turn_off_rationale,
             )
 
-            from agents import Agent, ModelSettings
-
-            openai_agent = Agent[Context](
+            openai_agent = CollaboratorAgent(
                 name=agent_name,
                 instructions=agent_instructions,
                 tools=cls._get_tools(agent["actionGroups"]),
-                model=agent.get("foundationModel", settings.OPENAI_AGENTS_FOUNDATION_MODEL),
+                foundation_model=agent.get("foundationModel", settings.OPENAI_AGENTS_FOUNDATION_MODEL),
+                user_model_credentials=user_model_credentials,
                 hooks=hooks,
-                model_settings=ModelSettings(
-                    max_tokens=max_tokens,
-                ),
+                model_settings={"max_tokens": max_tokens_collaborator},
+                collaborator_configurations=supervisor.get("collaborator_configurations", {}),
             )
 
             agents_as_tools.append(
@@ -213,8 +217,6 @@ class OpenAITeamAdapter(TeamAdapter):
         supervisor_tools = cls._get_tools(supervisor["tools"])
         supervisor_tools.extend(agents_as_tools)
 
-        from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
-
         supervisor_agent = SupervisorAgent(
             name="manager",
             instructions=instruction,
@@ -223,7 +225,7 @@ class OpenAITeamAdapter(TeamAdapter):
             model=supervisor["foundation_model"],
             prompt_override_configuration=supervisor.get("prompt_override_configuration", {}),
             preview=preview,
-            max_tokens=max_tokens,
+            max_tokens=max_tokens_supervisor,
             use_components=use_components,
         )
 
@@ -245,6 +247,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 contact_fields=contact_fields,
             ),
             "formatter_agent_instructions": supervisor.get("formatter_agent_components_instructions", ""),
+            "user_model_credentials": user_model_credentials,
         }
 
     @classmethod
@@ -795,6 +798,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         contact_urn: str,
         agent_data: Optional[dict] = None,
         tool_call_data: Optional[dict] = None,
+        tool_result_data: Optional[dict] = None,
         preview: bool = False,
         backend: str = "openai",
         foundation_model: str = "",
@@ -805,7 +809,9 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             agent_data = {}
         if tool_call_data is None:
             tool_call_data = {}
-        if preview or (not agent_data and not tool_call_data):
+        if tool_result_data is None:
+            tool_result_data = {}
+        if preview or (not agent_data and not tool_call_data and not tool_result_data):
             return
 
         try:
@@ -822,6 +828,21 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             agent_identifier = None
             if agent_data:
                 agent_identifier = agent_data.get("agent_name")
+
+            if tool_result_data:
+                event_data["metadata"]["tool_result"] = tool_result_data
+                event_data["key"] = "tool_result"
+                event_data["value"] = tool_result_data.get("tool_name", "")
+                validated_event = self._event_service.send_validated_event(
+                    event_data=event_data,
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    use_delay=False,
+                    channel_uuid=channel_uuid,
+                    agent_identifier=agent_identifier,
+                    conversation=conversation,
+                )
+                return validated_event
 
             if tool_call_data:
                 event_data["metadata"]["tool_call"] = tool_call_data

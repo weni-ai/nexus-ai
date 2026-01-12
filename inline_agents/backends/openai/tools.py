@@ -1,15 +1,55 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict
 
 import boto3
 
 if TYPE_CHECKING:
     pass
-from agents import Agent, RunContextWrapper
+from agents import Agent, ModelSettings, RunContextWrapper
+from agents.extensions.models.litellm_model import LitellmModel
 from django.conf import settings
 from openai.types.shared import Reasoning
 
 from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
+
+
+class Collaborator(Agent[Context]):  # type: ignore[misc]
+    def __init__(
+        self,
+        name: str,
+        instructions: str,
+        tools: list,
+        foundation_model: str,
+        user_model_credentials: Dict[str, str],
+        hooks,
+        model_settings: Dict[str, Any],
+        collaborator_configurations: Dict[str, Any],
+    ):
+        if collaborator_configurations.get("override_collaborators_foundation_model"):
+            model_name = collaborator_configurations.get("collaborators_foundation_model")
+        else:
+            model_name = foundation_model
+
+        super().__init__(
+            name=name,
+            instructions=instructions,
+            tools=tools,
+            model=self.get_model(model_name, user_model_credentials),
+            hooks=hooks,
+            model_settings=ModelSettings(**model_settings),
+        )
+
+    def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
+        if "litellm" in model:
+            kwargs = {
+                "model": model,
+                "api_key": user_model_credentials.get("api_key"),
+            }
+            if user_model_credentials.get("api_base"):
+                kwargs["api_base"] = user_model_credentials.get("api_base")
+
+            return LitellmModel(**kwargs)
+        return model
 
 
 class Supervisor(Agent):  # type: ignore[misc]
