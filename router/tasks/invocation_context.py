@@ -17,7 +17,6 @@ class CachedProjectData:
     inline_agent_config_dict: Optional[Dict]
     instructions: List[str]
     agent_data: Optional[Dict]
-    formatter_agent_configurations: Dict  # Always a dict (matches old @property behavior)
 
     @classmethod
     def from_pre_generation_data(
@@ -31,17 +30,6 @@ class CachedProjectData:
         agent_data: Optional[Dict],
     ) -> "CachedProjectData":
         """Create CachedProjectData from pre-generation service output."""
-        # Construct formatter_agent_configurations from cached project_dict
-        # Always return a dict with all keys (matching old @property behavior)
-        # Values may be None if not configured, but the dict is always present
-        formatter_agent_configurations = {
-            "formatter_foundation_model": project_dict.get("default_formatter_foundation_model"),
-            "formatter_instructions": project_dict.get("formatter_instructions"),
-            "formatter_reasoning_effort": project_dict.get("formatter_reasoning_effort"),
-            "formatter_reasoning_summary": project_dict.get("formatter_reasoning_summary"),
-            "formatter_send_only_assistant_message": project_dict.get("formatter_send_only_assistant_message"),
-            "formatter_tools_descriptions": project_dict.get("formatter_tools_descriptions"),
-        }
 
         return cls(
             project_dict=project_dict,
@@ -51,7 +39,6 @@ class CachedProjectData:
             inline_agent_config_dict=inline_agent_config_dict,
             instructions=instructions,
             agent_data=agent_data,
-            formatter_agent_configurations=formatter_agent_configurations,
         )
 
     def get_invoke_kwargs(self, team: List[Dict]) -> Dict:
@@ -67,9 +54,9 @@ class CachedProjectData:
             "default_supervisor_foundation_model": self.project_dict.get("default_supervisor_foundation_model"),
             "content_base_uuid": self.content_base_dict.get("uuid"),
             "business_rules": self.project_dict.get("human_support_prompt"),
+            "supervisor_uuid": self.project_dict.get("supervisor_uuid"),
             "instructions": self.instructions,
             "agent_data": self.agent_data,
-            "formatter_agent_configurations": self.formatter_agent_configurations,
             "guardrails_config": self.guardrails_config,
             "default_instructions_for_collaborators": (
                 self.inline_agent_config_dict.get("default_instructions_for_collaborators")

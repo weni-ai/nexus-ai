@@ -6,7 +6,7 @@ from django.db import models
 
 from nexus.admin_widgets import PrettyJSONWidget
 from nexus.inline_agents.backends.bedrock.models import Supervisor
-from nexus.inline_agents.backends.openai.models import OpenAISupervisor
+from nexus.inline_agents.backends.openai.models import OpenAISupervisor, SupervisorAgent
 from nexus.inline_agents.models import Agent, Guardrail, InlineAgentsConfiguration
 
 logger = logging.getLogger(__name__)
@@ -41,12 +41,30 @@ class SupervisorAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {"fields": ("name", "foundation_model", "instruction")}),
-        ("Configuration", {"fields": ("prompt_override_configuration", "action_groups", "knowledge_bases")}),
+        (
+            "Configuration",
+            {
+                "fields": (
+                    "prompt_override_configuration",
+                    "action_groups",
+                    "knowledge_bases",
+                )
+            },
+        ),
         (
             "Human Support",
-            {"fields": ("human_support_prompt", "human_support_action_groups"), "classes": ("collapse",)},
+            {
+                "fields": ("human_support_prompt", "human_support_action_groups"),
+                "classes": ("collapse",),
+            },
         ),
-        ("Components", {"fields": ("components_prompt", "components_human_support_prompt"), "classes": ("collapse",)}),
+        (
+            "Components",
+            {
+                "fields": ("components_prompt", "components_human_support_prompt"),
+                "classes": ("collapse",),
+            },
+        ),
         ("Metadata", {"fields": ("created_on",), "classes": ("collapse",)}),
     )
 
@@ -79,19 +97,36 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        ("Transcription", {"fields": ("transcription_prompt",), "classes": ("collapse",)}),
+        (
+            "Transcription",
+            {"fields": ("transcription_prompt",), "classes": ("collapse",)},
+        ),
         (
             "Configuration",
-            {"fields": ("prompt_override_configuration", "action_groups", "knowledge_bases"), "classes": ("collapse",)},
+            {
+                "fields": (
+                    "prompt_override_configuration",
+                    "action_groups",
+                    "knowledge_bases",
+                ),
+                "classes": ("collapse",),
+            },
         ),
         (
             "Human Support",
-            {"fields": ("human_support_prompt", "human_support_action_groups"), "classes": ("collapse",)},
+            {
+                "fields": ("human_support_prompt", "human_support_action_groups"),
+                "classes": ("collapse",),
+            },
         ),
         (
             "Components",
             {
-                "fields": ("components_prompt", "components_human_support_prompt", "components_instructions_up_prompt"),
+                "fields": (
+                    "components_prompt",
+                    "components_human_support_prompt",
+                    "components_instructions_up_prompt",
+                ),
                 "classes": ("collapse",),
             },
         ),
@@ -101,13 +136,28 @@ class OpenAISupervisorAdmin(admin.ModelAdmin):
 
 @admin.register(InlineAgentsConfiguration)
 class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
-    list_display = ("project", "agents_backend", "default_instructions_for_collaborators")
+    list_display = (
+        "project",
+        "agents_backend",
+        "default_instructions_for_collaborators",
+    )
     list_filter = ("agents_backend",)
     search_fields = ("project__name", "project__uuid", "agents_backend")
     ordering = ("project__name",)
     autocomplete_fields = ["project"]
 
-    fieldsets = ((None, {"fields": ("project", "agents_backend", "default_instructions_for_collaborators")}),)
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "project",
+                    "agents_backend",
+                    "default_instructions_for_collaborators",
+                )
+            },
+        ),
+    )
 
     def save_model(self, request, obj, form, change):
         """Save model and trigger cache invalidation."""
@@ -189,3 +239,79 @@ class AgentAdmin(admin.ModelAdmin):
                 logger.info(f"[Admin] Triggered cache invalidation after Agent deletion (project {project_uuid})")
             except Exception as e:
                 logger.warning(f"[Admin] Failed to trigger cache invalidation after Agent deletion: {e}")
+
+
+@admin.register(SupervisorAgent)
+class SupervisorAgentAdmin(admin.ModelAdmin):
+    list_display = ("name", "foundation_model", "created_on")
+    list_filter = ("foundation_model",)
+    search_fields = ("name", "instruction")
+    readonly_fields = ("created_on",)
+    ordering = ("-created_on",)
+
+    fieldsets = (
+        (
+            "Base Configuration",
+            {
+                "fields": (
+                    "name",
+                    "base_prompt",
+                    "model_vendor",
+                    "foundation_model",
+                    "api_key",
+                    "api_base",
+                    "api_version",
+                    "max_tokens",
+                    "collaborator_max_tokens",
+                    "tools",
+                    "knowledge_bases",
+                    "model_has_reasoning",
+                    "reasoning_effort",
+                    "reasoning_summary",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Human Support",
+            {
+                "fields": ("human_support_prompt", "human_support_tools"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Audio Orchestration",
+            {
+                "fields": ("audio_orchestration_max_tokens", "audio_orchestration_collaborator_max_tokens"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Components",
+            {
+                "fields": (
+                    "header_components_prompt",
+                    "footer_components_prompt",
+                    "formatter_agent_prompt",
+                    "formatter_agent_foundation_model",
+                    "formatter_agent_model_has_reasoning",
+                    "formatter_agent_reasoning_effort",
+                    "formatter_agent_reasoning_summary",
+                    "formatter_agent_send_only_assistant_message",
+                    "formatter_agent_tools_descriptions",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Collaborators",
+            {
+                "fields": (
+                    "collaborators_foundation_model",
+                    "override_collaborators_foundation_model",
+                    "default_instructions_for_collaborators",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+    )

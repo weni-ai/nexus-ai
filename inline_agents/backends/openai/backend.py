@@ -8,8 +8,10 @@ from typing import Any, Dict, Optional
 import openai
 import pendulum
 import sentry_sdk
+from agents import set_default_openai_client, set_default_openai_key
 from django.conf import settings
 from langfuse import get_client
+from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
 from redis import Redis
 
@@ -36,7 +38,6 @@ from nexus.inline_agents.backends.openai.repository import (
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
-from router.traces_observers.save_traces import save_inline_message_to_database
 from router.traces_observers.save_traces import save_inline_message_async
 
 logger = logging.getLogger(__name__)
@@ -176,8 +177,8 @@ class OpenAIBackend(InlineAgentsBackend):
         use_components_cached = kwargs.pop("use_components", use_components)
         rationale_switch_cached = kwargs.pop("rationale_switch", rationale_switch)
         human_support_cached = kwargs.pop("human_support", None)
-        default_supervisor_foundation_model_cached = kwargs.pop("default_supervisor_foundation_model", None)
-        formatter_agent_configurations = kwargs.pop("formatter_agent_configurations", None)
+        supervisor_uuid_cached = kwargs.pop("supervisor_uuid", None)
+
         rationale_switch = rationale_switch_cached
 
         turns_to_include = None
@@ -192,10 +193,12 @@ class OpenAIBackend(InlineAgentsBackend):
 
         # Cached data is always provided from start_inline_agents
         supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(
+            project_uuid=project_uuid,
             use_components=use_components_cached,
             human_support=human_support_cached,
-            default_supervisor_foundation_model=default_supervisor_foundation_model_cached,
+            supervisor_uuid=supervisor_uuid_cached,
         )
+        formatter_agent_configurations: Dict[str, Any] = supervisor.get("formatter_agent_configurations", None)
         data_lake_event_adapter = self._get_data_lake_event_adapter()
 
         # Ensure conversation exists and get it for data lake events (skip in preview mode)
@@ -565,6 +568,18 @@ class OpenAIBackend(InlineAgentsBackend):
                 )
         return delta_counter
 
+    def _set_openai_client(self, user_model_credentials: Dict[str, str]) -> None:
+        if user_model_credentials:
+            if user_model_credentials.get("api_base", ""):
+                client = AsyncOpenAI(
+                    base_url=user_model_credentials.get("api_base", ""),
+                    api_key=user_model_credentials.get("api_key", ""),
+                )
+                set_default_openai_client(client)
+                return
+
+            set_default_openai_key(user_model_credentials.get("api_key", ""))
+
     async def _invoke_agents_async(
         self,
         client,
@@ -593,6 +608,10 @@ class OpenAIBackend(InlineAgentsBackend):
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
             trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
             formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
+            user_model_credentials = external_team.pop("user_model_credentials", {})
+
+            self._set_openai_client(user_model_credentials)
+
             result = client.run_streamed(
                 **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
             )

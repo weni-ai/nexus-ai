@@ -6,6 +6,7 @@ from django.db import models
 from django.utils import timezone
 
 from nexus.db.models import BaseModel, SoftDeleteModel
+from nexus.inline_agents.backends.openai.models import SupervisorAgent
 from nexus.orgs.models import Org
 from nexus.users.models import User
 
@@ -68,6 +69,10 @@ class Project(BaseModel, SoftDeleteModel):
     formatter_send_only_assistant_message = models.BooleanField(default=False)
     formatter_tools_descriptions = models.JSONField(default=dict, null=True, blank=True)
     audio_orchestration_welcome_message = models.TextField(null=True, blank=True)
+
+    supervisor = models.ForeignKey(
+        SupervisorAgent, on_delete=models.SET_NULL, null=True, blank=True, related_name="project"
+    )
 
     def __str__(self):
         return f"{self.uuid} - Project: {self.name} - Org: {self.org.name}"
