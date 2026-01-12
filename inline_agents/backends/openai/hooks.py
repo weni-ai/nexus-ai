@@ -340,6 +340,8 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
 
         context_data = context.context
         project_uuid = context_data.project.get("uuid")
+        tool_info = self.hooks_state.get_tool_info(tool.name)
+        parameters = tool_info.get("parameters", [])
 
         if isinstance(result, str):
             try:
@@ -415,6 +417,44 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                         f"Project: {project_uuid}, Contact: {context_data.contact.get('urn', 'unknown')}"
                     )
 
+        # Send tool result event to data lake
+        try:
+            if isinstance(result, str):
+                try:
+                    result_json = json.loads(result)
+                    result_value = result_json
+                except (json.JSONDecodeError, TypeError):
+                    result_value = result
+            elif isinstance(result, dict):
+                result_value = result
+
+            self.data_lake_event_adapter.to_data_lake_event(
+                project_uuid=project_uuid,
+                contact_urn=context_data.contact.get("urn"),
+                tool_result_data={
+                    "tool_name": tool.name,
+                    "result": result_value,
+                    "parameters": parameters,
+                    "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
+                },
+                agent_data={"agent_name": agent.name},
+                foundation_model=agent.model,
+                backend="openai",
+                channel_uuid=context_data.contact.get("channel_uuid"),
+                conversation=self.conversation,
+            )
+        except Exception as e:
+            logger.error(f"Error sending tool result event for tool '{tool.name}': {str(e)}")
+            sentry_sdk.set_context(
+                "tool_result_event_error",
+                {
+                    "tool_name": tool.name,
+                    "project_uuid": project_uuid,
+                    "contact_urn": context_data.contact.get("urn", "unknown"),
+                },
+            )
+            sentry_sdk.capture_exception(e)
+
         agent_slug = _get_agent_slug(agent, self.hooks_state)
         # Update last_active_agent_slug when collaborator receives tool results
         self.hooks_state.last_active_agent_slug = agent_slug
@@ -427,6 +467,8 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                     "observation": {
                         "actionGroupInvocationOutput": {
                             "text": result,
+                            "tool_name": tool.name,
+                            "parameters": parameters,
                         },
                     }
                 }
@@ -596,6 +638,8 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
 
         context_data = context.context
         project_uuid = context_data.project.get("uuid")
+        tool_info = self.hooks_state.get_tool_info(tool.name)
+        parameters = tool_info.get("parameters", [])
 
         if tool.name == self.knowledge_base_tool:
             trace_data = {
@@ -609,6 +653,38 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                     }
                 },
             }
+            await self.trace_handler.send_trace(context_data, agent.name, "search_result_received", trace_data)
+
+            # Send tool result event to data lake (same condition as tool_call)
+            try:
+                result_value = result
+                if isinstance(result, str):
+                    try:
+                        result_json = json.loads(result)
+                        result_value = result_json
+                    except (json.JSONDecodeError, TypeError):
+                        result_value = result
+                elif isinstance(result, dict):
+                    result_value = result
+
+                self.data_lake_event_adapter.to_data_lake_event(
+                    project_uuid=project_uuid,
+                    contact_urn=context_data.contact.get("urn"),
+                    tool_result_data={
+                        "tool_name": tool.name,
+                        "result": result_value,
+                        "parameters": parameters,
+                        "function_name": None,  # knowledge base doesn't have function_name
+                    },
+                    agent_data={"agent_name": agent.name},
+                    foundation_model=agent.model,
+                    backend="openai",
+                    channel_uuid=context_data.contact.get("channel_uuid"),
+                    conversation=self.conversation,
+                )
+            except Exception as e:
+                logger.error(f"Error sending tool result event for tool '{tool.name}': {str(e)}")
+                sentry_sdk.capture_exception(e)
             await self.trace_handler.send_trace(
                 context_data, _get_agent_slug(agent, self.hooks_state), "search_result_received", trace_data
             )
@@ -680,6 +756,44 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                         logger.error(f"Error calling custom_event_data in SupervisorHooks: {str(e)}")
                         sentry_sdk.capture_exception(e)
 
+            try:
+                result_value = result
+                if isinstance(result, str):
+                    try:
+                        result_json = json.loads(result)
+                        result_value = result_json
+                    except (json.JSONDecodeError, TypeError):
+                        result_value = result
+                elif isinstance(result, dict):
+                    result_value = result
+
+                self.data_lake_event_adapter.to_data_lake_event(
+                    project_uuid=project_uuid,
+                    contact_urn=context_data.contact.get("urn"),
+                    tool_result_data={
+                        "tool_name": tool.name,
+                        "result": result_value,
+                        "parameters": parameters,
+                        "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
+                    },
+                    agent_data={"agent_name": agent.name},
+                    foundation_model=agent.model,
+                    backend="openai",
+                    channel_uuid=context_data.contact.get("channel_uuid"),
+                    conversation=self.conversation,
+                )
+            except Exception as e:
+                logger.error(f"Error sending tool result event for tool '{tool.name}': {str(e)}")
+                sentry_sdk.set_context(
+                    "tool_result_event_error",
+                    {
+                        "tool_name": tool.name,
+                        "project_uuid": project_uuid,
+                        "contact_urn": context_data.contact.get("urn", "unknown"),
+                    },
+                )
+                sentry_sdk.capture_exception(e)
+
             agent_slug = _get_agent_slug(agent, self.hooks_state)
             trace_data = {
                 "collaboratorName": agent_slug,
@@ -690,6 +804,8 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                         "observation": {
                             "actionGroupInvocationOutput": {
                                 "text": result,
+                                "tool_name": tool.name,
+                                "parameters": parameters,
                             },
                         }
                     }
