@@ -216,7 +216,7 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 project.save()
 
                 # Fire cache invalidation event for team update
-                event_manager.notify(
+                notify_async(
                     event="cache_invalidation:team",
                     project_uuid=project_uuid,
                 )
