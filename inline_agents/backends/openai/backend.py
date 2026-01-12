@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 import openai
 import pendulum
 import sentry_sdk
+from agents import trace
 from django.conf import settings
 from langfuse import get_client
 from openai.types.shared import Reasoning
@@ -610,48 +611,103 @@ class OpenAIBackend(InlineAgentsBackend):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
             trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
-            formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
-            result = client.run_streamed(
-                **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
-            )
-            delta_counter = 0
-            try:
-                # Only stream events if the result has stream_events method
-                stream_events = getattr(result, "stream_events", None)
-                if stream_events and callable(stream_events):
-                    async for event in stream_events():
-                        delta_counter = self._process_delta_event(
-                            event=event,
-                            grpc_client=grpc_client,
-                            grpc_msg_id=grpc_msg_id,
-                            delta_counter=delta_counter,
-                            channel_uuid=channel_uuid,
-                            contact_urn=contact_urn,
-                            project_uuid=project_uuid,
-                        )
-                        if hasattr(event, "item") and event.type == "run_item_stream_event":
-                            if event.item.type == "tool_call_item":
-                                hooks_state.tool_calls.update({event.item.raw_item.name: event.item.raw_item.arguments})
-            except openai.APIError as api_error:
-                self._sentry_capture_exception(
-                    api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True
+
+            with trace(workflow_name=project_uuid, trace_id=trace_id):
+                formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
+                result = client.run_streamed(
+                    **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
                 )
-                raise
-            except Exception as stream_error:
-                self._sentry_capture_exception(
-                    stream_error,
-                    project_uuid,
-                    contact_urn,
-                    channel_uuid,
-                    session_id,
-                    input_text,
-                    enable_logger=True,
-                )
-                # Try to get final_response even if streaming failed
+
+                delta_counter = 0
                 try:
-                    final_response = self._get_final_response(result)
-                except Exception:
-                    final_response = None
+                    # Only stream events if the result has stream_events method
+                    stream_events = getattr(result, "stream_events", None)
+                    if stream_events and callable(stream_events):
+                        async for event in stream_events():
+                            delta_counter = self._process_delta_event(
+                                event=event,
+                                grpc_client=grpc_client,
+                                grpc_msg_id=grpc_msg_id,
+                                delta_counter=delta_counter,
+                                channel_uuid=channel_uuid,
+                                contact_urn=contact_urn,
+                                project_uuid=project_uuid,
+                            )
+                            if hasattr(event, "item") and event.type == "run_item_stream_event":
+                                if event.item.type == "tool_call_item":
+                                    hooks_state.tool_calls.update(
+                                        {event.item.raw_item.name: event.item.raw_item.arguments}
+                                    )
+                except openai.APIError as api_error:
+                    self._sentry_capture_exception(
+                        api_error, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger=True
+                    )
+                    raise
+                except Exception as stream_error:
+                    self._sentry_capture_exception(
+                        stream_error,
+                        project_uuid,
+                        contact_urn,
+                        channel_uuid,
+                        session_id,
+                        input_text,
+                        enable_logger=True,
+                    )
+                    # Try to get final_response even if streaming failed
+                    try:
+                        final_response = self._get_final_response(result)
+                    except Exception:
+                        final_response = None
+
+                    root_span.update_trace(
+                        input=input_text,
+                        output=final_response,
+                        metadata={
+                            "project_uuid": project_uuid,
+                            "contact_urn": contact_urn,
+                            "channel_uuid": channel_uuid,
+                            "preview": preview,
+                            "trace_id": trace_id,
+                            "error": True,
+                            "error_type": type(stream_error).__name__,
+                            "error_message": str(stream_error)[:500],
+                        },
+                    )
+
+                    if use_components and final_response:
+                        try:
+                            formatted_response = await self._run_formatter_agent_async(
+                                final_response,
+                                session,
+                                supervisor_hooks,
+                                external_team["context"],
+                                formatter_agent_instructions,
+                                formatter_agent_configurations,
+                            )
+                            final_response = formatted_response
+                        except Exception as formatter_error:
+                            logger.error(
+                                f"[OpenAIBackend] Error in formatter agent after streaming error: {formatter_error}",
+                                extra={
+                                    "project_uuid": project_uuid,
+                                    "contact_urn": contact_urn,
+                                },
+                            )
+
+                    return final_response
+
+                final_response = self._get_final_response(result)
+
+                if use_components:
+                    formatted_response = await self._run_formatter_agent_async(
+                        final_response,
+                        session,
+                        supervisor_hooks,
+                        external_team["context"],
+                        formatter_agent_instructions,
+                        formatter_agent_configurations,
+                    )
+                    final_response = formatted_response
 
                 root_span.update_trace(
                     input=input_text,
@@ -662,60 +718,10 @@ class OpenAIBackend(InlineAgentsBackend):
                         "channel_uuid": channel_uuid,
                         "preview": preview,
                         "trace_id": trace_id,
-                        "error": True,
-                        "error_type": type(stream_error).__name__,
-                        "error_message": str(stream_error)[:500],
                     },
                 )
 
-                if use_components and final_response:
-                    try:
-                        formatted_response = await self._run_formatter_agent_async(
-                            final_response,
-                            session,
-                            supervisor_hooks,
-                            external_team["context"],
-                            formatter_agent_instructions,
-                            formatter_agent_configurations,
-                        )
-                        final_response = formatted_response
-                    except Exception as formatter_error:
-                        logger.error(
-                            f"[OpenAIBackend] Error in formatter agent after streaming error: {formatter_error}",
-                            extra={
-                                "project_uuid": project_uuid,
-                                "contact_urn": contact_urn,
-                            },
-                        )
-
-                return final_response
-
-            final_response = self._get_final_response(result)
-
-            if use_components:
-                formatted_response = await self._run_formatter_agent_async(
-                    final_response,
-                    session,
-                    supervisor_hooks,
-                    external_team["context"],
-                    formatter_agent_instructions,
-                    formatter_agent_configurations,
-                )
-                final_response = formatted_response
-
-            root_span.update_trace(
-                input=input_text,
-                output=final_response,
-                metadata={
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "channel_uuid": channel_uuid,
-                    "preview": preview,
-                    "trace_id": trace_id,
-                },
-            )
-
-        return final_response
+            return final_response
 
     def _get_final_response(self, result):
         if isinstance(result.final_output, FinalResponse):
