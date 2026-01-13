@@ -127,7 +127,7 @@ def pre_generation_task(
             "inline_agent_config_dict": cached_data.inline_agent_config_dict,
             "instructions": cached_data.instructions,
             "agent_data": cached_data.agent_data,
-            "formatter_agent_configurations": cached_data.formatter_agent_configurations,
+            # "formatter_agent_configurations": cached_data.formatter_agent_configurations,
         }
 
         logger.info(
@@ -197,5 +197,4 @@ def deserialize_cached_data(serialized_data: Dict) -> CachedProjectData:
         inline_agent_config_dict=serialized_data.get("inline_agent_config_dict"),
         instructions=serialized_data.get("instructions"),
         agent_data=serialized_data.get("agent_data"),
-        formatter_agent_configurations=serialized_data.get("formatter_agent_configurations"),
     )
