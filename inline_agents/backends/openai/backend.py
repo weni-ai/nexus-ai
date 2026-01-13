@@ -783,7 +783,7 @@ class OpenAIBackend(InlineAgentsBackend):
                         },
                     )
 
-            return final_response
+                return final_response
 
     def _get_final_response(self, result):
         if isinstance(result.final_output, FinalResponse):
