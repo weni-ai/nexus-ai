@@ -32,11 +32,19 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             instruction=instructions,
             foundation_model=settings.AWS_BEDROCK_AGENTS_MODEL_ID[0],
             backend_foundation_models=settings.DEFAULT_FOUNDATION_MODELS,
+            constants=self._process_constants(agent.get("constants", {})),
         )
         self.handle_tools(agent_obj, project, agent["tools"], files, str(project.uuid))
         self.create_credentials(agent_obj, project, agent.get("credentials", {}))
         logger.info("Created agent", extra={"agent_key": agent_key})
         return agent_obj
+
+    def _process_constants(self, constants: Dict) -> Dict:
+        """Process constants from weni-cli YAML format to stored format"""
+        processed = {}
+        for key, constant_def in constants.items():
+            processed[key] = {"value": constant_def.get("default", ""), "definition": constant_def}
+        return processed
 
     def create_credentials(self, agent: Agent, project: Project, credentials: Dict):
         created_credentials = []

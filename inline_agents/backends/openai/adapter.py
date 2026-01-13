@@ -315,6 +315,51 @@ class OpenAITeamAdapter(TeamAdapter):
 
         return tools
 
+    @staticmethod
+    def _get_agent_for_tool(function_name: str, project_uuid: str):
+        try:
+            from nexus.inline_agents.models import Version
+
+            versions = Version.objects.filter(agent__project__uuid=project_uuid).select_related("agent")
+
+            for version in versions:
+                skills = version.skills or []
+                for skill in skills:
+                    action_group_name = skill.get("actionGroupName", "")
+                    normalized_action_group = action_group_name.replace("-", "").lower()
+                    normalized_function = function_name.replace("-", "").lower()
+
+                    if normalized_action_group == normalized_function or action_group_name == function_name:
+                        return version.agent
+
+            return None
+        except Exception as e:
+            logger.warning(f"Error getting agent for tool {function_name}: {e}")
+            return None
+
+    @staticmethod
+    def _validate_tool_parameters(tool_name: str, payload: dict, tooling: dict) -> list:
+        errors = []
+
+        if not isinstance(tooling, dict):
+            return errors
+
+        if "query_params" in tooling:
+            expected_params = tooling["query_params"]
+            if isinstance(expected_params, list):
+                for param in payload.keys():
+                    if param not in expected_params:
+                        errors.append(f"Unexpected parameter '{param}' not in expected query_params: {expected_params}")
+
+        if "required_params" in tooling:
+            required = tooling["required_params"]
+            if isinstance(required, list):
+                for param in required:
+                    if param not in payload or not payload[param]:
+                        errors.append(f"Required parameter '{param}' is missing or empty")
+
+        return errors
+
     def invoke_aws_lambda(
         cls,
         function_name: str,
@@ -327,15 +372,28 @@ class OpenAITeamAdapter(TeamAdapter):
         ctx,
     ) -> str:
         try:
+            agent = cls._get_agent_for_tool(function_name, project.get("uuid"))
+            constants = {}
+            validation_errors = []
+
+            if agent:
+                if hasattr(agent, "tooling") and agent.tooling:
+                    validation_errors = cls._validate_tool_parameters(function_name, payload, agent.tooling)
+                    if validation_errors:
+                        logger.warning(
+                            f"Tool parameter validation warnings for {function_name}",
+                            extra={"errors": validation_errors, "payload": payload, "tool_name": function_name},
+                        )
+
+                if hasattr(agent, "constants") and agent.constants:
+                    constants = {
+                        k: v.get("value", "") if isinstance(v, dict) else v for k, v in agent.constants.items()
+                    }
+
             lambda_client = boto3.client("lambda", region_name="us-east-1")
             parameters = []
             for key, value in payload.items():
                 parameters.append({"name": key, "value": value})
-            # ctx.context.hooks_state.add_tool_call(
-            #     {
-            #         function_name: parameters
-            #     }
-            # )
 
             ctx.context.hooks_state.add_tool_info(function_name, {"parameters": parameters})
 
@@ -344,6 +402,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 "globals": json.dumps(globals),
                 "contact": json.dumps(contact),
                 "project": json.dumps(project),
+                "constants": json.dumps(constants),
             }
 
             payload_json = {
