@@ -256,7 +256,7 @@ class AgentGroup(models.Model):
 class AgentSystem(models.Model):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
-    metadata = models.JSONField(default=dict)
+    metadata = models.JSONField(default=dict, null=True, blank=True)
 
     def __str__(self):
         return self.name
