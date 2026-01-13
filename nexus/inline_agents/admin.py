@@ -469,6 +469,8 @@ class SupervisorAgentAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "name",
+                    "default",
+                    "public",
                     "base_prompt",
                     "model_vendor",
                     "foundation_model",
