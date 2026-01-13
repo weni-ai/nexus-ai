@@ -126,6 +126,19 @@ class PushAgents(APIView):
         return Response({})
 
 
+def _sort_mcps(mcps: list) -> list:
+    """Sort MCPs so that 'Default' appears first, then alphabetical order"""
+    if not isinstance(mcps, list):
+        return mcps
+
+    def sort_key(mcp):
+        name = mcp.get("name", "") if isinstance(mcp, dict) else ""
+        is_default = name.lower() == "default"
+        return (0 if is_default else 1, name.lower())
+
+    return sorted(mcps, key=sort_key)
+
+
 def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
     """
     Get MCPs for an agent/system combination from database models.
@@ -165,7 +178,7 @@ def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
                 config_item["default_value"] = config_option.default_value
             mcp_data["config"].append(config_item)
         result.append(mcp_data)
-    return result
+    return _sort_mcps(result)
 
 
 def get_credentials_for_mcp(agent_slug: str, system_slug: str, mcp_name: str, group_slug: str = None) -> list:
@@ -248,6 +261,11 @@ def get_all_mcps_for_agent(agent_slug: str) -> dict:
                 config_item["default_value"] = config_option.default_value
             mcp_data["config"].append(config_item)
         result[system_slug].append(mcp_data)
+
+    # Sort MCPs for each system
+    for system_slug in result:
+        result[system_slug] = _sort_mcps(result[system_slug])
+
     return result
 
 
@@ -276,6 +294,10 @@ def get_all_mcps_for_group(group_slug: str) -> dict:
                 if mcp["name"] not in existing_mcp_names:
                     result[system_slug].append(mcp)
                     existing_mcp_names.add(mcp["name"])
+
+    # Sort MCPs for each system
+    for system_slug in result:
+        result[system_slug] = _sort_mcps(result[system_slug])
 
     return result
 

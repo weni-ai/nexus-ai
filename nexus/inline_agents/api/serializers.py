@@ -232,6 +232,7 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
 
         from nexus.inline_agents.api.views import (
+            _sort_mcps,
             get_all_mcps_for_group,
             get_credentials_for_mcp,
             get_mcps_for_agent_system,
@@ -280,7 +281,8 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             payload["MCP"] = selected_mcp
             payload["selected_mcp"] = mcp_name
         else:
-            payload["MCPs"] = system_mcps
+            # Sort MCPs so that 'Default' appears first
+            payload["MCPs"] = _sort_mcps(system_mcps)
 
         variant = getattr(obj, "variant", None)
         capabilities = getattr(obj, "capabilities", [])
