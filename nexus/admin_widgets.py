@@ -18,3 +18,22 @@ class PrettyJSONWidget(Textarea):
 
         # Call the parent class's render method with the formatted JSON
         return super().render(name, value, attrs, renderer)
+
+
+class ArrayJSONWidget(PrettyJSONWidget):
+    """Widget for ArrayField containing JSONField that properly handles JSON array conversion"""
+
+    def value_from_datadict(self, data, files, name):
+        """Convert JSON string back to Python list for ArrayField"""
+        value = data.get(name)
+        if value is None:
+            return None
+        if value == "":
+            return []
+        try:
+            parsed = json.loads(value)
+            if not isinstance(parsed, list):
+                return [parsed] if parsed else []
+            return parsed
+        except (json.JSONDecodeError, TypeError):
+            return []

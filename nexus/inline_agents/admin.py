@@ -4,7 +4,7 @@ from django.contrib import admin, messages
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
-from nexus.admin_widgets import PrettyJSONWidget
+from nexus.admin_widgets import ArrayJSONWidget, PrettyJSONWidget
 from nexus.inline_agents.backends.bedrock.models import Supervisor
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor, SupervisorAgent
 from nexus.inline_agents.models import (
@@ -211,7 +211,7 @@ class VersionInline(admin.TabularInline):
     fields = ("created_on", "skills", "display_skills")
     readonly_fields = ("created_on",)
     formfield_overrides = {
-        ArrayField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
+        ArrayField: {"widget": ArrayJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
     can_delete = False
     show_change_link = True
@@ -234,7 +234,7 @@ class VersionAdmin(admin.ModelAdmin):
     autocomplete_fields = ["agent"]
 
     formfield_overrides = {
-        ArrayField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
+        ArrayField: {"widget": ArrayJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
 
     fieldsets = (
