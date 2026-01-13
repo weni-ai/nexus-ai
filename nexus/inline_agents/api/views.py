@@ -423,6 +423,13 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 }
                 variants.append(variant_data)
 
+            def sort_key(v):
+                variant = v["variant"]
+                is_default = variant is None or (isinstance(variant, str) and variant.lower() == "default")
+                return (0 if is_default else 1, variant or "")
+
+            variants.sort(key=sort_key)
+
             generic_name = base_agent.name
             if "(" in generic_name:
                 generic_name = generic_name.split("(")[0].strip()
