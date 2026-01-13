@@ -326,6 +326,9 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
 
     agents_by_group = defaultdict(list)
     for agent in agents_queryset:
+        if "concierge" in agent.slug.lower() and agent.group is None:
+            continue
+
         if agent.group:
             agents_by_group[agent.group.slug].append(agent)
         else:
@@ -423,6 +426,13 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 }
                 variants.append(variant_data)
 
+            def sort_key(v):
+                variant = v["variant"]
+                is_default = variant is None or (isinstance(variant, str) and variant.lower() == "default")
+                return (0 if is_default else 1, variant or "")
+
+            variants.sort(key=sort_key)
+
             generic_name = base_agent.name
             if "(" in generic_name:
                 generic_name = generic_name.split("(")[0].strip()
@@ -501,6 +511,7 @@ class OfficialAgentsV1(APIView):
         variant_filter = request.query_params.get("variant")
 
         agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+        agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
         if name_filter:
             agents = agents.filter(name__icontains=name_filter)
         if type_filter:
@@ -520,6 +531,7 @@ class OfficialAgentsV1(APIView):
             )
             # Fetch agents again without the systems filter to avoid queryset state issues
             agents = Agent.objects.filter(uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM)
+            agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
         if variant_filter:
             agents = agents.filter(variant__iexact=variant_filter)
 

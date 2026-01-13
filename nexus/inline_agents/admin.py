@@ -304,7 +304,21 @@ class AgentAdmin(admin.ModelAdmin):
                 "classes": ("collapse",),
             },
         ),
+        (
+            "Constants",
+            {
+                "fields": ("constants",),
+                "description": (
+                    "Constants are configurable values defined in the agent YAML file. "
+                    "These values are set via weni-cli and are read-only in the admin. "
+                    "To modify constants, update the agent definition YAML and push via weni-cli."
+                ),
+                "classes": ("collapse",),
+            },
+        ),
     )
+
+    readonly_fields = ("constants",)
 
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
