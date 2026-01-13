@@ -39,10 +39,9 @@ class SupervisorAgentCacheService:
         project_uuid: str,
         fetch_func: Callable[[str], Any],
     ) -> Optional[Dict[str, Any]]:
-        # Try to get from cache first
-        cached = self.cache_repository.get(self.cache_key)
-
-        print("TA CACHEADO:", cached)
+        # temporary disable cache
+        cached = False
+        # cached = self.cache_repository.get(self.cache_key)
 
         if cached:
             logger.debug("OpenAI Supervisor config loaded from cache")
@@ -54,9 +53,8 @@ class SupervisorAgentCacheService:
             logger.warning("No OpenAI Supervisor found in database")
             raise SupervisorAgent.DoesNotExist()
 
-        # Convert to dict and cache
         supervisor_dict = self._supervisor_to_dict(supervisor)
-        self.cache_repository.set(self.cache_key, supervisor_dict, self.SUPERVISOR_TTL)
+        # self.cache_repository.set(self.cache_key, supervisor_dict, self.SUPERVISOR_TTL)
         logger.info(f"OpenAI Supervisor config cached (ID: {supervisor.id})")
 
         return supervisor_dict
@@ -68,7 +66,6 @@ class SupervisorAgentCacheService:
         Args:
             refresh: If True, immediately refresh the cache with fresh data.
         """
-        # Delete existing cache
         self.cache_repository.delete(self.cache_key)
         logger.info("OpenAI Supervisor cache invalidated")
 
