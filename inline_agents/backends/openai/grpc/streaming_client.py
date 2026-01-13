@@ -17,7 +17,9 @@ from inline_agents.backends.openai.grpc.generated import (
 logger = logging.getLogger(__name__)
 
 
-def is_grpc_enabled(project_uuid: str) -> bool:
+def is_grpc_enabled(project_uuid: str, use_components: bool) -> bool:
+    if use_components:
+        return False
     enabled_projects = getattr(settings, "GRPC_ENABLED_PROJECTS", [])
     return str(project_uuid) in enabled_projects
 
