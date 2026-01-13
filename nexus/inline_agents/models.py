@@ -67,6 +67,7 @@ class Agent(models.Model):
     policies = models.JSONField(default=dict, null=True, blank=True)
     tooling = models.JSONField(default=dict, null=True, blank=True)
     catalog = models.JSONField(default=dict, null=True, blank=True)
+    constants = models.JSONField(default=dict, null=True, blank=True)
 
     def __str__(self):
         return self.name
