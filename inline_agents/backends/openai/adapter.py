@@ -5,6 +5,7 @@ from typing import Any, Callable, Optional
 import boto3
 import pendulum
 import sentry_sdk
+from agents import Agent, ModelSettings
 from django.conf import settings
 from django.template import Context as TemplateContext
 from django.template import Template
@@ -14,17 +15,11 @@ from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.data_lake import send_data_lake_event
 from inline_agents.backends.openai.entities import Context, HooksState
 from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
-from inline_agents.backends.openai.hooks import (
-    CollaboratorHooks,
-    RunnerHooks,
-    SupervisorHooks,
-)
+from inline_agents.backends.openai.hooks import CollaboratorHooks, RunnerHooks, SupervisorHooks
+from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
+from inline_agents.backends.openai.tools import get_model
 from inline_agents.data_lake.event_service import DataLakeEventService
-from nexus.inline_agents.models import (
-    AgentCredential,
-    Guardrail,
-    InlineAgentsConfiguration,
-)
+from nexus.inline_agents.models import AgentCredential, Guardrail, InlineAgentsConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -185,13 +180,13 @@ class OpenAITeamAdapter(TeamAdapter):
                 turn_off_rationale=turn_off_rationale,
             )
 
-            from agents import Agent, ModelSettings
+            model = get_model(agent.get("foundationModel", settings.OPENAI_AGENTS_FOUNDATION_MODEL), use_components)
 
             openai_agent = Agent[Context](
                 name=agent_name,
                 instructions=agent_instructions,
                 tools=cls._get_tools(agent["actionGroups"]),
-                model=agent.get("foundationModel", settings.OPENAI_AGENTS_FOUNDATION_MODEL),
+                model=model,
                 hooks=hooks,
                 model_settings=ModelSettings(
                     max_tokens=max_tokens,
@@ -212,8 +207,6 @@ class OpenAITeamAdapter(TeamAdapter):
 
         supervisor_tools = cls._get_tools(supervisor["tools"])
         supervisor_tools.extend(agents_as_tools)
-
-        from inline_agents.backends.openai.tools import Supervisor as SupervisorAgent
 
         supervisor_agent = SupervisorAgent(
             name="manager",
@@ -328,11 +321,6 @@ class OpenAITeamAdapter(TeamAdapter):
             parameters = []
             for key, value in payload.items():
                 parameters.append({"name": key, "value": value})
-            # ctx.context.hooks_state.add_tool_call(
-            #     {
-            #         function_name: parameters
-            #     }
-            # )
 
             ctx.context.hooks_state.add_tool_info(function_name, {"parameters": parameters})
 
