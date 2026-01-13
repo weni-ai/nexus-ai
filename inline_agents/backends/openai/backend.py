@@ -310,7 +310,7 @@ class OpenAIBackend(InlineAgentsBackend):
             )
 
         grpc_client, grpc_msg_id = None, None
-        if not preview and not use_components:
+        if not preview:
             grpc_client, grpc_msg_id = self._initialize_grpc_client(
                 channel_uuid=channel_uuid,
                 contact_urn=contact_urn,
@@ -318,6 +318,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 project_uuid=project_uuid,
                 language=language,
                 channel_type=channel_type,
+                use_components=use_components,
             )
 
         result = asyncio.run(
@@ -487,9 +488,10 @@ class OpenAIBackend(InlineAgentsBackend):
         project_uuid: str,
         language: str,
         channel_type: str = "",
+        use_components: bool = False,
     ) -> tuple[Optional[MessageStreamingClient], Optional[str]]:
         """Initialize gRPC client and send setup message."""
-        if not is_grpc_enabled(project_uuid) or not contact_urn:
+        if not is_grpc_enabled(project_uuid, use_components) or not contact_urn:
             return None, None
 
         if not channel_type:

@@ -36,9 +36,10 @@ class SendMessageHTTPClient(DirectMessage):
 
 
 class WhatsAppBroadcastHTTPClient(DirectMessage):
-    def __init__(self, host: str, access_token: str) -> None:
+    def __init__(self, host: str, access_token: str, use_grpc: bool = False) -> None:
         self.__host = host
         self.__access_token = access_token
+        self.__use_grpc = use_grpc
 
     def fix_json_string(self, json_str):
         """
@@ -118,7 +119,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
             msgs = self.format_message_for_openai(msg, urns, project_uuid, user, full_chunks)
 
         for msg in msgs:
-            response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid)
+            response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid, use_grpc=self.__use_grpc)
             try:
                 response.raise_for_status()
             except Exception as error:

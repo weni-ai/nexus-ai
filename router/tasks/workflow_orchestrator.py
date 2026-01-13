@@ -225,6 +225,7 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
         preview=ctx.preview,
         multi_agents=True,
         project_use_components=ctx.cached_data.project_dict.get("use_components", False),
+        project_uuid=ctx.project_uuid,
     )
 
     return result
