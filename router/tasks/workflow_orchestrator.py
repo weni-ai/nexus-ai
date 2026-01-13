@@ -140,7 +140,9 @@ def _finalize_workflow(ctx: WorkflowContext, status: str = "completed") -> None:
     )
     ctx.task_manager.clear_workflow_state(ctx.project_uuid, ctx.contact_urn)
 
-    logger.info(f"[Workflow] {status.capitalize()} workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}")
+    logger.info(
+        f"[Workflow] {status.capitalize()} workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
+    )
 
 
 def _handle_workflow_error(ctx: WorkflowContext, error: Exception) -> None:
@@ -201,7 +203,9 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
 
     Returns the pre-generation result dict with cached_data and agents_backend.
     """
-    logger.info(f"[Workflow] Executing pre-generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}")
+    logger.info(
+        f"[Workflow] Executing pre-generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
+    )
 
     # Call directly using .run() to avoid Celery's "never call .get() within a task" error
     result = pre_generation_task.run(
@@ -213,7 +217,9 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
 
     if result["status"] == "failed":
         error_msg = result.get("error", "Unknown error")
-        logger.error(f"[Workflow] Pre-generation failed for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}: {error_msg}")
+        logger.error(
+            f"[Workflow] Pre-generation failed for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}: {error_msg}"
+        )
         raise Exception(f"Pre-generation failed: {error_msg}")
 
     # Populate context with results
@@ -246,7 +252,9 @@ def _run_generation(ctx: WorkflowContext) -> str:
         task_id=ctx.task_id,
     )
 
-    logger.info(f"[Workflow] Executing generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}")
+    logger.info(
+        f"[Workflow] Executing generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
+    )
 
     # Preprocess message
     processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(ctx.message, ctx.agents_backend)
@@ -286,7 +294,9 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
         status="post_generation",
     )
 
-    logger.info(f"[Workflow] Executing post-generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}")
+    logger.info(
+        f"[Workflow] Executing post-generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
+    )
 
     message_obj = _create_message_object(ctx.message)
 
