@@ -74,6 +74,8 @@ INSTALLED_APPS = [
     "nexus.inline_agents",
     "nexus.reports",
     "nexus.analytics",
+    # Observer registration - MUST be last to ensure all apps are loaded first
+    "nexus.observers",
 ]
 
 MIDDLEWARE = [
@@ -634,6 +636,8 @@ LOCKED_FOUNDATION_MODELS = env.list("LOCKED_FOUNDATION_MODELS", default=[])
 CELERY_WORKER_PREFETCH_MULTIPLIER = env.int("CELERY_WORKER_PREFETCH_MULTIPLIER", 1)
 PROJECTS_WITH_SPECIAL_SESSION_ID = env.list("PROJECTS_WITH_SPECIAL_SESSION_ID", [])
 PROJECTS_WITH_LARGE_DATASOURCE = env.list("PROJECTS_WITH_LARGE_DATASOURCE", [])
+
+WORKFLOW_ARCHITECTURE_PROJECTS = env.list("WORKFLOW_ARCHITECTURE_PROJECTS", default=[])
 
 
 def get_datasource_id(project_uuid: str | None) -> str:

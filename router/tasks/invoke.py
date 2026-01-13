@@ -363,12 +363,27 @@ def start_inline_agents(
     task_manager: Optional[RedisTaskManager] = None,
 ) -> bool:  # pragma: no cover
     _apm_set_context(message=message, preview=preview)
+    project_uuid = message.get("project_uuid")
+
+    # Feature flag: list of project UUIDs that use new workflow architecture
+    # Set WORKFLOW_ARCHITECTURE_PROJECTS=["uuid1", "uuid2"] or ["*"] for all
+    workflow_projects = getattr(settings, "WORKFLOW_ARCHITECTURE_PROJECTS", [])
+    use_workflow = project_uuid in workflow_projects or "*" in workflow_projects
+
+    if use_workflow:
+        from router.tasks.workflow_orchestrator import inline_agent_workflow
+
+        # Call directly using .run() to avoid Celery's "never call .get() within a task" error
+        return inline_agent_workflow.run(
+            message,
+            preview=preview,
+            language=language,
+            user_email=user_email,
+        )
 
     task_manager = task_manager or get_task_manager()
 
     try:
-        project_uuid = message.get("project_uuid")
-
         TypingUsecase().send_typing_message(
             contact_urn=message.get("contact_urn"),
             msg_external_id=message.get("msg_event", {}).get("msg_external_id", ""),
