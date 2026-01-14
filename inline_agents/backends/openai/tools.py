@@ -4,7 +4,7 @@ import boto3
 
 if TYPE_CHECKING:
     pass
-from agents import Agent, ModelSettings, RunContextWrapper
+from agents import Agent, ModelSettings, RunContextWrapper, function_tool
 from agents.extensions.models.litellm_model import LitellmModel
 from django.conf import settings
 from openai.types.shared import Reasoning
@@ -13,7 +13,21 @@ from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
 
 
-class Collaborator(Agent[Context]):  # type: ignore[misc]
+class AgentModel:
+    def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
+        if "litellm" in model:
+            kwargs = {
+                "model": model,
+                "api_key": user_model_credentials.get("api_key"),
+            }
+            if user_model_credentials.get("api_base"):
+                kwargs["base_url"] = user_model_credentials.get("api_base")
+
+            return LitellmModel(**kwargs)
+        return model
+
+
+class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
     def __init__(
         self,
         name: str,
@@ -24,6 +38,7 @@ class Collaborator(Agent[Context]):  # type: ignore[misc]
         hooks,
         model_settings: Dict[str, Any],
         collaborator_configurations: Dict[str, Any],
+        model_has_reasoning: bool = False,
     ):
         if collaborator_configurations.get("override_collaborators_foundation_model"):
             model_name = collaborator_configurations.get("collaborators_foundation_model")
@@ -39,20 +54,8 @@ class Collaborator(Agent[Context]):  # type: ignore[misc]
             model_settings=ModelSettings(**model_settings),
         )
 
-    def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
-        if "litellm" in model:
-            kwargs = {
-                "model": model,
-                "api_key": user_model_credentials.get("api_key"),
-            }
-            if user_model_credentials.get("api_base"):
-                kwargs["api_base"] = user_model_credentials.get("api_base")
 
-            return LitellmModel(**kwargs)
-        return model
-
-
-class Supervisor(Agent):  # type: ignore[misc]
+class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
     def function_tools(self) -> list:
         return [self.knowledge_base_bedrock]
 
@@ -68,43 +71,23 @@ class Supervisor(Agent):  # type: ignore[misc]
         preview: bool = False,
         max_tokens: int | None = None,
         use_components: bool = False,
+        user_model_credentials: Dict[str, str] = None,
+        model_has_reasoning: bool = False,
+        reasoning_effort: str = "",
+        reasoning_summary: str = "",
     ):
         tools.extend(self.function_tools())
-
-        reasoning_effort = settings.OPENAI_AGENTS_REASONING_EFFORT
-        reasoning_summary = settings.OPENAI_AGENTS_REASONING_SUMMARY
         parallel_tool_calls = settings.OPENAI_AGENTS_PARALLEL_TOOL_CALLS
 
-        from agents import ModelSettings
+        model = self.get_model(model, user_model_credentials)
 
-        if model in settings.MODELS_WITH_REASONING and reasoning_effort:
-            super().__init__(
-                name=name,
-                instructions=instructions,
-                model=model,
-                tools=tools,
-                hooks=hooks,
-                model_settings=ModelSettings(
-                    max_tokens=max_tokens,
-                    reasoning=Reasoning(effort=reasoning_effort, summary=reasoning_summary),
-                    parallel_tool_calls=parallel_tool_calls,
-                ),
-            )
-            return
+        model_settings_kwargs = {
+            "max_tokens": max_tokens,
+            "parallel_tool_calls": parallel_tool_calls,
+        }
 
-        if use_components:
-            super().__init__(
-                name=name,
-                instructions=instructions,
-                model=model,
-                tools=tools,
-                hooks=hooks,
-                model_settings=ModelSettings(
-                    max_tokens=max_tokens,
-                    parallel_tool_calls=parallel_tool_calls,
-                ),
-            )
-            return
+        if model_has_reasoning and reasoning_effort:
+            model_settings_kwargs["reasoning"] = Reasoning(effort=reasoning_effort, summary=reasoning_summary)
 
         super().__init__(
             name=name,
@@ -112,15 +95,8 @@ class Supervisor(Agent):  # type: ignore[misc]
             model=model,
             tools=tools,
             hooks=hooks,
-            model_settings=ModelSettings(
-                max_tokens=max_tokens,
-                parallel_tool_calls=parallel_tool_calls,
-            ),
+            model_settings=ModelSettings(**model_settings_kwargs),
         )
-
-        return
-
-    from agents import function_tool
 
     @function_tool
     def knowledge_base_bedrock(ctx: RunContextWrapper[Context], question: str) -> str:
