@@ -6,7 +6,7 @@ from nexus.inline_agents.models import Agent, AgentCredential, IntegratedAgent
 class IntegratedAgentSerializer(serializers.ModelSerializer):
     class Meta:
         model = IntegratedAgent
-        fields = ["uuid", "id", "name", "skills", "is_official", "description"]
+        fields = ["uuid", "id", "name", "skills", "is_official", "description", "mcp"]
 
     uuid = serializers.UUIDField(source="agent.uuid")
     name = serializers.SerializerMethodField("get_name")
@@ -14,6 +14,7 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
     skills = serializers.SerializerMethodField("get_skills")
     description = serializers.SerializerMethodField("get_description")
     is_official = serializers.SerializerMethodField("get_is_official")
+    mcp = serializers.SerializerMethodField("get_mcp")
 
     def get_id(self, obj):
         return obj.agent.slug
@@ -31,6 +32,19 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
 
     def get_is_official(self, obj):
         return obj.agent.is_official
+
+    def get_mcp(self, obj):
+        """Return MCP name and config from IntegratedAgent metadata"""
+        if not obj.metadata:
+            return None
+
+        mcp_name = obj.metadata.get("mcp")
+        mcp_config = obj.metadata.get("mcp_config", {})
+
+        if not mcp_name:
+            return None
+
+        return {"name": mcp_name, "config": mcp_config}
 
 
 class AgentSerializer(serializers.ModelSerializer):
