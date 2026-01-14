@@ -586,8 +586,8 @@ class OpenAIBackend(InlineAgentsBackend):
                 )
         return delta_counter
 
-    def _set_openai_client(self, user_model_credentials: Dict[str, str]) -> None:
-        if user_model_credentials:
+    def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
+        if user_model_credentials and model_vendor.lower() == "openai":
             api_key = user_model_credentials.get("api_key", "")
             base_url = user_model_credentials.get("api_base", "")
 
@@ -732,8 +732,9 @@ class OpenAIBackend(InlineAgentsBackend):
             trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
             formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
             user_model_credentials = external_team.pop("user_model_credentials", {})
+            model_vendor = external_team.pop("model_vendor", "")
 
-            self._set_openai_client(user_model_credentials)
+            self._set_openai_client(user_model_credentials, model_vendor)
 
             stream_error = None
             with trace(workflow_name=project_uuid, trace_id=trace_id):
