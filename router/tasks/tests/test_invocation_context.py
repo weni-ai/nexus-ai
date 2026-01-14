@@ -4,76 +4,6 @@ from router.tasks.invocation_context import CachedProjectData
 
 
 class TestCachedProjectDataEdgeCases(TestCase):
-    def test_formatter_config_always_dict_even_when_not_configured(self):
-        result = CachedProjectData.from_pre_generation_data(
-            project_dict={
-                "uuid": "test-uuid",
-                "use_components": True,
-                "default_formatter_foundation_model": None,
-                "formatter_instructions": None,
-            },
-            content_base_dict={"uuid": "cb-uuid"},
-            team=[],
-            guardrails_config={},
-            inline_agent_config_dict=None,
-            instructions=[],
-            agent_data=None,
-        )
-
-        self.assertIsNotNone(result.formatter_agent_configurations)
-        self.assertIsInstance(result.formatter_agent_configurations, dict)
-
-        expected_keys = [
-            "formatter_foundation_model",
-            "formatter_instructions",
-            "formatter_reasoning_effort",
-            "formatter_reasoning_summary",
-            "formatter_send_only_assistant_message",
-            "formatter_tools_descriptions",
-        ]
-        for key in expected_keys:
-            self.assertIn(key, result.formatter_agent_configurations)
-
-    def test_formatter_config_created_when_model_provided(self):
-        result = CachedProjectData.from_pre_generation_data(
-            project_dict={
-                "uuid": "test-uuid",
-                "use_components": True,
-                "default_formatter_foundation_model": "gpt-4",
-                "formatter_instructions": None,
-            },
-            content_base_dict={"uuid": "cb-uuid"},
-            team=[],
-            guardrails_config={},
-            inline_agent_config_dict=None,
-            instructions=[],
-            agent_data=None,
-        )
-
-        self.assertIsNotNone(result.formatter_agent_configurations)
-        self.assertEqual(result.formatter_agent_configurations.get("formatter_foundation_model"), "gpt-4")
-
-    def test_formatter_config_created_when_instructions_provided(self):
-        result = CachedProjectData.from_pre_generation_data(
-            project_dict={
-                "uuid": "test-uuid",
-                "use_components": True,
-                "default_formatter_foundation_model": None,
-                "formatter_instructions": "Custom formatting instructions",
-            },
-            content_base_dict={"uuid": "cb-uuid"},
-            team=[],
-            guardrails_config={},
-            inline_agent_config_dict=None,
-            instructions=[],
-            agent_data=None,
-        )
-
-        self.assertIsNotNone(result.formatter_agent_configurations)
-        self.assertEqual(
-            result.formatter_agent_configurations.get("formatter_instructions"), "Custom formatting instructions"
-        )
-
     def test_agent_data_none_passed_through(self):
         result = CachedProjectData.from_pre_generation_data(
             project_dict={"uuid": "test-uuid"},
@@ -107,26 +37,6 @@ class TestCachedProjectDataEdgeCases(TestCase):
 
         self.assertEqual(result.agent_data, agent_data)
 
-    def test_get_invoke_kwargs_includes_formatter_dict(self):
-        cached_data = CachedProjectData(
-            project_dict={"use_components": True},
-            content_base_dict={"uuid": "cb-uuid"},
-            team=[],
-            guardrails_config={},
-            inline_agent_config_dict=None,
-            instructions=[],
-            agent_data=None,
-            formatter_agent_configurations={
-                "formatter_foundation_model": None,
-                "formatter_instructions": None,
-            },
-        )
-
-        kwargs = cached_data.get_invoke_kwargs(team=[])
-
-        self.assertIn("formatter_agent_configurations", kwargs)
-        self.assertIsInstance(kwargs["formatter_agent_configurations"], dict)
-
     def test_get_invoke_kwargs_with_none_agent_data(self):
         cached_data = CachedProjectData(
             project_dict={},
@@ -136,7 +46,6 @@ class TestCachedProjectDataEdgeCases(TestCase):
             inline_agent_config_dict=None,
             instructions=[],
             agent_data=None,
-            formatter_agent_configurations=None,
         )
 
         kwargs = cached_data.get_invoke_kwargs(team=[])
@@ -162,7 +71,6 @@ class TestCachedProjectDataEdgeCases(TestCase):
             inline_agent_config_dict={"default_instructions_for_collaborators": "Be helpful"},
             instructions=["Instruction 1", "Instruction 2"],
             agent_data={"name": "Test Agent"},
-            formatter_agent_configurations={"formatter_foundation_model": "gpt-4"},
         )
 
         kwargs = cached_data.get_invoke_kwargs(team=[{"name": "agent1"}])
@@ -180,7 +88,6 @@ class TestCachedProjectDataEdgeCases(TestCase):
             "business_rules",
             "instructions",
             "agent_data",
-            "formatter_agent_configurations",
             "guardrails_config",
             "default_instructions_for_collaborators",
         ]
@@ -201,7 +108,6 @@ class TestCachedProjectDataEdgeCases(TestCase):
             inline_agent_config_dict=None,
             instructions=[],
             agent_data=None,
-            formatter_agent_configurations=None,
         )
 
         kwargs = cached_data.get_invoke_kwargs(team=[])

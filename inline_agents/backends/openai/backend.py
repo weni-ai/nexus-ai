@@ -33,7 +33,7 @@ from inline_agents.backends.openai.sessions import (
     make_session_factory,
 )
 from nexus.inline_agents.backends.openai.repository import (
-    OpenAISupervisorRepository,
+    SupervisorAgentRepository,
 )
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIBackend(InlineAgentsBackend):
-    supervisor_repository = OpenAISupervisorRepository
+    supervisor_repository = SupervisorAgentRepository
     team_adapter = OpenAITeamAdapter
 
     def __init__(self):

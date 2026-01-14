@@ -1,8 +1,9 @@
 import pytest
 from django.test import TestCase
 
-from inline_agents.backends.openai.backend import OpenAIBackend, OpenAISupervisorRepository
+from inline_agents.backends.openai.backend import OpenAIBackend
 from inline_agents.backends.openai.tests.openai_factory import OpenAISupervisorFactory
+from nexus.inline_agents.backends.openai.repository import OpenAISupervisorRepository
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
