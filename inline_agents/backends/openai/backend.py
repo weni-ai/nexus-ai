@@ -729,7 +729,9 @@ class OpenAIBackend(InlineAgentsBackend):
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
-            trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
+            trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__").replace(
+                "@", "_at_"
+            )[:64]
             formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
             user_model_credentials = external_team.pop("user_model_credentials", {})
             model_vendor = external_team.pop("model_vendor", "")
