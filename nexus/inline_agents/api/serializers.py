@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from nexus.inline_agents.models import Agent, AgentCredential, IntegratedAgent
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, IntegratedAgent
 
 
 class IntegratedAgentSerializer(serializers.ModelSerializer):
@@ -44,7 +44,35 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         if not mcp_name:
             return None
 
-        return {"name": mcp_name, "config": mcp_config}
+        config_with_labels = {}
+        system_info = None
+
+        mcp = (
+            MCP.objects.filter(agent=obj.agent, name=mcp_name, is_active=True)
+            .select_related("system")
+            .prefetch_related("config_options")
+            .first()
+        )
+
+        if mcp:
+            if mcp_config:
+                name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
+                for name, value in mcp_config.items():
+                    label = name_to_label.get(name, name)
+                    config_with_labels[label] = value
+            else:
+                config_with_labels = mcp_config
+
+            if mcp.system:
+                system_info = {"name": mcp.system.name, "slug": mcp.system.slug}
+        else:
+            config_with_labels = mcp_config
+
+        result = {"name": mcp_name, "config": config_with_labels}
+        if system_info:
+            result["system"] = system_info
+
+        return result
 
 
 class AgentSerializer(serializers.ModelSerializer):
