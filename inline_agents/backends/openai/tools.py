@@ -16,8 +16,9 @@ from nexus.utils import get_datasource_id
 class AgentModel:
     def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
         if "litellm" in model:
+            cleaned_model = model.replace("litellm/", "")
             kwargs = {
-                "model": model,
+                "model": cleaned_model,
                 "api_key": user_model_credentials.get("api_key"),
             }
             if user_model_credentials.get("api_base"):
