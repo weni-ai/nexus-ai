@@ -248,6 +248,7 @@ class OpenAITeamAdapter(TeamAdapter):
             ),
             "formatter_agent_instructions": supervisor.get("formatter_agent_components_instructions", ""),
             "user_model_credentials": user_model_credentials,
+            "model_vendor": supervisor.get("model_vendor", ""),
         }
 
     @classmethod
