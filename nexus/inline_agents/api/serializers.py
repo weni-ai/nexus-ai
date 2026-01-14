@@ -1,12 +1,12 @@
 from rest_framework import serializers
 
-from nexus.inline_agents.models import Agent, AgentCredential, IntegratedAgent
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, IntegratedAgent
 
 
 class IntegratedAgentSerializer(serializers.ModelSerializer):
     class Meta:
         model = IntegratedAgent
-        fields = ["uuid", "id", "name", "skills", "is_official", "description"]
+        fields = ["uuid", "id", "name", "skills", "is_official", "description", "mcp"]
 
     uuid = serializers.UUIDField(source="agent.uuid")
     name = serializers.SerializerMethodField("get_name")
@@ -14,6 +14,7 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
     skills = serializers.SerializerMethodField("get_skills")
     description = serializers.SerializerMethodField("get_description")
     is_official = serializers.SerializerMethodField("get_is_official")
+    mcp = serializers.SerializerMethodField("get_mcp")
 
     def get_id(self, obj):
         return obj.agent.slug
@@ -31,6 +32,47 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
 
     def get_is_official(self, obj):
         return obj.agent.is_official
+
+    def get_mcp(self, obj):
+        """Return MCP name and config from IntegratedAgent metadata"""
+        if not obj.metadata:
+            return None
+
+        mcp_name = obj.metadata.get("mcp")
+        mcp_config = obj.metadata.get("mcp_config", {})
+
+        if not mcp_name:
+            return None
+
+        config_with_labels = {}
+        system_info = None
+
+        mcp = (
+            MCP.objects.filter(agent=obj.agent, name=mcp_name, is_active=True)
+            .select_related("system")
+            .prefetch_related("config_options")
+            .first()
+        )
+
+        if mcp:
+            if mcp_config:
+                name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
+                for name, value in mcp_config.items():
+                    label = name_to_label.get(name, name)
+                    config_with_labels[label] = value
+            else:
+                config_with_labels = mcp_config
+
+            if mcp.system:
+                system_info = {"name": mcp.system.name, "slug": mcp.system.slug}
+        else:
+            config_with_labels = mcp_config
+
+        result = {"name": mcp_name, "config": config_with_labels}
+        if system_info:
+            result["system"] = system_info
+
+        return result
 
 
 class AgentSerializer(serializers.ModelSerializer):
