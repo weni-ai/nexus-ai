@@ -1,30 +1,21 @@
-"""
-Generation Celery Task
-
-This task handles ONLY the core agent invocation - nothing else.
-
-All preprocessing (attachments, products, message formatting) and
-invoke_kwargs building is done in pre_generation_task.
-
-This isolation allows precise measurement of model latency.
-"""
-
 import logging
 from typing import Dict, Optional
 
 import sentry_sdk
 
 from inline_agents.backends import BackendsRegistry
+from inline_agents.backends.openai.redis_pool import get_redis_client
 from nexus.celery import app as celery_app
 from router.tasks.invoke import ThrottlingException
 from router.tasks.redis_task_manager import RedisTaskManager
 
 logger = logging.getLogger(__name__)
 
+WORKFLOW_BACKEND = "OpenAIWorkflowBackend"
+
 
 def get_task_manager() -> RedisTaskManager:
-    """Get the default task manager instance."""
-    return RedisTaskManager()
+    return RedisTaskManager(redis_client=get_redis_client())
 
 
 @celery_app.task(
@@ -45,12 +36,6 @@ def generation_task(
     contact_urn: str,
     workflow_id: Optional[str] = None,
 ) -> Dict:
-    """
-    Generation Task - Pure model invocation.
-
-    This task does ONE thing: call backend.invoke_agents().
-    All preprocessing is done in pre_generation_task.
-    """
     task_manager = get_task_manager()
 
     if workflow_id and contact_urn:
@@ -63,8 +48,7 @@ def generation_task(
         )
 
     try:
-        # Get backend and invoke - THE ONLY OPERATION
-        backend = BackendsRegistry.get_backend(agents_backend)
+        backend = BackendsRegistry.get_backend(WORKFLOW_BACKEND)
         response = backend.invoke_agents(**invoke_kwargs)
 
         logger.info(f"[Generation] Success for project {project_uuid}, contact {contact_urn}")
