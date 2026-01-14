@@ -62,7 +62,7 @@ class SupervisorAgent(models.Model):
     )
     name = models.CharField(max_length=255)
 
-    base_prompt = models.TextField()
+    base_prompt = models.TextField(null=True, blank=True)
 
     foundation_model = models.CharField(max_length=255)
     model_vendor = models.CharField(max_length=255)
@@ -76,22 +76,22 @@ class SupervisorAgent(models.Model):
     collaborator_max_tokens = models.PositiveIntegerField(default=2048)
     reasoning_effort = models.CharField(max_length=50, blank=True, null=True)
     reasoning_summary = models.CharField(max_length=50, blank=True, null=True, default="auto")
-    tools = models.JSONField()
-    knowledge_bases = models.JSONField()
+    tools = models.JSONField(null=True, blank=True)
+    knowledge_bases = models.JSONField(null=True, blank=True)
 
     # human support
-    human_support_prompt = models.TextField()
-    human_support_tools = models.JSONField()
+    human_support_prompt = models.TextField(null=True, blank=True)
+    human_support_tools = models.JSONField(null=True, blank=True)
 
     # audio orchestration
     audio_orchestration_max_tokens = models.PositiveIntegerField(default=2048)
     audio_orchestration_collaborator_max_tokens = models.PositiveIntegerField(default=2048)
 
     # components
-    header_components_prompt = models.TextField()
-    footer_components_prompt = models.TextField()
+    header_components_prompt = models.TextField(null=True, blank=True)
+    footer_components_prompt = models.TextField(null=True, blank=True)
     component_tools_descriptions = models.JSONField(default=dict, null=True, blank=True)
-    formatter_agent_prompt = models.TextField()
+    formatter_agent_prompt = models.TextField(null=True, blank=True)
     formatter_agent_reasoning_effort = models.CharField(max_length=50, blank=True, null=True)
     formatter_agent_reasoning_summary = models.CharField(max_length=50, blank=True, null=True, default="auto")
     formatter_agent_send_only_assistant_message = models.BooleanField(default=False)
@@ -103,18 +103,7 @@ class SupervisorAgent(models.Model):
     # collaboratos
     collaborators_foundation_model = models.CharField(max_length=255)
     override_collaborators_foundation_model = models.BooleanField(default=False)
-    default_instructions_for_collaborators = models.TextField()
+    default_instructions_for_collaborators = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return self.name
-
-    @property
-    def formatter_agent_configurations(self) -> dict[str, str]:
-        return {
-            "formatter_foundation_model": self.default_formatter_foundation_model,
-            "formatter_instructions": self.formatter_instructions,
-            "formatter_reasoning_effort": self.formatter_reasoning_effort,
-            "formatter_reasoning_summary": self.formatter_reasoning_summary,
-            "formatter_send_only_assistant_message": self.formatter_send_only_assistant_message,
-            "formatter_tools_descriptions": self.formatter_tools_descriptions,
-        }

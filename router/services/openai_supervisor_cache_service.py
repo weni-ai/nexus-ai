@@ -59,19 +59,9 @@ class SupervisorAgentCacheService:
 
         return supervisor_dict
 
-    def invalidate_cache(self, refresh: bool = True) -> None:
-        """
-        Invalidate the OpenAI Supervisor cache.
-
-        Args:
-            refresh: If True, immediately refresh the cache with fresh data.
-        """
+    def invalidate_cache(self) -> None:
         self.cache_repository.delete(self.cache_key)
         logger.info("OpenAI Supervisor cache invalidated")
-
-        # Optionally refresh the cache
-        if refresh:
-            self.get_supervisor_config()
 
     def get_cache_info(self) -> Dict[str, Any]:
         """
