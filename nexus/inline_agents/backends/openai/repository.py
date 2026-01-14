@@ -51,6 +51,12 @@ class OpenAISupervisorRepository(SupervisorRepository):
             else {}
         )
 
+        model_settings: Dict[str, Any] = {
+            "model_has_reasoning": supervisor_data["model_has_reasoning"],
+            "reasoning_effort": supervisor_data["reasoning_effort"],
+            "reasoning_summary": supervisor_data["reasoning_summary"],
+        }
+
         supervisor_dict = {
             "instruction": supervisor_data["base_prompt"],
             "use_components": use_components,
@@ -61,6 +67,7 @@ class OpenAISupervisorRepository(SupervisorRepository):
             "human_support_instructions": supervisor_data["human_support_prompt"],
             "tools": cls._get_supervisor_agent_tools(supervisor=supervisor_data, use_human_support=use_human_support),
             "foundation_model": supervisor_data["foundation_model"],
+            "model_settings": model_settings,
             "knowledge_bases": supervisor_data["knowledge_bases"],
             "max_tokens": {
                 "supervisor": supervisor_data["max_tokens"],

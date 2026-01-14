@@ -113,6 +113,7 @@ class OpenAITeamAdapter(TeamAdapter):
         agent_data: dict = None,
         **kwargs,
     ) -> list[dict]:
+        supervisor_model_settings = supervisor.get("model_settings", {})
         user_model_credentials = supervisor.get("user_model_credentials", {})
 
         agents_as_tools = []
@@ -227,6 +228,10 @@ class OpenAITeamAdapter(TeamAdapter):
             preview=preview,
             max_tokens=max_tokens_supervisor,
             use_components=use_components,
+            user_model_credentials=user_model_credentials,
+            model_has_reasoning=supervisor_model_settings.get("model_has_reasoning", False),
+            reasoning_effort=supervisor_model_settings.get("reasoning_effort", ""),
+            reasoning_summary=supervisor_model_settings.get("reasoning_summary", ""),
         )
 
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
