@@ -21,9 +21,11 @@ from inline_agents.backends.openai.hooks import (
 )
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
+    MCP,
     AgentCredential,
     Guardrail,
     InlineAgentsConfiguration,
+    IntegratedAgent,
 )
 
 logger = logging.getLogger(__name__)
@@ -372,6 +374,8 @@ class OpenAITeamAdapter(TeamAdapter):
             agent = cls._get_agent_for_tool(function_name, project.get("uuid"))
             constants = {}
             validation_errors = []
+            mcp_credentials = {}
+            mcp_config = {}
 
             if agent:
                 if hasattr(agent, "tooling") and agent.tooling:
@@ -387,6 +391,27 @@ class OpenAITeamAdapter(TeamAdapter):
                         k: v.get("value", "") if isinstance(v, dict) else v for k, v in agent.constants.items()
                     }
 
+                integrated_agent = IntegratedAgent.objects.filter(
+                    agent=agent, project__uuid=project.get("uuid")
+                ).first()
+
+                if integrated_agent and integrated_agent.metadata:
+                    mcp_name = integrated_agent.metadata.get("mcp")
+                    mcp_config = integrated_agent.metadata.get("mcp_config", {})
+
+                    if mcp_name:
+                        mcp = MCP.objects.filter(agent=agent, name=mcp_name, is_active=True).first()
+                        if mcp:
+                            template_keys = {t.name for t in mcp.credential_templates.all()}
+                            for key in template_keys:
+                                if key in credentials:
+                                    mcp_credentials[key] = credentials[key]
+
+                            if isinstance(mcp_config, dict):
+                                mcp_credentials.update(mcp_config)
+
+            merged_credentials = {**credentials, **mcp_credentials}
+
             lambda_client = boto3.client("lambda", region_name="us-east-1")
             parameters = []
             for key, value in payload.items():
@@ -395,7 +420,7 @@ class OpenAITeamAdapter(TeamAdapter):
             ctx.context.hooks_state.add_tool_info(function_name, {"parameters": parameters})
 
             session_attributes = {
-                "credentials": json.dumps(credentials),
+                "credentials": json.dumps(merged_credentials),
                 "globals": json.dumps(globals),
                 "contact": json.dumps(contact),
                 "project": json.dumps(project),
