@@ -283,7 +283,6 @@ class HooksMixin:
         project_uuid = context_data.project.get("uuid")
         events = []
 
-        # 1. Tentativa de extração de eventos
         try:
             if isinstance(result_json, (dict, list)):
                 events = self.hooks_state.get_events(result_json, tool_name)
@@ -300,7 +299,6 @@ class HooksMixin:
             sentry_sdk.capture_exception(e)
             return
 
-        # 2. Normalização da lista de eventos
         if events and events != "[]":
             if isinstance(events, str):
                 try:
@@ -316,7 +314,6 @@ class HooksMixin:
         else:
             events = []
 
-        # 3. Envio ou Aviso (Lógica específica do Collaborator)
         if isinstance(events, list) and len(events) > 0:
             logger.info(f"[HOOK] Eventos da ferramenta '{tool_name}': {events}")
             try:
@@ -333,7 +330,6 @@ class HooksMixin:
                 logger.error(f"Error calling custom_event_data in CollaboratorHooks: {str(e)}")
                 sentry_sdk.capture_exception(e)
         else:
-            # Aviso específico desta classe
             if "human" in tool_name.lower() or "support" in tool_name.lower():
                 logger.warning(
                     f"No events found for tool '{tool_name}'. "
