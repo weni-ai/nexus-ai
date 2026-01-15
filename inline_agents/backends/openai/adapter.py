@@ -433,8 +433,10 @@ class OpenAITeamAdapter(TeamAdapter):
                 "globals": json.dumps(globals),
                 "contact": json.dumps(contact),
                 "project": json.dumps(project),
-                "constants": json.dumps(constants),
             }
+
+            if constants:
+                session_attributes["constants"] = json.dumps(constants)
 
             payload_json = {
                 "parameters": parameters,
