@@ -46,6 +46,7 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
 
         config_with_labels = {}
         system_info = None
+        mcp_description = None
 
         mcp = (
             MCP.objects.filter(agent=obj.agent, name=mcp_name, is_active=True)
@@ -55,6 +56,7 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         )
 
         if mcp:
+            mcp_description = mcp.description
             if mcp_config:
                 name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
                 for name, value in mcp_config.items():
@@ -69,6 +71,8 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
             config_with_labels = mcp_config
 
         result = {"name": mcp_name, "config": config_with_labels}
+        if mcp_description:
+            result["description"] = mcp_description
         if system_info:
             result["system"] = system_info
 
