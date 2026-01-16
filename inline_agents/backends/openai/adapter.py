@@ -539,7 +539,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 "project": json.dumps(project),
             }
 
-            if constants:
+            if constants and len(constants) > 0:
                 session_attributes["constants"] = json.dumps(constants)
 
             payload_json = {
