@@ -1,5 +1,6 @@
 import logging
-from typing import Dict, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Callable, Dict, Optional, Tuple
 
 import sentry_sdk
 
@@ -15,16 +16,34 @@ from router.tasks.invoke import (
     handle_product_items,
 )
 from router.tasks.redis_task_manager import RedisTaskManager
-from router.traces_observers.save_traces import save_inline_message_async
 
 logger = logging.getLogger(__name__)
 
 
-def get_task_manager() -> RedisTaskManager:
-    return RedisTaskManager(redis_client=get_redis_client())
+@dataclass
+class PreGenerationDependencies:
+
+    data_service: PreGenerationService = field(default_factory=PreGenerationService)
+    task_manager: RedisTaskManager = field(
+        default_factory=lambda: RedisTaskManager(redis_client=get_redis_client())
+    )
+    fetch_credentials: Callable[[str], dict] = field(default=None)
+    ensure_conversation: Callable[..., Optional[str]] = field(default=None)
+    generate_auth_token: Callable[[str], str] = field(default=None)
+    save_user_message: Callable[..., None] = field(default=None)
+
+    def __post_init__(self):
+        if self.fetch_credentials is None:
+            self.fetch_credentials = _default_fetch_credentials
+        if self.ensure_conversation is None:
+            self.ensure_conversation = _default_ensure_conversation
+        if self.generate_auth_token is None:
+            self.generate_auth_token = _default_generate_auth_token
+        if self.save_user_message is None:
+            self.save_user_message = _default_save_user_message
 
 
-def _fetch_credentials(project_uuid: str) -> dict:
+def _default_fetch_credentials(project_uuid: str) -> dict:
     from nexus.inline_agents.models import AgentCredential
 
     agent_credentials = AgentCredential.objects.filter(project_id=project_uuid)
@@ -34,7 +53,7 @@ def _fetch_credentials(project_uuid: str) -> dict:
     return credentials
 
 
-def _ensure_conversation(
+def _default_ensure_conversation(
     project_uuid: str,
     contact_urn: str,
     contact_name: str,
@@ -89,18 +108,14 @@ def _ensure_conversation(
         return None
 
 
-def _generate_auth_token(project_uuid: str) -> str:
+def _default_generate_auth_token(project_uuid: str) -> str:
     from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 
     jwt_usecase = JWTUsecase()
     return jwt_usecase.generate_jwt_token(project_uuid)
 
 
-def _compute_session_id(project_uuid: str, sanitized_urn: str) -> str:
-    return f"project-{project_uuid}-session-{sanitized_urn}"
-
-
-def _save_user_message(
+def _default_save_user_message(
     project_uuid: str,
     contact_urn: str,
     input_text: str,
@@ -109,6 +124,8 @@ def _save_user_message(
     contact_name: str,
     channel_uuid: str,
 ) -> None:
+    from router.traces_observers.save_traces import save_inline_message_async
+
     save_inline_message_async.delay(
         project_uuid=project_uuid,
         contact_urn=contact_urn,
@@ -121,7 +138,7 @@ def _save_user_message(
     )
 
 
-def _preprocess_message(message: Dict) -> Tuple[Dict, bool]:
+def preprocess_message(message: Dict) -> Tuple[Dict, bool]:
     text = message.get("text", "")
     attachments = message.get("attachments", [])
     product_items = message.get("metadata", {}).get("order", {}).get("product_items", [])
@@ -146,7 +163,11 @@ def _preprocess_message(message: Dict) -> Tuple[Dict, bool]:
     return processed_message, turn_off_rationale
 
 
-def _build_invoke_kwargs(
+def compute_session_id(project_uuid: str, sanitized_urn: str) -> str:
+    return f"project-{project_uuid}-session-{sanitized_urn}"
+
+
+def build_invoke_kwargs(
     cached_data: CachedProjectData,
     message: Dict,
     preview: bool,
@@ -203,41 +224,78 @@ def _build_invoke_kwargs(
     return invoke_kwargs
 
 
-@celery_app.task(
-    bind=True,
-    name="router.tasks.pre_generation.pre_generation_task",
-    soft_time_limit=60,
-    time_limit=90,
-    max_retries=3,
-    autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_backoff_max=30,
-)
-def pre_generation_task(
-    self,
-    message: Dict,
-    preview: bool = False,
-    language: str = "en",
-    user_email: str = "",
-    workflow_id: Optional[str] = None,
-) -> Dict:
-    task_manager = get_task_manager()
-    project_uuid = message.get("project_uuid")
-    contact_urn = message.get("contact_urn")
-    contact_name = message.get("contact_name", "")
-    channel_uuid = message.get("channel_uuid", "")
+class PreGenerationExecutor:
+    """Executes pre-generation logic with injectable dependencies."""
 
-    if workflow_id and contact_urn:
-        task_manager.update_workflow_status(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            status="pre_generation",
-            task_phase="pre_generation",
-            task_id=self.request.id,
-        )
+    def __init__(self, deps: PreGenerationDependencies = None):
+        self.deps = deps or PreGenerationDependencies()
 
-    try:
-        pre_gen_service = PreGenerationService()
+    def execute(
+        self,
+        message: Dict,
+        preview: bool = False,
+        language: str = "en",
+        user_email: str = "",
+        workflow_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> Dict:
+        project_uuid = message.get("project_uuid")
+        contact_urn = message.get("contact_urn")
+        contact_name = message.get("contact_name", "")
+        channel_uuid = message.get("channel_uuid", "")
+
+        if workflow_id and contact_urn:
+            self.deps.task_manager.update_workflow_status(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                status="pre_generation",
+                task_phase="pre_generation",
+                task_id=task_id,
+            )
+
+        try:
+            return self._execute_core(
+                message=message,
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                contact_name=contact_name,
+                channel_uuid=channel_uuid,
+                preview=preview,
+                language=language,
+                user_email=user_email,
+                workflow_id=workflow_id,
+            )
+        except Exception as e:
+            logger.error(f"[PreGeneration] Failed for project {project_uuid}, contact {contact_urn}: {e}", exc_info=True)
+            sentry_sdk.capture_exception(e)
+
+            if workflow_id and contact_urn:
+                self.deps.task_manager.update_workflow_status(
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    status="failed",
+                )
+
+            return {
+                "status": "failed",
+                "error": str(e),
+                "project_uuid": project_uuid,
+                "workflow_id": workflow_id,
+            }
+
+    def _execute_core(
+        self,
+        message: Dict,
+        project_uuid: str,
+        contact_urn: str,
+        contact_name: str,
+        channel_uuid: str,
+        preview: bool,
+        language: str,
+        user_email: str,
+        workflow_id: Optional[str],
+    ) -> Dict:
+        # Fetch project data
         (
             project_dict,
             content_base_dict,
@@ -247,10 +305,12 @@ def pre_generation_task(
             agents_backend,
             instructions,
             agent_data,
-        ) = pre_gen_service.fetch_pre_generation_data(project_uuid)
+        ) = self.deps.data_service.fetch_pre_generation_data(project_uuid)
 
-        processed_message, turn_off_rationale = _preprocess_message(message)
+        # Preprocess message (pure function)
+        processed_message, turn_off_rationale = preprocess_message(message)
 
+        # Build cached data
         cached_data = CachedProjectData.from_pre_generation_data(
             project_dict=project_dict,
             content_base_dict=content_base_dict,
@@ -261,6 +321,7 @@ def pre_generation_task(
             agent_data=agent_data,
         )
 
+        # Create message object for sanitized_urn
         message_obj = message_factory(
             project_uuid=project_uuid,
             text=processed_message.get("text"),
@@ -273,9 +334,10 @@ def pre_generation_task(
             channel_uuid=channel_uuid,
         )
 
-        credentials = _fetch_credentials(project_uuid)
+        # Pre-fetch data using injected dependencies
+        credentials = self.deps.fetch_credentials(project_uuid)
 
-        conversation_id = _ensure_conversation(
+        conversation_id = self.deps.ensure_conversation(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             contact_name=contact_name,
@@ -283,10 +345,10 @@ def pre_generation_task(
             preview=preview,
         )
 
-        auth_token = _generate_auth_token(project_uuid)
-        session_id = _compute_session_id(project_uuid, message_obj.sanitized_urn)
+        auth_token = self.deps.generate_auth_token(project_uuid)
+        session_id = compute_session_id(project_uuid, message_obj.sanitized_urn)
 
-        _save_user_message(
+        self.deps.save_user_message(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             input_text=processed_message.get("text"),
@@ -296,7 +358,8 @@ def pre_generation_task(
             channel_uuid=channel_uuid,
         )
 
-        invoke_kwargs = _build_invoke_kwargs(
+        # Build invoke_kwargs (pure function)
+        invoke_kwargs = build_invoke_kwargs(
             cached_data=cached_data,
             message=processed_message,
             preview=preview,
@@ -328,23 +391,34 @@ def pre_generation_task(
             },
         }
 
-    except Exception as e:
-        logger.error(f"[PreGeneration] Failed for project {project_uuid}, contact {contact_urn}: {e}", exc_info=True)
-        sentry_sdk.capture_exception(e)
 
-        if workflow_id and contact_urn:
-            task_manager.update_workflow_status(
-                project_uuid=project_uuid,
-                contact_urn=contact_urn,
-                status="failed",
-            )
-
-        return {
-            "status": "failed",
-            "error": str(e),
-            "project_uuid": project_uuid,
-            "workflow_id": workflow_id,
-        }
+@celery_app.task(
+    bind=True,
+    name="router.tasks.pre_generation.pre_generation_task",
+    soft_time_limit=60,
+    time_limit=90,
+    max_retries=3,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=30,
+)
+def pre_generation_task(
+    self,
+    message: Dict,
+    preview: bool = False,
+    language: str = "en",
+    user_email: str = "",
+    workflow_id: Optional[str] = None,
+) -> Dict:
+    executor = PreGenerationExecutor()
+    return executor.execute(
+        message=message,
+        preview=preview,
+        language=language,
+        user_email=user_email,
+        workflow_id=workflow_id,
+        task_id=self.request.id,
+    )
 
 
 def deserialize_cached_data(serialized_data: Dict) -> CachedProjectData:
