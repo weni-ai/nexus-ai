@@ -71,6 +71,7 @@ class WorkflowContext:
     broadcast: Optional[Dict] = None
     use_components: bool = False
     flows_user_email: str = field(default_factory=lambda: os.environ.get("FLOW_USER_EMAIL", ""))
+    cached_data: Optional[Dict] = None
 
 
 # =============================================================================

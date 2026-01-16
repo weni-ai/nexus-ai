@@ -2,7 +2,7 @@
 Context objects for backend invocation to reduce parameter passing complexity.
 """
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Dict, List, Optional
 
 
@@ -53,6 +53,10 @@ class CachedProjectData:
             agent_data=agent_data,
             formatter_agent_configurations=formatter_agent_configurations,
         )
+
+    def to_dict(self) -> Dict:
+        """Serialize to dictionary for Celery task results."""
+        return asdict(self)
 
     def get_invoke_kwargs(self, team: List[Dict]) -> Dict:
         """Get all kwargs for backend.invoke_agents() call, including team data."""

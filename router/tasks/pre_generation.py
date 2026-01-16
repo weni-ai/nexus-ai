@@ -197,6 +197,7 @@ def pre_generation_task(
         return {
             "status": "success",
             "invoke_kwargs": invoke_kwargs,
+            "cached_data": cached_data.to_dict(),
             "agents_backend": agents_backend,
             "processed_message": processed_message,
             "project_uuid": project_uuid,
