@@ -3,7 +3,7 @@ Workflow Orchestrator for Inline Agents
 
 This task orchestrates the three-phase workflow:
 1. Pre-Generation (separate task via pre_generation_task)
-2. Generation (inline for now, will be extracted later)
+2. Generation (separate task via generation_task)
 3. Post-Generation (inline for now, will be extracted later)
 
 The orchestrator is designed to be simple and clean - it only:
@@ -23,22 +23,19 @@ from typing import Any, Dict, Optional
 import sentry_sdk
 from django.conf import settings
 
-from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.tasks.actions_client import get_action_clients
-from router.tasks.invocation_context import CachedProjectData
+from router.tasks.generation import generation_task
 from router.tasks.invoke import (
     ThrottlingException,
     UnsafeMessageException,
-    _invoke_backend,
-    _preprocess_message_input,
     dispatch_preview,
 )
-from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
+from router.tasks.pre_generation import pre_generation_task
 from router.tasks.redis_task_manager import RedisTaskManager
 
 logger = logging.getLogger(__name__)
@@ -72,8 +69,9 @@ class WorkflowContext:
     # State populated during execution
     agents_backend: Optional[str] = None
     broadcast: Optional[Dict] = None
-    cached_data: Optional[CachedProjectData] = None
+    use_components: bool = False
     flows_user_email: str = field(default_factory=lambda: os.environ.get("FLOW_USER_EMAIL", ""))
+    cached_data: Optional[Dict] = None
 
 
 # =============================================================================
@@ -115,9 +113,7 @@ def _initialize_workflow(ctx: WorkflowContext) -> None:
     )
 
     if had_existing:
-        logger.info(
-            f"[Workflow] Revoked existing workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
-        )
+        logger.info(f"[Workflow] Revoked existing workflow for {ctx.project_uuid}, {ctx.contact_urn}")
 
     # Update message with concatenated text
     ctx.message["text"] = final_message_text
@@ -140,7 +136,7 @@ def _finalize_workflow(ctx: WorkflowContext, status: str = "completed") -> None:
     )
     ctx.task_manager.clear_workflow_state(ctx.project_uuid, ctx.contact_urn)
 
-    logger.info(f"[Workflow] {status.capitalize()} workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}")
+    logger.info(f"[Workflow] {status.capitalize()} for {ctx.project_uuid}, {ctx.contact_urn}")
 
 
 def _handle_workflow_error(ctx: WorkflowContext, error: Exception) -> None:
@@ -164,9 +160,7 @@ def _handle_workflow_error(ctx: WorkflowContext, error: Exception) -> None:
 
 def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException) -> Any:
     """Handle guardrails block: dispatch the blocked message response."""
-    logger.warning(
-        f"[Workflow] Unsafe message in workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}: {error.message}"
-    )
+    logger.warning(f"[Workflow] Unsafe message for {ctx.project_uuid}, {ctx.contact_urn}: {error.message}")
 
     message_obj = _create_message_object(ctx.message)
     _finalize_workflow(ctx, status="blocked")
@@ -199,80 +193,67 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
     """
     Execute the pre-generation phase.
 
-    Returns the pre-generation result dict with cached_data and agents_backend.
+    Returns the pre-generation result dict with invoke_kwargs and agents_backend.
     """
-    logger.info(f"[Workflow] Executing pre-generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}")
+    logger.info(f"[Workflow] Executing pre-generation for {ctx.project_uuid}, {ctx.contact_urn}")
 
     # Call directly using .run() to avoid Celery's "never call .get() within a task" error
     result = pre_generation_task.run(
         ctx.message,
         preview=ctx.preview,
         language=ctx.language,
+        user_email=ctx.user_email,
         workflow_id=ctx.workflow_id,
     )
 
     if result["status"] == "failed":
         error_msg = result.get("error", "Unknown error")
-        logger.error(f"[Workflow] Pre-generation failed for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}: {error_msg}")
+        logger.error(f"[Workflow] Pre-generation failed for {ctx.project_uuid}, {ctx.contact_urn}: {error_msg}")
         raise Exception(f"Pre-generation failed: {error_msg}")
 
     # Populate context with results
-    ctx.cached_data = deserialize_cached_data(result["cached_data"])
     ctx.agents_backend = result["agents_backend"]
+    ctx.use_components = result.get("use_components", False)
 
     # Get action clients (needed for post-generation)
     ctx.broadcast, _ = get_action_clients(
         preview=ctx.preview,
         multi_agents=True,
-        project_use_components=ctx.cached_data.project_dict.get("use_components", False),
+        project_use_components=ctx.use_components,
     )
 
     return result
 
 
-def _run_generation(ctx: WorkflowContext) -> str:
+def _run_generation(ctx: WorkflowContext, pre_gen_result: Dict) -> str:
     """
-    Execute the generation phase.
+    Execute the generation phase via generation_task.
 
-    This is currently inline but will be replaced by generation_task.
+    Generation is now a PURE model call - all preprocessing is done in pre-generation.
+
     Returns the LLM response string.
     """
-    ctx.task_manager.update_workflow_status(
+    logger.info(f"[Workflow] Executing generation for {ctx.project_uuid}, {ctx.contact_urn}")
+
+    # Call generation_task directly using .run() to avoid Celery's "never call .get() within a task" error
+    # invoke_kwargs is ready-to-use - generation just calls backend.invoke_agents()
+    result = generation_task.run(
+        invoke_kwargs=pre_gen_result["invoke_kwargs"],
+        agents_backend=ctx.agents_backend,
         project_uuid=ctx.project_uuid,
         contact_urn=ctx.contact_urn,
-        status="generation",
-        task_phase="generation",
-        task_id=ctx.task_id,
+        workflow_id=ctx.workflow_id,
     )
 
-    logger.info(f"[Workflow] Executing generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}")
+    if result["status"] == "failed":
+        error_msg = result.get("error", "Unknown error")
+        logger.error(f"[Workflow] Generation failed for {ctx.project_uuid}, {ctx.contact_urn}: {error_msg}")
+        raise Exception(f"Generation failed: {error_msg}")
 
-    # Preprocess message
-    processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(ctx.message, ctx.agents_backend)
-
-    # Create message object
-    message_obj = _create_message_object(processed_message)
-
-    # Get backend and invoke
-    backend = BackendsRegistry.get_backend(ctx.agents_backend)
-
-    response = _invoke_backend(
-        backend=backend,
-        cached_data=ctx.cached_data,
-        message_obj=message_obj,
-        processed_message=processed_message,
-        preview=ctx.preview,
-        language=ctx.language,
-        user_email=ctx.user_email,
-        foundation_model=foundation_model,
-        turn_off_rationale=turn_off_rationale,
-        channel_type=ctx.message.get("channel_type", ""),
-    )
-
-    return response
+    return result["response"]
 
 
-def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
+def _run_post_generation(ctx: WorkflowContext, response: str, pre_gen_result: Dict) -> Any:
     """
     Execute the post-generation phase.
 
@@ -285,9 +266,11 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
         status="post_generation",
     )
 
-    logger.info(f"[Workflow] Executing post-generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}")
+    logger.info(f"[Workflow] Executing post-generation for {ctx.project_uuid}, {ctx.contact_urn}")
 
-    message_obj = _create_message_object(ctx.message)
+    # Use processed_message from pre-generation (has preprocessed text)
+    processed_message = pre_gen_result.get("processed_message", ctx.message)
+    message_obj = _create_message_object(processed_message)
 
     # Clear pending tasks (legacy compatibility)
     ctx.task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
@@ -384,7 +367,7 @@ def inline_agent_workflow(
     This task replaces start_inline_agents when project is in WORKFLOW_ARCHITECTURE_PROJECTS.
     It orchestrates the workflow through three phases:
     1. Pre-Generation (via pre_generation_task)
-    2. Generation (inline for now, will be generation_task)
+    2. Generation (via generation_task)
     3. Post-Generation (inline for now, will be post_generation_task)
 
     The orchestrator is intentionally simple - all complex logic is delegated
@@ -402,14 +385,14 @@ def inline_agent_workflow(
         # Initialize workflow (typing indicator, message concat, state creation)
         _initialize_workflow(ctx)
 
-        # Phase 1: Pre-Generation
-        _run_pre_generation(ctx)
+        # Phase 1: Pre-Generation (data fetching + message preprocessing)
+        pre_gen_result = _run_pre_generation(ctx)
 
-        # Phase 2: Generation (will be generation_task.apply() later)
-        response = _run_generation(ctx)
+        # Phase 2: Generation (PURE model call - invoke_kwargs ready to use)
+        response = _run_generation(ctx, pre_gen_result)
 
-        # Phase 3: Post-Generation (will be post_generation_task.apply() later)
-        result = _run_post_generation(ctx, response)
+        # Phase 3: Post-Generation (dispatch response)
+        result = _run_post_generation(ctx, response, pre_gen_result)
 
         # Finalize workflow
         _finalize_workflow(ctx)
