@@ -37,7 +37,6 @@ from nexus.inline_agents.backends.openai.repository import (
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
-from router.traces_observers.save_traces import save_inline_message_to_database
 from router.traces_observers.save_traces import save_inline_message_async
 
 logger = logging.getLogger(__name__)
