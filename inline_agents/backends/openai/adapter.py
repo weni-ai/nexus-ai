@@ -22,7 +22,6 @@ from inline_agents.backends.openai.hooks import (
 )
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
-    MCP,
     AgentCredential,
     Guardrail,
     InlineAgentsConfiguration,
@@ -470,7 +469,7 @@ class OpenAITeamAdapter(TeamAdapter):
                     )
 
                     if mcp_name:
-                        mcp = MCP.objects.filter(agent=agent, name=mcp_name, is_active=True).first()
+                        mcp = agent.mcps.filter(name=mcp_name, is_active=True).first()
                         if mcp:
                             logger.info(
                                 f"MCP '{mcp_name}' found for agent '{agent.slug}'",

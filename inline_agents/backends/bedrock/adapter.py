@@ -13,7 +13,7 @@ from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.bedrock.event_extractor import BedrockEventExtractor
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.celery import app as celery_app
-from nexus.inline_agents.models import MCP, Agent, AgentCredential, Guardrail, IntegratedAgent
+from nexus.inline_agents.models import Agent, AgentCredential, Guardrail, IntegratedAgent
 from nexus.utils import get_datasource_id
 
 logger = logging.getLogger(__name__)
@@ -147,11 +147,7 @@ class BedrockTeamAdapter(TeamAdapter):
             if not mcp_name:
                 continue
 
-            mcp = (
-                MCP.objects.filter(agent=agent, name=mcp_name, is_active=True)
-                .prefetch_related("credential_templates")
-                .first()
-            )
+            mcp = agent.mcps.filter(name=mcp_name, is_active=True).prefetch_related("credential_templates").first()
 
             if not mcp:
                 continue

@@ -212,8 +212,8 @@ class AgentAdmin(admin.ModelAdmin):
     list_filter = ("is_official", "source_type", "agent_type", "category")
     search_fields = ("name", "project__name", "project__uuid", "slug")
     ordering = ("project__name",)
-    autocomplete_fields = ["project", "group", "systems", "agent_type", "category"]
-    inlines = [MCPInline, VersionInline]
+    autocomplete_fields = ["project", "group", "systems", "agent_type", "category", "mcps"]
+    inlines = [VersionInline]
     readonly_fields = ("mcps_list",)
 
     fieldsets = (
@@ -240,8 +240,8 @@ class AgentAdmin(admin.ModelAdmin):
         (
             "MCPs",
             {
-                "fields": ("mcps_list",),
-                "description": "MCPs associated with this agent. To create or edit MCPs, go to the MCP admin section.",
+                "fields": ("mcps", "mcps_list"),
+                "description": "Select MCPs to associate with this agent. MCPs can be shared across multiple agents.",
             },
         ),
         (
@@ -300,14 +300,13 @@ class AgentAdmin(admin.ModelAdmin):
         if not obj.pk:
             return "Save the agent first to see associated MCPs"
 
-        mcps = MCP.objects.filter(agent=obj).select_related("system").order_by("system__slug", "order", "name")
+        mcps = obj.mcps.all().select_related("system").order_by("system__slug", "order", "name")
 
         if not mcps.exists():
             mcp_admin_url = reverse("admin:inline_agents_mcp_changelist")
             return format_html(
-                '<p>No MCPs found for this agent. <a href="{}?agent__id__exact={}" target="_blank">Create MCP</a></p>',
+                '<p>No MCPs found for this agent. <a href="{}" target="_blank">Create MCP</a></p>',
                 mcp_admin_url,
-                obj.pk,
             )
 
         html = '<table style="width: 100%; border-collapse: collapse;">'
@@ -338,7 +337,7 @@ class AgentAdmin(admin.ModelAdmin):
         html += "</tbody></table>"
 
         mcp_admin_url = reverse("admin:inline_agents_mcp_changelist")
-        html += f'<p style="margin-top: 10px;"><a href="{mcp_admin_url}?agent__id__exact={obj.pk}" target="_blank">+ Add new MCP for this agent</a></p>'
+        html += f'<p style="margin-top: 10px;"><a href="{mcp_admin_url}" target="_blank">+ Create new MCP</a></p>'
 
         return format_html(html)
 
@@ -425,51 +424,64 @@ class MCPCredentialTemplateInline(admin.TabularInline):
 
 @admin.register(MCP)
 class MCPAdmin(admin.ModelAdmin):
-    list_display = ("name", "agent", "system", "order", "is_active")
-    list_filter = ("is_active", "system", "agent")
-    search_fields = ("name", "description", "agent__name", "agent__slug", "system__name", "system__slug")
-    ordering = ("agent", "system", "order", "name")
-    autocomplete_fields = ["agent", "system"]
+    list_display = ("name", "system", "order", "is_active")
+    list_filter = ("is_active", "system")
+    search_fields = ("name", "description", "system__name", "system__slug")
+    ordering = ("system", "order", "name")
+    autocomplete_fields = ["system"]
     inlines = [MCPConfigOptionInline, MCPCredentialTemplateInline]
 
-    fieldsets = ((None, {"fields": ("name", "description", "agent", "system", "order", "is_active")}),)
+    fieldsets = ((None, {"fields": ("name", "description", "system", "order", "is_active")}),)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.select_related("agent", "system")
+        return qs.select_related("system")
 
     def save_model(self, request, obj, form, change):
-        """Save model and trigger cache invalidation."""
+        """Save model and trigger cache invalidation for all associated agents."""
         super().save_model(request, obj, form, change)
 
-        # Fire cache invalidation event for team update (agents are part of team)
+        # Fire cache invalidation event for team update for all agents using this MCP
         try:
             from nexus.events import notify_async
 
-            project_uuid = str(obj.project.uuid)
-            notify_async(
-                event="cache_invalidation:team",
-                project_uuid=project_uuid,
-            )
-            logger.info(f"[Admin] Triggered cache invalidation for Agent {obj.name} (project {project_uuid})")
+            # Get all projects from agents that use this MCP
+            projects = set()
+            for agent in obj.agents.all():
+                if agent.project:
+                    projects.add(agent.project.uuid)
+
+            for project_uuid in projects:
+                notify_async(
+                    event="cache_invalidation:team",
+                    project_uuid=str(project_uuid),
+                )
+            logger.info(f"[Admin] Triggered cache invalidation for MCP {obj.name} (affecting {len(projects)} projects)")
         except Exception as e:
-            logger.warning(f"[Admin] Failed to trigger cache invalidation for Agent: {e}")
+            logger.warning(f"[Admin] Failed to trigger cache invalidation for MCP: {e}")
 
     def delete_model(self, request, obj):
-        """Delete model and trigger cache invalidation."""
-        project_uuid = str(obj.project.uuid) if obj.project else None
+        """Delete model and trigger cache invalidation for all associated agents."""
+        # Get all projects from agents that use this MCP before deletion
+        projects = set()
+        for agent in obj.agents.all():
+            if agent.project:
+                projects.add(agent.project.uuid)
 
         super().delete_model(request, obj)
 
         # Fire cache invalidation event for team update
-        if project_uuid:
+        if projects:
             try:
                 from nexus.events import notify_async
 
-                notify_async(
-                    event="cache_invalidation:team",
-                    project_uuid=project_uuid,
+                for project_uuid in projects:
+                    notify_async(
+                        event="cache_invalidation:team",
+                        project_uuid=str(project_uuid),
+                    )
+                logger.info(
+                    f"[Admin] Triggered cache invalidation after MCP deletion (affecting {len(projects)} projects)"
                 )
-                logger.info(f"[Admin] Triggered cache invalidation after Agent deletion (project {project_uuid})")
             except Exception as e:
-                logger.warning(f"[Admin] Failed to trigger cache invalidation after Agent deletion: {e}")
+                logger.warning(f"[Admin] Failed to trigger cache invalidation after MCP deletion: {e}")
