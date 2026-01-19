@@ -39,8 +39,10 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         logger.info("Created agent", extra={"agent_key": agent_key})
         return agent_obj
 
-    def _process_constants(self, constants: Dict) -> Dict:
+    def _process_constants(self, constants: Dict) -> Dict | None:
         """Process constants from weni-cli YAML format to stored format"""
+        if not constants:
+            return None
         processed = {}
         for key, constant_def in constants.items():
             processed[key] = {"value": constant_def.get("default", ""), "definition": constant_def}

@@ -32,8 +32,10 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
         return agent_data
 
-    def _process_constants(self, constants: Dict) -> Dict:
+    def _process_constants(self, constants: Dict) -> Dict | None:
         """Process constants from weni-cli YAML format to stored format"""
+        if not constants:
+            return None
         processed = {}
         for key, constant_def in constants.items():
             processed[key] = {"value": constant_def.get("default", ""), "definition": constant_def}
