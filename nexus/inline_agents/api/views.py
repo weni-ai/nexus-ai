@@ -462,7 +462,7 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 "description": base_agent.collaboration_instructions,
                 "type": (base_agent.agent_type.slug if getattr(base_agent, "agent_type", None) else ""),
                 "category": (base_agent.category.slug if getattr(base_agent, "category", None) else ""),
-                "systems": sorted(list(all_systems)),
+                "systems": sorted(list(all_systems), key=lambda s: (0 if "vtex" in s.lower() else 1, s.lower())),
                 "assigned": group_assigned,
                 "is_official": base_agent.is_official,
                 "credentials": credentials,
