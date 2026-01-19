@@ -624,7 +624,7 @@ class OfficialAgentsV1(APIView):
         result["agent"] = agent_serializer.data
 
         if assigned is not None:
-            assignment_result = self._handle_assignment(agent_uuid, project_uuid, assigned, mcp, mcp_config)
+            assignment_result = self._handle_assignment(agent_uuid, project_uuid, assigned, mcp, mcp_config, system)
             if isinstance(assignment_result, Response):
                 return assignment_result
             result.update(assignment_result)
@@ -638,7 +638,13 @@ class OfficialAgentsV1(APIView):
         return Response(result or {"message": "No changes applied", "agent": agent_serializer.data}, status=200)
 
     def _handle_assignment(
-        self, agent_uuid: str, project_uuid: str, assigned: bool, mcp: str | None = None, mcp_config: dict | None = None
+        self,
+        agent_uuid: str,
+        project_uuid: str,
+        assigned: bool,
+        mcp: str | None = None,
+        mcp_config: dict | None = None,
+        system: str | None = None,
     ) -> dict | Response:
         usecase = AssignAgentsUsecase()
         if assigned:
@@ -646,13 +652,15 @@ class OfficialAgentsV1(APIView):
                 created, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
 
                 # Persist MCP selection and configuration in metadata
-                if mcp or mcp_config:
+                if mcp or mcp_config or system:
                     if not integrated_agent.metadata:
                         integrated_agent.metadata = {}
                     if mcp:
                         integrated_agent.metadata["mcp"] = mcp
                     if mcp_config:
                         integrated_agent.metadata["mcp_config"] = mcp_config
+                    if system:
+                        integrated_agent.metadata["system"] = system
                     integrated_agent.save(update_fields=["metadata"])
 
                 return {"assigned": True, "assigned_created": created}

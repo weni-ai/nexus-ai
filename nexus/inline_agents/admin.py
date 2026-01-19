@@ -3,6 +3,8 @@ import logging
 from django.contrib import admin, messages
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
+from django.urls import reverse
+from django.utils.html import format_html
 
 from nexus.admin_widgets import ArrayJSONWidget, PrettyJSONWidget
 from nexus.inline_agents.backends.bedrock.models import Supervisor
@@ -191,16 +193,27 @@ class InlineAgentsConfigurationAdmin(admin.ModelAdmin):
 
 
 class MCPInline(admin.TabularInline):
-    """Inline to show and manage MCPs for an Agent"""
+    """Inline to show MCPs for an Agent (read-only, for viewing only)"""
 
     model = MCP
-    extra = 1
-    fields = ("name", "system", "description", "order", "is_active")
-    autocomplete_fields = ["system"]
+    extra = 0
+    fields = ("name", "system", "description", "order", "is_active", "view_link")
+    readonly_fields = ("name", "system", "description", "order", "is_active", "view_link")
+    can_delete = False
+    show_change_link = True
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.select_related("system").order_by("system__slug", "order", "name")
+
+    def view_link(self, obj):
+        """Link to view MCP in MCP admin"""
+        if obj.pk:
+            url = reverse("admin:inline_agents_mcp_change", args=[obj.pk])
+            return format_html('<a href="{}" target="_blank">View MCP</a>', url)
+        return "-"
+
+    view_link.short_description = "View"
 
 
 class VersionInline(admin.TabularInline):
@@ -251,6 +264,7 @@ class AgentAdmin(admin.ModelAdmin):
     ordering = ("project__name",)
     autocomplete_fields = ["project", "group", "systems", "agent_type", "category"]
     inlines = [MCPInline, VersionInline]
+    readonly_fields = ("mcps_list",)
 
     fieldsets = (
         (
@@ -271,6 +285,13 @@ class AgentAdmin(admin.ModelAdmin):
                     "backend_foundation_models",
                     "source_type",
                 )
+            },
+        ),
+        (
+            "MCPs",
+            {
+                "fields": ("mcps_list",),
+                "description": "MCPs associated with this agent. To create or edit MCPs, go to the MCP admin section.",
             },
         ),
         (
@@ -318,11 +339,60 @@ class AgentAdmin(admin.ModelAdmin):
         ),
     )
 
-    readonly_fields = ("constants",)
+    readonly_fields = ("constants", "mcps_list")
 
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
+
+    def mcps_list(self, obj):
+        """Display MCPs associated with this agent with links to view them"""
+        if not obj.pk:
+            return "Save the agent first to see associated MCPs"
+
+        mcps = MCP.objects.filter(agent=obj).select_related("system").order_by("system__slug", "order", "name")
+
+        if not mcps.exists():
+            mcp_admin_url = reverse("admin:inline_agents_mcp_changelist")
+            return format_html(
+                '<p>No MCPs found for this agent. <a href="{}?agent__id__exact={}" target="_blank">Create MCP</a></p>',
+                mcp_admin_url,
+                obj.pk,
+            )
+
+        html = '<table style="width: 100%; border-collapse: collapse;">'
+        html += '<thead><tr><th style="padding: 8px; border: 1px solid #ddd;">Name</th>'
+        html += '<th style="padding: 8px; border: 1px solid #ddd;">System</th>'
+        html += '<th style="padding: 8px; border: 1px solid #ddd;">Description</th>'
+        html += '<th style="padding: 8px; border: 1px solid #ddd;">Status</th>'
+        html += '<th style="padding: 8px; border: 1px solid #ddd;">Actions</th></tr></thead><tbody>'
+
+        for mcp in mcps:
+            view_url = reverse("admin:inline_agents_mcp_change", args=[mcp.pk])
+            status = "Active" if mcp.is_active else "Inactive"
+            status_color = "green" if mcp.is_active else "gray"
+            description = (
+                mcp.description[:50] + "..."
+                if mcp.description and len(mcp.description) > 50
+                else (mcp.description or "-")
+            )
+
+            html += "<tr>"
+            html += f'<td style="padding: 8px; border: 1px solid #ddd;"><strong>{mcp.name}</strong></td>'
+            html += f'<td style="padding: 8px; border: 1px solid #ddd;">{mcp.system.name if mcp.system else "-"}</td>'
+            html += f'<td style="padding: 8px; border: 1px solid #ddd;">{description}</td>'
+            html += f'<td style="padding: 8px; border: 1px solid #ddd;"><span style="color: {status_color};">{status}</span></td>'
+            html += f'<td style="padding: 8px; border: 1px solid #ddd;"><a href="{view_url}" target="_blank">View MCP</a></td>'
+            html += "</tr>"
+
+        html += "</tbody></table>"
+
+        mcp_admin_url = reverse("admin:inline_agents_mcp_changelist")
+        html += f'<p style="margin-top: 10px;"><a href="{mcp_admin_url}?agent__id__exact={obj.pk}" target="_blank">+ Add new MCP for this agent</a></p>'
+
+        return format_html(html)
+
+    mcps_list.short_description = "Associated MCPs"
 
 
 @admin.register(AgentGroup)
