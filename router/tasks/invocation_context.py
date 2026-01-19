@@ -76,4 +76,5 @@ class CachedProjectData:
                 if self.inline_agent_config_dict
                 else None
             ),
+            "supervisor_agent_uuid": self.project_dict.get("supervisor_agent_uuid"),
         }
