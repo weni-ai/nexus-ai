@@ -24,7 +24,7 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
 )
-from nexus.inline_agents.models import MCP, Agent, AgentSystem, MCPCredentialTemplate
+from nexus.inline_agents.models import Agent, AgentSystem, MCPCredentialTemplate
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
@@ -151,11 +151,7 @@ def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
     if not agent or not system:
         return []
 
-    mcps = (
-        MCP.objects.filter(agent=agent, system=system, is_active=True)
-        .select_related()
-        .prefetch_related("config_options")
-    )
+    mcps = agent.mcps.filter(system=system, is_active=True).select_related("system").prefetch_related("config_options")
     result = []
     for mcp in mcps:
         mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
@@ -199,13 +195,13 @@ def get_credentials_for_mcp(agent_slug: str, system_slug: str, mcp_name: str, gr
         if group:
             agents = Agent.objects.filter(group=group, is_official=True, source_type=Agent.PLATFORM)
             for agent in agents:
-                mcp = MCP.objects.filter(agent=agent, system=system, name=mcp_name, is_active=True).first()
+                mcp = agent.mcps.filter(system=system, name=mcp_name, is_active=True).first()
                 if mcp:
                     break
     else:
         agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
         if agent:
-            mcp = MCP.objects.filter(agent=agent, system=system, name=mcp_name, is_active=True).first()
+            mcp = agent.mcps.filter(system=system, name=mcp_name, is_active=True).first()
 
     if not mcp:
         return []
@@ -234,7 +230,7 @@ def get_all_mcps_for_agent(agent_slug: str) -> dict:
     if not agent:
         return {}
 
-    mcps = MCP.objects.filter(agent=agent, is_active=True).select_related("system").prefetch_related("config_options")
+    mcps = agent.mcps.filter(is_active=True).select_related("system").prefetch_related("config_options")
     result = {}
     for mcp in mcps:
         system_slug = mcp.system.slug

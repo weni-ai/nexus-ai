@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('inline_agents', '0020_supervisoragent'),
+        ('inline_agents', '0019_agentcategory_agentgroup_agentsystem_agenttype_and_more'),
     ]
 
     operations = [

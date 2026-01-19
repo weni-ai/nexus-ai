@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from nexus.inline_agents.models import MCP, Agent, AgentCredential, IntegratedAgent
+from nexus.inline_agents.models import Agent, AgentCredential, IntegratedAgent
 
 
 class IntegratedAgentSerializer(serializers.ModelSerializer):
@@ -57,7 +57,7 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
             try:
                 system_obj = AgentSystem.objects.get(slug__iexact=system_slug)
                 mcp = (
-                    MCP.objects.filter(agent=obj.agent, system=system_obj, name=mcp_name, is_active=True)
+                    obj.agent.mcps.filter(system=system_obj, name=mcp_name, is_active=True)
                     .select_related("system")
                     .prefetch_related("config_options")
                     .first()
@@ -68,7 +68,7 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         # Fallback: try without system filter if not found
         if not mcp:
             mcp = (
-                MCP.objects.filter(agent=obj.agent, name=mcp_name, is_active=True)
+                obj.agent.mcps.filter(name=mcp_name, is_active=True)
                 .select_related("system")
                 .prefetch_related("config_options")
                 .first()

@@ -61,6 +61,7 @@ class Agent(models.Model):
     )
     group = models.ForeignKey("AgentGroup", on_delete=models.SET_NULL, null=True, blank=True, related_name="agents")
     systems = models.ManyToManyField("AgentSystem", blank=True, related_name="agents")
+    mcps = models.ManyToManyField("MCP", blank=True, related_name="agents")
 
     variant = models.CharField(max_length=100, null=True, blank=True)
     capabilities = models.JSONField(default=list, null=True, blank=True)
@@ -283,12 +284,6 @@ class MCP(models.Model):
 
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    agent = models.ForeignKey(
-        Agent,
-        on_delete=models.CASCADE,
-        related_name="mcps",
-        limit_choices_to={"is_official": True},
-    )
     system = models.ForeignKey(
         AgentSystem,
         on_delete=models.CASCADE,
@@ -298,11 +293,11 @@ class MCP(models.Model):
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        unique_together = ("agent", "system", "name")
+        unique_together = ("system", "name")
         ordering = ["order", "name"]
 
     def __str__(self):
-        return f"{self.agent.slug} - {self.system.slug} - {self.name}"
+        return f"{self.system.slug} - {self.name}"
 
 
 class MCPConfigOption(models.Model):
