@@ -56,12 +56,17 @@ class OpenAISupervisor(models.Model):
         return self.name
 
 
-class SupervisorAgent(models.Model):
+class ManagerAgent(models.Model):
     uuid = models.UUIDField(default=uuid4, editable=False)
     created_on = models.DateTimeField(auto_now_add=True)
-    default = models.BooleanField(default=False, help_text="If True, this is the default supervisor for all projects")
+    default = models.BooleanField(
+        default=False, help_text="If True, this is the default supervisor for all newly created projects"
+    )
     public = models.BooleanField(
         default=True, help_text="If True, this supervisor is public and will be available to all projects"
+    )
+    release_date = models.DateTimeField(
+        help_text="The date and time when this supervisor will be set in older projects"
     )
     name = models.CharField(max_length=255)
 

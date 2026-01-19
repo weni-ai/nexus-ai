@@ -31,7 +31,7 @@ class PreGenerationService:
             "formatter_reasoning_summary": project.formatter_reasoning_summary,
             "formatter_send_only_assistant_message": project.formatter_send_only_assistant_message,
             "formatter_tools_descriptions": project.formatter_tools_descriptions,
-            "supervisor_agent_uuid": project.supervisor_agent.uuid if project.supervisor_agent else None,
+            "supervisor_agent_uuid": project.manager_agent.uuid if project.manager_agent else None,
         }
 
     def _content_base_to_dict(self, content_base) -> Dict:

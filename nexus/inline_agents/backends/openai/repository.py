@@ -1,8 +1,8 @@
 from typing import Any, Dict, List, Optional
 
 from inline_agents.repository import SupervisorRepository
+from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as Supervisor
-from nexus.inline_agents.backends.openai.models import SupervisorAgent
 from nexus.inline_agents.models import Agent
 
 
@@ -59,8 +59,8 @@ class OpenAISupervisorRepository(SupervisorRepository):
         return supervisor.action_groups
 
 
-class SupervisorAgentRepository(SupervisorRepository):
-    def _supervisor_to_dict(self, supervisor: SupervisorAgent) -> Dict[str, Any]:
+class ManagerAgentRepository(SupervisorRepository):
+    def _supervisor_to_dict(self, supervisor: ManagerAgent) -> Dict[str, Any]:
         supervisor_dict = supervisor.__dict__
         supervisor_dict.pop("_state")
         return supervisor_dict
@@ -71,11 +71,11 @@ class SupervisorAgentRepository(SupervisorRepository):
         use_components: Optional[bool] = None,
         supervisor_agent_uuid: Optional[str] = None,
     ) -> dict:
-        def get_supervisor_object(supervisor_uuid: str) -> SupervisorAgent:
+        def get_supervisor_object(supervisor_uuid: str) -> ManagerAgent:
             try:
-                return SupervisorAgent.objects.get(uuid=supervisor_uuid)
-            except SupervisorAgent.DoesNotExist:
-                return SupervisorAgent.objects.filter(default=True, public=True).order_by("created_on").last()
+                return ManagerAgent.objects.get(uuid=supervisor_uuid)
+            except ManagerAgent.DoesNotExist:
+                return ManagerAgent.objects.filter(default=True, public=True).order_by("created_on").last()
 
         supervisor_data = self._supervisor_to_dict(get_supervisor_object(supervisor_agent_uuid))
 

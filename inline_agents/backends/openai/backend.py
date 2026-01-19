@@ -33,8 +33,8 @@ from inline_agents.backends.openai.sessions import (
     make_session_factory,
 )
 from nexus.inline_agents.backends.openai.repository import (
+    ManagerAgentRepository,
     OpenAISupervisorRepository,
-    SupervisorAgentRepository,
 )
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
@@ -55,7 +55,7 @@ class OpenAIBackend(InlineAgentsBackend):
         supervisor_agent_uuid: str,
     ):
         if supervisor_agent_uuid:
-            supervisor_repository = SupervisorAgentRepository()
+            supervisor_repository = ManagerAgentRepository()
             return supervisor_repository.get_supervisor(
                 use_components=use_components,
                 human_support=human_support,

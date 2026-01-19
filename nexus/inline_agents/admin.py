@@ -9,7 +9,7 @@ from django.db import models
 
 from nexus.admin_widgets import PrettyJSONWidget
 from nexus.inline_agents.backends.bedrock.models import Supervisor
-from nexus.inline_agents.backends.openai.models import OpenAISupervisor, SupervisorAgent
+from nexus.inline_agents.backends.openai.models import ManagerAgent, OpenAISupervisor
 from nexus.inline_agents.models import (
     MCP,
     Agent,
@@ -760,8 +760,8 @@ class MCPAdmin(admin.ModelAdmin):
                 logger.warning(f"[Admin] Failed to trigger cache invalidation after Agent deletion: {e}")
 
 
-@admin.register(SupervisorAgent)
-class SupervisorAgentAdmin(admin.ModelAdmin):
+@admin.register(ManagerAgent)
+class ManagerAgentAdmin(admin.ModelAdmin):
     list_display = ("name", "foundation_model", "created_on")
     list_filter = ("foundation_model",)
     search_fields = ("name", "instruction")
@@ -776,6 +776,7 @@ class SupervisorAgentAdmin(admin.ModelAdmin):
                     "name",
                     "default",
                     "public",
+                    "release_date",
                     "base_prompt",
                     "model_vendor",
                     "foundation_model",

@@ -1,13 +1,9 @@
 import logging
 
+import pendulum
 from django.conf import settings
 from django.db.models import Q
-from drf_spectacular.utils import (
-    OpenApiParameter,
-    OpenApiResponse,
-    OpenApiTypes,
-    extend_schema,
-)
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -24,8 +20,10 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
 )
+from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.models import MCP, Agent, AgentSystem, MCPCredentialTemplate
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
+from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
@@ -36,6 +34,7 @@ from nexus.usecases.intelligences.get_by_uuid import (
     create_inline_agents_configuration,
     get_project_and_content_base_data,
 )
+from nexus.usecases.projects import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from router.entities import message_factory
 
@@ -1280,3 +1279,66 @@ class AgentBuilderAudio(APIView):
             return Response({"error": "Invalid voice option"}, status=400)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
+
+def set_project_manager_agent(project_uuid, manager_uuid: str):
+    project = get_project_by_uuid(project_uuid)
+
+    manager = ManagerAgent.objects.get(uuid=manager_uuid)
+    project.manager_agent = manager
+    project.save()
+
+    notify_async(
+        event="cache_invalidation:project",
+        project=project,
+    )
+
+    return project.manager_agent.uuid
+
+
+def get_default_managers(limit: int = 2):
+    return ManagerAgent.objects.filter(default=True, public=True).order_by("-created_on")[:limit]
+
+
+class AgentManagersView(APIView):
+    # changing the supervisor agent naming to manager agent
+    def post(self, request, project_uuid):
+        manager_uuid = request.data.get("currentManager")
+        try:
+            manager_agent_uuid = set_project_manager_agent(project_uuid, manager_uuid)
+        except ManagerAgent.DoesNotExist:
+            return Response(data={"error": "Manager agent not found"}, status=404)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        return Response(data={"currentManager": manager_agent_uuid})
+
+    def get(self, request, project_uuid):
+        data = {
+            "serverTime": str(pendulum.now()),
+        }
+
+        project = get_project_by_uuid(project_uuid)
+        current_manager: ManagerAgent | None = project.manager_agent
+
+        if not current_manager:
+            return Response(data=data)
+
+        data.update({"currentManager": str(current_manager.uuid)})
+
+        if current_manager.default:
+            managers = get_default_managers(limit=2)
+            new_manager = managers[0]
+            legacy_manager = managers[1]
+            manager_data = {
+                "new": {"id": str(new_manager.uuid), "label": new_manager.name},
+                "legacy": {
+                    "id": str(legacy_manager.uuid),
+                    "label": legacy_manager.name,
+                    "deprecation": str(pendulum.instance(new_manager.release_date).subtract(days=1)),
+                },
+            }
+            data.update(manager_data)
+            return Response(data=data)
+
+        return Response(data=data)
