@@ -304,7 +304,15 @@ class MCP(models.Model):
         ordering = ["order", "name"]
 
     def __str__(self):
-        return f"{self.system.slug} - {self.name}"
+        return f"{self.system.name} - {self.name}"
+
+
+class AgentGroupModal(models.Model):
+    group = models.OneToOneField(AgentGroup, on_delete=models.CASCADE, related_name="modal")
+    conversation_example = models.JSONField(default=list, blank=True)
+
+    def __str__(self):
+        return f"Modal for {self.group.name}"
 
 
 class MCPConfigOption(models.Model):
