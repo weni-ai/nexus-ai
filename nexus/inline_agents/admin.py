@@ -348,7 +348,6 @@ class AgentAdmin(admin.ModelAdmin):
 class AgentGroupModalInline(admin.StackedInline):
     model = AgentGroupModal
     extra = 0
-    filter_horizontal = ("mcps_available",)
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
