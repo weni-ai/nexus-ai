@@ -25,7 +25,7 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
 )
-from nexus.inline_agents.models import Agent, AgentSystem, MCPCredentialTemplate
+from nexus.inline_agents.models import Agent, AgentSystem
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
@@ -140,6 +140,48 @@ def _sort_mcps(mcps: list) -> list:
     return sorted(mcps, key=sort_key)
 
 
+def _serialize_mcp(mcp) -> dict:
+    """Helper to serialize MCP with config and credentials"""
+    mcp_data = {
+        "name": mcp.name,
+        "description": mcp.description,
+        "config": [],
+        "credentials": [],
+    }
+
+    # Add config options
+    for config_option in mcp.config_options.all():
+        # For SWITCH, NUMBER, TEXT, CHECKBOX - ensure options is always an empty list
+        options = config_option.options
+        if config_option.type in ["SWITCH", "NUMBER", "TEXT", "CHECKBOX"]:
+            if not isinstance(options, list):
+                options = []
+
+        config_item = {
+            "name": config_option.name,
+            "label": config_option.label,
+            "type": config_option.type,
+            "options": options,
+        }
+        # Add default_value if it exists
+        if config_option.default_value is not None:
+            config_item["default_value"] = config_option.default_value
+        mcp_data["config"].append(config_item)
+
+    # Add credentials templates
+    for template in mcp.credential_templates.all():
+        mcp_data["credentials"].append(
+            {
+                "name": template.name,
+                "label": template.label,
+                "placeholder": template.placeholder,
+                "is_confidential": template.is_confidential,
+            }
+        )
+
+    return mcp_data
+
+
 def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
     """
     Get MCPs for an agent/system combination from database models.
@@ -152,73 +194,14 @@ def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
     if not agent or not system:
         return []
 
-    mcps = agent.mcps.filter(system=system, is_active=True).select_related("system").prefetch_related("config_options")
-    result = []
-    for mcp in mcps:
-        mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
-        # Add config options
-        for config_option in mcp.config_options.all():
-            # For SWITCH, NUMBER, TEXT, CHECKBOX - ensure options is always an empty list
-            options = config_option.options
-            if config_option.type in ["SWITCH", "NUMBER", "TEXT", "CHECKBOX"]:
-                if not isinstance(options, list):
-                    options = []
+    mcps = (
+        agent.mcps.filter(system=system, is_active=True)
+        .select_related("system")
+        .prefetch_related("config_options", "credential_templates")
+    )
 
-            config_item = {
-                "name": config_option.name,
-                "label": config_option.label,
-                "type": config_option.type,
-                "options": options,
-            }
-            # Add default_value if it exists
-            if config_option.default_value is not None:
-                config_item["default_value"] = config_option.default_value
-            mcp_data["config"].append(config_item)
-        result.append(mcp_data)
+    result = [_serialize_mcp(mcp) for mcp in mcps]
     return _sort_mcps(result)
-
-
-def get_credentials_for_mcp(agent_slug: str, system_slug: str, mcp_name: str, group_slug: str = None) -> list:
-    """
-    Get credential templates for an MCP from database models.
-    If group_slug is provided, searches across all agents in the group to find the MCP.
-    """
-    from nexus.inline_agents.models import Agent, AgentGroup, AgentSystem
-
-    system = AgentSystem.objects.filter(slug__iexact=system_slug).first()
-    if not system:
-        return []
-
-    mcp = None
-
-    if group_slug:
-        group = AgentGroup.objects.filter(slug=group_slug).first()
-        if group:
-            agents = Agent.objects.filter(group=group, is_official=True, source_type=Agent.PLATFORM)
-            for agent in agents:
-                mcp = agent.mcps.filter(system=system, name=mcp_name, is_active=True).first()
-                if mcp:
-                    break
-    else:
-        agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
-        if agent:
-            mcp = agent.mcps.filter(system=system, name=mcp_name, is_active=True).first()
-
-    if not mcp:
-        return []
-
-    templates = MCPCredentialTemplate.objects.filter(mcp=mcp)
-    result = []
-    for template in templates:
-        result.append(
-            {
-                "name": template.name,
-                "label": template.label,
-                "placeholder": template.placeholder,
-                "is_confidential": template.is_confidential,
-            }
-        )
-    return result
 
 
 def get_all_mcps_for_agent(agent_slug: str) -> dict:
@@ -231,33 +214,19 @@ def get_all_mcps_for_agent(agent_slug: str) -> dict:
     if not agent:
         return {}
 
-    mcps = agent.mcps.filter(is_active=True).select_related("system").prefetch_related("config_options")
+    mcps = (
+        agent.mcps.filter(is_active=True)
+        .select_related("system")
+        .prefetch_related("config_options", "credential_templates")
+    )
+
     result = {}
     for mcp in mcps:
         system_slug = mcp.system.slug
         if system_slug not in result:
             result[system_slug] = []
 
-        mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
-        # Add config options
-        for config_option in mcp.config_options.all():
-            # For SWITCH, NUMBER, TEXT, CHECKBOX - ensure options is always an empty list
-            options = config_option.options
-            if config_option.type in ["SWITCH", "NUMBER", "TEXT", "CHECKBOX"]:
-                if not isinstance(options, list):
-                    options = []
-
-            config_item = {
-                "name": config_option.name,
-                "label": config_option.label,
-                "type": config_option.type,
-                "options": options,
-            }
-            # Add default_value if it exists
-            if config_option.default_value is not None:
-                config_item["default_value"] = config_option.default_value
-            mcp_data["config"].append(config_item)
-        result[system_slug].append(mcp_data)
+        result[system_slug].append(_serialize_mcp(mcp))
 
     # Sort MCPs for each system
     for system_slug in result:
@@ -725,7 +694,27 @@ class OfficialAgentsV1(APIView):
 
         # If agent has a group, search across all agents in the group
         group_slug = agent.group.slug if getattr(agent, "group", None) else None
-        return get_credentials_for_mcp(agent.slug, system, mcp, group_slug=group_slug)
+
+        # Use existing helper to find MCPs
+        if group_slug:
+            all_group_mcps = get_all_mcps_for_group(group_slug)
+            mcps = []
+            for sys_key, sys_mcps in all_group_mcps.items():
+                if sys_key.lower() == system.lower():
+                    mcps = sys_mcps
+                    break
+        else:
+            mcps = get_mcps_for_agent_system(agent.slug, system)
+
+        # Find the specific MCP and return its credentials
+        if not mcps:
+            return []
+
+        target_mcp = next((m for m in mcps if m.get("name") == mcp), None)
+        if target_mcp:
+            return target_mcp.get("credentials", [])
+
+        return []
 
     def _validate_mcp(self, agent: Agent, system: str, mcp: str) -> Response | None:
         """Validate that the MCP exists for the given agent and system."""
