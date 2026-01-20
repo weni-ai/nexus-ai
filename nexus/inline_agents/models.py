@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
+from django.core.validators import FileExtensionValidator
 from django.db import models
 
 from nexus.agents.encryption import decrypt_value
@@ -257,6 +258,12 @@ class AgentGroup(models.Model):
 class AgentSystem(models.Model):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
+    logo = models.FileField(
+        upload_to="agent_systems/logos/",
+        null=True,
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=["png", "svg"])],
+    )
     metadata = models.JSONField(default=dict, null=True, blank=True)
 
     def __str__(self):

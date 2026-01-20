@@ -1,6 +1,12 @@
 from rest_framework import serializers
 
-from nexus.inline_agents.models import Agent, AgentCredential, IntegratedAgent
+from nexus.inline_agents.models import Agent, AgentCredential, AgentSystem, IntegratedAgent
+
+
+class AgentSystemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AgentSystem
+        fields = ["slug", "name", "logo"]
 
 
 class IntegratedAgentSerializer(serializers.ModelSerializer):
