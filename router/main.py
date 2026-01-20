@@ -32,14 +32,16 @@ def healthcheck():
 
 
 @app.post("/messages")
-def messages(request: Request, message: MessageHTTPBody):
+async def messages(request: Request):
     message_started.send(sender=DBCon)
 
     authenticate(request.query_params.get("token"))
 
     try:
+        raw_body = await request.json()
+        logger.info(f"Message received, raw payload: {raw_body}")
+        message = MessageHTTPBody(**raw_body)
         project = Project.objects.get(uuid=message.project_uuid)
-        logger.info(f"Message received, from project_uuid: {message.project_uuid}, text: {message.text}, contact_urn: {message.contact_urn}")
 
         if project.inline_agent_switch:
             logger.info("Starting Inline Agent")
