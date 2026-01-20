@@ -787,6 +787,7 @@ class ManagerAgentAdmin(admin.ModelAdmin):
                     "collaborator_max_tokens",
                     "tools",
                     "knowledge_bases",
+                    "parallel_tool_calls",
                     "model_has_reasoning",
                     "reasoning_effort",
                     "reasoning_summary",
