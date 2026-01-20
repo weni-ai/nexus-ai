@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 import openai
 import pendulum
 import sentry_sdk
-from agents import set_default_openai_client, set_default_openai_key, trace
+from agents import Agent, ModelSettings, set_default_openai_client, set_default_openai_key, trace
 from django.conf import settings
 from langfuse import get_client
 from openai import AsyncOpenAI
@@ -287,6 +287,7 @@ class OpenAIBackend(InlineAgentsBackend):
         default_instructions_for_collaborators_cached = kwargs.pop("default_instructions_for_collaborators", None)
 
         if supervisor_agent_uuid:
+            formatter_agent_configurations = supervisor.get("formatter_agent_configurations")
             external_team = self.team_adapter.to_external_enhanced(
                 supervisor=supervisor,
                 agents=team,
@@ -477,8 +478,6 @@ class OpenAIBackend(InlineAgentsBackend):
 
         supervisor_hooks.save_components_trace = True
 
-        from agents import Agent, ModelSettings
-
         formatter_agent = Agent(
             name="Response Formatter Agent",
             instructions=formatter_instructions,
@@ -490,8 +489,6 @@ class OpenAIBackend(InlineAgentsBackend):
         )
 
         if formatter_reasoning_effort:
-            from agents import ModelSettings
-
             formatter_agent.model_settings = ModelSettings(
                 reasoning=Reasoning(effort=formatter_reasoning_effort, summary=formatter_reasoning_summary)
             )

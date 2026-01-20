@@ -117,14 +117,11 @@ class ManagerAgentRepository(SupervisorRepository):
                 "audio_orchestration_collaborator": supervisor_data["audio_orchestration_collaborator_max_tokens"],
             },
             "formatter_agent_configurations": {
-                "formatter_agent_prompt": supervisor_data["formatter_agent_prompt"],
-                "formatter_agent_reasoning_effort": supervisor_data["formatter_agent_reasoning_effort"],
-                "formatter_agent_reasoning_summary": supervisor_data["formatter_agent_reasoning_summary"],
-                "formatter_agent_send_only_assistant_message": supervisor_data[
-                    "formatter_agent_send_only_assistant_message"
-                ],
-                "formatter_agent_tools_descriptions": supervisor_data["formatter_agent_tools_descriptions"],
-                "formatter_agent_foundation_model": supervisor_data["formatter_agent_foundation_model"],
+                "formatter_instructions": supervisor_data["formatter_agent_prompt"],
+                "formatter_reasoning_effort": supervisor_data["formatter_agent_reasoning_effort"],
+                "formatter_reasoning_summary": supervisor_data["formatter_agent_reasoning_summary"],
+                "formatter_send_only_assistant_message": supervisor_data["formatter_agent_send_only_assistant_message"],
+                "formatter_foundation_model": supervisor_data["formatter_agent_foundation_model"],
                 "formatter_agent_model_has_reasoning": supervisor_data["formatter_agent_model_has_reasoning"],
                 "formatter_tools_descriptions": supervisor_data["formatter_tools_descriptions"],
             },
