@@ -385,7 +385,7 @@ class AgentGroupAdmin(admin.ModelAdmin):
 
 @admin.register(AgentSystem)
 class AgentSystemAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug")
+    list_display = ("name", "slug", "logo")
     search_fields = ("name", "slug")
     ordering = ("name",)
     formfield_overrides = {
