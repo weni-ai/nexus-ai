@@ -5,6 +5,7 @@ from nexus.inline_agents.api.views import ActiveAgentsView as ActiveInlineAgents
 from nexus.inline_agents.api.views import (
     AgentBuilderAudio,
     AgentEndSessionView,
+    AgentManagersView,
     LogGroupView,
     MultiAgentView,
     OfficialAgentDetailV1,
@@ -59,4 +60,5 @@ urlpatterns = [
     path("agents/log-group", LogGroupView.as_view(), name="agents-log-group"),
     path("reports", ReportView.as_view(), name="reports"),
     path("project/<project_uuid>/agents/<str:agent_uuid>", DeleteAgentView.as_view(), name="delete-agent"),
+    path("project/<project_uuid>/managers", AgentManagersView.as_view(), name="project-agent-managerss"),
 ]

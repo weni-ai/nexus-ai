@@ -8,7 +8,7 @@ from django.utils.html import format_html
 
 from nexus.admin_widgets import ArrayJSONWidget, PrettyJSONWidget
 from nexus.inline_agents.backends.bedrock.models import Supervisor
-from nexus.inline_agents.backends.openai.models import OpenAISupervisor
+from nexus.inline_agents.backends.openai.models import ManagerAgent, OpenAISupervisor
 from nexus.inline_agents.models import (
     MCP,
     Agent,
@@ -484,4 +484,83 @@ class MCPAdmin(admin.ModelAdmin):
                     f"[Admin] Triggered cache invalidation after MCP deletion (affecting {len(projects)} projects)"
                 )
             except Exception as e:
-                logger.warning(f"[Admin] Failed to trigger cache invalidation after MCP deletion: {e}")
+                logger.warning(f"[Admin] Failed to trigger cache invalidation after Agent deletion: {e}")
+
+
+@admin.register(ManagerAgent)
+class ManagerAgentAdmin(admin.ModelAdmin):
+    list_display = ("name", "foundation_model", "created_on")
+    list_filter = ("foundation_model",)
+    search_fields = ("name", "instruction")
+    readonly_fields = ("created_on",)
+    ordering = ("-created_on",)
+
+    fieldsets = (
+        (
+            "Base Configuration",
+            {
+                "fields": (
+                    "name",
+                    "default",
+                    "public",
+                    "release_date",
+                    "base_prompt",
+                    "model_vendor",
+                    "foundation_model",
+                    "api_key",
+                    "api_base",
+                    "api_version",
+                    "max_tokens",
+                    "collaborator_max_tokens",
+                    "tools",
+                    "knowledge_bases",
+                    "model_has_reasoning",
+                    "reasoning_effort",
+                    "reasoning_summary",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Human Support",
+            {
+                "fields": ("human_support_prompt", "human_support_tools"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Audio Orchestration",
+            {
+                "fields": ("audio_orchestration_max_tokens", "audio_orchestration_collaborator_max_tokens"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Components",
+            {
+                "fields": (
+                    "header_components_prompt",
+                    "footer_components_prompt",
+                    "formatter_agent_prompt",
+                    "formatter_agent_foundation_model",
+                    "formatter_agent_model_has_reasoning",
+                    "formatter_agent_reasoning_effort",
+                    "formatter_agent_reasoning_summary",
+                    "formatter_agent_send_only_assistant_message",
+                    "formatter_agent_tools_descriptions",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Collaborators",
+            {
+                "fields": (
+                    "collaborators_foundation_model",
+                    "override_collaborators_foundation_model",
+                    "default_instructions_for_collaborators",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+    )
