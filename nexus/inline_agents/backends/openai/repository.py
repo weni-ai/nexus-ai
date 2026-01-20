@@ -96,6 +96,7 @@ class ManagerAgentRepository(SupervisorRepository):
             "model_has_reasoning": supervisor_data["model_has_reasoning"],
             "reasoning_effort": supervisor_data["reasoning_effort"],
             "reasoning_summary": supervisor_data["reasoning_summary"],
+            "parallel_tool_calls": supervisor_data["parallel_tool_calls"],
         }
 
         supervisor_dict = {
