@@ -52,7 +52,6 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
             return None
 
         config_with_labels = {}
-        system_info = None
         mcp_description = None
 
         # Try to find MCP with system if available in metadata
@@ -71,15 +70,6 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
             except AgentSystem.DoesNotExist:
                 pass
 
-        # Fallback: try without system filter if not found
-        if not mcp:
-            mcp = (
-                obj.agent.mcps.filter(name=mcp_name, is_active=True)
-                .select_related("system")
-                .prefetch_related("config_options")
-                .first()
-            )
-
         if mcp:
             mcp_description = mcp.description
             if mcp_config:
@@ -89,17 +79,12 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
                     config_with_labels[label] = value
             else:
                 config_with_labels = mcp_config
-
-            if mcp.system:
-                system_info = {"name": mcp.system.name, "slug": mcp.system.slug}
         else:
             config_with_labels = mcp_config
 
         result = {"name": mcp_name, "config": config_with_labels}
         if mcp_description:
             result["description"] = mcp_description
-        if system_info:
-            result["system"] = system_info
 
         return result
 
@@ -305,7 +290,6 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         from nexus.inline_agents.api.views import (
             _sort_mcps,
             get_all_mcps_for_group,
-            get_credentials_for_mcp,
             get_mcps_for_agent_system,
         )
 
@@ -316,24 +300,15 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         else:
             system_mcps = get_mcps_for_agent_system(obj.slug, selected_system) if selected_system else []
 
+        selected_mcp = None
+        creds = []
+
         if mcp_name and system_mcps:
             selected_mcp = next((mcp for mcp in system_mcps if mcp.get("name") == mcp_name), None)
             if selected_mcp:
-                creds = get_credentials_for_mcp(obj.slug, selected_system, mcp_name, group_slug=group_name)
-                selected_mcp["credentials"] = creds
+                creds = selected_mcp.get("credentials", [])
             else:
-                creds = []
                 selected_mcp = {}
-        else:
-            if system_mcps:
-                for mcp in system_mcps:
-                    mcp_name_for_creds = mcp.get("name")
-                    mcp_creds = get_credentials_for_mcp(
-                        obj.slug, selected_system, mcp_name_for_creds, group_slug=group_name
-                    )
-                    mcp["credentials"] = mcp_creds
-            selected_mcp = None
-            creds = []
 
         payload = {
             "name": obj.name,
