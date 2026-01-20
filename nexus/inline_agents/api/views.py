@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 
 from inline_agents.backends import BackendsRegistry
 from nexus.authentication import AUTHENTICATION_CLASSES
-from nexus.events import event_manager, notify_async
+from nexus.events import notify_async
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     IntegratedAgentSerializer,
@@ -1163,7 +1163,7 @@ class ProjectComponentsView(APIView):
             project.save()
 
             # Fire cache invalidation event for project update
-            event_manager.notify(
+            notify_async(
                 event="cache_invalidation:project",
                 project=project,
             )
