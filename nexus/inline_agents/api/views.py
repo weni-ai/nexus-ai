@@ -439,6 +439,13 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 "variants": variants,  # List of available variants
             }
 
+            try:
+                modal = base_agent.group.modal
+                presentation = {"conversation_example": modal.conversation_example}
+                payload["presentation"] = presentation
+            except Exception:
+                pass
+
             if len(all_capabilities) > 0:
                 payload["capabilities"] = sorted(list(all_capabilities))
             if len(all_policies) > 0:

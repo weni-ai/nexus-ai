@@ -14,6 +14,7 @@ from nexus.inline_agents.models import (
     Agent,
     AgentCategory,
     AgentGroup,
+    AgentGroupModal,
     AgentSystem,
     AgentType,
     Guardrail,
@@ -344,9 +345,19 @@ class AgentAdmin(admin.ModelAdmin):
     mcps_list.short_description = "Associated MCPs"
 
 
+class AgentGroupModalInline(admin.StackedInline):
+    model = AgentGroupModal
+    extra = 0
+    filter_horizontal = ("mcps_available",)
+    formfield_overrides = {
+        models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
+    }
+
+
 @admin.register(AgentGroup)
 class AgentGroupAdmin(admin.ModelAdmin):
     list_display = ("name", "slug")
+    inlines = [AgentGroupModalInline]
     search_fields = ("name", "slug")
     ordering = ("name",)
     formfield_overrides = {
