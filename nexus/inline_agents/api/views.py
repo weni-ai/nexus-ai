@@ -10,9 +10,10 @@ from rest_framework.views import APIView
 
 from inline_agents.backends import BackendsRegistry
 from nexus.authentication import AUTHENTICATION_CLASSES
-from nexus.events import event_manager, notify_async
+from nexus.events import notify_async
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
+    AgentSystemSerializer,
     IntegratedAgentSerializer,
     OfficialAgentDetailSerializer,
     OfficialAgentListSerializer,
@@ -554,7 +555,15 @@ class OfficialAgentsV1(APIView):
 
         consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
 
-        return Response(consolidated_data)
+        all_systems = AgentSystem.objects.all()
+        systems_data = AgentSystemSerializer(all_systems, many=True).data
+
+        response_data = {
+            "legacy": consolidated_data.get("legacy", []),
+            "new": {"agents": consolidated_data.get("new", []), "available_systems": systems_data},
+        }
+
+        return Response(response_data)
 
     @extend_schema(
         operation_id="v1_official_agents_assign",
@@ -1163,7 +1172,7 @@ class ProjectComponentsView(APIView):
             project.save()
 
             # Fire cache invalidation event for project update
-            event_manager.notify(
+            notify_async(
                 event="cache_invalidation:project",
                 project=project,
             )

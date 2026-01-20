@@ -62,7 +62,8 @@ def check_ingestion_job_status(
 
             file_database.search_data(content_base_uuid=content_base_uuid, text="test", number_of_results=1)
             logger.info(
-                f"🦑 BEDROCK: Knowledge base is accessible for content_base_uuid {content_base_uuid}, marking as success"
+                f"🦑 BEDROCK: Knowledge base is accessible for content_base_uuid "
+                f"{content_base_uuid}, marking as success"
             )
             task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
 
@@ -83,11 +84,33 @@ def check_ingestion_job_status(
     return True
 
 
-@app.task
+@app.task(
+    bind=True,
+    soft_time_limit=300,
+    time_limit=360,
+    max_retries=50,
+)
 def start_ingestion_job(
-    celery_task_manager_uuid: str, file_type: str = "file", post_delete: bool = False, project_uuid: str | None = None
+    self,
+    celery_task_manager_uuid: str,
+    file_type: str = "file",
+    post_delete: bool = False,
+    project_uuid: str | None = None,
 ):
     try:
+        # Early validation - don't loop forever for invalid inputs
+        if not celery_task_manager_uuid:
+            logger.warning("🦑 BEDROCK: start_ingestion_job called with empty UUID, skipping")
+            return
+
+        # Validate task manager exists before processing
+        if not post_delete:
+            task_manager_usecase = CeleryTaskManagerUseCase()
+            task_manager = task_manager_usecase.get_task_manager_by_uuid(celery_task_manager_uuid, file_type)
+            if not task_manager:
+                logger.warning(f"🦑 BEDROCK: TaskManager {celery_task_manager_uuid} not found, skipping")
+                return
+
         logger.info("🦑 BEDROCK: Starting Ingestion Job")
 
         file_database = BedrockFileDatabase(project_uuid=project_uuid)
@@ -95,16 +118,18 @@ def start_ingestion_job(
 
         if in_progress_ingestion_jobs:
             sleep(5)
-            return start_ingestion_job.delay(celery_task_manager_uuid, file_type=file_type, project_uuid=project_uuid)
+            return self.retry(
+                args=[celery_task_manager_uuid],
+                kwargs={"file_type": file_type, "post_delete": post_delete, "project_uuid": project_uuid},
+                countdown=0,
+            )
 
         ingestion_job_id: str = file_database.start_bedrock_ingestion()
 
         if post_delete:
             return
 
-        # TODO: USECASE
-        task_manager_usecase = CeleryTaskManagerUseCase()
-        task_manager = task_manager_usecase.get_task_manager_by_uuid(celery_task_manager_uuid, file_type)
+        # Update task manager with ingestion job ID
         task_manager.ingestion_job_id = ingestion_job_id
         task_manager.save()
 
@@ -120,7 +145,12 @@ def start_ingestion_job(
                 "🦑 BEDROCK: Filter didn't catch in progress Ingestion Job. " "Waiting to start new IngestionJob ..."
             )
             sleep(15)
-            return start_ingestion_job.delay(celery_task_manager_uuid, file_type=file_type, project_uuid=project_uuid)
+            return self.retry(
+                args=[celery_task_manager_uuid],
+                kwargs={"file_type": file_type, "post_delete": post_delete, "project_uuid": project_uuid},
+                countdown=0,
+            )
+        raise
 
 
 @app.task

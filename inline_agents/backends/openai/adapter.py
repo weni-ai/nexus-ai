@@ -625,7 +625,7 @@ class OpenAITeamAdapter(TeamAdapter):
             )
 
             agent = cls._get_agent_for_tool(function_name, project_uuid)
-            constants = {}
+            # constants = {}
             validation_errors = []
             mcp_credentials = {}
             mcp_config = {}
@@ -644,18 +644,18 @@ class OpenAITeamAdapter(TeamAdapter):
                             extra={"errors": validation_errors, "payload": payload, "tool_name": function_name},
                         )
 
-                if hasattr(agent, "constants") and agent.constants:
-                    constants = {
-                        k: v.get("value", "") if isinstance(v, dict) else v for k, v in agent.constants.items()
-                    }
-                    logger.debug(
-                        f"Loaded {len(constants)} constants for agent '{agent.slug}'",
-                        extra={
-                            "agent_slug": agent.slug,
-                            "constants_count": len(constants),
-                            "constants_keys": list(constants.keys()),
-                        },
-                    )
+                # if hasattr(agent, "constants") and agent.constants:
+                #     constants = {
+                #         k: v.get("value", "") if isinstance(v, dict) else v for k, v in agent.constants.items()
+                #     }
+                #     logger.debug(
+                #         f"Loaded {len(constants)} constants for agent '{agent.slug}'",
+                #         extra={
+                #             "agent_slug": agent.slug,
+                #             "constants_count": len(constants),
+                #             "constants_keys": list(constants.keys()),
+                #         },
+                #     )
 
                 integrated_agent = IntegratedAgent.objects.filter(agent=agent, project__uuid=project_uuid).first()
 
