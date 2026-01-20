@@ -1352,11 +1352,14 @@ class AgentManagersView(APIView):
         return Response(data={"currentManager": manager_agent_uuid})
 
     def get(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
         data = {
             "serverTime": str(pendulum.now()),
         }
-
-        project = get_project_by_uuid(project_uuid)
         current_manager: ManagerAgent | None = project.manager_agent
 
         if not current_manager:
@@ -1366,16 +1369,21 @@ class AgentManagersView(APIView):
 
         if current_manager.default:
             managers = get_default_managers(limit=2)
-            new_manager = managers[0]
-            legacy_manager = managers[1]
-            manager_data = {
-                "new": {"id": str(new_manager.uuid), "label": new_manager.name},
-                "legacy": {
-                    "id": str(legacy_manager.uuid),
-                    "label": legacy_manager.name,
-                    "deprecation": str(pendulum.instance(new_manager.release_date).subtract(days=1)),
-                },
-            }
+            if managers.count() == 2:
+                new_manager = managers[0]
+                legacy_manager = managers[1]
+                manager_data = {
+                    "new": {"id": str(new_manager.uuid), "label": new_manager.name},
+                    "legacy": {
+                        "id": str(legacy_manager.uuid),
+                        "label": legacy_manager.name,
+                        "deprecation": str(pendulum.instance(new_manager.release_date).subtract(days=1)),
+                    },
+                }
+            else:
+                manager_data = {
+                    "new": {"id": str(new_manager.uuid), "label": new_manager.name},
+                }
             data.update(manager_data)
             return Response(data=data)
 
