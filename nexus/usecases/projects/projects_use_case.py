@@ -269,9 +269,11 @@ class ProjectsUseCase:
         if project.agents_backend == "BedrockBackend":
             return backend.supervisor_repository.get_supervisor(project, foundation_model)
         else:
-            return backend.supervisor_repository.get_supervisor(
-                foundation_model=foundation_model,
-                default_supervisor_foundation_model=project.default_supervisor_foundation_model,
+            return backend.get_supervisor(
+                use_components=project.use_components,
+                human_support=project.human_support,
+                default_supervisor_foundation_model=foundation_model,
+                supervisor_agent_uuid=project.manager_agent.uuid if project.manager_agent else None,
             )
 
     def _build_contact_fields_json(self, project: Project) -> str:
