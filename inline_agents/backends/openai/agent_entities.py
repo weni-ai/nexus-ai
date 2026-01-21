@@ -18,7 +18,6 @@ class AgentModel:
                 "model": cleaned_model,
             }
             if user_model_credentials.get("api_key"):
-                print("UTILIZANDO API KEY")
                 kwargs["api_key"] = user_model_credentials.get("api_key")
             if user_model_credentials.get("api_base"):
                 kwargs["base_url"] = user_model_credentials.get("api_base")

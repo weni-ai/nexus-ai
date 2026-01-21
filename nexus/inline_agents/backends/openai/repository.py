@@ -75,7 +75,10 @@ class ManagerAgentRepository(SupervisorRepository):
             try:
                 return ManagerAgent.objects.get(uuid=supervisor_uuid)
             except ManagerAgent.DoesNotExist:
-                return ManagerAgent.objects.filter(default=True, public=True).order_by("created_on").last()
+                manager = ManagerAgent.objects.filter(default=True, public=True).order_by("created_on").last()
+                if manager is None:
+                    raise
+                return manager
 
         supervisor_data = self._supervisor_to_dict(get_supervisor_object(supervisor_agent_uuid))
 
