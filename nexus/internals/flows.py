@@ -80,13 +80,17 @@ class FlowsRESTClient(RestClient):
         except requests.exceptions.HTTPError:
             return {}
 
-    def whatsapp_broadcast(self, urns: List[str], msg: Dict, project_uuid: str, use_stream: bool = False):
+    def whatsapp_broadcast(
+        self, urns: List[str], msg: Dict, project_uuid: str, use_stream: bool = False, channel_uuid: str = ""
+    ):
         if use_stream:
             url = self._get_url("/api/v2/internals/messages/stream")
         else:
             url = self._get_url("/api/v2/internals/whatsapp_broadcasts")
 
         body = dict(urns=urns, project=project_uuid)
+        if use_stream and channel_uuid:
+            body["channel_uuid"] = channel_uuid
         body.update(msg)
 
         jwt_usecase = JWTUsecase()
@@ -100,9 +104,8 @@ class FlowsRESTClient(RestClient):
 
         response = requests.post(url, json=body, headers=headers)
 
-        response_text = response.text[:500] if response.text else None
         logger.info(
             f"[Broadcast] Response received - url: {url}, use_stream: {use_stream}, "
-            f"status_code: {response.status_code}, project: {project_uuid}, response: {response_text}"
+            f"status_code: {response.status_code}, project: {project_uuid}"
         )
         return response
