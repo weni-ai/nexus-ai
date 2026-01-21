@@ -106,7 +106,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.mccabe]
-max-complexity = 26
+max-complexity = 12
 
 
 [tool.isort]
