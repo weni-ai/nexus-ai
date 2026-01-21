@@ -231,6 +231,17 @@ def get_all_mcps_for_agent(agent_slug: str) -> dict:
     return result
 
 
+def _sort_systems(systems: list) -> list:
+    """
+    Sort systems list ensuring 'vtex' comes first, followed by alphabetical order.
+    """
+    sorted_systems = sorted(systems)
+    if "vtex" in sorted_systems:
+        sorted_systems.remove("vtex")
+        sorted_systems.insert(0, "vtex")
+    return sorted_systems
+
+
 def get_all_systems_for_group(group_slug: str) -> list:
     """
     Get all unique system slugs for all agents in a group.
@@ -238,9 +249,8 @@ def get_all_systems_for_group(group_slug: str) -> list:
     from nexus.inline_agents.models import Agent, AgentSystem
 
     agents = Agent.objects.filter(group__slug=group_slug, is_official=True, source_type=Agent.PLATFORM)
-    return list(
-        AgentSystem.objects.filter(agents__in=agents).values_list("slug", flat=True).distinct().order_by("slug")
-    )
+    systems = list(AgentSystem.objects.filter(agents__in=agents).values_list("slug", flat=True).distinct())
+    return _sort_systems(systems)
 
 
 def get_all_mcps_for_group(group_slug: str) -> dict:

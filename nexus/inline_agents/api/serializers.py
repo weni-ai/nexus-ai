@@ -289,6 +289,7 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
 
         from nexus.inline_agents.api.views import (
             _sort_mcps,
+            _sort_systems,
             get_all_mcps_for_group,
             get_all_systems_for_group,
             get_mcps_for_agent_system,
@@ -301,9 +302,10 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         else:
             from nexus.inline_agents.models import AgentSystem
 
-            available_systems = list(
+            systems_list = list(
                 AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct()
             )
+            available_systems = _sort_systems(systems_list)
 
         selected_system = system or (available_systems[0] if available_systems else "")
         assigned = False
