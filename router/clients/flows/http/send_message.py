@@ -24,10 +24,22 @@ class SendMessageHTTPClient(DirectMessage):
         if self.__use_grpc:
             # Use same format as whatsapp_broadcasts endpoint
             msg = {"msg": {"text": text}}
+            text_preview = text[:100] if text else None
+            logger.info(
+                f"[SendMessageHTTPClient] Using GRPC stream endpoint - "
+                f"project: {project_uuid}, urns: {urns}, msg: {msg}, text_preview: {text_preview}"
+            )
             response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid, use_stream=True)
             try:
                 response.raise_for_status()
             except Exception as error:
+                response_text = response.text[:500] if response and response.text else None
+                status_code = response.status_code if response else None
+                logger.error(
+                    f"[SendMessageHTTPClient] GRPC stream endpoint failed - "
+                    f"project: {project_uuid}, status_code: {status_code}, "
+                    f"response: {response_text}, error: {error}"
+                )
                 raise exceptions.UnableToSendMessage(str(error)) from error
             return
 

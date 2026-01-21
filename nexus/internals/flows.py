@@ -89,14 +89,20 @@ class FlowsRESTClient(RestClient):
         body = dict(urns=urns, project=project_uuid)
         body.update(msg)
 
-        logger.debug(
-            f"[Broadcast] Sending message for urns: {urns} and project: {project_uuid}",
-        )
-
         jwt_usecase = JWTUsecase()
         jwt_token = jwt_usecase.generate_broadcast_jwt_token()
         headers = {"Content-Type": "application/json; charset: utf-8", "Authorization": f"Bearer {jwt_token}"}
 
+        logger.info(
+            f"[Broadcast] Sending request - url: {url}, use_stream: {use_stream}, "
+            f"project: {project_uuid}, urns: {urns}, body: {body}"
+        )
+
         response = requests.post(url, json=body, headers=headers)
-        logger.debug(f"[Broadcast] Response sent to urns: {urns}")
+
+        response_text = response.text[:500] if response.text else None
+        logger.info(
+            f"[Broadcast] Response received - url: {url}, use_stream: {use_stream}, "
+            f"status_code: {response.status_code}, project: {project_uuid}, response: {response_text}"
+        )
         return response
