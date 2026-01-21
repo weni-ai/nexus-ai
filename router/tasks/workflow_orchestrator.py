@@ -115,9 +115,7 @@ def _initialize_workflow(ctx: WorkflowContext) -> None:
     )
 
     if had_existing:
-        logger.info(
-            f"[Workflow] Revoked existing workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
-        )
+        logger.info(f"[Workflow] Revoked existing workflow {ctx.workflow_id}")
 
     # Update message with concatenated text
     ctx.message["text"] = final_message_text
@@ -140,9 +138,7 @@ def _finalize_workflow(ctx: WorkflowContext, status: str = "completed") -> None:
     )
     ctx.task_manager.clear_workflow_state(ctx.project_uuid, ctx.contact_urn)
 
-    logger.info(
-        f"[Workflow] {status.capitalize()} workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
-    )
+    logger.info(f"[Workflow] {status.capitalize()} workflow {ctx.workflow_id}")
 
 
 def _handle_workflow_error(ctx: WorkflowContext, error: Exception) -> None:
@@ -166,9 +162,7 @@ def _handle_workflow_error(ctx: WorkflowContext, error: Exception) -> None:
 
 def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException) -> Any:
     """Handle guardrails block: dispatch the blocked message response."""
-    logger.warning(
-        f"[Workflow] Unsafe message in workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}: {error.message}"
-    )
+    logger.warning(f"[Workflow] Unsafe message in workflow {ctx.workflow_id}: {error.message}")
 
     message_obj = _create_message_object(ctx.message)
     _finalize_workflow(ctx, status="blocked")
@@ -203,9 +197,7 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
 
     Returns the pre-generation result dict with cached_data and agents_backend.
     """
-    logger.info(
-        f"[Workflow] Executing pre-generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
-    )
+    logger.info(f"[Workflow] Executing pre-generation for {ctx.workflow_id}")
 
     # Call directly using .run() to avoid Celery's "never call .get() within a task" error
     result = pre_generation_task.run(
@@ -217,9 +209,7 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
 
     if result["status"] == "failed":
         error_msg = result.get("error", "Unknown error")
-        logger.error(
-            f"[Workflow] Pre-generation failed for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}: {error_msg}"
-        )
+        logger.error(f"[Workflow] Pre-generation failed for {ctx.workflow_id}: {error_msg}")
         raise Exception(f"Pre-generation failed: {error_msg}")
 
     # Populate context with results
@@ -232,6 +222,7 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
         multi_agents=True,
         project_use_components=ctx.cached_data.project_dict.get("use_components", False),
         project_uuid=ctx.project_uuid,
+        stream_support=ctx.message.get("stream_support", False),
     )
 
     return result
@@ -276,6 +267,7 @@ def _run_generation(ctx: WorkflowContext) -> str:
         foundation_model=foundation_model,
         turn_off_rationale=turn_off_rationale,
         channel_type=ctx.message.get("channel_type", ""),
+        stream_support=ctx.message.get("stream_support", False),
     )
 
     return response
@@ -294,9 +286,7 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
         status="post_generation",
     )
 
-    logger.info(
-        f"[Workflow] Executing post-generation for {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
-    )
+    logger.info(f"[Workflow] Executing post-generation for {ctx.workflow_id}")
 
     message_obj = _create_message_object(ctx.message)
 

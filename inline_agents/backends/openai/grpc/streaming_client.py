@@ -17,11 +17,16 @@ from inline_agents.backends.openai.grpc.generated import (
 logger = logging.getLogger(__name__)
 
 
-def is_grpc_enabled(project_uuid: str, use_components: bool) -> bool:
-    if use_components:
+def is_grpc_enabled(project_uuid: str, use_components: bool, stream_support: bool) -> bool:
+    """
+    Check if GRPC is enabled for a project.
+
+    Set GRPC_ENABLED_PROJECTS=["uuid1", "uuid2"] or ["*"] for all projects.
+    """
+    if use_components or not stream_support:
         return False
     enabled_projects = getattr(settings, "GRPC_ENABLED_PROJECTS", [])
-    return str(project_uuid) in enabled_projects
+    return str(project_uuid) in enabled_projects or "*" in enabled_projects
 
 
 class MessageStreamingClient:

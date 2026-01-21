@@ -656,6 +656,7 @@ def start_multi_agents(
             multi_agents=True,
             project_use_components=project_use_components,
             project_uuid=str(message.project_uuid),
+            stream_support=getattr(message, "stream_support", False),
         )
         logger.info("Starting multi-agents")
 

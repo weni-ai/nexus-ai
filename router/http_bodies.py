@@ -14,6 +14,7 @@ class MessageHTTPBody(BaseModel):
     attachments: Optional[List] = []
     msg_event: Optional[dict] = {}
     contact_fields: Optional[dict] = {}
+    stream_support: Optional[bool] = False
 
     def dict(self):
         return {key: value for key, value in self.__dict__.items() if value is not None}

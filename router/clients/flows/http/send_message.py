@@ -13,14 +13,18 @@ logger = logging.getLogger(__name__)
 
 
 class SendMessageHTTPClient(DirectMessage):
-    def __init__(self, host: str, access_token: str) -> None:
+    def __init__(self, host: str, access_token: str, use_grpc: bool = False) -> None:
         self.__host = host
         self.__access_token = access_token
+        self.__use_grpc = use_grpc
 
     def send_direct_message(
         self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs
     ) -> None:
-        url = f"{self.__host}/mr/msg/send"
+        if self.__use_grpc:
+            url = f"{self.__host}/api/v2/internals/messages/stream"
+        else:
+            url = f"{self.__host}/mr/msg/send"
 
         payload = {"user": user, "project_uuid": project_uuid, "urns": urns, "text": text}
         headers = {"Authorization": f"Token {self.__access_token}", "Content-Type": "application/json"}
@@ -36,10 +40,9 @@ class SendMessageHTTPClient(DirectMessage):
 
 
 class WhatsAppBroadcastHTTPClient(DirectMessage):
-    def __init__(self, host: str, access_token: str, use_grpc: bool = False) -> None:
+    def __init__(self, host: str, access_token: str) -> None:
         self.__host = host
         self.__access_token = access_token
-        self.__use_grpc = use_grpc
 
     def fix_json_string(self, json_str):
         """
@@ -119,7 +122,7 @@ class WhatsAppBroadcastHTTPClient(DirectMessage):
             msgs = self.format_message_for_openai(msg, urns, project_uuid, user, full_chunks)
 
         for msg in msgs:
-            response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid, use_grpc=self.__use_grpc)
+            response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid)
             try:
                 response.raise_for_status()
             except Exception as error:
