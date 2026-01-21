@@ -1296,8 +1296,8 @@ def set_project_manager_agent(project_uuid, manager_uuid: str):
     return project.manager_agent.uuid
 
 
-def get_default_managers(limit: int = 2):
-    return ManagerAgent.objects.filter(default=True, public=True).order_by("-created_on")[:limit]
+def get_public_managers(limit: int = 2):
+    return ManagerAgent.objects.filter(public=True).order_by("-created_on")[:limit]
 
 
 class AgentManagersView(APIView):
@@ -1322,31 +1322,40 @@ class AgentManagersView(APIView):
         data = {
             "serverTime": str(pendulum.now()),
         }
+
+        managers = get_public_managers(limit=2)
+        managers_list = list(managers)
+
+        if managers_list:
+            if len(managers_list) == 2:
+                new_manager = managers_list[0]
+                legacy_manager = managers_list[1]
+                try:
+                    deprecation_date = pendulum.instance(new_manager.release_date).subtract(days=1).to_iso8601_string()
+                except (AttributeError, TypeError):
+                    deprecation_date = None
+
+                manager_data = {
+                    "new": {"id": str(new_manager.uuid), "label": new_manager.name},
+                    "legacy": {
+                        "id": str(legacy_manager.uuid),
+                        "label": legacy_manager.name,
+                        "deprecation": deprecation_date,
+                    },
+                }
+            else:
+                new_manager = managers_list[0]
+                manager_data = {
+                    "new": {"id": str(new_manager.uuid), "label": new_manager.name},
+                }
+
+            data.update(manager_data)
+
         current_manager: ManagerAgent | None = project.manager_agent
 
         if not current_manager:
             return Response(data=data)
 
         data.update({"currentManager": str(current_manager.uuid)})
-
-        if current_manager.default:
-            managers = get_default_managers(limit=2)
-            if managers.count() == 2:
-                new_manager = managers[0]
-                legacy_manager = managers[1]
-                manager_data = {
-                    "new": {"id": str(new_manager.uuid), "label": new_manager.name},
-                    "legacy": {
-                        "id": str(legacy_manager.uuid),
-                        "label": legacy_manager.name,
-                        "deprecation": str(pendulum.instance(new_manager.release_date).subtract(days=1)),
-                    },
-                }
-            else:
-                manager_data = {
-                    "new": {"id": str(new_manager.uuid), "label": new_manager.name},
-                }
-            data.update(manager_data)
-            return Response(data=data)
 
         return Response(data=data)
