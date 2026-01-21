@@ -634,8 +634,35 @@ class OfficialAgentsV1(APIView):
     ) -> dict | Response:
         usecase = AssignAgentsUsecase()
         if assigned:
+            # Matchmaking: If MCP is provided, try to find a better matching agent within the same group
+            real_agent_uuid = agent_uuid
+            if mcp:
+                try:
+                    current_agent = Agent.objects.get(uuid=agent_uuid)
+                    if current_agent.group:
+                        candidate_qs = Agent.objects.filter(
+                            group=current_agent.group, is_official=True, mcps__name=mcp, mcps__is_active=True
+                        )
+
+                        if system:
+                            candidate_qs = candidate_qs.filter(systems__slug__iexact=system)
+
+                        better_agent = candidate_qs.first()
+
+                        if better_agent:
+                            real_agent_uuid = str(better_agent.uuid)
+                        else:
+                            supports_it = current_agent.mcps.filter(name=mcp, is_active=True).exists()
+                            if not supports_it:
+                                error_msg = f"No agent in group '{current_agent.group.name}' supports MCP '{mcp}'"
+                                if system:
+                                    error_msg += f" for system '{system}'"
+                                return Response({"error": error_msg}, status=400)
+                except Agent.DoesNotExist:
+                    return Response({"error": "Agent not found"}, status=404)
+
             try:
-                created, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
+                created, integrated_agent = usecase.assign_agent(real_agent_uuid, project_uuid)
 
                 # Persist MCP selection and configuration in metadata
                 if mcp or mcp_config or system:
