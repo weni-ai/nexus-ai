@@ -1225,6 +1225,8 @@ class AgentEndSessionView(APIView):
 
 
 class AgentBuilderAudio(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
     def get(self, request, project_uuid):
         _, _, inline_agents_configuration = get_project_and_content_base_data(project_uuid=project_uuid)
         if inline_agents_configuration:
@@ -1301,6 +1303,8 @@ def get_public_managers(limit: int = 2):
 
 
 class AgentManagersView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
     # changing the supervisor agent naming to manager agent
     def post(self, request, project_uuid):
         manager_uuid = request.data.get("currentManager")
