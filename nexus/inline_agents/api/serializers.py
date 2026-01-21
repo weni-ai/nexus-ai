@@ -95,6 +95,13 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         if mcp_description:
             result["description"] = mcp_description
 
+        if mcp and mcp.system:
+            result["system"] = {
+                "name": mcp.system.name,
+                "slug": mcp.system.slug,
+                "logo": mcp.system.logo.url if mcp.system.logo else None,
+            }
+
         return result
 
 
@@ -289,9 +296,9 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
 
         from nexus.inline_agents.api.views import (
             _sort_mcps,
+            _sort_systems,
             get_all_mcps_for_group,
             get_all_systems_for_group,
-            get_mcps_for_agent_system,
         )
 
         group_name = obj.group.slug if getattr(obj, "group", None) else None
@@ -301,9 +308,10 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         else:
             from nexus.inline_agents.models import AgentSystem
 
-            available_systems = list(
+            systems_list = list(
                 AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct()
             )
+            available_systems = _sort_systems(systems_list)
 
         selected_system = system or (available_systems[0] if available_systems else "")
         assigned = False
@@ -311,9 +319,16 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
         if group_name:
             all_group_mcps = get_all_mcps_for_group(group_name)
-            system_mcps = all_group_mcps.get(selected_system, []) if selected_system else []
+            system_mcps = []
+            for mcps in all_group_mcps.values():
+                system_mcps.extend(mcps)
         else:
-            system_mcps = get_mcps_for_agent_system(obj.slug, selected_system) if selected_system else []
+            from nexus.inline_agents.api.views import get_all_mcps_for_agent
+
+            all_agent_mcps = get_all_mcps_for_agent(obj.slug)
+            system_mcps = []
+            for mcps in all_agent_mcps.values():
+                system_mcps.extend(mcps)
 
         selected_mcp = None
         creds = []

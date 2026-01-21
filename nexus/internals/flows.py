@@ -88,9 +88,12 @@ class FlowsRESTClient(RestClient):
         else:
             url = self._get_url("/api/v2/internals/whatsapp_broadcasts")
 
-        body = dict(urns=urns, project=project_uuid)
-        if use_stream and channel_uuid:
-            body["channel_uuid"] = channel_uuid
+        if use_stream:
+            body = dict(urns=urns, project_uuid=project_uuid)
+            if channel_uuid:
+                body["channel_uuid"] = channel_uuid
+        else:
+            body = dict(urns=urns, project=project_uuid)
         body.update(msg)
 
         jwt_usecase = JWTUsecase()
