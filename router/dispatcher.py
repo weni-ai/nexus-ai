@@ -22,7 +22,13 @@ def dispatch(
 
     if direct_message:
         return direct_message.send_direct_message(
-            llm_response, urns, message.project_uuid, user_email, full_chunks=full_chunks, backend=backend
+            llm_response,
+            urns,
+            message.project_uuid,
+            user_email,
+            full_chunks=full_chunks,
+            backend=backend,
+            channel_uuid=getattr(message, "channel_uuid", ""),
         )
 
     return flow_start.start_flow(
