@@ -54,7 +54,7 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         config_with_labels = {}
         mcp_description = None
 
-        # Try to find MCP with system if available in metadata
+        # Try to find MCP with system if available in metadata, or fallback to name lookup
         mcp = None
         if system_slug:
             from nexus.inline_agents.models import AgentSystem
@@ -69,6 +69,15 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
                 )
             except AgentSystem.DoesNotExist:
                 pass
+
+        # Fallback: find MCP by name within agent's MCPs if not found via system
+        if not mcp:
+            mcp = (
+                obj.agent.mcps.filter(name=mcp_name, is_active=True)
+                .select_related("system")
+                .prefetch_related("config_options")
+                .first()
+            )
 
         if mcp:
             mcp_description = mcp.description
