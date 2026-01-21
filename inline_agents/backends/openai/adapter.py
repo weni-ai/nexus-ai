@@ -79,15 +79,13 @@ class OpenAITeamAdapter(TeamAdapter):
         return "\n".join(instructions) if instructions else ""
 
     @classmethod
-    def prepate_agent_instructions(
+    def prepare_agent_instructions(
         cls,
         agent_instructions: str,
-        default_instructions_for_collaborators: str,
         supervisor_default_collaborator_instructions: str,
     ) -> str:
         parts = [
             agent_instructions,
-            default_instructions_for_collaborators,
             supervisor_default_collaborator_instructions,
         ]
         return "\n".join(filter(None, parts))
@@ -121,9 +119,8 @@ class OpenAITeamAdapter(TeamAdapter):
         max_tokens_collaborator: int = max_tokens.get("collaborator", 2048)
 
         for agent in agents:
-            agent_instructions = cls.prepate_agent_instructions(
+            agent_instructions = cls.prepare_agent_instructions(
                 agent.get("instruction"),
-                supervisor.get("default_instructions_for_collaborators"),
                 supervisor.get("default_instructions_for_collaborators"),
             )
             agent_name = agent.get("agentName")
