@@ -95,6 +95,13 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         if mcp_description:
             result["description"] = mcp_description
 
+        if mcp and mcp.system:
+            result["system"] = {
+                "name": mcp.system.name,
+                "slug": mcp.system.slug,
+                "logo": mcp.system.logo.url if mcp.system.logo else None,
+            }
+
         return result
 
 
