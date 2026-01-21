@@ -22,9 +22,16 @@ class SendMessageHTTPClient(DirectMessage):
         self, text: str, urns: List, project_uuid: str, user: str, full_chunks: List[Dict], **kwargs
     ) -> None:
         if self.__use_grpc:
-            url = f"{self.__host}/api/v2/internals/messages/stream"
-        else:
-            url = f"{self.__host}/mr/msg/send"
+            # Use same format as whatsapp_broadcasts endpoint
+            msg = {"msg": {"text": text}}
+            response = FlowsRESTClient().whatsapp_broadcast(urns, msg, project_uuid, use_stream=True)
+            try:
+                response.raise_for_status()
+            except Exception as error:
+                raise exceptions.UnableToSendMessage(str(error)) from error
+            return
+
+        url = f"{self.__host}/mr/msg/send"
 
         payload = {"user": user, "project_uuid": project_uuid, "urns": urns, "text": text}
         headers = {"Authorization": f"Token {self.__access_token}", "Content-Type": "application/json"}
