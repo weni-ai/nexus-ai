@@ -115,7 +115,7 @@ class OpenAITeamAdapter(TeamAdapter):
         for agent in agents:
             agent_instructions = cls.prepare_agent_instructions(
                 agent.get("instruction"),
-                supervisor.get("default_instructions_for_collaborators"),
+                supervisor.get("collaborator_configurations", {}).get("default_instructions_for_collaborators"),
             )
             agent_name = agent.get("agentName")
             hooks = CollaboratorHooks(
