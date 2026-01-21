@@ -287,7 +287,7 @@ class AgentCategory(models.Model):
 
 
 class MCP(models.Model):
-    """Micro-Capability Package - Represents a specific capability configuration for an agent/system combination"""
+    """Micro-Capability Package - Represents a specific capability configuration for an agent combination"""
 
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)

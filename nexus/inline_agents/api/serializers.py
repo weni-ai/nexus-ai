@@ -277,23 +277,29 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         project_uuid = self.context.get("project_uuid")
         system = self.context.get("system")
         mcp_name = self.context.get("mcp")
-        from nexus.inline_agents.models import AgentSystem
-
-        available_systems = list(
-            AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct()
-        )
-        selected_system = system or (available_systems[0] if available_systems else "")
-        assigned = False
-        if project_uuid:
-            assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
 
         from nexus.inline_agents.api.views import (
             _sort_mcps,
             get_all_mcps_for_group,
+            get_all_systems_for_group,
             get_mcps_for_agent_system,
         )
 
         group_name = obj.group.slug if getattr(obj, "group", None) else None
+
+        if group_name:
+            available_systems = get_all_systems_for_group(group_name)
+        else:
+            from nexus.inline_agents.models import AgentSystem
+
+            available_systems = list(
+                AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct()
+            )
+
+        selected_system = system or (available_systems[0] if available_systems else "")
+        assigned = False
+        if project_uuid:
+            assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
         if group_name:
             all_group_mcps = get_all_mcps_for_group(group_name)
             system_mcps = all_group_mcps.get(selected_system, []) if selected_system else []

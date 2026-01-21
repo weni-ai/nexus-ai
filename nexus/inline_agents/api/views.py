@@ -25,7 +25,7 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
 )
-from nexus.inline_agents.models import Agent, AgentSystem
+from nexus.inline_agents.models import Agent, AgentGroup, AgentSystem
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
@@ -186,8 +186,6 @@ def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
     """
     Get MCPs for an agent/system combination from database models.
     """
-    from nexus.inline_agents.models import Agent, AgentSystem
-
     agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
     system = AgentSystem.objects.filter(slug__iexact=system_slug).first()
 
@@ -208,8 +206,6 @@ def get_all_mcps_for_agent(agent_slug: str) -> dict:
     """
     Get all MCPs for an agent organized by system, from database models.
     """
-    from nexus.inline_agents.models import Agent
-
     agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
     if not agent:
         return {}
@@ -235,13 +231,22 @@ def get_all_mcps_for_agent(agent_slug: str) -> dict:
     return result
 
 
+def get_all_systems_for_group(group_slug: str) -> list:
+    """
+    Get all unique system slugs for all agents in a group.
+    """
+    from nexus.inline_agents.models import Agent, AgentSystem
+
+    agents = Agent.objects.filter(group__slug=group_slug, is_official=True, source_type=Agent.PLATFORM)
+    return list(
+        AgentSystem.objects.filter(agents__in=agents).values_list("slug", flat=True).distinct().order_by("slug")
+    )
+
+
 def get_all_mcps_for_group(group_slug: str) -> dict:
     """
     Get all MCPs for all agents in a group, organized by system.
-    Consolidates MCPs from all agents in the group.
     """
-    from nexus.inline_agents.models import AgentGroup
-
     group = AgentGroup.objects.filter(slug=group_slug).first()
     if not group:
         return {}
