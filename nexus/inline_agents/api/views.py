@@ -145,6 +145,7 @@ def _serialize_mcp(mcp) -> dict:
     mcp_data = {
         "name": mcp.name,
         "description": mcp.description,
+        "system": mcp.system.slug if mcp.system else None,
         "config": [],
         "credentials": [],
     }

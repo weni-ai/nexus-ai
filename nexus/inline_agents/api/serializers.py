@@ -299,7 +299,6 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             _sort_systems,
             get_all_mcps_for_group,
             get_all_systems_for_group,
-            get_mcps_for_agent_system,
         )
 
         group_name = obj.group.slug if getattr(obj, "group", None) else None
@@ -320,9 +319,16 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
         if group_name:
             all_group_mcps = get_all_mcps_for_group(group_name)
-            system_mcps = all_group_mcps.get(selected_system, []) if selected_system else []
+            system_mcps = []
+            for mcps in all_group_mcps.values():
+                system_mcps.extend(mcps)
         else:
-            system_mcps = get_mcps_for_agent_system(obj.slug, selected_system) if selected_system else []
+            from nexus.inline_agents.api.views import get_all_mcps_for_agent
+
+            all_agent_mcps = get_all_mcps_for_agent(obj.slug)
+            system_mcps = []
+            for mcps in all_agent_mcps.values():
+                system_mcps.extend(mcps)
 
         selected_mcp = None
         creds = []
