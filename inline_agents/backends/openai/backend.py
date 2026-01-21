@@ -824,6 +824,7 @@ class OpenAIBackend(InlineAgentsBackend):
             base_url = user_model_credentials.get("api_base", "")
 
             if user_model_credentials.get("api_base", ""):
+                print("UTILIZANDO API BASE")
                 client = AsyncOpenAI(
                     base_url=base_url,
                     api_key=api_key,
@@ -832,3 +833,4 @@ class OpenAIBackend(InlineAgentsBackend):
                 return
 
             set_default_openai_key(api_key)
+            print("UTILIZANDO API KEY")
