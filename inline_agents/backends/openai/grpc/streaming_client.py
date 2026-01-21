@@ -662,10 +662,12 @@ class MessageStreamingClient:
         """Close the gRPC channel and any active session."""
         if self._active_session and self._active_session.is_active:
             self._active_session.close()
+            self._active_session = None
 
         if self.channel:
             logger.info(f"[gRPC Client] Closing channel to {self.target}")
             self.channel.close()
+            self.channel = None  # Prevent double-close logging from __del__
 
     def __enter__(self):
         return self
