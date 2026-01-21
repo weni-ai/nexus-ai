@@ -97,15 +97,9 @@ class FlowsRESTClient(RestClient):
         jwt_token = jwt_usecase.generate_broadcast_jwt_token()
         headers = {"Content-Type": "application/json; charset: utf-8", "Authorization": f"Bearer {jwt_token}"}
 
-        logger.info(
-            f"[Broadcast] Sending request - url: {url}, use_stream: {use_stream}, "
-            f"project: {project_uuid}, urns: {urns}, body: {body}"
-        )
+        logger.info(f"[Broadcast] Sending to {url} - body: {body}")
 
         response = requests.post(url, json=body, headers=headers)
 
-        logger.info(
-            f"[Broadcast] Response received - url: {url}, use_stream: {use_stream}, "
-            f"status_code: {response.status_code}, project: {project_uuid}"
-        )
+        logger.info(f"[Broadcast] Response from {url} - status_code: {response.status_code}")
         return response

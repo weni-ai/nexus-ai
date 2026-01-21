@@ -25,10 +25,6 @@ class SendMessageHTTPClient(DirectMessage):
             # Use same format as whatsapp_broadcasts endpoint
             msg = {"msg": {"text": text}}
             channel_uuid = kwargs.get("channel_uuid", "")
-            logger.info(
-                f"[SendMessageHTTPClient] Using GRPC stream endpoint - "
-                f"project: {project_uuid}, urns: {urns}, channel_uuid: {channel_uuid}"
-            )
             response = FlowsRESTClient().whatsapp_broadcast(
                 urns, msg, project_uuid, use_stream=True, channel_uuid=channel_uuid
             )
