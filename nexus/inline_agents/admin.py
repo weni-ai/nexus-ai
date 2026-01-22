@@ -495,7 +495,6 @@ class MCPAdmin(admin.ModelAdmin):
                 )
             except Exception as e:
                 logger.warning(f"[Admin] Failed to trigger cache invalidation after MCP deletion: {e}")
-                logger.warning(f"[Admin] Failed to trigger cache invalidation after Agent deletion: {e}")
 
 
 @admin.register(ManagerAgent)
