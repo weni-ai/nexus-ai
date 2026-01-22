@@ -3,6 +3,15 @@
 from django.db import migrations, models
 
 
+def clear_agent_associations(apps, schema_editor):
+    MCP = apps.get_model('inline_agents', 'MCP')
+    MCP.objects.all().update(agent=None)
+
+
+def reverse_migrate(apps, schema_editor):
+    pass
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
