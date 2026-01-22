@@ -8,9 +8,10 @@ from typing import Any, Dict, Optional
 import openai
 import pendulum
 import sentry_sdk
-from agents import trace
+from agents import Agent, ModelSettings, set_default_openai_client, set_default_openai_key, trace
 from django.conf import settings
 from langfuse import get_client
+from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
 from redis import Redis
 
@@ -32,20 +33,41 @@ from inline_agents.backends.openai.sessions import (
     make_session_factory,
 )
 from nexus.inline_agents.backends.openai.repository import (
+    ManagerAgentRepository,
     OpenAISupervisorRepository,
 )
 from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
-from router.traces_observers.save_traces import save_inline_message_to_database
 from router.traces_observers.save_traces import save_inline_message_async
 
 logger = logging.getLogger(__name__)
 
 
 class OpenAIBackend(InlineAgentsBackend):
-    supervisor_repository = OpenAISupervisorRepository
     team_adapter = OpenAITeamAdapter
+
+    def get_supervisor(
+        self,
+        use_components: bool,
+        human_support: bool,
+        default_supervisor_foundation_model: str,
+        supervisor_agent_uuid: str,
+    ):
+        if supervisor_agent_uuid:
+            supervisor_repository = ManagerAgentRepository()
+            return supervisor_repository.get_supervisor(
+                use_components=use_components,
+                human_support=human_support,
+                supervisor_agent_uuid=supervisor_agent_uuid,
+            )
+
+        supervisor_repository = OpenAISupervisorRepository()
+        return supervisor_repository.get_supervisor(
+            use_components=use_components,
+            human_support=human_support,
+            default_supervisor_foundation_model=default_supervisor_foundation_model,
+        )
 
     def __init__(self):
         super().__init__()
@@ -180,6 +202,7 @@ class OpenAIBackend(InlineAgentsBackend):
         human_support_cached = kwargs.pop("human_support", None)
         default_supervisor_foundation_model_cached = kwargs.pop("default_supervisor_foundation_model", None)
         formatter_agent_configurations = kwargs.pop("formatter_agent_configurations", None)
+        supervisor_agent_uuid = kwargs.pop("supervisor_agent_uuid", None)
         rationale_switch = rationale_switch_cached
 
         turns_to_include = None
@@ -193,10 +216,11 @@ class OpenAIBackend(InlineAgentsBackend):
         )
 
         # Cached data is always provided from start_inline_agents
-        supervisor: Dict[str, Any] = self.supervisor_repository.get_supervisor(
+        supervisor: Dict[str, Any] = self.get_supervisor(
             use_components=use_components_cached,
             human_support=human_support_cached,
             default_supervisor_foundation_model=default_supervisor_foundation_model_cached,
+            supervisor_agent_uuid=supervisor_agent_uuid,
         )
         data_lake_event_adapter = self._get_data_lake_event_adapter()
 
@@ -262,39 +286,71 @@ class OpenAIBackend(InlineAgentsBackend):
         agent_data_cached = kwargs.pop("agent_data", None)
         default_instructions_for_collaborators_cached = kwargs.pop("default_instructions_for_collaborators", None)
 
-        external_team = self.team_adapter.to_external(
-            supervisor=supervisor,
-            agents=team,
-            input_text=input_text,
-            project_uuid=project_uuid,
-            contact_fields=contact_fields,
-            contact_urn=contact_urn,
-            contact_name=contact_name,
-            channel_uuid=channel_uuid,
-            supervisor_hooks=supervisor_hooks,
-            runner_hooks=runner_hooks,
-            inline_agent_configuration=inline_agent_configuration,
-            session_factory=session_factory,
-            session=session,
-            data_lake_event_adapter=data_lake_event_adapter,
-            preview=preview,
-            hooks_state=hooks_state,
-            event_manager_notify=self._event_manager_notify,
-            # Pass cached data to avoid database queries
-            content_base_uuid=content_base_uuid_cached,
-            business_rules=business_rules_cached,
-            instructions=instructions_cached,
-            agent_data=agent_data_cached,
-            default_instructions_for_collaborators=default_instructions_for_collaborators_cached,
-            rationale_switch=rationale_switch,
-            language=language,
-            user_email=user_email,
-            session_id=session_id,
-            msg_external_id=msg_external_id,
-            turn_off_rationale=turn_off_rationale,
-            auth_token=auth_token,
-            use_components=use_components,
-        )
+        if supervisor_agent_uuid:
+            formatter_agent_configurations = supervisor.get("formatter_agent_configurations")
+            external_team = self.team_adapter.to_external_enhanced(
+                supervisor=supervisor,
+                agents=team,
+                content_base_uuid=content_base_uuid_cached,
+                instructions=instructions_cached,
+                contact_urn=contact_urn,
+                contact_name=contact_name,
+                project_uuid=project_uuid,
+                channel_uuid=channel_uuid,
+                contact_fields=contact_fields,
+                business_rules=business_rules_cached,
+                use_components=use_components_cached,
+                agent_data=agent_data_cached,
+                data_lake_event_adapter=data_lake_event_adapter,
+                hooks_state=hooks_state,
+                event_manager_notify=self._event_manager_notify,
+                preview=preview,
+                rationale_switch=rationale_switch,
+                language=language,
+                user_email=user_email,
+                supervisor_hooks=supervisor_hooks,
+                input_text=input_text,
+                auth_token=auth_token,
+                session=session,
+                session_factory=session_factory,
+                session_id=session_id,
+                msg_external_id=msg_external_id,
+                turn_off_rationale=turn_off_rationale,
+            )
+        else:
+            external_team = self.team_adapter.to_external(
+                supervisor=supervisor,
+                agents=team,
+                input_text=input_text,
+                project_uuid=project_uuid,
+                contact_fields=contact_fields,
+                contact_urn=contact_urn,
+                contact_name=contact_name,
+                channel_uuid=channel_uuid,
+                supervisor_hooks=supervisor_hooks,
+                runner_hooks=runner_hooks,
+                inline_agent_configuration=inline_agent_configuration,
+                session_factory=session_factory,
+                session=session,
+                data_lake_event_adapter=data_lake_event_adapter,
+                preview=preview,
+                hooks_state=hooks_state,
+                event_manager_notify=self._event_manager_notify,
+                # Pass cached data to avoid database queries
+                content_base_uuid=content_base_uuid_cached,
+                business_rules=business_rules_cached,
+                instructions=instructions_cached,
+                agent_data=agent_data_cached,
+                default_instructions_for_collaborators=default_instructions_for_collaborators_cached,
+                rationale_switch=rationale_switch,
+                language=language,
+                user_email=user_email,
+                session_id=session_id,
+                msg_external_id=msg_external_id,
+                turn_off_rationale=turn_off_rationale,
+                auth_token=auth_token,
+                use_components=use_components,
+            )
 
         client = self._get_client()
 
@@ -422,8 +478,6 @@ class OpenAIBackend(InlineAgentsBackend):
 
         supervisor_hooks.save_components_trace = True
 
-        from agents import Agent, ModelSettings
-
         formatter_agent = Agent(
             name="Response Formatter Agent",
             instructions=formatter_instructions,
@@ -435,8 +489,6 @@ class OpenAIBackend(InlineAgentsBackend):
         )
 
         if formatter_reasoning_effort:
-            from agents import ModelSettings
-
             formatter_agent.model_settings = ModelSettings(
                 reasoning=Reasoning(effort=formatter_reasoning_effort, summary=formatter_reasoning_summary)
             )
@@ -614,6 +666,9 @@ class OpenAIBackend(InlineAgentsBackend):
 
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
+                user_model_credentials = external_team.pop("user_model_credentials", {})
+                model_vendor = external_team.pop("model_vendor", "")
+                self._set_openai_client(user_model_credentials, model_vendor)
                 result = client.run_streamed(
                     **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
                 )
@@ -762,3 +817,18 @@ class OpenAIBackend(InlineAgentsBackend):
         sentry_sdk.set_tag("project_uuid", project_uuid)
         sentry_sdk.set_tag("error_type", "streaming_error")
         sentry_sdk.capture_exception(exception)
+
+    def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
+        if user_model_credentials and model_vendor.lower() == "openai":
+            api_key = user_model_credentials.get("api_key", "")
+            base_url = user_model_credentials.get("api_base", "")
+
+            if user_model_credentials.get("api_base", ""):
+                client = AsyncOpenAI(
+                    base_url=base_url,
+                    api_key=api_key,
+                )
+                set_default_openai_client(client)
+                return
+
+            set_default_openai_key(api_key)

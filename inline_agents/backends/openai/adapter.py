@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import boto3
 import pendulum
@@ -13,13 +13,11 @@ from pydantic import BaseModel, Field, create_model
 
 from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.data_lake import send_data_lake_event
+from inline_agents.backends.openai.agent_entities import Collaborator as CollaboratorEntity
+from inline_agents.backends.openai.agent_entities import Supervisor as SupervisorEntity
 from inline_agents.backends.openai.entities import Context, HooksState
 from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
-from inline_agents.backends.openai.hooks import (
-    CollaboratorHooks,
-    RunnerHooks,
-    SupervisorHooks,
-)
+from inline_agents.backends.openai.hooks import CollaboratorHooks, RunnerHooks, SupervisorHooks
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
     AgentCredential,
@@ -76,6 +74,210 @@ def make_agent_proxy_tool(agent, tool_name: str, tool_description: str, session_
 
 
 class OpenAITeamAdapter(TeamAdapter):
+    @classmethod
+    def prepare_instructions(cls, instructions: List[str]) -> str:
+        return "\n".join(instructions) if instructions else ""
+
+    @classmethod
+    def prepare_agent_instructions(
+        cls,
+        agent_instructions: str,
+        supervisor_default_collaborator_instructions: str,
+    ) -> str:
+        parts = [
+            agent_instructions,
+            supervisor_default_collaborator_instructions,
+        ]
+        return "\n".join(filter(None, parts))
+
+    @classmethod
+    def prepare_time(cls) -> str:
+        time_now = pendulum.now("America/Sao_Paulo")
+        llm_formatted_time = f"Today is {time_now.format('dddd, MMMM D, YYYY [at] HH:mm:ss z')}"
+        return llm_formatted_time
+
+    @classmethod
+    def build_agents(
+        cls,
+        agents: list[dict],
+        supervisor: Dict[str, Any],
+        data_lake_event_adapter,
+        hooks_state,
+        event_manager_notify,
+        preview,
+        rationale_switch,
+        language,
+        user_email,
+        session_id,
+        msg_external_id,
+        turn_off_rationale,
+        session_factory,
+        max_tokens: Dict[str, int],
+    ):
+        agents_as_tools = []
+        user_model_credentials: Dict[str, Any] = supervisor.get("user_model_credentials", {})
+        max_tokens_collaborator: int = max_tokens.get("collaborator", 2048)
+
+        for agent in agents:
+            agent_instructions = cls.prepare_agent_instructions(
+                agent.get("instruction"),
+                supervisor.get("default_instructions_for_collaborators"),
+            )
+            agent_name = agent.get("agentName")
+            hooks = CollaboratorHooks(
+                agent_name=agent_name,
+                data_lake_event_adapter=data_lake_event_adapter,
+                hooks_state=hooks_state,
+                event_manager_notify=event_manager_notify,
+                preview=preview,
+                rationale_switch=rationale_switch,
+                language=language,
+                user_email=user_email,
+                session_id=session_id,
+                msg_external_id=msg_external_id,
+                turn_off_rationale=turn_off_rationale,
+            )
+            collaborator = CollaboratorEntity(
+                name=agent_name,
+                instructions=agent_instructions,
+                tools=cls._get_tools(agent["actionGroups"]),
+                foundation_model=agent.get("foundationModel"),
+                user_model_credentials=user_model_credentials,
+                hooks=hooks,
+                model_settings={"max_tokens": max_tokens_collaborator},
+                collaborator_configurations=supervisor.get("collaborator_configurations", {}),
+            )
+
+            agents_as_tools.append(
+                make_agent_proxy_tool(
+                    agent=collaborator,
+                    tool_name=agent.get("agentName"),
+                    tool_description=(
+                        f'Agent Name: {agent.get("agentDisplayName")}\n'
+                        f"Agent Collaboration Instructions: {agent.get('collaborator_configurations')}"
+                    ),
+                    session_factory=session_factory,
+                )
+            )
+        return agents_as_tools
+
+    @classmethod
+    def to_external_enhanced(
+        cls,
+        supervisor: Dict[str, Any],
+        agents: list[dict],
+        content_base_uuid: str,
+        instructions: list[str],
+        contact_urn: str,
+        contact_name: str,
+        project_uuid: str,
+        channel_uuid: str,
+        contact_fields: str,
+        business_rules: str,
+        use_components: bool,
+        agent_data: dict,
+        data_lake_event_adapter: DataLakeEventAdapter,
+        hooks_state: HooksState,
+        event_manager_notify: callable,
+        preview: bool,
+        rationale_switch: bool,
+        language: str,
+        user_email: str,
+        supervisor_hooks: SupervisorHooks,
+        input_text: str,
+        auth_token: str,
+        session: Any,
+        session_factory: Callable,
+        session_id: str,
+        msg_external_id: str,
+        turn_off_rationale: bool,
+    ):
+        supervisor_instructions: str = cls.prepare_instructions(instructions)
+        llm_formatted_time: str = cls.prepare_time()
+        max_tokens: Dict[str, int] = supervisor.get("max_tokens")
+        max_tokens_supervisor: int = max_tokens.get("supervisor", 2048)
+        supervisor_model_settings = supervisor.get("model_settings", {})
+        user_model_credentials: Dict[str, Any] = supervisor.get("user_model_credentials", {})
+
+        supervisor_prompt: str = cls.get_supervisor_instructions(
+            instruction=supervisor["instruction"],
+            date_time_now=llm_formatted_time,
+            contact_fields=contact_fields,
+            supervisor_name=agent_data.get("name"),
+            supervisor_role=agent_data.get("role"),
+            supervisor_goal=agent_data.get("goal"),
+            supervisor_adjective=agent_data.get("personality"),
+            supervisor_instructions=supervisor_instructions,
+            business_rules=business_rules,
+            project_id=project_uuid,
+            contact_id=contact_urn,
+            contact_name=contact_name,
+            channel_uuid=channel_uuid,
+            content_base_uuid=content_base_uuid,
+            use_components=use_components,
+            use_human_support=supervisor.get("use_components"),
+            components_instructions=supervisor.get("components_instructions", ""),
+            components_instructions_up=supervisor.get("components_instructions_up", ""),
+            human_support_instructions=supervisor.get("human_support_instructions", ""),
+        )
+
+        agents_as_tools: List[CollaboratorEntity] = cls.build_agents(
+            agents=agents,
+            supervisor=supervisor,
+            data_lake_event_adapter=data_lake_event_adapter,
+            hooks_state=hooks_state,
+            event_manager_notify=event_manager_notify,
+            preview=preview,
+            rationale_switch=rationale_switch,
+            language=language,
+            user_email=user_email,
+            max_tokens=max_tokens,
+            session_factory=session_factory,
+            session_id=session_id,
+            msg_external_id=msg_external_id,
+            turn_off_rationale=turn_off_rationale,
+        )
+
+        supervisor_tools = cls._get_tools(supervisor["tools"])
+        supervisor_tools.extend(agents_as_tools)
+
+        supervisor_agent = SupervisorEntity(
+            name="manager",
+            instructions=supervisor_prompt,
+            model=supervisor["foundation_model"],
+            tools=supervisor_tools,
+            hooks=supervisor_hooks,
+            prompt_override_configuration=supervisor.get("prompt_override_configuration", {}),
+            preview=preview,
+            max_tokens=max_tokens_supervisor,
+            use_components=use_components,
+            user_model_credentials=user_model_credentials,
+            model_has_reasoning=supervisor_model_settings.get("model_has_reasoning", False),
+            reasoning_effort=supervisor_model_settings.get("reasoning_effort", ""),
+            reasoning_summary=supervisor_model_settings.get("reasoning_summary", ""),
+            parallel_tool_calls=supervisor_model_settings.get("parallel_tool_calls", False),
+        )
+        supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
+        return {
+            "starting_agent": supervisor_agent,
+            "input": input_text,
+            "context": cls._get_context(
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                auth_token=auth_token,
+                channel_uuid=channel_uuid,
+                contact_name=contact_name,
+                content_base_uuid=content_base_uuid,
+                session=session,
+                input_text=input_text,
+                hooks_state=hooks_state,
+                contact_fields=contact_fields,
+            ),
+            "formatter_agent_instructions": supervisor.get("formatter_agent_components_instructions", ""),
+            "user_model_credentials": user_model_credentials,
+            "model_vendor": supervisor.get("model_vendor", ""),
+        }
+
     @classmethod
     def to_external(
         cls,

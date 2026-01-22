@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
@@ -49,6 +51,68 @@ class OpenAISupervisor(models.Model):
     class Meta:
         verbose_name = "OpenAI Supervisor"
         verbose_name_plural = "OpenAI Supervisors"
+
+    def __str__(self):
+        return self.name
+
+
+class ManagerAgent(models.Model):
+    uuid = models.UUIDField(default=uuid4, editable=False)
+    created_on = models.DateTimeField(auto_now_add=True)
+    default = models.BooleanField(
+        default=False, help_text="If True, this is the default supervisor for all newly created projects"
+    )
+    public = models.BooleanField(
+        default=True, help_text="If True, this supervisor is public and will be available to all projects"
+    )
+    release_date = models.DateTimeField(
+        help_text="The date and time when this supervisor will be set in older projects"
+    )
+    name = models.CharField(max_length=255)
+
+    base_prompt = models.TextField(null=True, blank=True)
+
+    foundation_model = models.CharField(max_length=255)
+    model_vendor = models.CharField(max_length=255)
+    model_has_reasoning = models.BooleanField(default=False)
+
+    api_key = models.CharField(max_length=255, null=True, blank=True)
+    api_base = models.CharField(max_length=255, null=True, blank=True)
+    api_version = models.CharField(max_length=255, null=True, blank=True)
+
+    max_tokens = models.PositiveIntegerField(default=2048)
+    collaborator_max_tokens = models.PositiveIntegerField(default=2048)
+    reasoning_effort = models.CharField(max_length=50, blank=True, null=True)
+    reasoning_summary = models.CharField(max_length=50, blank=True, null=True, default="auto")
+    parallel_tool_calls = models.BooleanField(default=False)
+    tools = models.JSONField(null=True, blank=True)
+    knowledge_bases = models.JSONField(null=True, blank=True)
+
+    # human support
+    human_support_prompt = models.TextField(null=True, blank=True)
+    human_support_tools = models.JSONField(null=True, blank=True)
+
+    # audio orchestration
+    audio_orchestration_max_tokens = models.PositiveIntegerField(default=2048)
+    audio_orchestration_collaborator_max_tokens = models.PositiveIntegerField(default=2048)
+
+    # components
+    header_components_prompt = models.TextField(null=True, blank=True)
+    footer_components_prompt = models.TextField(null=True, blank=True)
+    component_tools_descriptions = models.JSONField(default=dict, null=True, blank=True)
+    formatter_agent_prompt = models.TextField(null=True, blank=True)
+    formatter_agent_reasoning_effort = models.CharField(max_length=50, blank=True, null=True)
+    formatter_agent_reasoning_summary = models.CharField(max_length=50, blank=True, null=True, default="auto")
+    formatter_agent_send_only_assistant_message = models.BooleanField(default=False)
+    formatter_agent_tools_descriptions = models.JSONField(default=dict, null=True, blank=True)
+    formatter_agent_foundation_model = models.CharField(max_length=255)
+    formatter_agent_model_has_reasoning = models.BooleanField(default=False)
+    formatter_tools_descriptions = models.JSONField(default=dict, null=True, blank=True)
+
+    # collaboratos
+    collaborators_foundation_model = models.CharField(max_length=255)
+    override_collaborators_foundation_model = models.BooleanField(default=False)
+    default_instructions_for_collaborators = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return self.name
