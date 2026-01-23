@@ -53,6 +53,7 @@ class SimulateWhatsAppBroadcastHTTPClient(WhatsAppBroadcastHTTPClient):
         user: str,
         full_chunks: List[Dict] = None,
         backend: str = "BedrockBackend",
+        **kwargs,
     ) -> None:
         if backend == "BedrockBackend":
             return self.format_response_for_bedrock(msg, urns, project_uuid, user, full_chunks)

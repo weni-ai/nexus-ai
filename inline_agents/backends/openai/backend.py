@@ -23,6 +23,7 @@ from inline_agents.backends.openai.grpc import (
     MessageStreamingClient,
     is_grpc_enabled,
 )
+from inline_agents.backends.openai.grpc.streaming_client import StreamingSession
 from inline_agents.backends.openai.hooks import (
     HooksState,
     RunnerHooks,
@@ -195,6 +196,7 @@ class OpenAIBackend(InlineAgentsBackend):
         turn_off_rationale: bool = False,
         event_manager_notify: callable = None,
         inline_agent_configuration: InlineAgentsConfiguration | None = None,
+        stream_support: bool = False,
         **kwargs,
     ):
         use_components_cached = kwargs.pop("use_components", use_components)
@@ -365,16 +367,16 @@ class OpenAIBackend(InlineAgentsBackend):
                 },
             )
 
-        grpc_client, grpc_msg_id = None, None
+        grpc_client, grpc_session, grpc_msg_id = None, None, None
         if not preview:
-            grpc_client, grpc_msg_id = self._initialize_grpc_client(
+            grpc_client, grpc_session, grpc_msg_id = self._initialize_grpc_session(
                 channel_uuid=channel_uuid,
                 contact_urn=contact_urn,
                 session_id=session_id,
                 project_uuid=project_uuid,
                 language=language,
-                channel_type=channel_type,
                 use_components=use_components,
+                stream_support=stream_support,
             )
 
         result = asyncio.run(
@@ -397,26 +399,24 @@ class OpenAIBackend(InlineAgentsBackend):
                 runner_hooks,
                 hooks_state,
                 use_components,
-                grpc_client=grpc_client,
-                grpc_msg_id=grpc_msg_id,
+                grpc_session=grpc_session,
                 formatter_agent_configurations=formatter_agent_configurations,
             )
         )
 
-        if grpc_client and grpc_msg_id:
+        # Send completed message through the persistent stream and close
+        if grpc_session and grpc_session.is_active:
             try:
                 content = result if isinstance(result, str) else str(result)
-                grpc_client.send_completed_message(
-                    msg_id=grpc_msg_id,
-                    content=content,
-                    channel_uuid=channel_uuid,
-                    contact_urn=contact_urn,
-                    project_uuid=str(project_uuid),
-                )
+                grpc_session.send_completed(content)
             except Exception as e:
                 logger.error(f"gRPC completion failed: {e}", exc_info=True)
             finally:
-                grpc_client.close()
+                grpc_session.close()
+
+        # Close the client
+        if grpc_client:
+            grpc_client.close()
 
         return result
 
@@ -532,29 +532,26 @@ class OpenAIBackend(InlineAgentsBackend):
             # Return the original response if formatter fails
             return final_response
 
-    def _initialize_grpc_client(
+    def _initialize_grpc_session(
         self,
         channel_uuid: str,
         contact_urn: str,
         session_id: str,
         project_uuid: str,
         language: str,
-        channel_type: str = "",
-        use_components: bool = False,
-    ) -> tuple[Optional[MessageStreamingClient], Optional[str]]:
-        """Initialize gRPC client and send setup message."""
-        if not is_grpc_enabled(project_uuid, use_components) or not contact_urn:
-            return None, None
+        use_components: bool,
+        stream_support: bool,
+    ) -> tuple[Optional[MessageStreamingClient], Optional[StreamingSession], Optional[str]]:
+        """
+        Initialize gRPC client and create a persistent streaming session.
 
-        if not channel_type:
-            logger.info(
-                "channel_type is empty, skipping gRPC initialization",
-                extra={"project_uuid": project_uuid, "contact_urn": contact_urn},
-            )
-            return None, None
-
-        if channel_type != "WWC":
-            return None, None
+        Returns a tuple of (client, session, msg_id) where:
+        - client: The MessageStreamingClient (kept for cleanup)
+        - session: The StreamingSession for sending messages
+        - msg_id: The unique message ID for this session
+        """
+        if not is_grpc_enabled(project_uuid, use_components, stream_support) or not contact_urn:
+            return None, None, None
 
         if not channel_uuid:
             channel_uuid = "default-channel-uuid"
@@ -570,7 +567,8 @@ class OpenAIBackend(InlineAgentsBackend):
                 f"{contact_urn}-{session_id}-{datetime.now().isoformat()}".encode()
             ).hexdigest()[:16]
 
-            for _ in grpc_client.stream_messages_with_setup(
+            # Create a persistent streaming session
+            grpc_session = grpc_client.create_streaming_session(
                 msg_id=grpc_msg_id,
                 channel_uuid=channel_uuid,
                 contact_urn=contact_urn,
@@ -579,62 +577,47 @@ class OpenAIBackend(InlineAgentsBackend):
                     "session_id": session_id,
                     "language": language,
                 },
-            ):
-                pass
+            )
 
-            return grpc_client, grpc_msg_id
+            # Start the session (sends setup message through the stream)
+            if not grpc_session.start():
+                logger.error("gRPC session failed to start")
+                grpc_client.close()
+                return None, None, None
+
+            return grpc_client, grpc_session, grpc_msg_id
 
         except Exception as e:
             logger.error(f"gRPC setup failed: {e}", exc_info=True)
-            return None, None
+            return None, None, None
 
     def _send_grpc_delta(
         self,
         delta_content: str,
-        grpc_client: MessageStreamingClient,
-        grpc_msg_id: str,
-        delta_counter: int,
-        channel_uuid: str,
-        contact_urn: str,
-        project_uuid: str,
+        grpc_session: StreamingSession,
     ):
-        """Send a delta message via gRPC."""
+        """Send a delta message via the persistent gRPC stream."""
         try:
-            grpc_client.send_delta_message(
-                msg_id=grpc_msg_id,
-                content=delta_content,
-                channel_uuid=channel_uuid,
-                contact_urn=contact_urn,
-                project_uuid=str(project_uuid),
-            )
+            grpc_session.send_delta(delta_content)
         except Exception as e:
             logger.error(f"gRPC delta send failed: {e}", exc_info=True)
 
     def _process_delta_event(
         self,
         event,
-        grpc_client: Optional[MessageStreamingClient],
-        grpc_msg_id: Optional[str],
+        grpc_session: Optional[StreamingSession],
         delta_counter: int,
-        channel_uuid: str,
-        contact_urn: str,
-        project_uuid: str,
     ) -> int:
-        """Process a delta event and stream it via gRPC."""
+        """Process a delta event and stream it via the persistent gRPC session."""
         from openai.types.responses import ResponseTextDeltaEvent
 
         if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
             delta_content = event.data.delta
-            if delta_content and grpc_client and grpc_msg_id:
+            if delta_content and grpc_session and grpc_session.is_active:
                 delta_counter += 1
                 self._send_grpc_delta(
                     delta_content=delta_content,
-                    grpc_client=grpc_client,
-                    grpc_msg_id=grpc_msg_id,
-                    delta_counter=delta_counter,
-                    channel_uuid=channel_uuid,
-                    contact_urn=contact_urn,
-                    project_uuid=project_uuid,
+                    grpc_session=grpc_session,
                 )
         return delta_counter
 
@@ -658,8 +641,7 @@ class OpenAIBackend(InlineAgentsBackend):
         runner_hooks,
         hooks_state,
         use_components,
-        grpc_client: Optional[MessageStreamingClient] = None,
-        grpc_msg_id: Optional[str] = None,
+        grpc_session: Optional[StreamingSession] = None,
         formatter_agent_configurations=None,
     ):
         """Async wrapper to handle the streaming response"""
@@ -683,12 +665,8 @@ class OpenAIBackend(InlineAgentsBackend):
                         async for event in stream_events():
                             delta_counter = self._process_delta_event(
                                 event=event,
-                                grpc_client=grpc_client,
-                                grpc_msg_id=grpc_msg_id,
+                                grpc_session=grpc_session,
                                 delta_counter=delta_counter,
-                                channel_uuid=channel_uuid,
-                                contact_urn=contact_urn,
-                                project_uuid=project_uuid,
                             )
                             if hasattr(event, "item") and event.type == "run_item_stream_event":
                                 if event.item.type == "tool_call_item":
