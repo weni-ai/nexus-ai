@@ -18,10 +18,15 @@ logger = logging.getLogger(__name__)
 
 
 def is_grpc_enabled(project_uuid: str, use_components: bool) -> bool:
+    """
+    Check if GRPC is enabled for a project.
+
+    Set GRPC_ENABLED_PROJECTS=["uuid1", "uuid2"] or ["*"] for all projects.
+    """
     if use_components:
         return False
     enabled_projects = getattr(settings, "GRPC_ENABLED_PROJECTS", [])
-    return str(project_uuid) in enabled_projects
+    return str(project_uuid) in enabled_projects or "*" in enabled_projects
 
 
 class MessageStreamingClient:
