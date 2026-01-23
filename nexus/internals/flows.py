@@ -80,21 +80,17 @@ class FlowsRESTClient(RestClient):
         except requests.exceptions.HTTPError:
             return {}
 
-    def whatsapp_broadcast(self, urns: List[str], msg: Dict, project_uuid: str):
-        url = self._get_url("/api/v2/internals/whatsapp_broadcasts")
+    def whatsapp_broadcast(self, urns: List[str], msg: Dict, project_uuid: str, use_grpc: bool = False):
+        if use_grpc:
+            url = self._get_url("/api/v2/internals/messages/stream")
+        else:
+            url = self._get_url("/api/v2/internals/whatsapp_broadcasts")
 
         body = dict(urns=urns, project=project_uuid)
         body.update(msg)
 
         logger.debug(
-            "Whatsapp broadcast",
-            extra={
-                "url": url,
-                "urns_count": len(urns) if isinstance(urns, list) else None,
-                "msg_len": len(str(msg)),
-                "body_keys": list(body.keys()),
-                "project_uuid": project_uuid[:8] + "..." if project_uuid else None,
-            },
+            f"[Broadcast] Sending message for urns: {urns} and project: {project_uuid}",
         )
 
         jwt_usecase = JWTUsecase()
@@ -102,11 +98,5 @@ class FlowsRESTClient(RestClient):
         headers = {"Content-Type": "application/json; charset: utf-8", "Authorization": f"Bearer {jwt_token}"}
 
         response = requests.post(url, json=body, headers=headers)
-        logger.debug(
-            "Whatsapp broadcast response",
-            extra={
-                "status_code": response.status_code,
-                "response_preview": response.text[:200] if response.text else None,
-            },
-        )
+        logger.debug(f"[Broadcast] Response sent to urns: {urns}")
         return response

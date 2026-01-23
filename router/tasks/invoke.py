@@ -412,7 +412,10 @@ def start_inline_agents(
 
         # Use cached dict value instead of accessing Django object
         broadcast, _ = get_action_clients(
-            preview=preview, multi_agents=True, project_use_components=project_dict["use_components"]
+            preview=preview,
+            multi_agents=True,
+            project_use_components=project_dict["use_components"],
+            project_uuid=project_uuid,
         )
 
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
