@@ -14,6 +14,7 @@ except Exception:  # Fallback for test environments where agents fails to import
 
 if TYPE_CHECKING:
     pass
+from agents.extensions.models.litellm_model import LitellmModel
 from django.conf import settings
 
 from inline_agents.adapter import DataLakeEventAdapter
@@ -45,6 +46,12 @@ def _get_agent_slug(agent, hooks_state=None) -> str:
         return agent.name
 
     return slugify(agent.name)
+
+
+def _get_agent_model(agent) -> str:
+    if isinstance(agent.model, LitellmModel):
+        return agent.model.model
+    return agent.model
 
 
 class TraceHandler:
@@ -171,7 +178,7 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
             self.agents_names.append(agent.get("agentName"))
 
         try:
-            super(RunnerHooks, self).__init__()  # type: ignore
+            super().__init__()  # type: ignore
         except Exception:
             pass
 
@@ -278,7 +285,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                 "agent_name": _get_agent_slug(agent, self.hooks_state),
                 "input_text": context_data.input_text,
             },
-            foundation_model=agent.model,
+            foundation_model=_get_agent_model(agent),
             backend="openai",
             channel_uuid=context_data.contact.get("channel_uuid"),
             conversation=self.conversation,
@@ -326,7 +333,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                 "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
             },
             agent_data={"agent_name": agent_slug},  # Pass agent_data for agent_uuid enrichment
-            foundation_model=agent.model,
+            foundation_model=_get_agent_model(agent),
             backend="openai",
             channel_uuid=context_data.contact.get("channel_uuid"),
             conversation=self.conversation,
@@ -438,7 +445,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                     "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
                 },
                 agent_data={"agent_name": agent.name},
-                foundation_model=agent.model,
+                foundation_model=_get_agent_model(agent),
                 backend="openai",
                 channel_uuid=context_data.contact.get("channel_uuid"),
                 conversation=self.conversation,
@@ -545,7 +552,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
         self.save_components_trace = False
 
         try:
-            super(SupervisorHooks, self).__init__()  # type: ignore
+            super().__init__()  # type: ignore
         except Exception:
             pass
 
@@ -569,7 +576,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                 agent_data={
                     "agent_name": _get_agent_slug(agent, self.hooks_state)
                 },  # Pass agent_data for agent_uuid enrichment
-                foundation_model=agent.model,
+                foundation_model=_get_agent_model(agent),
                 backend="openai",
                 channel_uuid=context_data.contact.get("channel_uuid"),
                 conversation=self.conversation,
@@ -624,7 +631,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                     "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
                 },
                 agent_data={"agent_name": agent_slug},  # Pass agent_data for agent_uuid enrichment
-                foundation_model=agent.model,
+                foundation_model=_get_agent_model(agent),
                 backend="openai",
                 channel_uuid=context_data.contact.get("channel_uuid"),
                 conversation=self.conversation,
@@ -677,7 +684,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                         "function_name": None,  # knowledge base doesn't have function_name
                     },
                     agent_data={"agent_name": agent.name},
-                    foundation_model=agent.model,
+                    foundation_model=_get_agent_model(agent),
                     backend="openai",
                     channel_uuid=context_data.contact.get("channel_uuid"),
                     conversation=self.conversation,
@@ -777,7 +784,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                         "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
                     },
                     agent_data={"agent_name": agent.name},
-                    foundation_model=agent.model,
+                    foundation_model=_get_agent_model(agent),
                     backend="openai",
                     channel_uuid=context_data.contact.get("channel_uuid"),
                     conversation=self.conversation,

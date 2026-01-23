@@ -167,7 +167,7 @@ def get_project_and_content_base_data(
     try:
         inline_agent_configuration = None
         if project is None:
-            project = Project.objects.select_related("org").get(uuid=project_uuid)
+            project = Project.objects.select_related("org", "manager_agent").get(uuid=project_uuid)
 
         integrated_intelligence = get_integrated_intelligence_by_project(project_uuid, project)
 

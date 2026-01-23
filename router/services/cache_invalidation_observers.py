@@ -70,6 +70,7 @@ class ProjectCacheInvalidationObserver(EventObserver):
                     "default_supervisor_foundation_model": proj.default_supervisor_foundation_model,
                     "human_support": proj.human_support,
                     "human_support_prompt": proj.human_support_prompt,
+                    "supervisor_agent_uuid": proj.manager_agent.uuid if proj.manager_agent else None,
                 }
 
             def _content_base_to_dict(cb):

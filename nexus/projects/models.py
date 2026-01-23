@@ -68,6 +68,7 @@ class Project(BaseModel, SoftDeleteModel):
     formatter_send_only_assistant_message = models.BooleanField(default=False)
     formatter_tools_descriptions = models.JSONField(default=dict, null=True, blank=True)
     audio_orchestration_welcome_message = models.TextField(null=True, blank=True)
+    manager_agent = models.ForeignKey("inline_agents.ManagerAgent", on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return f"{self.uuid} - Project: {self.name} - Org: {self.org.name}"

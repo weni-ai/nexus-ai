@@ -1,6 +1,7 @@
 import json
 from unittest import mock
 
+import requests
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient, APIRequestFactory
@@ -120,3 +121,68 @@ class MultiAgentViewTestCase(TestCase):
         content = json.loads(response.content)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(content.get("multi_agents"), True)
+
+
+class ProjectComponentsViewTestCase(TestCase):
+    """Test case for ProjectComponentsView cache invalidation."""
+
+    def setUp(self):
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    @mock.patch("nexus.inline_agents.api.views.notify_async")
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_patch_use_components_calls_cache_invalidation(self, mock_check_auth, mock_notify_async):
+        """Test that updating use_components triggers cache invalidation event."""
+        # Make external auth fail with RequestException to trigger internal permission fallback
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+
+        url = reverse("project-components", kwargs={"project_uuid": str(self.project.uuid)})
+        response = self.client.patch(url, {"use_components": True}, format="json")
+
+        self.assertEqual(response.status_code, 200, f"Response: {response.content}")
+
+        # Verify notify_async was called with the correct event
+        mock_notify_async.assert_called_once()
+        call_kwargs = mock_notify_async.call_args
+        self.assertEqual(call_kwargs.kwargs.get("event"), "cache_invalidation:project")
+        # Compare UUIDs since the view fetches a fresh instance from DB
+        self.assertEqual(call_kwargs.kwargs.get("project").uuid, self.project.uuid)
+
+    @mock.patch("nexus.inline_agents.api.views.notify_async")
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_patch_use_components_false_calls_cache_invalidation(self, mock_check_auth, mock_notify_async):
+        """Test that updating use_components to False also triggers cache invalidation."""
+        # Make external auth fail with RequestException to trigger internal permission fallback
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+
+        # First set it to True
+        self.project.use_components = True
+        self.project.save()
+
+        url = reverse("project-components", kwargs={"project_uuid": str(self.project.uuid)})
+        response = self.client.patch(url, {"use_components": False}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+
+        # Verify notify_async was called
+        mock_notify_async.assert_called_once()
+        call_kwargs = mock_notify_async.call_args
+        self.assertEqual(call_kwargs.kwargs.get("event"), "cache_invalidation:project")
+
+    @mock.patch("nexus.inline_agents.api.views.notify_async")
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_patch_use_components_not_called_on_missing_field(self, mock_check_auth, mock_notify_async):
+        """Test that cache invalidation is NOT called when use_components field is missing."""
+        # Make external auth fail with RequestException to trigger internal permission fallback
+        mock_check_auth.side_effect = requests.RequestException("Mocked external auth failure")
+
+        url = reverse("project-components", kwargs={"project_uuid": str(self.project.uuid)})
+        response = self.client.patch(url, {}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+
+        # Verify notify_async was NOT called
+        mock_notify_async.assert_not_called()
