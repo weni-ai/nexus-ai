@@ -173,7 +173,7 @@ class VersionInline(admin.TabularInline):
     model = Version
     extra = 0
     fields = ("created_on", "skills", "display_skills")
-    readonly_fields = ("created_on",)
+    readonly_fields = ("created_on", "skills", "display_skills")
     formfield_overrides = {
         ArrayField: {"widget": ArrayJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
@@ -193,7 +193,7 @@ class VersionAdmin(admin.ModelAdmin):
     list_display = ("agent", "created_on")
     list_filter = ("created_on",)
     search_fields = ("agent__name", "agent__slug")
-    readonly_fields = ("created_on",)
+    readonly_fields = ("created_on", "skills", "display_skills")
     ordering = ("-created_on",)
     autocomplete_fields = ["agent"]
 
@@ -296,6 +296,30 @@ class AgentAdmin(admin.ModelAdmin):
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
 
+    def save_model(self, request, obj, form, change):
+        if change:
+            try:
+                original = Agent.objects.get(pk=obj.pk)
+                obj._old_group = original.group
+            except Agent.DoesNotExist:
+                obj._old_group = None
+        else:
+            obj._old_group = None
+
+        super().save_model(request, obj, form, change)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+
+        obj = form.instance
+        # Sync current group
+        if obj.group:
+            obj.group.update_mcps_from_agents()
+
+        # Sync old group if it existed and is different
+        if hasattr(obj, "_old_group") and obj._old_group and obj._old_group != obj.group:
+            obj._old_group.update_mcps_from_agents()
+
     def mcps_list(self, obj):
         """Display MCPs associated with this agent with links to view them"""
         if not obj.pk:
@@ -331,8 +355,14 @@ class AgentAdmin(admin.ModelAdmin):
             html += f'<td style="padding: 8px; border: 1px solid #ddd;"><strong>{mcp.name}</strong></td>'
             html += f'<td style="padding: 8px; border: 1px solid #ddd;">{mcp.system.name if mcp.system else "-"}</td>'
             html += f'<td style="padding: 8px; border: 1px solid #ddd;">{description}</td>'
-            html += f'<td style="padding: 8px; border: 1px solid #ddd;"><span style="color: {status_color};">{status}</span></td>'
-            html += f'<td style="padding: 8px; border: 1px solid #ddd;"><a href="{view_url}" target="_blank">View MCP</a></td>'
+            html += (
+                f'<td style="padding: 8px; border: 1px solid #ddd;"><span style="color: {status_color};">'
+                f"{status}</span></td>"
+            )
+            html += (
+                f'<td style="padding: 8px; border: 1px solid #ddd;"><a href="{view_url}" target="_blank">'
+                f"View MCP</a></td>"
+            )
             html += "</tr>"
 
         html += "</tbody></table>"
@@ -353,12 +383,22 @@ class AgentGroupModalInline(admin.StackedInline):
     }
 
 
+class AgentInline(admin.TabularInline):
+    model = Agent
+    extra = 0
+    fields = ("name", "uuid", "is_official")
+    readonly_fields = ("name", "uuid", "is_official")
+    can_delete = False
+    show_change_link = True
+
+
 @admin.register(AgentGroup)
 class AgentGroupAdmin(admin.ModelAdmin):
     list_display = ("name", "slug")
-    inlines = [AgentGroupModalInline]
+    inlines = [AgentGroupModalInline, AgentInline]
     search_fields = ("name", "slug")
     ordering = ("name",)
+    readonly_fields = ("mcps",)
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
@@ -434,14 +474,14 @@ class MCPCredentialTemplateInline(admin.TabularInline):
 
 @admin.register(MCP)
 class MCPAdmin(admin.ModelAdmin):
-    list_display = ("name", "system", "order", "is_active")
+    list_display = ("name", "slug", "system", "order", "is_active")
     list_filter = ("is_active", "system")
-    search_fields = ("name", "description", "system__name", "system__slug")
+    search_fields = ("name", "slug", "description", "system__name", "system__slug")
     ordering = ("system", "order", "name")
     autocomplete_fields = ["system"]
     inlines = [MCPConfigOptionInline, MCPCredentialTemplateInline]
 
-    fieldsets = ((None, {"fields": ("name", "description", "system", "order", "is_active")}),)
+    fieldsets = ((None, {"fields": ("name", "slug", "description", "system", "order", "is_active")}),)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -494,7 +534,7 @@ class MCPAdmin(admin.ModelAdmin):
                     f"[Admin] Triggered cache invalidation after MCP deletion (affecting {len(projects)} projects)"
                 )
             except Exception as e:
-                logger.warning(f"[Admin] Failed to trigger cache invalidation after Agent deletion: {e}")
+                logger.warning(f"[Admin] Failed to trigger cache invalidation after MCP deletion: {e}")
 
 
 @admin.register(ManagerAgent)

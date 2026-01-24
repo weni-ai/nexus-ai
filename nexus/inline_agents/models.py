@@ -250,9 +250,16 @@ class AgentGroup(models.Model):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
     shared_config = models.JSONField(default=dict)
+    mcps = models.ManyToManyField("MCP", blank=True, related_name="groups")
 
     def __str__(self):
         return self.name
+
+    def update_mcps_from_agents(self):
+        group_mcps = set()
+        for agent in self.agents.all().prefetch_related("mcps"):
+            group_mcps.update(agent.mcps.all())
+        self.mcps.set(group_mcps)
 
 
 class AgentSystem(models.Model):
@@ -290,6 +297,7 @@ class MCP(models.Model):
     """Micro-Capability Package - Represents a specific capability configuration for an agent combination"""
 
     name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True, null=True, blank=True)
     description = models.TextField(blank=True)
     system = models.ForeignKey(
         AgentSystem,
