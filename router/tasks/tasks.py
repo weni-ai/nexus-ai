@@ -283,7 +283,11 @@ def get_trace_summary(language, trace):
         return "Processing your request now"
 
 
-@celery_app.task(bind=True)
+@celery_app.task(
+    bind=True,
+    soft_time_limit=300,
+    time_limit=360,
+)
 def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: no cover
     # TODO: remove get_action_clients from this function
     def get_action_clients(preview: bool = False):
