@@ -173,7 +173,7 @@ class VersionInline(admin.TabularInline):
     model = Version
     extra = 0
     fields = ("created_on", "skills", "display_skills")
-    readonly_fields = ("created_on",)
+    readonly_fields = ("created_on", "skills", "display_skills")
     formfield_overrides = {
         ArrayField: {"widget": ArrayJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
@@ -193,7 +193,7 @@ class VersionAdmin(admin.ModelAdmin):
     list_display = ("agent", "created_on")
     list_filter = ("created_on",)
     search_fields = ("agent__name", "agent__slug")
-    readonly_fields = ("created_on",)
+    readonly_fields = ("created_on", "skills", "display_skills")
     ordering = ("-created_on",)
     autocomplete_fields = ["agent"]
 
@@ -331,8 +331,14 @@ class AgentAdmin(admin.ModelAdmin):
             html += f'<td style="padding: 8px; border: 1px solid #ddd;"><strong>{mcp.name}</strong></td>'
             html += f'<td style="padding: 8px; border: 1px solid #ddd;">{mcp.system.name if mcp.system else "-"}</td>'
             html += f'<td style="padding: 8px; border: 1px solid #ddd;">{description}</td>'
-            html += f'<td style="padding: 8px; border: 1px solid #ddd;"><span style="color: {status_color};">{status}</span></td>'
-            html += f'<td style="padding: 8px; border: 1px solid #ddd;"><a href="{view_url}" target="_blank">View MCP</a></td>'
+            html += (
+                f'<td style="padding: 8px; border: 1px solid #ddd;"><span style="color: {status_color};">'
+                f"{status}</span></td>"
+            )
+            html += (
+                f'<td style="padding: 8px; border: 1px solid #ddd;"><a href="{view_url}" target="_blank">'
+                f"View MCP</a></td>"
+            )
             html += "</tr>"
 
         html += "</tbody></table>"
