@@ -296,6 +296,30 @@ class AgentAdmin(admin.ModelAdmin):
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
 
+    def save_model(self, request, obj, form, change):
+        if change:
+            try:
+                original = Agent.objects.get(pk=obj.pk)
+                obj._old_group = original.group
+            except Agent.DoesNotExist:
+                obj._old_group = None
+        else:
+            obj._old_group = None
+
+        super().save_model(request, obj, form, change)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+
+        obj = form.instance
+        # Sync current group
+        if obj.group:
+            obj.group.update_mcps_from_agents()
+
+        # Sync old group if it existed and is different
+        if hasattr(obj, "_old_group") and obj._old_group and obj._old_group != obj.group:
+            obj._old_group.update_mcps_from_agents()
+
     def mcps_list(self, obj):
         """Display MCPs associated with this agent with links to view them"""
         if not obj.pk:
