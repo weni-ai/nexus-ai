@@ -297,7 +297,7 @@ class MCP(models.Model):
     """Micro-Capability Package - Represents a specific capability configuration for an agent combination"""
 
     name = models.CharField(max_length=255)
-    slug = models.SlugField(max_length=255, unique=True, null=True, blank=True)
+    slug = models.SlugField(max_length=255, unique=True)
     description = models.TextField(blank=True)
     system = models.ForeignKey(
         AgentSystem,
