@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('inline_agents', '0019_agentcategory_agentgroup_agentsystem_agenttype_and_more'),
+        ('inline_agents', '0022_add_slug_to_mcp_and_mcps_to_group'),
     ]
 
     operations = [
