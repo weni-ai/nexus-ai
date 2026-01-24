@@ -359,12 +359,22 @@ class AgentGroupModalInline(admin.StackedInline):
     }
 
 
+class AgentInline(admin.TabularInline):
+    model = Agent
+    extra = 0
+    fields = ("name", "uuid", "is_official")
+    readonly_fields = ("name", "uuid", "is_official")
+    can_delete = False
+    show_change_link = True
+
+
 @admin.register(AgentGroup)
 class AgentGroupAdmin(admin.ModelAdmin):
     list_display = ("name", "slug")
-    inlines = [AgentGroupModalInline]
+    inlines = [AgentGroupModalInline, AgentInline]
     search_fields = ("name", "slug")
     ordering = ("name",)
+    readonly_fields = ("mcps",)
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
@@ -440,14 +450,14 @@ class MCPCredentialTemplateInline(admin.TabularInline):
 
 @admin.register(MCP)
 class MCPAdmin(admin.ModelAdmin):
-    list_display = ("name", "system", "order", "is_active")
+    list_display = ("name", "slug", "system", "order", "is_active")
     list_filter = ("is_active", "system")
-    search_fields = ("name", "description", "system__name", "system__slug")
+    search_fields = ("name", "slug", "description", "system__name", "system__slug")
     ordering = ("system", "order", "name")
     autocomplete_fields = ["system"]
     inlines = [MCPConfigOptionInline, MCPCredentialTemplateInline]
 
-    fieldsets = ((None, {"fields": ("name", "description", "system", "order", "is_active")}),)
+    fieldsets = ((None, {"fields": ("name", "slug", "description", "system", "order", "is_active")}),)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)

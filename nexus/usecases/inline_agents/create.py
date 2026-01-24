@@ -5,7 +5,7 @@ import sentry_sdk
 from django.conf import settings
 
 from nexus.agents.encryption import encrypt_value
-from nexus.inline_agents.models import Agent, AgentCredential, InlineAgentMessage
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, InlineAgentMessage
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
@@ -36,6 +36,20 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         )
         self.handle_tools(agent_obj, project, agent["tools"], files, str(project.uuid))
         self.create_credentials(agent_obj, project, agent.get("credentials", {}))
+
+        if agent.get("group"):
+            group = AgentGroup.objects.filter(slug=agent.get("group")).first()
+            if group:
+                agent_obj.group = group
+                agent_obj.save()
+
+        if agent.get("mcps"):
+            mcps = MCP.objects.filter(slug__in=agent.get("mcps"))
+            agent_obj.mcps.set(mcps)
+
+        if agent_obj.group:
+            agent_obj.group.update_mcps_from_agents()
+
         logger.info("Created agent", extra={"agent_key": agent_key})
         return agent_obj
 

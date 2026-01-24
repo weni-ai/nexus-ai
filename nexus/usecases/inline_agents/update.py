@@ -2,7 +2,7 @@ import logging
 from typing import Dict
 
 from nexus.agents.encryption import encrypt_value
-from nexus.inline_agents.models import Agent, AgentCredential, InlineAgentMessage
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, InlineAgentMessage
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
@@ -29,6 +29,27 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
         self.handle_tools(agent_obj, project, agent_data["tools"], files, str(project.uuid))
         self.update_credentials(agent_obj, project, agent_data.get("credentials", {}))
+
+        old_group = agent_obj.group
+
+        if "group" in agent_data:
+            group_slug = agent_data.get("group")
+            if group_slug:
+                group = AgentGroup.objects.filter(slug=group_slug).first()
+                agent_obj.group = group
+            else:
+                agent_obj.group = None
+            agent_obj.save()
+
+        if "mcps" in agent_data:
+            mcps = MCP.objects.filter(slug__in=agent_data.get("mcps"))
+            agent_obj.mcps.set(mcps)
+
+        if old_group and old_group != agent_obj.group:
+            old_group.update_mcps_from_agents()
+
+        if agent_obj.group:
+            agent_obj.group.update_mcps_from_agents()
 
         return agent_data
 
