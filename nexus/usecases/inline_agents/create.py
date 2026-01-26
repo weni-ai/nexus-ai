@@ -10,6 +10,7 @@ from nexus.inline_agents.models import (
     Agent,
     AgentCredential,
     AgentGroup,
+    AgentSystem,
     InlineAgentMessage,
     MCPConfigOption,
     MCPCredentialTemplate,
@@ -50,8 +51,17 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 agent_obj.group = group
                 agent_obj.save()
 
-        if agent.get("mcps"):
+        if agent.get("mcps") or agent.get("mcp"):
             mcps_data = agent.get("mcps", [])
+            if not mcps_data and "mcp" in agent:
+                mcp_val = agent["mcp"]
+                if isinstance(mcp_val, list):
+                    mcps_data = mcp_val
+                elif isinstance(mcp_val, dict):
+                    mcps_data = [mcp_val]
+                elif isinstance(mcp_val, str) and mcp_val:
+                    mcps_data = [mcp_val]
+
             for mcp_item in mcps_data:
                 if isinstance(mcp_item, str):
                     mcp = MCP.objects.filter(slug=mcp_item).first()
@@ -63,33 +73,44 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                         continue
                     mcp = MCP.objects.filter(slug=slug).first()
                     if not mcp:
-                        continue
+                        system_slug = mcp_item.get("system", "custom")
+                        system, _ = AgentSystem.objects.get_or_create(
+                            slug=system_slug, defaults={"name": system_slug.capitalize()}
+                        )
+
+                        mcp = MCP.objects.create(
+                            slug=slug,
+                            name=mcp_item.get("name", slug),
+                            system=system,
+                            description=mcp_item.get("description", ""),
+                        )
 
                     # Update or create config options if constants provided
                     if "constants" in mcp_item:
                         for key, value in mcp_item["constants"].items():
-                            config_option = MCPConfigOption.objects.filter(mcp=mcp, name=key).first()
-                            if config_option:
-                                config_option.default_value = value
-                                config_option.save()
+                            MCPConfigOption.objects.update_or_create(
+                                mcp=mcp,
+                                name=key,
+                                defaults={
+                                    "default_value": value,
+                                    "label": key,
+                                    "type": MCPConfigOption.TEXT,
+                                },
+                            )
 
                     # Update or create credential templates if credentials provided
                     if "credentials" in mcp_item:
                         for key, cred_data in mcp_item["credentials"].items():
-                            cred_template = MCPCredentialTemplate.objects.filter(mcp=mcp, name=key).first()
-                            if cred_template:
-                                # Here we might want to update some template properties if needed
-                                # but usually we just want to ensure the agent has the credential values
-                                # which is handled by create_credentials separately if they are agent credentials
-                                # But if these are MCP-specific credentials, we might need a way to store them linked to the MCP/Agent
-                                # For now, following instructions to "update with sent values" which implies updating the template
-                                if isinstance(cred_data, dict):
-                                    cred_template.label = cred_data.get("label", cred_template.label)
-                                    cred_template.placeholder = cred_data.get("placeholder", cred_template.placeholder)
-                                    cred_template.is_confidential = cred_data.get(
-                                        "is_confidential", cred_template.is_confidential
-                                    )
-                                    cred_template.save()
+                            if isinstance(cred_data, dict):
+                                MCPCredentialTemplate.objects.update_or_create(
+                                    mcp=mcp,
+                                    name=key,
+                                    defaults={
+                                        "label": cred_data.get("label", key),
+                                        "placeholder": cred_data.get("placeholder", ""),
+                                        "is_confidential": cred_data.get("is_confidential", True),
+                                    },
+                                )
 
                     agent_obj.mcps.add(mcp)
 
