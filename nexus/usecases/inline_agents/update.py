@@ -2,7 +2,15 @@ import logging
 from typing import Dict
 
 from nexus.agents.encryption import encrypt_value
-from nexus.inline_agents.models import Agent, AgentCredential, InlineAgentMessage
+from nexus.inline_agents.models import (
+    MCP,
+    Agent,
+    AgentCredential,
+    AgentGroup,
+    InlineAgentMessage,
+    MCPConfigOption,
+    MCPCredentialTemplate,
+)
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
@@ -24,12 +32,79 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         agent_obj.name = agent_data["name"]
         agent_obj.collaboration_instructions = agent_data["description"]
         agent_obj.instruction = instructions
+        agent_obj.constants = self._process_constants(agent_data.get("constants", {}))
         agent_obj.save()
 
         self.handle_tools(agent_obj, project, agent_data["tools"], files, str(project.uuid))
         self.update_credentials(agent_obj, project, agent_data.get("credentials", {}))
 
+        old_group = agent_obj.group
+
+        if "group" in agent_data:
+            group_slug = agent_data.get("group")
+            if group_slug:
+                group = AgentGroup.objects.filter(slug=group_slug).first()
+                agent_obj.group = group
+            else:
+                agent_obj.group = None
+            agent_obj.save()
+
+        if "mcps" in agent_data:
+            mcps_data = agent_data.get("mcps", [])
+            agent_obj.mcps.clear()  # Clear existing to handle removals/updates
+
+            for mcp_item in mcps_data:
+                if isinstance(mcp_item, str):
+                    mcp = MCP.objects.filter(slug=mcp_item).first()
+                    if mcp:
+                        agent_obj.mcps.add(mcp)
+                elif isinstance(mcp_item, dict):
+                    slug = mcp_item.get("slug")
+                    if not slug:
+                        continue
+                    mcp = MCP.objects.filter(slug=slug).first()
+                    if not mcp:
+                        continue
+
+                    # Update or create config options if constants provided
+                    if "constants" in mcp_item:
+                        for key, value in mcp_item["constants"].items():
+                            config_option = MCPConfigOption.objects.filter(mcp=mcp, name=key).first()
+                            if config_option:
+                                config_option.default_value = value
+                                config_option.save()
+
+                    # Update or create credential templates if credentials provided
+                    if "credentials" in mcp_item:
+                        for key, cred_data in mcp_item["credentials"].items():
+                            cred_template = MCPCredentialTemplate.objects.filter(mcp=mcp, name=key).first()
+                            if cred_template:
+                                if isinstance(cred_data, dict):
+                                    cred_template.label = cred_data.get("label", cred_template.label)
+                                    cred_template.placeholder = cred_data.get("placeholder", cred_template.placeholder)
+                                    cred_template.is_confidential = cred_data.get(
+                                        "is_confidential", cred_template.is_confidential
+                                    )
+                                    cred_template.save()
+
+                    agent_obj.mcps.add(mcp)
+
+        if old_group and old_group != agent_obj.group:
+            old_group.update_mcps_from_agents()
+
+        if agent_obj.group:
+            agent_obj.group.update_mcps_from_agents()
+
         return agent_data
+
+    def _process_constants(self, constants: Dict) -> Dict | None:
+        """Process constants from weni-cli YAML format to stored format"""
+        if not constants:
+            return None
+        processed = {}
+        for key, constant_def in constants.items():
+            processed[key] = {"value": constant_def.get("default", ""), "definition": constant_def}
+        return processed
 
     def update_credentials(self, agent: Agent, project: Project, credentials: Dict):
         if not credentials:

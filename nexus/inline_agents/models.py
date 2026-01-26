@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
+from django.core.validators import FileExtensionValidator
 from django.db import models
 
 from nexus.agents.encryption import decrypt_value
@@ -61,39 +62,22 @@ class Agent(models.Model):
     )
     group = models.ForeignKey("AgentGroup", on_delete=models.SET_NULL, null=True, blank=True, related_name="agents")
     systems = models.ManyToManyField("AgentSystem", blank=True, related_name="agents")
+    mcps = models.ManyToManyField("MCP", blank=True, related_name="agents")
 
     variant = models.CharField(max_length=100, null=True, blank=True)
     capabilities = models.JSONField(default=list, null=True, blank=True)
     policies = models.JSONField(default=dict, null=True, blank=True)
     tooling = models.JSONField(default=dict, null=True, blank=True)
     catalog = models.JSONField(default=dict, null=True, blank=True)
+    constants = models.JSONField(default=dict, null=True, blank=True)
 
     def __str__(self):
         return self.name
 
-    def save(self, *args, **kwargs):
-        """Override save to automatically create empty Version for official agents."""
-        is_new = self.pk is None
-        super().save(*args, **kwargs)
-
-        # If this is a new official agent and has no versions, create an empty one
-        if is_new and self.is_official and not self.versions.exists():
-            self.versions.create(
-                skills=[],
-                display_skills=[],
-            )
-
     @property
     def current_version(self):
-        version = self.versions.order_by("created_on").last()
-        # Fallback: if no version exists, create one lazily to prevent errors
-        # This ensures agents created in admin (without skills) can still be used
-        if version is None:
-            version = self.versions.create(
-                skills=[],
-                display_skills=[],
-            )
-        return version
+        """Get the most recent version of the agent. Versions are created via weni-cli push."""
+        return self.versions.order_by("created_on").last()
 
     def __get_default_value_fallback(self, agents_backend):
         if agents_backend == "BedrockBackend":
@@ -266,15 +250,28 @@ class AgentGroup(models.Model):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
     shared_config = models.JSONField(default=dict)
+    mcps = models.ManyToManyField("MCP", blank=True, related_name="groups")
 
     def __str__(self):
         return self.name
+
+    def update_mcps_from_agents(self):
+        group_mcps = set()
+        for agent in self.agents.all().prefetch_related("mcps"):
+            group_mcps.update(agent.mcps.all())
+        self.mcps.set(group_mcps)
 
 
 class AgentSystem(models.Model):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
-    metadata = models.JSONField(default=dict)
+    logo = models.FileField(
+        upload_to="agent_systems/logos/",
+        null=True,
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=["png", "svg"])],
+    )
+    metadata = models.JSONField(default=dict, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -297,16 +294,11 @@ class AgentCategory(models.Model):
 
 
 class MCP(models.Model):
-    """Micro-Capability Package - Represents a specific capability configuration for an agent/system combination"""
+    """Micro-Capability Package - Represents a specific capability configuration for an agent combination"""
 
     name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True)
     description = models.TextField(blank=True)
-    agent = models.ForeignKey(
-        Agent,
-        on_delete=models.CASCADE,
-        related_name="mcps",
-        limit_choices_to={"is_official": True},
-    )
     system = models.ForeignKey(
         AgentSystem,
         on_delete=models.CASCADE,
@@ -316,11 +308,19 @@ class MCP(models.Model):
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        unique_together = ("agent", "system", "name")
+        unique_together = ("system", "name")
         ordering = ["order", "name"]
 
     def __str__(self):
-        return f"{self.agent.slug} - {self.system.slug} - {self.name}"
+        return f"{self.system.name} - {self.name}"
+
+
+class AgentGroupModal(models.Model):
+    group = models.OneToOneField(AgentGroup, on_delete=models.CASCADE, related_name="modal")
+    conversation_example = models.JSONField(default=list, blank=True)
+
+    def __str__(self):
+        return f"Modal for {self.group.name}"
 
 
 class MCPConfigOption(models.Model):

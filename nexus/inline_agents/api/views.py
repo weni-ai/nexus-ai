@@ -13,6 +13,7 @@ from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import notify_async
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
+    AgentSystemSerializer,
     IntegratedAgentSerializer,
     OfficialAgentDetailSerializer,
     OfficialAgentListSerializer,
@@ -21,7 +22,7 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer,
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent
-from nexus.inline_agents.models import MCP, Agent, AgentSystem, MCPCredentialTemplate
+from nexus.inline_agents.models import Agent, AgentGroup, AgentSystem
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
@@ -125,81 +126,51 @@ class PushAgents(APIView):
         return Response({})
 
 
-def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
-    """
-    Get MCPs for an agent/system combination from database models.
-    """
-    from nexus.inline_agents.models import Agent, AgentSystem
+def _sort_mcps(mcps: list) -> list:
+    """Sort MCPs so that 'Default' appears first, then alphabetical order"""
+    if not isinstance(mcps, list):
+        return mcps
 
-    agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
-    system = AgentSystem.objects.filter(slug__iexact=system_slug).first()
+    def sort_key(mcp):
+        name = mcp.get("name", "") if isinstance(mcp, dict) else ""
+        is_default = name.lower() == "default"
+        return (0 if is_default else 1, name.lower())
 
-    if not agent or not system:
-        return []
-
-    mcps = (
-        MCP.objects.filter(agent=agent, system=system, is_active=True)
-        .select_related()
-        .prefetch_related("config_options")
-    )
-    result = []
-    for mcp in mcps:
-        mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
-        # Add config options
-        for config_option in mcp.config_options.all():
-            # For SWITCH, NUMBER, TEXT, CHECKBOX - ensure options is always an empty list
-            options = config_option.options
-            if config_option.type in ["SWITCH", "NUMBER", "TEXT", "CHECKBOX"]:
-                if not isinstance(options, list):
-                    options = []
-
-            config_item = {
-                "name": config_option.name,
-                "label": config_option.label,
-                "type": config_option.type,
-                "options": options,
-            }
-            # Add default_value if it exists
-            if config_option.default_value is not None:
-                config_item["default_value"] = config_option.default_value
-            mcp_data["config"].append(config_item)
-        result.append(mcp_data)
-    return result
+    return sorted(mcps, key=sort_key)
 
 
-def get_credentials_for_mcp(agent_slug: str, system_slug: str, mcp_name: str, group_slug: str = None) -> list:
-    """
-    Get credential templates for an MCP from database models.
-    If group_slug is provided, searches across all agents in the group to find the MCP.
-    """
-    from nexus.inline_agents.models import Agent, AgentGroup, AgentSystem
+def _serialize_mcp(mcp) -> dict:
+    """Helper to serialize MCP with config and credentials"""
+    mcp_data = {
+        "name": mcp.name,
+        "description": mcp.description,
+        "system": mcp.system.slug if mcp.system else None,
+        "config": [],
+        "credentials": [],
+    }
 
-    system = AgentSystem.objects.filter(slug__iexact=system_slug).first()
-    if not system:
-        return []
+    # Add config options
+    for config_option in mcp.config_options.all():
+        # For SWITCH, NUMBER, TEXT, CHECKBOX - ensure options is always an empty list
+        options = config_option.options
+        if config_option.type in ["SWITCH", "NUMBER", "TEXT", "CHECKBOX"]:
+            if not isinstance(options, list):
+                options = []
 
-    mcp = None
+        config_item = {
+            "name": config_option.name,
+            "label": config_option.label,
+            "type": config_option.type,
+            "options": options,
+        }
+        # Add default_value if it exists
+        if config_option.default_value is not None:
+            config_item["default_value"] = config_option.default_value
+        mcp_data["config"].append(config_item)
 
-    if group_slug:
-        group = AgentGroup.objects.filter(slug=group_slug).first()
-        if group:
-            agents = Agent.objects.filter(group=group, is_official=True, source_type=Agent.PLATFORM)
-            for agent in agents:
-                mcp = MCP.objects.filter(agent=agent, system=system, name=mcp_name, is_active=True).first()
-                if mcp:
-                    break
-    else:
-        agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
-        if agent:
-            mcp = MCP.objects.filter(agent=agent, system=system, name=mcp_name, is_active=True).first()
-
-    if not mcp:
-        return []
-
-    templates = MCPCredentialTemplate.objects.filter(mcp=mcp)
-    result = []
-    for template in templates:
-        result.append(
+    # Add credentials templates
+    for template in mcp.credential_templates.all():
+        mcp_data["credentials"].append(
             {
                 "name": template.name,
                 "label": template.label,
@@ -207,56 +178,85 @@ def get_credentials_for_mcp(agent_slug: str, system_slug: str, mcp_name: str, gr
                 "is_confidential": template.is_confidential,
             }
         )
-    return result
+
+    return mcp_data
+
+
+def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
+    """
+    Get MCPs for an agent/system combination from database models.
+    """
+    agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
+    system = AgentSystem.objects.filter(slug__iexact=system_slug).first()
+
+    if not agent or not system:
+        return []
+
+    mcps = (
+        agent.mcps.filter(system=system, is_active=True)
+        .select_related("system")
+        .prefetch_related("config_options", "credential_templates")
+    )
+
+    result = [_serialize_mcp(mcp) for mcp in mcps]
+    return _sort_mcps(result)
 
 
 def get_all_mcps_for_agent(agent_slug: str) -> dict:
     """
     Get all MCPs for an agent organized by system, from database models.
     """
-    from nexus.inline_agents.models import Agent
-
     agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
     if not agent:
         return {}
 
-    mcps = MCP.objects.filter(agent=agent, is_active=True).select_related("system").prefetch_related("config_options")
+    mcps = (
+        agent.mcps.filter(is_active=True)
+        .select_related("system")
+        .prefetch_related("config_options", "credential_templates")
+    )
+
     result = {}
     for mcp in mcps:
         system_slug = mcp.system.slug
         if system_slug not in result:
             result[system_slug] = []
 
-        mcp_data = {"name": mcp.name, "description": mcp.description, "config": []}
-        # Add config options
-        for config_option in mcp.config_options.all():
-            # For SWITCH, NUMBER, TEXT, CHECKBOX - ensure options is always an empty list
-            options = config_option.options
-            if config_option.type in ["SWITCH", "NUMBER", "TEXT", "CHECKBOX"]:
-                if not isinstance(options, list):
-                    options = []
+        result[system_slug].append(_serialize_mcp(mcp))
 
-            config_item = {
-                "name": config_option.name,
-                "label": config_option.label,
-                "type": config_option.type,
-                "options": options,
-            }
-            # Add default_value if it exists
-            if config_option.default_value is not None:
-                config_item["default_value"] = config_option.default_value
-            mcp_data["config"].append(config_item)
-        result[system_slug].append(mcp_data)
+    # Sort MCPs for each system
+    for system_slug in result:
+        result[system_slug] = _sort_mcps(result[system_slug])
+
     return result
+
+
+def _sort_systems(systems: list) -> list:
+    """
+    Sort systems list ensuring 'vtex' comes first, followed by alphabetical order.
+    """
+    sorted_systems = sorted(systems)
+    if "vtex" in sorted_systems:
+        sorted_systems.remove("vtex")
+        sorted_systems.insert(0, "vtex")
+    return sorted_systems
+
+
+def get_all_systems_for_group(group_slug: str) -> list:
+    """
+    Get all unique system slugs for all agents in a group.
+    """
+    from nexus.inline_agents.models import Agent, AgentSystem
+
+    agents = Agent.objects.filter(group__slug=group_slug, is_official=True, source_type=Agent.PLATFORM)
+    systems = list(AgentSystem.objects.filter(agents__in=agents).values_list("slug", flat=True).distinct())
+    return _sort_systems(systems)
 
 
 def get_all_mcps_for_group(group_slug: str) -> dict:
     """
     Get all MCPs for all agents in a group, organized by system.
-    Consolidates MCPs from all agents in the group.
     """
-    from nexus.inline_agents.models import AgentGroup
-
     group = AgentGroup.objects.filter(slug=group_slug).first()
     if not group:
         return {}
@@ -275,6 +275,10 @@ def get_all_mcps_for_group(group_slug: str) -> dict:
                 if mcp["name"] not in existing_mcp_names:
                     result[system_slug].append(mcp)
                     existing_mcp_names.add(mcp["name"])
+
+    # Sort MCPs for each system
+    for system_slug in result:
+        result[system_slug] = _sort_mcps(result[system_slug])
 
     return result
 
@@ -325,6 +329,9 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
 
     agents_by_group = defaultdict(list)
     for agent in agents_queryset:
+        if "concierge" in agent.slug.lower() and agent.group is None:
+            continue
+
         if agent.group:
             agents_by_group[agent.group.slug].append(agent)
         else:
@@ -422,6 +429,13 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 }
                 variants.append(variant_data)
 
+            def sort_key(v):
+                variant = v["variant"]
+                is_default = variant is None or (isinstance(variant, str) and variant.lower() == "default")
+                return (0 if is_default else 1, variant or "")
+
+            variants.sort(key=sort_key)
+
             generic_name = base_agent.name
             if "(" in generic_name:
                 generic_name = generic_name.split("(")[0].strip()
@@ -433,12 +447,19 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 "description": base_agent.collaboration_instructions,
                 "type": (base_agent.agent_type.slug if getattr(base_agent, "agent_type", None) else ""),
                 "category": (base_agent.category.slug if getattr(base_agent, "category", None) else ""),
-                "systems": sorted(list(all_systems)),
+                "systems": sorted(list(all_systems), key=lambda s: (0 if "vtex" in s.lower() else 1, s.lower())),
                 "assigned": group_assigned,
                 "is_official": base_agent.is_official,
                 "credentials": credentials,
                 "variants": variants,  # List of available variants
             }
+
+            try:
+                modal = base_agent.group.modal
+                presentation = {"conversation_example": modal.conversation_example}
+                payload["presentation"] = presentation
+            except Exception:
+                pass
 
             if len(all_capabilities) > 0:
                 payload["capabilities"] = sorted(list(all_capabilities))
@@ -500,6 +521,7 @@ class OfficialAgentsV1(APIView):
         variant_filter = request.query_params.get("variant")
 
         agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+        agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
         if name_filter:
             agents = agents.filter(name__icontains=name_filter)
         if type_filter:
@@ -519,12 +541,21 @@ class OfficialAgentsV1(APIView):
             )
             # Fetch agents again without the systems filter to avoid queryset state issues
             agents = Agent.objects.filter(uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM)
+            agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
         if variant_filter:
             agents = agents.filter(variant__iexact=variant_filter)
 
         consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
 
-        return Response(consolidated_data)
+        all_systems = AgentSystem.objects.all()
+        systems_data = AgentSystemSerializer(all_systems, many=True).data
+
+        response_data = {
+            "legacy": consolidated_data.get("legacy", []),
+            "new": {"agents": consolidated_data.get("new", []), "available_systems": systems_data},
+        }
+
+        return Response(response_data)
 
     @extend_schema(
         operation_id="v1_official_agents_assign",
@@ -589,7 +620,7 @@ class OfficialAgentsV1(APIView):
         result["agent"] = agent_serializer.data
 
         if assigned is not None:
-            assignment_result = self._handle_assignment(agent_uuid, project_uuid, assigned, mcp, mcp_config)
+            assignment_result = self._handle_assignment(agent_uuid, project_uuid, assigned, mcp, mcp_config, system)
             if isinstance(assignment_result, Response):
                 return assignment_result
             result.update(assignment_result)
@@ -603,21 +634,56 @@ class OfficialAgentsV1(APIView):
         return Response(result or {"message": "No changes applied", "agent": agent_serializer.data}, status=200)
 
     def _handle_assignment(
-        self, agent_uuid: str, project_uuid: str, assigned: bool, mcp: str | None = None, mcp_config: dict | None = None
+        self,
+        agent_uuid: str,
+        project_uuid: str,
+        assigned: bool,
+        mcp: str | None = None,
+        mcp_config: dict | None = None,
+        system: str | None = None,
     ) -> dict | Response:
         usecase = AssignAgentsUsecase()
         if assigned:
+            # Matchmaking: If MCP is provided, try to find a better matching agent within the same group
+            real_agent_uuid = agent_uuid
+            if mcp:
+                try:
+                    current_agent = Agent.objects.get(uuid=agent_uuid)
+                    if current_agent.group:
+                        candidate_qs = Agent.objects.filter(
+                            group=current_agent.group, is_official=True, mcps__name=mcp, mcps__is_active=True
+                        )
+
+                        if system:
+                            candidate_qs = candidate_qs.filter(systems__slug__iexact=system)
+
+                        better_agent = candidate_qs.first()
+
+                        if better_agent:
+                            real_agent_uuid = str(better_agent.uuid)
+                        else:
+                            supports_it = current_agent.mcps.filter(name=mcp, is_active=True).exists()
+                            if not supports_it:
+                                error_msg = f"No agent in group '{current_agent.group.name}' supports MCP '{mcp}'"
+                                if system:
+                                    error_msg += f" for system '{system}'"
+                                return Response({"error": error_msg}, status=400)
+                except Agent.DoesNotExist:
+                    return Response({"error": "Agent not found"}, status=404)
+
             try:
-                created, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
+                created, integrated_agent = usecase.assign_agent(real_agent_uuid, project_uuid)
 
                 # Persist MCP selection and configuration in metadata
-                if mcp or mcp_config:
+                if mcp or mcp_config or system:
                     if not integrated_agent.metadata:
                         integrated_agent.metadata = {}
                     if mcp:
                         integrated_agent.metadata["mcp"] = mcp
                     if mcp_config:
                         integrated_agent.metadata["mcp_config"] = mcp_config
+                    if system:
+                        integrated_agent.metadata["system"] = system
                     integrated_agent.save(update_fields=["metadata"])
 
                 return {"assigned": True, "assigned_created": created}
@@ -677,7 +743,27 @@ class OfficialAgentsV1(APIView):
 
         # If agent has a group, search across all agents in the group
         group_slug = agent.group.slug if getattr(agent, "group", None) else None
-        return get_credentials_for_mcp(agent.slug, system, mcp, group_slug=group_slug)
+
+        # Use existing helper to find MCPs
+        if group_slug:
+            all_group_mcps = get_all_mcps_for_group(group_slug)
+            mcps = []
+            for sys_key, sys_mcps in all_group_mcps.items():
+                if sys_key.lower() == system.lower():
+                    mcps = sys_mcps
+                    break
+        else:
+            mcps = get_mcps_for_agent_system(agent.slug, system)
+
+        # Find the specific MCP and return its credentials
+        if not mcps:
+            return []
+
+        target_mcp = next((m for m in mcps if m.get("name") == mcp), None)
+        if target_mcp:
+            return target_mcp.get("credentials", [])
+
+        return []
 
     def _validate_mcp(self, agent: Agent, system: str, mcp: str) -> Response | None:
         """Validate that the MCP exists for the given agent and system."""

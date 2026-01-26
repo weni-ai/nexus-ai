@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
@@ -86,6 +86,7 @@ class Context:
     content_base: dict
     session: "Session"
     hooks_state: HooksState
+    constants: dict = field(default_factory=dict)
 
 
 class FinalResponse(BaseModel):
