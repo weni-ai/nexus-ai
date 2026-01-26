@@ -425,7 +425,11 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
 
             try:
                 modal = base_agent.group.modal
-                presentation = {"conversation_example": modal.conversation_example}
+                presentation = {
+                    "conversation_example": modal.conversation_example,
+                    "about": modal.about,
+                    "agent_name": modal.agent_name,
+                }
                 payload["presentation"] = presentation
             except Exception:
                 pass
