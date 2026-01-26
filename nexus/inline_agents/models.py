@@ -63,7 +63,6 @@ class Agent(models.Model):
     group = models.ForeignKey("AgentGroup", on_delete=models.SET_NULL, null=True, blank=True, related_name="agents")
     systems = models.ManyToManyField("AgentSystem", blank=True, related_name="agents")
     mcps = models.ManyToManyField("MCP", blank=True, related_name="agents")
-    constants = models.JSONField(default=dict, null=True, blank=True)
 
     def __str__(self):
         return self.name
