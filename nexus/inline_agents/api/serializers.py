@@ -1,12 +1,18 @@
 from rest_framework import serializers
 
-from nexus.inline_agents.models import Agent, AgentCredential, IntegratedAgent
+from nexus.inline_agents.models import Agent, AgentCredential, AgentSystem, IntegratedAgent
+
+
+class AgentSystemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AgentSystem
+        fields = ["slug", "name", "logo"]
 
 
 class IntegratedAgentSerializer(serializers.ModelSerializer):
     class Meta:
         model = IntegratedAgent
-        fields = ["uuid", "id", "name", "skills", "is_official", "description"]
+        fields = ["uuid", "id", "name", "skills", "is_official", "description", "mcp"]
 
     uuid = serializers.UUIDField(source="agent.uuid")
     name = serializers.SerializerMethodField("get_name")
@@ -14,6 +20,7 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
     skills = serializers.SerializerMethodField("get_skills")
     description = serializers.SerializerMethodField("get_description")
     is_official = serializers.SerializerMethodField("get_is_official")
+    mcp = serializers.SerializerMethodField("get_mcp")
 
     def get_id(self, obj):
         return obj.agent.slug
@@ -31,6 +38,71 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
 
     def get_is_official(self, obj):
         return obj.agent.is_official
+
+    def get_mcp(self, obj):
+        """Return MCP name and config from IntegratedAgent metadata"""
+        if not obj.metadata:
+            return None
+
+        mcp_name = obj.metadata.get("mcp")
+        mcp_config = obj.metadata.get("mcp_config", {})
+        system_slug = obj.metadata.get("system")
+
+        if not mcp_name:
+            return None
+
+        config_with_labels = {}
+        mcp_description = None
+
+        # Try to find MCP with system if available in metadata, or fallback to name lookup
+        mcp = None
+        if system_slug:
+            from nexus.inline_agents.models import AgentSystem
+
+            try:
+                system_obj = AgentSystem.objects.get(slug__iexact=system_slug)
+                mcp = (
+                    obj.agent.mcps.filter(system=system_obj, name=mcp_name, is_active=True)
+                    .select_related("system")
+                    .prefetch_related("config_options")
+                    .first()
+                )
+            except AgentSystem.DoesNotExist:
+                pass
+
+        # Fallback: find MCP by name within agent's MCPs if not found via system
+        if not mcp:
+            mcp = (
+                obj.agent.mcps.filter(name=mcp_name, is_active=True)
+                .select_related("system")
+                .prefetch_related("config_options")
+                .first()
+            )
+
+        if mcp:
+            mcp_description = mcp.description
+            if mcp_config:
+                name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
+                for name, value in mcp_config.items():
+                    label = name_to_label.get(name, name)
+                    config_with_labels[label] = value
+            else:
+                config_with_labels = mcp_config
+        else:
+            config_with_labels = mcp_config
+
+        result = {"name": mcp_name, "config": config_with_labels}
+        if mcp_description:
+            result["description"] = mcp_description
+
+        if mcp and mcp.system:
+            result["system"] = {
+                "name": mcp.system.name,
+                "slug": mcp.system.slug,
+                "logo": mcp.system.logo.url if mcp.system.logo else None,
+            }
+
+        return result
 
 
 class AgentSerializer(serializers.ModelSerializer):
@@ -221,47 +293,52 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         project_uuid = self.context.get("project_uuid")
         system = self.context.get("system")
         mcp_name = self.context.get("mcp")
-        from nexus.inline_agents.models import AgentSystem
 
-        available_systems = list(
-            AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct()
+        from nexus.inline_agents.api.views import (
+            _sort_mcps,
+            _sort_systems,
+            get_all_mcps_for_group,
+            get_all_systems_for_group,
         )
+
+        group_name = obj.group.slug if getattr(obj, "group", None) else None
+
+        if group_name:
+            available_systems = get_all_systems_for_group(group_name)
+        else:
+            from nexus.inline_agents.models import AgentSystem
+
+            systems_list = list(
+                AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct()
+            )
+            available_systems = _sort_systems(systems_list)
+
         selected_system = system or (available_systems[0] if available_systems else "")
         assigned = False
         if project_uuid:
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
-
-        from nexus.inline_agents.api.views import (
-            get_all_mcps_for_group,
-            get_credentials_for_mcp,
-            get_mcps_for_agent_system,
-        )
-
-        group_name = obj.group.slug if getattr(obj, "group", None) else None
         if group_name:
             all_group_mcps = get_all_mcps_for_group(group_name)
-            system_mcps = all_group_mcps.get(selected_system, []) if selected_system else []
+            system_mcps = []
+            for mcps in all_group_mcps.values():
+                system_mcps.extend(mcps)
         else:
-            system_mcps = get_mcps_for_agent_system(obj.slug, selected_system) if selected_system else []
+            from nexus.inline_agents.api.views import get_all_mcps_for_agent
+
+            all_agent_mcps = get_all_mcps_for_agent(obj.slug)
+            system_mcps = []
+            for mcps in all_agent_mcps.values():
+                system_mcps.extend(mcps)
+
+        selected_mcp = None
+        creds = []
 
         if mcp_name and system_mcps:
             selected_mcp = next((mcp for mcp in system_mcps if mcp.get("name") == mcp_name), None)
             if selected_mcp:
-                creds = get_credentials_for_mcp(obj.slug, selected_system, mcp_name, group_slug=group_name)
-                selected_mcp["credentials"] = creds
+                creds = selected_mcp.get("credentials", [])
             else:
-                creds = []
                 selected_mcp = {}
-        else:
-            if system_mcps:
-                for mcp in system_mcps:
-                    mcp_name_for_creds = mcp.get("name")
-                    mcp_creds = get_credentials_for_mcp(
-                        obj.slug, selected_system, mcp_name_for_creds, group_slug=group_name
-                    )
-                    mcp["credentials"] = mcp_creds
-            selected_mcp = None
-            creds = []
 
         payload = {
             "name": obj.name,
@@ -280,7 +357,8 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             payload["MCP"] = selected_mcp
             payload["selected_mcp"] = mcp_name
         else:
-            payload["MCPs"] = system_mcps
+            # Sort MCPs so that 'Default' appears first
+            payload["MCPs"] = _sort_mcps(system_mcps)
 
         variant = getattr(obj, "variant", None)
         capabilities = getattr(obj, "capabilities", [])
