@@ -246,37 +246,6 @@ class AgentAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "Variant & Capabilities",
-            {
-                "fields": (
-                    "variant",
-                    "capabilities",
-                ),
-                "classes": ("collapse",),
-            },
-        ),
-        (
-            "Regionalization Policies",
-            {
-                "fields": ("policies",),
-                "classes": ("collapse",),
-            },
-        ),
-        (
-            "Tooling",
-            {
-                "fields": ("tooling",),
-                "classes": ("collapse",),
-            },
-        ),
-        (
-            "Catalog Integration",
-            {
-                "fields": ("catalog",),
-                "classes": ("collapse",),
-            },
-        ),
-        (
             "Constants",
             {
                 "fields": ("constants",),
