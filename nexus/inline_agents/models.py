@@ -311,6 +311,8 @@ class MCP(models.Model):
 class AgentGroupModal(models.Model):
     group = models.OneToOneField(AgentGroup, on_delete=models.CASCADE, related_name="modal")
     conversation_example = models.JSONField(default=list, blank=True)
+    agent_name = models.CharField(max_length=255, null=True, blank=True)
+    about = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return f"Modal for {self.group.name}"
