@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('inline_agents', '0026_agentsystem_logo'),
+        ('inline_agents', '0022_add_slug_to_mcp_and_mcps_to_group'),
     ]
 
     operations = [
