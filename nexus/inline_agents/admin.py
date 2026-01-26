@@ -247,7 +247,7 @@ class AgentAdmin(admin.ModelAdmin):
         ),
     )
 
-    readonly_fields = ("constants", "mcps_list")
+    readonly_fields = ("mcps_list",)
 
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},

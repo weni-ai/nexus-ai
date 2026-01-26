@@ -349,14 +349,7 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
             if not group_agents:
                 continue
 
-            base_agent = None
-            for agent in group_agents:
-                variant = getattr(agent, "variant", None)
-                if not variant:
-                    base_agent = agent
-                    break
-            if not base_agent:
-                base_agent = group_agents[0]
+            base_agent = group_agents[0]
 
             group_assigned = False
             if project_uuid:
@@ -391,50 +384,26 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
             if not has_multiple_mcps:
                 credentials = get_all_credentials_for_group(group_slug)
 
-            # Consolidate capabilities, policies, tooling, catalog from all agents
-            all_capabilities = set()
-            all_policies = {}
-            all_tooling = {}
-            all_catalog = {}
-
+            agents_list = []
             for agent in group_agents:
-                if isinstance(getattr(agent, "capabilities", []), list):
-                    all_capabilities.update(agent.capabilities)
-                if isinstance(getattr(agent, "policies", {}), dict):
-                    all_policies.update(agent.policies)
-                if isinstance(getattr(agent, "tooling", {}), dict):
-                    all_tooling.update(agent.tooling)
-                if isinstance(getattr(agent, "catalog", {}), dict):
-                    all_catalog.update(agent.catalog)
-
-            variants = []
-            for agent in group_agents:
-                variant_assigned = False
+                agent_assigned = False
                 if project_uuid:
-                    variant_assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent).exists()
+                    agent_assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent).exists()
 
                 # Query systems directly through the intermediate table for this specific agent
                 # This ensures we get all systems regardless of any filters applied to the queryset
-                variant_systems = list(
+                agent_systems = list(
                     AgentSystem.objects.filter(agents__uuid=agent.uuid).values_list("slug", flat=True).distinct()
                 )
 
-                variant_data = {
+                agent_data = {
                     "uuid": agent.uuid,
                     "name": agent.name,
                     "slug": agent.slug,
-                    "variant": getattr(agent, "variant", None),
-                    "systems": variant_systems,
-                    "assigned": variant_assigned,
+                    "systems": agent_systems,
+                    "assigned": agent_assigned,
                 }
-                variants.append(variant_data)
-
-            def sort_key(v):
-                variant = v["variant"]
-                is_default = variant is None or (isinstance(variant, str) and variant.lower() == "default")
-                return (0 if is_default else 1, variant or "")
-
-            variants.sort(key=sort_key)
+                agents_list.append(agent_data)
 
             generic_name = base_agent.name
             if "(" in generic_name:
@@ -451,7 +420,7 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 "assigned": group_assigned,
                 "is_official": base_agent.is_official,
                 "credentials": credentials,
-                "variants": variants,  # List of available variants
+                "agents": agents_list,
             }
 
             try:
@@ -460,15 +429,6 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 payload["presentation"] = presentation
             except Exception:
                 pass
-
-            if len(all_capabilities) > 0:
-                payload["capabilities"] = sorted(list(all_capabilities))
-            if len(all_policies) > 0:
-                payload["policies"] = all_policies
-            if len(all_tooling) > 0:
-                payload["tooling"] = all_tooling
-            if len(all_catalog) > 0:
-                payload["catalog"] = all_catalog
 
             new_agents.append(payload)
 
@@ -502,7 +462,6 @@ class OfficialAgentsV1(APIView):
             OpenApiParameter(name="group", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(name="category", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
-            OpenApiParameter(name="variant", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
         ],
         responses={
             200: OpenApiResponse(description="Agents list", response=OfficialAgentListSerializer),
@@ -518,7 +477,6 @@ class OfficialAgentsV1(APIView):
         group_filter = request.query_params.get("group")
         category_filter = request.query_params.get("category")
         system_filter = request.query_params.get("system")
-        variant_filter = request.query_params.get("variant")
 
         agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
         agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
@@ -542,8 +500,6 @@ class OfficialAgentsV1(APIView):
             # Fetch agents again without the systems filter to avoid queryset state issues
             agents = Agent.objects.filter(uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM)
             agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
-        if variant_filter:
-            agents = agents.filter(variant__iexact=variant_filter)
 
         consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
 
