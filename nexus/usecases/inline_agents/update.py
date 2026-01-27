@@ -49,8 +49,22 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 agent_obj.group = None
             agent_obj.save()
 
-        if "mcps" in agent_data:
-            mcps_data = agent_data.get("mcps", [])
+        if "mcps" in agent_data or "mcp" in agent_data:
+            mcps_data = agent_data.get("mcps")
+            if mcps_data is None:
+                mcps_data = []
+            elif isinstance(mcps_data, str):
+                mcps_data = [mcps_data]
+
+            if not mcps_data and "mcp" in agent_data:
+                mcp_val = agent_data["mcp"]
+                if isinstance(mcp_val, list):
+                    mcps_data = mcp_val
+                elif isinstance(mcp_val, dict):
+                    mcps_data = [mcp_val]
+                elif isinstance(mcp_val, str) and mcp_val:
+                    mcps_data = [mcp_val]
+
             agent_obj.mcps.clear()  # Clear existing to handle removals/updates
 
             for mcp_item in mcps_data:
