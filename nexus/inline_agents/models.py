@@ -14,6 +14,7 @@ from nexus.agents.exceptions import (
     CredentialValueInvalid,
 )
 from nexus.projects.models import Project
+from nexus.storage import AgentSystemLogoStorage
 
 
 class Guardrail(models.Model):
@@ -259,6 +260,7 @@ class AgentSystem(models.Model):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
     logo = models.FileField(
+        storage=AgentSystemLogoStorage(),
         upload_to="agent_systems/logos/",
         null=True,
         blank=True,
