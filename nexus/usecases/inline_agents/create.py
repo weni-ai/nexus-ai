@@ -78,10 +78,10 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                         continue
                     mcp = MCP.objects.filter(slug=slug).first()
                     if not mcp:
-                        system_slug = mcp_item.get("system", "custom")
-                        system, _ = AgentSystem.objects.get_or_create(
-                            slug=system_slug, defaults={"name": system_slug.capitalize()}
-                        )
+                        system_slug = mcp_item.get("system")
+                        system = None
+                        if system_slug:
+                            system = AgentSystem.objects.filter(slug=system_slug).first()
 
                         mcp = MCP.objects.create(
                             slug=slug,

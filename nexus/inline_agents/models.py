@@ -298,6 +298,8 @@ class MCP(models.Model):
         AgentSystem,
         on_delete=models.CASCADE,
         related_name="mcps",
+        null=True,
+        blank=True,
     )
     order = models.PositiveIntegerField(default=0, help_text="Order for display")
     is_active = models.BooleanField(default=True)
@@ -307,7 +309,8 @@ class MCP(models.Model):
         ordering = ["order", "name"]
 
     def __str__(self):
-        return f"{self.system.name} - {self.name}"
+        system_name = self.system.name if self.system else "No System"
+        return f"{system_name} - {self.name}"
 
 
 class AgentGroupModal(models.Model):
