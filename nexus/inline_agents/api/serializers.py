@@ -1,12 +1,20 @@
 from rest_framework import serializers
 
 from nexus.inline_agents.models import Agent, AgentCredential, AgentSystem, IntegratedAgent
+from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
 
 class AgentSystemSerializer(serializers.ModelSerializer):
+    logo = serializers.SerializerMethodField()
+
     class Meta:
         model = AgentSystem
         fields = ["slug", "name", "logo"]
+
+    def get_logo(self, obj):
+        if not obj.logo:
+            return None
+        return s3FileDatabase().create_presigned_url(obj.logo.name)
 
 
 class IntegratedAgentSerializer(serializers.ModelSerializer):
