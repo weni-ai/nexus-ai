@@ -244,37 +244,41 @@ def _sort_systems(systems: list) -> list:
 
 def get_all_systems_for_group(group_slug: str) -> list:
     """
-    Get all unique system slugs for all agents in a group.
+    Get all unique system slugs for a group, derived from its associated MCPs.
+    Top-down approach: Group -> MCPs -> System
     """
-    from nexus.inline_agents.models import Agent, AgentSystem
-
-    agents = Agent.objects.filter(group__slug=group_slug, is_official=True, source_type=Agent.PLATFORM)
-    systems = list(AgentSystem.objects.filter(agents__in=agents).values_list("slug", flat=True).distinct())
+    systems = list(
+        AgentSystem.objects.filter(mcps__groups__slug=group_slug, mcps__is_active=True)
+        .values_list("slug", flat=True)
+        .distinct()
+    )
     return _sort_systems(systems)
 
 
 def get_all_mcps_for_group(group_slug: str) -> dict:
     """
-    Get all MCPs for all agents in a group, organized by system.
+    Get all MCPs for a group, organized by system.
+    Top-down approach: Group -> MCPs
     """
-    group = AgentGroup.objects.filter(slug=group_slug).first()
-    if not group:
+    try:
+        group = AgentGroup.objects.get(slug=group_slug)
+    except AgentGroup.DoesNotExist:
         return {}
 
-    agents = Agent.objects.filter(group=group, is_official=True, source_type=Agent.PLATFORM)
-    result = {}
+    # Get MCPs directly from the group (Source of Truth)
+    mcps = (
+        group.mcps.filter(is_active=True)
+        .select_related("system")
+        .prefetch_related("config_options", "credential_templates")
+    )
 
-    for agent in agents:
-        agent_mcps = get_all_mcps_for_agent(agent.slug)
-        for system_slug, mcps in agent_mcps.items():
-            if system_slug not in result:
-                result[system_slug] = []
-            # Add MCPs, avoiding duplicates by name
-            existing_mcp_names = {mcp["name"] for mcp in result[system_slug]}
-            for mcp in mcps:
-                if mcp["name"] not in existing_mcp_names:
-                    result[system_slug].append(mcp)
-                    existing_mcp_names.add(mcp["name"])
+    result = {}
+    for mcp in mcps:
+        system_slug = mcp.system.slug
+        if system_slug not in result:
+            result[system_slug] = []
+
+        result[system_slug].append(_serialize_mcp(mcp))
 
     # Sort MCPs for each system
     for system_slug in result:
@@ -826,6 +830,7 @@ class OfficialAgentDetailV1(APIView):
                 type=OpenApiTypes.STR,
             ),
             OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="group", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(
                 name="mcp",
                 location=OpenApiParameter.QUERY,
@@ -845,6 +850,7 @@ class OfficialAgentDetailV1(APIView):
         agent_uuid = kwargs.get("agent_uuid")
         project_uuid = request.query_params.get("project_uuid")
         system = request.query_params.get("system")
+        group = request.query_params.get("group")
         mcp = request.query_params.get("mcp")
 
         try:
@@ -857,6 +863,7 @@ class OfficialAgentDetailV1(APIView):
             context={
                 "project_uuid": project_uuid,
                 "system": system,
+                "group": group,
                 "mcp": mcp,
             },
         )
