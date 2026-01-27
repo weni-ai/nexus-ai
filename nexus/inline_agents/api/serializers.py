@@ -1,6 +1,5 @@
 from rest_framework import serializers
 
-from nexus.inline_agents.api.views import get_all_mcps_for_group
 from nexus.inline_agents.models import Agent, AgentCredential, AgentSystem, IntegratedAgent
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
@@ -66,8 +65,6 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         # Try to find MCP with system if available in metadata, or fallback to name lookup
         mcp = None
         if system_slug:
-            from nexus.inline_agents.models import AgentSystem
-
             try:
                 system_obj = AgentSystem.objects.get(slug__iexact=system_slug)
                 mcp = (
@@ -204,7 +201,7 @@ class OfficialAgentListSerializer(serializers.Serializer):
         assigned = False
         if project_uuid:
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
-        from nexus.inline_agents.models import AgentSystem
+        from nexus.inline_agents.api.views import get_all_mcps_for_group
 
         systems = list(AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct())
         group_name = obj.group.slug if getattr(obj, "group", None) else None
@@ -289,8 +286,6 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         if group_name:
             available_systems = get_all_systems_for_group(group_name)
         else:
-            from nexus.inline_agents.models import AgentSystem
-
             systems_list = list(
                 AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct()
             )
