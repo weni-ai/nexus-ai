@@ -41,6 +41,7 @@ class AttachmentPreviewStorage(S3Boto3Storage):
 
 class AgentSystemLogoStorage(S3Boto3Storage):
     location = ""
+    bucket_name = settings.AWS_S3_BUCKET_NAME
     file_overwrite = False
     custom_domain = False
 
