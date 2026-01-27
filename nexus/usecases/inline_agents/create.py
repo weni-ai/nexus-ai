@@ -52,7 +52,12 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 agent_obj.save()
 
         if agent.get("mcps") or agent.get("mcp"):
-            mcps_data = agent.get("mcps", [])
+            mcps_data = agent.get("mcps")
+            if mcps_data is None:
+                mcps_data = []
+            elif isinstance(mcps_data, str):
+                mcps_data = [mcps_data]
+
             if not mcps_data and "mcp" in agent:
                 mcp_val = agent["mcp"]
                 if isinstance(mcp_val, list):
