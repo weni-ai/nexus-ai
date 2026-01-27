@@ -237,6 +237,40 @@ def update_classification_healthcheck():
     classification_notify.check_service_health()
 
 
+@app.task(name="cleanup_celery_reply_channels")
+def cleanup_celery_reply_channels():
+    """
+    Clean up Celery control API reply channels that accumulate without TTL.
+
+    These are created when using app.control.revoke() or other control API calls.
+    Runs every 12 hours to prevent memory accumulation from task revocations.
+    """
+    try:
+        redis_client = redis.Redis.from_url(settings.REDIS_URL)
+        cursor = 0
+        deleted = 0
+        total_size = 0
+
+        while True:
+            cursor, keys = redis_client.scan(cursor, match="*.reply.celery.pidbox", count=1000)
+            for key in keys:
+                try:
+                    size = redis_client.memory_usage(key) or 0
+                    redis_client.delete(key)
+                    deleted += 1
+                    total_size += size
+                except Exception as e:
+                    logger.warning(f"Error deleting Celery reply channel {key}: {e}")
+
+            if cursor == 0:
+                break
+
+        if deleted > 0:
+            logger.info(f"Cleaned up {deleted} Celery reply channels, freed {total_size / (1024*1024):.2f} MB")
+    except Exception as e:
+        logger.error(f"Error cleaning up Celery reply channels: {e}", exc_info=True)
+
+
 @app.task(name="delete_attachment_preview_file")
 def delete_file_task(file_name):
     deleter = DeleteStorageFile()

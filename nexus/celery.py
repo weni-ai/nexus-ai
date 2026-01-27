@@ -43,6 +43,10 @@ app.conf.beat_schedule = {
     "delete_old_activities": {"task": "delete_old_activities", "schedule": schedules.crontab(hour=23, minute=0)},
     "healthcheck": {"task": "healthcheck", "schedule": schedules.crontab(minute="*/1")},
     "classification_healthcheck": {"task": "classification_healthcheck", "schedule": schedules.crontab(minute="*/5")},
+    "cleanup_celery_reply_channels": {
+        "task": "cleanup_celery_reply_channels",
+        "schedule": schedules.crontab(hour="*/12", minute=0),
+    },
 }
 
 if "test" in sys.argv or getattr(settings, "CELERY_ALWAYS_EAGER", False):
