@@ -838,7 +838,13 @@ class OfficialAgentDetailV1(APIView):
                 type=OpenApiTypes.STR,
                 description="Specific MCP name to retrieve. If not provided, returns all available MCPs.",
             ),
-            OpenApiParameter(name="agent_uuid", location=OpenApiParameter.PATH, required=True, type=OpenApiTypes.STR),
+            OpenApiParameter(
+                name="identifier",
+                location=OpenApiParameter.PATH,
+                required=True,
+                type=OpenApiTypes.STR,
+                description="Agent Group Slug",
+            ),
         ],
         responses={
             200: OpenApiResponse(description="Agent detail", response=OfficialAgentDetailSerializer),
@@ -847,16 +853,28 @@ class OfficialAgentDetailV1(APIView):
         tags=["Agents"],
     )
     def get(self, request, *args, **kwargs):
-        agent_uuid = kwargs.get("agent_uuid")
+        identifier = kwargs.get("identifier")
         project_uuid = request.query_params.get("project_uuid")
         system = request.query_params.get("system")
         group = request.query_params.get("group")
         mcp = request.query_params.get("mcp")
 
         try:
-            agent = Agent.objects.get(uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM)
-        except Agent.DoesNotExist:
-            return Response({"error": "Agent not found"}, status=404)
+            agent = Agent.objects.get(uuid=identifier, is_official=True, source_type=Agent.PLATFORM)
+        except Exception:
+            agent = Agent.objects.filter(slug=identifier, is_official=True, source_type=Agent.PLATFORM).first()
+
+            if not agent:
+                group_obj = AgentGroup.objects.filter(slug=identifier).first()
+                if not group_obj:
+                    return Response({"error": "Agent not found"}, status=404)
+
+                agent = Agent.objects.filter(group=group_obj, is_official=True, source_type=Agent.PLATFORM).first()
+                if not agent:
+                    return Response({"error": "Agent not found"}, status=404)
+
+                if not group:
+                    group = group_obj.slug
 
         serializer = OfficialAgentDetailSerializer(
             agent,
