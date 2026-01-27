@@ -27,7 +27,7 @@ from nexus.reports.views import ReportView
 urlpatterns = [
     path("agents/push", PushInlineAgents.as_view(), name="push-agents"),
     path("v1/official/agents", OfficialAgentsV1.as_view(), name="v1-official-agents"),
-    path("v1/official/agents/<agent_uuid>", OfficialAgentDetailV1.as_view(), name="v1-official-agent-detail"),
+    path("v1/official/agents/<str:identifier>", OfficialAgentDetailV1.as_view(), name="v1-official-agent-detail"),
     path("agents/teams/<project_uuid>", InlineTeamView.as_view(), name="teams"),
     path("agents/app-teams/<project_uuid>", VtexAppInlineTeamView.as_view(), name="vtex-teams"),
     path("agents/my-agents/<project_uuid>", InlineAgentsView.as_view(), name="my-agents"),
