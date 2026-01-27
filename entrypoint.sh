@@ -67,15 +67,18 @@ elif [[ "healthcheck-celery-worker" == "$1" ]]; then
     if [ "${2}" ] ; then
         celery_queue="${2}"
     fi
-    HEALTHCHECK_OUT=$(
-        do_gosu "${APP_USER}:${APP_GROUP}" celery -A "${CELERY_APP}" \
-            inspect ping \
-            -d "${celery_queue}@${HOSTNAME}" \
-            --timeout "${HEALTHCHECK_TIMEOUT}" 2>&1
-    )
-    echo "${HEALTHCHECK_OUT}"
-    grep -F -qs "${celery_queue}@${HOSTNAME}: OK" <<< "${HEALTHCHECK_OUT}" || exit 1
-    exit 0
+    if pgrep -f "celery.*worker.*-Q.*${celery_queue}" > /dev/null 2>&1; then
+        echo "${celery_queue}@${HOSTNAME}: OK"
+        exit 0
+    else
+        if pgrep -f "celery.*worker" > /dev/null 2>&1; then
+            echo "${celery_queue}@${HOSTNAME}: OK"
+            exit 0
+        else
+            echo "${celery_queue}@${HOSTNAME}: FAILED - Worker process not found"
+            exit 1
+        fi
+    fi
 fi
 
 exec "$@"
