@@ -22,7 +22,7 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer,
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent
-from nexus.inline_agents.models import Agent, AgentGroup, AgentSystem
+from nexus.inline_agents.models import MCP, Agent, AgentGroup, AgentSystem
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
@@ -202,35 +202,6 @@ def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
     return _sort_mcps(result)
 
 
-def get_all_mcps_for_agent(agent_slug: str) -> dict:
-    """
-    Get all MCPs for an agent organized by system, from database models.
-    """
-    agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
-    if not agent:
-        return {}
-
-    mcps = (
-        agent.mcps.filter(is_active=True)
-        .select_related("system")
-        .prefetch_related("config_options", "credential_templates")
-    )
-
-    result = {}
-    for mcp in mcps:
-        system_slug = mcp.system.slug
-        if system_slug not in result:
-            result[system_slug] = []
-
-        result[system_slug].append(_serialize_mcp(mcp))
-
-    # Sort MCPs for each system
-    for system_slug in result:
-        result[system_slug] = _sort_mcps(result[system_slug])
-
-    return result
-
-
 def _sort_systems(systems: list) -> list:
     """
     Sort systems list ensuring 'vtex' comes first, followed by alphabetical order.
@@ -247,11 +218,19 @@ def get_all_systems_for_group(group_slug: str) -> list:
     Get all unique system slugs for a group, derived from its associated MCPs.
     Top-down approach: Group -> MCPs -> System
     """
+    # Get systems from MCPs that have a system
     systems = list(
         AgentSystem.objects.filter(mcps__groups__slug=group_slug, mcps__is_active=True)
         .values_list("slug", flat=True)
         .distinct()
     )
+
+    # Check if there are any active MCPs in the group without a system
+    has_no_system_mcps = MCP.objects.filter(groups__slug=group_slug, is_active=True, system__isnull=True).exists()
+
+    if has_no_system_mcps:
+        systems.append("no_system")
+
     return _sort_systems(systems)
 
 
@@ -274,7 +253,7 @@ def get_all_mcps_for_group(group_slug: str) -> dict:
 
     result = {}
     for mcp in mcps:
-        system_slug = mcp.system.slug
+        system_slug = mcp.system.slug if mcp.system else "no_system"
         if system_slug not in result:
             result[system_slug] = []
 
@@ -292,8 +271,6 @@ def get_all_credentials_for_group(group_slug: str) -> list:
     Get all credentials for all agents in a group.
     Consolidates credentials from all agents in the group.
     """
-    from nexus.inline_agents.models import AgentGroup
-
     group = AgentGroup.objects.filter(slug=group_slug).first()
     if not group:
         return []

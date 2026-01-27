@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from nexus.inline_agents.api.views import get_all_mcps_for_group
 from nexus.inline_agents.models import Agent, AgentCredential, AgentSystem, IntegratedAgent
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
@@ -208,9 +209,10 @@ class OfficialAgentListSerializer(serializers.Serializer):
         systems = list(AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct())
         group_name = obj.group.slug if getattr(obj, "group", None) else None
 
-        from nexus.inline_agents.api.views import get_all_mcps_for_agent
+        agent_mcps = {}
+        if group_name:
+            agent_mcps = get_all_mcps_for_group(group_name)
 
-        agent_mcps = get_all_mcps_for_agent(obj.slug)
         has_multiple_mcps = False
 
         for system_slug in systems:
@@ -298,17 +300,10 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         assigned = False
         if project_uuid:
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
+        system_mcps = []
         if group_name:
             all_group_mcps = get_all_mcps_for_group(group_name)
-            system_mcps = []
             for mcps in all_group_mcps.values():
-                system_mcps.extend(mcps)
-        else:
-            from nexus.inline_agents.api.views import get_all_mcps_for_agent
-
-            all_agent_mcps = get_all_mcps_for_agent(obj.slug)
-            system_mcps = []
-            for mcps in all_agent_mcps.values():
                 system_mcps.extend(mcps)
 
         selected_mcp = None
