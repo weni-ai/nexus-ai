@@ -7,6 +7,7 @@ from nexus.inline_agents.models import (
     Agent,
     AgentCredential,
     AgentGroup,
+    AgentSystem,
     InlineAgentMessage,
     MCPConfigOption,
     MCPCredentialTemplate,
@@ -55,8 +56,41 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             for mcp_item in mcps_data:
                 if isinstance(mcp_item, str):
                     mcp = MCP.objects.filter(slug=mcp_item).first()
-                    if mcp:
-                        agent_obj.mcps.add(mcp)
+                    if not mcp:
+                        system, _ = AgentSystem.objects.get_or_create(slug="custom", defaults={"name": "Custom"})
+                        mcp = MCP.objects.create(
+                            slug=mcp_item,
+                            name=mcp_item,
+                            system=system,
+                            description=f"Auto-created MCP for {mcp_item}",
+                        )
+
+                        if "credentials" in agent_data:
+                            for key, cred_data in agent_data["credentials"].items():
+                                if isinstance(cred_data, dict):
+                                    MCPCredentialTemplate.objects.create(
+                                        mcp=mcp,
+                                        name=key,
+                                        label=cred_data.get("label", key),
+                                        placeholder=cred_data.get("placeholder", ""),
+                                        is_confidential=cred_data.get("is_confidential", True),
+                                    )
+
+                        if "constants" in agent_data:
+                            for key, value in agent_data["constants"].items():
+                                default_val = value
+                                if isinstance(value, dict) and "default" in value:
+                                    default_val = value["default"]
+
+                                MCPConfigOption.objects.create(
+                                    mcp=mcp,
+                                    name=key,
+                                    default_value=str(default_val),
+                                    label=key,
+                                    type=MCPConfigOption.TEXT,
+                                )
+
+                    agent_obj.mcps.add(mcp)
                 elif isinstance(mcp_item, dict):
                     slug = mcp_item.get("slug")
                     if not slug:
