@@ -265,6 +265,7 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         project_uuid = self.context.get("project_uuid")
         system = self.context.get("system")
         mcp_name = self.context.get("mcp")
+        group_context = self.context.get("group")
 
         from nexus.inline_agents.api.views import (
             _sort_mcps,
@@ -273,7 +274,7 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             get_all_systems_for_group,
         )
 
-        group_name = obj.group.slug if getattr(obj, "group", None) else None
+        group_name = group_context if group_context else (obj.group.slug if getattr(obj, "group", None) else None)
 
         if group_name:
             available_systems = get_all_systems_for_group(group_name)
