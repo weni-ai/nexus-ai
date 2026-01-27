@@ -7,7 +7,6 @@ from nexus.inline_agents.models import (
     Agent,
     AgentCredential,
     AgentGroup,
-    AgentSystem,
     InlineAgentMessage,
     MCPConfigOption,
     MCPCredentialTemplate,
@@ -71,11 +70,10 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 if isinstance(mcp_item, str):
                     mcp = MCP.objects.filter(slug=mcp_item).first()
                     if not mcp:
-                        system, _ = AgentSystem.objects.get_or_create(slug="custom", defaults={"name": "Custom"})
                         mcp = MCP.objects.create(
                             slug=mcp_item,
                             name=mcp_item,
-                            system=system,
+                            system=None,
                             description=f"Auto-created MCP for {mcp_item}",
                         )
 
