@@ -39,6 +39,13 @@ class AttachmentPreviewStorage(S3Boto3Storage):
         return super().get_available_name(name, max_length)
 
 
+class AgentSystemLogoStorage(S3Boto3Storage):
+    location = ""
+    bucket_name = settings.AWS_S3_BUCKET_NAME
+    file_overwrite = False
+    custom_domain = False
+
+
 class DeleteStorageFile:
     def __init__(self):
         self.s3_client = boto3.client("s3", region_name=settings.AWS_S3_REGION_NAME)

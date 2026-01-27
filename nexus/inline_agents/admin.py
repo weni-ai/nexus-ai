@@ -245,52 +245,9 @@ class AgentAdmin(admin.ModelAdmin):
                 "description": "Select MCPs to associate with this agent. MCPs can be shared across multiple agents.",
             },
         ),
-        (
-            "Variant & Capabilities",
-            {
-                "fields": (
-                    "variant",
-                    "capabilities",
-                ),
-                "classes": ("collapse",),
-            },
-        ),
-        (
-            "Regionalization Policies",
-            {
-                "fields": ("policies",),
-                "classes": ("collapse",),
-            },
-        ),
-        (
-            "Tooling",
-            {
-                "fields": ("tooling",),
-                "classes": ("collapse",),
-            },
-        ),
-        (
-            "Catalog Integration",
-            {
-                "fields": ("catalog",),
-                "classes": ("collapse",),
-            },
-        ),
-        (
-            "Constants",
-            {
-                "fields": ("constants",),
-                "description": (
-                    "Constants are configurable values defined in the agent YAML file. "
-                    "These values are set via weni-cli and are read-only in the admin. "
-                    "To modify constants, update the agent definition YAML and push via weni-cli."
-                ),
-                "classes": ("collapse",),
-            },
-        ),
     )
 
-    readonly_fields = ("constants", "mcps_list")
+    readonly_fields = ("mcps_list",)
 
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
@@ -378,6 +335,7 @@ class AgentAdmin(admin.ModelAdmin):
 class AgentGroupModalInline(admin.StackedInline):
     model = AgentGroupModal
     extra = 0
+    fields = ("agent_name", "about", "conversation_example")
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
@@ -392,13 +350,53 @@ class AgentInline(admin.TabularInline):
     show_change_link = True
 
 
+class AgentGroupMCPInline(admin.TabularInline):
+    model = AgentGroup.mcps.through
+    extra = 0
+    verbose_name = "Associated MCP"
+    verbose_name_plural = "Associated MCPs"
+    can_delete = False
+    max_num = 0
+
+    fields = ("get_name", "get_system", "get_description", "get_status", "view_link")
+    readonly_fields = ("get_name", "get_system", "get_description", "get_status", "view_link")
+
+    def get_name(self, obj):
+        return obj.mcp.name
+
+    get_name.short_description = "Name"
+
+    def get_system(self, obj):
+        return obj.mcp.system.name if obj.mcp.system else "-"
+
+    get_system.short_description = "System"
+
+    def get_description(self, obj):
+        return obj.mcp.description
+
+    get_description.short_description = "Description"
+
+    def get_status(self, obj):
+        return "Active" if obj.mcp.is_active else "Inactive"
+
+    get_status.short_description = "Status"
+
+    def view_link(self, obj):
+        if obj.mcp.pk:
+            url = reverse("admin:inline_agents_mcp_change", args=[obj.mcp.pk])
+            return format_html('<a href="{}" target="_blank">View MCP</a>', url)
+        return "-"
+
+    view_link.short_description = "Actions"
+
+
 @admin.register(AgentGroup)
 class AgentGroupAdmin(admin.ModelAdmin):
     list_display = ("name", "slug")
-    inlines = [AgentGroupModalInline, AgentInline]
+    inlines = [AgentGroupModalInline, AgentInline, AgentGroupMCPInline]
     search_fields = ("name", "slug")
     ordering = ("name",)
-    readonly_fields = ("mcps",)
+    exclude = ("mcps",)
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }

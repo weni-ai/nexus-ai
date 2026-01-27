@@ -14,6 +14,7 @@ from nexus.agents.exceptions import (
     CredentialValueInvalid,
 )
 from nexus.projects.models import Project
+from nexus.storage import AgentSystemLogoStorage
 
 
 class Guardrail(models.Model):
@@ -63,13 +64,6 @@ class Agent(models.Model):
     group = models.ForeignKey("AgentGroup", on_delete=models.SET_NULL, null=True, blank=True, related_name="agents")
     systems = models.ManyToManyField("AgentSystem", blank=True, related_name="agents")
     mcps = models.ManyToManyField("MCP", blank=True, related_name="agents")
-
-    variant = models.CharField(max_length=100, null=True, blank=True)
-    capabilities = models.JSONField(default=list, null=True, blank=True)
-    policies = models.JSONField(default=dict, null=True, blank=True)
-    tooling = models.JSONField(default=dict, null=True, blank=True)
-    catalog = models.JSONField(default=dict, null=True, blank=True)
-    constants = models.JSONField(default=dict, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -266,6 +260,7 @@ class AgentSystem(models.Model):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
     logo = models.FileField(
+        storage=AgentSystemLogoStorage(),
         upload_to="agent_systems/logos/",
         null=True,
         blank=True,
@@ -303,6 +298,8 @@ class MCP(models.Model):
         AgentSystem,
         on_delete=models.CASCADE,
         related_name="mcps",
+        null=True,
+        blank=True,
     )
     order = models.PositiveIntegerField(default=0, help_text="Order for display")
     is_active = models.BooleanField(default=True)
@@ -312,12 +309,15 @@ class MCP(models.Model):
         ordering = ["order", "name"]
 
     def __str__(self):
-        return f"{self.system.name} - {self.name}"
+        system_name = self.system.name if self.system else "No System"
+        return f"{system_name} - {self.name}"
 
 
 class AgentGroupModal(models.Model):
     group = models.OneToOneField(AgentGroup, on_delete=models.CASCADE, related_name="modal")
     conversation_example = models.JSONField(default=list, blank=True)
+    agent_name = models.CharField(max_length=255, null=True, blank=True)
+    about = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return f"Modal for {self.group.name}"

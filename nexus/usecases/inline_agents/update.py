@@ -32,7 +32,6 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         agent_obj.name = agent_data["name"]
         agent_obj.collaboration_instructions = agent_data["description"]
         agent_obj.instruction = instructions
-        agent_obj.constants = self._process_constants(agent_data.get("constants", {}))
         agent_obj.save()
 
         self.handle_tools(agent_obj, project, agent_data["tools"], files, str(project.uuid))
@@ -49,15 +48,61 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                 agent_obj.group = None
             agent_obj.save()
 
-        if "mcps" in agent_data:
-            mcps_data = agent_data.get("mcps", [])
+        if "mcps" in agent_data or "mcp" in agent_data:
+            mcps_data = agent_data.get("mcps")
+            if mcps_data is None:
+                mcps_data = []
+            elif isinstance(mcps_data, str):
+                mcps_data = [mcps_data]
+
+            if not mcps_data and "mcp" in agent_data:
+                mcp_val = agent_data["mcp"]
+                if isinstance(mcp_val, list):
+                    mcps_data = mcp_val
+                elif isinstance(mcp_val, dict):
+                    mcps_data = [mcp_val]
+                elif isinstance(mcp_val, str) and mcp_val:
+                    mcps_data = [mcp_val]
+
             agent_obj.mcps.clear()  # Clear existing to handle removals/updates
 
             for mcp_item in mcps_data:
                 if isinstance(mcp_item, str):
                     mcp = MCP.objects.filter(slug=mcp_item).first()
-                    if mcp:
-                        agent_obj.mcps.add(mcp)
+                    if not mcp:
+                        mcp = MCP.objects.create(
+                            slug=mcp_item,
+                            name=mcp_item,
+                            system=None,
+                            description=f"Auto-created MCP for {mcp_item}",
+                        )
+
+                        if "credentials" in agent_data:
+                            for key, cred_data in agent_data["credentials"].items():
+                                if isinstance(cred_data, dict):
+                                    MCPCredentialTemplate.objects.create(
+                                        mcp=mcp,
+                                        name=key,
+                                        label=cred_data.get("label", key),
+                                        placeholder=cred_data.get("placeholder", ""),
+                                        is_confidential=cred_data.get("is_confidential", True),
+                                    )
+
+                        if "constants" in agent_data:
+                            for key, value in agent_data["constants"].items():
+                                default_val = value
+                                if isinstance(value, dict) and "default" in value:
+                                    default_val = value["default"]
+
+                                MCPConfigOption.objects.create(
+                                    mcp=mcp,
+                                    name=key,
+                                    default_value=str(default_val),
+                                    label=key,
+                                    type=MCPConfigOption.TEXT,
+                                )
+
+                    agent_obj.mcps.add(mcp)
                 elif isinstance(mcp_item, dict):
                     slug = mcp_item.get("slug")
                     if not slug:
@@ -96,15 +141,6 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             agent_obj.group.update_mcps_from_agents()
 
         return agent_data
-
-    def _process_constants(self, constants: Dict) -> Dict | None:
-        """Process constants from weni-cli YAML format to stored format"""
-        if not constants:
-            return None
-        processed = {}
-        for key, constant_def in constants.items():
-            processed[key] = {"value": constant_def.get("default", ""), "definition": constant_def}
-        return processed
 
     def update_credentials(self, agent: Agent, project: Project, credentials: Dict):
         if not credentials:

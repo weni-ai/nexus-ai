@@ -1,12 +1,20 @@
 from rest_framework import serializers
 
 from nexus.inline_agents.models import Agent, AgentCredential, AgentSystem, IntegratedAgent
+from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
 
 class AgentSystemSerializer(serializers.ModelSerializer):
+    logo = serializers.SerializerMethodField()
+
     class Meta:
         model = AgentSystem
         fields = ["slug", "name", "logo"]
+
+    def get_logo(self, obj):
+        if not obj.logo:
+            return None
+        return s3FileDatabase().create_presigned_url(obj.logo.name)
 
 
 class IntegratedAgentSerializer(serializers.ModelSerializer):
@@ -186,11 +194,6 @@ class OfficialAgentListSerializer(serializers.Serializer):
     category = serializers.CharField(allow_blank=True)
     systems = serializers.ListField(child=serializers.CharField(), allow_empty=True)
     assigned = serializers.BooleanField()
-    variant = serializers.CharField(required=False, allow_null=True)
-    capabilities = serializers.ListField(child=serializers.CharField(), required=False, allow_empty=True)
-    policies = serializers.DictField(required=False)
-    tooling = serializers.DictField(required=False)
-    catalog = serializers.DictField(required=False)
     slug = serializers.CharField()
     is_official = serializers.BooleanField()
     credentials = serializers.ListField(child=serializers.DictField(), required=False)
@@ -245,24 +248,6 @@ class OfficialAgentListSerializer(serializers.Serializer):
             "credentials": credentials,
         }
 
-        # Include operational metadata only when configured on the model
-        variant = getattr(obj, "variant", None)
-        capabilities = getattr(obj, "capabilities", [])
-        policies = getattr(obj, "policies", {})
-        tooling = getattr(obj, "tooling", {})
-        catalog = getattr(obj, "catalog", {})
-
-        if variant is not None:
-            payload["variant"] = variant
-        if isinstance(capabilities, list) and len(capabilities) > 0:
-            payload["capabilities"] = capabilities
-        if isinstance(policies, dict) and len(policies) > 0:
-            payload["policies"] = policies
-        if isinstance(tooling, dict) and len(tooling) > 0:
-            payload["tooling"] = tooling
-        if isinstance(catalog, dict) and len(catalog) > 0:
-            payload["catalog"] = catalog
-
         return payload
 
     def _get_meta(self, agent: Agent) -> dict:
@@ -283,16 +268,12 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
     MCP = serializers.DictField(required=False)
     selected_mcp = serializers.CharField(required=False, allow_null=True)
     credentials = serializers.ListField()
-    variant = serializers.CharField(required=False, allow_null=True)
-    capabilities = serializers.ListField(child=serializers.CharField(), required=False, allow_empty=True)
-    policies = serializers.DictField(required=False)
-    tooling = serializers.DictField(required=False)
-    catalog = serializers.DictField(required=False)
 
     def to_representation(self, obj):
         project_uuid = self.context.get("project_uuid")
         system = self.context.get("system")
         mcp_name = self.context.get("mcp")
+        group_context = self.context.get("group")
 
         from nexus.inline_agents.api.views import (
             _sort_mcps,
@@ -301,7 +282,7 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             get_all_systems_for_group,
         )
 
-        group_name = obj.group.slug if getattr(obj, "group", None) else None
+        group_name = group_context if group_context else (obj.group.slug if getattr(obj, "group", None) else None)
 
         if group_name:
             available_systems = get_all_systems_for_group(group_name)
@@ -359,23 +340,6 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         else:
             # Sort MCPs so that 'Default' appears first
             payload["MCPs"] = _sort_mcps(system_mcps)
-
-        variant = getattr(obj, "variant", None)
-        capabilities = getattr(obj, "capabilities", [])
-        policies = getattr(obj, "policies", {})
-        tooling = getattr(obj, "tooling", {})
-        catalog = getattr(obj, "catalog", {})
-
-        if variant is not None:
-            payload["variant"] = variant
-        if isinstance(capabilities, list) and len(capabilities) > 0:
-            payload["capabilities"] = capabilities
-        if isinstance(policies, dict) and len(policies) > 0:
-            payload["policies"] = policies
-        if isinstance(tooling, dict) and len(tooling) > 0:
-            payload["tooling"] = tooling
-        if isinstance(catalog, dict) and len(catalog) > 0:
-            payload["catalog"] = catalog
 
         return payload
 

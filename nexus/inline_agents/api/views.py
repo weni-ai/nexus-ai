@@ -244,37 +244,41 @@ def _sort_systems(systems: list) -> list:
 
 def get_all_systems_for_group(group_slug: str) -> list:
     """
-    Get all unique system slugs for all agents in a group.
+    Get all unique system slugs for a group, derived from its associated MCPs.
+    Top-down approach: Group -> MCPs -> System
     """
-    from nexus.inline_agents.models import Agent, AgentSystem
-
-    agents = Agent.objects.filter(group__slug=group_slug, is_official=True, source_type=Agent.PLATFORM)
-    systems = list(AgentSystem.objects.filter(agents__in=agents).values_list("slug", flat=True).distinct())
+    systems = list(
+        AgentSystem.objects.filter(mcps__groups__slug=group_slug, mcps__is_active=True)
+        .values_list("slug", flat=True)
+        .distinct()
+    )
     return _sort_systems(systems)
 
 
 def get_all_mcps_for_group(group_slug: str) -> dict:
     """
-    Get all MCPs for all agents in a group, organized by system.
+    Get all MCPs for a group, organized by system.
+    Top-down approach: Group -> MCPs
     """
-    group = AgentGroup.objects.filter(slug=group_slug).first()
-    if not group:
+    try:
+        group = AgentGroup.objects.get(slug=group_slug)
+    except AgentGroup.DoesNotExist:
         return {}
 
-    agents = Agent.objects.filter(group=group, is_official=True, source_type=Agent.PLATFORM)
-    result = {}
+    # Get MCPs directly from the group (Source of Truth)
+    mcps = (
+        group.mcps.filter(is_active=True)
+        .select_related("system")
+        .prefetch_related("config_options", "credential_templates")
+    )
 
-    for agent in agents:
-        agent_mcps = get_all_mcps_for_agent(agent.slug)
-        for system_slug, mcps in agent_mcps.items():
-            if system_slug not in result:
-                result[system_slug] = []
-            # Add MCPs, avoiding duplicates by name
-            existing_mcp_names = {mcp["name"] for mcp in result[system_slug]}
-            for mcp in mcps:
-                if mcp["name"] not in existing_mcp_names:
-                    result[system_slug].append(mcp)
-                    existing_mcp_names.add(mcp["name"])
+    result = {}
+    for mcp in mcps:
+        system_slug = mcp.system.slug
+        if system_slug not in result:
+            result[system_slug] = []
+
+        result[system_slug].append(_serialize_mcp(mcp))
 
     # Sort MCPs for each system
     for system_slug in result:
@@ -349,14 +353,7 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
             if not group_agents:
                 continue
 
-            base_agent = None
-            for agent in group_agents:
-                variant = getattr(agent, "variant", None)
-                if not variant:
-                    base_agent = agent
-                    break
-            if not base_agent:
-                base_agent = group_agents[0]
+            base_agent = group_agents[0]
 
             group_assigned = False
             if project_uuid:
@@ -391,50 +388,26 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
             if not has_multiple_mcps:
                 credentials = get_all_credentials_for_group(group_slug)
 
-            # Consolidate capabilities, policies, tooling, catalog from all agents
-            all_capabilities = set()
-            all_policies = {}
-            all_tooling = {}
-            all_catalog = {}
-
+            agents_list = []
             for agent in group_agents:
-                if isinstance(getattr(agent, "capabilities", []), list):
-                    all_capabilities.update(agent.capabilities)
-                if isinstance(getattr(agent, "policies", {}), dict):
-                    all_policies.update(agent.policies)
-                if isinstance(getattr(agent, "tooling", {}), dict):
-                    all_tooling.update(agent.tooling)
-                if isinstance(getattr(agent, "catalog", {}), dict):
-                    all_catalog.update(agent.catalog)
-
-            variants = []
-            for agent in group_agents:
-                variant_assigned = False
+                agent_assigned = False
                 if project_uuid:
-                    variant_assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent).exists()
+                    agent_assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent).exists()
 
                 # Query systems directly through the intermediate table for this specific agent
                 # This ensures we get all systems regardless of any filters applied to the queryset
-                variant_systems = list(
+                agent_systems = list(
                     AgentSystem.objects.filter(agents__uuid=agent.uuid).values_list("slug", flat=True).distinct()
                 )
 
-                variant_data = {
+                agent_data = {
                     "uuid": agent.uuid,
                     "name": agent.name,
                     "slug": agent.slug,
-                    "variant": getattr(agent, "variant", None),
-                    "systems": variant_systems,
-                    "assigned": variant_assigned,
+                    "systems": agent_systems,
+                    "assigned": agent_assigned,
                 }
-                variants.append(variant_data)
-
-            def sort_key(v):
-                variant = v["variant"]
-                is_default = variant is None or (isinstance(variant, str) and variant.lower() == "default")
-                return (0 if is_default else 1, variant or "")
-
-            variants.sort(key=sort_key)
+                agents_list.append(agent_data)
 
             generic_name = base_agent.name
             if "(" in generic_name:
@@ -451,24 +424,19 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
                 "assigned": group_assigned,
                 "is_official": base_agent.is_official,
                 "credentials": credentials,
-                "variants": variants,  # List of available variants
+                "agents": agents_list,
             }
 
             try:
                 modal = base_agent.group.modal
-                presentation = {"conversation_example": modal.conversation_example}
+                presentation = {
+                    "conversation_example": modal.conversation_example,
+                    "about": modal.about,
+                    "agent_name": modal.agent_name,
+                }
                 payload["presentation"] = presentation
             except Exception:
                 pass
-
-            if len(all_capabilities) > 0:
-                payload["capabilities"] = sorted(list(all_capabilities))
-            if len(all_policies) > 0:
-                payload["policies"] = all_policies
-            if len(all_tooling) > 0:
-                payload["tooling"] = all_tooling
-            if len(all_catalog) > 0:
-                payload["catalog"] = all_catalog
 
             new_agents.append(payload)
 
@@ -502,7 +470,6 @@ class OfficialAgentsV1(APIView):
             OpenApiParameter(name="group", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(name="category", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
-            OpenApiParameter(name="variant", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
         ],
         responses={
             200: OpenApiResponse(description="Agents list", response=OfficialAgentListSerializer),
@@ -518,7 +485,6 @@ class OfficialAgentsV1(APIView):
         group_filter = request.query_params.get("group")
         category_filter = request.query_params.get("category")
         system_filter = request.query_params.get("system")
-        variant_filter = request.query_params.get("variant")
 
         agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
         agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
@@ -542,8 +508,6 @@ class OfficialAgentsV1(APIView):
             # Fetch agents again without the systems filter to avoid queryset state issues
             agents = Agent.objects.filter(uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM)
             agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
-        if variant_filter:
-            agents = agents.filter(variant__iexact=variant_filter)
 
         consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
 
@@ -866,6 +830,7 @@ class OfficialAgentDetailV1(APIView):
                 type=OpenApiTypes.STR,
             ),
             OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
+            OpenApiParameter(name="group", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(
                 name="mcp",
                 location=OpenApiParameter.QUERY,
@@ -873,7 +838,13 @@ class OfficialAgentDetailV1(APIView):
                 type=OpenApiTypes.STR,
                 description="Specific MCP name to retrieve. If not provided, returns all available MCPs.",
             ),
-            OpenApiParameter(name="agent_uuid", location=OpenApiParameter.PATH, required=True, type=OpenApiTypes.STR),
+            OpenApiParameter(
+                name="identifier",
+                location=OpenApiParameter.PATH,
+                required=True,
+                type=OpenApiTypes.STR,
+                description="Agent Group Slug",
+            ),
         ],
         responses={
             200: OpenApiResponse(description="Agent detail", response=OfficialAgentDetailSerializer),
@@ -882,21 +853,35 @@ class OfficialAgentDetailV1(APIView):
         tags=["Agents"],
     )
     def get(self, request, *args, **kwargs):
-        agent_uuid = kwargs.get("agent_uuid")
+        identifier = kwargs.get("identifier")
         project_uuid = request.query_params.get("project_uuid")
         system = request.query_params.get("system")
+        group = request.query_params.get("group")
         mcp = request.query_params.get("mcp")
 
         try:
-            agent = Agent.objects.get(uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM)
-        except Agent.DoesNotExist:
-            return Response({"error": "Agent not found"}, status=404)
+            agent = Agent.objects.get(uuid=identifier, is_official=True, source_type=Agent.PLATFORM)
+        except Exception:
+            agent = Agent.objects.filter(slug=identifier, is_official=True, source_type=Agent.PLATFORM).first()
+
+            if not agent:
+                group_obj = AgentGroup.objects.filter(slug=identifier).first()
+                if not group_obj:
+                    return Response({"error": "Agent not found"}, status=404)
+
+                agent = Agent.objects.filter(group=group_obj, is_official=True, source_type=Agent.PLATFORM).first()
+                if not agent:
+                    return Response({"error": "Agent not found"}, status=404)
+
+                if not group:
+                    group = group_obj.slug
 
         serializer = OfficialAgentDetailSerializer(
             agent,
             context={
                 "project_uuid": project_uuid,
                 "system": system,
+                "group": group,
                 "mcp": mcp,
             },
         )
