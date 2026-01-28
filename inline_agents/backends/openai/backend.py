@@ -13,7 +13,6 @@ from django.conf import settings
 from langfuse import get_client
 from openai import AsyncOpenAI
 from openai.types.shared import Reasoning
-from redis import Redis
 
 from inline_agents.backend import InlineAgentsBackend
 from inline_agents.backends.openai.adapter import OpenAIDataLakeEventAdapter, OpenAITeamAdapter
@@ -89,7 +88,9 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_session(
         self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None
     ) -> tuple[RedisSession, str]:
-        redis_client = Redis.from_url(settings.REDIS_URL)
+        from router.utils.redis_clients import get_redis_write_client
+
+        redis_client = get_redis_write_client()
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         return RedisSession(
             session_id=session_id,
@@ -102,7 +103,9 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_session_factory(
         self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None
     ):
-        redis_client = Redis.from_url(settings.REDIS_URL)
+        from router.utils.redis_clients import get_redis_write_client
+
+        redis_client = get_redis_write_client()
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         return make_session_factory(
             redis=redis_client,

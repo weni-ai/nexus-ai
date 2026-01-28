@@ -8,7 +8,6 @@ from typing import Dict, List, Optional
 from django.conf import settings
 from django.template.defaultfilters import slugify
 from openai import OpenAI
-from redis import Redis
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from nexus.agents.models import AgentMessage
@@ -305,8 +304,10 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
     source = "preview" if preview else "router"
     logger.info("Message source", extra={"source": source})
 
-    # Initialize Redis client using the REDIS_URL from settings
-    redis_client = Redis.from_url(settings.REDIS_URL)
+    from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
+
+    redis_read_client = get_redis_read_client()
+    redis_write_client = get_redis_write_client()
 
     logger.info("Message received", extra={"has_text": bool(message.get("text"))})
 
@@ -394,8 +395,8 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         # Check if there's a pending response for this user
         pending_response_key = f"response:{message.contact_urn}"
         pending_task_key = f"task:{message.contact_urn}"
-        pending_response = redis_client.get(pending_response_key)
-        pending_task_id = redis_client.get(pending_task_key)
+        pending_response = redis_read_client.get(pending_response_key)
+        pending_task_id = redis_read_client.get(pending_task_key)
 
         if pending_response:
             # Revoke the previous task
@@ -406,13 +407,13 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
             previous_message = pending_response.decode("utf-8")
             concatenated_message = f"{previous_message}\n{message.text}"
             message.text = concatenated_message
-            redis_client.delete(pending_response_key)  # Remove the pending response
+            redis_write_client.delete(pending_response_key)  # Remove the pending response
         else:
             # Store the current message in Redis
-            redis_client.set(pending_response_key, message.text)
+            redis_write_client.set(pending_response_key, message.text)
 
         # Store the current task ID in Redis
-        redis_client.set(pending_task_key, self.request.id)
+        redis_write_client.set(pending_task_key, self.request.id)
 
         # Generate response for the concatenated message
         response: dict = route(
@@ -432,8 +433,8 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         )
 
         # If response generation completes, remove from Redis
-        redis_client.delete(pending_response_key)
-        redis_client.delete(pending_task_key)
+        redis_write_client.delete(pending_response_key)
+        redis_write_client.delete(pending_task_key)
 
         log_usecase.update_status("S")
 
@@ -447,7 +448,10 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
 
 
 def _initialize_and_handle_pending_response(message, task_id):
-    redis_client = Redis.from_url(settings.REDIS_URL)
+    from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
+
+    redis_read_client = get_redis_read_client()
+    redis_write_client = get_redis_write_client()
     message = message_factory(
         project_uuid=message.get("project_uuid"),
         text=message.get("text"),
@@ -460,8 +464,8 @@ def _initialize_and_handle_pending_response(message, task_id):
 
     pending_response_key = f"multi_response:{message.contact_urn}"
     pending_task_key = f"multi_task:{message.contact_urn}"
-    pending_response = redis_client.get(pending_response_key)
-    pending_task_id = redis_client.get(pending_task_key)
+    pending_response = redis_read_client.get(pending_response_key)
+    pending_task_id = redis_read_client.get(pending_task_key)
 
     if pending_response:
         if pending_task_id:
@@ -469,12 +473,12 @@ def _initialize_and_handle_pending_response(message, task_id):
         previous_message = pending_response.decode("utf-8")
         concatenated_message = f"{previous_message}\n{message.text}"
         message.text = concatenated_message
-        redis_client.delete(pending_response_key)
+        redis_write_client.delete(pending_response_key)
     else:
-        redis_client.set(pending_response_key, message.text)
+        redis_write_client.set(pending_response_key, message.text)
 
-    redis_client.set(pending_task_key, task_id)
-    return redis_client, message
+    redis_write_client.set(pending_task_key, task_id)
+    return redis_write_client, message
 
 
 def _process_event(
