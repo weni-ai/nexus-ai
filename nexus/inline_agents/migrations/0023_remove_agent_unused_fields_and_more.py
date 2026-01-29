@@ -49,7 +49,6 @@ class Migration(migrations.Migration):
                 blank=True,
                 null=True,
                 storage=nexus.storage.AgentSystemLogoStorage(),
-                upload_to='agent_systems/logos/',
                 validators=[django.core.validators.FileExtensionValidator(allowed_extensions=['png', 'svg'])],
             ),
         ),
