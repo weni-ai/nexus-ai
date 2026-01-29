@@ -309,6 +309,7 @@ def _invoke_backend(
     foundation_model: Optional[str],
     turn_off_rationale: bool,
     channel_type: str = "",
+    stream_support: bool = False,
 ):
     """
     Invoke backend with cached data to avoid database queries.
@@ -335,6 +336,7 @@ def _invoke_backend(
             "foundation_model": foundation_model,
             "turn_off_rationale": turn_off_rationale,
             "channel_type": channel_type,
+            "stream_support": stream_support,
         }
     )
 
@@ -410,7 +412,11 @@ def start_inline_agents(
 
         # Use cached dict value instead of accessing Django object
         broadcast, _ = get_action_clients(
-            preview=preview, multi_agents=True, project_use_components=project_dict["use_components"]
+            preview=preview,
+            multi_agents=True,
+            project_use_components=project_dict["use_components"],
+            project_uuid=project_uuid,
+            stream_support=message.get("stream_support", False),
         )
 
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
@@ -458,6 +464,7 @@ def start_inline_agents(
             foundation_model=foundation_model,
             turn_off_rationale=turn_off_rationale,
             channel_type=message.get("channel_type", ""),
+            stream_support=message.get("stream_support", False),
         )
 
         if response is None or response == "":

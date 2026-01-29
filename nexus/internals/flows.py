@@ -80,28 +80,35 @@ class FlowsRESTClient(RestClient):
         except requests.exceptions.HTTPError:
             return {}
 
-    def whatsapp_broadcast(self, urns: List[str], msg: Dict, project_uuid: str):
-        url = self._get_url("/api/v2/internals/whatsapp_broadcasts")
+    def whatsapp_broadcast(
+        self, urns: List[str], msg: Dict, project_uuid: str, use_stream: bool = False, channel_uuid: str = ""
+    ):
+        if use_stream:
+            url = self._get_url("/api/v2/internals/messages/stream")
+        else:
+            url = self._get_url("/api/v2/internals/whatsapp_broadcasts")
 
-        body = dict(urns=urns, project=project_uuid)
+        if use_stream:
+            body = dict(urns=urns, project_uuid=project_uuid)
+            if channel_uuid:
+                body["channel_uuid"] = channel_uuid
+        else:
+            body = dict(urns=urns, project=project_uuid)
         body.update(msg)
-
-        logger.debug(
-            f"Whatsapp broadcast - url: {url}, urns_count: {len(urns) if isinstance(urns, list) else None}, "
-            f"msg_len: {len(str(msg))}, body_keys: {list(body.keys())}, "
-            f"project_uuid: {project_uuid[:8] + '...' if project_uuid else None}"
-        )
 
         jwt_usecase = JWTUsecase()
         jwt_token = jwt_usecase.generate_broadcast_jwt_token()
         headers = {"Content-Type": "application/json; charset: utf-8", "Authorization": f"Bearer {jwt_token}"}
 
+        logger.info(
+            f"[Broadcast] Sending request - url: {url}, use_stream: {use_stream}, "
+            f"project: {project_uuid}, urns: {urns}, body: {body}"
+        )
+
         response = requests.post(url, json=body, headers=headers)
-        logger.debug(
-            "Whatsapp broadcast response",
-            extra={
-                "status_code": response.status_code,
-                "response_preview": response.text[:200] if response.text else None,
-            },
+
+        logger.info(
+            f"[Broadcast] Response received - url: {url}, use_stream: {use_stream}, "
+            f"status_code: {response.status_code}, project: {project_uuid}"
         )
         return response
