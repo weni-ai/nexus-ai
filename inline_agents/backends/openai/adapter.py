@@ -522,11 +522,7 @@ class OpenAITeamAdapter(TeamAdapter):
             logger.debug(
                 f"Searching for agent with tool '{function_name}' in project '{project_uuid}' - function_name: {function_name}, project_uuid: {project_uuid}"
             )
-            integrated_agents = (
-                IntegratedAgent.objects.filter(project__uuid=project_uuid)
-                .select_related("agent")
-                .prefetch_related("agent__versions")
-            )
+            integrated_agents = IntegratedAgent.objects.filter(project__uuid=project_uuid).select_related("agent")
 
             integrated_agents_count = integrated_agents.count()
             logger.debug(
@@ -538,36 +534,39 @@ class OpenAITeamAdapter(TeamAdapter):
                 logger.debug(
                     f"Checking agent '{agent.slug}' (is_official={agent.is_official}) - agent_slug: {agent.slug}, agent_uuid: {str(agent.uuid)}, is_official: {agent.is_official}"
                 )
-                versions = agent.versions.all()
 
-                for version in versions:
-                    skills = version.skills or []
-                    for skill in skills:
-                        action_group_name = skill.get("actionGroupName", "")
-                        normalized_action_group = slugify(action_group_name)
-                        normalized_function = slugify(function_name)
+                # Get only the latest version instead of all versions
+                latest_version = agent.versions.order_by("-created_on").first()
+                if not latest_version:
+                    continue
 
-                        logger.debug(
-                            f"Comparing action group '{action_group_name}' (normalized: '{normalized_action_group}') "
-                            f"with function '{function_name}' (normalized: '{normalized_function}') - "
-                            f"action_group_name: {action_group_name}, normalized_action_group: {normalized_action_group}, "
-                            f"function_name: {function_name}, normalized_function: {normalized_function}"
+                skills = latest_version.skills or []
+                for skill in skills:
+                    action_group_name = skill.get("actionGroupName", "")
+                    normalized_action_group = slugify(action_group_name)
+                    normalized_function = slugify(function_name)
+
+                    logger.debug(
+                        f"Comparing action group '{action_group_name}' (normalized: '{normalized_action_group}') "
+                        f"with function '{function_name}' (normalized: '{normalized_function}') - "
+                        f"action_group_name: {action_group_name}, normalized_action_group: {normalized_action_group}, "
+                        f"function_name: {function_name}, normalized_function: {normalized_function}"
+                    )
+
+                    if normalized_action_group == normalized_function or action_group_name == function_name:
+                        logger.info(
+                            f"Found matching agent '{agent.slug}' for tool '{function_name}' - "
+                            f"agent_slug: {agent.slug}, agent_uuid: {str(agent.uuid)}, function_name: {function_name}"
                         )
-
-                        if normalized_action_group == normalized_function or action_group_name == function_name:
-                            logger.info(
-                                f"Found matching agent '{agent.slug}' for tool '{function_name}' - "
-                                f"agent_slug: {agent.slug}, agent_uuid: {str(agent.uuid)}, function_name: {function_name}"
-                            )
-                            return agent
+                        return agent, integrated_agent
 
             logger.warning(
                 f"No agent found for tool '{function_name}' in project '{project_uuid}' - function_name: {function_name}, project_uuid: {project_uuid}"
             )
-            return None
+            return None, None
         except Exception as e:
             logger.warning(f"Error getting agent for tool {function_name}: {e}", exc_info=True)
-            return None
+            return None, None
 
     @staticmethod
     def _validate_tool_parameters(tool_name: str, payload: dict, tooling: dict) -> list:
@@ -609,7 +608,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 f"Invoking AWS Lambda tool '{function_name}' for project '{project_uuid}' - function_name: {function_name}, function_arn: {function_arn}, project_uuid: {project_uuid}"
             )
 
-            agent = cls._get_agent_for_tool(function_name, project_uuid)
+            agent, integrated_agent = cls._get_agent_for_tool(function_name, project_uuid)
             constants = {}
             validation_errors = []
             mcp_credentials = {}
@@ -634,8 +633,6 @@ class OpenAITeamAdapter(TeamAdapter):
                     logger.debug(
                         f"Loaded {len(constants)} constants for agent '{agent.slug}' - agent_slug: {agent.slug}, constants_count: {len(constants)}, constants_keys: {list(constants.keys())}"
                     )
-
-                integrated_agent = IntegratedAgent.objects.filter(agent=agent, project__uuid=project_uuid).first()
 
                 if integrated_agent and integrated_agent.metadata:
                     mcp_name = integrated_agent.metadata.get("mcp")
