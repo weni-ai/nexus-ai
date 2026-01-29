@@ -134,7 +134,11 @@ class BedrockTeamAdapter(TeamAdapter):
             if not agent_name:
                 continue
 
-            agent = Agent.objects.filter(slug=agent_name, project__uuid=project_uuid).first()
+            agent = (
+                Agent.objects.filter(slug=agent_name, project__uuid=project_uuid)
+                .prefetch_related("mcps__credential_templates")
+                .first()
+            )
             if not agent:
                 continue
 
