@@ -1,5 +1,6 @@
 import django.core.validators
 from django.db import migrations, models
+import nexus.storage 
 
 
 class Migration(migrations.Migration):
