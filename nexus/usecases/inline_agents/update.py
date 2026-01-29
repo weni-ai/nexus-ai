@@ -2,7 +2,15 @@ import logging
 from typing import Dict
 
 from nexus.agents.encryption import encrypt_value
-from nexus.inline_agents.models import Agent, AgentCredential, InlineAgentMessage
+from nexus.inline_agents.models import (
+    MCP,
+    Agent,
+    AgentCredential,
+    AgentGroup,
+    InlineAgentMessage,
+    MCPConfigOption,
+    MCPCredentialTemplate,
+)
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
@@ -29,6 +37,109 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         self.handle_tools(agent_obj, project, agent_data["tools"], files, str(project.uuid))
         self.update_credentials(agent_obj, project, agent_data.get("credentials", {}))
 
+        old_group = agent_obj.group
+
+        if "group" in agent_data:
+            group_slug = agent_data.get("group")
+            if group_slug:
+                group = AgentGroup.objects.filter(slug=group_slug).first()
+                agent_obj.group = group
+            else:
+                agent_obj.group = None
+            agent_obj.save()
+
+        if "mcps" in agent_data or "mcp" in agent_data:
+            mcps_data = agent_data.get("mcps")
+            if mcps_data is None:
+                mcps_data = []
+            elif isinstance(mcps_data, str):
+                mcps_data = [mcps_data]
+
+            if not mcps_data and "mcp" in agent_data:
+                mcp_val = agent_data["mcp"]
+                if isinstance(mcp_val, list):
+                    mcps_data = mcp_val
+                elif isinstance(mcp_val, dict):
+                    mcps_data = [mcp_val]
+                elif isinstance(mcp_val, str) and mcp_val:
+                    mcps_data = [mcp_val]
+
+            agent_obj.mcps.clear()  # Clear existing to handle removals/updates
+
+            for mcp_item in mcps_data:
+                if isinstance(mcp_item, str):
+                    mcp = MCP.objects.filter(slug=mcp_item).first()
+                    if not mcp:
+                        mcp = MCP.objects.create(
+                            slug=mcp_item,
+                            name=mcp_item,
+                            system=None,
+                            description=f"Auto-created MCP for {mcp_item}",
+                        )
+
+                        if "credentials" in agent_data:
+                            for key, cred_data in agent_data["credentials"].items():
+                                if isinstance(cred_data, dict):
+                                    MCPCredentialTemplate.objects.create(
+                                        mcp=mcp,
+                                        name=key,
+                                        label=cred_data.get("label", key),
+                                        placeholder=cred_data.get("placeholder", ""),
+                                        is_confidential=cred_data.get("is_confidential", True),
+                                    )
+
+                        if "constants" in agent_data:
+                            for key, value in agent_data["constants"].items():
+                                default_val = value
+                                if isinstance(value, dict) and "default" in value:
+                                    default_val = value["default"]
+
+                                MCPConfigOption.objects.create(
+                                    mcp=mcp,
+                                    name=key,
+                                    default_value=str(default_val),
+                                    label=key,
+                                    type=MCPConfigOption.TEXT,
+                                )
+
+                    agent_obj.mcps.add(mcp)
+                elif isinstance(mcp_item, dict):
+                    slug = mcp_item.get("slug")
+                    if not slug:
+                        continue
+                    mcp = MCP.objects.filter(slug=slug).first()
+                    if not mcp:
+                        continue
+
+                    # Update or create config options if constants provided
+                    if "constants" in mcp_item:
+                        for key, value in mcp_item["constants"].items():
+                            config_option = MCPConfigOption.objects.filter(mcp=mcp, name=key).first()
+                            if config_option:
+                                config_option.default_value = value
+                                config_option.save()
+
+                    # Update or create credential templates if credentials provided
+                    if "credentials" in mcp_item:
+                        for key, cred_data in mcp_item["credentials"].items():
+                            cred_template = MCPCredentialTemplate.objects.filter(mcp=mcp, name=key).first()
+                            if cred_template:
+                                if isinstance(cred_data, dict):
+                                    cred_template.label = cred_data.get("label", cred_template.label)
+                                    cred_template.placeholder = cred_data.get("placeholder", cred_template.placeholder)
+                                    cred_template.is_confidential = cred_data.get(
+                                        "is_confidential", cred_template.is_confidential
+                                    )
+                                    cred_template.save()
+
+                    agent_obj.mcps.add(mcp)
+
+        if old_group and old_group != agent_obj.group:
+            old_group.update_mcps_from_agents()
+
+        if agent_obj.group:
+            agent_obj.group.update_mcps_from_agents()
+
         return agent_data
 
     def update_credentials(self, agent: Agent, project: Project, credentials: Dict):
@@ -43,7 +154,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             is_confidential = credential.get("is_confidential", True)
 
             if key in existing_credentials:
-                logger.info("Updating credential", extra={"key": key})
+                logger.info(f"Updating credential - key: {key}")
                 cred = existing_credentials[key]
                 cred.label = credential.get("label", key)
                 cred.placeholder = credential.get("placeholder", "")
@@ -53,7 +164,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                     cred.agents.add(agent)
                 del existing_credentials[key]
             else:
-                logger.info("Creating credential", extra={"key": key})
+                logger.info(f"Creating credential - key: {key}")
                 cred = AgentCredential.objects.create(
                     project=project,
                     key=key,
@@ -67,10 +178,10 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             agents = list(cred.agents.all())
 
             if len(agents) <= 0:
-                logger.info("Deleting empty credential", extra={"key": cred.key, "project_uuid": str(project.uuid)})
+                logger.info(f"Deleting empty credential - key: {cred.key}, project_uuid: {str(project.uuid)}")
                 cred.delete()
             elif len(agents) == 1 and agent in agents:
-                logger.info("Deleting credential", extra={"key": cred.key, "project_uuid": str(project.uuid)})
+                logger.info(f"Deleting credential - key: {cred.key}, project_uuid: {str(project.uuid)}")
                 cred.delete()
             elif agent in agents:
                 cred.agents.remove(agent)

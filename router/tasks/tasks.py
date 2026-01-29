@@ -128,7 +128,7 @@ def improve_rationale_text(
             modelId=model_id, messages=conversation, inferenceConfig={"maxTokens": 150, "temperature": 0.5, "topP": 0.9}
         )
 
-        logger.debug("Improvement response", extra={"length": len(str(response or ""))})
+        logger.debug(f"Improvement response - length: {len(str(response or ''))}")
         # Extract the response text
         response_text = response["output"]["message"]["content"][0]["text"]
 
@@ -303,12 +303,12 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         return broadcast, flow_start
 
     source = "preview" if preview else "router"
-    logger.info("Message source", extra={"source": source})
+    logger.info(f"Message source - source: {source}")
 
     # Initialize Redis client using the REDIS_URL from settings
     redis_client = Redis.from_url(settings.REDIS_URL)
 
-    logger.info("Message received", extra={"has_text": bool(message.get("text"))})
+    logger.info(f"Message received - has_text: {bool(message.get('text'))}")
 
     content_base_repository = ContentBaseORMRepository()
     message_logs_repository = MessageLogsRepository()

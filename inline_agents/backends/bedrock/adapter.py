@@ -13,7 +13,7 @@ from inline_agents.adapter import DataLakeEventAdapter, TeamAdapter
 from inline_agents.backends.bedrock.event_extractor import BedrockEventExtractor
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.celery import app as celery_app
-from nexus.inline_agents.models import AgentCredential, Guardrail
+from nexus.inline_agents.models import Agent, AgentCredential, Guardrail, IntegratedAgent
 from nexus.utils import get_datasource_id
 
 logger = logging.getLogger(__name__)
@@ -75,9 +75,9 @@ class BedrockTeamAdapter(TeamAdapter):
             channel_uuid=channel_uuid,
         )
 
-        logger.debug("Auth token present", extra={"token_len": len(auth_token or "")})
+        logger.debug(f"Auth token present - token_len: {len(auth_token or '')}")
 
-        credentials = self._get_credentials(project_uuid)
+        credentials = self._get_credentials(project_uuid, agents)
 
         if classification_foundation_model:
             foundation_model = classification_foundation_model
@@ -113,17 +113,63 @@ class BedrockTeamAdapter(TeamAdapter):
             "idleSessionTTLInSeconds": settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS,
         }
 
-        logger.debug("External team built", extra={"agents_count": len(external_team.get("agents", []))})
+        logger.debug(f"External team built - agents_count: {len(external_team.get('agents', []))}")
 
         return external_team
 
     @classmethod
-    def _get_credentials(cls, project_uuid: str) -> dict:
+    def _get_credentials(cls, project_uuid: str, agents: list[dict] = None) -> dict:
         agent_credentials = AgentCredential.objects.filter(project_id=project_uuid)
         credentials = {}
         for credential in agent_credentials:
             credentials[credential.key] = credential.decrypted_value
-        return credentials
+
+        if not agents:
+            return credentials
+
+        merged_credentials = credentials.copy()
+
+        for agent_dict in agents:
+            agent_name = agent_dict.get("agentName")
+            if not agent_name:
+                continue
+
+            agent = (
+                Agent.objects.filter(slug=agent_name, project__uuid=project_uuid)
+                .prefetch_related("mcps__credential_templates")
+                .first()
+            )
+            if not agent:
+                continue
+
+            integrated_agent = IntegratedAgent.objects.filter(agent=agent, project__uuid=project_uuid).first()
+
+            if not integrated_agent or not integrated_agent.metadata:
+                continue
+
+            mcp_name = integrated_agent.metadata.get("mcp")
+            if not mcp_name:
+                continue
+
+            mcp = agent.mcps.filter(name=mcp_name, is_active=True).prefetch_related("credential_templates").first()
+
+            if not mcp:
+                continue
+
+            mcp_credentials = {}
+            credential_templates = mcp.credential_templates.all()
+            if credential_templates:
+                template_names = {template.name for template in credential_templates}
+                for credential in agent_credentials:
+                    if credential.key in template_names:
+                        mcp_credentials[credential.key] = credential.decrypted_value
+
+            mcp_config = integrated_agent.metadata.get("mcp_config", {})
+            if isinstance(mcp_config, dict):
+                merged_credentials.update(mcp_credentials)
+                merged_credentials.update(mcp_config)
+
+        return merged_credentials
 
     @classmethod
     def _get_session_id(cls, contact_urn: str, project_uuid: str) -> str:

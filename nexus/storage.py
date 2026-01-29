@@ -39,6 +39,13 @@ class AttachmentPreviewStorage(S3Boto3Storage):
         return super().get_available_name(name, max_length)
 
 
+class AgentSystemLogoStorage(S3Boto3Storage):
+    location = "agent_systems/logos"
+    bucket_name = settings.AWS_S3_BUCKET_NAME
+    file_overwrite = False
+    custom_domain = False
+
+
 class DeleteStorageFile:
     def __init__(self):
         self.s3_client = boto3.client("s3", region_name=settings.AWS_S3_REGION_NAME)
@@ -50,5 +57,5 @@ class DeleteStorageFile:
             )
             return response
         except Exception as e:
-            logger.error("Error deleting file", extra={"file_name": file_name, "error": str(e)})
+            logger.error(f"Error deleting file - file_name: {file_name}, error: {str(e)}")
             return None

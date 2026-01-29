@@ -460,9 +460,7 @@ class OpenAIBackend(InlineAgentsBackend):
             formatter_instructions
             or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
         )
-        logger.debug(
-            "Formatter agent configurations", extra={"keys": list((formatter_agent_configurations or {}).keys())}
-        )
+        logger.debug(f"Formatter agent configurations - keys: {list((formatter_agent_configurations or {}).keys())}")
         # Handle None case for formatter_agent_configurations
         if formatter_agent_configurations is None:
             formatter_agent_configurations = {}
@@ -722,11 +720,7 @@ class OpenAIBackend(InlineAgentsBackend):
                             final_response = formatted_response
                         except Exception as formatter_error:
                             logger.error(
-                                f"[OpenAIBackend] Error in formatter agent after streaming error: {formatter_error}",
-                                extra={
-                                    "project_uuid": project_uuid,
-                                    "contact_urn": contact_urn,
-                                },
+                                f"[OpenAIBackend] Error in formatter agent after streaming error: {formatter_error} - project_uuid: {project_uuid}, contact_urn: {contact_urn}"
                             )
 
                     return final_response
@@ -770,16 +764,10 @@ class OpenAIBackend(InlineAgentsBackend):
     ):
         if enable_logger:
             logger.error(
-                f"[OpenAIBackend] Streaming error during agent execution: {exception}",
-                extra={
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "channel_uuid": channel_uuid,
-                    "session_id": session_id,
-                    "error_type": type(exception).__name__,
-                    "error_message": str(exception),
-                    "input_text": input_text[:500] if input_text else None,
-                },
+                f"[OpenAIBackend] Streaming error during agent execution: {exception} - "
+                f"project_uuid: {project_uuid}, contact_urn: {contact_urn}, channel_uuid: {channel_uuid}, "
+                f"session_id: {session_id}, error_type: {type(exception).__name__}, "
+                f"error_message: {str(exception)}, input_text: {input_text[:500] if input_text else None}"
             )
 
         sentry_sdk.set_context(
