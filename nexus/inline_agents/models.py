@@ -261,7 +261,6 @@ class AgentSystem(models.Model):
     slug = models.SlugField(max_length=255, unique=True)
     logo = models.FileField(
         storage=AgentSystemLogoStorage(),
-        upload_to="agent_systems/logos/",
         null=True,
         blank=True,
         validators=[FileExtensionValidator(allowed_extensions=["png", "svg"])],

@@ -127,7 +127,7 @@ def improve_rationale_text(
             modelId=model_id, messages=conversation, inferenceConfig={"maxTokens": 150, "temperature": 0.5, "topP": 0.9}
         )
 
-        logger.debug("Improvement response", extra={"length": len(str(response or ""))})
+        logger.debug(f"Improvement response - length: {len(str(response or ''))}")
         # Extract the response text
         response_text = response["output"]["message"]["content"][0]["text"]
 
