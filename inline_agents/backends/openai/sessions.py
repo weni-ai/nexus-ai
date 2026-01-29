@@ -97,6 +97,8 @@ class RedisSession:  # type: ignore[misc]
         logger.debug("RedisSession", extra={"session_id": session_id})
         self._key = session_id
         self.r = r
+        self._read_client = r
+        self._write_client = r
         self.project_uuid = project_uuid
         self.sanitized_urn = sanitized_urn
         self.limit = limit
@@ -130,19 +132,17 @@ class RedisSession:  # type: ignore[misc]
         limit = limit or self.limit
         logger.debug("Session limit", extra={"limit": limit})
         try:
-            with self.r.pipeline() as pipe:
-                if limit is None or limit <= 0:
-                    pipe.lrange(self._key, 0, -1)
-                else:
-                    pipe.lrange(self._key, -limit, -1)
+            from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
-                pipe.expire(self._key, settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS)
-                results = pipe.execute()
+            read_client = get_redis_read_client()
+            write_client = get_redis_write_client()
 
-                if not results or not results[0]:
-                    return []
+            if limit is None or limit <= 0:
+                data = read_client.lrange(self._key, 0, -1)
+            else:
+                data = read_client.lrange(self._key, -limit, -1)
 
-                data = results[0]
+            write_client.expire(self._key, settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS)
 
             items = []
 
@@ -159,7 +159,8 @@ class RedisSession:  # type: ignore[misc]
                         if len(raw_str) != len(sanitized_str):
                             null_count = raw_str.count("\u0000") + raw_str.count("\x00")
                             logger.warning(
-                                f"Item {i} in session {self._key} contains {null_count} null characters. Sanitizing before parsing. "
+                                f"Item {i} in session {self._key} contains {null_count} null characters. "
+                                f"Sanitizing before parsing. "
                                 f"Project: {self.project_uuid}, Contact: {self.sanitized_urn}"
                             )
                             log_error_to_sentry(
@@ -182,7 +183,8 @@ class RedisSession:  # type: ignore[misc]
                                 content_nulls = content.count("\u0000") + content.count("\x00")
                                 if content_nulls > 0:
                                     logger.warning(
-                                        f"Content of item {i} in session {self._key} contains {content_nulls} null characters. "
+                                        f"Content of item {i} in session {self._key} contains "
+                                        f"{content_nulls} null characters. "
                                         f"Project: {self.project_uuid}, Contact: {self.sanitized_urn}"
                                     )
 
