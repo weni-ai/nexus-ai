@@ -87,14 +87,9 @@ class FlowsRESTClient(RestClient):
         body.update(msg)
 
         logger.debug(
-            "Whatsapp broadcast",
-            extra={
-                "url": url,
-                "urns_count": len(urns) if isinstance(urns, list) else None,
-                "msg_len": len(str(msg)),
-                "body_keys": list(body.keys()),
-                "project_uuid": project_uuid[:8] + "..." if project_uuid else None,
-            },
+            f"Whatsapp broadcast - url: {url}, urns_count: {len(urns) if isinstance(urns, list) else None}, "
+            f"msg_len: {len(str(msg))}, body_keys: {list(body.keys())}, "
+            f"project_uuid: {project_uuid[:8] + '...' if project_uuid else None}"
         )
 
         jwt_usecase = JWTUsecase()

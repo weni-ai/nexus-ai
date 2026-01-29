@@ -93,8 +93,7 @@ def complexity_layer(input_text: str) -> str | None:
                 payload = json.loads(response["Payload"].read().decode("utf-8"))
                 classification = payload.get("body").get("classification")
                 logger.debug(
-                    "Message classification",
-                    extra={"text_len": len(input_text or ""), "classification": classification},
+                    f"Message classification - text_len: {len(input_text or '')}, classification: {classification}"
                 )
                 return classification
             else:
@@ -145,8 +144,7 @@ def dispatch_preview(
 
 def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
     logger.debug(
-        "Guardrails complexity layer",
-        extra={"text_len": len(input_text or ""), "guardrail_id": guardrail_id, "guardrail_version": guardrail_version},
+        f"Guardrails complexity layer - text_len: {len(input_text or '')}, guardrail_id: {guardrail_id}, guardrail_version: {guardrail_version}"
     )
     try:
         payload = {
@@ -162,7 +160,7 @@ def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_ve
         if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
             payload = json.loads(response["Payload"].read().decode("utf-8"))
 
-            logger.debug("Guardrails complexity layer response", extra={"keys": list(payload.keys())})
+            logger.debug(f"Guardrails complexity layer response - keys: {list(payload.keys())}")
             response = payload
             status_code = payload.get("statusCode")
             if status_code == 200:
@@ -432,7 +430,7 @@ def start_inline_agents(
             channel_uuid=processed_message.get("channel_uuid", ""),
         )
 
-        logger.debug("Message object built", extra={"has_text": bool(message_obj.text)})
+        logger.debug(f"Message object built - has_text: {bool(message_obj.text)}")
 
         message_obj.text = _manage_pending_task(task_manager, message_obj, self.request.id)
 
