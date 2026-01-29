@@ -29,7 +29,7 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         self.agent_backend_client = agent_backend_client()
 
     def create_agent(self, agent_key: str, agent: dict, project: Project, files: dict):
-        logger.info("Creating agent", extra={"agent_key": agent_key})
+        logger.info(f"Creating agent - agent_key: {agent_key}")
         instructions: str = self.handle_instructions(
             agent.get("instructions", []), agent.get("guardrails", []), agent.get("components", [])
         )
@@ -122,7 +122,7 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
         if agent_obj.group:
             agent_obj.group.update_mcps_from_agents()
 
-        logger.info("Created agent", extra={"agent_key": agent_key})
+        logger.info(f"Created agent - agent_key: {agent_key}")
         return agent_obj
 
     def _process_constants(self, constants: Dict) -> Dict | None:
@@ -140,7 +140,7 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             return
 
         for key, credential in credentials.items():
-            logger.info("Creating credential", extra={"key": key})
+            logger.info(f"Creating credential - key: {key}")
             is_confidential = credential.get("is_confidential", True)
 
             existing_credential = AgentCredential.objects.filter(project=project, key=key)
@@ -149,7 +149,7 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
             if existing_credential.exists():
                 existing_credential = existing_credential.first()
-                logger.info("Updating existing credential", extra={"key": key})
+                logger.info(f"Updating existing credential - key: {key}")
                 existing_credential.label = credential.get("label", key)
                 existing_credential.placeholder = credential.get("placeholder", "")
                 existing_credential.is_confidential = is_confidential

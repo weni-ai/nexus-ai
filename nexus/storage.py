@@ -57,5 +57,5 @@ class DeleteStorageFile:
             )
             return response
         except Exception as e:
-            logger.error("Error deleting file", extra={"file_name": file_name, "error": str(e)})
+            logger.error(f"Error deleting file - file_name: {file_name}, error: {str(e)}")
             return None

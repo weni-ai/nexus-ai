@@ -75,7 +75,7 @@ class BedrockTeamAdapter(TeamAdapter):
             channel_uuid=channel_uuid,
         )
 
-        logger.debug("Auth token present", extra={"token_len": len(auth_token or "")})
+        logger.debug(f"Auth token present - token_len: {len(auth_token or '')}")
 
         credentials = self._get_credentials(project_uuid, agents)
 
@@ -113,7 +113,7 @@ class BedrockTeamAdapter(TeamAdapter):
             "idleSessionTTLInSeconds": settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS,
         }
 
-        logger.debug("External team built", extra={"agents_count": len(external_team.get("agents", []))})
+        logger.debug(f"External team built - agents_count: {len(external_team.get('agents', []))}")
 
         return external_team
 
@@ -134,7 +134,11 @@ class BedrockTeamAdapter(TeamAdapter):
             if not agent_name:
                 continue
 
-            agent = Agent.objects.filter(slug=agent_name, project__uuid=project_uuid).first()
+            agent = (
+                Agent.objects.filter(slug=agent_name, project__uuid=project_uuid)
+                .prefetch_related("mcps__credential_templates")
+                .first()
+            )
             if not agent:
                 continue
 

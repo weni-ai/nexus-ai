@@ -306,14 +306,14 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         return broadcast, flow_start
 
     source = "preview" if preview else "router"
-    logger.info("Message source", extra={"source": source})
+    logger.info(f"Message source - source: {source}")
 
     from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
     redis_read_client = get_redis_read_client()
     redis_write_client = get_redis_write_client()
 
-    logger.info("Message received", extra={"has_text": bool(message.get("text"))})
+    logger.info(f"Message received - has_text: {bool(message.get('text'))}")
 
     content_base_repository = ContentBaseORMRepository()
     message_logs_repository = MessageLogsRepository()

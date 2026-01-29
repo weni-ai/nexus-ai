@@ -29,7 +29,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='mcp',
             name='slug',
-            field=models.SlugField(blank=True, max_length=255, null=True),
+            field=models.CharField(blank=True, max_length=255, null=True),
         ),
         migrations.RunPython(populate_mcp_slugs, migrations.RunPython.noop),
         migrations.AlterField(

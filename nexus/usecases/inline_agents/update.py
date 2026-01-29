@@ -154,7 +154,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             is_confidential = credential.get("is_confidential", True)
 
             if key in existing_credentials:
-                logger.info("Updating credential", extra={"key": key})
+                logger.info(f"Updating credential - key: {key}")
                 cred = existing_credentials[key]
                 cred.label = credential.get("label", key)
                 cred.placeholder = credential.get("placeholder", "")
@@ -164,7 +164,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                     cred.agents.add(agent)
                 del existing_credentials[key]
             else:
-                logger.info("Creating credential", extra={"key": key})
+                logger.info(f"Creating credential - key: {key}")
                 cred = AgentCredential.objects.create(
                     project=project,
                     key=key,
@@ -178,10 +178,10 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
             agents = list(cred.agents.all())
 
             if len(agents) <= 0:
-                logger.info("Deleting empty credential", extra={"key": cred.key, "project_uuid": str(project.uuid)})
+                logger.info(f"Deleting empty credential - key: {cred.key}, project_uuid: {str(project.uuid)}")
                 cred.delete()
             elif len(agents) == 1 and agent in agents:
-                logger.info("Deleting credential", extra={"key": cred.key, "project_uuid": str(project.uuid)})
+                logger.info(f"Deleting credential - key: {cred.key}, project_uuid: {str(project.uuid)}")
                 cred.delete()
             elif agent in agents:
                 cred.agents.remove(agent)
