@@ -40,6 +40,8 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         return obj.agent.collaboration_instructions
 
     def get_skills(self, obj):
+        if hasattr(obj.agent, "latest_display_skills"):
+            return obj.agent.latest_display_skills
         if obj.agent.current_version:
             return obj.agent.current_version.display_skills
         return []

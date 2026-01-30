@@ -2,7 +2,7 @@ import logging
 
 import pendulum
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import OuterRef, Q, Subquery
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -22,7 +22,7 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer,
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent
-from nexus.inline_agents.models import MCP, Agent, AgentGroup, AgentSystem
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
@@ -271,30 +271,25 @@ def get_all_credentials_for_group(group_slug: str) -> list:
     Get all credentials for all agents in a group.
     Consolidates credentials from all agents in the group.
     """
-    group = AgentGroup.objects.filter(slug=group_slug).first()
-    if not group:
-        return []
+    credentials = (
+        AgentCredential.objects.filter(
+            agents__group__slug=group_slug,
+            agents__is_official=True,
+            agents__source_type=Agent.PLATFORM,
+        )
+        .distinct("key")
+        .values("key", "label", "placeholder", "is_confidential")
+    )
 
-    agents = Agent.objects.filter(group=group, is_official=True, source_type=Agent.PLATFORM)
-    all_credentials = []
-    seen_credential_keys = set()
-
-    for agent in agents:
-        if hasattr(agent, "agentcredential_set"):
-            creds = agent.agentcredential_set.all().distinct("key")
-            for credential in creds:
-                if credential.key not in seen_credential_keys:
-                    all_credentials.append(
-                        {
-                            "name": credential.key,
-                            "label": credential.label,
-                            "placeholder": credential.placeholder,
-                            "is_confidential": credential.is_confidential,
-                        }
-                    )
-                    seen_credential_keys.add(credential.key)
-
-    return all_credentials
+    return [
+        {
+            "name": cred["key"],
+            "label": cred["label"],
+            "placeholder": cred["placeholder"],
+            "is_confidential": cred["is_confidential"],
+        }
+        for cred in credentials
+    ]
 
 
 def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dict:
@@ -464,6 +459,12 @@ class OfficialAgentsV1(APIView):
         system_filter = request.query_params.get("system")
 
         agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+
+        latest_version_skills = Subquery(
+            Version.objects.filter(agent=OuterRef("pk")).order_by("-created_on").values("display_skills")[:1]
+        )
+        agents = agents.annotate(latest_display_skills=latest_version_skills)
+
         agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
         if name_filter:
             agents = agents.filter(name__icontains=name_filter)
