@@ -22,7 +22,7 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer,
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent
-from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, Version, IntegratedAgent
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
@@ -603,6 +603,45 @@ class OfficialAgentsV1(APIView):
 
         return Response(result or {"message": "No changes applied", "agent": agent_serializer.data}, status=200)
 
+    def _find_better_agent(self, current_agent, mcp, system):
+        """Finds a better matching agent within the same group for the given MCP and system."""
+        if not current_agent.group:
+            return None
+
+        candidate_qs = Agent.objects.filter(
+            group=current_agent.group, is_official=True, mcps__name=mcp, mcps__is_active=True
+        )
+
+        if system:
+            candidate_qs = candidate_qs.filter(systems__slug__iexact=system)
+
+        return candidate_qs.first()
+
+    def _validate_agent_mcp_support(self, current_agent, mcp, system):
+        """Validates if the current agent or group supports the requested MCP."""
+        supports_it = current_agent.mcps.filter(name=mcp, is_active=True).exists()
+        if not supports_it:
+            error_msg = f"No agent in group '{current_agent.group.name}' supports MCP '{mcp}'"
+            if system:
+                error_msg += f" for system '{system}'"
+            return Response({"error": error_msg}, status=400)
+        return None
+
+    def _update_agent_metadata(self, integrated_agent, mcp, mcp_config, system):
+        """Updates metadata for the integrated agent."""
+        if not (mcp or mcp_config or system):
+            return
+
+        if not integrated_agent.metadata:
+            integrated_agent.metadata = {}
+        if mcp:
+            integrated_agent.metadata["mcp"] = mcp
+        if mcp_config:
+            integrated_agent.metadata["mcp_config"] = mcp_config
+        if system:
+            integrated_agent.metadata["system"] = system
+        integrated_agent.save(update_fields=["metadata"])
+
     def _handle_assignment(
         self,
         agent_uuid: str,
@@ -613,55 +652,33 @@ class OfficialAgentsV1(APIView):
         system: str | None = None,
     ) -> dict | Response:
         usecase = AssignAgentsUsecase()
-        if assigned:
-            # Matchmaking: If MCP is provided, try to find a better matching agent within the same group
-            real_agent_uuid = agent_uuid
-            if mcp:
-                try:
-                    current_agent = Agent.objects.get(uuid=agent_uuid)
-                    if current_agent.group:
-                        candidate_qs = Agent.objects.filter(
-                            group=current_agent.group, is_official=True, mcps__name=mcp, mcps__is_active=True
-                        )
-
-                        if system:
-                            candidate_qs = candidate_qs.filter(systems__slug__iexact=system)
-
-                        better_agent = candidate_qs.first()
-
-                        if better_agent:
-                            real_agent_uuid = str(better_agent.uuid)
-                        else:
-                            supports_it = current_agent.mcps.filter(name=mcp, is_active=True).exists()
-                            if not supports_it:
-                                error_msg = f"No agent in group '{current_agent.group.name}' supports MCP '{mcp}'"
-                                if system:
-                                    error_msg += f" for system '{system}'"
-                                return Response({"error": error_msg}, status=400)
-                except Agent.DoesNotExist:
-                    return Response({"error": "Agent not found"}, status=404)
-
+        if not assigned:
             try:
-                created, integrated_agent = usecase.assign_agent(real_agent_uuid, project_uuid)
-
-                # Persist MCP selection and configuration in metadata
-                if mcp or mcp_config or system:
-                    if not integrated_agent.metadata:
-                        integrated_agent.metadata = {}
-                    if mcp:
-                        integrated_agent.metadata["mcp"] = mcp
-                    if mcp_config:
-                        integrated_agent.metadata["mcp_config"] = mcp_config
-                    if system:
-                        integrated_agent.metadata["system"] = system
-                    integrated_agent.save(update_fields=["metadata"])
-
-                return {"assigned": True, "assigned_created": created}
+                usecase.unassign_agent(agent_uuid, project_uuid)
+                return {"assigned": False}
             except ValueError as e:
                 return Response({"error": str(e)}, status=404)
+
+        # Matchmaking: If MCP is provided, try to find a better matching agent within the same group
+        real_agent_uuid = agent_uuid
+        if mcp:
+            try:
+                current_agent = Agent.objects.get(uuid=agent_uuid)
+                better_agent = self._find_better_agent(current_agent, mcp, system)
+
+                if better_agent:
+                    real_agent_uuid = str(better_agent.uuid)
+                else:
+                    error_response = self._validate_agent_mcp_support(current_agent, mcp, system)
+                    if error_response:
+                        return error_response
+            except Agent.DoesNotExist:
+                return Response({"error": "Agent not found"}, status=404)
+
         try:
-            usecase.unassign_agent(agent_uuid, project_uuid)
-            return {"assigned": False}
+            created, integrated_agent = usecase.assign_agent(real_agent_uuid, project_uuid)
+            self._update_agent_metadata(integrated_agent, mcp, mcp_config, system)
+            return {"assigned": True, "assigned_created": created}
         except ValueError as e:
             return Response({"error": str(e)}, status=404)
 
