@@ -42,6 +42,10 @@ async def messages(request: Request):
         logger.info(f"Message received, raw payload: {raw_body}")
         message = MessageHTTPBody(**raw_body)
         project = Project.objects.get(uuid=message.project_uuid)
+        logger.info(
+            f"Message received, from project_uuid: {message.project_uuid}, "
+            f"text: {message.text}, contact_urn: {message.contact_urn}"
+        )
 
         if project.inline_agent_switch:
             logger.info("Starting Inline Agent")
