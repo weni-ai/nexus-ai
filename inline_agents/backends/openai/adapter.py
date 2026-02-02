@@ -886,7 +886,6 @@ class OpenAITeamAdapter(TeamAdapter):
             parsed = tool_function_args.model_validate_json(args)
             payload = parsed.model_dump()
             return cls.invoke_aws_lambda(
-                cls,
                 function_name=function_name,
                 function_arn=function_arn,
                 payload=payload,
