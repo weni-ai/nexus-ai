@@ -40,7 +40,7 @@ from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_async
-from router.utils.redis_clients import get_redis_write_client
+from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
 logger = logging.getLogger(__name__)
 
@@ -89,23 +89,28 @@ class OpenAIBackend(InlineAgentsBackend):
     def _get_session(
         self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None
     ) -> tuple[RedisSession, str]:
-        redis_client = get_redis_write_client()
+        read_client = get_redis_read_client()
+        write_client = get_redis_write_client()
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         return RedisSession(
             session_id=session_id,
-            r=redis_client,
+            r=write_client,
             project_uuid=project_uuid,
             sanitized_urn=sanitized_urn,
             limit=conversation_turns_to_include,
+            read_client=read_client,
+            write_client=write_client,
         ), session_id
 
     def _get_session_factory(
         self, project_uuid: str, sanitized_urn: str, conversation_turns_to_include: int | None = None
     ):
-        redis_client = get_redis_write_client()
+        read_client = get_redis_read_client()
+        write_client = get_redis_write_client()
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         return make_session_factory(
-            redis=redis_client,
+            redis=write_client,
+            read_redis=read_client,
             base_id=session_id,
             project_uuid=project_uuid,
             sanitized_urn=sanitized_urn,
