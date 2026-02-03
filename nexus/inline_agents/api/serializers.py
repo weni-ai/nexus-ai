@@ -313,8 +313,20 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
             else:
                 selected_mcp = {}
 
+        name = obj.name
+        if getattr(obj, "group", None):
+            try:
+                if obj.group.modal and obj.group.modal.agent_name:
+                    name = obj.group.modal.agent_name
+            except Exception:
+                pass
+
+        # Fallback: remove parenthetical suffix if name is still original and group exists
+        if name == obj.name and group_name and "(" in name:
+            name = name.split("(")[0].strip()
+
         payload = {
-            "name": obj.name,
+            "name": name,
             "description": obj.collaboration_instructions,
             "type": (obj.agent_type.slug if getattr(obj, "agent_type", None) else ""),
             "group": group_name,
