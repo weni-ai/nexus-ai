@@ -92,13 +92,20 @@ def sanitize_redis_item(item_str: str) -> str:
 
 class RedisSession:  # type: ignore[misc]
     def __init__(
-        self, session_id: str, r: redis.Redis, project_uuid: str, sanitized_urn: str, limit: Optional[int] = None
+        self,
+        session_id: str,
+        r: redis.Redis,
+        project_uuid: str,
+        sanitized_urn: str,
+        limit: Optional[int] = None,
+        read_client: Optional[redis.Redis] = None,
+        write_client: Optional[redis.Redis] = None,
     ):
         logger.debug("RedisSession", extra={"session_id": session_id})
         self._key = session_id
-        self.r = r
-        self._read_client = r
-        self._write_client = r
+        self._write_client = write_client if write_client is not None else r
+        self._read_client = read_client if read_client is not None else r
+        self.r = self._write_client
         self.project_uuid = project_uuid
         self.sanitized_urn = sanitized_urn
         self.limit = limit
@@ -132,10 +139,8 @@ class RedisSession:  # type: ignore[misc]
         limit = limit or self.limit
         logger.debug("Session limit", extra={"limit": limit})
         try:
-            from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
-
-            read_client = get_redis_read_client()
-            write_client = get_redis_write_client()
+            read_client = self._read_client
+            write_client = self._write_client
 
             if limit is None or limit <= 0:
                 data = read_client.lrange(self._key, 0, -1)
@@ -250,9 +255,24 @@ class RedisSession:  # type: ignore[misc]
         self.r.delete(self._key)
 
 
-def make_session_factory(redis: redis.Redis, base_id: str, project_uuid: str, sanitized_urn: str, limit: int):
+def make_session_factory(
+    redis: redis.Redis,
+    base_id: str,
+    project_uuid: str,
+    sanitized_urn: str,
+    limit: int,
+    read_redis: Optional[redis.Redis] = None,
+):
     def for_agent(agent_name: str | None = None):
         key = f"{base_id}:{agent_name}"
-        return RedisSession(key, redis, project_uuid, sanitized_urn, limit)
+        return RedisSession(
+            key,
+            redis,
+            project_uuid,
+            sanitized_urn,
+            limit,
+            read_client=read_redis,
+            write_client=redis,
+        )
 
     return for_agent

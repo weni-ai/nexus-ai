@@ -69,7 +69,8 @@ class MessageRepository(Repository):
         """Store a batch of messages with a custom key - matches original rabbitmq_msg_batch_to_cache logic."""
         cache_key = f"{key}:{project_uuid}:{contact_urn}"
         ttl = 172800  # 2 days
-        existing_msgs = self._read_client.get(cache_key)
+        # Read from primary: read-modify-write must see latest data to avoid replication lag data loss
+        existing_msgs = self._write_client.get(cache_key)
 
         if existing_msgs:
             try:
