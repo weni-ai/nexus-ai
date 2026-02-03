@@ -530,9 +530,10 @@ class OfficialAgentsV1(APIView):
         summary="Assign official agent to project and/or configure credentials",
         description=(
             "Assigns or removes an official agent (`assigned`) and optionally creates credentials. "
+            "Identify the agent either by `agent_uuid` (direct) or `group` + `system` + `mcp` (resolution). "
             "When `system` is provided, `credentials` must follow the system template. "
             "When `mcp` is provided, `credentials` must follow the MCP-specific template for that system. "
-            "`project_uuid` and `group` are required query parameters. "
+            "`project_uuid` is required. Either `group` or `agent_uuid` is required. "
             "All other fields (`assigned`, `credentials`, `system`, `mcp`, `mcp_config`) are sent in the request body."
         ),
         parameters=[
@@ -546,9 +547,16 @@ class OfficialAgentsV1(APIView):
             OpenApiParameter(
                 name="group",
                 location=OpenApiParameter.QUERY,
-                required=True,
+                required=False,
                 type=OpenApiTypes.STR,
-                description="The slug of the official agent group (e.g. 'customer-service')",
+                description="The slug of the official agent group (required if agent_uuid is missing)",
+            ),
+            OpenApiParameter(
+                name="agent_uuid",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.UUID,
+                description="The UUID of the official agent (required if group is missing)",
             ),
         ],
         request=OfficialAgentsAssignRequestSerializer,
@@ -563,9 +571,13 @@ class OfficialAgentsV1(APIView):
     def post(self, request, *args, **kwargs):
         project_uuid = request.query_params.get("project_uuid")
         group_slug = request.query_params.get("group")
+        agent_uuid = request.query_params.get("agent_uuid")
 
-        if not project_uuid or not group_slug:
-            return Response({"error": "project_uuid and group are required"}, status=400)
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=400)
+
+        if not group_slug and not agent_uuid:
+            return Response({"error": "Either group or agent_uuid is required"}, status=400)
 
         project = self._get_project_or_response(project_uuid)
         if isinstance(project, Response):
@@ -580,7 +592,13 @@ class OfficialAgentsV1(APIView):
 
         if assigned is not None:
             assignment_result = self._handle_assignment(
-                project_uuid, assigned, group_slug, mcp, request.data.get("mcp_config", {}), system
+                project_uuid,
+                assigned,
+                group_slug,
+                mcp,
+                request.data.get("mcp_config", {}),
+                system,
+                agent_uuid,
             )
             res, agent = self._process_assignment_result(assignment_result, project_uuid)
             if isinstance(res, Response):
@@ -589,11 +607,10 @@ class OfficialAgentsV1(APIView):
 
         if credentials_data:
             if not agent:
-                agent = self._resolve_agent_fallback(group_slug, system, mcp)
+                agent = self._resolve_agent_fallback(group_slug, system, mcp, agent_uuid)
                 if not agent:
-                    return Response(
-                        {"error": f"No agent found in group '{group_slug}' to apply credentials"}, status=404
-                    )
+                    msg = f"No agent found in group '{group_slug}'" if group_slug else f"Agent {agent_uuid} not found"
+                    return Response({"error": f"{msg} to apply credentials"}, status=404)
 
             creds_result = self._handle_credentials(agent, project, credentials_data, system, mcp)
             if isinstance(creds_result, Response):
@@ -648,29 +665,35 @@ class OfficialAgentsV1(APIView):
         self,
         project_uuid: str,
         assigned: bool,
-        group_slug: str,
+        group_slug: str | None = None,
         mcp: str | None = None,
         mcp_config: dict | None = None,
         system: str | None = None,
+        agent_uuid: str | None = None,
     ) -> dict | Response:
         usecase = AssignAgentsUsecase()
 
         real_agent_uuid = None
 
-        candidates = Agent.objects.filter(group__slug=group_slug, is_official=True)
-        if system:
-            candidates = candidates.filter(systems__slug__iexact=system)
-        if mcp:
-            candidates = candidates.filter(mcps__name=mcp, mcps__is_active=True)
+        if agent_uuid:
+            real_agent_uuid = agent_uuid
+        elif group_slug:
+            candidates = Agent.objects.filter(group__slug=group_slug, is_official=True)
+            if system:
+                candidates = candidates.filter(systems__slug__iexact=system)
+            if mcp:
+                candidates = candidates.filter(mcps__name=mcp, mcps__is_active=True)
 
-        best_match = candidates.first()
-        if best_match:
-            real_agent_uuid = str(best_match.uuid)
-        elif assigned:
-            return Response(
-                {"error": f"No agent found in group '{group_slug}' for system '{system}' and MCP '{mcp}'"},
-                status=404,
-            )
+            best_match = candidates.first()
+            if best_match:
+                real_agent_uuid = str(best_match.uuid)
+            elif assigned:
+                return Response(
+                    {"error": f"No agent found in group '{group_slug}' for system '{system}' and MCP '{mcp}'"},
+                    status=404,
+                )
+        else:
+            return Response({"error": "Either group or agent_uuid is required for assignment"}, status=400)
 
         if not real_agent_uuid:
             return Response({"error": "Could not resolve a valid agent for operation"}, status=400)
@@ -843,7 +866,10 @@ class OfficialAgentsV1(APIView):
         except Project.DoesNotExist:
             return Response({"error": "Project not found"}, status=404)
 
-    def _resolve_agent_fallback(self, group_slug, system, mcp):
+    def _resolve_agent_fallback(self, group_slug, system, mcp, agent_uuid=None):
+        if agent_uuid:
+            return Agent.objects.filter(uuid=agent_uuid).first()
+
         candidates = Agent.objects.filter(group__slug=group_slug, is_official=True)
         if system:
             candidates = candidates.filter(systems__slug__iexact=system)
