@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Tuple
 
 import pendulum
-from django.conf import settings
 from redis import Redis
 
 from router.repositories.redis.message import MessageRepository as RedisMessageRepository
@@ -53,7 +52,15 @@ class RedisTaskManager(TaskManager):
     WORKFLOW_CACHE_TIMEOUT = 600  # 10 minutes for workflow state
 
     def __init__(self, redis_client: Optional[Redis] = None):
-        self.redis_client = redis_client or Redis.from_url(settings.REDIS_URL)
+        if redis_client:
+            self._read_client = redis_client
+            self._write_client = redis_client
+        else:
+            from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
+
+            self._read_client = get_redis_read_client()
+            self._write_client = get_redis_write_client()
+        self.redis_client = self._write_client
         self.message_repository = RedisMessageRepository(self.redis_client)
         self._conversation_service = None
 
@@ -61,7 +68,7 @@ class RedisTaskManager(TaskManager):
 
     def get_workflow_state(self, project_uuid: str, contact_urn: str) -> Optional[Dict]:
         """
-        Get current workflow state for a contact.
+        Get current workflow state for a contact - uses read replica if available.
 
         Args:
             project_uuid: Project UUID
@@ -71,7 +78,7 @@ class RedisTaskManager(TaskManager):
             Workflow state dict or None if not found
         """
         workflow_key = f"workflow:{project_uuid}:{contact_urn}"
-        state = self.redis_client.get(workflow_key)
+        state = self._read_client.get(workflow_key)
         if state:
             return json.loads(state.decode("utf-8"))
         return None
@@ -84,7 +91,7 @@ class RedisTaskManager(TaskManager):
             workflow_state: Workflow state dict containing project_uuid, contact_urn, etc.
         """
         workflow_key = f"workflow:{workflow_state['project_uuid']}:{workflow_state['contact_urn']}"
-        self.redis_client.setex(workflow_key, self.WORKFLOW_CACHE_TIMEOUT, json.dumps(workflow_state, default=str))
+        self._write_client.setex(workflow_key, self.WORKFLOW_CACHE_TIMEOUT, json.dumps(workflow_state, default=str))
 
     def update_workflow_status(
         self, project_uuid: str, contact_urn: str, status: str, task_phase: str = None, task_id: str = None
@@ -150,7 +157,7 @@ class RedisTaskManager(TaskManager):
             contact_urn: Contact URN
         """
         workflow_key = f"workflow:{project_uuid}:{contact_urn}"
-        self.redis_client.delete(workflow_key)
+        self._write_client.delete(workflow_key)
         # Also clear old single-task keys for backwards compatibility
         self.clear_pending_tasks(project_uuid, contact_urn)
 
@@ -256,33 +263,33 @@ class RedisTaskManager(TaskManager):
     # ==================== Legacy Pending Task Methods ====================
 
     def get_pending_response(self, project_uuid: str, contact_urn: str) -> Optional[str]:
-        """Get the pending response for a contact."""
+        """Get the pending response for a contact - uses read replica if available."""
         pending_response_key = f"response:{project_uuid}:{contact_urn}"
-        pending_response = self.redis_client.get(pending_response_key)
+        pending_response = self._read_client.get(pending_response_key)
         return pending_response.decode("utf-8") if pending_response else None
 
     def get_pending_task_id(self, project_uuid: str, contact_urn: str) -> Optional[str]:
-        """Get the pending task ID for a contact."""
+        """Get the pending task ID for a contact - uses read replica if available."""
         pending_task_key = f"task:{project_uuid}:{contact_urn}"
-        pending_task_id = self.redis_client.get(pending_task_key)
+        pending_task_id = self._read_client.get(pending_task_key)
         return pending_task_id.decode("utf-8") if pending_task_id else None
 
     def store_pending_response(self, project_uuid: str, contact_urn: str, message_text: str) -> None:
-        """Store a pending response for a contact."""
+        """Store a pending response for a contact - uses primary."""
         pending_response_key = f"response:{project_uuid}:{contact_urn}"
-        self.redis_client.set(pending_response_key, message_text)
+        self._write_client.set(pending_response_key, message_text)
 
     def store_pending_task_id(self, project_uuid: str, contact_urn: str, task_id: str) -> None:
-        """Store a pending task ID for a contact."""
+        """Store a pending task ID for a contact - uses primary."""
         pending_task_key = f"task:{project_uuid}:{contact_urn}"
-        self.redis_client.set(pending_task_key, task_id)
+        self._write_client.set(pending_task_key, task_id)
 
     def clear_pending_tasks(self, project_uuid: str, contact_urn: str) -> None:
-        """Clear all pending tasks for a contact."""
+        """Clear all pending tasks for a contact - uses primary."""
         pending_response_key = f"response:{project_uuid}:{contact_urn}"
         pending_task_key = f"task:{project_uuid}:{contact_urn}"
-        self.redis_client.delete(pending_response_key)
-        self.redis_client.delete(pending_task_key)
+        self._write_client.delete(pending_response_key)
+        self._write_client.delete(pending_task_key)
 
     def handle_pending_response(self, project_uuid: str, contact_urn: str, message_text: str) -> str:
         """
@@ -308,9 +315,9 @@ class RedisTaskManager(TaskManager):
         return pendulum.now().to_iso8601_string()
 
     def get_rationale_session_data(self, session_id: str) -> dict:
-        """Get or create rationale session data from cache."""
+        """Get or create rationale session data from cache - uses read replica if available."""
         cache_key = f"rationale_session_{session_id}"
-        session_data = self.redis_client.get(cache_key)
+        session_data = self._read_client.get(cache_key)
 
         if session_data is None:
             session_data = {"rationale_history": [], "first_rationale_text": None, "is_first_rationale": True}
@@ -321,9 +328,9 @@ class RedisTaskManager(TaskManager):
         return session_data
 
     def save_rationale_session_data(self, session_id: str, session_data: dict) -> None:
-        """Save rationale session data to cache."""
+        """Save rationale session data to cache - uses primary."""
         cache_key = f"rationale_session_{session_id}"
-        self.redis_client.setex(cache_key, self.CACHE_TIMEOUT, json.dumps(session_data))
+        self._write_client.setex(cache_key, self.CACHE_TIMEOUT, json.dumps(session_data))
 
     def create_message_to_cache(
         self,
