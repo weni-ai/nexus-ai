@@ -661,6 +661,49 @@ class OfficialAgentsV1(APIView):
             integrated_agent.metadata["system"] = system
         integrated_agent.save(update_fields=["metadata"])
 
+    def _handle_group_unassignment(self, project_uuid, group_slug):
+        """Handles unassignment of all agents in a group."""
+        active_agents = IntegratedAgent.objects.filter(
+            project__uuid=project_uuid,
+            agent__group__slug=group_slug,
+            agent__is_official=True,
+        )
+        if active_agents.exists():
+            first_uuid = None
+            usecase = AssignAgentsUsecase()
+            for ia in active_agents:
+                uid = str(ia.agent.uuid)
+                if not first_uuid:
+                    first_uuid = uid
+                usecase.unassign_agent(uid, project_uuid)
+            return {"assigned": False, "real_agent_uuid": first_uuid}
+        return None
+
+    def _resolve_target_agent(self, group_slug, system, mcp, agent_uuid, assigned):
+        """Resolves the target agent UUID based on inputs."""
+        if agent_uuid:
+            return agent_uuid
+
+        if group_slug:
+            candidates = Agent.objects.filter(group__slug=group_slug, is_official=True)
+            if system:
+                candidates = candidates.filter(systems__slug__iexact=system)
+            if mcp:
+                candidates = candidates.filter(mcps__name=mcp, mcps__is_active=True)
+
+            best_match = candidates.first()
+            if best_match:
+                return str(best_match.uuid)
+            elif assigned:
+                return Response(
+                    {"error": f"No agent found in group '{group_slug}' for system '{system}' and MCP '{mcp}'"},
+                    status=404,
+                )
+        else:
+            return Response({"error": "Either group or agent_uuid is required for assignment"}, status=400)
+
+        return None
+
     def _handle_assignment(
         self,
         project_uuid: str,
@@ -673,27 +716,15 @@ class OfficialAgentsV1(APIView):
     ) -> dict | Response:
         usecase = AssignAgentsUsecase()
 
-        real_agent_uuid = None
+        if group_slug and not assigned:
+            result = self._handle_group_unassignment(project_uuid, group_slug)
+            if result:
+                return result
 
-        if agent_uuid:
-            real_agent_uuid = agent_uuid
-        elif group_slug:
-            candidates = Agent.objects.filter(group__slug=group_slug, is_official=True)
-            if system:
-                candidates = candidates.filter(systems__slug__iexact=system)
-            if mcp:
-                candidates = candidates.filter(mcps__name=mcp, mcps__is_active=True)
+        real_agent_uuid = self._resolve_target_agent(group_slug, system, mcp, agent_uuid, assigned)
 
-            best_match = candidates.first()
-            if best_match:
-                real_agent_uuid = str(best_match.uuid)
-            elif assigned:
-                return Response(
-                    {"error": f"No agent found in group '{group_slug}' for system '{system}' and MCP '{mcp}'"},
-                    status=404,
-                )
-        else:
-            return Response({"error": "Either group or agent_uuid is required for assignment"}, status=400)
+        if isinstance(real_agent_uuid, Response):
+            return real_agent_uuid
 
         if not real_agent_uuid:
             return Response({"error": "Could not resolve a valid agent for operation"}, status=400)
