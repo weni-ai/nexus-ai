@@ -74,4 +74,15 @@ class InlineMessageReceivedMetricsObserver(EventObserver):
             incoming_created_at=incoming_created_at,
             outgoing_created_at=outgoing_created_at,
         )
+        logger.info(
+            "Sending %s conversation event(s) to SQS (project=%s, contact=%s)",
+            len(events),
+            project_uuid,
+            contact_urn,
+        )
         get_conversation_events_producer().send_events(events)
+        logger.info(
+            "Sent %s conversation event(s) to SQS (project=%s)",
+            len(events),
+            project_uuid,
+        )

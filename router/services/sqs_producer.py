@@ -53,7 +53,7 @@ class ConversationEventsSQSProducer:
                 MessageDeduplicationId=correlation_id,
                 MessageAttributes=message_attributes,
             )
-            logger.debug("Sent conversation event to SQS: %s", event_type)
+            logger.info("Sent conversation event to SQS: %s (project=%s)", event_type, project_uuid)
         except Exception as e:
             logger.error("Failed to send conversation event to SQS: %s", e, exc_info=True)
             sentry_sdk.set_tag("project_uuid", project_uuid)
