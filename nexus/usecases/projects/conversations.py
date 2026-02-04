@@ -20,9 +20,13 @@ class ConversationsUsecase:
         status: int = None,
         contact_urn: str = None,
         include_messages: bool = None,
+        page: str = None,
+        page_size: str = None,
+        limit: str = None,
+        offset: str = None,
     ):
         """
-        Get conversations for a project with optional filters.
+        Get conversations for a project with optional filters and pagination.
 
         Args:
             project_uuid: UUID of the project (required)
@@ -31,29 +35,53 @@ class ConversationsUsecase:
             status: Integer mapped to resolution - optional
             contact_urn: String (e.g., phone number) - optional
             include_messages: Boolean, True returns message history - optional
+            page: Page number for pagination - optional
+            page_size: Number of results per page - optional
+            limit: Limit number of results (LimitOffsetPagination) - optional
+            offset: Offset for results (LimitOffsetPagination) - optional
 
         Returns:
-            List of conversation objects
+            Paginated response dict with format:
+            {
+                "count": int,
+                "next": str or null,
+                "previous": str or null,
+                "results": [validated conversation objects]
+            }
 
         Raises:
             requests.exceptions.HTTPError: For HTTP errors from Conversations service
             requests.exceptions.RequestException: For other request errors
             serializers.ValidationError: For validation errors in response
         """
-        conversations = self.client.get_conversations(
+        response = self.client.get_conversations(
             project_uuid=project_uuid,
             start_date=start_date,
             end_date=end_date,
             status=status,
             contact_urn=contact_urn,
             include_messages=include_messages,
+            page=page,
+            page_size=page_size,
+            limit=limit,
+            offset=offset,
         )
 
-        # Validate response with serializer
-        serializer = ConversationSerializer(data=conversations, many=True)
-        serializer.is_valid(raise_exception=True)
+        if isinstance(response, dict) and "results" in response:
+            # Validate only the results array
+            serializer = ConversationSerializer(data=response["results"], many=True)
+            serializer.is_valid(raise_exception=True)
 
-        return serializer.data
+            return {
+                "count": response.get("count"),
+                "next": response.get("next"),
+                "previous": response.get("previous"),
+                "results": serializer.data,
+            }
+        else:
+            serializer = ConversationSerializer(data=response, many=True)
+            serializer.is_valid(raise_exception=True)
+            return serializer.data
 
     def extract_error_message(self, response):
         """Extract error message from HTTP response."""

@@ -113,6 +113,18 @@ class ConversationsProxyView(APIView):
         - status: Integer mapped to resolution
         - contact_urn: String (e.g., phone number)
         - include_messages: Boolean, true returns message history
+        - page: Page number for pagination
+        - page_size: Number of results per page
+        - limit: Limit number of results (LimitOffsetPagination)
+        - offset: Offset for results (LimitOffsetPagination)
+
+        Returns paginated response with format:
+        {
+            "count": int,
+            "next": str or null,
+            "previous": str or null,
+            "results": [...]
+        }
         """
         project_uuid = kwargs.get("project_uuid")
 
@@ -128,11 +140,15 @@ class ConversationsProxyView(APIView):
         try:
             conversations = self.usecase.get_conversations(
                 project_uuid=project_uuid,
-                start_date=query_params["start_date"],
-                end_date=query_params["end_date"],
-                status=query_params["status"],
-                contact_urn=query_params["contact_urn"],
-                include_messages=query_params["include_messages"],
+                start_date=query_params.get("start_date"),
+                end_date=query_params.get("end_date"),
+                status=query_params.get("status"),
+                contact_urn=query_params.get("contact_urn"),
+                include_messages=query_params.get("include_messages"),
+                page=query_params.get("page"),
+                page_size=query_params.get("page_size"),
+                limit=query_params.get("limit"),
+                offset=query_params.get("offset"),
             )
             return Response(conversations, status=status.HTTP_200_OK)
 
@@ -177,13 +193,30 @@ class ConversationsProxyView(APIView):
         if status_param is not None:
             status_param = int(status_param)
 
-        return {
+        # Extract pagination parameters
+        page = request.query_params.get("page")
+        page_size = request.query_params.get("page_size")
+        limit = request.query_params.get("limit")
+        offset = request.query_params.get("offset")
+
+        params = {
             "start_date": request.query_params.get("start_date"),
             "end_date": request.query_params.get("end_date"),
             "status": status_param,
             "contact_urn": request.query_params.get("contact_urn"),
             "include_messages": include_messages,
         }
+
+        if page is not None:
+            params["page"] = page
+        if page_size is not None:
+            params["page_size"] = page_size
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
+
+        return params
 
     def _handle_http_error(self, e, project_uuid):
         status_code = e.response.status_code if e.response else 500

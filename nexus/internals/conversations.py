@@ -28,9 +28,13 @@ class ConversationsRESTClient(RestClient):
         status: int = None,
         contact_urn: str = None,
         include_messages: bool = None,
+        page: str = None,
+        page_size: str = None,
+        limit: str = None,
+        offset: str = None,
     ):
         """
-        Get conversations for a project with optional filters.
+        Get conversations for a project with optional filters and pagination.
 
         Args:
             project_uuid: UUID of the project (required)
@@ -39,9 +43,19 @@ class ConversationsRESTClient(RestClient):
             status: Integer mapped to resolution - optional
             contact_urn: String (e.g., phone number) - optional
             include_messages: Boolean, True returns message history - optional
+            page: Page number for pagination - optional
+            page_size: Number of results per page - optional
+            limit: Limit number of results (LimitOffsetPagination) - optional
+            offset: Offset for results (LimitOffsetPagination) - optional
 
         Returns:
-            List of conversation objects as JSON
+            Paginated response dict with format:
+            {
+                "count": int,
+                "next": str or null,
+                "previous": str or null,
+                "results": [conversation objects]
+            }
         """
         endpoint = f"/api/v1/projects/{project_uuid}/conversations/"
         params = {}
@@ -56,6 +70,14 @@ class ConversationsRESTClient(RestClient):
             params["contact_urn"] = contact_urn
         if include_messages is not None:
             params["include_messages"] = include_messages
+        if page is not None:
+            params["page"] = page
+        if page_size is not None:
+            params["page_size"] = page_size
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
 
         response = requests.get(
             self._get_url(endpoint),
