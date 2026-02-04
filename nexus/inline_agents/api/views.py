@@ -378,7 +378,9 @@ def _build_agents_list(group_agents, project_uuid):
 def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, credentials, agents_list):
     """Constructs the final payload for a grouped agent."""
     generic_name = base_agent.name
-    if "(" in generic_name:
+    if base_agent.group:
+        generic_name = base_agent.group.name
+    elif "(" in generic_name:
         generic_name = generic_name.split("(")[0].strip()
 
     payload = {
