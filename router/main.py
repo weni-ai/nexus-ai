@@ -39,7 +39,10 @@ def messages(request: Request, message: MessageHTTPBody):
 
     try:
         project = Project.objects.get(uuid=message.project_uuid)
-        logger.info(f"Message received, from project_uuid: {message.project_uuid}, text: {message.text}, contact_urn: {message.contact_urn}")
+        logger.info(
+            f"Message received, from project_uuid: {message.project_uuid}, "
+            f"text: {message.text}, contact_urn: {message.contact_urn}"
+        )
 
         if project.inline_agent_switch:
             logger.info("Starting Inline Agent")
