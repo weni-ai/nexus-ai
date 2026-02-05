@@ -68,6 +68,7 @@ class WorkflowContext:
     user_email: str
     task_id: str
     task_manager: RedisTaskManager
+    supervisor_agent_uuid: Optional[str] = None
 
     # State populated during execution
     agents_backend: Optional[str] = None
@@ -268,6 +269,7 @@ def _run_generation(ctx: WorkflowContext) -> str:
         turn_off_rationale=turn_off_rationale,
         channel_type=ctx.message.get("channel_type", ""),
         stream_support=ctx.message.get("stream_support", False),
+        supervisor_agent_uuid=ctx.supervisor_agent_uuid,
     )
 
     return response
@@ -340,6 +342,7 @@ def _create_workflow_context(
     preview: bool,
     language: str,
     user_email: str,
+    supervisor_agent_uuid: Optional[str] = None,
 ) -> WorkflowContext:
     """Create a workflow context from task parameters."""
     return WorkflowContext(
@@ -352,6 +355,7 @@ def _create_workflow_context(
         user_email=user_email,
         task_id=task_id,
         task_manager=RedisTaskManager(),
+        supervisor_agent_uuid=supervisor_agent_uuid,
     )
 
 
@@ -378,6 +382,7 @@ def inline_agent_workflow(
     preview: bool = False,
     language: str = "en",
     user_email: str = "",
+    supervisor_agent_uuid: Optional[str] = None,
 ) -> Any:
     """
     Main workflow orchestrator for inline agents.
@@ -397,6 +402,7 @@ def inline_agent_workflow(
         preview=preview,
         language=language,
         user_email=user_email,
+        supervisor_agent_uuid=supervisor_agent_uuid,
     )
 
     try:

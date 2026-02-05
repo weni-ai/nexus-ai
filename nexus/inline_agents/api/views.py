@@ -22,6 +22,7 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer,
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent
+from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
 from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
@@ -1483,19 +1484,24 @@ class AgentBuilderAudio(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-def set_project_manager_agent(project_uuid, manager_uuid: str):
+def set_project_manager_agent(project_uuid, manager_identifier: str):
     project = get_project_by_uuid(project_uuid)
 
-    manager = ManagerAgent.objects.get(uuid=manager_uuid)
+    try:
+        manager_id = int(manager_identifier)
+        if DeprecatedManagerAgent.objects.filter(id=manager_id).exists():
+            project.manager_agent = None
+            project.save()
+            notify_async(event="cache_invalidation:project", project=project)
+            return manager_identifier
+    except ValueError:
+        pass  # ignoring error because it's not a deprecated manager agent
+
+    manager = ManagerAgent.objects.get(uuid=manager_identifier)
     project.manager_agent = manager
     project.save()
-
-    notify_async(
-        event="cache_invalidation:project",
-        project=project,
-    )
-
-    return project.manager_agent.uuid
+    notify_async(event="cache_invalidation:project", project=project)
+    return str(manager.uuid)
 
 
 def get_public_managers(limit: int = 2):
@@ -1505,15 +1511,23 @@ def get_public_managers(limit: int = 2):
 class AgentManagersView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
 
-    # changing the supervisor agent naming to manager agent
     def post(self, request, project_uuid):
         manager_uuid = request.data.get("currentManager")
+
+        if not manager_uuid:
+            return Response(data={"error": "currentManager is required"}, status=400)
+
         try:
-            manager_agent_uuid = set_project_manager_agent(project_uuid, manager_uuid)
+            manager_agent_uuid = set_project_manager_agent(project_uuid, str(manager_uuid))
         except ManagerAgent.DoesNotExist:
             return Response(data={"error": "Manager agent not found"}, status=404)
         except ProjectDoesNotExist:
             return Response(data={"error": "Project not found"}, status=404)
+        except ValueError:
+            return Response(data={"error": "Invalid manager identifier format"}, status=400)
+        except Exception as e:
+            logger.error(f"Error setting project manager agent: {e}")
+            return Response(data={"error": "Internal server error"}, status=500)
 
         return Response(data={"currentManager": manager_agent_uuid})
 
@@ -1535,7 +1549,7 @@ class AgentManagersView(APIView):
                 new_manager = managers_list[0]
                 legacy_manager = managers_list[1]
                 try:
-                    deprecation_date = pendulum.instance(new_manager.release_date).subtract(days=1).to_iso8601_string()
+                    deprecation_date = pendulum.instance(new_manager.release_date).to_iso8601_string()
                 except (AttributeError, TypeError):
                     deprecation_date = None
 
@@ -1557,9 +1571,13 @@ class AgentManagersView(APIView):
 
         current_manager: ManagerAgent | None = project.manager_agent
 
-        if not current_manager:
-            return Response(data=data)
+        if current_manager:
+            current_manager_id = str(current_manager.uuid)
+        else:
+            current_manager = DeprecatedManagerAgent.objects.order_by("id").last()
+            current_manager_id = str(current_manager.id) if current_manager else None
 
-        data.update({"currentManager": str(current_manager.uuid)})
+        if current_manager_id:
+            data.update({"currentManager": current_manager_id})
 
         return Response(data=data)

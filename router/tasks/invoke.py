@@ -310,6 +310,7 @@ def _invoke_backend(
     turn_off_rationale: bool,
     channel_type: str = "",
     stream_support: bool = False,
+    supervisor_agent_uuid: Optional[str] = None,
 ):
     """
     Invoke backend with cached data to avoid database queries.
@@ -318,6 +319,9 @@ def _invoke_backend(
     all cached data and parameters into a cleaner interface.
     """
     invoke_kwargs = cached_data.get_invoke_kwargs(team=cached_data.team)
+
+    if supervisor_agent_uuid is not None:
+        invoke_kwargs["supervisor_agent_uuid"] = supervisor_agent_uuid
 
     # Add non-cached parameters that come from the message/request
     invoke_kwargs.update(
@@ -361,6 +365,7 @@ def start_inline_agents(
     language: str = "en",
     user_email: str = "",
     task_manager: Optional[RedisTaskManager] = None,
+    supervisor_agent_uuid: Optional[str] = None,
 ) -> bool:  # pragma: no cover
     _apm_set_context(message=message, preview=preview)
     project_uuid = message.get("project_uuid")
@@ -379,6 +384,7 @@ def start_inline_agents(
             preview=preview,
             language=language,
             user_email=user_email,
+            supervisor_agent_uuid=supervisor_agent_uuid,
         )
 
     task_manager = task_manager or get_task_manager()
@@ -465,6 +471,7 @@ def start_inline_agents(
             turn_off_rationale=turn_off_rationale,
             channel_type=message.get("channel_type", ""),
             stream_support=message.get("stream_support", False),
+            supervisor_agent_uuid=supervisor_agent_uuid,
         )
 
         if response is None or response == "":

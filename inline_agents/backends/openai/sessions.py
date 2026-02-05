@@ -92,11 +92,20 @@ def sanitize_redis_item(item_str: str) -> str:
 
 class RedisSession:  # type: ignore[misc]
     def __init__(
-        self, session_id: str, r: redis.Redis, project_uuid: str, sanitized_urn: str, limit: Optional[int] = None
+        self,
+        session_id: str,
+        r: redis.Redis,
+        project_uuid: str,
+        sanitized_urn: str,
+        limit: Optional[int] = None,
+        read_client: Optional[redis.Redis] = None,
+        write_client: Optional[redis.Redis] = None,
     ):
         logger.debug("RedisSession", extra={"session_id": session_id})
         self._key = session_id
-        self.r = r
+        self._write_client = write_client if write_client is not None else r
+        self._read_client = read_client if read_client is not None else r
+        self.r = self._write_client
         self.project_uuid = project_uuid
         self.sanitized_urn = sanitized_urn
         self.limit = limit
@@ -130,19 +139,15 @@ class RedisSession:  # type: ignore[misc]
         limit = limit or self.limit
         logger.debug("Session limit", extra={"limit": limit})
         try:
-            with self.r.pipeline() as pipe:
-                if limit is None or limit <= 0:
-                    pipe.lrange(self._key, 0, -1)
-                else:
-                    pipe.lrange(self._key, -limit, -1)
+            read_client = self._read_client
+            write_client = self._write_client
 
-                pipe.expire(self._key, settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS)
-                results = pipe.execute()
+            if limit is None or limit <= 0:
+                data = read_client.lrange(self._key, 0, -1)
+            else:
+                data = read_client.lrange(self._key, -limit, -1)
 
-                if not results or not results[0]:
-                    return []
-
-                data = results[0]
+            write_client.expire(self._key, settings.AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS)
 
             items = []
 
@@ -159,7 +164,8 @@ class RedisSession:  # type: ignore[misc]
                         if len(raw_str) != len(sanitized_str):
                             null_count = raw_str.count("\u0000") + raw_str.count("\x00")
                             logger.warning(
-                                f"Item {i} in session {self._key} contains {null_count} null characters. Sanitizing before parsing. "
+                                f"Item {i} in session {self._key} contains {null_count} null characters. "
+                                f"Sanitizing before parsing. "
                                 f"Project: {self.project_uuid}, Contact: {self.sanitized_urn}"
                             )
                             log_error_to_sentry(
@@ -182,7 +188,8 @@ class RedisSession:  # type: ignore[misc]
                                 content_nulls = content.count("\u0000") + content.count("\x00")
                                 if content_nulls > 0:
                                     logger.warning(
-                                        f"Content of item {i} in session {self._key} contains {content_nulls} null characters. "
+                                        f"Content of item {i} in session {self._key} contains "
+                                        f"{content_nulls} null characters. "
                                         f"Project: {self.project_uuid}, Contact: {self.sanitized_urn}"
                                     )
 
@@ -248,9 +255,24 @@ class RedisSession:  # type: ignore[misc]
         self.r.delete(self._key)
 
 
-def make_session_factory(redis: redis.Redis, base_id: str, project_uuid: str, sanitized_urn: str, limit: int):
+def make_session_factory(
+    redis: redis.Redis,
+    base_id: str,
+    project_uuid: str,
+    sanitized_urn: str,
+    limit: int,
+    read_redis: Optional[redis.Redis] = None,
+):
     def for_agent(agent_name: str | None = None):
         key = f"{base_id}:{agent_name}"
-        return RedisSession(key, redis, project_uuid, sanitized_urn, limit)
+        return RedisSession(
+            key,
+            redis,
+            project_uuid,
+            sanitized_urn,
+            limit,
+            read_client=read_redis,
+            write_client=redis,
+        )
 
     return for_agent
