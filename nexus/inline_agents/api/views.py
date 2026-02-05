@@ -1544,6 +1544,8 @@ class AgentManagersView(APIView):
         managers = get_public_managers(limit=2)
         managers_list = list(managers)
 
+        deprecated_manager_agent_obj = DeprecatedManagerAgent.objects.order_by("id").last()
+
         if managers_list:
             if len(managers_list) == 2:
                 new_manager = managers_list[0]
@@ -1563,9 +1565,21 @@ class AgentManagersView(APIView):
                 }
             else:
                 new_manager = managers_list[0]
+
+                try:
+                    deprecation_date = pendulum.instance(new_manager.release_date).to_iso8601_string()
+                except (AttributeError, TypeError):
+                    deprecation_date = None
+
                 manager_data = {
                     "new": {"id": str(new_manager.uuid), "label": new_manager.name},
                 }
+                if deprecated_manager_agent_obj:
+                    manager_data["legacy"] = {
+                        "id": str(deprecated_manager_agent_obj.id),
+                        "label": deprecated_manager_agent_obj.name,
+                        "deprecation": deprecation_date,
+                    }
 
             data.update(manager_data)
 
@@ -1574,7 +1588,7 @@ class AgentManagersView(APIView):
         if current_manager:
             current_manager_id = str(current_manager.uuid)
         else:
-            current_manager = DeprecatedManagerAgent.objects.order_by("id").last()
+            current_manager = deprecated_manager_agent_obj
             current_manager_id = str(current_manager.id) if current_manager else None
 
         if current_manager_id:
