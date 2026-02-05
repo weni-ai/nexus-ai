@@ -11,10 +11,16 @@ class ConversationFilter(filters.FilterSet):
     """Filter for Conversation model"""
 
     start_date = filters.DateFilter(
-        field_name="start_date", lookup_expr="gte", input_formats=["%d-%m-%Y"], method="filter_start_date"
+        field_name="start_date",
+        lookup_expr="gte",
+        input_formats=["%d-%m-%Y", "%Y-%m-%d", "iso-8601"],
+        method="filter_start_date",
     )
     end_date = filters.DateFilter(
-        field_name="end_date", lookup_expr="lte", input_formats=["%d-%m-%Y"], method="filter_end_date"
+        field_name="end_date",
+        lookup_expr="lte",
+        input_formats=["%d-%m-%Y", "%Y-%m-%d", "iso-8601"],
+        method="filter_end_date",
     )
     csat = filters.BaseInFilter(field_name="csat")
     resolution = filters.BaseInFilter(field_name="resolution")
