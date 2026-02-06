@@ -219,7 +219,15 @@ class MessagePreviewView(APIView):
                     "language": language,
                 }
                 if supervisor_agent_uuid:
-                    task_kwargs["supervisor_agent_uuid"] = supervisor_agent_uuid
+                    try:
+                        # validating if supervisor_agent_uuid is a ID (identifier of deprecated manager)
+                        # # or UUID (identifier of new manager)
+                        # this code adds temporary support for deprecated manager agent that
+                        # will be removed in the next release
+                        int(supervisor_agent_uuid)
+                    except ValueError:
+                        task_kwargs["supervisor_agent_uuid"] = supervisor_agent_uuid
+
                 start_inline_agents.apply_async(
                     kwargs=task_kwargs,
                     queue="celery",
