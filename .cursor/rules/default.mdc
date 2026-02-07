@@ -1,0 +1,1124 @@
+---
+alwaysApply: true
+---
+
+# PROMPT: Generate Definitive .cursorrules from Architectural Blueprint
+
+**Role:** You are a Senior Principal Software Architect and DevOps Engineer.
+
+**Input Data (Source of Truth):**
+
+--- BEGIN SPECIFICATION ---
+
+Project Architecture Analysis
+Core Technologies
+Framework: Django 4.2.6
+Python: 3.10-3.11
+API: Django REST Framework + FastAPI (router)
+Task Queue: Celery 5.3.6
+Cache: Redis (django-redis)
+Message Broker: RabbitMQ (optional, via USE_EDA)
+Database: PostgreSQL (production), SQLite (tests)
+Monitoring: Sentry, Elastic APM, Prometheus
+
+Architectural Patterns
+Repository Pattern: router/repositories/ - Base class Repository, implementations in subdirectories
+UseCase Pattern: nexus/usecases/ - Business logic separated from views
+Observer Pattern: nexus/event_domain/ - Event-driven architecture with decorator-based registration
+Backend Pattern: inline_agents/backends/ - Plugin architecture for agent backends
+Adapter Pattern: Team adapters, data lake adapters
+Factory Pattern: Observer factories for dependency injection
+
+Directory Structure - CRITICAL DISTINCTION
+Dual inline_agents Structure:
+
+- inline_agents/ (standalone package) - Backend implementations, adapters, data lake, team entity
+  - inline_agents/backends/ - Backend implementations (OpenAI, Bedrock)
+  - inline_agents/adapter.py - Base adapter classes
+  - inline_agents/backend.py - InlineAgentsBackend base class
+  - inline_agents/data_lake/ - Data lake event processing
+  - inline_agents/team/ - Team entity and repository
+- nexus/inline_agents/ (Django app) - Models, admin, API, migrations
+  - nexus/inline_agents/models.py - Django models (Agent, Version, etc.)
+  - nexus/inline_agents/admin.py - Django admin configuration
+  - nexus/inline_agents/api/ - DRF views and serializers
+  - nexus/inline_agents/backends/ - Backend-specific models and repositories
+  - nexus/inline_agents/migrations/ - Database migrations
+
+Import Patterns:
+
+- Use `from inline_agents.backends import ...` for backend implementations
+- Use `from nexus.inline_agents.models import ...` for Django models
+- Use `from nexus.inline_agents.api.serializers import ...` for serializers
+- Never mix import paths - use correct path based on package type
+
+Critical System Components
+Tier 1 - CRITICAL (System-Wide Impact)
+Event System (nexus/event_domain/)
+EventManager, AsyncEventManager
+ObserverRegistry with lazy loading
+Observer decorator registration
+Middleware chain (Sentry, performance)
+Validator chains
+Base Models (nexus/db/models.py)
+BaseModel (UUID primary key, created_by/modified_by)
+SoftDeleteModel (is_active flag)
+Project Model (nexus/projects/models.py)
+Core entity with 30+ fields
+Backend selection (OpenAIBackend, BedrockBackend)
+Feature flags (inline_agent_switch, rationale_switch, use_components)
+Foundation model configurations
+Agent Backend System (inline_agents/backends/)
+BackendsRegistry registration
+InlineAgentsBackend abstract interface
+OpenAI hooks and components
+Session management (RedisSession)
+Cache System (router/services/cache_service.py, router/repositories/redis/cache.py)
+CacheRepository with TTL management
+Cache invalidation observers
+Hybrid caching strategy
+
+Tier 2 - HIGH RISK (Feature Impact)
+Observer Registrations (nexus/events.py)
+Auto-registration of all observers
+Import order critical
+Database Migrations (all migrations/ directories)
+Never modify existing migrations
+Dependency chains
+API Views (nexus/\*/api/views.py)
+Permission classes
+Serializer usage
+UseCase integration
+Celery Tasks (router/tasks/)
+Task decorators with retry logic
+Error handling patterns
+Task manager integration
+
+Detailed Rules Structure
+
+## ABSOLUTE MANDATORY RULES - NEVER VIOLATE
+
+### Git Operations - STRICTLY FORBIDDEN
+
+- NEVER execute `git commit`, only if asked and only in english
+- NEVER execute `git push` under any circumstances
+- NEVER stage files using `git add` under any circumstances
+- NEVER create git branches, only if asked
+- NEVER modify .gitignore or .gitattributes, only if asked
+- If user explicitly requests git operations, inform them these are forbidden by project rules and ask if they want to proceed
+
+### Code Modification Scope
+
+- ONLY modify code that is explicitly requested
+- DO NOT refactor unrelated code
+- DO NOT "improve" code unless explicitly asked
+- DO NOT add features not requested
+- DO NOT remove "unused" code without explicit approval
+- DO NOT change code style of unrelated files
+
+### Change Approval Workflow - MANDATORY
+
+Before applying ANY code change:
+
+1. Analyze the change request
+2. Identify ALL affected files
+3. Create detailed change report with:
+   - List of files to modify
+   - Exact changes for each file (before/after)
+   - Dependencies affected
+   - Potential risks
+   - Impact on critical components
+4. Present report to user
+5. WAIT for explicit approval (user must say "yes", "proceed", "approve", or similar)
+6. Only after approval, apply changes
+7. If user says "no" or asks to modify, create new report
+
+Code Style Section
+
+## CODE STYLE & FORMATTING RULES
+
+### Python Style Configuration
+
+- Line length: 120 characters (ruff config, isort config)
+- Formatter: blue (line-length 79 for blue, but code follows 120)
+- Linter: ruff with specific rules:
+  - E, W (pycodestyle errors/warnings)
+  - F (Pyflakes)
+  - B (flake8-bugbear)
+  - Q (flake8-quotes)
+  - UP (pyupgrade)
+  - I (isort)
+  - C901 (complexity)
+  - DJ (flake8-django)
+- Max complexity: 12 (mccabe)
+- Import sorting: isort with black profile, line_length=120
+- Ruff configuration: `pyproject.toml` [tool.ruff] section
+- Blue configuration: `pyproject.toml` [tool.blue] section (line-length 79, but code follows 120)
+- Ruff excludes: migrations, manage.py, wsgi.py, asgi.py, **init**.py, bedrock prompts
+- Use `task lint` to run ruff and blue checks
+- Use `task format` to format code with blue and isort
+
+### Type Hints
+
+- Use type hints where present in existing code
+- Follow existing patterns: Optional, Union, List, Dict
+- Use TYPE_CHECKING for conditional imports
+- Use string literals for forward references when needed
+
+### Import Organization
+
+- Standard library imports first
+- Third-party imports second
+- Local application imports last
+- Use absolute imports (no relative imports)
+- Group imports with blank lines between groups
+- Use isort to maintain import order
+- Import path clarification:
+  - `from inline_agents.backends import ...` - For backend implementations (standalone package)
+  - `from nexus.inline_agents.models import ...` - For Django models (Django app)
+  - `from router.repositories import ...` - For router repositories
+  - `from nexus.usecases import ...` - For usecases
+- Never mix import paths - use correct path based on package type
+
+### Docstrings
+
+- Follow existing docstring patterns
+- Use triple double quotes
+- Include parameter descriptions
+- Include return type descriptions
+- Include exceptions raised
+
+Architectural Patterns Section
+
+## ARCHITECTURAL PATTERNS - MAINTAIN EXISTING PATTERNS
+
+### Repository Pattern
+
+Location: `router/repositories/`
+
+- Base class: `Repository` (abstract, minimal)
+- Implementations: Inherit from Repository
+- Examples:
+  - `CacheRepository` in `router/repositories/redis/cache.py`
+  - `MessageRepository` in `router/repositories/redis/message.py`
+  - `ORMTeamRepository` in `nexus/inline_agents/team/repository.py`
+- Rules:
+  - All repositories inherit from Repository
+  - Methods should be repository-specific (get, set, delete, etc.)
+  - Use dependency injection for clients (Redis, DB)
+  - Never put business logic in repositories
+
+### UseCase Pattern
+
+Location: `nexus/usecases/`
+
+- Structure: One usecase class per operation
+- Naming: `{Action}{Entity}UseCase` (e.g., `CreateAgentUseCase`)
+- Dependencies: Injected via **init**
+- Examples:
+  - `nexus/usecases/inline_agents/create.py` - CreateAgentUseCase
+  - `nexus/usecases/inline_agents/update.py` - UpdateAgentUseCase
+  - `nexus/usecases/projects/projects_use_case.py` - ProjectsUseCase
+- Rules:
+  - One usecase = one business operation
+  - UseCases can inherit from multiple mixins (ToolsUseCase, InstructionsUseCase)
+  - UseCases call repositories, not models directly (where applicable)
+  - UseCases handle business logic, not data access
+  - UseCases can raise custom exceptions
+
+### Observer Pattern
+
+Location: `nexus/event_domain/`
+
+- Registration: Use `@observer` decorator
+- Base class: `EventObserver` with `perform(**kwargs)` method
+- Managers: `event_manager` (sync), `async_event_manager` (async)
+- Registration mechanism: Observers are auto-registered via `nexus/observers/apps.py` in `OBSERVER_MODULES` list
+- Examples:
+  - `@observer("cache_invalidation:project", isolate_errors=True, manager="async")`
+  - `@observer("inline_trace_observers", factory=create_rationale_observer)`
+- Rules:
+  - Always use `@observer` decorator for registration
+  - Use `isolate_errors=True` for non-critical observers
+  - Use `manager="async"` for async operations
+  - Use factory pattern for dependency injection
+  - Use lazy imports inside `perform()` to avoid circular dependencies
+  - Never modify EventManager core logic without approval
+  - Observer registration: Add observer module to `OBSERVER_MODULES` in `nexus/observers/apps.py`
+  - Observer imports in `nexus/events.py` are for convenience, not registration
+  - Import order in `nexus/observers/apps.py` is critical for proper initialization
+
+### Backend Pattern
+
+Location: `inline_agents/backends/`
+
+- Base class: `InlineAgentsBackend` (ABC)
+- Registration: `BackendsRegistry.register()`
+- Examples:
+  - `OpenAIBackend` in `inline_agents/backends/openai/backend.py`
+  - `BedrockBackend` in `inline_agents/backends/bedrock/backend.py`
+- Rules:
+  - All backends inherit from InlineAgentsBackend
+  - Must implement `invoke_agents()` method
+  - Register in `inline_agents/backends/__init__.py`
+  - Never change InlineAgentsBackend interface
+  - Backend-specific code in backend subdirectories
+  - Backend models in `nexus/inline_agents/backends/{backend}/models.py` (e.g., Supervisor, OpenAISupervisor)
+  - Backend repositories in `nexus/inline_agents/backends/{backend}/repository.py`
+  - Backend hooks in `inline_agents/backends/{backend}/hooks.py` (e.g., OpenAI hooks)
+  - Backend sessions in `inline_agents/backends/{backend}/sessions.py` (e.g., RedisSession)
+  - Backend adapters in `inline_agents/backends/{backend}/adapter.py` (TeamAdapter, DataLakeEventAdapter)
+  - Backend components in `inline_agents/backends/{backend}/components_tools.py` (OpenAI components)
+  - Backend event extractors in `inline_agents/backends/{backend}/event_extractor.py`
+  - Backend gRPC (if applicable) in `inline_agents/backends/{backend}/grpc/`
+
+### Adapter Pattern
+
+Location: `inline_agents/adapter.py`, `inline_agents/backends/*/adapter.py`
+
+- Base classes: `TeamAdapter`, `DataLakeEventAdapter` (ABC)
+- Purpose: Transform data between internal and external formats
+- Examples:
+  - `BedrockTeamAdapter` in `inline_agents/backends/bedrock/adapter.py`
+  - `OpenAIDataLakeEventAdapter` in `inline_agents/backends/openai/adapter.py`
+  - `BedrockDataLakeEventAdapter` in `inline_agents/backends/bedrock/adapter.py`
+- Rules:
+  - All adapters inherit from base adapter classes
+  - Implement abstract methods: `to_external()`, `to_data_lake_event()`
+  - Use `DataLakeEventService` for event processing
+  - Use `EventExtractor` pattern for trace data extraction
+  - Backend-specific adapters in backend subdirectories
+  - Adapters handle format transformation, not business logic
+
+### Event-Driven Architecture (EDA) Pattern
+
+Location: `nexus/event_driven/`
+
+- Purpose: RabbitMQ-based message queue system (optional, via USE_EDA)
+- Consumer base: `EDAConsumer` (abstract) in `nexus/event_driven/consumer/consumers.py`
+- Connection: `RabbitMQConnection` (singleton) in `nexus/event_driven/connection/rabbitmq_connection.py`
+- Publisher: `RabbitMQPublisher` in `nexus/event_driven/publisher/rabbitmq_publisher.py`
+- Backend: `PyAMQPConnectionBackend` in `nexus/event_driven/connection/pymqp_connection.py`
+- Examples:
+  - `ProjectConsumer` in `nexus/projects/consumers/project_consumer.py`
+  - `FlowConsumer` in `nexus/projects/consumers/flow_consumer.py`
+  - `ConversationConsumer` in `nexus/intelligences/consumers/conversation_consumer.py`
+- Rules:
+  - All consumers inherit from `EDAConsumer`
+  - Implement `handle()` method for message processing
+  - Register consumers in `handle_consumers()` functions (e.g., `nexus/event_driven/handle.py`)
+  - Use connection singleton pattern for RabbitMQ
+  - Handle connection errors and reconnection logic
+  - Use retry logic with `settings.EDA_WAIT_TIME_RETRY`
+  - Never modify connection singleton without approval
+  - Consumer registration order matters
+
+Critical Components Section
+
+## CRITICAL SYSTEM COMPONENTS - HIGH RISK AREAS
+
+### Event System (TIER 1 - CRITICAL)
+
+Files:
+
+- `nexus/event_domain/event_manager.py` - EventManager, AsyncEventManager
+- `nexus/event_domain/observer_registry.py` - ObserverRegistry
+- `nexus/event_domain/decorators.py` - @observer decorator
+- `nexus/events.py` - Observer registration and imports
+- `nexus/event_domain/middleware.py` - Middleware chain
+- `nexus/event_domain/validators.py` - Event validators
+
+Risks:
+
+- Breaking EventManager breaks all event-driven features
+- Breaking ObserverRegistry breaks observer registration
+- Breaking decorator breaks auto-registration
+- Import order in nexus/events.py is critical
+
+Rules:
+
+- NEVER modify EventManager.notify() or AsyncEventManager.notify() core logic
+- NEVER modify ObserverRegistry registration mechanism
+- NEVER change @observer decorator signature
+- NEVER change import order in nexus/events.py
+- NEVER remove observer imports from nexus/events.py
+- Always use lazy loading for observers to avoid circular imports
+- Maintain isolate_errors flags appropriately
+- Use factory pattern for observers with dependencies
+
+### Base Models (TIER 1 - CRITICAL)
+
+Files:
+
+- `nexus/db/models.py` - BaseModel, SoftDeleteModel
+
+Risks:
+
+- All models inherit from BaseModel
+- Changing primary key structure breaks entire system
+- Changing created_by/modified_by breaks audit trail
+
+Rules:
+
+- NEVER change BaseModel.uuid field (UUID primary key)
+- NEVER change BaseModel.created_by or BaseModel.modified_by ForeignKeys
+- NEVER change on_delete=PROTECT for created_by/modified_by
+- NEVER change SoftDeleteModel.is_active field
+- If model changes needed, create new migration, never modify BaseModel directly
+- All new models must inherit from BaseModel or SoftDeleteModel appropriately
+
+### Project Model (TIER 1 - CRITICAL)
+
+Files:
+
+- `nexus/projects/models.py` - Project model
+
+Risks:
+
+- Core entity referenced throughout system
+- 30+ fields with complex relationships
+- Backend selection affects agent execution
+- Feature flags control major features
+
+Rules:
+
+- NEVER remove Project model fields without migration
+- NEVER change Project.agents_backend choices without backend support
+- NEVER modify Project.inline_agent_switch logic without approval
+- NEVER change Project foreign key relationships
+- Changes to Project model require:
+  1. Database migration
+  2. Impact analysis on all usecases
+  3. Cache invalidation strategy
+  4. Observer impact analysis
+
+### Agent Backend System (TIER 1 - CRITICAL)
+
+Files:
+
+- `inline_agents/backend.py` - InlineAgentsBackend base class
+- `inline_agents/backends/__init__.py` - BackendsRegistry
+- `inline_agents/backends/openai/backend.py` - OpenAIBackend
+- `inline_agents/backends/openai/hooks.py` - OpenAI hooks
+- `inline_agents/backends/openai/components_tools.py` - Component tools
+- `inline_agents/backends/openai/sessions.py` - RedisSession
+
+Risks:
+
+- Breaking backend breaks all agent operations
+- Breaking hooks breaks trace handling
+- Breaking components breaks message formatting
+- Breaking sessions breaks conversation context
+
+Rules:
+
+- NEVER modify InlineAgentsBackend abstract interface
+- NEVER change BackendsRegistry registration mechanism
+- NEVER modify OpenAI hooks without understanding trace flow
+- NEVER change component tool Pydantic models without approval
+- NEVER modify RedisSession session management without approval
+- Backend-specific code must stay in backend subdirectories
+- Session TTL changes affect conversation context retention
+
+### Cache System (TIER 1 - CRITICAL)
+
+Files:
+
+- `router/services/cache_service.py` - CacheService
+- `router/repositories/redis/cache.py` - CacheRepository
+- `router/services/cache_invalidation_observers.py` - Cache observers
+
+Risks:
+
+- Cache inconsistencies cause stale data
+- Cache invalidation failures cause data corruption
+- TTL changes affect performance
+
+Rules:
+
+- NEVER modify cache key formats without updating all usages
+- NEVER change TTL constants without performance analysis
+- Cache invalidation observers MUST use isolate_errors=True
+- Cache invalidation observers MUST use manager="async"
+- Always use CacheRepository for cache operations
+- Never bypass cache service for direct Redis access
+- Cache key format: `{type}:{project_uuid}:{suffix}` or `{type}:{project_uuid}:{backend}:{suffix}`
+
+### Backend Models (TIER 2 - HIGH RISK)
+
+Files:
+
+- `nexus/inline_agents/backends/bedrock/models.py` - Supervisor model
+- `nexus/inline_agents/backends/openai/models.py` - OpenAISupervisor model
+- `nexus/inline_agents/models.py` - Agent, Version, AgentCategory, AgentGroup, AgentSystem, AgentType, MCP, InlineAgentsConfiguration
+
+Risks:
+
+- Backend models control agent behavior
+- Supervisor models affect agent orchestration
+- Version model affects agent versioning
+- Configuration models affect agent settings
+
+Rules:
+
+- NEVER modify Supervisor or OpenAISupervisor models without backend support
+- NEVER change Version model structure without migration
+- NEVER modify Agent model relationships without approval
+- Backend-specific models in `nexus/inline_agents/backends/{backend}/models.py`
+- Version model tracks agent versions and changes
+- AgentCategory, AgentGroup, AgentSystem, AgentType for agent organization
+- MCP (Model Context Protocol) models for MCP integration
+- InlineAgentsConfiguration for project-level agent settings
+- Changes to backend models require:
+  1. Database migration
+  2. Backend adapter updates
+  3. Cache invalidation strategy
+
+Layer-Specific Rules Section
+
+## LAYER-SPECIFIC RULES
+
+### Models Layer
+
+Location: `nexus/*/models.py`
+
+- All models inherit from BaseModel or SoftDeleteModel
+- Use UUID as primary key (uuid4)
+- ForeignKeys use PROTECT for created_by/modified_by
+- Use CASCADE for business relationships
+- Use SET_NULL for optional relationships
+- Add indexes for frequently queried fields
+- Use choices for constrained string fields
+- Use JSONField for flexible data structures
+- Never use null=True on CharField unless explicitly needed
+- Use related_name for reverse relationships
+
+### Views/API Layer
+
+Location: `nexus/*/api/views.py`, `router/main.py`
+
+- Use APIView or ViewSet from DRF
+- Use ModelViewSet for CRUD operations
+- Use permission classes: IsAuthenticated, ProjectPermission, CombinedExternalProjectPermission
+- Use serializers for request/response
+- Call UseCases, not models directly
+- Handle exceptions and return appropriate status codes
+- Use drf-spectacular for OpenAPI documentation
+- Use `extend_schema` decorator for API documentation
+- FastAPI views in router/main.py use different patterns (see FastAPI Integration section)
+
+### Serializers Layer
+
+Location: `nexus/*/api/serializers.py`
+
+- Base classes: `serializers.ModelSerializer`, `serializers.Serializer`
+- Naming: `{Model}Serializer` (e.g., `AgentSerializer`, `ProjectSerializer`)
+- Examples:
+  - `nexus/inline_agents/api/serializers.py` - AgentSerializer, IntegratedAgentSerializer
+  - `nexus/projects/api/serializers.py` - ProjectSerializer
+  - `nexus/intelligences/api/serializers.py` - IntelligenceSerializer, ContentBaseSerializer
+- Rules:
+  - Inherit from `serializers.ModelSerializer` for model-based serializers
+  - Inherit from `serializers.Serializer` for custom serializers
+  - Use `SerializerMethodField` for computed fields
+  - Use `source` parameter for field mapping (e.g., `description = serializers.CharField(source="collaboration_instructions")`)
+  - Use `context` parameter for dynamic data (e.g., `project_uuid` from request)
+  - Define `Meta` class with `model`, `fields`, `read_only_fields`
+  - Use `many=True` for list serialization
+  - Use nested serializers for related objects
+  - Include validation logic in serializer methods
+  - Use `to_representation()` for custom output formatting
+  - Use `to_internal_value()` for custom input processing
+
+### Admin Layer
+
+Location: `nexus/*/admin.py`
+
+- Registration: Use `@admin.register()` decorator
+- Base class: `admin.ModelAdmin`
+- Examples:
+  - `nexus/inline_agents/admin.py` - GuardrailAdmin, SupervisorAdmin, AgentAdmin
+- Rules:
+  - Use `@admin.register(Model)` decorator for model registration
+  - Inherit from `admin.ModelAdmin`
+  - Configure `list_display` for list view columns
+  - Configure `list_filter` for filtering options
+  - Configure `search_fields` for search functionality
+  - Use `readonly_fields` for non-editable fields
+  - Use `fieldsets` for field organization and grouping
+  - Use `formfield_overrides` for custom widgets (e.g., `PrettyJSONWidget` for JSONField)
+  - Use `ordering` for default sorting
+  - Use `raw_id_fields` for ForeignKey optimization
+  - Use `autocomplete_fields` for ForeignKey autocomplete
+  - Use `prepopulated_fields` for slug generation
+  - Use `filter_horizontal` or `filter_vertical` for ManyToMany fields
+  - Use `inlines` for related object editing
+  - Use `PrettyJSONWidget` from `nexus.admin_widgets` for JSON fields
+  - Configure `verbose_name` and `verbose_name_plural` in Meta class
+
+### WebSockets/Channels Layer
+
+Location: `nexus/projects/websockets/`, `nexus/asgi.py`
+
+- Framework: Django Channels (`channels`, `channels-redis`)
+- ASGI configuration: `nexus/asgi.py` - ProtocolTypeRouter for HTTP and WebSocket
+- Consumer base: `WebsocketConsumer` from `channels.generic.websocket`
+- Authentication: `TokenAuthMiddleware` for WebSocket authentication
+- Examples:
+  - `WebsocketMessageConsumer` in `nexus/projects/websockets/consumers.py`
+  - `PreviewConsumer` in `nexus/projects/websockets/consumers.py`
+- Rules:
+  - All consumers inherit from `WebsocketConsumer`
+  - Implement `connect()`, `receive()`, `disconnect()` methods
+  - Use `async_to_sync()` for async channel layer operations
+  - Room naming patterns:
+    - Monitoring: `project_{project_uuid}`
+    - Preview: `preview_{project_uuid}_{sanitized_user_email}`
+  - Use `channel_layer.group_add()` for joining groups
+  - Use `channel_layer.group_send()` for broadcasting
+  - Implement permission checks in `connect()` method
+  - Use `has_project_permission()` for authorization
+  - Sanitize user email with `sanitize_user_email()` function
+  - Register routes in `nexus/projects/websockets/routing.py`
+  - Use `re_path()` for URL patterns with parameters
+  - ASGI routing in `nexus/asgi.py` uses `ProtocolTypeRouter`
+  - WebSocket middleware: `TokenAuthMiddleware(URLRouter(routing.websocket_urlpatterns))`
+  - Never modify ASGI configuration without approval
+
+### FastAPI Integration
+
+Location: `router/main.py`, `router/management/commands/runapi.py`
+
+- Framework: FastAPI (separate from Django)
+- Server: Uvicorn (via Django management command)
+- Authentication: Query parameter token (`ROUTER_TOKEN` environment variable)
+- Examples:
+  - `/messages` endpoint in `router/main.py`
+  - Healthcheck endpoint `/` in `router/main.py`
+- Rules:
+  - FastAPI app is separate from Django (`app = FastAPI()`)
+  - Use Pydantic models for request bodies (e.g., `MessageHTTPBody`)
+  - Use `@app.post()`, `@app.get()` decorators for routes
+  - Authentication via `authenticate()` function checking query parameter
+  - Integrate with Django models: `Project.objects.get(uuid=...)`
+  - Use Celery tasks: `start_inline_agents.delay()`, `start_route.delay()`
+  - Use Django signals: `message_started.send()`, `message_finished.send()`
+  - Handle exceptions with `HTTPException`
+  - Run via Django management command: `python manage.py runapi --port 8000`
+  - Never modify FastAPI app structure without approval
+  - FastAPI routes are separate from Django URL patterns
+
+### UseCases Layer
+
+Location: `nexus/usecases/`
+
+- One usecase class per business operation
+- Inject dependencies via **init**
+- Call repositories for data access
+- Handle business logic
+- Raise custom exceptions for business errors
+- Use DTOs for data transfer
+- Can inherit from multiple mixins
+
+### Repositories Layer
+
+Location: `router/repositories/`, `nexus/inline_agents/team/repository.py`
+
+- Inherit from Repository base class
+- Implement data access methods
+- No business logic
+- Use dependency injection for clients
+- Handle data transformation
+- Raise domain exceptions (TeamDoesNotExist, etc.)
+
+### Observers Layer
+
+Location: Various observer files
+
+- Use @observer decorator
+- Inherit from EventObserver
+- Implement perform(\*\*kwargs) method
+- Use lazy imports for dependencies
+- Use isolate_errors=True for non-critical
+- Use factory pattern for dependencies
+- Register in nexus/events.py
+
+### Backends Layer
+
+Location: `inline_agents/backends/`
+
+- Inherit from InlineAgentsBackend
+- Implement invoke_agents() method
+- Register in BackendsRegistry
+- Backend-specific code in subdirectories
+- Use adapters for external formats
+- Handle sessions appropriately
+- Implement hooks for tracing
+
+### Services Layer
+
+Location: `router/services/`
+
+- Stateless service classes
+- Use repositories for data access
+- Handle business logic coordination
+- Use dependency injection
+- Examples:
+  - `CacheService` in `router/services/cache_service.py`
+  - `ConversationService` in `router/services/conversation_service.py`
+  - `MessageService` in `router/services/message_service.py`
+- Rules:
+  - Services are stateless (no instance state)
+  - Services coordinate between repositories and usecases
+  - Services handle cross-cutting concerns
+  - Use dependency injection for repositories
+  - Services can call usecases when needed
+  - Never put data access logic directly in services (use repositories)
+
+### Data Lake Event Service
+
+Location: `inline_agents/data_lake/event_service.py`
+
+- Purpose: Process and send events to data lake
+- Base service: `DataLakeEventService`
+- Event extractor: `EventExtractor` (abstract) for trace data extraction
+- Examples:
+  - `OpenAIEventExtractor` in `inline_agents/backends/openai/event_extractor.py`
+  - `BedrockEventExtractor` in `inline_agents/backends/bedrock/event_extractor.py`
+- Rules:
+  - Use `DataLakeEventService` for event processing
+  - Implement `EventExtractor` for backend-specific trace extraction
+  - Use `send_data_lake_event` Celery task for async sending
+  - Handle conversation lookup with `_get_conversation()` method
+  - Use `channel_uuid` for conversation retrieval
+  - Log to Sentry when conversation cannot be found
+  - Validate events before sending
+  - Use `send_validated_event()` for validated events
+  - Use `process_custom_events()` for custom event processing
+  - Never send events without proper validation
+  - Event format: `weni_nexus_data` with metadata
+
+### Message Service
+
+Location: `router/services/message_service.py`
+
+- Purpose: Handle message caching and conversation management
+- Repository: `MessageRepository` (DynamoDB or Redis)
+- Integration: Works with `ConversationService`
+- Rules:
+  - Use `MessageService` for message operations
+  - Use `MessageRepository` for data access
+  - Handle message cache with TTL management
+  - Use `handle_message_cache()` for message caching
+  - Use `create_message_to_cache()` for new conversations
+  - Use `add_message_to_cache()` for existing conversations
+  - Check for existing conversation before creating
+  - Use `preview` flag to skip caching in preview mode
+  - Message TTL: 48 hours default
+  - Never cache messages without channel_uuid
+  - Message service coordinates with conversation service
+
+### Tasks Layer
+
+Location: `router/tasks/`
+
+- Use @celery_app.task decorator
+- Configure retry logic appropriately
+- Use soft_time_limit and time_limit
+- Handle exceptions properly
+- Use task managers for state
+- Log appropriately
+- Examples:
+  - `start_route` in `router/tasks/tasks.py`
+  - `start_inline_agents` in `router/tasks/invoke.py`
+  - Workflow orchestrator tasks in `router/tasks/workflow_orchestrator.py`
+- Rules:
+  - Use `@celery_app.task` decorator from `nexus.celery`
+  - Configure `bind=True` for task instance access
+  - Use `autoretry_for` for automatic retries
+  - Use `retry_backoff` for exponential backoff
+  - Use `max_retries` to limit retry attempts
+  - Use `soft_time_limit` and `time_limit` for timeout control
+  - Use `task_id` for task tracking
+  - Use task managers in `nexus/task_managers/` for state management
+  - Handle exceptions with proper logging and Sentry integration
+  - Use `delay()` for async execution, `apply_async()` for advanced options
+
+### Task Managers Layer
+
+Location: `nexus/task_managers/`
+
+- Purpose: State management for async tasks
+- Patterns: File-based database, state tracking, workflow context
+- Examples:
+  - Workflow context management
+  - Task state persistence
+  - File-based task database
+- Rules:
+  - Use task managers for long-running task state
+  - Persist state for recovery and monitoring
+  - Use file-based storage for task data
+  - Handle state cleanup appropriately
+  - Never modify task manager core logic without approval
+  - Task managers are backend-agnostic (some exclude bedrock)
+
+### Router Patterns
+
+Location: `router/`
+
+- Purpose: Message routing and processing
+- Components:
+  - `router/dispatcher.py` - Message dispatching logic
+  - `router/route.py` - Routing logic and utilities
+  - `router/handler.py` - Message handling
+  - `router/entities/` - Entity factories and DTOs
+  - `router/services/` - Router services
+  - `router/tasks/` - Celery tasks for routing
+- Rules:
+  - Use dispatcher for message routing decisions
+  - Use route utilities for language and filtering
+  - Use entity factories for DTO creation
+  - Use services for business logic coordination
+  - Never modify router core logic without approval
+  - Router integrates with both Django and FastAPI
+
+Exception Handling Section
+
+## EXCEPTION HANDLING RULES
+
+### Custom Exceptions
+
+Location: `nexus/*/exceptions.py`, `router/tasks/exceptions.py`
+
+- Inherit from Exception or APIException
+- Use descriptive names ending in Exception
+- Include default_detail for APIException
+- Include status_code for APIException
+- Examples:
+  - `ProjectDoesNotExist(Exception)`
+  - `ProjectAuthorizationDenied(APIException)` - status_code=403
+  - `TeamDoesNotExist(Exception)`
+  - `EmptyFinalResponseException(Exception)`
+
+### Error Isolation
+
+- Observers: Use isolate_errors=True for non-critical operations
+- Critical observers: Use isolate_errors=False (default, fail-fast)
+- Cache observers: Always use isolate_errors=True
+- Logging observers: Always use isolate_errors=True
+
+### Sentry Integration
+
+- Use sentry_sdk.capture_exception() for unexpected errors
+- Use sentry_sdk.set_context() for additional context
+- Use sentry_sdk.set_tag() for filtering
+- Don't capture expected business exceptions
+
+### Logging
+
+- Use logger from logging.getLogger(**name**)
+- Use appropriate log levels (DEBUG, INFO, WARNING, ERROR)
+- Include context in extra parameter
+- Use structured logging with extra dict
+- Log message processing with project_uuid, contact_urn, session_id
+- Log errors with full context for debugging
+- Use logger.info() for important operations
+- Use logger.error() for exceptions with exc_info=True
+- Use logger.warning() for recoverable issues
+- Use logger.debug() for detailed debugging information
+
+Caching & Sessions Section
+
+## CACHING & SESSION RULES
+
+### Redis Patterns
+
+- Use Redis.from_url(settings.REDIS_URL)
+- Use connection pooling
+- Handle connection errors gracefully
+- Use pipelines for multiple operations
+- Set appropriate TTLs
+
+### Cache Key Formats
+
+- Project data: `project:{project_uuid}:data`
+- Content base: `project:{project_uuid}:content_base:{uuid}`
+- Team: `project:{project_uuid}:{backend}:team`
+- Guardrails: `project:{project_uuid}:guardrails`
+- Follow existing patterns in CacheService
+
+### TTL Management
+
+- Long TTLs (86400 = 24h) for rarely changing data
+- Short TTLs (600 = 10m) for frequently changing data
+- Use constants in CacheService
+- Document TTL choices
+
+### Session Management
+
+- Use RedisSession for conversation context
+- Session key format: `project-{project_uuid}-session-{sanitized_urn}`
+- Set TTL: AWS_BEDROCK_IDLE_SESSION_TTL_IN_SECONDS
+- Use limit parameter for conversation turns
+- Clear sessions appropriately
+
+### Cache Invalidation
+
+- Use cache invalidation observers
+- Invalidate on model updates
+- Use async observers for invalidation
+- Invalidate related caches (e.g., team cache when agent updated)
+
+### Conversation Management
+
+Location: `nexus/intelligences/models.py`, `router/services/conversation_service.py`
+
+- Model: `Conversation` in `nexus/intelligences/models.py`
+- Service: `ConversationService` in `router/services/conversation_service.py`
+- UseCase: `ConversationUseCase` in `nexus/usecases/intelligences/create.py`
+- Rules:
+  - Conversation requires `channel_uuid` for creation
+  - Use `create_conversation_if_channel_exists()` when channel_uuid is available
+  - Use `ensure_conversation_exists()` for guaranteed conversation
+  - Conversation model has indexes on project, contact_urn, start_date, end_date, channel_uuid
+  - Conversation has resolution choices: Resolved, Unresolved, In Progress, Unclassified, Has Chat Room
+  - Conversation has CSAT choices: Very unsatisfied to Very satisfied
+  - Use conversation for analytics and reporting
+  - Never create conversation without channel_uuid (log to Sentry instead)
+  - Conversation creation is optional and should not block message processing
+
+### Authentication Patterns
+
+Location: `nexus/authentication/authentication.py`
+
+- JWT Authentication: `JWTAuthentication` class
+- Keycloak Integration: `mozilla-django-oidc` package
+- WebSocket Authentication: `TokenAuthMiddleware` for Channels
+- FastAPI Authentication: Query parameter token check
+- Rules:
+  - Use `JWTAuthentication` for DRF views
+  - Use `TokenAuthMiddleware` for WebSocket connections
+  - Use `get_keycloak_user()` for Keycloak user retrieval
+  - FastAPI uses `ROUTER_TOKEN` environment variable
+  - WebSocket authentication checks user and project permissions
+  - Never bypass authentication checks
+  - Use `AUTHENTICATION_CLASSES` from `nexus.authentication` for DRF
+
+### ASGI Configuration
+
+Location: `nexus/asgi.py`
+
+- Purpose: ASGI application for HTTP and WebSocket
+- Framework: Django Channels with ProtocolTypeRouter
+- Components:
+  - HTTP: `get_asgi_application()` from Django
+  - WebSocket: `TokenAuthMiddleware(URLRouter(routing.websocket_urlpatterns))`
+- Rules:
+  - ASGI config must setup Django before importing Channels
+  - Use `ProtocolTypeRouter` to route HTTP and WebSocket
+  - WebSocket routing uses `TokenAuthMiddleware` for authentication
+  - WebSocket URL patterns in `nexus/projects/websockets/routing.py`
+  - Never modify ASGI configuration without approval
+  - ASGI is separate from WSGI (production uses ASGI for WebSocket support)
+
+### Dependency Management
+
+Location: `pyproject.toml`, `poetry.lock`
+
+- Tool: Poetry for dependency management
+- Configuration: `pyproject.toml` [tool.poetry.dependencies]
+- Lock file: `poetry.lock` (committed to version control)
+- Task runner: `taskipy` for common tasks
+- Rules:
+  - Use Poetry for all dependency management
+  - Run `poetry install` to install dependencies
+  - Run `poetry add <package>` to add dependencies
+  - Run `poetry update` to update dependencies
+  - Development dependencies in [tool.poetry.group.dev.dependencies]
+  - Use `task lint` for linting (ruff + blue)
+  - Use `task format` for formatting (blue + isort)
+  - Use `task test` for testing (pytest with coverage)
+  - Use `task run` for running server
+  - Use `task makemigrations` for creating migrations
+  - Use `task migrate` for applying migrations
+  - Never commit `poetry.lock` changes without reviewing dependency updates
+  - Python version: >=3.10,<3.12 (specified in pyproject.toml)
+
+### gRPC Patterns
+
+Location: `inline_agents/backends/openai/grpc/`
+
+- Purpose: gRPC communication for OpenAI streaming
+- Protocol buffers: `message_stream_service.proto`
+- Generated code: `generated/message_stream_service_pb2.py`, `message_stream_service_pb2_grpc.py`
+- Client: `streaming_client.py`
+- Rules:
+  - Use protocol buffers for gRPC service definitions
+  - Generated code in `generated/` directory
+  - Use streaming client for async message streaming
+  - Never modify generated code directly
+  - Regenerate code after proto file changes
+  - gRPC is backend-specific (OpenAI only)
+  - Handle gRPC errors appropriately
+
+Testing Rules Section
+
+## TESTING RULES
+
+### Test Structure
+
+- Create a test folder if it not exist inside the code being tested
+- Test files: `tests.py`, `test_*.py`, `*_tests.py`
+- Use pytest-django
+- Use factory-boy for test data
+- Use freezegun for time mocking
+- Test configuration in `pyproject.toml` [tool.pytest.ini_options]
+- Python path: `.` (project root)
+- Django settings: `nexus.settings`
+- Excluded paths: bedrock backends, staticfiles, specific test files
+- Use `--nomigrations` flag for faster tests
+- Use `conftest.py` for shared fixtures
+
+### Test Patterns
+
+- Inherit from TestCase or SimpleTestCase
+- Use descriptive test method names
+- Test one thing per test method
+- Use fixtures for common setup
+- Mock external dependencies
+- Test both success and failure cases
+
+### Coverage
+
+- Aim for high coverage on critical paths
+- Exclude migrations, manage.py, wsgi.py, asgi.py
+- Exclude bedrock backends (coverage config in pyproject.toml)
+- Test UseCases thoroughly
+- Test observers with appropriate isolation
+- Coverage configuration in `pyproject.toml` [tool.coverage.report]
+- Excluded paths: migrations, manage.py, wsgi.py, asgi.py, bedrock backends, router/clients/
+- Use `pytest --cov` for coverage reports
+- Use `coverage html` for HTML reports
+
+Change Approval Workflow Section
+
+## CHANGE APPROVAL WORKFLOW - MANDATORY PROCESS
+
+### Step 1: Request Analysis
+
+- Understand the exact change requested
+- Identify scope and boundaries
+- Clarify ambiguities before proceeding
+
+### Step 2: Impact Analysis
+
+For each change, analyze:
+
+1. **Direct Impact**
+
+   - Files to be modified
+   - Lines to be changed
+   - Functions/methods affected
+
+2. **Dependency Impact**
+
+   - Files that import the changed code
+   - UseCases that use the changed code
+   - Observers that depend on the change
+   - API endpoints affected
+   - Database migrations needed
+
+3. **Critical Component Impact**
+
+   - Check if change affects Tier 1 components
+   - Check if change affects event system
+   - Check if change affects base models
+   - Check if change affects backends
+   - Check if change affects cache system
+
+4. **Risk Assessment**
+   - High risk: Changes to critical components
+   - Medium risk: Changes to high-risk components
+   - Low risk: Changes to isolated components
+   - Document potential failure modes
+
+### Step 3: Change Report Creation
+
+Create detailed report with:
+
+1. **Summary**
+
+   - What is being changed
+   - Why it's being changed
+   - Expected outcome
+
+2. **Files to Modify**
+
+   - Complete list with paths
+   - Reason for each modification
+
+3. **Before/After Examples**
+
+   - Show exact code before change
+   - Show exact code after change
+   - Use code blocks with proper formatting
+   - Highlight key differences
+
+4. **Dependencies**
+
+   - List all files that import changed code
+   - List all UseCases that use changed code
+   - List all observers that depend on change
+   - List all API endpoints affected
+
+5. **Migrations**
+
+   - Database migrations needed
+   - Data migrations needed
+   - Migration dependencies
+
+6. **Testing Impact**
+
+   - Tests that need updating
+   - New tests needed
+   - Test coverage impact
+
+7. **Risk Assessment**
+   - Risk level (High/Medium/Low)
+   - Potential failure modes
+   - Rollback strategy
+   - Monitoring needed
+
+### Step 4: Present Report
+
+- Format report clearly
+- Use markdown for readability
+- Include code examples
+- Highlight risks prominently
+- Wait for user response
+
+### Step 5: Approval Process
+
+- User must explicitly approve
+- Acceptable responses: "yes", "proceed", "approve", "go ahead", "ok"
+- If user asks questions, answer and wait for approval
+- If user requests changes, create new report
+- If user says "no", do not proceed
+
+### Step 6: Apply Changes
+
+- Only after explicit approval
+- Make only approved changes
+- Follow code style rules
+- Maintain existing patterns
+- Add appropriate comments
+- Update related documentation if needed
+
+### Step 7: Verification
+
+- Verify changes match report
+- Check for syntax errors
+- Check for import errors
+- Verify no unintended changes
+
+--- END SPECIFICATION ---
