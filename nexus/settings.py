@@ -651,6 +651,10 @@ def get_datasource_id(project_uuid: str | None) -> str:
 DYNAMODB_REGION = env.str("DYNAMODB_REGION", default="us-east-1")
 DYNAMODB_MESSAGE_TABLE = env.str("DYNAMODB_MESSAGE_TABLE", default="NexusMessages")
 
+# SQS (conversation events for microservice consumer)
+CONVERSATION_EVENTS_SQS_QUEUE_URL = env.str("CONVERSATION_EVENTS_SQS_QUEUE_URL", default="")
+CONVERSATION_EVENTS_SQS_REGION = env.str("CONVERSATION_EVENTS_SQS_REGION", default="us-east-1")
+
 DEFAULT_FOUNDATION_MODELS = {
     "OpenAIBackend": OPENAI_AGENTS_FOUNDATION_MODEL,
     "BedrockBackend": AWS_BEDROCK_AGENTS_MODEL_ID[0],

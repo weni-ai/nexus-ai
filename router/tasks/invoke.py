@@ -7,11 +7,13 @@ import boto3
 import botocore
 import elasticapm
 import openai
+import pendulum
 import sentry_sdk
 from django.conf import settings
 
 from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
+from nexus.events import notify_async
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.dispatcher import dispatch
@@ -390,6 +392,7 @@ def start_inline_agents(
     task_manager = task_manager or get_task_manager()
 
     try:
+        incoming_created_at = None  # Set right before _invoke_backend (same point as InlineAgentMessage save)
         TypingUsecase().send_typing_message(
             contact_urn=message.get("contact_urn"),
             msg_external_id=message.get("msg_event", {}).get("msg_external_id", ""),
@@ -457,7 +460,8 @@ def start_inline_agents(
             agent_data=agent_cached,
         )
 
-        # Invoke backend with simplified parameters
+        # Invoke backend (incoming saved inside backend via save_inline_message_async)
+        incoming_created_at = pendulum.now().to_iso8601_string()
         backend = BackendsRegistry.get_backend(agents_backend)
         response = _invoke_backend(
             backend=backend,
@@ -478,6 +482,19 @@ def start_inline_agents(
             raise EmptyFinalResponseException("Final response is empty")
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
+
+        notify_async(
+            event="inline_message:received",
+            project_uuid=project_uuid,
+            contact_urn=message_obj.contact_urn,
+            channel_uuid=message_obj.channel_uuid,
+            contact_name=message_obj.contact_name or "",
+            preview=preview,
+            message_text=message.get("text"),
+            response_text=response or "",
+            incoming_created_at=incoming_created_at,
+            outgoing_created_at=pendulum.now().to_iso8601_string(),
+        )
 
         if preview:
             return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)
@@ -502,6 +519,18 @@ def start_inline_agents(
             contact_fields=message.get("contact_fields", {}),
             contact_name=message.get("contact_name", ""),
             channel_uuid=message.get("channel_uuid", ""),
+        )
+        notify_async(
+            event="inline_message:received",
+            project_uuid=message.get("project_uuid"),
+            contact_urn=message_obj.contact_urn,
+            channel_uuid=message_obj.channel_uuid,
+            contact_name=message_obj.contact_name or "",
+            preview=preview,
+            message_text=message.get("text"),
+            response_text=e.message,
+            incoming_created_at=incoming_created_at,
+            outgoing_created_at=pendulum.now().to_iso8601_string(),
         )
         if preview:
             return dispatch_preview(e.message, message_obj, broadcast, user_email, agents_backend, flows_user_email)
