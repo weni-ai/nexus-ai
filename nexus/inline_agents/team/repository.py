@@ -1,3 +1,5 @@
+import logging
+
 from django.utils.text import slugify
 
 from inline_agents.team.repository import TeamRepository
@@ -5,6 +7,8 @@ from nexus.inline_agents.models import IntegratedAgent as ORMIntegratedAgent
 from nexus.projects.models import Project
 
 from .exceptions import TeamDoesNotExist
+
+logger = logging.getLogger(__name__)
 
 
 #  Montar dict e retornar para o bedrock, pegar o integrated do projeto
@@ -15,6 +19,7 @@ class ORMTeamRepository(TeamRepository):
 
     def get_team(self, project_uuid: str) -> list[dict]:
         try:
+            logger.info(f"Fetching team for project {project_uuid}")
             orm_team = (
                 ORMIntegratedAgent.objects.filter(project__uuid=project_uuid)
                 .select_related("agent")
@@ -22,8 +27,13 @@ class ORMTeamRepository(TeamRepository):
             )
             agents = []
 
+            logger.info(f"Found {orm_team.count()} integrated agents for project {project_uuid}")
+
             for integrated_agent in orm_team:
                 agent = integrated_agent.agent
+                logger.info(
+                    f"Processing agent for team: {agent.slug} (uuid: {agent.uuid}, is_official: {agent.is_official})"
+                )
                 skills = []
 
                 skills = agent.current_version.skills or []
@@ -46,6 +56,7 @@ class ORMTeamRepository(TeamRepository):
                     "foundationModel": agent.current_foundation_model(self.agents_backend, self.project),
                     "agentCollaboration": "DISABLED",
                     "collaborator_configurations": agent.collaboration_instructions,
+                    "constants": integrated_agent.metadata.get("mcp_config", {}) if integrated_agent.metadata else {},
                 }
 
                 if self.agents_backend == "OpenAIBackend":
