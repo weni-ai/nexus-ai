@@ -118,6 +118,8 @@ class OpenAITeamAdapter(TeamAdapter):
         user_model_credentials: Dict[str, Any] = supervisor.get("user_model_credentials", {})
         max_tokens_collaborator: int = max_tokens.get("collaborator", 2048)
 
+        logger.info(f"Building agents for supervisor: {[a.get('agentName') for a in agents]}")
+
         for agent in agents:
             agent_instructions = cls.prepare_agent_instructions(
                 agent.get("instruction"),
@@ -597,17 +599,24 @@ class OpenAITeamAdapter(TeamAdapter):
         return errors
 
     @classmethod
-    def _prepare_agent_constants(cls, agent):
+    def _prepare_agent_constants(cls, agent, integrated_agent=None):
         """Extract constants from agent configuration."""
+        constants = {}
         if hasattr(agent, "constants") and agent.constants:
             constants = {k: v.get("value", "") if isinstance(v, dict) else v for k, v in agent.constants.items()}
-            logger.debug(
-                f"Loaded {len(constants)} constants for agent '{agent.slug}'"
-                f" - agent_slug: {agent.slug}, constants_count: {len(constants)},"
-                f" constants_keys: {list(constants.keys())}"
-            )
-            return constants
-        return {}
+
+        # Inject mcp_config into constants
+        if integrated_agent and integrated_agent.metadata:
+            mcp_config = integrated_agent.metadata.get("mcp_config", {})
+            if isinstance(mcp_config, dict):
+                constants.update(mcp_config)
+
+        logger.debug(
+            f"Loaded {len(constants)} constants for agent '{agent.slug}'"
+            f" - agent_slug: {agent.slug}, constants_count: {len(constants)},"
+            f" constants_keys: {list(constants.keys())}"
+        )
+        return constants
 
     @classmethod
     def _prepare_mcp_credentials(cls, agent, integrated_agent, credentials):
@@ -707,8 +716,9 @@ class OpenAITeamAdapter(TeamAdapter):
                 )
 
                 cls._validate_agent_tooling(function_name, payload, agent)
-                constants = cls._prepare_agent_constants(agent)
+                constants = cls._prepare_agent_constants(agent, integrated_agent)
                 mcp_credentials = cls._prepare_mcp_credentials(agent, integrated_agent, credentials)
+
             else:
                 logger.warning(
                     f"No agent found for tool '{function_name}' - proceeding without agent-specific configuration"
