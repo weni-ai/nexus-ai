@@ -197,6 +197,11 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                     event="cache_invalidation:team",
                     project_uuid=project_uuid,
                 )
+                # Fire cache invalidation for project data (human_support is in project cache)
+                notify_async(
+                    event="cache_invalidation:project",
+                    project=project,
+                )
 
                 # Only trigger add/rollback if human_support boolean changed
                 if old_human_support != team.human_support:
@@ -219,6 +224,11 @@ class ContentBasePersonalizationSerializer(serializers.ModelSerializer):
                 notify_async(
                     event="cache_invalidation:team",
                     project_uuid=project_uuid,
+                )
+                # Fire cache invalidation for project data (human_support is in project cache)
+                notify_async(
+                    event="cache_invalidation:project",
+                    project=project,
                 )
 
         # Handle agent updates
