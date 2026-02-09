@@ -44,6 +44,8 @@ def messages(request: Request, message: MessageHTTPBody):
             message.project_uuid,
             message.text,
             message.contact_urn,
+            f"Message received, from project_uuid: {message.project_uuid}, "
+            f"text: {message.text}, contact_urn: {message.contact_urn}",
         )
 
         if project.inline_agent_switch:
