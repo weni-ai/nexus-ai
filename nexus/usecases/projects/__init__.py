@@ -7,10 +7,15 @@ def __getattr__(name):
         from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 
         return ProjectsUseCase
+    if name == "ConversationsUsecase":
+        from nexus.usecases.projects.conversations import ConversationsUsecase
+
+        return ConversationsUsecase
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [
     "get_project_by_uuid",
     "ProjectsUseCase",
+    "ConversationsUsecase",
 ]
