@@ -258,7 +258,7 @@ class AgentGroup(models.Model):
 
 def agent_system_logo_upload_to(instance, filename):
     ext = filename.split(".")[-1]
-    return f"{instance.slug}.{ext}"
+    return f"agent_systems/logos/{instance.slug}.{ext}"
 
 
 class AgentSystem(models.Model):
