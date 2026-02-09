@@ -256,11 +256,17 @@ class AgentGroup(models.Model):
         self.mcps.set(group_mcps)
 
 
+def agent_system_logo_upload_to(instance, filename):
+    ext = filename.split(".")[-1]
+    return f"{instance.slug}.{ext}"
+
+
 class AgentSystem(models.Model):
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
     logo = models.FileField(
         storage=AgentSystemLogoStorage(),
+        upload_to=agent_system_logo_upload_to,
         null=True,
         blank=True,
         validators=[FileExtensionValidator(allowed_extensions=["png", "svg"])],
