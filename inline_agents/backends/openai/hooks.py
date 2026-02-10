@@ -641,7 +641,15 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
             self.hooks_state.advance_tool_info_index(tool.name)
 
     async def _send_tool_result_to_data_lake(
-        self, context_data, project_uuid, contact_urn, agent, tool, parameters, result_value, function_name
+        self,
+        context_data,
+        project_uuid,
+        contact_urn,
+        agent,
+        tool,
+        parameters,
+        result_value,
+        function_name,
     ):
         """Send a single tool_result event to data lake. function_name is None for knowledge base."""
         try:
