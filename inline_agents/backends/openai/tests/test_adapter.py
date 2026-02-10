@@ -376,6 +376,23 @@ class TestOpenAIDataLakeEventAdapterDataLakeEvents(TestCase):
     def setUp(self):
         self.adapter = OpenAIDataLakeEventAdapter()
         self.mock_service = MockDataLakeEventService()
+
+        def fake_send_validated_event(
+            event_data,
+            project_uuid,
+            contact_urn,
+            use_delay=True,
+            channel_uuid=None,
+            agent_identifier=None,
+            conversation=None,
+        ):
+            if use_delay:
+                self.mock_service.send_data_lake_event_task.delay(event_data)
+            else:
+                self.mock_service.send_data_lake_event_task(event_data)
+            return event_data
+
+        self.mock_service.send_validated_event = fake_send_validated_event
         self.adapter._event_service = self.mock_service
 
     def test_tool_result_sends_one_event_with_key_tool_result(self):
