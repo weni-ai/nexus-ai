@@ -116,7 +116,6 @@ class ConversationsProxyView(APIView):
         if not project_uuid:
             return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get all query parameters as a dict (convert list values to single values)
         query_params = {
             key: value[0] if isinstance(value, list) and len(value) == 1 else value
             for key, value in request.query_params.items()
@@ -259,5 +258,121 @@ class ConversationsProxyView(APIView):
         """Handle all other errors (connection, timeout, validation, etc.) - return generic error."""
         error_message = str(e)
         logger.error(f"Error fetching conversations for project {project_uuid}: {error_message}", exc_info=True)
+        self.usecase.send_to_sentry(project_uuid, None, error_message, None, exception=e)
+        return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ConversationDetailProxyView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usecase = ConversationsUsecase()
+
+    def get(self, request, *args, **kwargs):
+        """
+        Proxy endpoint to fetch conversation detail from Conversations service.
+        """
+        project_uuid = kwargs.get("project_uuid")
+        conversation_uuid = kwargs.get("conversation_uuid")
+
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not conversation_uuid:
+            return Response({"error": "conversation_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Call the conversations API to get conversation detail
+            response = self._call_conversations_api(project_uuid, conversation_uuid)
+
+            # Transform response to match SupervisorPublicConversationsView format
+            transformed_response = self._transform_response(response)
+
+            return Response(transformed_response, status=status.HTTP_200_OK)
+
+        except requests.exceptions.HTTPError as e:
+            return self._handle_http_error(e, project_uuid, conversation_uuid)
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            requests.exceptions.RequestException,
+            Exception,
+        ) as e:
+            return self._handle_generic_error(e, project_uuid, conversation_uuid)
+
+    def _call_conversations_api(self, project_uuid, conversation_uuid):
+        """Call the conversations API to get conversation detail."""
+        endpoint = f"/api/v1/projects/{project_uuid}/conversations/{conversation_uuid}/"
+        base_url = settings.CONVERSATIONS_REST_ENDPOINT
+        token = settings.CONVERSATIONS_TOKEN
+
+        url = base_url + endpoint
+        headers = {
+            "Content-Type": "application/json; charset: utf-8",
+            "Authorization": f"Bearer {token}",
+        }
+
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def _transform_response(self, response_data):
+        """Transform response from conversations service to SupervisorPublicConversationsView format."""
+        # Extract topic from classification if it exists
+        topic = None
+        if response_data.get("classification") and isinstance(response_data["classification"], dict):
+            topic = response_data["classification"].get("topic")
+
+        # Transform the response
+        transformed = {
+            "conversation_uuid": str(response_data.get("uuid")),
+            "created_at": response_data.get("created_at"),
+            "ended_at": response_data.get("end_date"),
+            "status": response_data.get("status"),
+            "topic": topic,
+            "channel_uuid": str(response_data.get("channel_uuid")) if response_data.get("channel_uuid") else None,
+            "contact_urn": response_data.get("contact_urn"),
+            "messages": response_data.get("messages", []),
+        }
+
+        return transformed
+
+    def _handle_http_error(self, e, project_uuid, conversation_uuid):
+        status_code = e.response.status_code if e.response else 500
+        error_message, error_details = self.usecase.extract_error_message(e.response)
+
+        if status_code != 404:
+            self.usecase.send_to_sentry(project_uuid, status_code, error_message, error_details, exception=e)
+
+        if status_code == 400:
+            return Response({"error": error_message or "Bad request"}, status=status.HTTP_400_BAD_REQUEST)
+        elif status_code == 404:
+            return Response(
+                {"error": f"Conversation {conversation_uuid} not found for project {project_uuid}"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        else:
+            logger.error(
+                f"Error from Conversations service for project {project_uuid}\
+                    , conversation {conversation_uuid}: {error_message}",
+                extra={
+                    "project_uuid": project_uuid,
+                    "conversation_uuid": conversation_uuid,
+                    "status_code": status_code,
+                    "error_message": error_message,
+                    "error_details": error_details,
+                },
+                exc_info=True,
+            )
+            return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _handle_generic_error(self, e, project_uuid, conversation_uuid):
+        """Handle all other errors (connection, timeout, validation, etc.) - return generic error."""
+        error_message = str(e)
+        logger.error(
+            f"Error fetching conversation {conversation_uuid} for project {project_uuid}: {error_message}",
+            exc_info=True,
+        )
         self.usecase.send_to_sentry(project_uuid, None, error_message, None, exception=e)
         return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
