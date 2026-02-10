@@ -3,7 +3,8 @@ from typing import Optional
 from django.test import TestCase
 from pydantic import BaseModel, ValidationError
 
-from inline_agents.backends.openai.adapter import OpenAITeamAdapter
+from inline_agents.backends.openai.adapter import OpenAIDataLakeEventAdapter, OpenAITeamAdapter
+from inline_agents.data_lake.mock_service import MockDataLakeEventService
 
 
 class TestCreateFunctionArgsClass(TestCase):
@@ -367,3 +368,53 @@ class TestAllOptionalParamsNone(TestCase):
         self.assertIsNone(agent_data.get("name"))
         self.assertIsNone(formatter_agent_configurations.get("formatter_foundation_model"))
         self.assertEqual("\n".join(instructions) if instructions else "", "")
+
+
+class TestOpenAIDataLakeEventAdapterDataLakeEvents(TestCase):
+    """Verify data lake event behavior: one tool_result event per tool, sent async."""
+
+    def setUp(self):
+        self.adapter = OpenAIDataLakeEventAdapter()
+        self.mock_service = MockDataLakeEventService()
+        self.adapter._event_service = self.mock_service
+
+    def test_tool_result_sends_one_event_with_key_tool_result(self):
+        """to_data_lake_event with tool_result_data sends exactly one event with key tool_result."""
+        self.mock_service.clear_events()
+        self.adapter.to_data_lake_event(
+            project_uuid="proj-123",
+            contact_urn="urn:test",
+            tool_result_data={
+                "tool_name": "my_tool",
+                "result": {"ok": True},
+                "parameters": [],
+                "function_name": "my_func",
+            },
+            agent_data={"agent_name": "test_agent"},
+            foundation_model="gpt-4",
+            backend="openai",
+        )
+        tool_result_events = self.mock_service.get_events_by_key("tool_result")
+        self.assertEqual(len(tool_result_events), 1)
+        self.assertEqual(tool_result_events[0]["value"], "my_tool")
+        self.assertIn("tool_result", tool_result_events[0].get("metadata", {}))
+
+    def test_tool_result_sent_async_via_delay(self):
+        """Tool result events use use_delay=True and appear in sent_events_async (no blocking)."""
+        self.mock_service.clear_events()
+        self.adapter.to_data_lake_event(
+            project_uuid="proj-456",
+            contact_urn="urn:async",
+            tool_result_data={
+                "tool_name": "async_tool",
+                "result": "done",
+                "parameters": [],
+                "function_name": None,
+            },
+            agent_data={"agent_name": "agent"},
+            foundation_model="gpt-4",
+            backend="openai",
+        )
+        self.assertEqual(len(self.mock_service.sent_events_async), 1)
+        self.assertEqual(self.mock_service.sent_events_async[0]["key"], "tool_result")
+        self.assertEqual(len(self.mock_service.sent_events_sync), 0)
