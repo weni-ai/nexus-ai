@@ -192,18 +192,33 @@ class ConversationsProxyView(APIView):
             # Build absolute URI using the current request
             nexus_url = request.build_absolute_uri(nexus_path)
 
+            # Always force HTTPS scheme
+            scheme = "https"
+
             # Add query parameters if they exist
+            parsed_nexus = urlparse(nexus_url)
             if query_params:
-                parsed_nexus = urlparse(nexus_url)
                 # urlencode with doseq=True handles lists correctly
                 query_params_encoded = urlencode(query_params, doseq=True)
                 nexus_url = urlunparse(
                     (
-                        parsed_nexus.scheme,
+                        scheme,
                         parsed_nexus.netloc,
                         parsed_nexus.path,
                         parsed_nexus.params,
                         query_params_encoded,
+                        parsed_nexus.fragment,
+                    )
+                )
+            else:
+                # Update scheme even if no query params
+                nexus_url = urlunparse(
+                    (
+                        scheme,
+                        parsed_nexus.netloc,
+                        parsed_nexus.path,
+                        parsed_nexus.params,
+                        parsed_nexus.query,
                         parsed_nexus.fragment,
                     )
                 )
