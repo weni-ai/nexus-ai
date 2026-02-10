@@ -202,6 +202,7 @@ class MessagePreviewView(APIView):
 
             data = request.data
             language = data.get("language", "en")
+            supervisor_agent_uuid = data.get("manager_agent_uuid")
             message = UserMessage(
                 project_uuid=project_uuid,
                 text=data.get("text"),
@@ -211,13 +212,24 @@ class MessagePreviewView(APIView):
             )
             if project.inline_agent_switch:
                 logger.info("Starting Inline Agent")
+                task_kwargs = {
+                    "message": message.dict(),
+                    "preview": True,
+                    "user_email": request.user.email,
+                    "language": language,
+                }
+                if supervisor_agent_uuid:
+                    try:
+                        # validating if supervisor_agent_uuid is a ID (identifier of deprecated manager)
+                        # # or UUID (identifier of new manager)
+                        # this code adds temporary support for deprecated manager agent that
+                        # will be removed in the next release
+                        int(supervisor_agent_uuid)
+                    except ValueError:
+                        task_kwargs["supervisor_agent_uuid"] = supervisor_agent_uuid
+
                 start_inline_agents.apply_async(
-                    kwargs={
-                        "message": message.dict(),
-                        "preview": True,
-                        "user_email": request.user.email,
-                        "language": language,
-                    },
+                    kwargs=task_kwargs,
                     queue="celery",
                 )
                 return Response(data={"type": "preview", "message": "Processing started", "fonts": []})
