@@ -191,6 +191,7 @@ class ProjectsUseCase:
         project.conversation_turns_to_include = conversation_turns_to_include
         project.exclude_previous_thinking_steps = exclude_previous_thinking_steps
         project.save()
+        notify_async(event="cache_invalidation:project", project=project)
         project.refresh_from_db()
         return {
             "use_prompt_creation_configurations": project.use_prompt_creation_configurations,
