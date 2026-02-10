@@ -1,12 +1,15 @@
 import logging
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import requests
+from django.conf import settings
 from rest_framework import serializers, status, views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from nexus.projects.api.permissions import ProjectPermission
+from nexus.projects.api.serializers import ConversationSerializer
 from nexus.usecases.projects.conversations import ConversationsUsecase
 from nexus.usecases.projects.dto import UpdateProjectDTO
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -106,51 +109,45 @@ class ConversationsProxyView(APIView):
     def get(self, request, *args, **kwargs):
         """
         Proxy endpoint to fetch conversations from Conversations service.
-
-        Query Parameters (all optional):
-        - start_date: ISO Date string (>=)
-        - end_date: ISO Date string (<=)
-        - status: Integer mapped to resolution
-        - contact_urn: String (e.g., phone number)
-        - include_messages: Boolean, true returns message history
-        - page: Page number for pagination
-        - page_size: Number of results per page
-        - limit: Limit number of results (LimitOffsetPagination)
-        - offset: Offset for results (LimitOffsetPagination)
-
-        Returns paginated response with format:
-        {
-            "count": int,
-            "next": str or null,
-            "previous": str or null,
-            "results": [...]
-        }
+        All query parameters are forwarded directly to the Conversations service.
         """
         project_uuid = kwargs.get("project_uuid")
 
         if not project_uuid:
             return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        validation_error = self._validate_query_params(request)
-        if validation_error:
-            return validation_error
-
-        query_params = self._extract_query_params(request)
+        # Get all query parameters as a dict (convert list values to single values)
+        query_params = {
+            key: value[0] if isinstance(value, list) and len(value) == 1 else value
+            for key, value in request.query_params.items()
+        }
 
         try:
-            conversations = self.usecase.get_conversations(
-                project_uuid=project_uuid,
-                start_date=query_params.get("start_date"),
-                end_date=query_params.get("end_date"),
-                status=query_params.get("status"),
-                contact_urn=query_params.get("contact_urn"),
-                include_messages=query_params.get("include_messages"),
-                page=query_params.get("page"),
-                page_size=query_params.get("page_size"),
-                limit=query_params.get("limit"),
-                offset=query_params.get("offset"),
-            )
-            return Response(conversations, status=status.HTTP_200_OK)
+            # Call the conversations API directly with all params
+            response = self._call_conversations_api(project_uuid, query_params)
+
+            # Validate and return response using usecase logic
+            if isinstance(response, dict) and "results" in response:
+                serializer = ConversationSerializer(data=response["results"], many=True)
+                serializer.is_valid(raise_exception=True)
+
+                # Rewrite pagination URLs to point to nexus instead of conversations service
+                next_url = self._rewrite_pagination_url(response.get("next"), request, project_uuid)
+                previous_url = self._rewrite_pagination_url(response.get("previous"), request, project_uuid)
+
+                return Response(
+                    {
+                        "count": response.get("count"),
+                        "next": next_url,
+                        "previous": previous_url,
+                        "results": serializer.data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            else:
+                serializer = ConversationSerializer(data=response, many=True)
+                serializer.is_valid(raise_exception=True)
+                return Response(serializer.data, status=status.HTTP_200_OK)
 
         except requests.exceptions.HTTPError as e:
             return self._handle_http_error(e, project_uuid)
@@ -163,60 +160,59 @@ class ConversationsProxyView(APIView):
         ) as e:
             return self._handle_generic_error(e, project_uuid)
 
-    def _validate_query_params(self, request):
-        """Validate and convert query parameters."""
-        include_messages = request.query_params.get("include_messages")
-        status_param = request.query_params.get("status")
+    def _call_conversations_api(self, project_uuid, query_params):
+        """Call the conversations API with all query params."""
+        endpoint = f"/api/v1/projects/{project_uuid}/conversations/"
+        base_url = settings.CONVERSATIONS_REST_ENDPOINT
+        token = settings.CONVERSATIONS_TOKEN
 
-        if include_messages is not None:
-            if include_messages.lower() not in ("true", "false"):
-                return Response(
-                    {"error": "include_messages must be 'true' or 'false'"}, status=status.HTTP_400_BAD_REQUEST
-                )
-
-        if status_param is not None:
-            try:
-                int(status_param)
-            except ValueError:
-                return Response({"error": "status must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
-
-        return None
-
-    def _extract_query_params(self, request):
-        """Extract and convert query parameters."""
-        include_messages = request.query_params.get("include_messages")
-        status_param = request.query_params.get("status")
-
-        if include_messages is not None:
-            include_messages = include_messages.lower() == "true"
-
-        if status_param is not None:
-            status_param = int(status_param)
-
-        # Extract pagination parameters
-        page = request.query_params.get("page")
-        page_size = request.query_params.get("page_size")
-        limit = request.query_params.get("limit")
-        offset = request.query_params.get("offset")
-
-        params = {
-            "start_date": request.query_params.get("start_date"),
-            "end_date": request.query_params.get("end_date"),
-            "status": status_param,
-            "contact_urn": request.query_params.get("contact_urn"),
-            "include_messages": include_messages,
+        url = base_url + endpoint
+        headers = {
+            "Content-Type": "application/json; charset: utf-8",
+            "Authorization": f"Bearer {token}",
         }
 
-        if page is not None:
-            params["page"] = page
-        if page_size is not None:
-            params["page_size"] = page_size
-        if limit is not None:
-            params["limit"] = limit
-        if offset is not None:
-            params["offset"] = offset
+        response = requests.get(url, headers=headers, params=query_params)
+        response.raise_for_status()
+        return response.json()
 
-        return params
+    def _rewrite_pagination_url(self, url, request, project_uuid):
+        """Rewrite pagination URL from conversations service to nexus proxy."""
+        if not url:
+            return None
+
+        try:
+            # Parse the URL from conversations service
+            parsed = urlparse(url)
+            query_params = parse_qs(parsed.query, keep_blank_values=True)
+
+            # Build the nexus URL path
+            nexus_path = f"/api/v2/{project_uuid}/conversations"
+
+            # Build absolute URI using the current request
+            nexus_url = request.build_absolute_uri(nexus_path)
+
+            # Add query parameters if they exist
+            if query_params:
+                parsed_nexus = urlparse(nexus_url)
+                # urlencode with doseq=True handles lists correctly
+                query_params_encoded = urlencode(query_params, doseq=True)
+                nexus_url = urlunparse(
+                    (
+                        parsed_nexus.scheme,
+                        parsed_nexus.netloc,
+                        parsed_nexus.path,
+                        parsed_nexus.params,
+                        query_params_encoded,
+                        parsed_nexus.fragment,
+                    )
+                )
+
+            return nexus_url
+        except Exception as e:
+            logger.warning(f"Error rewriting pagination URL: {e}", exc_info=True)
+            # Return None if there's an error, so pagination links are removed
+            return None
 
     def _handle_http_error(self, e, project_uuid):
         status_code = e.response.status_code if e.response else 500
