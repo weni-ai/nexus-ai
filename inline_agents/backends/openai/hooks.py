@@ -411,6 +411,14 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         project_uuid = context_data.project.get("uuid")
         tool_info = self.hooks_state.get_tool_info(tool.name)
         parameters = tool_info.get("parameters", [])
+        # If framework already called tool_started, index points at session_attributes (no
+        # "parameters"); params are in the previous entry. Use them so tool_result has params.
+        if not parameters and tool.name in self.hooks_state.tool_info:
+            executions = self.hooks_state.tool_info[tool.name]
+            idx = self.hooks_state.tool_info_index.get(tool.name, 0)
+            if idx > 0 and idx <= len(executions):
+                params_entry = executions[idx - 1]
+                parameters = params_entry.get("parameters", [])
         self.hooks_state.advance_tool_info_index(tool.name)
 
         logger.info(f"[HOOK] Resultado da ferramenta '{tool.name}' recebido {result}.")
@@ -750,6 +758,14 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
         project_uuid = context_data.project.get("uuid")
         tool_info = self.hooks_state.get_tool_info(tool.name)
         parameters = tool_info.get("parameters", [])
+        # If framework already called tool_started, index may point at session_attributes (no
+        # "parameters"); params are in the previous entry.
+        if not parameters and tool.name in self.hooks_state.tool_info:
+            executions = self.hooks_state.tool_info[tool.name]
+            idx = self.hooks_state.tool_info_index.get(tool.name, 0)
+            if idx > 0 and idx <= len(executions):
+                params_entry = executions[idx - 1]
+                parameters = params_entry.get("parameters", [])
         if tool.name == self.knowledge_base_tool or tool.name not in self.hooks_state.agents_names:
             self.hooks_state.advance_tool_info_index(tool.name)
 
