@@ -3,6 +3,7 @@ import json
 from django.core.management.base import BaseCommand
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Prefetch
+from django.utils import timezone
 
 from nexus.intelligences.models import SubTopics, Topics
 
@@ -46,6 +47,7 @@ class Command(BaseCommand):
                 "description": topic.description,
                 "created_at": topic.created_at.isoformat() if topic.created_at else None,
                 "project_uuid": str(topic.project.uuid) if topic.project else None,
+                "project_name": topic.project.name if topic.project else None,
             }
             topics_data.append(topic_dict)
 
@@ -60,18 +62,13 @@ class Command(BaseCommand):
                 }
                 subtopics_data.append(subtopic_dict)
 
-        # Estrutura final do JSON
         export_data = {
             "topics": topics_data,
             "subtopics": subtopics_data,
             "metadata": {
                 "total_topics": len(topics_data),
                 "total_subtopics": len(subtopics_data),
-                "exported_at": json.loads(
-                    json.dumps(topics_data[0]["created_at"] if topics_data else None, cls=DjangoJSONEncoder)
-                )
-                if topics_data
-                else None,
+                "exported_at": timezone.now().isoformat(),
             },
         }
 
