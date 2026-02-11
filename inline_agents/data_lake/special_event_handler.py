@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 import pendulum
@@ -6,6 +7,8 @@ from django.conf import settings
 
 from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.sqs_message_events import build_csat_event, build_custom_event, build_nps_event
+
+logger = logging.getLogger(__name__)
 
 
 class SpecialEventHandler:
@@ -20,20 +23,33 @@ class SpecialEventHandler:
         key = event_data.get("key")
         value = event_data.get("value")
 
+        logger.info(
+            "[SpecialEventHandler] Checking if event needs to be sent to SQS key=%s value=%s"
+            " project_uuid=%s contact_urn=%s",
+            key,
+            value,
+            project_uuid,
+            contact_urn,
+        )
+
         if not key or value is None:
+            logger.info("[SpecialEventHandler] Skipping SQS send: missing key or value")
             return
 
         try:
             event = None
             if key == "weni_csat":
+                logger.info("[SpecialEventHandler] Building CSAT event for SQS")
                 event = build_csat_event(
                     project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, value=str(value)
                 )
             elif key == "weni_nps":
+                logger.info("[SpecialEventHandler] Building NPS event for SQS")
                 event = build_nps_event(
                     project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, value=str(value)
                 )
             else:
+                logger.info("[SpecialEventHandler] Building Custom event for SQS")
                 event = build_custom_event(
                     project_uuid=project_uuid,
                     contact_urn=contact_urn,
@@ -44,8 +60,21 @@ class SpecialEventHandler:
 
             if event:
                 get_conversation_events_producer().send_event(event.to_dict())
+                logger.info(
+                    "[SpecialEventHandler] Successfully sent event to SQS event_key=%s event_type=%s",
+                    key,
+                    type(event).__name__,
+                )
+            else:
+                logger.warning("[SpecialEventHandler] Event object was not built")
 
         except Exception as e:
+            logger.error(
+                "[SpecialEventHandler] Error sending event to SQS error=%s key=%s",
+                str(e),
+                key,
+                exc_info=True,
+            )
             sentry_sdk.capture_exception(e)
 
     def process(
