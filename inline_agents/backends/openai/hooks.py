@@ -579,6 +579,10 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
         tool_call_data = {"tool_name": tool.name, "parameters": parameters}
 
         if tool.name == self.knowledge_base_tool:
+            logger.info(
+                "[HOOK] Knowledge base: searching (tool_started) tool_name=%s",
+                tool.name,
+            )
             self.data_lake_event_adapter.to_data_lake_event(
                 project_uuid=context_data.project.get("uuid"),
                 contact_urn=context_data.contact.get("urn"),
@@ -686,6 +690,10 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
 
     async def _on_tool_end_knowledge_base(self, context, agent, tool, result, context_data, project_uuid, parameters):
         """Handle on_tool_end for knowledge base tool."""
+        logger.info(
+            "[HOOK] Knowledge base: result received (on_tool_end) tool_name=%s",
+            tool.name,
+        )
         trace_data = {
             "eventTime": pendulum.now().to_iso8601_string(),
             "sessionId": context_data.session.get_session_id(),
