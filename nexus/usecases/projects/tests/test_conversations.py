@@ -63,6 +63,10 @@ class ConversationsUsecaseTestCase(TestCase):
             status=0,
             contact_urn="+558299999999",
             include_messages=True,
+            page=None,
+            page_size=None,
+            limit=None,
+            offset=None,
         )
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["contact_urn"], "+558299999999")
@@ -81,6 +85,10 @@ class ConversationsUsecaseTestCase(TestCase):
             status=None,
             contact_urn=None,
             include_messages=None,
+            page=None,
+            page_size=None,
+            limit=None,
+            offset=None,
         )
         self.assertEqual(result, [])
 
