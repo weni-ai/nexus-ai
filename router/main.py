@@ -40,12 +40,8 @@ def messages(request: Request, message: MessageHTTPBody):
     try:
         project = Project.objects.get(uuid=message.project_uuid)
         logger.info(
-            "Message received, project_uuid=%s text=%s contact_urn=%s",
-            message.project_uuid,
-            message.text,
-            message.contact_urn,
             f"Message received, from project_uuid: {message.project_uuid}, "
-            f"text: {message.text}, contact_urn: {message.contact_urn}",
+            f"text: {message.text}, contact_urn: {message.contact_urn}, channel_uuid= {message.channel_uuid}",
         )
 
         if project.inline_agent_switch:
