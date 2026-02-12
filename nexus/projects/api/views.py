@@ -282,11 +282,14 @@ class ConversationDetailProxyView(APIView):
         if not conversation_uuid:
             return Response({"error": "conversation_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            # Call the conversations API to get conversation detail
-            response = self._call_conversations_api(project_uuid, conversation_uuid)
+        query_params = {
+            key: value[0] if isinstance(value, list) and len(value) == 1 else value
+            for key, value in request.query_params.items()
+        }
 
-            # Transform response to match SupervisorPublicConversationsView format
+        try:
+            response = self._call_conversations_api(project_uuid, conversation_uuid, query_params)
+
             transformed_response = self._transform_response(response, request, project_uuid, conversation_uuid)
 
             return Response(transformed_response, status=status.HTTP_200_OK)
@@ -301,7 +304,7 @@ class ConversationDetailProxyView(APIView):
         ) as e:
             return self._handle_generic_error(e, project_uuid, conversation_uuid)
 
-    def _call_conversations_api(self, project_uuid, conversation_uuid):
+    def _call_conversations_api(self, project_uuid, conversation_uuid, query_params=None):
         """Call the conversations API to get conversation detail."""
         endpoint = f"/api/v1/projects/{project_uuid}/conversations/{conversation_uuid}/"
         base_url = settings.CONVERSATIONS_REST_ENDPOINT
@@ -313,22 +316,19 @@ class ConversationDetailProxyView(APIView):
             "Authorization": f"Bearer {token}",
         }
 
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, params=query_params or {})
         response.raise_for_status()
         return response.json()
 
     def _transform_response(self, response_data, request, project_uuid, conversation_uuid):
         """Transform response from conversations service to SupervisorPublicConversationsView format."""
-        # Extract topic from classification if it exists
         topic = None
         if response_data.get("classification") and isinstance(response_data["classification"], dict):
             topic = response_data["classification"].get("topic")
 
-        # Handle messages pagination
         messages_data = response_data.get("messages", {})
         messages = {}
         if isinstance(messages_data, dict) and "results" in messages_data:
-            # Rewrite pagination URLs for messages
             next_url = self._rewrite_messages_pagination_url(
                 messages_data.get("next"), request, project_uuid, conversation_uuid
             )
@@ -341,10 +341,8 @@ class ConversationDetailProxyView(APIView):
                 "results": messages_data.get("results", []),
             }
         else:
-            # Fallback if messages is not paginated
             messages = messages_data if messages_data else []
 
-        # Transform the response
         transformed = {
             "conversation_uuid": str(response_data.get("uuid")),
             "created_at": response_data.get("created_at"),
@@ -364,23 +362,17 @@ class ConversationDetailProxyView(APIView):
             return None
 
         try:
-            # Parse the URL from conversations service
             parsed = urlparse(url)
             query_params = parse_qs(parsed.query, keep_blank_values=True)
 
-            # Build the nexus URL path for conversation detail
             nexus_path = f"/api/v2/{project_uuid}/conversations/{conversation_uuid}"
 
-            # Build absolute URI using the current request
             nexus_url = request.build_absolute_uri(nexus_path)
 
-            # Always force HTTPS scheme
             scheme = "https"
 
-            # Add query parameters if they exist
             parsed_nexus = urlparse(nexus_url)
             if query_params:
-                # urlencode with doseq=True handles lists correctly
                 query_params_encoded = urlencode(query_params, doseq=True)
                 nexus_url = urlunparse(
                     (
@@ -393,7 +385,6 @@ class ConversationDetailProxyView(APIView):
                     )
                 )
             else:
-                # Update scheme even if no query params
                 nexus_url = urlunparse(
                     (
                         scheme,
@@ -408,7 +399,6 @@ class ConversationDetailProxyView(APIView):
             return nexus_url
         except Exception as e:
             logger.warning(f"Error rewriting messages pagination URL: {e}", exc_info=True)
-            # Return None if there's an error, so pagination links are removed
             return None
 
     def _handle_http_error(self, e, project_uuid, conversation_uuid):
