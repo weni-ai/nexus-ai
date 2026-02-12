@@ -183,8 +183,10 @@ class SupervisorPublicConversationsView(APIView):
             qs, start_dt, end_dt = self._apply_filters(qs, request)
 
             # Calculate summary stats before pagination and status filtering
+            status_summary = {str(key): 0 for key, _ in Conversation.RESOLUTION_CHOICES}
             status_counts = qs.values("resolution").annotate(count=Count("resolution"))
-            status_summary = {str(item["resolution"]): item["count"] for item in status_counts}
+            for item in status_counts:
+                status_summary[str(item["resolution"])] = item["count"]
 
             status_param = request.query_params.get("status")
             if status_param:
@@ -198,6 +200,8 @@ class SupervisorPublicConversationsView(APIView):
             total_pages = math.ceil(total_count / page_size) if page_size > 0 else 1
 
             page = int(request.query_params.get("page", 1))
+            if page < 1:
+                page = 1
             offset = (page - 1) * page_size
             results = []
 
