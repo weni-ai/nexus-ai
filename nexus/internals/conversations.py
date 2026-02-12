@@ -83,6 +83,7 @@ class ConversationsRESTClient(RestClient):
             self._get_url(endpoint),
             headers=self.headers,
             params=params if params else None,
+            timeout=45,
         )
         response.raise_for_status()
         return response.json()
