@@ -1590,7 +1590,7 @@ class AgentManagersView(APIView):
             if not current_manager.public:
                 data = {
                     "serverTime": str(pendulum.now()),
-                    "new": {"id": str(new_manager.uuid), "label": new_manager.name},
+                    "new": {"id": str(current_manager.uuid), "label": current_manager.name},
                     "currentManager": current_manager_id
                 }
                 return Response(data=data)
