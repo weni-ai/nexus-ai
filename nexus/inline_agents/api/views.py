@@ -1592,6 +1592,7 @@ class AgentManagersView(APIView):
                     "serverTime": str(pendulum.now()),
                     "new": {"id": str(new_manager.uuid), "label": new_manager.name},
                 }
+                return Response(data=data)
         else:
             current_manager = deprecated_manager_agent_obj
             current_manager_id = str(current_manager.id) if current_manager else None
