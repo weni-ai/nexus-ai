@@ -1435,6 +1435,11 @@ class AgentManagersView(APIView):
 
         if current_manager:
             current_manager_id = str(current_manager.uuid)
+            if not current_manager.public:
+                data = {
+                    "serverTime": str(pendulum.now()),
+                    "new": {"id": str(new_manager.uuid), "label": new_manager.name},
+                }
         else:
             current_manager = deprecated_manager_agent_obj
             current_manager_id = str(current_manager.id) if current_manager else None
