@@ -1439,6 +1439,7 @@ class AgentManagersView(APIView):
                 data = {
                     "serverTime": str(pendulum.now()),
                     "new": {"id": str(new_manager.uuid), "label": new_manager.name},
+                    "currentManager": current_manager_id
                 }
                 return Response(data=data)
         else:
