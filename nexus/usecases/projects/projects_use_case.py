@@ -5,6 +5,7 @@ import sentry_sdk
 from django.conf import settings
 
 from nexus.events import event_manager, notify_async
+from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.models import ContactField
 from nexus.intelligences.models import ContentBase, IntegratedIntelligence
 from nexus.projects.exceptions import ProjectDoesNotExist
@@ -118,6 +119,9 @@ class ProjectsUseCase:
             from nexus.usecases.template_type.template_type_usecase import TemplateTypeUseCase
 
             template_type = TemplateTypeUseCase().get_by_uuid(project_dto.template_type_uuid)
+
+        manager_agent = ManagerAgent.objects.filter(default=True, public=True).order_by("-created_on").first()
+
         project = Project.objects.create(
             uuid=project_dto.uuid,
             name=project_dto.name,
@@ -128,6 +132,7 @@ class ProjectsUseCase:
             brain_on=project_dto.brain_on,
             indexer_database=project_dto.indexer_database,
             agents_backend=backend,
+            manager_agent=manager_agent,
         )
 
         self.create_brain_project_base(project_dto=project_dto, user_email=user_email, project=project)
