@@ -224,17 +224,21 @@ class ResolutionRateAverageView(APIView):
         if project_rates:
             resolution_rate = sum(project_rates) / len(project_rates) / 100.0
             unresolved_rate = float(total_unresolved / total_conversations_all) if total_conversations_all > 0 else 0.0
+            has_chat_room_rate = float(total_has_chat / total_conversations_all) if total_conversations_all > 0 else 0.0
         else:
             resolution_rate = 0.0
             unresolved_rate = 0.0
+            has_chat_room_rate = 0.0
             total_conversations_all = 0
 
         response_data = {
             "resolution_rate": round(resolution_rate, 4),
             "unresolved_rate": round(unresolved_rate, 4),
+            "has_chat_room_rate": round(has_chat_room_rate, 4),
             "total_conversations": total_conversations_all,
             "resolved_conversations": total_resolved,
             "unresolved_conversations": total_unresolved,
+            "has_chat_room_conversations": total_has_chat,
             "breakdown": {
                 "resolved": total_resolved,
                 "unresolved": total_unresolved,
