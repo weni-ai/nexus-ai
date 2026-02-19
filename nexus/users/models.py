@@ -1,9 +1,12 @@
+import hashlib
+import secrets
 from typing import Optional
 
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
 from django.db import models
+from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
@@ -41,3 +44,39 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def is_staff(self):
         return self.is_superuser
+
+
+class UserApiToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="api_tokens")
+    name = models.CharField(max_length=255)
+    token_hash = models.CharField(max_length=128)
+    salt = models.CharField(max_length=64)
+    scope = models.CharField(max_length=64, default="global")
+    enabled = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "name")
+
+    def __str__(self):
+        return f"{self.user.email} - {self.name}"
+
+    @staticmethod
+    def hash_token(token: str, salt: str) -> str:
+        return hashlib.sha256(f"{salt}{token}".encode()).hexdigest()
+
+    def matches(self, token: str) -> bool:
+        if not self.enabled:
+            return False
+        if self.expires_at and self.expires_at <= timezone.now():
+            return False
+        return self.token_hash == self.hash_token(token, self.salt)
+
+    @staticmethod
+    def generate_token_pair() -> tuple[str, str, str]:
+        token = secrets.token_urlsafe(48)
+        salt = secrets.token_hex(16)
+        token_hash = UserApiToken.hash_token(token, salt)
+        return token, salt, token_hash
