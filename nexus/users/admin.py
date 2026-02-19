@@ -16,6 +16,7 @@ class UserApiTokenInline(admin.TabularInline):
 class UserAdmin(BaseUserAdmin):
     ordering = ["email"]
     list_display = ("email", "is_active", "is_superuser", "is_staff")
+    list_filter = ("is_superuser", "is_active", "groups")
     search_fields = ("email",)
     inlines = [UserApiTokenInline]
     actions = ["generate_global_token"]
