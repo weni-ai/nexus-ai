@@ -18,9 +18,16 @@ class UserGlobalTokenAuthentication(authentication.BaseAuthentication):
         except IndexError:
             return None
 
-        # Iterate over enabled tokens to find a match
-        # This is acceptable for low-volume global tokens
-        tokens = UserApiToken.objects.filter(enabled=True).select_related("user")
+        # To avoid timing attacks, the prefix should be constant length
+        prefix_length = 8
+        if len(raw_token) <= prefix_length:
+            return None
+
+        prefix = raw_token[:prefix_length]
+
+        # Use filter() to handle potential prefix collisions gracefully
+        tokens = UserApiToken.objects.select_related("user").filter(token_prefix=prefix, enabled=True)
+
         for token_obj in tokens:
             if token_obj.matches(raw_token):
                 if token_obj.expires_at and token_obj.expires_at <= timezone.now():

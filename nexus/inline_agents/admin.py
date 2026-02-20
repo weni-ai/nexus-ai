@@ -566,6 +566,20 @@ class ManagerAgentAdmin(admin.ModelAdmin):
                     "model_has_reasoning",
                     "reasoning_effort",
                     "reasoning_summary",
+                    "manager_extra_args",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Collaborators",
+            {
+                "fields": (
+                    "collaborators_foundation_model",
+                    "override_collaborators_foundation_model",
+                    "default_instructions_for_collaborators",
+                    "collaborator_extra_args",
+                    "append_manager_extra_args",
                 ),
                 "classes": ("collapse",),
             },
@@ -597,17 +611,6 @@ class ManagerAgentAdmin(admin.ModelAdmin):
                     "formatter_agent_reasoning_summary",
                     "formatter_agent_send_only_assistant_message",
                     "formatter_agent_tools_descriptions",
-                ),
-                "classes": ("collapse",),
-            },
-        ),
-        (
-            "Collaborators",
-            {
-                "fields": (
-                    "collaborators_foundation_model",
-                    "override_collaborators_foundation_model",
-                    "default_instructions_for_collaborators",
                 ),
                 "classes": ("collapse",),
             },
