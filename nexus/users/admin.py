@@ -1,3 +1,5 @@
+import secrets
+
 from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils import timezone
@@ -9,7 +11,7 @@ from .models import User, UserApiToken
 class UserApiTokenInline(admin.TabularInline):
     model = UserApiToken
     extra = 0
-    readonly_fields = ("token_hash", "salt", "created_at", "last_used_at")
+    readonly_fields = ("token_hash", "salt", "token_prefix", "created_at", "last_used_at")
 
 
 @admin.register(User)
@@ -31,14 +33,31 @@ class UserAdmin(BaseUserAdmin):
             return
 
         user = queryset.first()
-        token, salt, token_hash = UserApiToken.generate_token_pair()
         name = f"Global Token - {user.email} - {timezone.now().strftime('%Y-%m-%d %H:%M')}"
+
+        existing_token = UserApiToken.objects.filter(user=user, name=name).first()
+        if existing_token:
+            existing_token.enabled = False
+            # Rename to avoid unique constraint collision
+            suffix = f"_disabled_{secrets.token_hex(4)}"
+            max_len = 255 - len(suffix)
+            existing_token.name = existing_token.name[:max_len] + suffix
+            existing_token.save()
+
+            self.message_user(
+                request,
+                f"Previous token '{name}' has been disabled.",
+                level=messages.INFO,
+            )
+
+        token, salt, token_hash, token_prefix = UserApiToken.generate_token_pair()
 
         UserApiToken.objects.create(
             user=user,
             name=name,
             token_hash=token_hash,
             salt=salt,
+            token_prefix=token_prefix,
             scope="global",
         )
 
@@ -61,4 +80,4 @@ class UserAdmin(BaseUserAdmin):
 class UserApiTokenAdmin(admin.ModelAdmin):
     list_display = ("user", "name", "created_at", "last_used_at", "enabled")
     search_fields = ("user__email", "name")
-    readonly_fields = ("token_hash", "salt", "created_at", "last_used_at")
+    readonly_fields = ("token_hash", "salt", "token_prefix", "created_at", "last_used_at")

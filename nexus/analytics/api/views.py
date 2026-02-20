@@ -235,21 +235,15 @@ class ResolutionRateAverageView(APIView):
                 total_has_chat += ps["has_chat_cnt"]
                 total_conversations_all += ps["total_conversations"]
 
-        if project_rates:
-            global_resolution_rate = (
-                float(total_resolved / total_conversations_all * 100.0) if total_conversations_all > 0 else 0.0
-            )
-            global_unresolved_rate = (
-                float(total_unresolved / total_conversations_all * 100.0) if total_conversations_all > 0 else 0.0
-            )
-            global_has_chat_room_rate = (
-                float(total_has_chat / total_conversations_all * 100.0) if total_conversations_all > 0 else 0.0
-            )
-        else:
-            global_resolution_rate = 0.0
-            global_unresolved_rate = 0.0
-            global_has_chat_room_rate = 0.0
-            total_conversations_all = 0
+        global_resolution_rate = (
+            float(total_resolved / total_conversations_all * 100.0) if total_conversations_all > 0 else 0.0
+        )
+        global_unresolved_rate = (
+            float(total_unresolved / total_conversations_all * 100.0) if total_conversations_all > 0 else 0.0
+        )
+        global_has_chat_room_rate = (
+            float(total_has_chat / total_conversations_all * 100.0) if total_conversations_all > 0 else 0.0
+        )
 
         # Calculate percentages for breakdown
         breakdown_percentages = {}

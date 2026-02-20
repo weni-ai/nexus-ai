@@ -23,6 +23,9 @@ class AnalyticsSerializersTestCase(TestCase):
             "total_conversations": 100,
             "resolved_conversations": 75,
             "unresolved_conversations": 25,
+            "in_progress_conversations": 0,
+            "unclassified_conversations": 0,
+            "has_chat_room_conversations": 0,
             "breakdown": {
                 "resolved": 75,
                 "unresolved": 25,
@@ -74,6 +77,9 @@ class AnalyticsSerializersTestCase(TestCase):
             "total_conversations": 0,
             "resolved_conversations": 0,
             "unresolved_conversations": 0,
+            "in_progress_conversations": 0,
+            "unclassified_conversations": 0,
+            "has_chat_room_conversations": 0,
             "breakdown": {},
             "filters": {},
         }
