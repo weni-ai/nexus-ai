@@ -10,6 +10,8 @@ class ResolutionRateSerializer(serializers.Serializer):
     total_conversations = serializers.IntegerField()
     resolved_conversations = serializers.IntegerField()
     unresolved_conversations = serializers.IntegerField()
+    in_progress_conversations = serializers.IntegerField()
+    unclassified_conversations = serializers.IntegerField()
     has_chat_room_conversations = serializers.IntegerField()
     breakdown = serializers.DictField()
     filters = serializers.DictField()

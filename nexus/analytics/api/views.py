@@ -149,6 +149,20 @@ class ResolutionRateAverageView(APIView):
         """
         GET /api/analytics/resolution-rate/average/
 
+        Returns average resolution metrics across projects.
+
+        Response Format:
+        - resolution_rate: Average resolution rate across projects (weighted).
+        - unresolved_rate: Global percentage of unresolved conversations.
+        - has_chat_room_rate: Global percentage of conversations with human handoff.
+        - total_conversations: Total number of conversations considered.
+        - resolved_conversations: Total count of resolved conversations.
+        - unresolved_conversations: Total count of unresolved conversations.
+        - in_progress_conversations: Total count of conversations in progress.
+        - unclassified_conversations: Total count of unclassified conversations.
+        - has_chat_room_conversations: Total count of conversations with human handoff.
+        - breakdown: Dictionary containing PERCENTAGE distribution of statuses (e.g., {"resolved": 20.5, ...}).
+
         Query params:
         - project_uuid (optional): Filter by specific project UUID
         - start_date (optional, YYYY-MM-DD): Start date
@@ -231,6 +245,25 @@ class ResolutionRateAverageView(APIView):
             has_chat_room_rate = 0.0
             total_conversations_all = 0
 
+        # Calculate percentages for breakdown
+        breakdown_percentages = {}
+        if total_conversations_all > 0:
+            breakdown_percentages = {
+                "resolved": round(total_resolved / total_conversations_all * 100, 2),
+                "unresolved": round(total_unresolved / total_conversations_all * 100, 2),
+                "in_progress": round(total_in_progress / total_conversations_all * 100, 2),
+                "unclassified": round(total_unclassified / total_conversations_all * 100, 2),
+                "has_chat_room": round(total_has_chat / total_conversations_all * 100, 2),
+            }
+        else:
+            breakdown_percentages = {
+                "resolved": 0.0,
+                "unresolved": 0.0,
+                "in_progress": 0.0,
+                "unclassified": 0.0,
+                "has_chat_room": 0.0,
+            }
+
         response_data = {
             "resolution_rate": round(resolution_rate, 4),
             "unresolved_rate": round(unresolved_rate, 4),
@@ -238,14 +271,10 @@ class ResolutionRateAverageView(APIView):
             "total_conversations": total_conversations_all,
             "resolved_conversations": total_resolved,
             "unresolved_conversations": total_unresolved,
+            "in_progress_conversations": total_in_progress,
+            "unclassified_conversations": total_unclassified,
             "has_chat_room_conversations": total_has_chat,
-            "breakdown": {
-                "resolved": total_resolved,
-                "unresolved": total_unresolved,
-                "in_progress": total_in_progress,
-                "unclassified": total_unclassified,
-                "has_chat_room": total_has_chat,
-            },
+            "breakdown": breakdown_percentages,
             "filters": {
                 "start_date": str(start_date),
                 "end_date": str(end_date),
