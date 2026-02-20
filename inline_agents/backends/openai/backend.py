@@ -494,7 +494,12 @@ class OpenAIBackend(InlineAgentsBackend):
 
         if formatter_reasoning_effort:
             formatter_agent.model_settings = ModelSettings(
-                reasoning=Reasoning(effort=formatter_reasoning_effort, summary=formatter_reasoning_summary)
+                tool_choice="required",
+                parallel_tool_calls=False,
+                reasoning=Reasoning(
+                    effort=formatter_reasoning_effort,
+                    summary=formatter_reasoning_summary,
+                ),
             )
 
         return formatter_agent
