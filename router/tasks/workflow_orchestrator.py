@@ -20,6 +20,7 @@ import uuid as uuid_lib
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
+import pendulum
 import sentry_sdk
 from django.conf import settings
 
@@ -75,6 +76,7 @@ class WorkflowContext:
     broadcast: Optional[Dict] = None
     cached_data: Optional[CachedProjectData] = None
     flows_user_email: str = field(default_factory=lambda: os.environ.get("FLOW_USER_EMAIL", ""))
+    incoming_created_at: Optional[str] = None
 
 
 # =============================================================================
@@ -168,6 +170,19 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
     message_obj = _create_message_object(ctx.message)
     _finalize_workflow(ctx, status="blocked")
 
+    notify_async(
+        event="inline_message:received",
+        project_uuid=ctx.project_uuid,
+        contact_urn=ctx.contact_urn,
+        channel_uuid=message_obj.channel_uuid or ctx.message.get("channel_uuid"),
+        contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
+        preview=ctx.preview,
+        message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
+        response_text=error.message or "",
+        incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
+        outgoing_created_at=pendulum.now().to_iso8601_string(),
+    )
+
     if ctx.preview and ctx.broadcast:
         return dispatch_preview(
             error.message,
@@ -254,7 +269,8 @@ def _run_generation(ctx: WorkflowContext) -> str:
     # Create message object
     message_obj = _create_message_object(processed_message)
 
-    # Get backend and invoke
+    # Get backend and invoke (incoming message is saved inside backend via save_inline_message_async)
+    ctx.incoming_created_at = pendulum.now().to_iso8601_string()
     backend = BackendsRegistry.get_backend(ctx.agents_backend)
 
     response = _invoke_backend(
@@ -294,6 +310,19 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
 
     # Clear pending tasks (legacy compatibility)
     ctx.task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
+
+    notify_async(
+        event="inline_message:received",
+        project_uuid=ctx.project_uuid,
+        contact_urn=ctx.contact_urn,
+        channel_uuid=message_obj.channel_uuid or ctx.message.get("channel_uuid"),
+        contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
+        preview=ctx.preview,
+        message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
+        response_text=response or "",
+        incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
+        outgoing_created_at=pendulum.now().to_iso8601_string(),
+    )
 
     # Dispatch response
     if ctx.preview:
@@ -424,6 +453,8 @@ def inline_agent_workflow(
         return result
 
     except UnsafeMessageException as e:
+        # Mutually exclusive with success path above: observer fires in
+        # _handle_guardrails_block (not in _run_post_generation).
         return _handle_guardrails_block(ctx, e)
 
     except Exception as e:

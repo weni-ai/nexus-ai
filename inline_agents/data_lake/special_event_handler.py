@@ -1,7 +1,11 @@
 from typing import Optional
 
 import pendulum
+import sentry_sdk
 from django.conf import settings
+
+from router.services.sqs_producer import get_conversation_events_producer
+from router.tasks.sqs_message_events import build_csat_event, build_custom_event, build_nps_event
 
 
 class SpecialEventHandler:
@@ -10,6 +14,39 @@ class SpecialEventHandler:
     def __init__(self, agent_uuid: str, conversation_field: Optional[str] = None):
         self.agent_uuid = agent_uuid
         self.conversation_field = conversation_field
+
+    def _send_to_sqs(self, event_data: dict, project_uuid: str, contact_urn: str, channel_uuid: str) -> None:
+        """Send the special event to SQS for conversation-ms."""
+        key = event_data.get("key")
+        value = event_data.get("value")
+
+        if not key or value is None:
+            return
+
+        try:
+            event = None
+            if key == "weni_csat":
+                event = build_csat_event(
+                    project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, value=str(value)
+                )
+            elif key == "weni_nps":
+                event = build_nps_event(
+                    project_uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid, value=str(value)
+                )
+            else:
+                event = build_custom_event(
+                    project_uuid=project_uuid,
+                    contact_urn=contact_urn,
+                    channel_uuid=channel_uuid,
+                    key=key,
+                    value=str(value),
+                )
+
+            if event:
+                get_conversation_events_producer().send_event(event.to_dict())
+
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
 
     def process(
         self,
@@ -20,6 +57,9 @@ class SpecialEventHandler:
         conversation: Optional[object] = None,
     ) -> None:
         """Process the special event."""
+        # Send to SQS for conversation-ms
+        self._send_to_sqs(event_data, project_uuid, contact_urn, channel_uuid)
+
         event_data.setdefault("metadata", {})
         event_data["metadata"]["agent_uuid"] = self.agent_uuid
 
