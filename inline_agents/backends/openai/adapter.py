@@ -144,7 +144,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 foundation_model=agent.get("foundationModel"),
                 user_model_credentials=user_model_credentials,
                 hooks=hooks,
-                model_settings={"max_tokens": max_tokens_collaborator},
+                model_settings={"max_tokens": max_tokens_collaborator, "extra_args": {"drop_params": True}},
                 collaborator_configurations=supervisor.get("collaborator_configurations", {}),
             )
 

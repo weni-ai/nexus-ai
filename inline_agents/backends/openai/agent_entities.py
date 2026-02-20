@@ -83,6 +83,7 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
         model_settings_kwargs = {
             "max_tokens": max_tokens,
             "parallel_tool_calls": parallel_tool_calls,
+            "extra_args": {"drop_params": True},
         }
 
         if model_has_reasoning and reasoning_effort:
