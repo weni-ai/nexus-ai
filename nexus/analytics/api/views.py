@@ -149,6 +149,20 @@ class ResolutionRateAverageView(APIView):
         """
         GET /api/analytics/resolution-rate/average/
 
+        Returns average resolution metrics across projects.
+
+        Response Format:
+        - resolution_rate: Average resolution rate across projects (weighted).
+        - unresolved_rate: Global percentage of unresolved conversations.
+        - has_chat_room_rate: Global percentage of conversations with human handoff.
+        - total_conversations: Total number of conversations considered.
+        - resolved_conversations: Total count of resolved conversations.
+        - unresolved_conversations: Total count of unresolved conversations.
+        - in_progress_conversations: Total count of conversations in progress.
+        - unclassified_conversations: Total count of unclassified conversations.
+        - has_chat_room_conversations: Total count of conversations with human handoff.
+        - breakdown: Dictionary containing PERCENTAGE distribution of statuses (e.g., {"resolved": 20.5, ...}).
+
         Query params:
         - project_uuid (optional): Filter by specific project UUID
         - start_date (optional, YYYY-MM-DD): Start date
