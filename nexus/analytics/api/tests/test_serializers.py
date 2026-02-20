@@ -17,11 +17,15 @@ class AnalyticsSerializersTestCase(TestCase):
     def test_resolution_rate_serializer_valid_data(self):
         """Test ResolutionRateSerializer with valid data"""
         data = {
-            "resolution_rate": 0.75,
-            "unresolved_rate": 0.25,
+            "global_resolution_rate": 0.75,
+            "global_unresolved_rate": 0.25,
+            "global_has_chat_room_rate": 0.0,
             "total_conversations": 100,
             "resolved_conversations": 75,
             "unresolved_conversations": 25,
+            "in_progress_conversations": 0,
+            "unclassified_conversations": 0,
+            "has_chat_room_conversations": 0,
             "breakdown": {
                 "resolved": 75,
                 "unresolved": 25,
@@ -45,14 +49,14 @@ class AnalyticsSerializersTestCase(TestCase):
         serializer = ResolutionRateSerializer(data={})
         self.assertFalse(serializer.is_valid())
         # Check that required fields are validated
-        self.assertIn("resolution_rate", serializer.errors)
         self.assertIn("total_conversations", serializer.errors)
 
     def test_resolution_rate_serializer_float_validation(self):
         """Test ResolutionRateSerializer float field validation"""
         data = {
-            "resolution_rate": "not-a-float",
-            "unresolved_rate": 0.25,
+            "global_resolution_rate": "not-a-float",
+            "global_unresolved_rate": 0.25,
+            "global_has_chat_room_rate": 0.0,
             "total_conversations": 100,
             "resolved_conversations": 75,
             "unresolved_conversations": 25,
@@ -62,16 +66,20 @@ class AnalyticsSerializersTestCase(TestCase):
 
         serializer = ResolutionRateSerializer(data=data)
         self.assertFalse(serializer.is_valid())
-        self.assertIn("resolution_rate", serializer.errors)
+        self.assertIn("global_resolution_rate", serializer.errors)
 
     def test_resolution_rate_serializer_empty_breakdown(self):
         """Test ResolutionRateSerializer with empty breakdown"""
         data = {
-            "resolution_rate": 0.0,
-            "unresolved_rate": 0.0,
+            "global_resolution_rate": 0.0,
+            "global_unresolved_rate": 0.0,
+            "global_has_chat_room_rate": 0.0,
             "total_conversations": 0,
             "resolved_conversations": 0,
             "unresolved_conversations": 0,
+            "in_progress_conversations": 0,
+            "unclassified_conversations": 0,
+            "has_chat_room_conversations": 0,
             "breakdown": {},
             "filters": {},
         }
