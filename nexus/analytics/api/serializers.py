@@ -4,9 +4,9 @@ from rest_framework import serializers
 class ResolutionRateSerializer(serializers.Serializer):
     """Serializer for average resolution rate endpoint"""
 
-    resolution_rate = serializers.FloatField()
-    unresolved_rate = serializers.FloatField()
-    has_chat_room_rate = serializers.FloatField()
+    global_resolution_rate = serializers.FloatField()
+    global_unresolved_rate = serializers.FloatField()
+    global_has_chat_room_rate = serializers.FloatField()
     total_conversations = serializers.IntegerField()
     resolved_conversations = serializers.IntegerField()
     unresolved_conversations = serializers.IntegerField()
