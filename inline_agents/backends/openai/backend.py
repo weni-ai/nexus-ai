@@ -489,16 +489,13 @@ class OpenAIBackend(InlineAgentsBackend):
             tools=tools,
             hooks=supervisor_hooks,
             tool_use_behavior=custom_tool_handler,
-            model_settings=ModelSettings(
-                tool_choice="required", parallel_tool_calls=False, extra_args={"drop_params": True}
-            ),
+            model_settings=ModelSettings(tool_choice="required", parallel_tool_calls=False),
         )
 
         if formatter_reasoning_effort:
             formatter_agent.model_settings = ModelSettings(
                 tool_choice="required",
                 parallel_tool_calls=False,
-                extra_args={"drop_params": True},
                 reasoning=Reasoning(
                     effort=formatter_reasoning_effort,
                     summary=formatter_reasoning_summary,

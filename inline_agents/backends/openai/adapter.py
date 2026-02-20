@@ -125,6 +125,12 @@ class OpenAITeamAdapter(TeamAdapter):
 
         if append_manager_extra_args:
             manager_extra_args = supervisor.get("model_settings", {}).get("manager_extra_args", {})
+
+            if not isinstance(collaborator_extra_args, dict):
+                collaborator_extra_args = {}
+            if not isinstance(manager_extra_args, dict):
+                manager_extra_args = {}
+
             collaborator_extra_args = {**collaborator_extra_args, **manager_extra_args}
 
         for agent in agents:
