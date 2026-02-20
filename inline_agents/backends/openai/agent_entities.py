@@ -17,6 +17,10 @@ class AgentModel:
             kwargs = {
                 "model": cleaned_model,
             }
+
+            if "vertex" in model:
+                return LitellmModel(**kwargs)
+
             if user_model_credentials.get("api_key"):
                 kwargs["api_key"] = user_model_credentials.get("api_key")
             if user_model_credentials.get("api_base"):
@@ -75,6 +79,7 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
         reasoning_effort: str = "",
         reasoning_summary: str = "",
         parallel_tool_calls: bool = False,
+        extra_args: dict | None = None,
     ):
         tools.extend(self.function_tools())
 
@@ -83,7 +88,7 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
         model_settings_kwargs = {
             "max_tokens": max_tokens,
             "parallel_tool_calls": parallel_tool_calls,
-            "extra_args": {"drop_params": True},
+            "extra_args": extra_args,
         }
 
         if model_has_reasoning and reasoning_effort:

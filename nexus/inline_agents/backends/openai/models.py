@@ -114,5 +114,12 @@ class ManagerAgent(models.Model):
     override_collaborators_foundation_model = models.BooleanField(default=False)
     default_instructions_for_collaborators = models.TextField(null=True, blank=True)
 
+    # model specific params
+    manager_extra_args = models.JSONField(null=True, blank=True)
+    collaborator_extra_args = models.JSONField(default=dict, blank=True)
+    append_manager_extra_args = models.BooleanField(
+        default=True, help_text="If True, the manager extra args will be appended to the collaborator extra args"
+    )
+
     def __str__(self):
         return self.name
