@@ -12,6 +12,7 @@ from nexus.authentication.authentication import ExternalTokenAuthentication
 from nexus.intelligences.models import Conversation
 from nexus.orgs import permissions as org_permissions
 from nexus.projects.models import Project
+from nexus.users.api.authentication import UserGlobalTokenAuthentication
 
 from .serializers import (
     IndividualResolutionRateSerializer,
@@ -80,8 +81,65 @@ def validate_and_parse_dates(start_date_str, end_date_str):
     return start_date, end_date, None
 
 
+def get_valid_analytics_params(request):
+    """
+    Validates common analytics parameters from request.
+    Returns (params, error_response).
+    params is a dict with validated values.
+    error_response is a Response object if validation fails, else None.
+    """
+    start_date_str = request.query_params.get("start_date")
+    end_date_str = request.query_params.get("end_date")
+    motor = request.query_params.get("motor")
+    min_conversations_str = request.query_params.get("min_conversations")
+    project_uuid = request.query_params.get("project_uuid")
+
+    # Validate and parse dates
+    start_date, end_date, error_response = validate_and_parse_dates(start_date_str, end_date_str)
+    if error_response:
+        return None, error_response
+
+    # Validate motor
+    if motor and motor not in MOTOR_BACKEND_MAP:
+        return None, Response(
+            {"error": f"Invalid motor value. Must be one of: {', '.join(MOTOR_BACKEND_MAP.keys())}"},
+            status=400,
+        )
+
+    # Validate min_conversations
+    min_conversations = None
+    if min_conversations_str:
+        try:
+            min_conversations = int(min_conversations_str)
+            if min_conversations < 0:
+                return None, Response(
+                    {"error": "min_conversations must be a non-negative integer"},
+                    status=400,
+                )
+        except ValueError:
+            return None, Response({"error": "min_conversations must be a valid integer"}, status=400)
+
+    # Validate project_uuid
+    if project_uuid:
+        try:
+            UUID(project_uuid)
+        except (ValueError, TypeError):
+            return None, Response(
+                {"error": "project_uuid must be a valid UUID format"},
+                status=400,
+            )
+
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "motor": motor,
+        "min_conversations": min_conversations,
+        "project_uuid": project_uuid,
+    }, None
+
+
 class ResolutionRateAverageView(APIView):
-    authentication_classes = [ExternalTokenAuthentication, OIDCAuthentication]
+    authentication_classes = [UserGlobalTokenAuthentication, ExternalTokenAuthentication, OIDCAuthentication]
     permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
@@ -91,6 +149,20 @@ class ResolutionRateAverageView(APIView):
         """
         GET /api/analytics/resolution-rate/average/
 
+        Returns average resolution metrics across projects.
+
+        Response Format:
+        - resolution_rate: Average resolution rate across projects (weighted).
+        - unresolved_rate: Global percentage of unresolved conversations.
+        - has_chat_room_rate: Global percentage of conversations with human handoff.
+        - total_conversations: Total number of conversations considered.
+        - resolved_conversations: Total count of resolved conversations.
+        - unresolved_conversations: Total count of unresolved conversations.
+        - in_progress_conversations: Total count of conversations in progress.
+        - unclassified_conversations: Total count of unclassified conversations.
+        - has_chat_room_conversations: Total count of conversations with human handoff.
+        - breakdown: Dictionary containing PERCENTAGE distribution of statuses (e.g., {"resolved": 20.5, ...}).
+
         Query params:
         - project_uuid (optional): Filter by specific project UUID
         - start_date (optional, YYYY-MM-DD): Start date
@@ -98,46 +170,15 @@ class ResolutionRateAverageView(APIView):
         - motor (optional, "AB 2" | "AB 2.5"): Filter by specific motor
         - min_conversations (optional, int): Minimum conversations to consider project
         """
-        start_date_str = request.query_params.get("start_date")
-        end_date_str = request.query_params.get("end_date")
-        motor = request.query_params.get("motor")
-        min_conversations_str = request.query_params.get("min_conversations")
-        project_uuid = request.query_params.get("project_uuid")
-
-        # Validate and parse dates
-        start_date, end_date, error_response = validate_and_parse_dates(start_date_str, end_date_str)
+        params, error_response = get_valid_analytics_params(request)
         if error_response:
             return error_response
 
-        # Validate project_uuid if provided
-        if project_uuid:
-            try:
-                UUID(project_uuid)
-            except (ValueError, TypeError):
-                return Response(
-                    {"error": "project_uuid must be a valid UUID format"},
-                    status=400,
-                )
-
-        # Validate motor if provided
-        if motor and motor not in MOTOR_BACKEND_MAP:
-            return Response(
-                {"error": f"Invalid motor value. Must be one of: {', '.join(MOTOR_BACKEND_MAP.keys())}"},
-                status=400,
-            )
-
-        # Validate min_conversations if provided
-        min_conversations = None
-        if min_conversations_str:
-            try:
-                min_conversations = int(min_conversations_str)
-                if min_conversations < 0:
-                    return Response(
-                        {"error": "min_conversations must be a non-negative integer"},
-                        status=400,
-                    )
-            except ValueError:
-                return Response({"error": "min_conversations must be a valid integer"}, status=400)
+        start_date = params["start_date"]
+        end_date = params["end_date"]
+        motor = params["motor"]
+        min_conversations = params["min_conversations"]
+        project_uuid = params["project_uuid"]
 
         conversations = (
             Conversation.objects.filter(
@@ -194,27 +235,46 @@ class ResolutionRateAverageView(APIView):
                 total_has_chat += ps["has_chat_cnt"]
                 total_conversations_all += ps["total_conversations"]
 
-        if project_rates:
-            resolution_rate = sum(project_rates) / len(project_rates) / 100.0
-            unresolved_rate = float(total_unresolved / total_conversations_all) if total_conversations_all > 0 else 0.0
+        global_resolution_rate = (
+            float(total_resolved / total_conversations_all * 100.0) if total_conversations_all > 0 else 0.0
+        )
+        global_unresolved_rate = (
+            float(total_unresolved / total_conversations_all * 100.0) if total_conversations_all > 0 else 0.0
+        )
+        global_has_chat_room_rate = (
+            float(total_has_chat / total_conversations_all * 100.0) if total_conversations_all > 0 else 0.0
+        )
+
+        # Calculate percentages for breakdown
+        breakdown_percentages = {}
+        if total_conversations_all > 0:
+            breakdown_percentages = {
+                "resolved": round(total_resolved / total_conversations_all * 100, 2),
+                "unresolved": round(total_unresolved / total_conversations_all * 100, 2),
+                "in_progress": round(total_in_progress / total_conversations_all * 100, 2),
+                "unclassified": round(total_unclassified / total_conversations_all * 100, 2),
+                "has_chat_room": round(total_has_chat / total_conversations_all * 100, 2),
+            }
         else:
-            resolution_rate = 0.0
-            unresolved_rate = 0.0
-            total_conversations_all = 0
+            breakdown_percentages = {
+                "resolved": 0.0,
+                "unresolved": 0.0,
+                "in_progress": 0.0,
+                "unclassified": 0.0,
+                "has_chat_room": 0.0,
+            }
 
         response_data = {
-            "resolution_rate": round(resolution_rate, 4),
-            "unresolved_rate": round(unresolved_rate, 4),
+            "global_resolution_rate": round(global_resolution_rate, 2),
+            "global_unresolved_rate": round(global_unresolved_rate, 2),
+            "global_has_chat_room_rate": round(global_has_chat_room_rate, 2),
             "total_conversations": total_conversations_all,
             "resolved_conversations": total_resolved,
             "unresolved_conversations": total_unresolved,
-            "breakdown": {
-                "resolved": total_resolved,
-                "unresolved": total_unresolved,
-                "in_progress": total_in_progress,
-                "unclassified": total_unclassified,
-                "has_chat_room": total_has_chat,
-            },
+            "in_progress_conversations": total_in_progress,
+            "unclassified_conversations": total_unclassified,
+            "has_chat_room_conversations": total_has_chat,
+            "breakdown": breakdown_percentages,
             "filters": {
                 "start_date": str(start_date),
                 "end_date": str(end_date),
@@ -229,7 +289,7 @@ class ResolutionRateAverageView(APIView):
 
 
 class ResolutionRateIndividualView(APIView):
-    authentication_classes = [ExternalTokenAuthentication, OIDCAuthentication]
+    authentication_classes = [UserGlobalTokenAuthentication, ExternalTokenAuthentication, OIDCAuthentication]
     permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
@@ -244,48 +304,18 @@ class ResolutionRateIndividualView(APIView):
         - filter_project_name (optional): Filter by project name (partial search, case-insensitive)
         Returns: Array of project-level metrics
         """
-        start_date_str = request.query_params.get("start_date")
-        end_date_str = request.query_params.get("end_date")
-        motor = request.query_params.get("motor")
-        min_conversations_str = request.query_params.get("min_conversations")
-        project_uuid = request.query_params.get("project_uuid")
-        filter_project_uuid = request.query_params.get("filter_project_uuid")
-        filter_project_name = request.query_params.get("filter_project_name")
-
-        # Validate and parse dates
-        start_date, end_date, error_response = validate_and_parse_dates(start_date_str, end_date_str)
+        params, error_response = get_valid_analytics_params(request)
         if error_response:
             return error_response
 
-        # Validate motor if provided
-        if motor and motor not in MOTOR_BACKEND_MAP:
-            return Response(
-                {"error": f"Invalid motor value. Must be one of: {', '.join(MOTOR_BACKEND_MAP.keys())}"},
-                status=400,
-            )
+        start_date = params["start_date"]
+        end_date = params["end_date"]
+        motor = params["motor"]
+        min_conversations = params["min_conversations"]
+        project_uuid = params["project_uuid"]
 
-        # Validate min_conversations if provided
-        min_conversations = None
-        if min_conversations_str:
-            try:
-                min_conversations = int(min_conversations_str)
-                if min_conversations < 0:
-                    return Response(
-                        {"error": "min_conversations must be a non-negative integer"},
-                        status=400,
-                    )
-            except ValueError:
-                return Response({"error": "min_conversations must be a valid integer"}, status=400)
-
-        # Validate project_uuid if provided
-        if project_uuid:
-            try:
-                UUID(project_uuid)
-            except (ValueError, TypeError):
-                return Response(
-                    {"error": "project_uuid must be a valid UUID format"},
-                    status=400,
-                )
+        filter_project_uuid = request.query_params.get("filter_project_uuid")
+        filter_project_name = request.query_params.get("filter_project_name")
 
         # Build base query across all projects
         conversations = Conversation.objects.filter(
@@ -371,7 +401,7 @@ class ResolutionRateIndividualView(APIView):
 
 
 class UnresolvedRateView(APIView):
-    authentication_classes = [ExternalTokenAuthentication, OIDCAuthentication]
+    authentication_classes = [UserGlobalTokenAuthentication, ExternalTokenAuthentication, OIDCAuthentication]
     permission_classes = [InternalCommunicationPermission]
 
     def get(self, request):
@@ -389,46 +419,15 @@ class UnresolvedRateView(APIView):
         - min_conversations (optional, int): Minimum conversations to consider project
         Returns: Unresolved rate metrics
         """
-        start_date_str = request.query_params.get("start_date")
-        end_date_str = request.query_params.get("end_date")
-        motor = request.query_params.get("motor")
-        min_conversations_str = request.query_params.get("min_conversations")
-        project_uuid = request.query_params.get("project_uuid")
-
-        # Validate and parse dates
-        start_date, end_date, error_response = validate_and_parse_dates(start_date_str, end_date_str)
+        params, error_response = get_valid_analytics_params(request)
         if error_response:
             return error_response
 
-        # Validate project_uuid if provided
-        if project_uuid:
-            try:
-                UUID(project_uuid)
-            except (ValueError, TypeError):
-                return Response(
-                    {"error": "project_uuid must be a valid UUID format"},
-                    status=400,
-                )
-
-        # Validate motor if provided
-        if motor and motor not in MOTOR_BACKEND_MAP:
-            return Response(
-                {"error": f"Invalid motor value. Must be one of: {', '.join(MOTOR_BACKEND_MAP.keys())}"},
-                status=400,
-            )
-
-        # Validate min_conversations if provided
-        min_conversations = None
-        if min_conversations_str:
-            try:
-                min_conversations = int(min_conversations_str)
-                if min_conversations < 0:
-                    return Response(
-                        {"error": "min_conversations must be a non-negative integer"},
-                        status=400,
-                    )
-            except ValueError:
-                return Response({"error": "min_conversations must be a valid integer"}, status=400)
+        start_date = params["start_date"]
+        end_date = params["end_date"]
+        motor = params["motor"]
+        min_conversations = params["min_conversations"]
+        project_uuid = params["project_uuid"]
 
         # Build base query (across all projects, or filtered by project_uuid)
         conversations = Conversation.objects.filter(
