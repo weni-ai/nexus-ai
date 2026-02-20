@@ -25,6 +25,7 @@ class Migration(migrations.Migration):
                 ('last_used_at', models.DateTimeField(blank=True, null=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='api_tokens', to=settings.AUTH_USER_MODEL)),
+                ('token_prefix', models.CharField(blank=True, db_index=True, max_length=32, null=True))
             ],
             options={
                 'unique_together': {('user', 'name')},

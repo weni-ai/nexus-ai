@@ -11,7 +11,7 @@ from .models import User, UserApiToken
 class UserApiTokenInline(admin.TabularInline):
     model = UserApiToken
     extra = 0
-    readonly_fields = ("token_hash", "salt", "created_at", "last_used_at")
+    readonly_fields = ("token_hash", "salt", "token_prefix", "created_at", "last_used_at")
 
 
 @admin.register(User)
@@ -50,13 +50,14 @@ class UserAdmin(BaseUserAdmin):
                 level=messages.INFO,
             )
 
-        token, salt, token_hash = UserApiToken.generate_token_pair()
+        token, salt, token_hash, token_prefix = UserApiToken.generate_token_pair()
 
         UserApiToken.objects.create(
             user=user,
             name=name,
             token_hash=token_hash,
             salt=salt,
+            token_prefix=token_prefix,
             scope="global",
         )
 
@@ -79,4 +80,4 @@ class UserAdmin(BaseUserAdmin):
 class UserApiTokenAdmin(admin.ModelAdmin):
     list_display = ("user", "name", "created_at", "last_used_at", "enabled")
     search_fields = ("user__email", "name")
-    readonly_fields = ("token_hash", "salt", "created_at", "last_used_at")
+    readonly_fields = ("token_hash", "salt", "token_prefix", "created_at", "last_used_at")

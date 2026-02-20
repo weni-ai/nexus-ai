@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import secrets
 from typing import Optional
 
@@ -50,6 +51,7 @@ class UserApiToken(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="api_tokens")
     name = models.CharField(max_length=255)
     token_hash = models.CharField(max_length=128)
+    token_prefix = models.CharField(max_length=32, db_index=True, null=True, blank=True)
     salt = models.CharField(max_length=64)
     scope = models.CharField(max_length=64, default="global")
     enabled = models.BooleanField(default=True)
@@ -72,11 +74,12 @@ class UserApiToken(models.Model):
             return False
         if self.expires_at and self.expires_at <= timezone.now():
             return False
-        return self.token_hash == self.hash_token(token, self.salt)
+        return hmac.compare_digest(self.token_hash, self.hash_token(token, self.salt))
 
     @staticmethod
-    def generate_token_pair() -> tuple[str, str, str]:
+    def generate_token_pair() -> tuple[str, str, str, str]:
         token = secrets.token_urlsafe(48)
         salt = secrets.token_hex(16)
         token_hash = UserApiToken.hash_token(token, salt)
-        return token, salt, token_hash
+        token_prefix = token[:8]
+        return token, salt, token_hash, token_prefix
