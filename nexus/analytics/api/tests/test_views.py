@@ -242,8 +242,8 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["total_conversations"], 0)
-        self.assertEqual(data["resolution_rate"], 0.0)
-        self.assertEqual(data["unresolved_rate"], 0.0)
+        self.assertEqual(data["global_resolution_rate"], 0.0)
+        self.assertEqual(data["global_unresolved_rate"], 0.0)
 
     def test_resolution_rate_all_resolutions(self):
         """Test with all resolution types"""
@@ -301,13 +301,20 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
+        # Should return correct counts
         self.assertEqual(data["total_conversations"], 5)
         self.assertEqual(data["resolved_conversations"], 1)
         self.assertEqual(data["unresolved_conversations"], 1)
-        self.assertIn("breakdown", data)
-        self.assertEqual(data["breakdown"]["in_progress"], 1)
-        self.assertEqual(data["breakdown"]["unclassified"], 1)
-        self.assertEqual(data["breakdown"]["has_chat_room"], 1)
+        self.assertEqual(data["in_progress_conversations"], 1)
+        self.assertEqual(data["unclassified_conversations"], 1)
+        self.assertEqual(data["has_chat_room_conversations"], 1)
+
+        # Check breakdown percentages
+        self.assertEqual(data["breakdown"]["resolved"], 20.0)
+        self.assertEqual(data["breakdown"]["unresolved"], 20.0)
+        self.assertEqual(data["breakdown"]["in_progress"], 20.0)
+        self.assertEqual(data["breakdown"]["unclassified"], 20.0)
+        self.assertEqual(data["breakdown"]["has_chat_room"], 20.0)
 
     def test_invalid_date_format(self):
         """Test with invalid date format"""
