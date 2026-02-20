@@ -372,8 +372,8 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         required_fields = [
-            "resolution_rate",
-            "unresolved_rate",
+            "global_resolution_rate",
+            "global_unresolved_rate",
             "total_conversations",
             "resolved_conversations",
             "unresolved_conversations",
@@ -717,7 +717,7 @@ class AnalyticsEdgeCasesTestCase(BaseAnalyticsTestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["total_conversations"], 0)
-        self.assertEqual(data["resolution_rate"], 0.0)
+        self.assertEqual(data["global_resolution_rate"], 0.0)
 
     def test_very_large_date_range(self):
         """Test with very large date range"""
@@ -808,5 +808,5 @@ class QueryOptimizationTestCase(BaseAnalyticsTestCase):
         # If aggregation happens in DB, the calculation should be correct
         data = response.json()
         # Verify calculation is correct
-        expected_rate = data["resolved_conversations"] / data["total_conversations"]
-        self.assertAlmostEqual(data["resolution_rate"], expected_rate, places=4)
+        expected_rate = data["resolved_conversations"] / data["total_conversations"] * 100
+        self.assertAlmostEqual(data["global_resolution_rate"], expected_rate, places=2)
