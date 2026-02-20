@@ -113,12 +113,13 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertIn("resolution_rate", data)
+        self.assertIn("global_resolution_rate", data)
         self.assertIn("total_conversations", data)
         # Should have 3 conversations: 2 resolved, 1 unresolved
         self.assertEqual(data["total_conversations"], 3)
         self.assertEqual(data["resolved_conversations"], 2)
-        self.assertAlmostEqual(data["resolution_rate"], 0.6667, places=3)
+        # 66.67% global resolution rate (2/3)
+        self.assertAlmostEqual(data["global_resolution_rate"], 66.67, places=2)
 
     def test_resolution_rate_with_ab2_5_project(self):
         """Test average resolution rate for AB 2.5 project"""
@@ -133,7 +134,8 @@ class ResolutionRateAverageViewTestCase(BaseAnalyticsTestCase):
         # Should have 3 conversations: 1 resolved, 2 unresolved
         self.assertEqual(data["total_conversations"], 3)
         self.assertEqual(data["resolved_conversations"], 1)
-        self.assertAlmostEqual(data["resolution_rate"], 0.3333, places=3)
+        # 33.33% global resolution rate (1/3)
+        self.assertAlmostEqual(data["global_resolution_rate"], 33.33, places=2)
 
     def test_resolution_rate_with_motor_filter_ab2(self):
         """Test filtering by motor AB 2"""
