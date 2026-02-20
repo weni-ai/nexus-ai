@@ -265,7 +265,7 @@ class OpenAITeamAdapter(TeamAdapter):
             reasoning_effort=supervisor_model_settings.get("reasoning_effort", ""),
             reasoning_summary=supervisor_model_settings.get("reasoning_summary", ""),
             parallel_tool_calls=supervisor_model_settings.get("parallel_tool_calls", False),
-            extra_args=supervisor_model_settings.get("manager_extra_args", {}),
+            extra_args=supervisor_model_settings.get("manager_extra_args") or {},
         )
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
         return {

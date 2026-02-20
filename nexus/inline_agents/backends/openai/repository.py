@@ -100,7 +100,7 @@ class ManagerAgentRepository(SupervisorRepository):
             "reasoning_effort": supervisor_data["reasoning_effort"],
             "reasoning_summary": supervisor_data["reasoning_summary"],
             "parallel_tool_calls": supervisor_data["parallel_tool_calls"],
-            "manager_extra_args": supervisor_data["manager_extra_args"],
+            "manager_extra_args": supervisor_data["manager_extra_args"] or {},
         }
 
         supervisor_dict = {
