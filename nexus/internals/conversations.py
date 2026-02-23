@@ -16,7 +16,6 @@ class ConversationsRESTClient(RestClient):
     @property
     def headers(self):
         return {
-            "Content-Type": "application/json; charset: utf-8",
             "Authorization": f"Bearer {self.token}",
         }
 
