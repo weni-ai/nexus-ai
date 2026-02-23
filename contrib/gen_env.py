@@ -255,6 +255,7 @@ def generate_env():
         "TURN_SERVER_URL": "",
         "TURN_SERVER_USERNAME": "",
         "TURN_SERVER_PASSWORD": "",
+        "CONVERSATIONS_TOKEN": "",
     }
 
     with open(env_path, "w") as configfile:
