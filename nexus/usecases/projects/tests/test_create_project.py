@@ -2,11 +2,13 @@ from unittest import skip
 from unittest.mock import patch
 from uuid import uuid4
 
+import pendulum
 from django.test import TestCase
 
 from nexus.actions.models import Flow
 from nexus.agents.models import Agent
 from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
+from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.usecases.actions.tests.flow_factory import TemplateActionFactory
 from nexus.usecases.orgs.tests.org_factory import OrgFactory
@@ -96,6 +98,121 @@ class TestCreateProject(TestCase):
             # Team provision happens when Bedrock is used; skip assertion for OpenAI default
             self.assertIsNone(project.team.external_id)
             self.assertTrue(project.brain_on)
+
+    def test_create_project_with_manager_agent(self):
+        """Test that project is created with manager_agent when one exists with default=True and public=True"""
+        # Create a ManagerAgent with default=True and public=True
+        manager_agent = ManagerAgent.objects.create(
+            name="Test Manager Agent",
+            base_prompt="Test base prompt",
+            foundation_model="gpt-4",
+            model_vendor="openai",
+            model_has_reasoning=False,
+            max_tokens=2048,
+            collaborator_max_tokens=2048,
+            reasoning_summary="auto",
+            parallel_tool_calls=False,
+            audio_orchestration_max_tokens=2048,
+            audio_orchestration_collaborator_max_tokens=2048,
+            component_tools_descriptions={},
+            formatter_agent_reasoning_summary="auto",
+            formatter_agent_send_only_assistant_message=False,
+            formatter_agent_tools_descriptions={},
+            formatter_agent_foundation_model="gpt-4",
+            formatter_agent_model_has_reasoning=False,
+            formatter_tools_descriptions={},
+            collaborators_foundation_model="gpt-4",
+            override_collaborators_foundation_model=False,
+            default=True,
+            public=True,
+            release_date=pendulum.now(),
+        )
+
+        project = ProjectsUseCase(
+            event_manager_notify=mock_event_manager_notify,
+        ).create_project(project_dto=self.project_dto, user_email=self.user.email)
+
+        self.assertEqual(project.uuid, self.project_dto.uuid)
+        self.assertIsNotNone(project.manager_agent)
+        self.assertEqual(project.manager_agent, manager_agent)
+
+    def test_create_project_with_manager_agent_most_recent(self):
+        """Test that project is created with the most recent manager_agent when multiple exist"""
+        # Create an older ManagerAgent
+        older_manager_agent = ManagerAgent.objects.create(
+            name="Older Manager Agent",
+            base_prompt="Test base prompt",
+            foundation_model="gpt-4",
+            model_vendor="openai",
+            model_has_reasoning=False,
+            max_tokens=2048,
+            collaborator_max_tokens=2048,
+            reasoning_summary="auto",
+            parallel_tool_calls=False,
+            audio_orchestration_max_tokens=2048,
+            audio_orchestration_collaborator_max_tokens=2048,
+            component_tools_descriptions={},
+            formatter_agent_reasoning_summary="auto",
+            formatter_agent_send_only_assistant_message=False,
+            formatter_agent_tools_descriptions={},
+            formatter_agent_foundation_model="gpt-4",
+            formatter_agent_model_has_reasoning=False,
+            formatter_tools_descriptions={},
+            collaborators_foundation_model="gpt-4",
+            override_collaborators_foundation_model=False,
+            default=True,
+            public=True,
+            release_date=pendulum.now().subtract(days=1),
+        )
+
+        # Create a newer ManagerAgent (more recent)
+        newer_manager_agent = ManagerAgent.objects.create(
+            name="Newer Manager Agent",
+            base_prompt="Test base prompt",
+            foundation_model="gpt-4",
+            model_vendor="openai",
+            model_has_reasoning=False,
+            max_tokens=2048,
+            collaborator_max_tokens=2048,
+            reasoning_summary="auto",
+            parallel_tool_calls=False,
+            audio_orchestration_max_tokens=2048,
+            audio_orchestration_collaborator_max_tokens=2048,
+            component_tools_descriptions={},
+            formatter_agent_reasoning_summary="auto",
+            formatter_agent_send_only_assistant_message=False,
+            formatter_agent_tools_descriptions={},
+            formatter_agent_foundation_model="gpt-4",
+            formatter_agent_model_has_reasoning=False,
+            formatter_tools_descriptions={},
+            collaborators_foundation_model="gpt-4",
+            override_collaborators_foundation_model=False,
+            default=True,
+            public=True,
+            release_date=pendulum.now(),
+        )
+
+        project = ProjectsUseCase(
+            event_manager_notify=mock_event_manager_notify,
+        ).create_project(project_dto=self.project_dto, user_email=self.user.email)
+
+        self.assertEqual(project.uuid, self.project_dto.uuid)
+        self.assertIsNotNone(project.manager_agent)
+        # Should be the most recent one (newer_manager_agent)
+        self.assertEqual(project.manager_agent, newer_manager_agent)
+        self.assertNotEqual(project.manager_agent, older_manager_agent)
+
+    def test_create_project_without_manager_agent(self):
+        """Test that project is created without manager_agent when none exists with default=True and public=True"""
+        # Ensure no ManagerAgent with default=True and public=True exists
+        ManagerAgent.objects.filter(default=True, public=True).delete()
+
+        project = ProjectsUseCase(
+            event_manager_notify=mock_event_manager_notify,
+        ).create_project(project_dto=self.project_dto, user_email=self.user.email)
+
+        self.assertEqual(project.uuid, self.project_dto.uuid)
+        self.assertIsNone(project.manager_agent)
 
 
 class ProjectAuthUseCaseTestCase(TestCase):

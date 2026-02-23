@@ -118,6 +118,20 @@ class OpenAITeamAdapter(TeamAdapter):
         user_model_credentials: Dict[str, Any] = supervisor.get("user_model_credentials", {})
         max_tokens_collaborator: int = max_tokens.get("collaborator", 2048)
 
+        collaborator_configurations = supervisor.get("collaborator_configurations", {})
+        collaborator_extra_args = collaborator_configurations.get("collaborator_extra_args", {})
+        append_manager_extra_args = collaborator_configurations.get("append_manager_extra_args")
+
+        if append_manager_extra_args:
+            manager_extra_args = supervisor.get("model_settings", {}).get("manager_extra_args", {})
+
+            if not isinstance(collaborator_extra_args, dict):
+                collaborator_extra_args = {}
+            if not isinstance(manager_extra_args, dict):
+                manager_extra_args = {}
+
+            collaborator_extra_args = {**collaborator_extra_args, **manager_extra_args}
+
         for agent in agents:
             agent_instructions = cls.prepare_agent_instructions(
                 agent.get("instruction"),
@@ -144,7 +158,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 foundation_model=agent.get("foundationModel"),
                 user_model_credentials=user_model_credentials,
                 hooks=hooks,
-                model_settings={"max_tokens": max_tokens_collaborator},
+                model_settings={"max_tokens": max_tokens_collaborator, "extra_args": collaborator_extra_args},
                 collaborator_configurations=supervisor.get("collaborator_configurations", {}),
             )
 
@@ -256,6 +270,7 @@ class OpenAITeamAdapter(TeamAdapter):
             reasoning_effort=supervisor_model_settings.get("reasoning_effort", ""),
             reasoning_summary=supervisor_model_settings.get("reasoning_summary", ""),
             parallel_tool_calls=supervisor_model_settings.get("parallel_tool_calls", False),
+            extra_args=supervisor_model_settings.get("manager_extra_args") or {},
         )
         supervisor_hooks.set_knowledge_base_tool(supervisor_agent.knowledge_base_bedrock.name)
         return {
@@ -1196,7 +1211,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     event_data=event_data,
                     project_uuid=project_uuid,
                     contact_urn=contact_urn,
-                    use_delay=False,
+                    use_delay=True,
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
                     conversation=conversation,
