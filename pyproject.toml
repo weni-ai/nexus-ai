@@ -61,7 +61,7 @@ langfuse = "3.4.0"
 nest-asyncio = "^1.6.0"
 pydantic-ai = {extras = ["logfire"], version = "^1.7.0"}
 aiohttp = "3.10"
-litellm = "1.80.15"
+litellm = "1.81.3"
 grpcio = "^1.76.0"
 grpcio-tools = "^1.76.0"
 protobuf = ">=6.31,<7.0"
