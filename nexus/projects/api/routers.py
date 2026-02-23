@@ -3,6 +3,8 @@ from django.urls import path
 from .views import (
     AgentBuilderProjectDetailsView,
     AgentsBackendView,
+    ConversationDetailProxyView,
+    ConversationsProxyView,
     ProjectPromptCreationConfigurationsViewset,
     ProjectUpdateViewset,
 )
@@ -16,4 +18,10 @@ urlpatterns = [
     ),
     path("<project_uuid>/agents-backend", AgentsBackendView.as_view(), name="agents-backend"),
     path("<project_uuid>/ab-project-details", AgentBuilderProjectDetailsView.as_view(), name="ab-project-details"),
+    path("v2/<project_uuid>/conversations", ConversationsProxyView.as_view(), name="conversations-proxy-v2"),
+    path(
+        "v2/<project_uuid>/conversations/<conversation_uuid>",
+        ConversationDetailProxyView.as_view(),
+        name="conversation-detail-proxy-v2",
+    ),
 ]
