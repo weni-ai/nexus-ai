@@ -10,6 +10,7 @@ from drf_spectacular.utils import (
     extend_schema,
 )
 from rest_framework import serializers, status
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -61,16 +62,14 @@ class SupervisorPublicConversationsView(APIView):
 
         start_dt = None
         end_dt = None
-        if start:
-            try:
+
+        try:
+            if start:
                 start_dt = pendulum.parse(start).start_of("day")
-            except Exception:
-                start_dt = start
-        if end:
-            try:
+            if end:
                 end_dt = pendulum.parse(end).end_of("day")
-            except Exception:
-                end_dt = end
+        except pendulum.parsing.exceptions.ParserError:
+            raise ValidationError({"date": "Invalid date format. Please use ISO 8601."}) from None
 
         if start_dt and end_dt:
             qs = qs.filter(start_date__gte=start_dt, start_date__lte=end_dt)
@@ -81,63 +80,65 @@ class SupervisorPublicConversationsView(APIView):
 
         return qs, start_dt, end_dt
 
+    def _to_utc_iso(self, val):
+        try:
+            return pendulum.instance(val).in_timezone("UTC").format("YYYY-MM-DDTHH:mm:ss")
+        except Exception:
+            return str(val)
+
     def _get_messages(self, conv, project_uuid, start_dt, end_dt, message_service):
         messages = []
         fetch_start = start_dt or conv.start_date
         fetch_end = end_dt or conv.end_date
 
         can_fetch = bool(conv.contact_urn and fetch_start and fetch_end)
-        if can_fetch:
-            try:
+        if not can_fetch:
+            return messages
 
-                def _to_utc_iso(val):
-                    try:
-                        return pendulum.parse(str(val)).in_timezone("UTC").format("YYYY-MM-DDTHH:mm:ss")
-                    except Exception:
-                        return str(val)
+        try:
+            start_iso = self._to_utc_iso(fetch_start)
+            end_iso = self._to_utc_iso(fetch_end)
 
-                start_iso = _to_utc_iso(fetch_start)
-                end_iso = _to_utc_iso(fetch_end)
+            messages = message_service.get_messages_for_conversation(
+                project_uuid=str(project_uuid),
+                contact_urn=conv.contact_urn,
+                channel_uuid=str(conv.channel_uuid),
+                start_date=start_iso,
+                end_date=end_iso,
+                resolution_status=None,
+            )
+            if not messages:
+                start_utc = pendulum.instance(fetch_start).in_timezone("UTC")
+                end_utc = pendulum.instance(fetch_end).in_timezone("UTC")
 
-                messages = message_service.get_messages_for_conversation(
-                    project_uuid=str(project_uuid),
+                inline_qs = InlineAgentMessage.objects.filter(
+                    project__uuid=str(project_uuid),
                     contact_urn=conv.contact_urn,
-                    channel_uuid=str(conv.channel_uuid),
-                    start_date=start_iso,
-                    end_date=end_iso,
-                    resolution_status=None,
-                )
-                if not messages:
-                    inline_qs = InlineAgentMessage.objects.filter(
-                        project__uuid=str(project_uuid),
-                        contact_urn=conv.contact_urn,
-                        created_at__range=(
-                            pendulum.parse(start_iso).in_timezone("UTC"),
-                            pendulum.parse(end_iso).in_timezone("UTC"),
-                        ),
-                    ).order_by("created_at")
-                    if inline_qs.exists():
-                        messages = [
-                            {
-                                "text": m.text,
-                                "source": "user" if m.source_type == "user" else "agent",
-                                "created_at": m.created_at.isoformat(),
-                            }
-                            for m in inline_qs
-                        ]
-            except Exception as e:
-                logger.warning(
-                    f"Error fetching messages for conversation {conv.uuid}: {str(e)}",
-                    extra={
-                        "project_uuid": project_uuid,
-                        "conversation_uuid": str(conv.uuid),
-                        "contact_urn": conv.contact_urn,
-                        "channel_uuid": str(conv.channel_uuid) if conv.channel_uuid else None,
-                    },
-                )
-                sentry_sdk.set_tag("project_uuid", project_uuid)
-                sentry_sdk.set_tag("conversation_uuid", str(conv.uuid))
-                sentry_sdk.capture_exception(e)
+                    created_at__range=(start_utc, end_utc),
+                ).order_by("created_at")
+
+                if inline_qs.exists():
+                    messages = [
+                        {
+                            "text": message.text,
+                            "source": "user" if message.source_type == "user" else "agent",
+                            "created_at": message.created_at.isoformat(),
+                        }
+                        for message in inline_qs
+                    ]
+        except Exception as e:
+            logger.warning(
+                f"Error fetching messages for conversation {conv.uuid}: {str(e)}",
+                extra={
+                    "project_uuid": project_uuid,
+                    "conversation_uuid": str(conv.uuid),
+                    "contact_urn": conv.contact_urn,
+                    "channel_uuid": str(conv.channel_uuid) if conv.channel_uuid else None,
+                },
+            )
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.set_tag("conversation_uuid", str(conv.uuid))
+            sentry_sdk.capture_exception(e)
         return messages
 
     @extend_schema(
@@ -190,6 +191,9 @@ class SupervisorPublicConversationsView(APIView):
 
             status_param = request.query_params.get("status")
             if status_param:
+                valid_statuses = [str(k) for k, _ in Conversation.RESOLUTION_CHOICES]
+                if status_param not in valid_statuses:
+                    raise ValidationError({"status": f"Invalid status. Choices are: {', '.join(valid_statuses)}"})
                 qs = qs.filter(resolution=status_param)
 
             # Calculate summary stats before pagination
@@ -232,7 +236,9 @@ class SupervisorPublicConversationsView(APIView):
                     "results": results,
                 }
             )
+        except ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.capture_exception(e)
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
