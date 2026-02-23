@@ -100,6 +100,7 @@ class ManagerAgentRepository(SupervisorRepository):
             "reasoning_effort": supervisor_data["reasoning_effort"],
             "reasoning_summary": supervisor_data["reasoning_summary"],
             "parallel_tool_calls": supervisor_data["parallel_tool_calls"],
+            "manager_extra_args": supervisor_data["manager_extra_args"] or {},
         }
 
         supervisor_dict = {
@@ -135,6 +136,8 @@ class ManagerAgentRepository(SupervisorRepository):
                 "override_collaborators_foundation_model": supervisor_data["override_collaborators_foundation_model"],
                 "collaborators_foundation_model": supervisor_data["collaborators_foundation_model"],
                 "default_instructions_for_collaborators": supervisor_data["default_instructions_for_collaborators"],
+                "collaborator_extra_args": supervisor_data["collaborator_extra_args"],
+                "append_manager_extra_args": supervisor_data["append_manager_extra_args"],
             },
         }
 
