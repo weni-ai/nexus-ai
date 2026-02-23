@@ -116,7 +116,6 @@ class ConversationsProxyView(APIView):
         if not project_uuid:
             return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get all query parameters as a dict (convert list values to single values)
         query_params = {
             key: value[0] if isinstance(value, list) and len(value) == 1 else value
             for key, value in request.query_params.items()
@@ -259,5 +258,184 @@ class ConversationsProxyView(APIView):
         """Handle all other errors (connection, timeout, validation, etc.) - return generic error."""
         error_message = str(e)
         logger.error(f"Error fetching conversations for project {project_uuid}: {error_message}", exc_info=True)
+        self.usecase.send_to_sentry(project_uuid, None, error_message, None, exception=e)
+        return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ConversationDetailProxyView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usecase = ConversationsUsecase()
+
+    def get(self, request, *args, **kwargs):
+        """
+        Proxy endpoint to fetch conversation detail from Conversations service.
+        """
+        project_uuid = kwargs.get("project_uuid")
+        conversation_uuid = kwargs.get("conversation_uuid")
+
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not conversation_uuid:
+            return Response({"error": "conversation_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        query_params = {
+            key: value[0] if isinstance(value, list) and len(value) == 1 else value
+            for key, value in request.query_params.items()
+        }
+
+        try:
+            response = self._call_conversations_api(project_uuid, conversation_uuid, query_params)
+
+            transformed_response = self._transform_response(response, request, project_uuid, conversation_uuid)
+
+            return Response(transformed_response, status=status.HTTP_200_OK)
+
+        except requests.exceptions.HTTPError as e:
+            return self._handle_http_error(e, project_uuid, conversation_uuid)
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            requests.exceptions.RequestException,
+            Exception,
+        ) as e:
+            return self._handle_generic_error(e, project_uuid, conversation_uuid)
+
+    def _call_conversations_api(self, project_uuid, conversation_uuid, query_params=None):
+        """Call the conversations API to get conversation detail."""
+        endpoint = f"/api/v1/projects/{project_uuid}/conversations/{conversation_uuid}/"
+        base_url = settings.CONVERSATIONS_REST_ENDPOINT
+        token = settings.CONVERSATIONS_TOKEN
+
+        url = base_url + endpoint
+        headers = {
+            "Content-Type": "application/json; charset: utf-8",
+            "Authorization": f"Bearer {token}",
+        }
+
+        response = requests.get(url, headers=headers, params=query_params or {}, timeout=45)
+        response.raise_for_status()
+        return response.json()
+
+    def _transform_response(self, response_data, request, project_uuid, conversation_uuid):
+        """Transform response from conversations service to SupervisorPublicConversationsView format."""
+        topic = None
+        if response_data.get("classification") and isinstance(response_data["classification"], dict):
+            topic = response_data["classification"].get("topic")
+
+        messages_data = response_data.get("messages", {})
+        messages = {}
+        if isinstance(messages_data, dict) and "results" in messages_data:
+            next_url = self._rewrite_messages_pagination_url(
+                messages_data.get("next"), request, project_uuid, conversation_uuid
+            )
+            previous_url = self._rewrite_messages_pagination_url(
+                messages_data.get("previous"), request, project_uuid, conversation_uuid
+            )
+            messages = {
+                "next": next_url,
+                "previous": previous_url,
+                "results": messages_data.get("results", []),
+            }
+        else:
+            messages = messages_data if messages_data else []
+
+        transformed = {
+            "conversation_uuid": str(response_data.get("uuid")),
+            "created_at": response_data.get("created_at"),
+            "ended_at": response_data.get("end_date"),
+            "status": response_data.get("status"),
+            "topic": topic,
+            "channel_uuid": str(response_data.get("channel_uuid")) if response_data.get("channel_uuid") else None,
+            "contact_urn": response_data.get("contact_urn"),
+            "messages": messages,
+        }
+
+        return transformed
+
+    def _rewrite_messages_pagination_url(self, url, request, project_uuid, conversation_uuid):
+        """Rewrite pagination URL from conversations service messages to nexus proxy."""
+        if not url:
+            return None
+
+        try:
+            parsed = urlparse(url)
+            query_params = parse_qs(parsed.query, keep_blank_values=True)
+
+            nexus_path = f"/api/v2/{project_uuid}/conversations/{conversation_uuid}"
+
+            nexus_url = request.build_absolute_uri(nexus_path)
+
+            scheme = "https"
+
+            parsed_nexus = urlparse(nexus_url)
+            if query_params:
+                query_params_encoded = urlencode(query_params, doseq=True)
+                nexus_url = urlunparse(
+                    (
+                        scheme,
+                        parsed_nexus.netloc,
+                        parsed_nexus.path,
+                        parsed_nexus.params,
+                        query_params_encoded,
+                        parsed_nexus.fragment,
+                    )
+                )
+            else:
+                nexus_url = urlunparse(
+                    (
+                        scheme,
+                        parsed_nexus.netloc,
+                        parsed_nexus.path,
+                        parsed_nexus.params,
+                        parsed_nexus.query,
+                        parsed_nexus.fragment,
+                    )
+                )
+
+            return nexus_url
+        except Exception as e:
+            logger.warning(f"Error rewriting messages pagination URL: {e}", exc_info=True)
+            return None
+
+    def _handle_http_error(self, e, project_uuid, conversation_uuid):
+        status_code = e.response.status_code if e.response else 500
+        error_message, error_details = self.usecase.extract_error_message(e.response)
+
+        if status_code != 404:
+            self.usecase.send_to_sentry(project_uuid, status_code, error_message, error_details, exception=e)
+
+        if status_code == 400:
+            return Response({"error": error_message or "Bad request"}, status=status.HTTP_400_BAD_REQUEST)
+        elif status_code == 404:
+            return Response(
+                {"error": f"Conversation {conversation_uuid} not found for project {project_uuid}"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        else:
+            logger.error(
+                f"Error from Conversations service for project {project_uuid}\
+                    , conversation {conversation_uuid}: {error_message}",
+                extra={
+                    "project_uuid": project_uuid,
+                    "conversation_uuid": conversation_uuid,
+                    "status_code": status_code,
+                    "error_message": error_message,
+                    "error_details": error_details,
+                },
+                exc_info=True,
+            )
+            return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _handle_generic_error(self, e, project_uuid, conversation_uuid):
+        """Handle all other errors (connection, timeout, validation, etc.) - return generic error."""
+        error_message = str(e)
+        logger.error(
+            f"Error fetching conversation {conversation_uuid} for project {project_uuid}: {error_message}",
+            exc_info=True,
+        )
         self.usecase.send_to_sentry(project_uuid, None, error_message, None, exception=e)
         return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
