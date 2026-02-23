@@ -535,19 +535,22 @@ class OpenAITeamAdapter(TeamAdapter):
     def _get_agent_for_tool(function_name: str, project_uuid: str):
         try:
             logger.debug(
-                f"Searching for agent with tool '{function_name}' in project '{project_uuid}' - function_name: {function_name}, project_uuid: {project_uuid}"
+                f"Searching for agent with tool '{function_name}' in project '{project_uuid}'"
+                f" - function_name: {function_name}, project_uuid: {project_uuid}"
             )
             integrated_agents = IntegratedAgent.objects.filter(project__uuid=project_uuid).select_related("agent")
 
             integrated_agents_count = integrated_agents.count()
             logger.debug(
-                f"Found {integrated_agents_count} integrated agent(s) for project - project_uuid: {project_uuid}, count: {integrated_agents_count}"
+                f"Found {integrated_agents_count} integrated agent(s) for project '{project_uuid}'"
+                f" - project_uuid: {project_uuid}, count: {integrated_agents_count}"
             )
 
             for integrated_agent in integrated_agents:
                 agent = integrated_agent.agent
                 logger.debug(
-                    f"Checking agent '{agent.slug}' (is_official={agent.is_official}) - agent_slug: {agent.slug}, agent_uuid: {str(agent.uuid)}, is_official: {agent.is_official}"
+                    f"Checking agent '{agent.slug}' (is_official={agent.is_official})"
+                    f" - agent_slug: {agent.slug}, agent_uuid: {str(agent.uuid)}, is_official: {agent.is_official}"
                 )
 
                 # Get only the latest version instead of all versions
@@ -570,13 +573,15 @@ class OpenAITeamAdapter(TeamAdapter):
 
                     if normalized_action_group == normalized_function or action_group_name == function_name:
                         logger.info(
-                            f"Found matching agent '{agent.slug}' for tool '{function_name}' - "
-                            f"agent_slug: {agent.slug}, agent_uuid: {str(agent.uuid)}, function_name: {function_name}"
+                            f"Found matching agent '{agent.slug}' for tool '{function_name}'"
+                            f" - agent_slug: {agent.slug}, agent_uuid: {str(agent.uuid)},"
+                            f" function_name: {function_name}"
                         )
                         return agent, integrated_agent
 
             logger.warning(
-                f"No agent found for tool '{function_name}' in project '{project_uuid}' - function_name: {function_name}, project_uuid: {project_uuid}"
+                f"No agent found for tool '{function_name}' in project '{project_uuid}'"
+                f" - function_name: {function_name}, project_uuid: {project_uuid}"
             )
             return None, None
         except Exception as e:
@@ -606,6 +611,95 @@ class OpenAITeamAdapter(TeamAdapter):
 
         return errors
 
+    @classmethod
+    def _prepare_agent_constants(cls, agent, integrated_agent=None):
+        """Extract constants from agent configuration."""
+        constants = {}
+        if hasattr(agent, "constants") and agent.constants:
+            constants = {k: v.get("value", "") if isinstance(v, dict) else v for k, v in agent.constants.items()}
+
+        # Inject mcp_config into constants
+        if integrated_agent and integrated_agent.metadata:
+            mcp_config = integrated_agent.metadata.get("mcp_config", {})
+            if isinstance(mcp_config, dict):
+                constants.update(mcp_config)
+
+        logger.debug(
+            f"Loaded {len(constants)} constants for agent '{agent.slug}'"
+            f" - agent_slug: {agent.slug}, constants_count: {len(constants)},"
+            f" constants_keys: {list(constants.keys())}"
+        )
+        return constants
+
+    @classmethod
+    def _prepare_mcp_credentials(cls, agent, integrated_agent, credentials):
+        """Prepare MCP credentials based on integrated agent configuration."""
+        mcp_credentials = {}
+        if not (integrated_agent and integrated_agent.metadata):
+            logger.debug(
+                f"No IntegratedAgent metadata found for agent '{agent.slug}' "
+                f" - agent_slug: {agent.slug}, has_integrated_agent: {integrated_agent is not None}"
+            )
+            return mcp_credentials
+
+        mcp_name = integrated_agent.metadata.get("mcp")
+        mcp_config = integrated_agent.metadata.get("mcp_config", {})
+
+        logger.debug(
+            f"IntegratedAgent metadata found for agent '{agent.slug}': mcp='{mcp_name}',"
+            f" mcp_config keys={list(mcp_config.keys()) if isinstance(mcp_config, dict) else 'N/A'}"
+            f" - agent_slug: {agent.slug}, mcp_name: {mcp_name},"
+            f" mcp_config_keys: {list(mcp_config.keys()) if isinstance(mcp_config, dict) else None}"
+        )
+
+        if not mcp_name:
+            logger.debug(f"No MCP configured for agent '{agent.slug}' - agent_slug: {agent.slug}")
+            return mcp_credentials
+
+        mcp = agent.mcps.filter(name=mcp_name, is_active=True).first()
+        if not mcp:
+            logger.warning(
+                f"MCP '{mcp_name}' not found or inactive for agent '{agent.slug}'"
+                f" - agent_slug: {agent.slug}, mcp_name: {mcp_name}"
+            )
+            return mcp_credentials
+
+        logger.info(f"MCP '{mcp_name}' found for agent '{agent.slug}' - agent_slug: {agent.slug}, mcp_name: {mcp_name}")
+        template_keys = {t.name for t in mcp.credential_templates.all()}
+        logger.debug(
+            f"MCP credential templates: {template_keys} - mcp_name: {mcp_name}, template_keys: {list(template_keys)}"
+        )
+
+        for key in template_keys:
+            if key in credentials:
+                mcp_credentials[key] = credentials[key]
+                logger.debug(
+                    f"Added MCP credential '{key}' to mcp_credentials - mcp_name: {mcp_name}, credential_key: {key}"
+                )
+
+        if isinstance(mcp_config, dict):
+            mcp_credentials.update(mcp_config)
+            logger.info(
+                f"MCP config merged into credentials: {list(mcp_config.keys())}"
+                f" - mcp_name: {mcp_name}, mcp_config_keys: {list(mcp_config.keys())}"
+            )
+
+        return mcp_credentials
+
+    @classmethod
+    def _validate_agent_tooling(cls, function_name, payload, agent):
+        """Validate payload against agent tooling configuration."""
+        validation_errors = []
+        if hasattr(agent, "tooling") and agent.tooling:
+            validation_errors = cls._validate_tool_parameters(function_name, payload, agent.tooling)
+            if validation_errors:
+                logger.warning(
+                    f"Tool parameter validation warnings for '{function_name}'"
+                    f" - errors: {validation_errors}, payload: {payload}, tool_name: {function_name}"
+                )
+        return validation_errors
+
+    @classmethod
     def invoke_aws_lambda(
         cls,
         function_name: str,
@@ -620,87 +714,44 @@ class OpenAITeamAdapter(TeamAdapter):
         try:
             project_uuid = project.get("uuid")
             logger.debug(
-                f"Invoking AWS Lambda tool '{function_name}' for project '{project_uuid}' - function_name: {function_name}, function_arn: {function_arn}, project_uuid: {project_uuid}"
+                f"Invoking AWS Lambda tool '{function_name}' for project '{project_uuid}'"
+                f" - function_name: {function_name}, function_arn: {function_arn}, project_uuid: {project_uuid}"
             )
 
             agent, integrated_agent = cls._get_agent_for_tool(function_name, project_uuid)
             constants = {}
-            validation_errors = []
             mcp_credentials = {}
-            mcp_config = {}
 
             if agent:
                 logger.info(
-                    f"Agent found for tool '{function_name}': '{agent.slug}' (uuid: {agent.uuid}) - agent_slug: {agent.slug}, agent_uuid: {str(agent.uuid)}, function_name: {function_name}"
+                    f"Agent found for tool '{function_name}': '{agent.slug}' (uuid: {agent.uuid})"
+                    f" - agent_slug: {agent.slug}, agent_uuid: {str(agent.uuid)}, function_name: {function_name}"
                 )
 
-                if hasattr(agent, "tooling") and agent.tooling:
-                    validation_errors = cls._validate_tool_parameters(function_name, payload, agent.tooling)
-                    if validation_errors:
-                        logger.warning(
-                            f"Tool parameter validation warnings for {function_name} - errors: {validation_errors}, payload: {payload}, tool_name: {function_name}"
-                        )
-
-                if hasattr(agent, "constants") and agent.constants:
-                    constants = {
-                        k: v.get("value", "") if isinstance(v, dict) else v for k, v in agent.constants.items()
-                    }
-                    logger.debug(
-                        f"Loaded {len(constants)} constants for agent '{agent.slug}' - agent_slug: {agent.slug}, constants_count: {len(constants)}, constants_keys: {list(constants.keys())}"
+                validation_errors = cls._validate_agent_tooling(function_name, payload, agent)
+                if validation_errors:
+                    error_message = (
+                        f"Tool parameter validation failed for '{function_name}': {', '.join(validation_errors)}"
                     )
+                    logger.error(error_message)
+                    return json.dumps({"error": error_message})
 
-                if integrated_agent and integrated_agent.metadata:
-                    mcp_name = integrated_agent.metadata.get("mcp")
-                    mcp_config = integrated_agent.metadata.get("mcp_config", {})
+                constants = cls._prepare_agent_constants(agent, integrated_agent)
+                mcp_credentials = cls._prepare_mcp_credentials(agent, integrated_agent, credentials)
 
-                    logger.debug(
-                        f"IntegratedAgent metadata found for agent '{agent.slug}': mcp='{mcp_name}', mcp_config keys={list(mcp_config.keys()) if isinstance(mcp_config, dict) else 'N/A'} - "
-                        f"agent_slug: {agent.slug}, mcp_name: {mcp_name}, mcp_config_keys: {list(mcp_config.keys()) if isinstance(mcp_config, dict) else None}"
-                    )
-
-                    if mcp_name:
-                        mcp = agent.mcps.filter(name=mcp_name, is_active=True).first()
-                        if mcp:
-                            logger.info(
-                                f"MCP '{mcp_name}' found for agent '{agent.slug}' - agent_slug: {agent.slug}, mcp_name: {mcp_name}"
-                            )
-                            template_keys = {t.name for t in mcp.credential_templates.all()}
-                            logger.debug(
-                                f"MCP credential templates: {template_keys} - mcp_name: {mcp_name}, template_keys: {list(template_keys)}"
-                            )
-                            for key in template_keys:
-                                if key in credentials:
-                                    mcp_credentials[key] = credentials[key]
-                                    logger.debug(
-                                        f"Added MCP credential '{key}' to mcp_credentials - mcp_name: {mcp_name}, credential_key: {key}"
-                                    )
-
-                            if isinstance(mcp_config, dict):
-                                mcp_credentials.update(mcp_config)
-                                logger.info(
-                                    f"MCP config merged into credentials: {list(mcp_config.keys())} - mcp_name: {mcp_name}, mcp_config_keys: {list(mcp_config.keys())}"
-                                )
-                        else:
-                            logger.warning(
-                                f"MCP '{mcp_name}' not found or inactive for agent '{agent.slug}' - agent_slug: {agent.slug}, mcp_name: {mcp_name}"
-                            )
-                    else:
-                        logger.debug(f"No MCP configured for agent '{agent.slug}' - agent_slug: {agent.slug}")
-                else:
-                    logger.debug(
-                        f"No IntegratedAgent metadata found for agent '{agent.slug}' - agent_slug: {agent.slug}, has_integrated_agent: {integrated_agent is not None}"
-                    )
             else:
                 logger.warning(
-                    f"No agent found for tool '{function_name}' - proceeding without agent-specific configuration - function_name: {function_name}, project_uuid: {project_uuid}"
+                    f"No agent found for tool '{function_name}' - proceeding without agent-specific configuration"
+                    f" - function_name: {function_name}, project_uuid: {project_uuid}"
                 )
 
             merged_credentials = {**credentials, **mcp_credentials}
             logger.debug(
-                f"Final merged credentials keys: {list(merged_credentials.keys())} "
-                f"(base: {len(credentials)}, mcp: {len(mcp_credentials)}) - "
-                f"base_credentials_count: {len(credentials)}, mcp_credentials_count: {len(mcp_credentials)}, "
-                f"merged_credentials_count: {len(merged_credentials)}, merged_credentials_keys: {list(merged_credentials.keys())}"
+                f"Final merged credentials keys: {list(merged_credentials.keys())}"
+                f" - base_credentials_count: {len(credentials)},"
+                f" mcp_credentials_count: {len(mcp_credentials)}, "
+                f" merged_credentials_count: {len(merged_credentials)},"
+                f" merged_credentials_keys: {list(merged_credentials.keys())}"
             )
 
             lambda_client = boto3.client("lambda", region_name="us-east-1")
@@ -773,10 +824,10 @@ class OpenAITeamAdapter(TeamAdapter):
 
             if not events:
                 logger.warning(
-                    f"No events returned by Lambda '{function_name}'. "
-                    f"This may indicate that the record will not be created in contact history. "
-                    f"Contact: {contact.get('urn', 'unknown')}, "
-                    f"Project: {project.get('uuid', 'unknown')}"
+                    f"No events returned by Lambda '{function_name}'"
+                    f" - This may indicate that the record will not be created in contact history."
+                    f" - contact_urn: {contact.get('urn', 'unknown')}, "
+                    f" - project_uuid: {project.get('uuid', 'unknown')}"
                 )
                 sentry_sdk.set_context(
                     "missing_lambda_events",
@@ -792,8 +843,8 @@ class OpenAITeamAdapter(TeamAdapter):
                 sentry_sdk.capture_message(f"Lambda '{function_name}' did not return events", level="warning")
             else:
                 logger.info(
-                    f"Lambda '{function_name}' returned {len(events)} event(s). "
-                    f"Contact: {contact.get('urn', 'unknown')}"
+                    f"Lambda '{function_name}' returned {len(events)} event(s)."
+                    f" Contact: {contact.get('urn', 'unknown')}"
                 )
 
             ctx.context.hooks_state.add_tool_info(function_name, session_attributes)
@@ -865,7 +916,6 @@ class OpenAITeamAdapter(TeamAdapter):
             parsed = tool_function_args.model_validate_json(args)
             payload = parsed.model_dump()
             return cls.invoke_aws_lambda(
-                cls,
                 function_name=function_name,
                 function_arn=function_arn,
                 payload=payload,

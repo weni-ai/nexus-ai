@@ -2,7 +2,7 @@ import logging
 
 import pendulum
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import OuterRef, Q, Subquery
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -23,7 +23,7 @@ from nexus.inline_agents.api.serializers import (
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
-from nexus.inline_agents.models import MCP, Agent, AgentGroup, AgentSystem
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
@@ -272,42 +272,30 @@ def get_all_credentials_for_group(group_slug: str) -> list:
     Get all credentials for all agents in a group.
     Consolidates credentials from all agents in the group.
     """
-    group = AgentGroup.objects.filter(slug=group_slug).first()
-    if not group:
-        return []
+    credentials = (
+        AgentCredential.objects.filter(
+            agents__group__slug=group_slug,
+            agents__is_official=True,
+            agents__source_type=Agent.PLATFORM,
+        )
+        .distinct("key")
+        .values("key", "label", "placeholder", "is_confidential")
+    )
 
-    agents = Agent.objects.filter(group=group, is_official=True, source_type=Agent.PLATFORM)
-    all_credentials = []
-    seen_credential_keys = set()
-
-    for agent in agents:
-        if hasattr(agent, "agentcredential_set"):
-            creds = agent.agentcredential_set.all().distinct("key")
-            for credential in creds:
-                if credential.key not in seen_credential_keys:
-                    all_credentials.append(
-                        {
-                            "name": credential.key,
-                            "label": credential.label,
-                            "placeholder": credential.placeholder,
-                            "is_confidential": credential.is_confidential,
-                        }
-                    )
-                    seen_credential_keys.add(credential.key)
-
-    return all_credentials
+    return [
+        {
+            "name": cred["key"],
+            "label": cred["label"],
+            "placeholder": cred["placeholder"],
+            "is_confidential": cred["is_confidential"],
+        }
+        for cred in credentials
+    ]
 
 
-def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dict:
-    """
-    Consolidate agents that belong to the same group into a single entry with variants list.
-    Returns a dict with 'legacy' and 'new' keys separating legacy agents from grouped agents.
-    For grouped agents, returns consolidated group data with a list of available variants.
-    """
+def _group_agents_by_slug(agents_queryset):
+    """Groups agents by their group slug, separating those without a group."""
     from collections import defaultdict
-
-    from nexus.inline_agents.api.serializers import OfficialAgentListSerializer
-    from nexus.inline_agents.models import IntegratedAgent
 
     agents_by_group = defaultdict(list)
     for agent in agents_queryset:
@@ -318,104 +306,148 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
             agents_by_group[agent.group.slug].append(agent)
         else:
             agents_by_group[None].append(agent)
+    return agents_by_group
+
+
+def _process_legacy_agents(group_agents, project_uuid=None):
+    """Processes legacy agents (those without a group)."""
+    legacy_agents = []
+    for agent in group_agents:
+        serializer = OfficialAgentListSerializer(agent, context={"project_uuid": project_uuid})
+        legacy_agents.append(serializer.data)
+    return legacy_agents
+
+
+def _get_group_systems(group_slug):
+    """Fetches all unique system slugs for a given group."""
+    all_group_agent_uuids = list(
+        Agent.objects.filter(group__slug=group_slug, is_official=True, source_type=Agent.PLATFORM).values_list(
+            "uuid", flat=True
+        )
+    )
+    return set(
+        AgentSystem.objects.filter(agents__uuid__in=all_group_agent_uuids).values_list("slug", flat=True).distinct()
+    )
+
+
+def _check_group_assignment(group_agents, project_uuid):
+    """Checks if any agent in the group is assigned to the project."""
+    if not project_uuid:
+        return False
+    agent_uuids = [agent.uuid for agent in group_agents]
+    return IntegratedAgent.objects.filter(project__uuid=project_uuid, agent__uuid__in=agent_uuids).exists()
+
+
+def _get_group_credentials(group_slug, all_systems):
+    """Determines credentials for the group based on MCP multiplicity."""
+    group_mcps = get_all_mcps_for_group(group_slug)
+    has_multiple_mcps = False
+    for system_slug in all_systems:
+        system_mcps = group_mcps.get(system_slug, [])
+        if isinstance(system_mcps, list) and len(system_mcps) > 1:
+            has_multiple_mcps = True
+            break
+
+    if not has_multiple_mcps:
+        return get_all_credentials_for_group(group_slug)
+    return []
+
+
+def _build_agents_list(group_agents, project_uuid):
+    """Builds the list of individual agents within the group."""
+    assigned_agent_uuids = set()
+    if project_uuid:
+        # Single query to get all assigned agents in the group
+        group_agent_uuids = [agent.uuid for agent in group_agents]
+        assigned_agent_uuids = set(
+            IntegratedAgent.objects.filter(project__uuid=project_uuid, agent__uuid__in=group_agent_uuids).values_list(
+                "agent__uuid", flat=True
+            )
+        )
+
+    agents_list = []
+    for agent in group_agents:
+        agent_data = {
+            "uuid": agent.uuid,
+            "name": agent.name,
+            "slug": agent.slug,
+            "systems": agent.systems,
+            "assigned": agent.uuid in assigned_agent_uuids,
+        }
+        agents_list.append(agent_data)
+    return agents_list
+
+
+def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, credentials, agents_list):
+    """Constructs the final payload for a grouped agent."""
+    generic_name = base_agent.name
+
+    if base_agent.group:
+        try:
+            if base_agent.group.modal.agent_name:
+                generic_name = base_agent.group.modal.agent_name
+            else:
+                generic_name = base_agent.group.name
+        except Exception:
+            generic_name = base_agent.group.name
+    elif "(" in generic_name:
+        generic_name = generic_name.split("(")[0].strip()
+
+    payload = {
+        "group": group_slug,
+        "name": generic_name,
+        "slug": base_agent.slug,
+        "description": base_agent.collaboration_instructions,
+        "type": (base_agent.agent_type.slug if getattr(base_agent, "agent_type", None) else ""),
+        "category": (base_agent.category.slug if getattr(base_agent, "category", None) else ""),
+        "systems": sorted(list(all_systems), key=lambda s: (0 if "vtex" in s.lower() else 1, s.lower())),
+        "assigned": group_assigned,
+        "is_official": base_agent.is_official,
+        "credentials": credentials,
+        "agents": agents_list,
+    }
+
+    try:
+        modal = base_agent.group.modal
+        presentation = {
+            "conversation_example": modal.conversation_example,
+            "about": modal.about,
+            "agent_name": modal.agent_name,
+        }
+        payload["presentation"] = presentation
+    except Exception:
+        pass
+
+    return payload
+
+
+def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dict:
+    """
+    Consolidate agents that belong to the same group into a single entry with agents list.
+    Returns a dict with 'legacy' and 'new' keys separating legacy agents from grouped agents.
+    For grouped agents, returns consolidated group data with a list of available agents.
+    """
+    agents_by_group = _group_agents_by_slug(agents_queryset)
 
     legacy_agents = []
     new_agents = []
 
     for group_slug, group_agents in agents_by_group.items():
         if group_slug is None:
-            for agent in group_agents:
-                serializer = OfficialAgentListSerializer(agent, context={"project_uuid": project_uuid})
-                legacy_agents.append(serializer.data)
+            legacy_agents.extend(_process_legacy_agents(group_agents, project_uuid))
         else:
             if not group_agents:
                 continue
 
             base_agent = group_agents[0]
+            group_assigned = _check_group_assignment(group_agents, project_uuid)
+            all_systems = _get_group_systems(group_slug)
+            credentials = _get_group_credentials(group_slug, all_systems)
+            agents_list = _build_agents_list(group_agents, project_uuid)
 
-            group_assigned = False
-            if project_uuid:
-                agent_uuids = [agent.uuid for agent in group_agents]
-                group_assigned = IntegratedAgent.objects.filter(
-                    project__uuid=project_uuid, agent__uuid__in=agent_uuids
-                ).exists()
-
-            # Get all systems for all agents in this group by querying the intermediate table directly
-            # This avoids any influence from the filtered queryset
-            all_group_agent_uuids = list(
-                Agent.objects.filter(group__slug=group_slug, is_official=True, source_type=Agent.PLATFORM).values_list(
-                    "uuid", flat=True
-                )
+            payload = _build_group_payload(
+                base_agent, group_slug, all_systems, group_assigned, credentials, agents_list
             )
-            # Query AgentSystem directly through the intermediate table, bypassing any queryset cache
-            all_systems = set(
-                AgentSystem.objects.filter(agents__uuid__in=all_group_agent_uuids)
-                .values_list("slug", flat=True)
-                .distinct()
-            )
-
-            group_mcps = get_all_mcps_for_group(group_slug)
-            has_multiple_mcps = False
-            for system_slug in all_systems:
-                system_mcps = group_mcps.get(system_slug, [])
-                if isinstance(system_mcps, list) and len(system_mcps) > 1:
-                    has_multiple_mcps = True
-                    break
-
-            credentials = []
-            if not has_multiple_mcps:
-                credentials = get_all_credentials_for_group(group_slug)
-
-            agents_list = []
-            for agent in group_agents:
-                agent_assigned = False
-                if project_uuid:
-                    agent_assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent).exists()
-
-                # Query systems directly through the intermediate table for this specific agent
-                # This ensures we get all systems regardless of any filters applied to the queryset
-                agent_systems = list(
-                    AgentSystem.objects.filter(agents__uuid=agent.uuid).values_list("slug", flat=True).distinct()
-                )
-
-                agent_data = {
-                    "uuid": agent.uuid,
-                    "name": agent.name,
-                    "slug": agent.slug,
-                    "systems": agent_systems,
-                    "assigned": agent_assigned,
-                }
-                agents_list.append(agent_data)
-
-            generic_name = base_agent.name
-            if "(" in generic_name:
-                generic_name = generic_name.split("(")[0].strip()
-
-            payload = {
-                "group": group_slug,
-                "name": generic_name,
-                "slug": base_agent.slug,
-                "description": base_agent.collaboration_instructions,
-                "type": (base_agent.agent_type.slug if getattr(base_agent, "agent_type", None) else ""),
-                "category": (base_agent.category.slug if getattr(base_agent, "category", None) else ""),
-                "systems": sorted(list(all_systems), key=lambda s: (0 if "vtex" in s.lower() else 1, s.lower())),
-                "assigned": group_assigned,
-                "is_official": base_agent.is_official,
-                "credentials": credentials,
-                "agents": agents_list,
-            }
-
-            try:
-                modal = base_agent.group.modal
-                presentation = {
-                    "conversation_example": modal.conversation_example,
-                    "about": modal.about,
-                    "agent_name": modal.agent_name,
-                }
-                payload["presentation"] = presentation
-            except Exception:
-                pass
-
             new_agents.append(payload)
 
     return {"legacy": legacy_agents, "new": new_agents}
@@ -432,8 +464,8 @@ class OfficialAgentsV1(APIView):
             "Returns available official agents separated into 'legacy' and 'new' keys. "
             "Legacy agents (without group) are returned individually. "
             "New agents (with group) are consolidated by group with consolidated systems, MCPs, and credentials. "
-            "Each grouped agent includes a 'variants' array listing all available variants with their UUIDs, "
-            "allowing the frontend to select which variant to view details for. "
+            "Each grouped agent includes a 'agents' array listing all available agents with their UUIDs, "
+            "allowing the frontend to select which agent to view details for. "
             "Optional filters: `type`, `group`, `category`, `system`. Use `project_uuid` to mark `assigned`."
         ),
         parameters=[
@@ -465,6 +497,14 @@ class OfficialAgentsV1(APIView):
         system_filter = request.query_params.get("system")
 
         agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+
+        latest_version_skills = Subquery(
+            Version.objects.filter(agent=OuterRef("pk"))
+            .order_by("-created_on")
+            .values_list("display_skills", flat=True)[:1]
+        )
+        agents = agents.annotate(latest_display_skills=latest_version_skills)
+
         agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
         if name_filter:
             agents = agents.filter(name__icontains=name_filter)
@@ -504,9 +544,10 @@ class OfficialAgentsV1(APIView):
         summary="Assign official agent to project and/or configure credentials",
         description=(
             "Assigns or removes an official agent (`assigned`) and optionally creates credentials. "
+            "Identify the agent either by `agent_uuid` (direct) or `group` + `system` + `mcp` (resolution). "
             "When `system` is provided, `credentials` must follow the system template. "
             "When `mcp` is provided, `credentials` must follow the MCP-specific template for that system. "
-            "`project_uuid` and `agent_uuid` are required query parameters. "
+            "`project_uuid` is required. Either `group` or `agent_uuid` is required. "
             "All other fields (`assigned`, `credentials`, `system`, `mcp`, `mcp_config`) are sent in the request body."
         ),
         parameters=[
@@ -518,11 +559,18 @@ class OfficialAgentsV1(APIView):
                 description="Project UUID to assign the agent to",
             ),
             OpenApiParameter(
+                name="group",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.STR,
+                description="The slug of the official agent group (required if agent_uuid is missing)",
+            ),
+            OpenApiParameter(
                 name="agent_uuid",
                 location=OpenApiParameter.QUERY,
-                required=True,
+                required=False,
                 type=OpenApiTypes.UUID,
-                description="Official agent UUID to assign",
+                description="The UUID of the official agent (required if group is missing)",
             ),
         ],
         request=OfficialAgentsAssignRequestSerializer,
@@ -536,104 +584,176 @@ class OfficialAgentsV1(APIView):
     )
     def post(self, request, *args, **kwargs):
         project_uuid = request.query_params.get("project_uuid")
+        group_slug = request.query_params.get("group")
         agent_uuid = request.query_params.get("agent_uuid")
+
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=400)
+
+        if not group_slug and not agent_uuid:
+            return Response({"error": "Either group or agent_uuid is required"}, status=400)
+
+        project = self._get_project_or_response(project_uuid)
+        if isinstance(project, Response):
+            return project
+
+        result = {}
+        agent = None
         assigned = request.data.get("assigned")
         credentials_data = request.data.get("credentials", [])
         system = request.data.get("system")
         mcp = request.data.get("mcp")
-        mcp_config = request.data.get("mcp_config", {})
-
-        if not project_uuid or not agent_uuid:
-            return Response({"error": "project_uuid and agent_uuid are required"}, status=400)
-
-        try:
-            project = Project.objects.get(uuid=project_uuid)
-            agent = Agent.objects.get(uuid=agent_uuid, is_official=True, source_type=Agent.PLATFORM)
-        except Project.DoesNotExist:
-            return Response({"error": "Project not found"}, status=404)
-        except Agent.DoesNotExist:
-            return Response({"error": "Agent not found"}, status=404)
-
-        result = {}
-
-        from nexus.inline_agents.api.serializers import OfficialAgentListSerializer
-
-        agent_serializer = OfficialAgentListSerializer(agent, context={"project_uuid": project_uuid})
-        result["agent"] = agent_serializer.data
 
         if assigned is not None:
-            assignment_result = self._handle_assignment(agent_uuid, project_uuid, assigned, mcp, mcp_config, system)
-            if isinstance(assignment_result, Response):
-                return assignment_result
-            result.update(assignment_result)
+            assignment_result = self._handle_assignment(
+                project_uuid,
+                assigned,
+                group_slug,
+                mcp,
+                request.data.get("mcp_config", {}),
+                system,
+                agent_uuid,
+            )
+            res, agent = self._process_assignment_result(assignment_result, project_uuid)
+            if isinstance(res, Response):
+                return res
+            result.update(res)
 
         if credentials_data:
+            if not agent:
+                agent = self._resolve_agent_fallback(group_slug, system, mcp, agent_uuid)
+                if not agent:
+                    msg = f"No agent found in group '{group_slug}'" if group_slug else f"Agent {agent_uuid} not found"
+                    return Response({"error": f"{msg} to apply credentials"}, status=404)
+
             creds_result = self._handle_credentials(agent, project, credentials_data, system, mcp)
             if isinstance(creds_result, Response):
                 return creds_result
             result.update(creds_result)
 
-        return Response(result or {"message": "No changes applied", "agent": agent_serializer.data}, status=200)
+            if "agent" not in result:
+                result["agent"] = OfficialAgentListSerializer(agent, context={"project_uuid": project_uuid}).data
+
+        return Response(result or {"message": "No changes applied"}, status=200)
+
+    def _find_better_agent(self, current_agent, mcp, system):
+        """Finds a better matching agent within the same group for the given MCP and system."""
+        if not current_agent.group:
+            return None
+
+        candidate_qs = Agent.objects.filter(
+            group=current_agent.group, is_official=True, mcps__name=mcp, mcps__is_active=True
+        )
+
+        if system:
+            candidate_qs = candidate_qs.filter(systems__slug__iexact=system)
+
+        return candidate_qs.first()
+
+    def _validate_agent_mcp_support(self, current_agent, mcp, system):
+        """Validates if the current agent or group supports the requested MCP."""
+        supports_it = current_agent.mcps.filter(name=mcp, is_active=True).exists()
+        if not supports_it:
+            error_msg = f"No agent in group '{current_agent.group.name}' supports MCP '{mcp}'"
+            if system:
+                error_msg += f" for system '{system}'"
+            return Response({"error": error_msg}, status=400)
+        return None
+
+    def _update_agent_metadata(self, integrated_agent, mcp, mcp_config, system):
+        """Updates metadata for the integrated agent."""
+        if not (mcp or mcp_config or system):
+            return
+
+        if not integrated_agent.metadata:
+            integrated_agent.metadata = {}
+        if mcp:
+            integrated_agent.metadata["mcp"] = mcp
+        if mcp_config:
+            integrated_agent.metadata["mcp_config"] = mcp_config
+        if system:
+            integrated_agent.metadata["system"] = system
+        integrated_agent.save(update_fields=["metadata"])
+
+    def _handle_group_unassignment(self, project_uuid, group_slug):
+        """Handles unassignment of all agents in a group."""
+        active_agents = IntegratedAgent.objects.filter(
+            project__uuid=project_uuid,
+            agent__group__slug=group_slug,
+            agent__is_official=True,
+        )
+        if active_agents.exists():
+            first_uuid = None
+            usecase = AssignAgentsUsecase()
+            for ia in active_agents:
+                uid = str(ia.agent.uuid)
+                if not first_uuid:
+                    first_uuid = uid
+                usecase.unassign_agent(uid, project_uuid)
+            return {"assigned": False, "real_agent_uuid": first_uuid}
+        return None
+
+    def _resolve_target_agent(self, group_slug, system, mcp, agent_uuid, assigned):
+        """Resolves the target agent UUID based on inputs."""
+        if agent_uuid:
+            return agent_uuid
+
+        if group_slug:
+            candidates = Agent.objects.filter(group__slug=group_slug, is_official=True)
+            if system:
+                candidates = candidates.filter(systems__slug__iexact=system)
+            if mcp:
+                candidates = candidates.filter(mcps__name=mcp, mcps__is_active=True)
+
+            best_match = candidates.first()
+            if best_match:
+                return str(best_match.uuid)
+            elif assigned:
+                return Response(
+                    {"error": f"No agent found in group '{group_slug}' for system '{system}' and MCP '{mcp}'"},
+                    status=404,
+                )
+        else:
+            return Response({"error": "Either group or agent_uuid is required for assignment"}, status=400)
+
+        return None
 
     def _handle_assignment(
         self,
-        agent_uuid: str,
         project_uuid: str,
         assigned: bool,
+        group_slug: str | None = None,
         mcp: str | None = None,
         mcp_config: dict | None = None,
         system: str | None = None,
+        agent_uuid: str | None = None,
     ) -> dict | Response:
         usecase = AssignAgentsUsecase()
-        if assigned:
-            # Matchmaking: If MCP is provided, try to find a better matching agent within the same group
-            real_agent_uuid = agent_uuid
-            if mcp:
-                try:
-                    current_agent = Agent.objects.get(uuid=agent_uuid)
-                    if current_agent.group:
-                        candidate_qs = Agent.objects.filter(
-                            group=current_agent.group, is_official=True, mcps__name=mcp, mcps__is_active=True
-                        )
 
-                        if system:
-                            candidate_qs = candidate_qs.filter(systems__slug__iexact=system)
+        if group_slug and not assigned:
+            result = self._handle_group_unassignment(project_uuid, group_slug)
+            if result:
+                return result
 
-                        better_agent = candidate_qs.first()
+        real_agent_uuid = self._resolve_target_agent(group_slug, system, mcp, agent_uuid, assigned)
 
-                        if better_agent:
-                            real_agent_uuid = str(better_agent.uuid)
-                        else:
-                            supports_it = current_agent.mcps.filter(name=mcp, is_active=True).exists()
-                            if not supports_it:
-                                error_msg = f"No agent in group '{current_agent.group.name}' supports MCP '{mcp}'"
-                                if system:
-                                    error_msg += f" for system '{system}'"
-                                return Response({"error": error_msg}, status=400)
-                except Agent.DoesNotExist:
-                    return Response({"error": "Agent not found"}, status=404)
+        if isinstance(real_agent_uuid, Response):
+            return real_agent_uuid
 
+        if not real_agent_uuid:
+            return Response({"error": "Could not resolve a valid agent for operation"}, status=400)
+
+        if not assigned:
             try:
-                created, integrated_agent = usecase.assign_agent(real_agent_uuid, project_uuid)
-
-                # Persist MCP selection and configuration in metadata
-                if mcp or mcp_config or system:
-                    if not integrated_agent.metadata:
-                        integrated_agent.metadata = {}
-                    if mcp:
-                        integrated_agent.metadata["mcp"] = mcp
-                    if mcp_config:
-                        integrated_agent.metadata["mcp_config"] = mcp_config
-                    if system:
-                        integrated_agent.metadata["system"] = system
-                    integrated_agent.save(update_fields=["metadata"])
-
-                return {"assigned": True, "assigned_created": created}
+                usecase.unassign_agent(real_agent_uuid, project_uuid)
+                return {"assigned": False, "real_agent_uuid": real_agent_uuid}
             except ValueError as e:
                 return Response({"error": str(e)}, status=404)
+
         try:
-            usecase.unassign_agent(agent_uuid, project_uuid)
-            return {"assigned": False}
+            created, integrated_agent = usecase.assign_agent(real_agent_uuid, project_uuid)
+            self._update_agent_metadata(integrated_agent, mcp, mcp_config, system)
+            return {"assigned": True, "assigned_created": created, "real_agent_uuid": real_agent_uuid}
         except ValueError as e:
             return Response({"error": str(e)}, status=404)
 
@@ -784,6 +904,42 @@ class OfficialAgentsV1(APIView):
                 }
             )
         return payload
+
+    def _get_project_or_response(self, project_uuid):
+        try:
+            return Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return Response({"error": "Project not found"}, status=404)
+
+    def _resolve_agent_fallback(self, group_slug, system, mcp, agent_uuid=None):
+        if agent_uuid:
+            return Agent.objects.filter(uuid=agent_uuid).first()
+
+        candidates = Agent.objects.filter(group__slug=group_slug, is_official=True)
+        if system:
+            candidates = candidates.filter(systems__slug__iexact=system)
+        if mcp:
+            candidates = candidates.filter(mcps__name=mcp, mcps__is_active=True)
+        return candidates.first()
+
+    def _process_assignment_result(self, assignment_result, project_uuid):
+        if isinstance(assignment_result, Response):
+            return assignment_result, None
+
+        result = {}
+        agent = None
+
+        if "real_agent_uuid" in assignment_result:
+            real_uuid = assignment_result["real_agent_uuid"]
+            try:
+                agent = Agent.objects.get(uuid=real_uuid)
+                agent_serializer = OfficialAgentListSerializer(agent, context={"project_uuid": project_uuid})
+                result["agent"] = agent_serializer.data
+            except Agent.DoesNotExist:
+                return Response({"error": "Resolved agent not found"}, status=404), None
+
+        result.update(assignment_result)
+        return result, agent
 
 
 class OfficialAgentDetailV1(APIView):
