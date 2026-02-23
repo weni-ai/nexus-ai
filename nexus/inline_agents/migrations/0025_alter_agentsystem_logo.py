@@ -7,7 +7,7 @@ import nexus.storage
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('inline_agents', '0024_manageragent_append_manager_extra_args_and_more.py'),
+        ('inline_agents', '0024_manageragent_append_manager_extra_args_and_more'),
     ]
 
     operations = [

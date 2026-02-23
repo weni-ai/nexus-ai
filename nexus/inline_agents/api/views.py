@@ -21,7 +21,8 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
 )
-from nexus.inline_agents.backends.openai.models import ManagerAgent, OpenAISupervisor as DeprecatedManagerAgent
+from nexus.inline_agents.backends.openai.models import ManagerAgent
+from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
 from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
@@ -354,22 +355,24 @@ def _get_group_credentials(group_slug, all_systems):
 
 def _build_agents_list(group_agents, project_uuid):
     """Builds the list of individual agents within the group."""
-    agents_list = []
-    for agent in group_agents:
-        agent_assigned = False
-        if project_uuid:
-            agent_assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent).exists()
-
-        agent_systems = list(
-            AgentSystem.objects.filter(agents__uuid=agent.uuid).values_list("slug", flat=True).distinct()
+    assigned_agent_uuids = set()
+    if project_uuid:
+        # Single query to get all assigned agents in the group
+        group_agent_uuids = [agent.uuid for agent in group_agents]
+        assigned_agent_uuids = set(
+            IntegratedAgent.objects.filter(project__uuid=project_uuid, agent__uuid__in=group_agent_uuids).values_list(
+                "agent__uuid", flat=True
+            )
         )
 
+    agents_list = []
+    for agent in group_agents:
         agent_data = {
             "uuid": agent.uuid,
             "name": agent.name,
             "slug": agent.slug,
-            "systems": agent_systems,
-            "assigned": agent_assigned,
+            "systems": agent.systems,
+            "assigned": agent.uuid in assigned_agent_uuids,
         }
         agents_list.append(agent_data)
     return agents_list
@@ -496,7 +499,9 @@ class OfficialAgentsV1(APIView):
         agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
 
         latest_version_skills = Subquery(
-            Version.objects.filter(agent=OuterRef("pk")).order_by("-created_on").values("display_skills")[:1]
+            Version.objects.filter(agent=OuterRef("pk"))
+            .order_by("-created_on")
+            .values_list("display_skills", flat=True)[:1]
         )
         agents = agents.annotate(latest_display_skills=latest_version_skills)
 
