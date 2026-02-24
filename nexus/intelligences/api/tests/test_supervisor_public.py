@@ -73,3 +73,21 @@ class TestSupervisorPublicAPI(TestCase):
         self.assertEqual(item["contact_urn"], self.conversation.contact_urn)
         self.assertIn("messages", item)
         self.assertEqual(item["messages"][0]["text"], "hello")
+
+    def test_invalid_date_format(self):
+        url = reverse(
+            "public-supervisor-conversations",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+        response = self.client.get(f"{url}?start=invalid-date", HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("date", response.json())
+
+    def test_invalid_status(self):
+        url = reverse(
+            "public-supervisor-conversations",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+        response = self.client.get(f"{url}?status=invalid-status", HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("status", response.json())
