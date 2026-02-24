@@ -1,5 +1,5 @@
 from io import BytesIO
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import boto3
 from django.conf import settings
@@ -121,7 +121,8 @@ class BedrockClient:
                 # Get existing environment variables to merge with APM variables
                 try:
                     current_config = self.lambda_client.get_function_configuration(FunctionName=lambda_name)
-                    existing_vars = current_config.get("Environment", {}).get("Variables", {})
+                    environment = current_config.get("Environment") or {}
+                    existing_vars = environment.get("Variables", {})
                     # Merge existing variables with APM variables (APM variables take precedence)
                     merged_vars = {**existing_vars, **environment_variables}
                     update_config_params["Environment"] = {"Variables": merged_vars}
