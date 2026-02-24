@@ -94,6 +94,10 @@ class TestSupervisorPublicAPI(TestCase):
 
     @mock.patch("nexus.intelligences.api.supervisor_public.MessageService")
     def test_status_summary_aggregation(self, MockMessageService):
+        # Setup mock properly to avoid recursion
+        instance = MockMessageService.return_value
+        instance.get_messages_for_conversation.return_value = []
+
         # Create multiple conversations to verify aggregation
         from datetime import datetime, timedelta, timezone
 
