@@ -171,7 +171,7 @@ class ConversationsProxyView(APIView):
             "Authorization": f"Bearer {token}",
         }
 
-        response = requests.get(url, headers=headers, params=query_params)
+        response = requests.get(url, headers=headers, params=query_params, timeout=45)
         response.raise_for_status()
         return response.json()
 
@@ -316,7 +316,7 @@ class ConversationDetailProxyView(APIView):
             "Authorization": f"Bearer {token}",
         }
 
-        response = requests.get(url, headers=headers, params=query_params or {})
+        response = requests.get(url, headers=headers, params=query_params or {}, timeout=45)
         response.raise_for_status()
         return response.json()
 

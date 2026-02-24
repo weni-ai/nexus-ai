@@ -185,9 +185,14 @@ class SupervisorPublicConversationsView(APIView):
 
             # Calculate summary stats before pagination and status filtering
             status_summary = {str(key): 0 for key, _ in Conversation.RESOLUTION_CHOICES}
-            status_counts = qs.values("resolution").annotate(count=Count("resolution"))
+            status_counts = qs.values("resolution").annotate(count=Count("resolution")).order_by()
             for item in status_counts:
-                status_summary[str(item["resolution"])] = item["count"]
+                res = str(item["resolution"])
+                if res in status_summary:
+                    status_summary[res] = item["count"]
+                else:
+                    # If resolution is None or not in choices, we map it to "3" (Unclassified)
+                    status_summary["3"] += item["count"]
 
             status_param = request.query_params.get("status")
             if status_param:

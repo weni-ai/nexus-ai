@@ -91,3 +91,49 @@ class TestSupervisorPublicAPI(TestCase):
         response = self.client.get(f"{url}?status=invalid-status", HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("status", response.json())
+
+    @mock.patch("nexus.intelligences.api.supervisor_public.MessageService")
+    def test_status_summary_aggregation(self, MockMessageService):
+        # Create multiple conversations to verify aggregation
+        from datetime import datetime, timedelta, timezone
+
+        start_dt = datetime.now(tz=timezone.utc) - timedelta(days=2)
+        end_dt = datetime.now(tz=timezone.utc) - timedelta(days=1)
+
+        # Create 5 resolved conversations
+        for _ in range(5):
+            Conversation.objects.create(
+                project=self.project,
+                contact_urn="whatsapp:123",
+                channel_uuid=uuid.uuid4(),
+                start_date=start_dt,
+                end_date=end_dt,
+                resolution=0,
+            )
+
+        # Create 3 in-progress conversations
+        for _ in range(3):
+            Conversation.objects.create(
+                project=self.project,
+                contact_urn="whatsapp:123",
+                channel_uuid=uuid.uuid4(),
+                start_date=start_dt,
+                end_date=end_dt,
+                resolution=2,
+            )
+
+        url = reverse(
+            "public-supervisor-conversations",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+
+        response = self.client.get(url, HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+
+        status_summary = data["status_summary"]
+
+        # We have 1 conversation from setUp (resolution=2) + 3 created above = 4
+        # We created 5 conversations with resolution=0
+        self.assertEqual(status_summary["0"], 5)
+        self.assertEqual(status_summary["2"], 4)

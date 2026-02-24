@@ -355,22 +355,24 @@ def _get_group_credentials(group_slug, all_systems):
 
 def _build_agents_list(group_agents, project_uuid):
     """Builds the list of individual agents within the group."""
-    agents_list = []
-    for agent in group_agents:
-        agent_assigned = False
-        if project_uuid:
-            agent_assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent).exists()
-
-        agent_systems = list(
-            AgentSystem.objects.filter(agents__uuid=agent.uuid).values_list("slug", flat=True).distinct()
+    assigned_agent_uuids = set()
+    if project_uuid:
+        # Single query to get all assigned agents in the group
+        group_agent_uuids = [agent.uuid for agent in group_agents]
+        assigned_agent_uuids = set(
+            IntegratedAgent.objects.filter(project__uuid=project_uuid, agent__uuid__in=group_agent_uuids).values_list(
+                "agent__uuid", flat=True
+            )
         )
 
+    agents_list = []
+    for agent in group_agents:
         agent_data = {
             "uuid": agent.uuid,
             "name": agent.name,
             "slug": agent.slug,
-            "systems": agent_systems,
-            "assigned": agent_assigned,
+            "systems": [s.slug for s in agent.systems.all()],
+            "assigned": agent.uuid in assigned_agent_uuids,
         }
         agents_list.append(agent_data)
     return agents_list
@@ -494,10 +496,12 @@ class OfficialAgentsV1(APIView):
         category_filter = request.query_params.get("category")
         system_filter = request.query_params.get("system")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).prefetch_related("systems")
 
         latest_version_skills = Subquery(
-            Version.objects.filter(agent=OuterRef("pk")).order_by("-created_on").values("display_skills")[:1]
+            Version.objects.filter(agent=OuterRef("pk"))
+            .order_by("-created_on")
+            .values_list("display_skills", flat=True)[:1]
         )
         agents = agents.annotate(latest_display_skills=latest_version_skills)
 
@@ -520,7 +524,9 @@ class OfficialAgentsV1(APIView):
                 agents.filter(systems__slug__iexact=system_filter).distinct("uuid").values_list("uuid", flat=True)
             )
             # Fetch agents again without the systems filter to avoid queryset state issues
-            agents = Agent.objects.filter(uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM)
+            agents = Agent.objects.filter(
+                uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM
+            ).prefetch_related("systems")
             agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
 
         consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
@@ -1591,7 +1597,7 @@ class AgentManagersView(APIView):
                 data = {
                     "serverTime": str(pendulum.now()),
                     "new": {"id": str(current_manager.uuid), "label": current_manager.name},
-                    "currentManager": current_manager_id
+                    "currentManager": current_manager_id,
                 }
                 return Response(data=data)
         else:

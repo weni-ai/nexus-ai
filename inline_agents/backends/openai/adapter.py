@@ -729,7 +729,14 @@ class OpenAITeamAdapter(TeamAdapter):
                     f" - agent_slug: {agent.slug}, agent_uuid: {str(agent.uuid)}, function_name: {function_name}"
                 )
 
-                cls._validate_agent_tooling(function_name, payload, agent)
+                validation_errors = cls._validate_agent_tooling(function_name, payload, agent)
+                if validation_errors:
+                    error_message = (
+                        f"Tool parameter validation failed for '{function_name}': {', '.join(validation_errors)}"
+                    )
+                    logger.error(error_message)
+                    return json.dumps({"error": error_message})
+
                 constants = cls._prepare_agent_constants(agent, integrated_agent)
                 mcp_credentials = cls._prepare_mcp_credentials(agent, integrated_agent, credentials)
 

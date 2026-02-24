@@ -16,7 +16,6 @@ class ConversationsRESTClient(RestClient):
     @property
     def headers(self):
         return {
-            "Content-Type": "application/json; charset: utf-8",
             "Authorization": f"Bearer {self.token}",
         }
 
@@ -83,6 +82,7 @@ class ConversationsRESTClient(RestClient):
             self._get_url(endpoint),
             headers=self.headers,
             params=params if params else None,
+            timeout=45,
         )
         response.raise_for_status()
         return response.json()
