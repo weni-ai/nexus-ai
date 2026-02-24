@@ -21,7 +21,7 @@ class ConversationClassificationSerializer(serializers.Serializer):
 class ConversationSerializer(serializers.Serializer):
     uuid = serializers.UUIDField()
     contact_urn = serializers.CharField(required=False, allow_null=True)
-    contact_name = serializers.CharField(required=False, allow_null=True)
+    contact_name = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     status = serializers.CharField(required=False, allow_null=True)
     resolution = serializers.IntegerField(required=False, allow_null=True)
     start_date = serializers.DateTimeField(required=False, allow_null=True)
