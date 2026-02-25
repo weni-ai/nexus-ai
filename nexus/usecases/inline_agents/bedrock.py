@@ -22,7 +22,7 @@ class BedrockClient:
             return []
 
         region = settings.AWS_BEDROCK_REGION_NAME
-        architecture = getattr(settings, "ELASTIC_APM_LAMBDA_ARCHITECTURE", "x86_64")
+        architecture = getattr(settings, "ELASTIC_APM_LAMBDA_ARCHITECTURE", "arm64")
         extension_version = getattr(settings, "ELASTIC_APM_LAMBDA_EXTENSION_VERSION", "1-6-0")
         python_agent_version = getattr(settings, "ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION", "6-25-0")
 
@@ -73,6 +73,7 @@ class BedrockClient:
             "Role": lambda_role,
             "Code": {"ZipFile": zip_buffer.getvalue()},
             "Handler": skill_handler,
+            "Architectures": ["arm64"],
         }
 
         # Add layers if Elastic APM is enabled
