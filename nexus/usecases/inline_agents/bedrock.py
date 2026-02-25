@@ -1,8 +1,11 @@
+import logging
 from io import BytesIO
 from typing import Dict, List
 
 import boto3
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 class BedrockClient:
@@ -138,8 +141,17 @@ class BedrockClient:
             current_layer_arns = [layer.get("Arn", "") for layer in current_layers if layer.get("Arn")]
             environment = current_config.get("Environment") or {}
             existing_vars = environment.get("Variables", {})
-        except Exception:
-            # If we can't get current config, assume no APM is present
+        except Exception as e:
+            # If we can't get current config, log the error and assume no APM is present
+            logger.error(
+                "Failed to get current Lambda function configuration",
+                extra={
+                    "lambda_name": lambda_name,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+                exc_info=True,
+            )
             current_layer_arns = []
             existing_vars = {}
 

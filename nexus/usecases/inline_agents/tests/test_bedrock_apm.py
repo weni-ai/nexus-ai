@@ -474,18 +474,30 @@ class TestBedrockClientElasticAPM(TestCase):
         AWS_BEDROCK_REGION_NAME="us-east-1",
     )
     @patch.object(BedrockClient, "update_lambda_alias")
-    def test_update_lambda_function_with_apm_enabled_handles_exception(self, mock_update_alias):
-        """Tests that update handles exceptions when getting current configuration"""
+    @patch("nexus.usecases.inline_agents.bedrock.logger")
+    def test_update_lambda_function_with_apm_enabled_handles_exception(self, mock_logger, mock_update_alias):
+        """Tests that update handles exceptions when getting current configuration and logs the error"""
         mock_lambda_client = Mock()
         mock_lambda_client.update_function_code.return_value = {
             "Version": "2",
             "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function",
         }
         mock_lambda_client.get_waiter.return_value.wait = Mock()
-        mock_lambda_client.get_function_configuration.side_effect = Exception("Config error")
+        config_error = Exception("Config error")
+        mock_lambda_client.get_function_configuration.side_effect = config_error
         self.client.lambda_client = mock_lambda_client
 
         self.client.update_lambda_function(self.lambda_name, self.zip_buffer)
+
+        # Verify that error was logged with proper context
+        mock_logger.error.assert_called_once()
+        error_call_args = mock_logger.error.call_args
+        self.assertEqual(error_call_args.args[0], "Failed to get current Lambda function configuration")
+        self.assertIn("lambda_name", error_call_args.kwargs["extra"])
+        self.assertEqual(error_call_args.kwargs["extra"]["lambda_name"], self.lambda_name)
+        self.assertIn("error_type", error_call_args.kwargs["extra"])
+        self.assertIn("error_message", error_call_args.kwargs["extra"])
+        self.assertTrue(error_call_args.kwargs["exc_info"])
 
         # Verify that update_function_configuration was called even with error
         mock_lambda_client.update_function_configuration.assert_called_once()
