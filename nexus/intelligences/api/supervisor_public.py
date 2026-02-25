@@ -189,7 +189,7 @@ class SupervisorPublicConversationsView(APIView):
             for item in status_counts:
                 res = str(item["resolution"])
                 if res in status_summary:
-                    status_summary[res] = item["count"]
+                    status_summary[res] += item["count"]
                 else:
                     # If resolution is None or not in choices, we map it to "3" (Unclassified)
                     status_summary["3"] += item["count"]
