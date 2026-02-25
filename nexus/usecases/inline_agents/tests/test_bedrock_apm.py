@@ -200,21 +200,130 @@ class TestBedrockClientElasticAPM(TestCase):
     )
     @patch.object(BedrockClient, "update_lambda_alias")
     def test_update_lambda_function_with_apm_disabled(self, mock_update_alias):
-        """Tests that when APM is disabled, update does not add layers or variables"""
+        """Tests that when APM is disabled and no APM was present, update does not add layers or variables"""
         mock_lambda_client = Mock()
         mock_lambda_client.update_function_code.return_value = {
             "Version": "1",
             "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function",
         }
         mock_lambda_client.get_waiter.return_value.wait = Mock()
+        # No APM layers or variables present
+        mock_lambda_client.get_function_configuration.return_value = {
+            "Layers": [],
+            "Environment": {"Variables": {"OTHER_VAR": "value"}},
+        }
         self.client.lambda_client = mock_lambda_client
 
         self.client.update_lambda_function(self.lambda_name, self.zip_buffer)
 
-        # Verify that update_function_configuration was NOT called
+        # Verify that update_function_configuration was NOT called (no APM to remove)
         mock_lambda_client.update_function_configuration.assert_not_called()
         # Verify that update_lambda_alias was called
         mock_update_alias.assert_called_once_with(self.lambda_name, "1")
+
+    @override_settings(
+        ELASTIC_APM_LAMBDA_ENABLED=False,
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+    )
+    @patch.object(BedrockClient, "update_lambda_alias")
+    def test_update_lambda_function_removes_apm_when_disabled(self, mock_update_alias):
+        """Tests that when APM is disabled but was previously enabled, it removes APM layers and variables"""
+        mock_lambda_client = Mock()
+        mock_lambda_client.update_function_code.return_value = {
+            "Version": "2",
+            "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function",
+        }
+        mock_lambda_client.get_waiter.return_value.wait = Mock()
+        # APM layers and variables are present
+        apm_extension_layer = "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-extension-ver-1-6-0-x86_64:1"
+        apm_python_layer = "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-python-ver-6-25-0:1"
+        mock_lambda_client.get_function_configuration.return_value = {
+            "Layers": [
+                {"Arn": apm_extension_layer},
+                {"Arn": apm_python_layer},
+            ],
+            "Environment": {
+                "Variables": {
+                    "OTHER_VAR": "value",
+                    "AWS_LAMBDA_EXEC_WRAPPER": "/opt/python/bin/elasticapm-lambda",
+                    "ELASTIC_APM_LAMBDA_APM_SERVER": "https://apm-server.example.com",
+                    "ELASTIC_APM_SECRET_TOKEN": "old-token",
+                    "ELASTIC_APM_SEND_STRATEGY": "background",
+                }
+            },
+        }
+        self.client.lambda_client = mock_lambda_client
+
+        self.client.update_lambda_function(self.lambda_name, self.zip_buffer)
+
+        # Verify that update_function_configuration was called to remove APM
+        mock_lambda_client.update_function_configuration.assert_called_once()
+
+        # Verify the parameters passed
+        call_args = mock_lambda_client.update_function_configuration.call_args
+        call_kwargs = call_args.kwargs
+
+        # Verify that Layers was set to empty (no APM layers)
+        self.assertIn("Layers", call_kwargs)
+        self.assertEqual(call_kwargs["Layers"], [])
+
+        # Verify that Environment was updated to remove APM variables
+        self.assertIn("Environment", call_kwargs)
+        environment = call_kwargs["Environment"]
+        env_vars = environment["Variables"]
+
+        # Verify that APM variables were removed
+        self.assertNotIn("AWS_LAMBDA_EXEC_WRAPPER", env_vars)
+        self.assertNotIn("ELASTIC_APM_LAMBDA_APM_SERVER", env_vars)
+        self.assertNotIn("ELASTIC_APM_SECRET_TOKEN", env_vars)
+        self.assertNotIn("ELASTIC_APM_SEND_STRATEGY", env_vars)
+
+        # Verify that non-APM variables were preserved
+        self.assertEqual(env_vars["OTHER_VAR"], "value")
+
+    @override_settings(
+        ELASTIC_APM_LAMBDA_ENABLED=False,
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+    )
+    @patch.object(BedrockClient, "update_lambda_alias")
+    def test_update_lambda_function_removes_only_apm_layers_when_other_layers_present(self, mock_update_alias):
+        """Tests that when APM is disabled, only APM layers are removed while other layers are preserved"""
+        mock_lambda_client = Mock()
+        mock_lambda_client.update_function_code.return_value = {
+            "Version": "2",
+            "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function",
+        }
+        mock_lambda_client.get_waiter.return_value.wait = Mock()
+        # APM layers and non-APM layers are present
+        apm_extension_layer = "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-extension-ver-1-6-0-x86_64:1"
+        apm_python_layer = "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-python-ver-6-25-0:1"
+        other_layer = "arn:aws:lambda:us-east-1:123456789012:layer:other-layer:1"
+        mock_lambda_client.get_function_configuration.return_value = {
+            "Layers": [
+                {"Arn": other_layer},
+                {"Arn": apm_extension_layer},
+                {"Arn": apm_python_layer},
+            ],
+            "Environment": {"Variables": {"OTHER_VAR": "value"}},
+        }
+        self.client.lambda_client = mock_lambda_client
+
+        self.client.update_lambda_function(self.lambda_name, self.zip_buffer)
+
+        # Verify that update_function_configuration was called to remove APM layers
+        mock_lambda_client.update_function_configuration.assert_called_once()
+
+        # Verify the parameters passed
+        call_args = mock_lambda_client.update_function_configuration.call_args
+        call_kwargs = call_args.kwargs
+
+        # Verify that Layers contains only the non-APM layer
+        self.assertIn("Layers", call_kwargs)
+        layers = call_kwargs["Layers"]
+        self.assertEqual(len(layers), 1)
+        self.assertEqual(layers[0], other_layer)
+        self.assertNotIn(apm_extension_layer, layers)
+        self.assertNotIn(apm_python_layer, layers)
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
@@ -235,7 +344,8 @@ class TestBedrockClientElasticAPM(TestCase):
         }
         mock_lambda_client.get_waiter.return_value.wait = Mock()
         mock_lambda_client.get_function_configuration.return_value = {
-            "Environment": {"Variables": {"EXISTING_VAR": "existing_value", "ANOTHER_VAR": "another_value"}}
+            "Layers": [],
+            "Environment": {"Variables": {"EXISTING_VAR": "existing_value", "ANOTHER_VAR": "another_value"}},
         }
         self.client.lambda_client = mock_lambda_client
 
@@ -267,6 +377,48 @@ class TestBedrockClientElasticAPM(TestCase):
         self.assertEqual(env_vars["ELASTIC_APM_LAMBDA_APM_SERVER"], "https://apm-server.example.com")
         self.assertEqual(env_vars["ELASTIC_APM_SECRET_TOKEN"], "test-secret-token")
         self.assertEqual(env_vars["ELASTIC_APM_SEND_STRATEGY"], "background")
+
+    @override_settings(
+        ELASTIC_APM_LAMBDA_ENABLED=True,
+        ELASTIC_APM_LAMBDA_APM_SERVER="https://apm-server.example.com",
+        ELASTIC_APM_LAMBDA_SECRET_TOKEN="test-secret-token",
+        ELASTIC_APM_LAMBDA_ARCHITECTURE="x86_64",
+        ELASTIC_APM_LAMBDA_EXTENSION_VERSION="1-6-0",
+        ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION="6-25-0",
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+    )
+    @patch.object(BedrockClient, "update_lambda_alias")
+    def test_update_lambda_function_with_apm_enabled_preserves_non_apm_layers(self, mock_update_alias):
+        """Tests that when APM is enabled, non-APM layers are preserved"""
+        mock_lambda_client = Mock()
+        mock_lambda_client.update_function_code.return_value = {
+            "Version": "2",
+            "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function",
+        }
+        mock_lambda_client.get_waiter.return_value.wait = Mock()
+        other_layer = "arn:aws:lambda:us-east-1:123456789012:layer:other-layer:1"
+        mock_lambda_client.get_function_configuration.return_value = {
+            "Layers": [{"Arn": other_layer}],
+            "Environment": {"Variables": {"OTHER_VAR": "value"}},
+        }
+        self.client.lambda_client = mock_lambda_client
+
+        self.client.update_lambda_function(self.lambda_name, self.zip_buffer)
+
+        # Verify that update_function_configuration was called
+        mock_lambda_client.update_function_configuration.assert_called_once()
+
+        # Verify the parameters passed
+        call_args = mock_lambda_client.update_function_configuration.call_args
+        call_kwargs = call_args.kwargs
+
+        # Verify that Layers contains both APM layers and the non-APM layer
+        self.assertIn("Layers", call_kwargs)
+        layers = call_kwargs["Layers"]
+        # Should have 2 APM layers + 1 non-APM layer = 3 total
+        self.assertEqual(len(layers), 3)
+        # Verify non-APM layer is preserved
+        self.assertIn(other_layer, layers)
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
