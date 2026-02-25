@@ -1,8 +1,11 @@
+import logging
 from io import BytesIO
-from typing import Dict
+from typing import Dict, List
 
 import boto3
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 class BedrockClient:
@@ -10,18 +13,79 @@ class BedrockClient:
         self.lambda_client = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME)
         self.cloudwatch_client = boto3.client("logs", region_name=settings.AWS_BEDROCK_REGION_NAME)
 
+    def _get_elastic_apm_layers(self) -> List[str]:
+        """
+        Get Elastic APM Lambda layers ARNs based on configuration.
+        Returns empty list if APM is disabled or not configured.
+        """
+        if not getattr(settings, "ELASTIC_APM_LAMBDA_ENABLED", False):
+            return []
+
+        region = settings.AWS_BEDROCK_REGION_NAME
+        architecture = getattr(settings, "ELASTIC_APM_LAMBDA_ARCHITECTURE", "arm64")
+        extension_version = getattr(settings, "ELASTIC_APM_LAMBDA_EXTENSION_VERSION", "1-6-0")
+        python_agent_version = getattr(settings, "ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION", "6-25-0")
+
+        # Elastic APM layer ARNs format:
+        # Extension: arn:aws:lambda:{region}:267093732750:layer:elastic-apm-extension-ver-{version}-{arch}:1
+        # Python Agent: arn:aws:lambda:{region}:267093732750:layer:elastic-apm-python-ver-{version}:1
+        extension_layer_arn = (
+            f"arn:aws:lambda:{region}:267093732750:layer:elastic-apm-extension-ver-{extension_version}-{architecture}:1"
+        )
+        python_agent_layer_arn = (
+            f"arn:aws:lambda:{region}:267093732750:layer:elastic-apm-python-ver-{python_agent_version}:1"
+        )
+
+        return [extension_layer_arn, python_agent_layer_arn]
+
+    def _get_elastic_apm_environment_variables(self) -> Dict[str, str]:
+        """
+        Get Elastic APM Lambda environment variables.
+        Returns empty dict if APM is disabled or not configured.
+        """
+        if not getattr(settings, "ELASTIC_APM_LAMBDA_ENABLED", False):
+            return {}
+
+        apm_server = getattr(settings, "ELASTIC_APM_LAMBDA_APM_SERVER", "")
+        secret_token = getattr(settings, "ELASTIC_APM_LAMBDA_SECRET_TOKEN", "")
+
+        if not apm_server or not secret_token:
+            return {}
+
+        return {
+            "AWS_LAMBDA_EXEC_WRAPPER": "/opt/python/bin/elasticapm-lambda",
+            "ELASTIC_APM_LAMBDA_APM_SERVER": apm_server,
+            "ELASTIC_APM_SECRET_TOKEN": secret_token,
+            "ELASTIC_APM_SEND_STRATEGY": "background",
+        }
+
     def create_lambda_function(
         self, lambda_name: str, lambda_role: str, skill_handler: str, zip_buffer: BytesIO
     ) -> Dict[str, str]:
+        # Get Elastic APM layers and environment variables
+        layers = self._get_elastic_apm_layers()
+        environment_variables = self._get_elastic_apm_environment_variables()
+
+        create_function_params = {
+            "FunctionName": lambda_name,
+            "Runtime": "python3.12",
+            "Timeout": 180,
+            "Role": lambda_role,
+            "Code": {"ZipFile": zip_buffer.getvalue()},
+            "Handler": skill_handler,
+            "Architectures": ["arm64"],
+        }
+
+        # Add layers if Elastic APM is enabled
+        if layers:
+            create_function_params["Layers"] = layers
+
+        # Add environment variables if Elastic APM is enabled
+        if environment_variables:
+            create_function_params["Environment"] = {"Variables": environment_variables}
+
         try:
-            lambda_function = self.lambda_client.create_function(
-                FunctionName=lambda_name,
-                Runtime="python3.12",
-                Timeout=180,
-                Role=lambda_role,
-                Code={"ZipFile": zip_buffer.getvalue()},
-                Handler=skill_handler,
-            )
+            lambda_function = self.lambda_client.create_function(**create_function_params)
             lambda_arn = lambda_function.get("FunctionArn")
         except self.lambda_client.exceptions.ResourceConflictException:
             lambda_function = self.lambda_client.get_function(FunctionName=lambda_name)
@@ -40,6 +104,24 @@ class BedrockClient:
         # list_versions_by_function["Versions"][0]["Version"]
         self.lambda_client.delete_function(FunctionName=function_name)
 
+    def _is_apm_layer(self, layer_arn: str) -> bool:
+        """
+        Check if a layer ARN is an Elastic APM layer.
+        """
+        return "elastic-apm" in layer_arn.lower()
+
+    def _is_apm_environment_variable(self, var_name: str) -> bool:
+        """
+        Check if an environment variable name is an Elastic APM variable.
+        """
+        apm_var_names = {
+            "AWS_LAMBDA_EXEC_WRAPPER",
+            "ELASTIC_APM_LAMBDA_APM_SERVER",
+            "ELASTIC_APM_SECRET_TOKEN",
+            "ELASTIC_APM_SEND_STRATEGY",
+        }
+        return var_name in apm_var_names
+
     def update_lambda_function(self, lambda_name: str, zip_buffer: BytesIO) -> Dict[str, str]:
         response = self.lambda_client.update_function_code(
             FunctionName=lambda_name, ZipFile=zip_buffer.getvalue(), Publish=True
@@ -48,6 +130,80 @@ class BedrockClient:
         waiter.wait(FunctionName=lambda_name, WaiterConfig={"Delay": 5, "MaxAttempts": 60})
         new_version = response["Version"]
         lambda_arn = response["FunctionArn"]
+
+        # Get desired APM configuration
+        desired_layers = self._get_elastic_apm_layers()
+        desired_environment_variables = self._get_elastic_apm_environment_variables()
+
+        # Get current configuration to check if APM needs to be removed
+        try:
+            current_config = self.lambda_client.get_function_configuration(FunctionName=lambda_name)
+            current_layers = current_config.get("Layers", [])
+            current_layer_arns = [layer.get("Arn", "") for layer in current_layers if layer.get("Arn")]
+            environment = current_config.get("Environment") or {}
+            existing_vars = environment.get("Variables", {})
+        except Exception as e:
+            # If we can't get current config, log the error and assume no APM is present
+            logger.error(
+                "Failed to get current Lambda function configuration",
+                extra={
+                    "lambda_name": lambda_name,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+                exc_info=True,
+            )
+            current_layer_arns = []
+            existing_vars = {}
+
+        # Check if we need to update configuration
+        # We need to update if:
+        # 1. APM is enabled and layers/env vars need to be added/updated
+        # 2. APM is disabled but APM layers/env vars are still present (need to remove them)
+        needs_update = False
+        update_config_params = {"FunctionName": lambda_name}
+
+        # Check layers: update if desired layers differ from current, or if APM layers need removal
+        if desired_layers:
+            # APM is enabled: merge desired APM layers with existing non-APM layers
+            non_apm_layers = [arn for arn in current_layer_arns if not self._is_apm_layer(arn)]
+            # Combine non-APM layers with desired APM layers (APM layers take precedence in case of duplicates)
+            merged_layers = list(set(non_apm_layers + desired_layers))
+            if set(merged_layers) != set(current_layer_arns):
+                update_config_params["Layers"] = merged_layers
+                needs_update = True
+        else:
+            # APM is disabled: remove APM layers if any are present
+            apm_layers_present = any(self._is_apm_layer(arn) for arn in current_layer_arns)
+            if apm_layers_present:
+                # Remove APM layers, keep non-APM layers
+                non_apm_layers = [arn for arn in current_layer_arns if not self._is_apm_layer(arn)]
+                update_config_params["Layers"] = non_apm_layers
+                needs_update = True
+
+        # Check environment variables: update if desired vars differ from current, or if APM vars need removal
+        if desired_environment_variables:
+            # APM is enabled: merge with existing vars (APM vars take precedence)
+            merged_vars = {**existing_vars, **desired_environment_variables}
+            if merged_vars != existing_vars:
+                update_config_params["Environment"] = {"Variables": merged_vars}
+                needs_update = True
+        else:
+            # APM is disabled: remove APM variables if any are present
+            apm_vars_present = any(self._is_apm_environment_variable(var_name) for var_name in existing_vars.keys())
+            if apm_vars_present:
+                # Remove APM variables, keep non-APM variables
+                non_apm_vars = {
+                    var_name: var_value
+                    for var_name, var_value in existing_vars.items()
+                    if not self._is_apm_environment_variable(var_name)
+                }
+                update_config_params["Environment"] = {"Variables": non_apm_vars}
+                needs_update = True
+
+        # Update configuration if needed
+        if needs_update:
+            self.lambda_client.update_function_configuration(**update_config_params)
 
         self.update_lambda_alias(lambda_name, new_version)
         return {"lambda": lambda_arn}
