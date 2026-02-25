@@ -100,6 +100,24 @@ class BedrockClient:
         # list_versions_by_function["Versions"][0]["Version"]
         self.lambda_client.delete_function(FunctionName=function_name)
 
+    def _is_apm_layer(self, layer_arn: str) -> bool:
+        """
+        Check if a layer ARN is an Elastic APM layer.
+        """
+        return "elastic-apm" in layer_arn.lower()
+
+    def _is_apm_environment_variable(self, var_name: str) -> bool:
+        """
+        Check if an environment variable name is an Elastic APM variable.
+        """
+        apm_var_names = {
+            "AWS_LAMBDA_EXEC_WRAPPER",
+            "ELASTIC_APM_LAMBDA_APM_SERVER",
+            "ELASTIC_APM_SECRET_TOKEN",
+            "ELASTIC_APM_SEND_STRATEGY",
+        }
+        return var_name in apm_var_names
+
     def update_lambda_function(self, lambda_name: str, zip_buffer: BytesIO) -> Dict[str, str]:
         response = self.lambda_client.update_function_code(
             FunctionName=lambda_name, ZipFile=zip_buffer.getvalue(), Publish=True
@@ -109,27 +127,69 @@ class BedrockClient:
         new_version = response["Version"]
         lambda_arn = response["FunctionArn"]
 
-        # Update layers and environment variables if Elastic APM is enabled
-        layers = self._get_elastic_apm_layers()
-        environment_variables = self._get_elastic_apm_environment_variables()
+        # Get desired APM configuration
+        desired_layers = self._get_elastic_apm_layers()
+        desired_environment_variables = self._get_elastic_apm_environment_variables()
 
-        if layers or environment_variables:
-            update_config_params = {"FunctionName": lambda_name}
-            if layers:
-                update_config_params["Layers"] = layers
-            if environment_variables:
-                # Get existing environment variables to merge with APM variables
-                try:
-                    current_config = self.lambda_client.get_function_configuration(FunctionName=lambda_name)
-                    environment = current_config.get("Environment") or {}
-                    existing_vars = environment.get("Variables", {})
-                    # Merge existing variables with APM variables (APM variables take precedence)
-                    merged_vars = {**existing_vars, **environment_variables}
-                    update_config_params["Environment"] = {"Variables": merged_vars}
-                except Exception:
-                    # If we can't get current config, just use APM variables
-                    update_config_params["Environment"] = {"Variables": environment_variables}
+        # Get current configuration to check if APM needs to be removed
+        try:
+            current_config = self.lambda_client.get_function_configuration(FunctionName=lambda_name)
+            current_layers = current_config.get("Layers", [])
+            current_layer_arns = [layer.get("Arn", "") for layer in current_layers if layer.get("Arn")]
+            environment = current_config.get("Environment") or {}
+            existing_vars = environment.get("Variables", {})
+        except Exception:
+            # If we can't get current config, assume no APM is present
+            current_layer_arns = []
+            existing_vars = {}
 
+        # Check if we need to update configuration
+        # We need to update if:
+        # 1. APM is enabled and layers/env vars need to be added/updated
+        # 2. APM is disabled but APM layers/env vars are still present (need to remove them)
+        needs_update = False
+        update_config_params = {"FunctionName": lambda_name}
+
+        # Check layers: update if desired layers differ from current, or if APM layers need removal
+        if desired_layers:
+            # APM is enabled: merge desired APM layers with existing non-APM layers
+            non_apm_layers = [arn for arn in current_layer_arns if not self._is_apm_layer(arn)]
+            # Combine non-APM layers with desired APM layers (APM layers take precedence in case of duplicates)
+            merged_layers = list(set(non_apm_layers + desired_layers))
+            if set(merged_layers) != set(current_layer_arns):
+                update_config_params["Layers"] = merged_layers
+                needs_update = True
+        else:
+            # APM is disabled: remove APM layers if any are present
+            apm_layers_present = any(self._is_apm_layer(arn) for arn in current_layer_arns)
+            if apm_layers_present:
+                # Remove APM layers, keep non-APM layers
+                non_apm_layers = [arn for arn in current_layer_arns if not self._is_apm_layer(arn)]
+                update_config_params["Layers"] = non_apm_layers
+                needs_update = True
+
+        # Check environment variables: update if desired vars differ from current, or if APM vars need removal
+        if desired_environment_variables:
+            # APM is enabled: merge with existing vars (APM vars take precedence)
+            merged_vars = {**existing_vars, **desired_environment_variables}
+            if merged_vars != existing_vars:
+                update_config_params["Environment"] = {"Variables": merged_vars}
+                needs_update = True
+        else:
+            # APM is disabled: remove APM variables if any are present
+            apm_vars_present = any(self._is_apm_environment_variable(var_name) for var_name in existing_vars.keys())
+            if apm_vars_present:
+                # Remove APM variables, keep non-APM variables
+                non_apm_vars = {
+                    var_name: var_value
+                    for var_name, var_value in existing_vars.items()
+                    if not self._is_apm_environment_variable(var_name)
+                }
+                update_config_params["Environment"] = {"Variables": non_apm_vars}
+                needs_update = True
+
+        # Update configuration if needed
+        if needs_update:
             self.lambda_client.update_function_configuration(**update_config_params)
 
         self.update_lambda_alias(lambda_name, new_version)
