@@ -1,6 +1,7 @@
 import logging
 import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import pendulum
 import requests
@@ -261,7 +262,6 @@ class SupervisorPublicConversationListV2Serializer(serializers.Serializer):
     count = serializers.IntegerField()
     total_pages = serializers.IntegerField()
     status_summary = serializers.DictField()
-    page = serializers.IntegerField()
     page_size = serializers.IntegerField()
     results = SupervisorPublicConversationItemSerializer(many=True)
     next = serializers.URLField(allow_null=True, required=False)
@@ -388,48 +388,55 @@ class SupervisorPublicConversationsViewV2(APIView):
         next_url,
         previous_url,
         request,
-        project_uuid,
     ):
         """Build the paginated list response payload."""
         return {
             "count": count,
             "total_pages": total_pages,
             "status_summary": status_summary,
-            "page": 1,
             "page_size": page_size,
             "results": results,
-            "next": self._rewrite_pagination_url(next_url, request, project_uuid) if next_url else None,
-            "previous": self._rewrite_pagination_url(previous_url, request, project_uuid) if previous_url else None,
+            "next": self._rewrite_pagination_url(next_url, request) if next_url else None,
+            "previous": self._rewrite_pagination_url(previous_url, request) if previous_url else None,
         }
 
-    def _rewrite_pagination_url(self, url, request, project_uuid):
+    def _parse_request_params(self, request):
+        """Parse and validate query params for nexus-conversations API. Raises ValidationError on invalid input."""
+        params = {}
+        if request.query_params.get("start"):
+            params["start_date"] = request.query_params.get("start")
+        if request.query_params.get("end"):
+            params["end_date"] = request.query_params.get("end")
+        status_param = request.query_params.get("status")
+        if status_param is not None:
+            if status_param not in NEXUS_CONVERSATIONS_RESOLUTION_KEYS:
+                raise ValidationError({"status": f"Invalid status '{status_param}'"})
+            params["status"] = status_param
+        if request.query_params.get("cursor"):
+            params["cursor"] = request.query_params.get("cursor")
+        try:
+            page_size = int(request.query_params.get("page_size", 50))
+            if page_size < 1:
+                raise ValueError("page_size must be positive")
+        except (ValueError, TypeError):
+            raise ValidationError({"page_size": "Invalid page_size, must be a positive integer"}) from None
+        params["page_size"] = page_size
+        return params, page_size
+
+    def _rewrite_pagination_url(self, url, request):
         """Rewrite pagination URL to point to nexus-ai v2 endpoint."""
         if not url:
             return None
         try:
-            from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+            parsed_upstream = urlparse(url)
+            query_params = parse_qs(parsed_upstream.query, keep_blank_values=True)
+            if not query_params:
+                return request.build_absolute_uri(request.path)
 
-            parsed = urlparse(url)
-            query_params = parse_qs(parsed.query, keep_blank_values=True)
-            # Build path for v2 endpoint
-            v2_path = request.path
-            if not v2_path.endswith("/"):
-                v2_path += "/"
-            nexus_url = request.build_absolute_uri(v2_path)
-            parsed_nexus = urlparse(nexus_url)
-            if query_params:
-                query_params_encoded = urlencode(query_params, doseq=True)
-                nexus_url = urlunparse(
-                    (
-                        parsed_nexus.scheme or "https",
-                        parsed_nexus.netloc,
-                        parsed_nexus.path.rstrip("/"),
-                        parsed_nexus.params,
-                        query_params_encoded,
-                        parsed_nexus.fragment,
-                    )
-                )
-            return nexus_url
+            base_url = request.build_absolute_uri(request.path)
+            query_string = urlencode(query_params, doseq=True)
+            parsed_base = urlparse(base_url)
+            return urlunparse(("https", parsed_base.netloc, parsed_base.path, "", query_string, ""))
         except Exception as e:
             logger.warning("Error rewriting pagination URL: %s", e, exc_info=True)
             return None
@@ -489,22 +496,7 @@ class SupervisorPublicConversationsViewV2(APIView):
     )
     def get(self, request, project_uuid):
         try:
-            # Map query params to nexus-conversations API
-            # nexus-conversations filters: start_date, end_date (on created_at), status, page_size, cursor
-            params = {}
-            if request.query_params.get("start"):
-                params["start_date"] = request.query_params.get("start")
-            if request.query_params.get("end"):
-                params["end_date"] = request.query_params.get("end")
-            if request.query_params.get("status") is not None:
-                params["status"] = request.query_params.get("status")
-            if request.query_params.get("cursor"):
-                params["cursor"] = request.query_params.get("cursor")
-            page_size = int(request.query_params.get("page_size", 50))
-            if page_size < 1:
-                page_size = 50
-            params["page_size"] = page_size
-
+            params, page_size = self._parse_request_params(request)
             data = self._call_conversations_api(project_uuid, params)
             results_data = data.get("results", [])
             next_url = data.get("next")
@@ -527,7 +519,7 @@ class SupervisorPublicConversationsViewV2(APIView):
             # Use len(results) as approximate; total_pages=1 when no next, else 2+ (unknown)
             count = len(results)
             has_next = bool(next_url)
-            total_pages = 2 if has_next else max(1, (count + page_size - 1) // page_size) if count else 1
+            total_pages = 2 if has_next else 1
 
             return Response(
                 self._build_list_response(
@@ -539,10 +531,11 @@ class SupervisorPublicConversationsViewV2(APIView):
                     next_url=next_url,
                     previous_url=previous_url,
                     request=request,
-                    project_uuid=project_uuid,
                 ),
                 status=status.HTTP_200_OK,
             )
+        except ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code if e.response else 500
             error_detail = str(e)
@@ -555,6 +548,10 @@ class SupervisorPublicConversationsViewV2(APIView):
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.capture_exception(e)
             return Response({"error": error_detail}, status=status_code)
+        except requests.exceptions.RequestException as e:
+            sentry_sdk.set_tag("project_uuid", project_uuid)
+            sentry_sdk.capture_exception(e)
+            return Response({"error": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception as e:
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.capture_exception(e)
