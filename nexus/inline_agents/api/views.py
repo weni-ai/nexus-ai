@@ -621,6 +621,12 @@ class OfficialAgentsV1(APIView):
                 return res
             result.update(res)
 
+            # Fire cache invalidation so team cache reflects assignment change
+            notify_async(
+                event="cache_invalidation:team",
+                project_uuid=project_uuid,
+            )
+
         if credentials_data:
             if not agent:
                 agent = self._resolve_agent_fallback(group_slug, system, mcp, agent_uuid)
