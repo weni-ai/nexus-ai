@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .supervisor_public import SupervisorPublicConversationsView
+from .supervisor_public import SupervisorPublicConversationsView, SupervisorPublicConversationsViewV2
 from .views import (
     CommerceHasAgentBuilder,
     ContentBaseFilePreview,
@@ -105,6 +105,11 @@ urlpatterns = [
         "public/<project_uuid>/supervisor/conversations",
         SupervisorPublicConversationsView.as_view(),
         name="public-supervisor-conversations",
+    ),
+    path(
+        "public/v2/<project_uuid>/supervisor/conversations",
+        SupervisorPublicConversationsViewV2.as_view(),
+        name="public-supervisor-conversations-v2",
     ),
     path(
         "<project_uuid>/instructions-classification/",
