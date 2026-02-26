@@ -1,5 +1,6 @@
 import logging
 import math
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pendulum
 import requests
@@ -276,27 +277,64 @@ class SupervisorPublicConversationsViewV2(APIView):
     authentication_classes = [ProjectApiKeyAuthentication]
     permission_classes = [ProjectApiKeyPermission]
 
+    def _get_headers(self):
+        return {
+            "Content-Type": "application/json; charset: utf-8",
+            "Authorization": f"Bearer {settings.CONVERSATIONS_TOKEN}",
+        }
+
     def _call_conversations_api(self, project_uuid, params):
         """Call nexus-conversations list API."""
         endpoint = f"/api/v1/projects/{project_uuid}/conversations/"
-        base_url = settings.CONVERSATIONS_REST_ENDPOINT
-        token = settings.CONVERSATIONS_TOKEN
-        url = base_url.rstrip("/") + endpoint
-        headers = {
-            "Content-Type": "application/json; charset: utf-8",
-            "Authorization": f"Bearer {token}",
-        }
-        response = requests.get(url, headers=headers, params=params, timeout=45)
+        url = settings.CONVERSATIONS_REST_ENDPOINT.rstrip("/") + endpoint
+        response = requests.get(url, headers=self._get_headers(), params=params, timeout=45)
         response.raise_for_status()
         return response.json()
 
-    def _transform_conversation(self, item):
+    def _fetch_conversation_messages(self, project_uuid, conversation_uuid):
+        """
+        Fetch messages for a single conversation from nexus-conversations detail endpoint.
+        For 'In Progress' conversations, nexus-conversations fetches from DynamoDB.
+        """
+        try:
+            endpoint = f"/api/v1/projects/{project_uuid}/conversations/{conversation_uuid}/"
+            url = settings.CONVERSATIONS_REST_ENDPOINT.rstrip("/") + endpoint
+            response = requests.get(url, headers=self._get_headers(), timeout=30)
+            response.raise_for_status()
+            data = response.json()
+        except Exception as e:
+            logger.warning(
+                "Failed to fetch messages for conversation %s: %s",
+                conversation_uuid,
+                str(e),
+                extra={"project_uuid": project_uuid, "conversation_uuid": str(conversation_uuid)},
+            )
+            return []
+
+        messages_data = data.get("messages")
+        if not messages_data:
+            return []
+        # Detail returns paginated messages: {next, previous, results}
+        if isinstance(messages_data, dict) and "results" in messages_data:
+            raw = messages_data.get("results", [])
+        else:
+            raw = messages_data if isinstance(messages_data, list) else []
+
+        # Normalize to MessageSerializer format (text, source, created_at)
+        return [
+            {
+                "text": m.get("text", ""),
+                "source": m.get("source", ""),
+                "created_at": m.get("created_at", ""),
+            }
+            for m in raw
+        ]
+
+    def _transform_conversation(self, item, messages=None):
         """Transform nexus-conversations item to SupervisorPublicConversationItem format."""
         classification = item.get("classification") or {}
         topic = classification.get("topic") if isinstance(classification, dict) else None
-
-        # Messages are not included in nexus-conversations list response
-        messages = item.get("messages") or []
+        messages = messages if messages is not None else (item.get("messages") or [])
 
         return {
             "conversation_uuid": str(item.get("uuid", "")),
@@ -308,6 +346,60 @@ class SupervisorPublicConversationsViewV2(APIView):
             "channel_uuid": str(item["channel_uuid"]) if item.get("channel_uuid") else None,
             "contact_urn": item.get("contact_urn") or "",
             "messages": messages,
+        }
+
+    def _fetch_messages_for_conversations(self, project_uuid, results_data, request):
+        """Fetch messages for all conversations in parallel (from DynamoDB for In Progress)."""
+        include_messages = request.query_params.get("include_messages", "true").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        if not include_messages or not results_data:
+            return {}
+
+        messages_by_uuid = {}
+        max_workers = min(10, len(results_data))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_uuid = {
+                executor.submit(
+                    self._fetch_conversation_messages,
+                    project_uuid,
+                    str(item.get("uuid")),
+                ): str(item.get("uuid"))
+                for item in results_data
+            }
+            for future in as_completed(future_to_uuid):
+                conv_uuid = future_to_uuid[future]
+                try:
+                    messages_by_uuid[conv_uuid] = future.result()
+                except Exception as e:
+                    logger.warning("Error fetching messages for %s: %s", conv_uuid, e)
+                    messages_by_uuid[conv_uuid] = []
+        return messages_by_uuid
+
+    def _build_list_response(
+        self,
+        results,
+        count,
+        total_pages,
+        status_summary,
+        page_size,
+        next_url,
+        previous_url,
+        request,
+        project_uuid,
+    ):
+        """Build the paginated list response payload."""
+        return {
+            "count": count,
+            "total_pages": total_pages,
+            "status_summary": status_summary,
+            "page": 1,
+            "page_size": page_size,
+            "results": results,
+            "next": self._rewrite_pagination_url(next_url, request, project_uuid) if next_url else None,
+            "previous": self._rewrite_pagination_url(previous_url, request, project_uuid) if previous_url else None,
         }
 
     def _rewrite_pagination_url(self, url, request, project_uuid):
@@ -345,8 +437,9 @@ class SupervisorPublicConversationsViewV2(APIView):
     @extend_schema(
         summary="List Conversations (V2)",
         description=(
-            "Retrieve a list of conversations from nexus-conversations. "
-            "Uses cursor-based pagination. Messages are not included in list; use the detail endpoint to fetch them."
+            "Retrieve a list of conversations from nexus-conversations. Uses cursor-based pagination. "
+            "By default includes messages for each conversation; for 'In Progress' conversations "
+            "messages are fetched from DynamoDB via nexus-conversations detail API."
         ),
         parameters=[
             OpenApiParameter(
@@ -382,6 +475,15 @@ class SupervisorPublicConversationsViewV2(APIView):
                 required=False,
                 type=OpenApiTypes.INT,
             ),
+            OpenApiParameter(
+                name="include_messages",
+                description=(
+                    "Include messages for each conversation. For 'In Progress' conversations, "
+                    "messages are fetched from DynamoDB via nexus-conversations. Default: true."
+                ),
+                required=False,
+                type=OpenApiTypes.BOOL,
+            ),
         ],
         responses={200: SupervisorPublicConversationListV2Serializer},
     )
@@ -408,7 +510,14 @@ class SupervisorPublicConversationsViewV2(APIView):
             next_url = data.get("next")
             previous_url = data.get("previous")
 
-            results = [self._transform_conversation(item) for item in results_data]
+            messages_by_uuid = self._fetch_messages_for_conversations(project_uuid, results_data, request)
+            results = [
+                self._transform_conversation(
+                    item,
+                    messages=messages_by_uuid.get(str(item.get("uuid")), []),
+                )
+                for item in results_data
+            ]
 
             # status_summary: nexus-conversations uses cursor pagination and does not return aggregates.
             # We return empty counts; a dedicated aggregation endpoint would be needed for real counts.
@@ -420,17 +529,20 @@ class SupervisorPublicConversationsViewV2(APIView):
             has_next = bool(next_url)
             total_pages = 2 if has_next else max(1, (count + page_size - 1) // page_size) if count else 1
 
-            response_data = {
-                "count": count,
-                "total_pages": total_pages,
-                "status_summary": status_summary,
-                "page": 1,
-                "page_size": page_size,
-                "results": results,
-                "next": self._rewrite_pagination_url(next_url, request, project_uuid) if next_url else None,
-                "previous": self._rewrite_pagination_url(previous_url, request, project_uuid) if previous_url else None,
-            }
-            return Response(response_data, status=status.HTTP_200_OK)
+            return Response(
+                self._build_list_response(
+                    results=results,
+                    count=count,
+                    total_pages=total_pages,
+                    status_summary=status_summary,
+                    page_size=page_size,
+                    next_url=next_url,
+                    previous_url=previous_url,
+                    request=request,
+                    project_uuid=project_uuid,
+                ),
+                status=status.HTTP_200_OK,
+            )
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code if e.response else 500
             error_detail = str(e)
