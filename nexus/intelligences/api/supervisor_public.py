@@ -315,10 +315,47 @@ class SupervisorPublicConversationsViewV2(APIView):
         if not messages_data:
             return []
         # Detail returns paginated messages: {next, previous, results}
+        raw = []
         if isinstance(messages_data, dict) and "results" in messages_data:
-            raw = messages_data.get("results", [])
+            raw.extend(messages_data.get("results", []) or [])
+            next_url = messages_data.get("next")
+            # Follow pagination until exhausted
+            while next_url:
+                try:
+                    if next_url.startswith("http://") or next_url.startswith("https://"):
+                        page_url = next_url
+                    else:
+                        page_url = settings.CONVERSATIONS_REST_ENDPOINT.rstrip("/") + (
+                            next_url if next_url.startswith("/") else f"/{next_url}"
+                        )
+                    page_response = requests.get(
+                        page_url,
+                        headers=self._get_headers(),
+                        timeout=30,
+                    )
+                    page_response.raise_for_status()
+                    page_data = page_response.json() or {}
+                    page_messages = page_data.get("messages") or page_data
+                    if isinstance(page_messages, dict) and "results" in page_messages:
+                        raw.extend(page_messages.get("results", []) or [])
+                        next_url = page_messages.get("next")
+                    elif isinstance(page_messages, list):
+                        raw.extend(page_messages)
+                        next_url = None
+                    else:
+                        next_url = None
+                except Exception as e:
+                    logger.warning(
+                        "Failed to fetch paginated messages for conversation %s: %s",
+                        conversation_uuid,
+                        str(e),
+                        extra={"project_uuid": project_uuid, "conversation_uuid": str(conversation_uuid)},
+                    )
+                    break
+        elif isinstance(messages_data, list):
+            raw = messages_data
         else:
-            raw = messages_data if isinstance(messages_data, list) else []
+            raw = []
 
         # Normalize to MessageSerializer format (text, source, created_at)
         return [
@@ -511,9 +548,12 @@ class SupervisorPublicConversationsViewV2(APIView):
                 for item in results_data
             ]
 
-            # status_summary: nexus-conversations uses cursor pagination and does not return aggregates.
-            # We return empty counts; a dedicated aggregation endpoint would be needed for real counts.
+            # status_summary: count by resolution from current page (cursor API doesn't provide totals).
             status_summary = {k: 0 for k in NEXUS_CONVERSATIONS_RESOLUTION_KEYS}
+            for item in results_data:
+                res = str(item.get("resolution") or "")
+                if res in status_summary:
+                    status_summary[res] += 1
 
             # count/total_pages: cursor pagination does not provide total count.
             # Use len(results) as approximate; total_pages=1 when no next, else 2+ (unknown)
