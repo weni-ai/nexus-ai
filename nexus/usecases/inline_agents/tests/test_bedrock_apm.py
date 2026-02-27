@@ -48,12 +48,15 @@ class TestBedrockClientElasticAPM(TestCase):
         self.assertEqual(call_args.kwargs["Runtime"], "python3.12")
         self.assertEqual(call_args.kwargs["Role"], self.lambda_role)
         self.assertEqual(call_args.kwargs["Handler"], self.skill_handler)
+        # Verify that Architectures is always set (default is arm64)
+        self.assertIn("Architectures", call_args.kwargs)
+        self.assertEqual(call_args.kwargs["Architectures"], ["arm64"])
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
         ELASTIC_APM_LAMBDA_APM_SERVER="https://apm-server.example.com",
         ELASTIC_APM_LAMBDA_SECRET_TOKEN="test-secret-token",
-        ELASTIC_APM_LAMBDA_ARCHITECTURE="x86_64",
+        AWS_LAMBDA_ARCHITECTURE="x86_64",
         ELASTIC_APM_LAMBDA_EXTENSION_VERSION="1-6-0",
         ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION="6-25-0",
         AWS_BEDROCK_REGION_NAME="us-east-1",
@@ -93,6 +96,10 @@ class TestBedrockClientElasticAPM(TestCase):
         self.assertIn(expected_extension_layer, layers)
         self.assertIn(expected_python_agent_layer, layers)
 
+        # Verify that Architectures was added
+        self.assertIn("Architectures", call_kwargs)
+        self.assertEqual(call_kwargs["Architectures"], ["x86_64"])
+
         # Verify that Environment was added
         self.assertIn("Environment", call_kwargs)
         environment = call_kwargs["Environment"]
@@ -104,6 +111,46 @@ class TestBedrockClientElasticAPM(TestCase):
         self.assertEqual(env_vars["ELASTIC_APM_LAMBDA_APM_SERVER"], "https://apm-server.example.com")
         self.assertEqual(env_vars["ELASTIC_APM_SECRET_TOKEN"], "test-secret-token")
         self.assertEqual(env_vars["ELASTIC_APM_SEND_STRATEGY"], "background")
+        # ELASTIC_APM_ENVIRONMENT is always present (default is empty string)
+        self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
+        self.assertEqual(env_vars["ELASTIC_APM_ENVIRONMENT"], "")
+
+    @override_settings(
+        ELASTIC_APM_LAMBDA_ENABLED=True,
+        ELASTIC_APM_LAMBDA_APM_SERVER="https://apm-server.example.com",
+        ELASTIC_APM_LAMBDA_SECRET_TOKEN="test-secret-token",
+        ELASTIC_APM_ENVIRONMENT="staging",
+        AWS_LAMBDA_ARCHITECTURE="x86_64",
+        ELASTIC_APM_LAMBDA_EXTENSION_VERSION="1-6-0",
+        ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION="6-25-0",
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+    )
+    def test_create_lambda_function_with_apm_environment_variable(self):
+        """Tests that ELASTIC_APM_ENVIRONMENT is added when configured"""
+        mock_lambda_client = Mock()
+        mock_lambda_client.create_function.return_value = {
+            "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function"
+        }
+        self.client.lambda_client = mock_lambda_client
+
+        self.client.create_lambda_function(
+            lambda_name=self.lambda_name,
+            lambda_role=self.lambda_role,
+            skill_handler=self.skill_handler,
+            zip_buffer=self.zip_buffer,
+        )
+
+        call_args = mock_lambda_client.create_function.call_args
+        call_kwargs = call_args.kwargs
+
+        # Verify that Environment was added
+        self.assertIn("Environment", call_kwargs)
+        environment = call_kwargs["Environment"]
+        env_vars = environment["Variables"]
+
+        # Verify that ELASTIC_APM_ENVIRONMENT is present
+        self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
+        self.assertEqual(env_vars["ELASTIC_APM_ENVIRONMENT"], "staging")
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
@@ -163,7 +210,7 @@ class TestBedrockClientElasticAPM(TestCase):
         ELASTIC_APM_LAMBDA_ENABLED=True,
         ELASTIC_APM_LAMBDA_APM_SERVER="https://apm-server.example.com",
         ELASTIC_APM_LAMBDA_SECRET_TOKEN="test-secret-token",
-        ELASTIC_APM_LAMBDA_ARCHITECTURE="arm64",
+        AWS_LAMBDA_ARCHITECTURE="arm64",
         ELASTIC_APM_LAMBDA_EXTENSION_VERSION="1-6-0",
         ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION="6-25-0",
         AWS_BEDROCK_REGION_NAME="us-west-2",
@@ -193,6 +240,10 @@ class TestBedrockClientElasticAPM(TestCase):
         # Verify the extension layer ARN with arm64
         expected_extension_layer = "arn:aws:lambda:us-west-2:267093732750:layer:elastic-apm-extension-ver-1-6-0-arm64:1"
         self.assertIn(expected_extension_layer, layers)
+
+        # Verify that Architectures was set to arm64
+        self.assertIn("Architectures", call_kwargs)
+        self.assertEqual(call_kwargs["Architectures"], ["arm64"])
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=False,
@@ -249,6 +300,7 @@ class TestBedrockClientElasticAPM(TestCase):
                     "ELASTIC_APM_LAMBDA_APM_SERVER": "https://apm-server.example.com",
                     "ELASTIC_APM_SECRET_TOKEN": "old-token",
                     "ELASTIC_APM_SEND_STRATEGY": "background",
+                    "ELASTIC_APM_ENVIRONMENT": "staging",
                 }
             },
         }
@@ -277,6 +329,7 @@ class TestBedrockClientElasticAPM(TestCase):
         self.assertNotIn("ELASTIC_APM_LAMBDA_APM_SERVER", env_vars)
         self.assertNotIn("ELASTIC_APM_SECRET_TOKEN", env_vars)
         self.assertNotIn("ELASTIC_APM_SEND_STRATEGY", env_vars)
+        self.assertNotIn("ELASTIC_APM_ENVIRONMENT", env_vars)
 
         # Verify that non-APM variables were preserved
         self.assertEqual(env_vars["OTHER_VAR"], "value")
@@ -329,7 +382,7 @@ class TestBedrockClientElasticAPM(TestCase):
         ELASTIC_APM_LAMBDA_ENABLED=True,
         ELASTIC_APM_LAMBDA_APM_SERVER="https://apm-server.example.com",
         ELASTIC_APM_LAMBDA_SECRET_TOKEN="test-secret-token",
-        ELASTIC_APM_LAMBDA_ARCHITECTURE="x86_64",
+        AWS_LAMBDA_ARCHITECTURE="x86_64",
         ELASTIC_APM_LAMBDA_EXTENSION_VERSION="1-6-0",
         ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION="6-25-0",
         AWS_BEDROCK_REGION_NAME="us-east-1",
@@ -377,12 +430,14 @@ class TestBedrockClientElasticAPM(TestCase):
         self.assertEqual(env_vars["ELASTIC_APM_LAMBDA_APM_SERVER"], "https://apm-server.example.com")
         self.assertEqual(env_vars["ELASTIC_APM_SECRET_TOKEN"], "test-secret-token")
         self.assertEqual(env_vars["ELASTIC_APM_SEND_STRATEGY"], "background")
+        # ELASTIC_APM_ENVIRONMENT is always present
+        self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
         ELASTIC_APM_LAMBDA_APM_SERVER="https://apm-server.example.com",
         ELASTIC_APM_LAMBDA_SECRET_TOKEN="test-secret-token",
-        ELASTIC_APM_LAMBDA_ARCHITECTURE="x86_64",
+        AWS_LAMBDA_ARCHITECTURE="x86_64",
         ELASTIC_APM_LAMBDA_EXTENSION_VERSION="1-6-0",
         ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION="6-25-0",
         AWS_BEDROCK_REGION_NAME="us-east-1",
@@ -424,7 +479,7 @@ class TestBedrockClientElasticAPM(TestCase):
         ELASTIC_APM_LAMBDA_ENABLED=True,
         ELASTIC_APM_LAMBDA_APM_SERVER="https://apm-server.example.com",
         ELASTIC_APM_LAMBDA_SECRET_TOKEN="test-secret-token",
-        ELASTIC_APM_LAMBDA_ARCHITECTURE="x86_64",
+        AWS_LAMBDA_ARCHITECTURE="x86_64",
         ELASTIC_APM_LAMBDA_EXTENSION_VERSION="1-6-0",
         ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION="6-25-0",
         AWS_BEDROCK_REGION_NAME="us-east-1",
@@ -457,18 +512,21 @@ class TestBedrockClientElasticAPM(TestCase):
         environment = call_kwargs["Environment"]
         env_vars = environment["Variables"]
 
-        # Verify that only APM variables are present
-        self.assertEqual(len(env_vars), 4)
+        # Verify that only APM variables are present (5 variables including ELASTIC_APM_ENVIRONMENT)
+        self.assertEqual(len(env_vars), 5)
         self.assertEqual(env_vars["AWS_LAMBDA_EXEC_WRAPPER"], "/opt/python/bin/elasticapm-lambda")
         self.assertEqual(env_vars["ELASTIC_APM_LAMBDA_APM_SERVER"], "https://apm-server.example.com")
         self.assertEqual(env_vars["ELASTIC_APM_SECRET_TOKEN"], "test-secret-token")
         self.assertEqual(env_vars["ELASTIC_APM_SEND_STRATEGY"], "background")
+        # ELASTIC_APM_ENVIRONMENT is always present
+        self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
+        self.assertEqual(env_vars["ELASTIC_APM_ENVIRONMENT"], "")
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
         ELASTIC_APM_LAMBDA_APM_SERVER="https://apm-server.example.com",
         ELASTIC_APM_LAMBDA_SECRET_TOKEN="test-secret-token",
-        ELASTIC_APM_LAMBDA_ARCHITECTURE="x86_64",
+        AWS_LAMBDA_ARCHITECTURE="x86_64",
         ELASTIC_APM_LAMBDA_EXTENSION_VERSION="1-6-0",
         ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION="6-25-0",
         AWS_BEDROCK_REGION_NAME="us-east-1",
@@ -507,6 +565,8 @@ class TestBedrockClientElasticAPM(TestCase):
         call_kwargs = call_args.kwargs
         env_vars = call_kwargs["Environment"]["Variables"]
 
-        # Verify that only APM variables are present
-        self.assertEqual(len(env_vars), 4)
+        # Verify that only APM variables are present (5 variables including ELASTIC_APM_ENVIRONMENT)
+        self.assertEqual(len(env_vars), 5)
         self.assertEqual(env_vars["AWS_LAMBDA_EXEC_WRAPPER"], "/opt/python/bin/elasticapm-lambda")
+        self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
+        self.assertEqual(env_vars["ELASTIC_APM_ENVIRONMENT"], "")

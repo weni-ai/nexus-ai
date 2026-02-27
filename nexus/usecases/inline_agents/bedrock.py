@@ -23,7 +23,7 @@ class BedrockClient:
             return []
 
         region = settings.AWS_BEDROCK_REGION_NAME
-        architecture = getattr(settings, "ELASTIC_APM_LAMBDA_ARCHITECTURE", "arm64")
+        architecture = getattr(settings, "AWS_LAMBDA_ARCHITECTURE", "arm64")
         extension_version = getattr(settings, "ELASTIC_APM_LAMBDA_EXTENSION_VERSION", "1-6-0")
         python_agent_version = getattr(settings, "ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION", "6-25-0")
 
@@ -50,6 +50,7 @@ class BedrockClient:
 
         apm_server = getattr(settings, "ELASTIC_APM_LAMBDA_APM_SERVER", "")
         secret_token = getattr(settings, "ELASTIC_APM_LAMBDA_SECRET_TOKEN", "")
+        apm_environment = getattr(settings, "ELASTIC_APM_ENVIRONMENT", "")
 
         if not apm_server or not secret_token:
             return {}
@@ -59,6 +60,7 @@ class BedrockClient:
             "ELASTIC_APM_LAMBDA_APM_SERVER": apm_server,
             "ELASTIC_APM_SECRET_TOKEN": secret_token,
             "ELASTIC_APM_SEND_STRATEGY": "background",
+            "ELASTIC_APM_ENVIRONMENT": apm_environment,
         }
 
     def create_lambda_function(
@@ -68,6 +70,9 @@ class BedrockClient:
         layers = self._get_elastic_apm_layers()
         environment_variables = self._get_elastic_apm_environment_variables()
 
+        # Get Lambda architecture from settings
+        lambda_architecture = getattr(settings, "AWS_LAMBDA_ARCHITECTURE", "x86_64")
+
         create_function_params = {
             "FunctionName": lambda_name,
             "Runtime": "python3.12",
@@ -75,7 +80,7 @@ class BedrockClient:
             "Role": lambda_role,
             "Code": {"ZipFile": zip_buffer.getvalue()},
             "Handler": skill_handler,
-            "Architectures": ["arm64"],
+            "Architectures": [lambda_architecture],
         }
 
         # Add layers if Elastic APM is enabled
@@ -121,6 +126,7 @@ class BedrockClient:
             "ELASTIC_APM_LAMBDA_APM_SERVER",
             "ELASTIC_APM_SECRET_TOKEN",
             "ELASTIC_APM_SEND_STRATEGY",
+            "ELASTIC_APM_ENVIRONMENT",
         }
         return var_name in apm_var_names
 
