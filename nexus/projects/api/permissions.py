@@ -46,32 +46,6 @@ class ExternalTokenPermission(permissions.BasePermission):
         return True
 
 
-class ProjectOrInternalPermission(permissions.BasePermission):
-    """
-    Grants access if the user has standard project permission OR
-    if the user has the internal communication permission.
-    """
-
-    def has_permission(self, request, view):
-        if ProjectPermission().has_permission(request, view):
-            return True
-        return request.user.has_perm("users.can_communicate_internally")
-
-
-class ExternalTokenOrProjectOrInternalPermission(permissions.BasePermission):
-    """
-    Grants access if the user has an external super user token,
-    standard project permission, or the internal communication permission.
-    """
-
-    def has_permission(self, request, view):
-        if ExternalTokenPermission().has_permission(request, view):
-            return True
-        if ProjectPermission().has_permission(request, view):
-            return True
-        return request.user.has_perm("users.can_communicate_internally")
-
-
 class CombinedExternalProjectPermission(permissions.BasePermission):
     def has_permission(self, request, view):
         external_token_permission = ExternalTokenPermission()

@@ -36,12 +36,7 @@ from nexus.intelligences.models import (
 from nexus.orgs import permissions
 from nexus.paginations import CustomCursorPagination, SupervisorPagination
 from nexus.agents.api.views import InternalCommunicationPermission
-from nexus.projects.api.permissions import (
-    CombinedExternalProjectPermission,
-    ExternalTokenOrProjectOrInternalPermission,
-    ProjectOrInternalPermission,
-    ProjectPermission,
-)
+from nexus.projects.api.permissions import CombinedExternalProjectPermission, ExternalTokenPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.storage import AttachmentPreviewStorage, validate_mime_type
@@ -857,7 +852,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
     serializer_class = ContentBaseFileSerializer
     pagination_class = CustomCursorPagination
     parser_classes = (parsers.MultiPartParser,)
-    permission_classes = [IsAuthenticated, ProjectOrInternalPermission]
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
     lookup_url_kwarg = "contentbase_file_uuid"
 
     def list(self, request, *args, **kwargs):
@@ -1408,7 +1403,7 @@ class LLMDefaultViewset(views.APIView):
 class ContentBasePersonalizationViewSet(ModelViewSet):
     serializer_class = ContentBasePersonalizationSerializer
     authentication_classes = AUTHENTICATION_CLASSES
-    permission_classes = [ExternalTokenOrProjectOrInternalPermission]
+    permission_classes = [ExternalTokenPermission | ProjectPermission | InternalCommunicationPermission]
 
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
