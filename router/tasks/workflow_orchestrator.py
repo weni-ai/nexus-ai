@@ -77,6 +77,7 @@ class WorkflowContext:
     cached_data: Optional[CachedProjectData] = None
     flows_user_email: str = field(default_factory=lambda: os.environ.get("FLOW_USER_EMAIL", ""))
     incoming_created_at: Optional[str] = None
+    message_conversation_log_uuid: Optional[str] = None
 
 
 # =============================================================================
@@ -181,6 +182,7 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         response_text=error.message or "",
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
         outgoing_created_at=pendulum.now().to_iso8601_string(),
+        message_conversation_log_uuid=ctx.message_conversation_log_uuid,
     )
 
     if ctx.preview and ctx.broadcast:
@@ -286,6 +288,7 @@ def _run_generation(ctx: WorkflowContext) -> str:
         channel_type=ctx.message.get("channel_type", ""),
         stream_support=ctx.message.get("stream_support", False),
         supervisor_agent_uuid=ctx.supervisor_agent_uuid,
+        message_conversation_log_uuid=ctx.message_conversation_log_uuid,
     )
 
     return response
@@ -322,6 +325,7 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
         response_text=response or "",
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
         outgoing_created_at=pendulum.now().to_iso8601_string(),
+        message_conversation_log_uuid=ctx.message_conversation_log_uuid,
     )
 
     # Dispatch response
@@ -385,6 +389,7 @@ def _create_workflow_context(
         task_id=task_id,
         task_manager=RedisTaskManager(),
         supervisor_agent_uuid=supervisor_agent_uuid,
+        message_conversation_log_uuid=str(uuid_lib.uuid4()),
     )
 
 
