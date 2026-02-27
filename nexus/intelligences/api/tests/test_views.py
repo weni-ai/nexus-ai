@@ -374,7 +374,7 @@ class TestContentBasePersonalizationViewSet(TestCase):
         self.project = ProjectFactory(
             brain_on=True, name=self.content_base.intelligence.name, org=self.org, created_by=self.user
         )
-        self.project.authorizations.create(user=self.user, role=3)
+        self.project.authorizations.update_or_create(user=self.user, defaults={"role": 3})
 
         IntegratedIntelligenceFactory(
             intelligence=self.content_base.intelligence, project=self.project, created_by=self.user
