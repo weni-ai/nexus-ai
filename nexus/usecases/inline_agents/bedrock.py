@@ -19,6 +19,7 @@ class BedrockClient:
         Returns empty list if APM is disabled or not configured.
         """
         if not getattr(settings, "ELASTIC_APM_LAMBDA_ENABLED", False):
+            logger.info("ELASTIC_APM_LAMBDA not enabled")
             return []
 
         region = settings.AWS_BEDROCK_REGION_NAME
@@ -44,6 +45,7 @@ class BedrockClient:
         Returns empty dict if APM is disabled or not configured.
         """
         if not getattr(settings, "ELASTIC_APM_LAMBDA_ENABLED", False):
+            logger.info("ELASTIC_APM_LAMBDA not enabled")
             return {}
 
         apm_server = getattr(settings, "ELASTIC_APM_LAMBDA_APM_SERVER", "")
