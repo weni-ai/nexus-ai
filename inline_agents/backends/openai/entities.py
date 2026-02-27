@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class HooksState:
-    def __init__(self, agents: list):
+    def __init__(self, agents: list, message_conversation_log_uuid: str):
         self.agents = agents
         self.agents_names = []
         self.lambda_names = {}
@@ -16,6 +16,7 @@ class HooksState:
         self.tool_info = {}
         self.tool_info_index = {}
         self.last_active_agent_slug = None  # Track the last agent that executed before formatter
+        self.message_conversation_log_uuid = message_conversation_log_uuid
 
         for agent in self.agents:
             self.agents_names.append(agent.get("agentName"))
