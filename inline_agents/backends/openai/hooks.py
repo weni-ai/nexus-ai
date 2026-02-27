@@ -361,7 +361,6 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         parameters = tool_info.get("parameters", [])
 
         agent_slug = _get_agent_slug(agent, self.hooks_state)
-        # Update last_active_agent_slug when collaborator executes tools
         self.hooks_state.last_active_agent_slug = agent_slug
         logger.info(f"[HOOK] Executando ferramenta '{tool.name}'.")
         logger.info(f"[HOOK] Agente '{agent_slug}' vai usar a ferramenta '{tool.name}'.")
@@ -388,25 +387,11 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         logger.debug(f"Trace data: {trace_data}")
         logger.debug("==========================================")
         await self.trace_handler.send_trace(context_data, agent_slug, "executing_tool", trace_data, tool_name=tool.name)
-        self.data_lake_event_adapter.to_data_lake_event(
-            project_uuid=context_data.project.get("uuid"),
-            contact_urn=context_data.contact.get("urn"),
-            tool_call_data={
-                "tool_name": tool.name,
-                "parameters": parameters,
-                "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
-            },
-            agent_data={"agent_name": agent_slug},  # Pass agent_data for agent_uuid enrichment
-            foundation_model=_get_agent_model(agent),
-            backend="openai",
-            channel_uuid=context_data.contact.get("channel_uuid"),
-            conversation=self.conversation,
-        )
-        self.hooks_state.advance_tool_info_index(tool.name)
 
     async def on_tool_end(self, context, agent, tool, result):
-        # Only send tool_result to data lake (one event per tool). Do not call tool_started
-        # here to avoid sending tool_call + tool_result in sequence for the same execution.
+        # Emit the "tool started" trace (e.g. for preview).
+        await self.tool_started(context, agent, tool)
+
         context_data = context.context
         project_uuid = context_data.project.get("uuid")
         tool_info = self.hooks_state.get_tool_info(tool.name)
@@ -576,24 +561,11 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
         context_data = context.context
         tool_info = self.hooks_state.get_tool_info(tool.name)
         parameters = tool_info.get("parameters", [])
-        tool_call_data = {"tool_name": tool.name, "parameters": parameters}
 
         if tool.name == self.knowledge_base_tool:
             logger.info(
                 "[HOOK] Knowledge base: searching (tool_started) tool_name=%s",
                 tool.name,
-            )
-            self.data_lake_event_adapter.to_data_lake_event(
-                project_uuid=context_data.project.get("uuid"),
-                contact_urn=context_data.contact.get("urn"),
-                tool_call_data=tool_call_data,
-                agent_data={
-                    "agent_name": _get_agent_slug(agent, self.hooks_state)
-                },  # Pass agent_data for agent_uuid enrichment
-                foundation_model=_get_agent_model(agent),
-                backend="openai",
-                channel_uuid=context_data.contact.get("channel_uuid"),
-                conversation=self.conversation,
             )
             trace_data = {
                 "eventTime": pendulum.now().to_iso8601_string(),
@@ -636,21 +608,6 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
             await self.trace_handler.send_trace(
                 context_data, agent_slug, "executing_tool", trace_data, tool_name=tool.name
             )
-            self.data_lake_event_adapter.to_data_lake_event(
-                project_uuid=context_data.project.get("uuid"),
-                contact_urn=context_data.contact.get("urn"),
-                tool_call_data={
-                    "tool_name": tool.name,
-                    "parameters": parameters,
-                    "function_name": self.hooks_state.lambda_names.get(tool.name, {}).get("function_name"),
-                },
-                agent_data={"agent_name": agent_slug},  # Pass agent_data for agent_uuid enrichment
-                foundation_model=_get_agent_model(agent),
-                backend="openai",
-                channel_uuid=context_data.contact.get("channel_uuid"),
-                conversation=self.conversation,
-            )
-            self.hooks_state.advance_tool_info_index(tool.name)
 
     async def _send_tool_result_to_data_lake(
         self,
@@ -761,7 +718,9 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
         )
 
     async def on_tool_end(self, context, agent, tool, result):
-        # Only send tool_result to data lake (one event per tool). Do not call tool_started here.
+        # Emit the "tool started" trace (e.g. for preview).
+        await self.tool_started(context, agent, tool)
+
         context_data = context.context
         project_uuid = context_data.project.get("uuid")
         tool_info = self.hooks_state.get_tool_info(tool.name)
