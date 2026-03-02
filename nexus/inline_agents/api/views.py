@@ -1117,7 +1117,7 @@ class AgentProjectsView(APIView):
         integrated_project_ids = IntegratedAgent.objects.filter(agent=agent).values_list("project_id", flat=True)
         project_ids.update(integrated_project_ids)
 
-        projects = Project.objects.filter(id__in=project_ids, is_active=True)
+        projects = Project.objects.filter(pk__in=project_ids, is_active=True)
         serializer = ProjectSerializer(projects, many=True)
         return Response(serializer.data)
 
