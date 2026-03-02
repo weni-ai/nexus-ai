@@ -25,6 +25,7 @@ from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
 from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
+from nexus.projects.api.serializers import ProjectSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
@@ -1079,6 +1080,45 @@ class AgentsView(APIView):
             agents = agents.filter(query_filter).distinct("uuid")
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        return Response(serializer.data)
+
+
+class AgentProjectsView(APIView):
+    """Returns all projects that use a given agent (owner project + integrated projects)."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="agent_projects_list",
+        summary="List projects using an agent",
+        description=(
+            "Returns all projects that use the given agent. "
+            "Includes the project that owns the agent and any projects that have integrated it."
+        ),
+        responses={
+            200: ProjectSerializer(many=True),
+            404: OpenApiResponse(description="Agent not found"),
+        },
+    )
+    def get(self, request, *args, **kwargs):
+        agent_uuid = kwargs.get("agent_uuid")
+
+        try:
+            agent = Agent.objects.get(uuid=agent_uuid)
+        except Agent.DoesNotExist:
+            return Response({"error": "Agent not found"}, status=404)
+
+        project_ids = set()
+
+        # Project that owns the agent
+        project_ids.add(agent.project_id)
+
+        # Projects that have integrated this agent
+        integrated_project_ids = IntegratedAgent.objects.filter(agent=agent).values_list("project_id", flat=True)
+        project_ids.update(integrated_project_ids)
+
+        projects = Project.objects.filter(id__in=project_ids, is_active=True)
+        serializer = ProjectSerializer(projects, many=True)
         return Response(serializer.data)
 
 
