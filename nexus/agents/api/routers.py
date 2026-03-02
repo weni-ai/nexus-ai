@@ -6,6 +6,7 @@ from nexus.inline_agents.api.views import (
     AgentBuilderAudio,
     AgentEndSessionView,
     AgentManagersView,
+    AgentProjectsView,
     LogGroupView,
     MultiAgentView,
     OfficialAgentDetailV1,
@@ -26,6 +27,7 @@ from nexus.reports.views import ReportView
 
 urlpatterns = [
     path("agents/push", PushInlineAgents.as_view(), name="push-agents"),
+    path("agents/<str:agent_uuid>/projects", AgentProjectsView.as_view(), name="agent-projects"),
     path("v1/official/agents", OfficialAgentsV1.as_view(), name="v1-official-agents"),
     path("v1/official/agents/<str:identifier>", OfficialAgentDetailV1.as_view(), name="v1-official-agent-detail"),
     path("agents/teams/<project_uuid>", InlineTeamView.as_view(), name="teams"),
