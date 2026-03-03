@@ -2,7 +2,7 @@ import logging
 
 import pendulum
 from django.conf import settings
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import Count, OuterRef, Q, Subquery
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -25,7 +25,7 @@ from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
 from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
-from nexus.projects.api.serializers import ProjectSerializer
+from nexus.projects.api.serializers import ProjectMinimalSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
@@ -1093,10 +1093,20 @@ class AgentProjectsView(APIView):
         summary="List projects using an agent",
         description=(
             "Returns all projects that use the given agent. "
-            "Includes the project that owns the agent and any projects that have integrated it."
+            "Includes the project that owns the agent and any projects that have integrated it. "
+            "Optional min_conversations filters out projects with fewer conversations (e.g. test projects)."
         ),
+        parameters=[
+            OpenApiParameter(
+                name="min_conversations",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.INT,
+                description="Minimum number of conversations; projects below this are excluded.",
+            ),
+        ],
         responses={
-            200: ProjectSerializer(many=True),
+            200: OpenApiResponse(description="Summary with count and list of projects (name, uuid)"),
             404: OpenApiResponse(description="Agent not found"),
         },
     )
@@ -1118,8 +1128,25 @@ class AgentProjectsView(APIView):
         project_ids.update(integrated_project_ids)
 
         projects = Project.objects.filter(pk__in=project_ids, is_active=True)
-        serializer = ProjectSerializer(projects, many=True)
-        return Response(serializer.data)
+
+        min_conversations = request.query_params.get("min_conversations")
+        if min_conversations is not None:
+            try:
+                min_n = int(min_conversations)
+                if min_n >= 0:
+                    projects = projects.annotate(conversation_count=Count("conversations")).filter(
+                        conversation_count__gte=min_n
+                    )
+            except ValueError:
+                pass
+
+        serializer = ProjectMinimalSerializer(projects, many=True)
+        return Response(
+            {
+                "summary": {"count": len(projects)},
+                "projects": serializer.data,
+            }
+        )
 
 
 class TeamView(APIView):
