@@ -374,24 +374,20 @@ class TestContentBasePersonalizationViewSet(TestCase):
         self.project = ProjectFactory(
             brain_on=True, name=self.content_base.intelligence.name, org=self.org, created_by=self.user
         )
-        # Use the same intelligence as the content_base
+        self.project.authorizations.update_or_create(user=self.user, defaults={"role": 3})
+
         IntegratedIntelligenceFactory(
             intelligence=self.content_base.intelligence, project=self.project, created_by=self.user
         )
 
-        # Get the actual content base that the view will use
-        from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
-
         actual_content_base = get_default_content_base_by_project(str(self.project.uuid))
 
-        # Create instruction on the actual content base that will be used
         from nexus.intelligences.models import ContentBaseInstruction
 
         self.instruction_1 = ContentBaseInstruction.objects.create(
             content_base=actual_content_base, instruction="Test instruction"
         )
 
-        # Create a team with human support data
         self.team = Team.objects.create(
             project=self.project,
             external_id="test-supervisor-id",
@@ -399,6 +395,21 @@ class TestContentBasePersonalizationViewSet(TestCase):
             human_support_prompt="Test human support prompt",
         )
         self.url = f"{self.project.uuid}/customization"
+
+        self._patcher = mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+        self._mock_ext_permission = self._patcher.start()
+
+        def _local_permission(request, project_uuid, method):
+            from nexus.projects.models import Project
+            from nexus.projects.permissions import has_project_permission
+
+            project = Project.objects.get(uuid=project_uuid)
+            return has_project_permission(request.user, project, method)
+
+        self._mock_ext_permission.side_effect = _local_permission
+
+    def tearDown(self):
+        self._patcher.stop()
 
     def test_get_personalization(self):
         url_retrieve = f"{self.url}/"
@@ -498,6 +509,40 @@ class TestContentBasePersonalizationViewSet(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_get_personalization_internal_user(self):
+        internal_user = User.objects.create_user(email="internal@example.com")
+        content_type = ContentType.objects.get_for_model(internal_user)
+        permission, _ = Permission.objects.get_or_create(
+            codename="can_communicate_internally",
+            name="can communicate internally",
+            content_type=content_type,
+        )
+        internal_user.user_permissions.add(permission)
+        internal_user = User.objects.get(pk=internal_user.pk)
+
+        url_retrieve = f"{self.url}/"
+        request = self.factory.get(url_retrieve)
+        force_authenticate(request, user=internal_user)
+
+        response = ContentBasePersonalizationViewSet.as_view({"get": "list"})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_permission_denied_without_access(self):
+        unauthorized_user = User.objects.create_user(email="noaccess@example.com")
+
+        url_retrieve = f"{self.url}/"
+        request = self.factory.get(url_retrieve)
+        force_authenticate(request, user=unauthorized_user)
+
+        response = ContentBasePersonalizationViewSet.as_view({"get": "list"})(
+            request,
+            project_uuid=str(self.project.uuid),
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 class TestRetailRouterViewset(APITestCase):

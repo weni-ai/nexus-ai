@@ -35,7 +35,8 @@ from nexus.intelligences.models import (
 )
 from nexus.orgs import permissions
 from nexus.paginations import CustomCursorPagination, SupervisorPagination
-from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
+from nexus.agents.api.views import InternalCommunicationPermission
+from nexus.projects.api.permissions import CombinedExternalProjectPermission, ExternalTokenPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.storage import AttachmentPreviewStorage, validate_mime_type
@@ -851,7 +852,7 @@ class InlineContentBaseFileViewset(ModelViewSet):
     serializer_class = ContentBaseFileSerializer
     pagination_class = CustomCursorPagination
     parser_classes = (parsers.MultiPartParser,)
-    permission_classes = [IsAuthenticated, ProjectPermission]
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
     lookup_url_kwarg = "contentbase_file_uuid"
 
     def list(self, request, *args, **kwargs):
@@ -1402,39 +1403,28 @@ class LLMDefaultViewset(views.APIView):
 class ContentBasePersonalizationViewSet(ModelViewSet):
     serializer_class = ContentBasePersonalizationSerializer
     authentication_classes = AUTHENTICATION_CLASSES
+    permission_classes = [ExternalTokenPermission | ProjectPermission | InternalCommunicationPermission]
 
     def get_queryset(self, *args, **kwargs):
         if getattr(self, "swagger_fake_view", False):
             return ContentBase.objects.none()  # pragma: no cover
         super().get_serializer(*args, **kwargs)
 
+    def _get_content_base(self, project_uuid):
+        return intelligences.get_default_content_base_by_project(project_uuid)
+
     def list(self, request, *args, **kwargs):
-        try:
-            user_email = ""
-            authorization_header = request.headers.get("Authorization", "Bearer unauthorized")
-            is_super_user = permissions.is_super_user(authorization_header)
-
-            if not is_super_user:
-                user_email = request.user.email
-
-            project_uuid = kwargs.get("project_uuid")
-
-            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(
-                project_uuid, user_email, is_super_user
-            )
-            data = ContentBasePersonalizationSerializer(
-                content_base, context={"request": request, "project_uuid": project_uuid}
-            ).data
-            return Response(data=data, status=status.HTTP_200_OK)
-        except IntelligencePermissionDenied:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        project_uuid = kwargs.get("project_uuid")
+        content_base = self._get_content_base(project_uuid)
+        data = ContentBasePersonalizationSerializer(
+            content_base, context={"request": request, "project_uuid": project_uuid}
+        ).data
+        return Response(data=data, status=status.HTTP_200_OK)
 
     def update(self, request, *args, **kwargs):
         try:
             project_uuid = kwargs.get("project_uuid")
-            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(
-                project_uuid, request.user.email
-            )
+            content_base = self._get_content_base(project_uuid)
 
             context = {"request": request, "project_uuid": project_uuid}
 
@@ -1447,33 +1437,24 @@ class ContentBasePersonalizationViewSet(ModelViewSet):
 
             if serializer.is_valid():
                 serializer.save()
-                data = serializer.data
-                return Response(data=data, status=status.HTTP_200_OK)
-            else:
-                logger.error("Serializer errors", extra={"errors": serializer.errors})
-                return Response(data=serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                return Response(data=serializer.data, status=status.HTTP_200_OK)
 
-        except IntelligencePermissionDenied:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+            logger.error("Serializer errors", extra={"errors": serializer.errors})
+            return Response(data=serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
         except Exception as e:
             logger.error("Error updating personalization: %s", str(e), exc_info=True)
             return Response(data={"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def destroy(self, request, *args, **kwargs):
-        try:
-            instruction_id = request.query_params.get("id")
-            project_uuid = kwargs.get("project_uuid")
-            content_base = intelligences.RetrieveContentBaseUseCase().get_default_by_project(
-                project_uuid, request.user.email
-            )
-            user = request.user
+        instruction_id = request.query_params.get("id")
+        project_uuid = kwargs.get("project_uuid")
+        content_base = self._get_content_base(project_uuid)
 
-            ids = [instruction_id]
-            intelligences.DeleteContentBaseUseCase().bulk_delete_instruction_by_id(content_base, ids, user)
-            data = ContentBasePersonalizationSerializer(content_base, context={"request": request}).data
-            return Response(status=status.HTTP_200_OK, data=data)
-        except IntelligencePermissionDenied:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        ids = [instruction_id]
+        intelligences.DeleteContentBaseUseCase().bulk_delete_instruction_by_id(content_base, ids, request.user)
+        data = ContentBasePersonalizationSerializer(content_base, context={"request": request}).data
+        return Response(status=status.HTTP_200_OK, data=data)
 
 
 class ContentBaseFilePreview(views.APIView):
@@ -1532,13 +1513,9 @@ class UploadFileView(views.APIView):
 
 
 class CommerceHasAgentBuilder(views.APIView):
-    def get(eslf, request):
-        user: User = request.user
-        module_permission = user.has_perm("users.can_communicate_internally")
+    permission_classes = [InternalCommunicationPermission]
 
-        if not module_permission:
-            return Response({"error": "you dont have permission"}, status=status.HTTP_401_UNAUTHORIZED)
-
+    def get(self, request):
         project_uuid = request.query_params.get("project_uuid", None)
 
         if not project_uuid:
