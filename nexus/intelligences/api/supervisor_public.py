@@ -291,10 +291,30 @@ class SupervisorPublicConversationsViewV2(APIView):
         response.raise_for_status()
         return response.json()
 
+    def _normalize_message(self, m):
+        """Normalize one message to MessageSerializer format."""
+        return {
+            "text": m.get("text", ""),
+            "source": m.get("source", ""),
+            "created_at": m.get("created_at", ""),
+        }
+
+    def _append_page_messages(self, out, page_messages):
+        """Append normalized messages from a page to out. Returns next_url or None."""
+        if isinstance(page_messages, dict) and "results" in page_messages:
+            for m in page_messages.get("results") or []:
+                out.append(self._normalize_message(m))
+            return page_messages.get("next")
+        if isinstance(page_messages, list):
+            for m in page_messages:
+                out.append(self._normalize_message(m))
+        return None
+
     def _fetch_conversation_messages(self, project_uuid, conversation_uuid):
         """
         Fetch messages for a single conversation from nexus-conversations detail endpoint.
         For 'In Progress' conversations, nexus-conversations fetches from DynamoDB.
+        Normalizes on the fly into a single list to avoid holding raw + normalized in memory.
         """
         try:
             endpoint = f"/api/v1/projects/{project_uuid}/conversations/{conversation_uuid}/"
@@ -314,20 +334,18 @@ class SupervisorPublicConversationsViewV2(APIView):
         messages_data = data.get("messages")
         if not messages_data:
             return []
-        # Detail returns paginated messages: {next, previous, results}
-        raw = []
+
+        out = []
         if isinstance(messages_data, dict) and "results" in messages_data:
-            raw.extend(messages_data.get("results", []) or [])
-            next_url = messages_data.get("next")
-            # Follow pagination until exhausted
+            next_url = self._append_page_messages(out, messages_data)
             while next_url:
                 try:
-                    if next_url.startswith("http://") or next_url.startswith("https://"):
-                        page_url = next_url
-                    else:
-                        page_url = settings.CONVERSATIONS_REST_ENDPOINT.rstrip("/") + (
-                            next_url if next_url.startswith("/") else f"/{next_url}"
-                        )
+                    page_url = (
+                        next_url
+                        if next_url.startswith("http://") or next_url.startswith("https://")
+                        else settings.CONVERSATIONS_REST_ENDPOINT.rstrip("/")
+                        + (next_url if next_url.startswith("/") else f"/{next_url}")
+                    )
                     page_response = requests.get(
                         page_url,
                         headers=self._get_headers(),
@@ -336,14 +354,7 @@ class SupervisorPublicConversationsViewV2(APIView):
                     page_response.raise_for_status()
                     page_data = page_response.json() or {}
                     page_messages = page_data.get("messages") or page_data
-                    if isinstance(page_messages, dict) and "results" in page_messages:
-                        raw.extend(page_messages.get("results", []) or [])
-                        next_url = page_messages.get("next")
-                    elif isinstance(page_messages, list):
-                        raw.extend(page_messages)
-                        next_url = None
-                    else:
-                        next_url = None
+                    next_url = self._append_page_messages(out, page_messages)
                 except Exception as e:
                     logger.warning(
                         "Failed to fetch paginated messages for conversation %s: %s",
@@ -353,19 +364,8 @@ class SupervisorPublicConversationsViewV2(APIView):
                     )
                     break
         elif isinstance(messages_data, list):
-            raw = messages_data
-        else:
-            raw = []
-
-        # Normalize to MessageSerializer format (text, source, created_at)
-        return [
-            {
-                "text": m.get("text", ""),
-                "source": m.get("source", ""),
-                "created_at": m.get("created_at", ""),
-            }
-            for m in raw
-        ]
+            self._append_page_messages(out, messages_data)
+        return out
 
     def _transform_conversation(self, item, messages=None):
         """Transform nexus-conversations item to SupervisorPublicConversationItem format."""
