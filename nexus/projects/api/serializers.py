@@ -10,6 +10,15 @@ class ProjectSerializer(serializers.ModelSerializer):
         read_only_fields = ["uuid", "name", "indexer_database"]
 
 
+class ProjectMinimalSerializer(serializers.ModelSerializer):
+    """Minimal project representation (name, uuid only)."""
+
+    class Meta:
+        model = Project
+        fields = ["name", "uuid"]
+        read_only_fields = ["name", "uuid"]
+
+
 class ConversationClassificationSerializer(serializers.Serializer):
     topic = serializers.CharField(required=False, allow_null=True)
     subtopic = serializers.CharField(required=False, allow_null=True)
