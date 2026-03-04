@@ -1002,8 +1002,7 @@ class BedrockFileDatabase(FileDataBase):
 
         try:
             logger.info(
-                "Creating S3 client for inline traces"
-                f"region: {custom_region}, bucket: {custom_bucket}, key: {key}"
+                f"Creating S3 client for inline traces, region: {custom_region}, bucket: {custom_bucket}, key: {key}"
             )
             custom_s3_client = boto3.client("s3", region_name=custom_region)
 
@@ -1017,13 +1016,12 @@ class BedrockFileDatabase(FileDataBase):
             )
             
             logger.info(
-                "Successfully uploaded traces to S3",
-                extra={"bucket": custom_bucket, "key": key, "data_size": len(data)}
+                f"Successfully uploaded traces to S3, bucket: {custom_bucket}, key: {key}, data_size: {len(data)}"
             )
         except Exception as e:
             logger.error(
-                "Error uploading inline traces to S3"
-                f"bucket: {custom_bucket}, region: {custom_region}, key: {key}, error: {str(e)}, error_type: {type(e).__name__}"
+                f"Error uploading inline traces to S3, bucket: {custom_bucket}, region: {custom_region}, key: {key}, error: {str(e)}, error_type: {type(e).__name__}",
+                exc_info=True
             )
             raise
 
