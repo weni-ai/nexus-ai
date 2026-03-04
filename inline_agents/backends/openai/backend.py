@@ -204,6 +204,7 @@ class OpenAIBackend(InlineAgentsBackend):
         stream_support: bool = False,
         **kwargs,
     ):
+        message_conversation_log_uuid = kwargs.pop("message_conversation_log_uuid", None)
         use_components_cached = kwargs.pop("use_components", use_components)
         rationale_switch_cached = kwargs.pop("rationale_switch", rationale_switch)
         human_support_cached = kwargs.pop("human_support", None)
@@ -240,7 +241,7 @@ class OpenAIBackend(InlineAgentsBackend):
             preview=preview,
         )
 
-        hooks_state = HooksState(agents=team)
+        hooks_state = HooksState(agents=team, message_conversation_log_uuid=message_conversation_log_uuid)
 
         save_inline_message_async.delay(
             project_uuid=project_uuid,
