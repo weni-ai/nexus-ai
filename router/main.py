@@ -52,6 +52,8 @@ def messages(request: Request, message: MessageHTTPBody):
             }
             preview: bool = message.preview
 
+            logger.info(f"Is preview: {preview}")
+
             if preview:
                 task_kwargs.update(
                     {
