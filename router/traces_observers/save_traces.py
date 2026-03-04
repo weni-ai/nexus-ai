@@ -31,6 +31,7 @@ class SaveTracesObserver(EventObserver):
         logger.info("Start SaveTracesObserver")
 
         data = ""
+        message_conversation_log_uuid = kwargs.get("message_conversation_log_uuid")
 
         for trace_event in trace_events:
             trace_events_json = trace_events_to_json(trace_event)
@@ -46,6 +47,7 @@ class SaveTracesObserver(EventObserver):
             source_type=source_type,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
 
@@ -64,6 +66,7 @@ def save_inline_trace_events(
     source_type: str,
     contact_name: str,
     channel_uuid: str,
+    message_conversation_log_uuid: str,
 ):
     try:
         message = save_inline_message_to_database(
@@ -75,11 +78,12 @@ def save_inline_trace_events(
             source_type=source_type,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
         data = _prepare_trace_data(trace_events)
 
-        filename = f"{message.uuid}.jsonl"
+        filename = f"{message_conversation_log_uuid}.jsonl"
         key = f"inline_traces/{project_uuid}/{filename}"
 
         upload_traces_to_s3(data, key)
@@ -148,6 +152,7 @@ def save_inline_message_to_database(
     source_type: str,
     contact_name: str,
     channel_uuid: str = None,
+    message_conversation_log_uuid: str = None,
 ) -> InlineAgentMessage:
     message_service = _get_message_service()
     message_service.handle_message_cache(
@@ -162,14 +167,18 @@ def save_inline_message_to_database(
 
     source = {True: "preview", False: "router"}
 
-    return InlineAgentMessage.objects.create(
-        project_id=project_uuid,
-        text=text,
-        source=source.get(preview),
-        contact_urn=contact_urn,
-        session_id=session_id,
-        source_type=source_type,
-    )
+    kwargs = {
+        "project_id": project_uuid,
+        "text": text,
+        "source": source.get(preview),
+        "contact_urn": contact_urn,
+        "session_id": session_id,
+        "source_type": source_type,
+    }
+    if message_conversation_log_uuid:
+        kwargs["uuid"] = message_conversation_log_uuid
+
+    return InlineAgentMessage.objects.create(**kwargs)
 
 
 def _prepare_trace_data(trace_events: List[Dict]) -> str:

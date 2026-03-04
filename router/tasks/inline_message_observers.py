@@ -31,6 +31,11 @@ class InlineMessageReceivedObserver(EventObserver):
         if preview:
             return
 
+        message_conversation_log_uuid = kwargs.get("message_conversation_log_uuid")
+        if not message_conversation_log_uuid:
+            logger.warning("message_conversation_log_uuid not provided, skipping SQS event creation")
+            return
+
         events = build_inline_message_sqs_events(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
@@ -40,6 +45,7 @@ class InlineMessageReceivedObserver(EventObserver):
             response_text=response_text,
             incoming_created_at=incoming_created_at,
             outgoing_created_at=outgoing_created_at,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
         logger.debug("inline_message:received SQS events: %s", events)
 
@@ -64,6 +70,11 @@ class InlineMessageReceivedMetricsObserver(EventObserver):
         if preview:
             return
 
+        message_conversation_log_uuid = kwargs.get("message_conversation_log_uuid")
+        if not message_conversation_log_uuid:
+            logger.warning("message_conversation_log_uuid not provided, skipping SQS event creation")
+            return
+
         events = build_inline_message_sqs_events(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
@@ -73,5 +84,6 @@ class InlineMessageReceivedMetricsObserver(EventObserver):
             response_text=response_text,
             incoming_created_at=incoming_created_at,
             outgoing_created_at=outgoing_created_at,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
         get_conversation_events_producer().send_events(events)

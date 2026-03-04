@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import uuid
 from typing import Dict, Optional, Tuple
 
 import boto3
@@ -313,6 +314,7 @@ def _invoke_backend(
     channel_type: str = "",
     stream_support: bool = False,
     supervisor_agent_uuid: Optional[str] = None,
+    message_conversation_log_uuid: Optional[str] = None,
 ):
     """
     Invoke backend with cached data to avoid database queries.
@@ -343,6 +345,7 @@ def _invoke_backend(
             "turn_off_rationale": turn_off_rationale,
             "channel_type": channel_type,
             "stream_support": stream_support,
+            "message_conversation_log_uuid": message_conversation_log_uuid,
         }
     )
 
@@ -390,6 +393,8 @@ def start_inline_agents(
         )
 
     task_manager = task_manager or get_task_manager()
+
+    message_conversation_log_uuid = str(uuid.uuid4())
 
     try:
         incoming_created_at = None  # Set right before _invoke_backend (same point as InlineAgentMessage save)
@@ -476,6 +481,7 @@ def start_inline_agents(
             channel_type=message.get("channel_type", ""),
             stream_support=message.get("stream_support", False),
             supervisor_agent_uuid=supervisor_agent_uuid,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
         if response is None or response == "":
@@ -494,6 +500,7 @@ def start_inline_agents(
             response_text=response or "",
             incoming_created_at=incoming_created_at,
             outgoing_created_at=pendulum.now().to_iso8601_string(),
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
         # if preview:
@@ -529,8 +536,9 @@ def start_inline_agents(
             preview=preview,
             message_text=message.get("text"),
             response_text=e.message,
-            incoming_created_at=incoming_created_at,
+            incoming_created_at=incoming_created_at or pendulum.now().to_iso8601_string(),
             outgoing_created_at=pendulum.now().to_iso8601_string(),
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
         if preview:
             return dispatch_preview(e.message, message_obj, broadcast, user_email, agents_backend, flows_user_email)

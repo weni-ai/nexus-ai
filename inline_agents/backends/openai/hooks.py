@@ -181,6 +181,7 @@ class TraceHandler:
         session_id: str,
         contact_name: str,
         channel_uuid: str,
+        message_conversation_log_uuid: str,
     ):
         await self.event_manager_notify(
             event="save_inline_trace_events",
@@ -194,6 +195,7 @@ class TraceHandler:
             source_type="agent",  # If user message, source_type="user"
             contact_name=contact_name,
             channel_uuid=channel_uuid,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
 
@@ -770,4 +772,5 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                 session_id=context_data.session.get_session_id(),
                 contact_name=context_data.contact.get("name"),
                 channel_uuid=context_data.contact.get("channel_uuid"),
+                message_conversation_log_uuid=self.hooks_state.message_conversation_log_uuid,
             )
