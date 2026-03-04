@@ -2,7 +2,7 @@ import logging
 
 import pendulum
 from django.conf import settings
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import Count, OuterRef, Q, Subquery
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -25,6 +25,7 @@ from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
 from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
+from nexus.projects.api.serializers import ProjectMinimalSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
@@ -38,6 +39,7 @@ from nexus.usecases.intelligences.get_by_uuid import (
 )
 from nexus.usecases.projects import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.users.api.authentication import UserGlobalTokenAuthentication
 from router.entities import message_factory
 
 logger = logging.getLogger(__name__)
@@ -1080,6 +1082,89 @@ class AgentsView(APIView):
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
+
+
+class AgentProjectsView(APIView):
+    """Returns all projects that use a given agent (owner project + integrated projects)."""
+
+    permission_classes = [IsAuthenticated]
+    # Token-only: User API token
+    authentication_classes = [UserGlobalTokenAuthentication]
+
+    @extend_schema(
+        operation_id="agent_projects_list",
+        summary="List projects using an agent",
+        description=(
+            "Returns all projects that use the given agent. "
+            "Includes the project that owns the agent and any projects that have integrated it. "
+            "Optional min_conversations filters out projects with fewer conversations (e.g. test projects)."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="min_conversations",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.INT,
+                description="Minimum number of conversations; projects below this are excluded.",
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(description="Summary with count and list of projects (name, uuid)"),
+            400: OpenApiResponse(description="Invalid agent UUID or min_conversations"),
+            404: OpenApiResponse(description="Agent not found"),
+        },
+    )
+    def get(self, request, *args, **kwargs):
+        agent_uuid = kwargs.get("agent_uuid")
+
+        try:
+            agent = Agent.objects.get(uuid=agent_uuid)
+        except (ValueError, TypeError):
+            return Response({"error": "Invalid agent UUID format"}, status=400)
+        except Agent.DoesNotExist:
+            return Response({"error": "Agent not found"}, status=404)
+        except Agent.MultipleObjectsReturned:
+            return Response({"error": "Agent not found"}, status=404)
+
+        project_ids = set()
+
+        # Project that owns the agent
+        project_ids.add(agent.project_id)
+
+        # Projects that have integrated this agent
+        integrated_project_ids = IntegratedAgent.objects.filter(agent=agent).values_list("project_id", flat=True)
+        project_ids.update(integrated_project_ids)
+
+        projects = Project.objects.filter(pk__in=project_ids, is_active=True)
+
+        min_conversations = request.query_params.get("min_conversations")
+        if min_conversations is not None:
+            try:
+                min_n = int(min_conversations)
+            except ValueError:
+                return Response(
+                    {"error": "min_conversations must be an integer"},
+                    status=400,
+                )
+
+            if min_n < 0:
+                return Response(
+                    {"error": "min_conversations must be a non-negative integer"},
+                    status=400,
+                )
+
+            projects = projects.annotate(conversation_count=Count("conversations")).filter(
+                conversation_count__gte=min_n
+            )
+
+        serializer = ProjectMinimalSerializer(projects, many=True)
+        projects_data = serializer.data
+        return Response(
+            {
+                "summary": {"count": len(projects_data)},
+                "projects": projects_data,
+            }
+        )
 
 
 class TeamView(APIView):
