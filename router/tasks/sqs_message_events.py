@@ -112,6 +112,7 @@ def build_message_sent_event(
     contact_name: str,
     message_text: str,
     created_at: str,
+    message_id: Optional[str] = None,
 ) -> SQSMessageEvent:
     return SQSMessageEvent(
         event_type=EVENT_TYPE_MESSAGE_SENT,
@@ -121,7 +122,7 @@ def build_message_sent_event(
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
             message=MessagePayload(
-                id=str(uuid.uuid4()),
+                id=message_id or str(uuid.uuid4()),
                 text=message_text,
                 source="outgoing",
                 created_at=created_at,
@@ -207,6 +208,7 @@ def build_inline_message_sqs_events(
     response_text: str,
     incoming_created_at: str,
     outgoing_created_at: str,
+    message_conversation_log_uuid: Optional[str] = None,
 ) -> list[dict]:
     received = build_message_received_event(
         project_uuid=project_uuid,
@@ -223,5 +225,6 @@ def build_inline_message_sqs_events(
         contact_name=contact_name,
         message_text=response_text,
         created_at=outgoing_created_at,
+        message_id=message_conversation_log_uuid,
     )
     return [received.to_dict(), sent.to_dict()]
