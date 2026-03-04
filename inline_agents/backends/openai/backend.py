@@ -242,6 +242,8 @@ class OpenAIBackend(InlineAgentsBackend):
 
         hooks_state = HooksState(agents=team)
 
+        message_conversation_log_uuid = kwargs.pop("message_conversation_log_uuid", None)
+
         save_inline_message_async.delay(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
@@ -251,6 +253,7 @@ class OpenAIBackend(InlineAgentsBackend):
             source_type="user",
             contact_name=contact_name,
             channel_uuid=channel_uuid,
+            message_uuid=message_conversation_log_uuid,
         )
 
         supervisor_hooks = SupervisorHooks(
@@ -268,6 +271,7 @@ class OpenAIBackend(InlineAgentsBackend):
             data_lake_event_adapter=data_lake_event_adapter,
             conversation=conversation,
             use_components=use_components,
+            message_uuid=message_conversation_log_uuid,
         )
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
@@ -281,6 +285,7 @@ class OpenAIBackend(InlineAgentsBackend):
             event_manager_notify=self._event_manager_notify,
             agents=team,
             hooks_state=hooks_state,
+            message_uuid=message_conversation_log_uuid,
         )
 
         jwt_usecase = JWTUsecase()
