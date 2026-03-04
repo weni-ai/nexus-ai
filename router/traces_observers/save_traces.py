@@ -32,7 +32,6 @@ class SaveTracesObserver(EventObserver):
             f"Start SaveTracesObserver, project_uuid: {project_uuid}, trace_events_count: {len(trace_events) if trace_events else 0}, preview: {preview}"
         )
 
-        # Validar se há trace_events
         if not trace_events:
             logger.warning(
                 f"No trace events to save, project_uuid: {project_uuid}, contact_urn: {contact_urn}"
