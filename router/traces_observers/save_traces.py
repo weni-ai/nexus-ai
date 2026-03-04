@@ -28,14 +28,18 @@ class SaveTracesObserver(EventObserver):
         channel_uuid: str,
         **kwargs,
     ):
-        logger.info("Start SaveTracesObserver")
+        logger.info(
+            "Start SaveTracesObserver",
+            f"project_uuid: {project_uuid}, trace_events_count: {len(trace_events) if trace_events else 0}, preview: {preview}"
+        )
 
-        data = ""
-        message_conversation_log_uuid = kwargs.get("message_conversation_log_uuid")
-
-        for trace_event in trace_events:
-            trace_events_json = trace_events_to_json(trace_event)
-            data += trace_events_json + "\n"
+        # Validar se há trace_events
+        if not trace_events:
+            logger.warning(
+                "No trace events to save",
+                f"project_uuid: {project_uuid}, contact_urn: {contact_urn}"
+            )
+            return
 
         save_inline_trace_events.delay(
             trace_events=trace_events,
