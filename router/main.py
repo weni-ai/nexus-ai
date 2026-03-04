@@ -54,11 +54,13 @@ def messages(request: Request, message: MessageHTTPBody):
 
             logger.info(f"Is preview: {preview}")
 
+            user_email = message.contact_urn.replace("ext:", "")
+
             if preview:
                 task_kwargs.update(
                     {
                         "preview": True,
-                        "user_email": message.contact_urn,
+                        "user_email": user_email,
                     }
                 )
                 queue = "celery"
