@@ -39,6 +39,7 @@ from nexus.usecases.intelligences.get_by_uuid import (
 )
 from nexus.usecases.projects import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.users.api.authentication import UserGlobalTokenAuthentication
 from router.entities import message_factory
 
 logger = logging.getLogger(__name__)
@@ -1087,6 +1088,8 @@ class AgentProjectsView(APIView):
     """Returns all projects that use a given agent (owner project + integrated projects)."""
 
     permission_classes = [IsAuthenticated]
+    # Token-only: User API token
+    authentication_classes = [UserGlobalTokenAuthentication]
 
     @extend_schema(
         operation_id="agent_projects_list",
