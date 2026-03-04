@@ -502,17 +502,17 @@ def start_inline_agents(
             message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
-        if preview:
-            return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)
-        else:
-            return dispatch(
-                llm_response=response,
-                message=message_obj,
-                direct_message=broadcast,
-                user_email=flows_user_email,
-                full_chunks=[],
-                backend=agents_backend,
-            )
+        # if preview:
+        #     return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)
+        # else:
+        return dispatch(
+            llm_response=response,
+            message=message_obj,
+            direct_message=broadcast,
+            user_email=flows_user_email,
+            full_chunks=[],
+            backend=agents_backend,
+        )
 
     except UnsafeMessageException as e:
         message_obj = message_factory(

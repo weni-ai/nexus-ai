@@ -7,6 +7,7 @@ class MessageHTTPBody(BaseModel):
     project_uuid: str
     text: str
     contact_urn: str
+    preview: Optional[bool] = False
     channel_uuid: Optional[str] = None
     channel_type: Optional[str] = None
     contact_name: Optional[str] = None
