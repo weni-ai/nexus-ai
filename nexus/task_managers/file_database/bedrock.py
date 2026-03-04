@@ -987,14 +987,45 @@ class BedrockFileDatabase(FileDataBase):
         custom_bucket = os.getenv("AWS_BEDROCK_INLINE_TRACES_BUCKET")
         custom_region = os.getenv("AWS_BEDROCK_INLINE_TRACES_REGION")
 
-        custom_s3_client = boto3.client("s3", region_name=custom_region)
+        if not custom_bucket:
+            error_msg = "AWS_BEDROCK_INLINE_TRACES_BUCKET environment variable is not set"
+            logger.error(error_msg, extra={"key": key})
+            raise ValueError(error_msg)
+        
+        if not custom_region:
+            error_msg = "AWS_BEDROCK_INLINE_TRACES_REGION environment variable is not set"
+            logger.error(error_msg, extra={"key": key})
+            raise ValueError(error_msg)
 
-        bytes_stream = BytesIO(data.encode("utf-8"))
-        custom_s3_client.upload_fileobj(
-            bytes_stream,
-            custom_bucket,
-            key,
-        )
+        if not data or not data.strip():
+            logger.warning("Attempting to upload empty trace data", extra={"key": key, "bucket": custom_bucket})
+
+        try:
+            logger.info(
+                "Creating S3 client for inline traces"
+                f"region: {custom_region}, bucket: {custom_bucket}, key: {key}"
+            )
+            custom_s3_client = boto3.client("s3", region_name=custom_region)
+
+            bytes_stream = BytesIO(data.encode("utf-8"))
+            logger.info(f"Uploading traces to S3, bucket: {custom_bucket}, key: {key}, data_size: {len(data)}")
+            
+            custom_s3_client.upload_fileobj(
+                bytes_stream,
+                custom_bucket,
+                key,
+            )
+            
+            logger.info(
+                "Successfully uploaded traces to S3",
+                extra={"bucket": custom_bucket, "key": key, "data_size": len(data)}
+            )
+        except Exception as e:
+            logger.error(
+                "Error uploading inline traces to S3"
+                f"bucket: {custom_bucket}, region: {custom_region}, key: {key}, error: {str(e)}, error_type: {type(e).__name__}"
+            )
+            raise
 
     def upload_traces(self, data, key):
         bytes_stream = BytesIO(data.encode("utf-8"))
