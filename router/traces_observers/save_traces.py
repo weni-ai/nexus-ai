@@ -39,6 +39,8 @@ class SaveTracesObserver(EventObserver):
             )
             return
 
+        message_conversation_log_uuid = kwargs.get("message_conversation_log_uuid")
+
         save_inline_trace_events.delay(
             trace_events=trace_events,
             project_uuid=project_uuid,
@@ -49,6 +51,7 @@ class SaveTracesObserver(EventObserver):
             source_type=source_type,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
 
@@ -67,6 +70,7 @@ def save_inline_trace_events(
     source_type: str,
     contact_name: str,
     channel_uuid: str,
+    message_conversation_log_uuid: str = None,
 ):
     try:
         message = save_inline_message_to_database(
@@ -82,8 +86,15 @@ def save_inline_trace_events(
 
         data = _prepare_trace_data(trace_events)
 
-        filename = f"{message.uuid}.jsonl"
+        trace_uuid = message_conversation_log_uuid if message_conversation_log_uuid else str(message.uuid)
+        filename = f"{trace_uuid}.jsonl"
         key = f"inline_traces/{project_uuid}/{filename}"
+
+        logger.info(
+            f"Saving traces to S3 with UUID: {trace_uuid}, "
+            f"message_conversation_log_uuid: {message_conversation_log_uuid}, "
+            f"message.uuid: {message.uuid}"
+        )
 
         upload_traces_to_s3(data, key)
 
