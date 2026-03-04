@@ -39,6 +39,7 @@ from nexus.usecases.intelligences.get_by_uuid import (
 )
 from nexus.usecases.projects import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.users.api.authentication import UserGlobalTokenAuthentication
 from router.entities import message_factory
 
 logger = logging.getLogger(__name__)
@@ -1087,6 +1088,8 @@ class AgentProjectsView(APIView):
     """Returns all projects that use a given agent (owner project + integrated projects)."""
 
     permission_classes = [IsAuthenticated]
+    # Token-only: User API token
+    authentication_classes = [UserGlobalTokenAuthentication]
 
     @extend_schema(
         operation_id="agent_projects_list",
@@ -1107,6 +1110,7 @@ class AgentProjectsView(APIView):
         ],
         responses={
             200: OpenApiResponse(description="Summary with count and list of projects (name, uuid)"),
+            400: OpenApiResponse(description="Invalid agent UUID or min_conversations"),
             404: OpenApiResponse(description="Agent not found"),
         },
     )
@@ -1115,7 +1119,11 @@ class AgentProjectsView(APIView):
 
         try:
             agent = Agent.objects.get(uuid=agent_uuid)
+        except (ValueError, TypeError):
+            return Response({"error": "Invalid agent UUID format"}, status=400)
         except Agent.DoesNotExist:
+            return Response({"error": "Agent not found"}, status=404)
+        except Agent.MultipleObjectsReturned:
             return Response({"error": "Agent not found"}, status=404)
 
         project_ids = set()
@@ -1133,18 +1141,28 @@ class AgentProjectsView(APIView):
         if min_conversations is not None:
             try:
                 min_n = int(min_conversations)
-                if min_n >= 0:
-                    projects = projects.annotate(conversation_count=Count("conversations")).filter(
-                        conversation_count__gte=min_n
-                    )
             except ValueError:
-                pass
+                return Response(
+                    {"error": "min_conversations must be an integer"},
+                    status=400,
+                )
+
+            if min_n < 0:
+                return Response(
+                    {"error": "min_conversations must be a non-negative integer"},
+                    status=400,
+                )
+
+            projects = projects.annotate(conversation_count=Count("conversations")).filter(
+                conversation_count__gte=min_n
+            )
 
         serializer = ProjectMinimalSerializer(projects, many=True)
+        projects_data = serializer.data
         return Response(
             {
-                "summary": {"count": len(projects)},
-                "projects": serializer.data,
+                "summary": {"count": len(projects_data)},
+                "projects": projects_data,
             }
         )
 
