@@ -308,7 +308,7 @@ class BedrockBackend(InlineAgentsBackend):
 
                 logger.debug("Stream event")
 
-        # Saving traces on s3
+        message_conversation_log_uuid = kwargs.get("message_conversation_log_uuid")
         self._event_manager_notify(
             event="save_inline_trace_events",
             trace_events=trace_events,
@@ -321,6 +321,7 @@ class BedrockBackend(InlineAgentsBackend):
             source_type="agent",  # If user message, source_type="user"
             contact_name=contact_name,
             channel_uuid=channel_uuid,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
         if preview and user_email:
