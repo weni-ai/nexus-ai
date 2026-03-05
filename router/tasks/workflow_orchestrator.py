@@ -30,6 +30,7 @@ from nexus.events import notify_async
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from router.dispatcher import dispatch
 from router.entities import message_factory
+from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.actions_client import get_action_clients
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.invoke import (
@@ -41,6 +42,7 @@ from router.tasks.invoke import (
 )
 from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
 from router.tasks.redis_task_manager import RedisTaskManager
+from router.tasks.sqs_message_events import build_message_received_event
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +80,7 @@ class WorkflowContext:
     flows_user_email: str = field(default_factory=lambda: os.environ.get("FLOW_USER_EMAIL", ""))
     incoming_created_at: Optional[str] = None
     message_conversation_log_uuid: Optional[str] = None
+    turn_id: Optional[str] = None  # Stable id for SQS/conversation-ms deduplication
 
 
 # =============================================================================
@@ -182,6 +185,8 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         response_text=error.message or "",
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
         outgoing_created_at=pendulum.now().to_iso8601_string(),
+        message_conversation_log_uuid=ctx.message_conversation_log_uuid,
+        turn_id=ctx.turn_id,
     )
 
     if ctx.preview and ctx.broadcast:
@@ -272,6 +277,29 @@ def _run_generation(ctx: WorkflowContext) -> str:
 
     # Get backend and invoke (incoming message is saved inside backend via save_inline_message_async)
     ctx.incoming_created_at = pendulum.now().to_iso8601_string()
+    ctx.turn_id = ctx.message.get("msg_event", {}).get("msg_external_id") or str(uuid_lib.uuid4())
+
+    # Send incoming to SQS when message is received
+    if not ctx.preview:
+        received_event = build_message_received_event(
+            project_uuid=ctx.project_uuid,
+            contact_urn=ctx.contact_urn,
+            channel_uuid=message_obj.channel_uuid or ctx.message.get("channel_uuid", ""),
+            contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
+            message_text=getattr(message_obj, "text", "") or ctx.message.get("text", ""),
+            created_at=ctx.incoming_created_at,
+            message_id=ctx.turn_id,
+            correlation_id=ctx.turn_id,
+        )
+        try:
+            get_conversation_events_producer().send_event(received_event.to_dict())
+        except Exception as exc:
+            logger.exception(
+                "Failed to send message.received event to SQS",
+                extra={"project_uuid": ctx.project_uuid, "turn_id": ctx.turn_id},
+            )
+            sentry_sdk.capture_exception(exc)
+
     backend = BackendsRegistry.get_backend(ctx.agents_backend)
 
     response = _invoke_backend(
@@ -325,6 +353,7 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
         outgoing_created_at=pendulum.now().to_iso8601_string(),
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
+        turn_id=ctx.turn_id,
     )
 
     # Dispatch response
