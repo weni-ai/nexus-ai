@@ -20,9 +20,11 @@ from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.services.pre_generation_service import PreGenerationService
+from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.redis_task_manager import RedisTaskManager
+from router.tasks.sqs_message_events import build_message_received_event
 
 from .actions_client import get_action_clients
 
@@ -147,7 +149,10 @@ def dispatch_preview(
 
 def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
     logger.debug(
-        f"Guardrails complexity layer - text_len: {len(input_text or '')}, guardrail_id: {guardrail_id}, guardrail_version: {guardrail_version}"
+        "Guardrails complexity layer - text_len: %s, guardrail_id: %s, guardrail_version: %s",
+        len(input_text or ""),
+        guardrail_id,
+        guardrail_version,
     )
     try:
         payload = {
@@ -466,6 +471,22 @@ def start_inline_agents(
 
         # Invoke backend (incoming saved inside backend via save_inline_message_async)
         incoming_created_at = pendulum.now().to_iso8601_string()
+        turn_id = message.get("msg_event", {}).get("msg_external_id") or str(uuid.uuid4())
+
+        # Send incoming to SQS when message is received
+        if not preview:
+            received_event = build_message_received_event(
+                project_uuid=project_uuid,
+                contact_urn=message_obj.contact_urn,
+                channel_uuid=message_obj.channel_uuid,
+                contact_name=message_obj.contact_name or "",
+                message_text=message.get("text", ""),
+                created_at=incoming_created_at,
+                message_id=turn_id,
+                correlation_id=turn_id,
+            )
+            get_conversation_events_producer().send_event(received_event.to_dict())
+
         backend = BackendsRegistry.get_backend(agents_backend)
         response = _invoke_backend(
             backend=backend,
@@ -500,6 +521,7 @@ def start_inline_agents(
             incoming_created_at=incoming_created_at,
             outgoing_created_at=pendulum.now().to_iso8601_string(),
             message_conversation_log_uuid=message_conversation_log_uuid,
+            turn_id=turn_id,
         )
 
         if preview:
@@ -526,6 +548,7 @@ def start_inline_agents(
             contact_name=message.get("contact_name", ""),
             channel_uuid=message.get("channel_uuid", ""),
         )
+        turn_id = message.get("msg_event", {}).get("msg_external_id") or str(uuid.uuid4())
         notify_async(
             event="inline_message:received",
             project_uuid=message.get("project_uuid"),
@@ -535,8 +558,10 @@ def start_inline_agents(
             preview=preview,
             message_text=message.get("text"),
             response_text=e.message,
-            incoming_created_at=incoming_created_at,
+            incoming_created_at=incoming_created_at or pendulum.now().to_iso8601_string(),
             outgoing_created_at=pendulum.now().to_iso8601_string(),
+            message_conversation_log_uuid=message_conversation_log_uuid,
+            turn_id=turn_id,
         )
         if preview:
             return dispatch_preview(e.message, message_obj, broadcast, user_email, agents_backend, flows_user_email)

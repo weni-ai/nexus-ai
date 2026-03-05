@@ -86,16 +86,21 @@ def build_message_received_event(
     contact_name: str,
     message_text: str,
     created_at: str,
+    message_id: Optional[str] = None,
+    correlation_id: Optional[str] = None,
 ) -> SQSMessageEvent:
+    """Build message.received. Pass message_id/correlation_id for SQS and consumer deduplication."""
+    cid = correlation_id or str(uuid.uuid4())
+    mid = message_id or str(uuid.uuid4())
     return SQSMessageEvent(
         event_type=EVENT_TYPE_MESSAGE_RECEIVED,
-        correlation_id=str(uuid.uuid4()),
+        correlation_id=cid,
         data=EventData(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
             message=MessagePayload(
-                id=str(uuid.uuid4()),
+                id=mid,
                 text=message_text,
                 source="incoming",
                 created_at=created_at,
@@ -113,16 +118,20 @@ def build_message_sent_event(
     message_text: str,
     created_at: str,
     message_id: Optional[str] = None,
+    correlation_id: Optional[str] = None,
 ) -> SQSMessageEvent:
+    """Build message.sent. message_id = trace id; correlation_id for SQS dedup."""
+    cid = correlation_id or str(uuid.uuid4())
+    mid = message_id or str(uuid.uuid4())
     return SQSMessageEvent(
         event_type=EVENT_TYPE_MESSAGE_SENT,
-        correlation_id=str(uuid.uuid4()),
+        correlation_id=cid,
         data=EventData(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
             message=MessagePayload(
-                id=message_id or str(uuid.uuid4()),
+                id=mid,
                 text=message_text,
                 source="outgoing",
                 created_at=created_at,
@@ -209,7 +218,9 @@ def build_inline_message_sqs_events(
     incoming_created_at: str,
     outgoing_created_at: str,
     message_conversation_log_uuid: Optional[str] = None,
+    turn_id: Optional[str] = None,
 ) -> list[dict]:
+    """Build received + sent events. Incoming is sent on receive; this is for legacy callers."""
     received = build_message_received_event(
         project_uuid=project_uuid,
         contact_urn=contact_urn,
@@ -217,6 +228,8 @@ def build_inline_message_sqs_events(
         contact_name=contact_name,
         message_text=message_text,
         created_at=incoming_created_at,
+        message_id=turn_id,
+        correlation_id=turn_id,
     )
     sent = build_message_sent_event(
         project_uuid=project_uuid,
@@ -226,5 +239,6 @@ def build_inline_message_sqs_events(
         message_text=response_text,
         created_at=outgoing_created_at,
         message_id=message_conversation_log_uuid,
+        correlation_id=f"{turn_id}:outgoing" if turn_id else None,
     )
     return [received.to_dict(), sent.to_dict()]
