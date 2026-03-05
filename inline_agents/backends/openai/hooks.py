@@ -130,6 +130,7 @@ class TraceHandler:
         msg_external_id,
         turn_off_rationale,
         hooks_state,
+        message_uuid=None,
     ):
         self.event_manager_notify = event_manager_notify
         self.preview = preview
@@ -140,6 +141,7 @@ class TraceHandler:
         self.msg_external_id = msg_external_id
         self.turn_off_rationale = turn_off_rationale
         self.hooks_state = hooks_state
+        self.message_uuid = message_uuid
 
     async def send_trace(self, context_data, agent_name, trace_type, trace_data=None, tool_name=""):
         if trace_data is None:
@@ -195,7 +197,7 @@ class TraceHandler:
             source_type="agent",  # If user message, source_type="user"
             contact_name=contact_name,
             channel_uuid=channel_uuid,
-            message_conversation_log_uuid=message_conversation_log_uuid,
+            message_uuid=self.message_uuid,
         )
 
 
@@ -213,6 +215,7 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         event_manager_notify: callable,
         agents: list,
         hooks_state: HooksState,
+        message_uuid: str = None,
     ):
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
@@ -224,6 +227,7 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
             hooks_state=hooks_state,
+            message_uuid=message_uuid,
         )
         self.agents = agents
         self.supervisor_name = supervisor_name
@@ -526,6 +530,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
         use_components: bool = False,
         **kwargs,
     ):
+        message_uuid = kwargs.pop("message_uuid", None)
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
             preview=preview,
@@ -536,6 +541,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
             hooks_state=hooks_state,
+            message_uuid=message_uuid,
         )
         self.agent_name = agent_name
         self.preview = preview

@@ -34,12 +34,12 @@ class SaveTracesObserver(EventObserver):
 
         # Validar se há trace_events
         if not trace_events:
-            logger.warning(
-                f"No trace events to save, project_uuid: {project_uuid}, contact_urn: {contact_urn}"
-            )
+            logger.warning(f"No trace events to save, project_uuid: {project_uuid}, contact_urn: {contact_urn}")
             return
 
         message_conversation_log_uuid = kwargs.get("message_conversation_log_uuid")
+
+        message_uuid = kwargs.get("message_uuid")
 
         save_inline_trace_events.delay(
             trace_events=trace_events,
@@ -51,7 +51,7 @@ class SaveTracesObserver(EventObserver):
             source_type=source_type,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
-            message_conversation_log_uuid=message_conversation_log_uuid,
+            message_uuid=message_uuid,
         )
 
 
@@ -71,6 +71,7 @@ def save_inline_trace_events(
     contact_name: str,
     channel_uuid: str,
     message_conversation_log_uuid: str = None,
+    message_uuid: str = None,
 ):
     try:
         message = save_inline_message_to_database(
@@ -82,12 +83,16 @@ def save_inline_trace_events(
             source_type=source_type,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
+            message_uuid=message_uuid,
         )
 
         data = _prepare_trace_data(trace_events)
 
         trace_uuid = message_conversation_log_uuid if message_conversation_log_uuid else str(message.uuid)
         filename = f"{trace_uuid}.jsonl"
+        # Use message_uuid if provided, otherwise use message.uuid
+        uuid_for_filename = message_uuid or str(message.uuid)
+        filename = f"{uuid_for_filename}.jsonl"
         key = f"inline_traces/{project_uuid}/{filename}"
 
         logger.info(
@@ -127,6 +132,7 @@ def save_inline_message_async(
     source_type: str,
     contact_name: str,
     channel_uuid: str = None,
+    message_uuid: str = None,
 ):
     try:
         save_inline_message_to_database(
@@ -138,6 +144,7 @@ def save_inline_message_async(
             source_type=source_type,
             contact_name=contact_name,
             channel_uuid=channel_uuid,
+            message_uuid=message_uuid,
         )
     except Exception as e:
         logger.warning(f"Error saving message to database (attempt {self.request.retries + 1}/{self.max_retries}): {e}")
@@ -162,6 +169,7 @@ def save_inline_message_to_database(
     source_type: str,
     contact_name: str,
     channel_uuid: str = None,
+    message_uuid: str = None,
 ) -> InlineAgentMessage:
     message_service = _get_message_service()
     message_service.handle_message_cache(
@@ -176,14 +184,19 @@ def save_inline_message_to_database(
 
     source = {True: "preview", False: "router"}
 
-    return InlineAgentMessage.objects.create(
-        project_id=project_uuid,
-        text=text,
-        source=source.get(preview),
-        contact_urn=contact_urn,
-        session_id=session_id,
-        source_type=source_type,
-    )
+    create_kwargs = {
+        "project_id": project_uuid,
+        "text": text,
+        "source": source.get(preview),
+        "contact_urn": contact_urn,
+        "session_id": session_id,
+        "source_type": source_type,
+    }
+
+    if message_uuid:
+        create_kwargs["uuid"] = message_uuid
+
+    return InlineAgentMessage.objects.create(**create_kwargs)
 
 
 def _prepare_trace_data(trace_events: List[Dict]) -> str:
