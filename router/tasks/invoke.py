@@ -404,6 +404,7 @@ def start_inline_agents(
 
     try:
         incoming_created_at = None  # Set right before _invoke_backend (same point as InlineAgentMessage save)
+        turn_id = message.get("msg_event", {}).get("msg_external_id") or str(uuid.uuid4())
         TypingUsecase().send_typing_message(
             contact_urn=message.get("contact_urn"),
             msg_external_id=message.get("msg_event", {}).get("msg_external_id", ""),
@@ -473,7 +474,6 @@ def start_inline_agents(
 
         # Invoke backend (incoming saved inside backend via save_inline_message_async)
         incoming_created_at = pendulum.now().to_iso8601_string()
-        turn_id = message.get("msg_event", {}).get("msg_external_id") or str(uuid.uuid4())
 
         # Send incoming to SQS when message is received
         if not preview:
@@ -482,12 +482,19 @@ def start_inline_agents(
                 contact_urn=message_obj.contact_urn,
                 channel_uuid=message_obj.channel_uuid,
                 contact_name=message_obj.contact_name or "",
-                message_text=message.get("text", ""),
+                message_text=(message_obj.text or message.get("text", "")),
                 created_at=incoming_created_at,
                 message_id=turn_id,
                 correlation_id=turn_id,
             )
-            get_conversation_events_producer().send_event(received_event.to_dict())
+            try:
+                get_conversation_events_producer().send_event(received_event.to_dict())
+            except Exception as exc:
+                logger.exception(
+                    "Failed to send message.received event to SQS",
+                    extra={"project_uuid": project_uuid, "turn_id": turn_id},
+                )
+                sentry_sdk.capture_exception(exc)
 
         backend = BackendsRegistry.get_backend(agents_backend)
         response = _invoke_backend(
@@ -550,7 +557,7 @@ def start_inline_agents(
             contact_name=message.get("contact_name", ""),
             channel_uuid=message.get("channel_uuid", ""),
         )
-        turn_id = message.get("msg_event", {}).get("msg_external_id") or str(uuid.uuid4())
+        # Reuse turn_id from try block so received/sent correlation is consistent
         notify_async(
             event="inline_message:received",
             project_uuid=message.get("project_uuid"),
