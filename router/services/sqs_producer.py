@@ -9,6 +9,20 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+# SQS FIFO MessageDeduplicationId: max 128 chars, alphanumeric + hyphen
+SQS_DEDUP_ID_MAX_LENGTH = 128
+
+
+def _normalize_sqs_deduplication_id(value: str) -> str:
+    """Ensure value is safe for SQS MessageDeduplicationId (<=128 chars, alphanumeric + hyphen)."""
+    if not value:
+        return str(uuid.uuid4())
+    if len(value) <= SQS_DEDUP_ID_MAX_LENGTH and all(c.isalnum() or c == "-" for c in value):
+        return value
+    truncated = value[:SQS_DEDUP_ID_MAX_LENGTH]
+    safe = "".join(c if c.isalnum() or c == "-" else "-" for c in truncated)
+    return safe or str(uuid.uuid4())
+
 
 class ConversationEventsSQSProducer:
     """Send conversation event payloads to SQS FIFO queue."""
@@ -34,7 +48,7 @@ class ConversationEventsSQSProducer:
         contact_urn = data["contact_urn"]
         channel_uuid = data["channel_uuid"]
 
-        correlation_id = payload.get("correlation_id") or str(uuid.uuid4())
+        correlation_id = _normalize_sqs_deduplication_id(payload.get("correlation_id") or str(uuid.uuid4()))
         event_type = payload.get("event_type", "message.received")
 
         message_group_id = f"{project_uuid}:{contact_urn}:{channel_uuid}"

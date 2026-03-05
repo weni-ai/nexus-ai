@@ -97,14 +97,7 @@ class InlineMessageReceivedMetricsObserver(EventObserver):
             return
 
         message_conversation_log_uuid = kwargs.get("message_conversation_log_uuid")
-        if not message_conversation_log_uuid:
-            logger.warning("message_conversation_log_uuid not provided, using fallback id so message is not lost")
-            _report_missing_required_sentry(
-                project_uuid=project_uuid,
-                contact_urn=contact_urn,
-                channel_uuid=channel_uuid,
-            )
-
+        # Missing trace ID is reported only by InlineMessageReceivedObserver to avoid duplicate Sentry
         turn_id = kwargs.get("turn_id")
         message_id = message_conversation_log_uuid or str(uuid.uuid4())
         outgoing_id = f"{turn_id}:outgoing" if turn_id else str(uuid.uuid4())
@@ -118,4 +111,11 @@ class InlineMessageReceivedMetricsObserver(EventObserver):
             message_id=message_id,
             correlation_id=outgoing_id,
         )
-        get_conversation_events_producer().send_event(sent_event.to_dict())
+        try:
+            get_conversation_events_producer().send_event(sent_event.to_dict())
+        except Exception as exc:
+            logger.exception(
+                "Failed to send message.sent event to SQS",
+                extra={"project_uuid": project_uuid, "turn_id": turn_id},
+            )
+            sentry_sdk.capture_exception(exc)

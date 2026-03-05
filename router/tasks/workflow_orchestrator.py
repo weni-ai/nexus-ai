@@ -286,12 +286,19 @@ def _run_generation(ctx: WorkflowContext) -> str:
             contact_urn=ctx.contact_urn,
             channel_uuid=message_obj.channel_uuid or ctx.message.get("channel_uuid", ""),
             contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
-            message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
+            message_text=getattr(message_obj, "text", "") or ctx.message.get("text", ""),
             created_at=ctx.incoming_created_at,
             message_id=ctx.turn_id,
             correlation_id=ctx.turn_id,
         )
-        get_conversation_events_producer().send_event(received_event.to_dict())
+        try:
+            get_conversation_events_producer().send_event(received_event.to_dict())
+        except Exception as exc:
+            logger.exception(
+                "Failed to send message.received event to SQS",
+                extra={"project_uuid": ctx.project_uuid, "turn_id": ctx.turn_id},
+            )
+            sentry_sdk.capture_exception(exc)
 
     backend = BackendsRegistry.get_backend(ctx.agents_backend)
 
