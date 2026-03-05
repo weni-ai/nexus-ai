@@ -379,16 +379,16 @@ class OpenAIBackend(InlineAgentsBackend):
             )
 
         grpc_client, grpc_session, grpc_msg_id = None, None, None
-        if not preview:
-            grpc_client, grpc_session, grpc_msg_id = self._initialize_grpc_session(
-                channel_uuid=channel_uuid,
-                contact_urn=contact_urn,
-                session_id=session_id,
-                project_uuid=project_uuid,
-                language=language,
-                use_components=use_components,
-                stream_support=stream_support,
-            )
+        # if not preview:
+        grpc_client, grpc_session, grpc_msg_id = self._initialize_grpc_session(
+            channel_uuid=channel_uuid,
+            contact_urn=contact_urn,
+            session_id=session_id,
+            project_uuid=project_uuid,
+            language=language,
+            use_components=use_components,
+            stream_support=stream_support,
+        )
 
         result = asyncio.run(
             self._invoke_agents_async(
