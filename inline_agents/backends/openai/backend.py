@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import logging
+import re
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -43,6 +44,12 @@ from router.traces_observers.save_traces import save_inline_message_async
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_langfuse_id(value: str, max_length: int = 64) -> str:
+    """Sanitize string for Langfuse id/trace_id: only letters, numbers, underscores, dashes."""
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", value)
+    return sanitized[:max_length]
 
 
 class OpenAIBackend(InlineAgentsBackend):
@@ -659,7 +666,8 @@ class OpenAIBackend(InlineAgentsBackend):
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
-            trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
+            trace_id_raw = f"trace_urn_{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}"
+            trace_id = _sanitize_langfuse_id(trace_id_raw)
 
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
