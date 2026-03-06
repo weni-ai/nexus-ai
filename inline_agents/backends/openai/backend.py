@@ -727,9 +727,7 @@ class OpenAIBackend(InlineAgentsBackend):
                         "error_message": str(stream_error)[:500],
                     }
                     if usage_dict:
-                        metadata["usage"] = usage_dict
                         self._log_cache_usage_per_request(request_entries, project_uuid, contact_urn, trace_id)
-                        self._send_usage_to_langfuse(usage_dict, project_uuid, contact_urn)
                     root_span.update_trace(
                         input=input_text,
                         output=final_response,
@@ -776,9 +774,7 @@ class OpenAIBackend(InlineAgentsBackend):
                     "trace_id": trace_id,
                 }
                 if usage_dict:
-                    metadata["usage"] = usage_dict
                     self._log_cache_usage_per_request(request_entries, project_uuid, contact_urn, trace_id)
-                    self._send_usage_to_langfuse(usage_dict, project_uuid, contact_urn)
                 root_span.update_trace(
                     input=input_text,
                     output=final_response,
@@ -826,9 +822,9 @@ class OpenAIBackend(InlineAgentsBackend):
             return None
 
     def _get_usage_metadata_and_request_entries(self, result):
-        """Get usage for Langfuse metadata and per-request entries for logging.
+        """Get usage and per-request entries for logging (usage is sent to Langfuse/OTEL in hooks).
 
-        Returns (usage_dict_for_langfuse, request_usage_entries_list).
+        Returns (usage_dict, request_usage_entries_list).
         """
         usage_dict = self._extract_usage_from_result(result)
         request_entries = []
@@ -883,32 +879,6 @@ class OpenAIBackend(InlineAgentsBackend):
             total_cached,
             len(request_entries),
         )
-
-    def _send_usage_to_langfuse(
-        self,
-        usage_dict: Dict[str, Any],
-        project_uuid: str,
-        contact_urn: str,
-    ) -> None:
-        """Create a Langfuse generation observation with usage_details for cost tracking.
-
-        Langfuse only tracks cost/usage on observations of type 'generation'. This creates
-        a child generation under the current span so the run's token usage (including
-        cache) appears in Langfuse dashboards.
-        """
-        try:
-            start_obs = getattr(self.langfuse_c, "start_as_current_observation", None)
-            if not callable(start_obs):
-                return
-            with start_obs(
-                as_type="generation",
-                name="openai-agents-usage",
-                model="openai-agents",
-                metadata={"project_uuid": project_uuid, "contact_urn": contact_urn},
-            ) as generation:
-                generation.update(usage_details=usage_dict)
-        except Exception as e:
-            logger.debug("Could not send usage to Langfuse: %s", e)
 
     def _sentry_capture_exception(
         self, exception, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger
