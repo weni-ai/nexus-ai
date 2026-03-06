@@ -353,18 +353,22 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         await self.trace_handler.send_trace(
             context_data, _get_agent_slug(agent, self.trace_handler.hooks_state), "invoking_model"
         )
-        # Create a Langfuse generation for this LLM call so usage (incl. cache_read) appears on it, not on the parent span.
+        # Open a Langfuse generation.
+        # We keep the context open so "current" is our generation during the LLM call; no duplicate.
         try:
             langfuse = get_client()
-            start_obs = getattr(langfuse, "start_observation", None)
-            if callable(start_obs):
+            start_current = getattr(langfuse, "start_as_current_observation", None)
+            if callable(start_current):
                 model_name = _get_model_name_from_agent(agent)
                 name = f"Responses API with '{model_name}'"
-                generation = start_obs(as_type="generation", name=name, model=model_name or None)
+                ctx = start_current(as_type="generation", name=name, model=model_name or None)
+                generation = ctx.__enter__()
                 self.trace_handler.hooks_state.current_langfuse_generation = generation
+                self.trace_handler.hooks_state.current_langfuse_gen_ctx = ctx
         except Exception as e:
             logger.debug("[RunnerHooks] on_llm_start: could not start Langfuse generation: %s", e)
             self.trace_handler.hooks_state.current_langfuse_generation = None
+            self.trace_handler.hooks_state.current_langfuse_gen_ctx = None
 
     async def on_llm_end(self, context, agent, response, **kwargs):
         context_data = context.context
@@ -385,8 +389,9 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
             )
             if usage_dict:
                 _set_current_span_usage_attributes(usage_dict)
-            # Update and end the generation we created in on_llm_start (so usage is on "Responses API", not manager).
+            # Update and close the generation we opened in on_llm_start (generation.update + ctx.__exit__).
             gen = getattr(self.trace_handler.hooks_state, "current_langfuse_generation", None)
+            gen_ctx = getattr(self.trace_handler.hooks_state, "current_langfuse_gen_ctx", None)
             if gen is not None:
                 try:
                     update = getattr(gen, "update", None)
@@ -398,12 +403,18 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                             update_kwargs["model"] = model_name
                         if update_kwargs:
                             update(**update_kwargs)
-                    end_fn = getattr(gen, "end", None)
-                    if callable(end_fn):
-                        end_fn()
+                    if gen_ctx is not None:
+                        exit_fn = getattr(gen_ctx, "__exit__", None)
+                        if callable(exit_fn):
+                            exit_fn(None, None, None)
+                    else:
+                        end_fn = getattr(gen, "end", None)
+                        if callable(end_fn):
+                            end_fn()
                 except Exception as e:
                     logger.debug("[RunnerHooks] on_llm_end: could not update/end Langfuse generation: %s", e)
                 self.trace_handler.hooks_state.current_langfuse_generation = None
+                self.trace_handler.hooks_state.current_langfuse_gen_ctx = None
             elif usage_dict:
                 _update_langfuse_current_generation_usage(usage_dict, model=model_name)
         except Exception as e:

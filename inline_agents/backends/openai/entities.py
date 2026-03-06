@@ -17,8 +17,9 @@ class HooksState:
         self.tool_info_index = {}
         self.last_active_agent_slug = None  # Track the last agent that executed before formatter
         self.message_conversation_log_uuid = message_conversation_log_uuid
-        # Langfuse generation for the current LLM call (set in on_llm_start, updated/ended in on_llm_end)
+        # Langfuse: one generation per LLM call (open in on_llm_start, update+close in on_llm_end)
         self.current_langfuse_generation = None
+        self.current_langfuse_gen_ctx = None  # context manager from start_as_current_observation
 
         for agent in self.agents:
             self.agents_names.append(agent.get("agentName"))
