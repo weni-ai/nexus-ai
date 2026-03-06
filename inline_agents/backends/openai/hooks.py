@@ -108,6 +108,16 @@ def _update_langfuse_current_generation_usage(
         logger.debug("Could not update current Langfuse generation with usage: %s", e)
 
 
+def _get_model_name_from_agent(agent) -> str:
+    """Get a display model name from the agent for Langfuse generation naming."""
+    m = getattr(agent, "model", None)
+    if isinstance(m, str):
+        return m
+    if m is not None and hasattr(m, "model"):
+        return getattr(m, "model", "llm") or "llm"
+    return "llm"
+
+
 def _get_agent_slug(agent, hooks_state=None) -> str:
     """
     Get the agent slug from the agent object.
@@ -342,13 +352,23 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         await self.trace_handler.send_trace(
             context_data, _get_agent_slug(agent, self.trace_handler.hooks_state), "invoking_model"
         )
+        # Create a Langfuse generation for this LLM call so usage (incl. cache_read) appears on it, not on the parent span.
+        try:
+            langfuse = get_client()
+            start_obs = getattr(langfuse, "start_observation", None)
+            if callable(start_obs):
+                model_name = _get_model_name_from_agent(agent)
+                name = f"Responses API with '{model_name}'"
+                generation = start_obs(as_type="generation", name=name, model=model_name or None)
+                self.trace_handler.hooks_state.current_langfuse_generation = generation
+        except Exception as e:
+            logger.debug("[RunnerHooks] on_llm_start: could not start Langfuse generation: %s", e)
+            self.trace_handler.hooks_state.current_langfuse_generation = None
 
     async def on_llm_end(self, context, agent, response, **kwargs):
         context_data = context.context
-        # Update the current Langfuse generation (this LLM request) with usage including cache
-        # so cache_read_input_tokens appears in the same "Usage breakdown" as input/output.
-        # Applies to all providers used via OpenAIBackend: OpenAI (gpt-*), Gemini (LiteLLM),
-        # Anthropic/Claude (LiteLLM), and any other model routed through openai-agents/LiteLLM.
+        # Update our Langfuse generation (created in on_llm_start) with usage including cache
+        # so cache_read_input_tokens appears in "Responses API with ...", not on the parent span.
         try:
             usage_dict = None
             usage = getattr(context, "usage", None)
@@ -364,6 +384,26 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
             )
             if usage_dict:
                 _set_current_span_usage_attributes(usage_dict)
+            # Update and end the generation we created in on_llm_start (so usage is on "Responses API", not manager).
+            gen = getattr(self.trace_handler.hooks_state, "current_langfuse_generation", None)
+            if gen is not None:
+                try:
+                    update = getattr(gen, "update", None)
+                    if callable(update):
+                        update_kwargs = {}
+                        if usage_dict:
+                            update_kwargs["usage_details"] = usage_dict
+                        if model_name:
+                            update_kwargs["model"] = model_name
+                        if update_kwargs:
+                            update(**update_kwargs)
+                    end_fn = getattr(gen, "end", None)
+                    if callable(end_fn):
+                        end_fn()
+                except Exception as e:
+                    logger.debug("[RunnerHooks] on_llm_end: could not update/end Langfuse generation: %s", e)
+                self.trace_handler.hooks_state.current_langfuse_generation = None
+            elif usage_dict:
                 _update_langfuse_current_generation_usage(usage_dict, model=model_name)
         except Exception as e:
             logger.debug("[RunnerHooks] on_llm_end: could not update Langfuse generation usage: %s", e)
