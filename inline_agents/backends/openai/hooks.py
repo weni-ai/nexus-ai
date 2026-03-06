@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import pendulum
 import sentry_sdk
@@ -16,11 +16,71 @@ if TYPE_CHECKING:
     pass
 from agents.extensions.models.litellm_model import LitellmModel
 from django.conf import settings
+from langfuse import get_client
 
 from inline_agents.adapter import DataLakeEventAdapter
 from inline_agents.backends.openai.entities import FinalResponse, HooksState
 
 logger = logging.getLogger(__name__)
+
+
+def _usage_dict_from_request_entry(entry: Any) -> Optional[Dict[str, int]]:
+    """Build Langfuse usage_details from a single request_usage_entry (one LLM call)."""
+    if entry is None:
+        return None
+    try:
+        input_tokens = getattr(entry, "input_tokens", 0) or 0
+        output_tokens = getattr(entry, "output_tokens", 0) or 0
+        input_details = getattr(entry, "input_tokens_details", None)
+        cached = 0
+        if input_details is not None:
+            cached = getattr(input_details, "cached_tokens", 0) or 0
+        if input_tokens == 0 and output_tokens == 0:
+            return None
+        return {
+            "input": input_tokens,
+            "output": output_tokens,
+            "cache_read_input_tokens": cached,
+        }
+    except Exception as e:
+        logger.debug("Could not build usage_dict from request entry: %s", e)
+        return None
+
+
+def _usage_dict_from_response_usage(usage: Any) -> Optional[Dict[str, int]]:
+    """Build Langfuse usage_details from response.usage (e.g. OpenAI-style)."""
+    if usage is None:
+        return None
+    try:
+        input_tokens = getattr(usage, "input_tokens", None) or getattr(usage, "prompt_tokens", 0) or 0
+        output_tokens = getattr(usage, "output_tokens", None) or getattr(usage, "completion_tokens", 0) or 0
+        input_details = getattr(usage, "input_tokens_details", None)
+        cached = 0
+        if input_details is not None:
+            cached = getattr(input_details, "cached_tokens", 0) or 0
+        if input_tokens == 0 and output_tokens == 0:
+            return None
+        return {
+            "input": input_tokens,
+            "output": output_tokens,
+            "cache_read_input_tokens": cached,
+        }
+    except Exception as e:
+        logger.debug("Could not build usage_dict from response usage: %s", e)
+        return None
+
+
+def _update_langfuse_current_generation_usage(usage_dict: Dict[str, int]) -> None:
+    """Update the current Langfuse generation with usage_details so cache appears in the same request."""
+    if not usage_dict:
+        return
+    try:
+        langfuse = get_client()
+        update = getattr(langfuse, "update_current_generation", None)
+        if callable(update):
+            update(usage_details=usage_dict)
+    except Exception as e:
+        logger.debug("Could not update current Langfuse generation with usage: %s", e)
 
 
 def _get_agent_slug(agent, hooks_state=None) -> str:
@@ -261,6 +321,25 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
 
     async def on_llm_end(self, context, agent, response, **kwargs):
         context_data = context.context
+        # Update the current Langfuse generation (this LLM request) with usage including cache
+        # so cache_read_input_tokens appears in the same "Usage breakdown" as input/output.
+        # Applies to all providers used via OpenAIBackend: OpenAI (gpt-*), Gemini (LiteLLM),
+        # Anthropic/Claude (LiteLLM), and any other model routed through openai-agents/LiteLLM.
+        try:
+            usage_dict = None
+            usage = getattr(context, "usage", None)
+            if usage is not None:
+                request_entries = getattr(usage, "request_usage_entries", None) or []
+                if request_entries:
+                    last_entry = request_entries[-1]
+                    usage_dict = _usage_dict_from_request_entry(last_entry)
+            if usage_dict is None and hasattr(response, "usage"):
+                usage_dict = _usage_dict_from_response_usage(response.usage)
+            if usage_dict:
+                _update_langfuse_current_generation_usage(usage_dict)
+        except Exception as e:
+            logger.debug("[RunnerHooks] on_llm_end: could not update Langfuse generation usage: %s", e)
+
         for reasoning_item in response.output:
             if (
                 getattr(reasoning_item, "type", None) == "reasoning"
