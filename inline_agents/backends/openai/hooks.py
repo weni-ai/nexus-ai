@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 from agents.extensions.models.litellm_model import LitellmModel
 from django.conf import settings
 from langfuse import get_client
+from opentelemetry import trace
 
 from inline_agents.adapter import DataLakeEventAdapter
 from inline_agents.backends.openai.entities import FinalResponse, HooksState
@@ -70,15 +71,39 @@ def _usage_dict_from_response_usage(usage: Any) -> Optional[Dict[str, int]]:
         return None
 
 
-def _update_langfuse_current_generation_usage(usage_dict: Dict[str, int]) -> None:
-    """Update the current Langfuse generation with usage_details so cache appears in the same request."""
+def _set_current_span_usage_attributes(usage_dict: Dict[str, int]) -> None:
+    """Set usage attributes on the current OpenTelemetry span."""
+    if not usage_dict:
+        return
+    try:
+        span = trace.get_current_span()
+        if not span or not span.is_recording():
+            return
+        span.set_attribute("gen_ai.usage.input_tokens", usage_dict.get("input", 0))
+        span.set_attribute("gen_ai.usage.output_tokens", usage_dict.get("output", 0))
+        cache_read = usage_dict.get("cache_read_input_tokens", 0)
+        if cache_read is not None:
+            span.set_attribute("gen_ai.usage.cache_read.input_tokens", cache_read)
+    except Exception as e:
+        logger.debug("Could not set usage on current span: %s", e)
+
+
+def _update_langfuse_current_generation_usage(
+    usage_dict: Dict[str, int],
+    model: Optional[str] = None,
+) -> None:
+    """Update the current Langfuse generation with usage_details."""
     if not usage_dict:
         return
     try:
         langfuse = get_client()
         update = getattr(langfuse, "update_current_generation", None)
-        if callable(update):
-            update(usage_details=usage_dict)
+        if not callable(update):
+            return
+        kwargs = {"usage_details": usage_dict}
+        if model:
+            kwargs["model"] = model
+        update(**kwargs)
     except Exception as e:
         logger.debug("Could not update current Langfuse generation with usage: %s", e)
 
@@ -335,8 +360,12 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                     usage_dict = _usage_dict_from_request_entry(last_entry)
             if usage_dict is None and hasattr(response, "usage"):
                 usage_dict = _usage_dict_from_response_usage(response.usage)
+            model_name = getattr(response, "model", None) or (
+                response.get("model") if isinstance(response, dict) else None
+            )
             if usage_dict:
-                _update_langfuse_current_generation_usage(usage_dict)
+                _set_current_span_usage_attributes(usage_dict)
+                _update_langfuse_current_generation_usage(usage_dict, model=model_name)
         except Exception as e:
             logger.debug("[RunnerHooks] on_llm_end: could not update Langfuse generation usage: %s", e)
 
