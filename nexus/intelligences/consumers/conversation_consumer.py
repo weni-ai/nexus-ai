@@ -18,14 +18,11 @@ class ConversationConsumer(EDAConsumer):
         correlation_id = str(uuid.uuid4())
         delivery_tag = message.delivery_tag
 
+        message_body = message.body.decode() if message.body else None
         logger.info(
-            "[ConversationConsumer] Starting message consumption",
-            extra={
-                "correlation_id": correlation_id,
-                "delivery_tag": delivery_tag,
-                "consumer": "ConversationConsumer",
-                "message_body": message.body.decode() if message.body else None,
-            },
+            f"[ConversationConsumer] Starting message consumption - "
+            f"correlation_id={correlation_id}, delivery_tag={delivery_tag}, "
+            f"message_body={message_body}"
         )
 
         try:
@@ -55,60 +52,39 @@ class ConversationConsumer(EDAConsumer):
             task_id = task_result.id
 
             logger.info(
-                "[ConversationConsumer] Message dispatched to Celery task",
-                extra={
-                    "correlation_id": correlation_id,
-                    "task_id": task_id,
-                    "delivery_tag": delivery_tag,
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "external_id": external_id,
-                    "channel_uuid": channel_uuid,
-                    "consumer": "ConversationConsumer",
-                },
+                f"[ConversationConsumer] Message dispatched to Celery task - "
+                f"correlation_id={correlation_id}, task_id={task_id}, "
+                f"delivery_tag={delivery_tag}, project_uuid={project_uuid}, "
+                f"contact_urn={contact_urn}, external_id={external_id}, "
+                f"channel_uuid={channel_uuid}"
             )
 
             message.channel.basic_ack(delivery_tag)
 
             logger.info(
-                "[ConversationConsumer] Message acknowledged successfully",
-                extra={
-                    "correlation_id": correlation_id,
-                    "task_id": task_id,
-                    "delivery_tag": delivery_tag,
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "start_date": window_conversation_dto.start_date,
-                    "end_date": window_conversation_dto.end_date,
-                    "consumer": "ConversationConsumer",
-                },
+                f"[ConversationConsumer] Message acknowledged successfully - "
+                f"correlation_id={correlation_id}, task_id={task_id}, "
+                f"delivery_tag={delivery_tag}, project_uuid={project_uuid}, "
+                f"contact_urn={contact_urn}, start_date={window_conversation_dto.start_date}, "
+                f"end_date={window_conversation_dto.end_date}"
             )
 
         except KeyError as e:
             logger.error(
-                "[ConversationConsumer] Message rejected - missing required field",
-                extra={
-                    "correlation_id": correlation_id,
-                    "delivery_tag": delivery_tag,
-                    "error": str(e),
-                    "error_type": "KeyError",
-                    "consumer": "ConversationConsumer",
-                },
+                f"[ConversationConsumer] Message rejected - missing required field - "
+                f"correlation_id={correlation_id}, delivery_tag={delivery_tag}, "
+                f"error={str(e)}, error_type=KeyError",
                 exc_info=True,
             )
             capture_exception(e)
             message.channel.basic_reject(delivery_tag, requeue=False)
 
         except Exception as exception:
+            error_type = type(exception).__name__
             logger.error(
-                "[ConversationConsumer] Message rejected - unexpected error",
-                extra={
-                    "correlation_id": correlation_id,
-                    "delivery_tag": delivery_tag,
-                    "error": str(exception),
-                    "error_type": type(exception).__name__,
-                    "consumer": "ConversationConsumer",
-                },
+                f"[ConversationConsumer] Message rejected - unexpected error - "
+                f"correlation_id={correlation_id}, delivery_tag={delivery_tag}, "
+                f"error={str(exception)}, error_type={error_type}",
                 exc_info=True,
             )
             capture_exception(exception)
