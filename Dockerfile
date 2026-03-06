@@ -21,11 +21,12 @@ ARG RUNTIME_DEPS="\
   gosu"
 #libmariadb3 \
 
-FROM python:${PYTHON_VERSION}-slim-${DEBIAN_VERSION} as base
+FROM python:${PYTHON_VERSION}-slim-${DEBIAN_VERSION} AS base
 
 ARG POETRY_VERSION
 ARG NODE_VERSION
 
+ARG VERSION=0.1.0
 ENV PYTHONUNBUFFERED=1 \
   PYTHONDONTWRITEBYTECODE=1 \
   DEBIAN_FRONTEND=noninteractive \
@@ -54,7 +55,7 @@ WORKDIR "${APP_PATH}"
 
 RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 
-FROM base as build-poetry
+FROM base AS build-poetry
 
 ARG POETRY_VERSION
 
@@ -64,7 +65,7 @@ COPY poetry.lock ./
 RUN --mount=type=cache,mode=0755,target=/pip_cache,id=pip pip install --cache-dir /pip_cache -U poetry=="${POETRY_VERSION}" \
   && poetry export --without-hashes --output requirements.txt
 
-FROM base as build
+FROM base AS build
 
 ARG BUILD_DEPS
 
@@ -75,6 +76,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 COPY --from=build-poetry /app/requirements.txt /tmp/dep/
 RUN --mount=type=cache,mode=0755,target=/pip_cache,id=pip pip install --cache-dir /pip_cache --prefix=/install -r /tmp/dep/requirements.txt
+
 FROM base
 
 ARG BUILD_DEPS
