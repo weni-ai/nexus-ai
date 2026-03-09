@@ -16,6 +16,7 @@ class TestBedrockClientElasticAPM(TestCase):
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=False,
+        AWS_LAMBDA_ARCHITECTURE="arm64",
         AWS_BEDROCK_REGION_NAME="us-east-1",
     )
     def test_create_lambda_function_with_apm_disabled(self):
@@ -260,6 +261,7 @@ class TestBedrockClientElasticAPM(TestCase):
         mock_lambda_client.get_waiter.return_value.wait = Mock()
         # No APM layers or variables present
         mock_lambda_client.get_function_configuration.return_value = {
+            "Architectures": ["x86_64"],
             "Layers": [],
             "Environment": {"Variables": {"OTHER_VAR": "value"}},
         }
@@ -289,6 +291,7 @@ class TestBedrockClientElasticAPM(TestCase):
         apm_extension_layer = "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-extension-ver-1-6-0-x86_64:1"
         apm_python_layer = "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-python-ver-6-25-0:1"
         mock_lambda_client.get_function_configuration.return_value = {
+            "Architectures": ["x86_64"],
             "Layers": [
                 {"Arn": apm_extension_layer},
                 {"Arn": apm_python_layer},
@@ -352,6 +355,7 @@ class TestBedrockClientElasticAPM(TestCase):
         apm_python_layer = "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-python-ver-6-25-0:1"
         other_layer = "arn:aws:lambda:us-east-1:123456789012:layer:other-layer:1"
         mock_lambda_client.get_function_configuration.return_value = {
+            "Architectures": ["x86_64"],
             "Layers": [
                 {"Arn": other_layer},
                 {"Arn": apm_extension_layer},
@@ -397,6 +401,7 @@ class TestBedrockClientElasticAPM(TestCase):
         }
         mock_lambda_client.get_waiter.return_value.wait = Mock()
         mock_lambda_client.get_function_configuration.return_value = {
+            "Architectures": ["x86_64"],
             "Layers": [],
             "Environment": {"Variables": {"EXISTING_VAR": "existing_value", "ANOTHER_VAR": "another_value"}},
         }
@@ -453,6 +458,7 @@ class TestBedrockClientElasticAPM(TestCase):
         mock_lambda_client.get_waiter.return_value.wait = Mock()
         other_layer = "arn:aws:lambda:us-east-1:123456789012:layer:other-layer:1"
         mock_lambda_client.get_function_configuration.return_value = {
+            "Architectures": ["x86_64"],
             "Layers": [{"Arn": other_layer}],
             "Environment": {"Variables": {"OTHER_VAR": "value"}},
         }
@@ -494,7 +500,8 @@ class TestBedrockClientElasticAPM(TestCase):
         }
         mock_lambda_client.get_waiter.return_value.wait = Mock()
         mock_lambda_client.get_function_configuration.return_value = {
-            "Environment": {"Variables": {}}  # No existing environment variables
+            "Architectures": ["x86_64"],
+            "Environment": {"Variables": {}},  # No existing environment variables
         }
         self.client.lambda_client = mock_lambda_client
 
@@ -521,6 +528,52 @@ class TestBedrockClientElasticAPM(TestCase):
         # ELASTIC_APM_ENVIRONMENT is always present
         self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
         self.assertEqual(env_vars["ELASTIC_APM_ENVIRONMENT"], "")
+
+    @override_settings(
+        ELASTIC_APM_LAMBDA_ENABLED=True,
+        ELASTIC_APM_LAMBDA_APM_SERVER="https://apm-server.example.com",
+        ELASTIC_APM_LAMBDA_SECRET_TOKEN="test-secret-token",
+        AWS_LAMBDA_ARCHITECTURE="x86_64",
+        ELASTIC_APM_LAMBDA_EXTENSION_VERSION="1-6-0",
+        ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION="6-25-0",
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+    )
+    @patch.object(BedrockClient, "update_lambda_alias")
+    def test_update_lambda_function_uses_lambda_actual_architecture_for_layers(self, mock_update_alias):
+        """Tests that update uses the Lambda's actual architecture for layer ARNs, not the setting"""
+        mock_lambda_client = Mock()
+        mock_lambda_client.update_function_code.return_value = {
+            "Version": "2",
+            "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function",
+        }
+        mock_lambda_client.get_waiter.return_value.wait = Mock()
+        # Lambda is arm64 but settings say x86_64
+        mock_lambda_client.get_function_configuration.return_value = {
+            "Architectures": ["arm64"],
+            "Layers": [],
+            "Environment": {"Variables": {}},
+        }
+        self.client.lambda_client = mock_lambda_client
+
+        self.client.update_lambda_function(self.lambda_name, self.zip_buffer)
+
+        # Verify that update_function_configuration was called
+        mock_lambda_client.update_function_configuration.assert_called_once()
+
+        call_args = mock_lambda_client.update_function_configuration.call_args
+        call_kwargs = call_args.kwargs
+
+        # Verify that Layers uses arm64 (Lambda's actual architecture), not x86_64 (settings)
+        self.assertIn("Layers", call_kwargs)
+        layers = call_kwargs["Layers"]
+        expected_extension_layer = "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-extension-ver-1-6-0-arm64:1"
+        expected_python_agent_layer = "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-python-ver-6-25-0:1"
+        self.assertIn(expected_extension_layer, layers)
+        self.assertIn(expected_python_agent_layer, layers)
+
+        # Ensure x86_64 layer is NOT present (should use actual Lambda architecture)
+        x86_extension_layer = "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-extension-ver-1-6-0-x86_64:1"
+        self.assertNotIn(x86_extension_layer, layers)
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
@@ -570,3 +623,11 @@ class TestBedrockClientElasticAPM(TestCase):
         self.assertEqual(env_vars["AWS_LAMBDA_EXEC_WRAPPER"], "/opt/python/bin/elasticapm-lambda")
         self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
         self.assertEqual(env_vars["ELASTIC_APM_ENVIRONMENT"], "")
+
+        # Verify that layers fallback to settings architecture (x86_64) when config fetch fails
+        self.assertIn("Layers", call_kwargs)
+        layers = call_kwargs["Layers"]
+        expected_extension_layer = (
+            "arn:aws:lambda:us-east-1:267093732750:layer:elastic-apm-extension-ver-1-6-0-x86_64:1"
+        )
+        self.assertIn(expected_extension_layer, layers)

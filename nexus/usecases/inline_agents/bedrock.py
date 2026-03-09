@@ -13,17 +13,22 @@ class BedrockClient:
         self.lambda_client = boto3.client("lambda", region_name=settings.AWS_BEDROCK_REGION_NAME)
         self.cloudwatch_client = boto3.client("logs", region_name=settings.AWS_BEDROCK_REGION_NAME)
 
-    def _get_elastic_apm_layers(self) -> List[str]:
+    def _get_elastic_apm_layers(self, architecture: str = None) -> List[str]:
         """
         Get Elastic APM Lambda layers ARNs based on configuration.
         Returns empty list if APM is disabled or not configured.
+
+        Args:
+            architecture: Lambda architecture to use for layer ARNs (e.g. 'x86_64', 'arm64').
+                          If not provided, falls back to AWS_LAMBDA_ARCHITECTURE setting.
         """
         if not getattr(settings, "ELASTIC_APM_LAMBDA_ENABLED", False):
             logger.info("ELASTIC_APM_LAMBDA not enabled")
             return []
 
         region = settings.AWS_BEDROCK_REGION_NAME
-        architecture = getattr(settings, "AWS_LAMBDA_ARCHITECTURE", "arm64")
+        if architecture is None:
+            architecture = getattr(settings, "AWS_LAMBDA_ARCHITECTURE", "x86_64")
         extension_version = getattr(settings, "ELASTIC_APM_LAMBDA_EXTENSION_VERSION", "1-6-0")
         python_agent_version = getattr(settings, "ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION", "6-25-0")
 
@@ -139,19 +144,17 @@ class BedrockClient:
         new_version = response["Version"]
         lambda_arn = response["FunctionArn"]
 
-        # Get desired APM configuration
-        desired_layers = self._get_elastic_apm_layers()
-        desired_environment_variables = self._get_elastic_apm_environment_variables()
-
-        # Get current configuration to check if APM needs to be removed
+        # Get current configuration to check if APM needs to be added/removed
         try:
             current_config = self.lambda_client.get_function_configuration(FunctionName=lambda_name)
             current_layers = current_config.get("Layers", [])
             current_layer_arns = [layer.get("Arn", "") for layer in current_layers if layer.get("Arn")]
             environment = current_config.get("Environment") or {}
             existing_vars = environment.get("Variables", {})
+            # Read the actual architecture of the existing Lambda function
+            current_architectures = current_config.get("Architectures", ["x86_64"])
+            current_architecture = current_architectures[0] if current_architectures else "x86_64"
         except Exception as e:
-            # If we can't get current config, log the error and assume no APM is present
             logger.error(
                 "Failed to get current Lambda function configuration",
                 extra={
@@ -163,6 +166,11 @@ class BedrockClient:
             )
             current_layer_arns = []
             existing_vars = {}
+            current_architecture = getattr(settings, "AWS_LAMBDA_ARCHITECTURE", "x86_64")
+
+        # Get desired APM configuration using the Lambda's actual architecture
+        desired_layers = self._get_elastic_apm_layers(architecture=current_architecture)
+        desired_environment_variables = self._get_elastic_apm_environment_variables()
 
         # Check if we need to update configuration
         # We need to update if:
