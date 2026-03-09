@@ -504,6 +504,30 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         self.preview = preview
         self.conversation = conversation
 
+    async def on_llm_end(self, context, agent, response, **kwargs):
+        """Accumulate collaborator LLM usage into shared cumulative_usage so manager span shows sum of all generations."""
+        try:
+            usage_dict = None
+            usage = getattr(context, "usage", None)
+            if usage is not None:
+                request_entries = getattr(usage, "request_usage_entries", None) or []
+                if request_entries:
+                    last_entry = request_entries[-1]
+                    usage_dict = _usage_dict_from_request_entry(last_entry)
+            if usage_dict is None and hasattr(response, "usage"):
+                usage_dict = _usage_dict_from_response_usage(response.usage)
+            if not usage_dict:
+                return
+            state = self.hooks_state
+            cum = getattr(state, "cumulative_usage", None)
+            if cum is not None:
+                cum["input"] = cum.get("input", 0) + (usage_dict.get("input") or 0)
+                cum["output"] = cum.get("output", 0) + (usage_dict.get("output") or 0)
+                cr = usage_dict.get("cache_read_input_tokens")
+                cum["cache_read_input_tokens"] = cum.get("cache_read_input_tokens", 0) + (cr if cr is not None else 0)
+        except Exception as e:
+            logger.debug("[CollaboratorHooks] on_llm_end: could not accumulate usage: %s", e)
+
     async def on_start(self, context, agent):
         agent_slug = _get_agent_slug(agent, self.hooks_state)
         self.hooks_state.last_active_agent_slug = agent_slug
