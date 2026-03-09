@@ -353,9 +353,20 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         await self.trace_handler.send_trace(
             context_data, _get_agent_slug(agent, self.trace_handler.hooks_state), "invoking_model"
         )
-        # Open a Langfuse generation.
-        # We keep the context open so "current" is our generation during the LLM call; no duplicate.
+        # Open a Langfuse generation (one per LLM call). Close any previous one if on_llm_start runs again before on_llm_end.
         try:
+            state = self.trace_handler.hooks_state
+            gen_ctx = getattr(state, "current_langfuse_gen_ctx", None)
+            if gen_ctx is not None:
+                try:
+                    exit_fn = getattr(gen_ctx, "__exit__", None)
+                    if callable(exit_fn):
+                        exit_fn(None, None, None)
+                except Exception as e:
+                    logger.debug("[RunnerHooks] on_llm_start: could not close previous Langfuse generation: %s", e)
+                state.current_langfuse_generation = None
+                state.current_langfuse_gen_ctx = None
+
             langfuse = get_client()
             start_current = getattr(langfuse, "start_as_current_observation", None)
             if callable(start_current):
@@ -363,8 +374,8 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                 name = f"Responses API with '{model_name}'"
                 ctx = start_current(as_type="generation", name=name, model=model_name or None)
                 generation = ctx.__enter__()
-                self.trace_handler.hooks_state.current_langfuse_generation = generation
-                self.trace_handler.hooks_state.current_langfuse_gen_ctx = ctx
+                state.current_langfuse_generation = generation
+                state.current_langfuse_gen_ctx = ctx
         except Exception as e:
             logger.debug("[RunnerHooks] on_llm_start: could not start Langfuse generation: %s", e)
             self.trace_handler.hooks_state.current_langfuse_generation = None
