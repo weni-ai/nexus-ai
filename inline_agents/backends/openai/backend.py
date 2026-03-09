@@ -852,7 +852,7 @@ class OpenAIBackend(InlineAgentsBackend):
             output_tokens = getattr(entry, "output_tokens", 0) or 0
             input_details = getattr(entry, "input_tokens_details", None)
             cached = getattr(input_details, "cached_tokens", 0) or 0 if input_details else 0
-            logger.info(
+            logger.debug(
                 "[Cache/usage] request=%s project_uuid=%s contact_urn=%s trace_id=%s "
                 "input_tokens=%s output_tokens=%s cached_tokens=%s",
                 i + 1,
@@ -868,7 +868,7 @@ class OpenAIBackend(InlineAgentsBackend):
         total_cached = sum(
             (getattr(getattr(e, "input_tokens_details", None), "cached_tokens", 0) or 0) for e in request_entries
         )
-        logger.info(
+        logger.debug(
             "[Cache/usage] total project_uuid=%s contact_urn=%s trace_id=%s "
             "input_tokens=%s output_tokens=%s cached_tokens=%s requests=%s",
             project_uuid,
