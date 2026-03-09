@@ -71,34 +71,6 @@ def _usage_dict_from_response_usage(usage: Any) -> Optional[Dict[str, int]]:
         return None
 
 
-def _log_current_span_for_usage_validation(usage_dict: Dict[str, int]) -> None:
-    """Log current OTEL span info to validate option 3 (usage on correct span). Remove after validation."""
-    try:
-        span = trace.get_current_span()
-        if span is None:
-            logger.info(
-                "[usage-validation] on_llm_end: current span is None. usage_dict=%s",
-                usage_dict,
-            )
-            return
-        is_recording = getattr(span, "is_recording", lambda: None)()
-        get_ctx = getattr(span, "get_span_context", None)
-        span_ctx = get_ctx() if callable(get_ctx) else None
-        trace_id = getattr(span_ctx, "trace_id", None) if span_ctx else None
-        span_id = getattr(span_ctx, "span_id", None) if span_ctx else None
-        span_name = getattr(span, "name", None)
-        logger.info(
-            "[usage-validation] on_llm_end: span_name=%r is_recording=%s trace_id=%s span_id=%s usage_dict=%s",
-            span_name,
-            is_recording,
-            trace_id,
-            span_id,
-            usage_dict,
-        )
-    except Exception as e:
-        logger.info("[usage-validation] on_llm_end: could not log span info: %s usage_dict=%s", e, usage_dict)
-
-
 def _set_current_span_usage_attributes(usage_dict: Dict[str, int]) -> None:
     """Set usage attributes on the current OpenTelemetry span."""
     if not usage_dict:
@@ -428,9 +400,6 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
             model_name = getattr(response, "model", None) or (
                 response.get("model") if isinstance(response, dict) else None
             )
-            # Option-3 validation: log current OTEL span so we can check if usage lands on "Responses API".
-            if usage_dict and settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
-                _log_current_span_for_usage_validation(usage_dict)
             if usage_dict:
                 _set_current_span_usage_attributes(usage_dict)
 
@@ -461,8 +430,7 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                 self.trace_handler.hooks_state.current_langfuse_generation = None
                 self.trace_handler.hooks_state.current_langfuse_gen_ctx = None
             elif usage_dict:
-                if not settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
-                    _update_langfuse_current_generation_usage(usage_dict, model=model_name)
+                _update_langfuse_current_generation_usage(usage_dict, model=model_name)
         except Exception as e:
             logger.debug("[RunnerHooks] on_llm_end: could not update Langfuse generation usage: %s", e)
 
