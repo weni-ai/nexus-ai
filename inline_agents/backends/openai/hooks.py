@@ -352,7 +352,10 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         await self.trace_handler.send_trace(
             context_data, _get_agent_slug(agent, self.trace_handler.hooks_state), "invoking_model"
         )
-        # Open a Langfuse generation (one per LLM call). Close any previous one if on_llm_start runs again before on_llm_end.
+        # When Logfire instrument_openai_agents is on, it creates an OTel span "Responses API with ..." that
+        # Langfuse ingests. Do not create our own Langfuse generation or we get two spans (langfuse-sdk + logfire).
+        if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
+            return
         try:
             state = self.trace_handler.hooks_state
             gen_ctx = getattr(state, "current_langfuse_gen_ctx", None)
@@ -399,6 +402,7 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
             )
             if usage_dict:
                 _set_current_span_usage_attributes(usage_dict)
+
             # Update and close the generation we opened in on_llm_start (generation.update + ctx.__exit__).
             gen = getattr(self.trace_handler.hooks_state, "current_langfuse_generation", None)
             gen_ctx = getattr(self.trace_handler.hooks_state, "current_langfuse_gen_ctx", None)
@@ -426,7 +430,8 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                 self.trace_handler.hooks_state.current_langfuse_generation = None
                 self.trace_handler.hooks_state.current_langfuse_gen_ctx = None
             elif usage_dict:
-                _update_langfuse_current_generation_usage(usage_dict, model=model_name)
+                if not settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
+                    _update_langfuse_current_generation_usage(usage_dict, model=model_name)
         except Exception as e:
             logger.debug("[RunnerHooks] on_llm_end: could not update Langfuse generation usage: %s", e)
 
