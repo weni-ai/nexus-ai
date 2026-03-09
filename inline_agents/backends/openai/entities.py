@@ -16,6 +16,11 @@ class HooksState:
         self.tool_info = {}
         self.tool_info_index = {}
         self.last_active_agent_slug = None  # Track the last agent that executed before formatter
+        # Langfuse: one generation per LLM call (open in on_llm_start, update+close in on_llm_end)
+        self.current_langfuse_generation = None
+        self.current_langfuse_gen_ctx = None  # context manager from start_as_current_observation
+        # Accumulated usage for the whole run (manager + collaborators) when updating manager span
+        self.cumulative_usage = {"input": 0, "output": 0, "cache_read_input_tokens": 0}
 
         for agent in self.agents:
             self.agents_names.append(agent.get("agentName"))
