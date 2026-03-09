@@ -401,7 +401,17 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                 response.get("model") if isinstance(response, dict) else None
             )
             if usage_dict:
-                _set_current_span_usage_attributes(usage_dict)
+                state = self.trace_handler.hooks_state
+                cum = getattr(state, "cumulative_usage", None)
+                if cum is not None:
+                    cum["input"] = cum.get("input", 0) + (usage_dict.get("input") or 0)
+                    cum["output"] = cum.get("output", 0) + (usage_dict.get("output") or 0)
+                    cr = usage_dict.get("cache_read_input_tokens")
+                    cum["cache_read_input_tokens"] = cum.get("cache_read_input_tokens", 0) + (
+                        cr if cr is not None else 0
+                    )
+                cumulative_for_manager = dict(cum) if cum is not None else usage_dict
+                _set_current_span_usage_attributes(cumulative_for_manager)
 
             # Update and close the generation we opened in on_llm_start (generation.update + ctx.__exit__).
             gen = getattr(self.trace_handler.hooks_state, "current_langfuse_generation", None)
@@ -430,7 +440,7 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
                 self.trace_handler.hooks_state.current_langfuse_generation = None
                 self.trace_handler.hooks_state.current_langfuse_gen_ctx = None
             elif usage_dict:
-                _update_langfuse_current_generation_usage(usage_dict, model=model_name)
+                _update_langfuse_current_generation_usage(cumulative_for_manager, model=model_name)
         except Exception as e:
             logger.debug("[RunnerHooks] on_llm_end: could not update Langfuse generation usage: %s", e)
 
