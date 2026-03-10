@@ -229,7 +229,10 @@ class ConversationsProxyView(APIView):
             return None
 
     def _handle_http_error(self, e, project_uuid):
-        status_code = e.response.status_code
+        if e.response is None:
+            status_code = 500
+        else:
+            status_code = getattr(e.response, "status_code", 500)
 
         if status_code == 404:
             return Response({}, status=status.HTTP_200_OK)
@@ -246,13 +249,9 @@ class ConversationsProxyView(APIView):
             return Response({"error": error_message or "Bad request"}, status=status.HTTP_400_BAD_REQUEST)
 
         logger.error(
-            f"Error from Conversations service for project {project_uuid}: {error_message}",
-            extra={
-                "project_uuid": project_uuid,
-                "status_code": status_code,
-                "error_message": error_message,
-                "error_details": error_details,
-            },
+            f"Error from Conversations service for project {project_uuid}: "
+            f"status_code={status_code}, error_message={error_message}, "
+            f"error_details={error_details}",
             exc_info=True,
         )
         return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -420,15 +419,9 @@ class ConversationDetailProxyView(APIView):
             )
         else:
             logger.error(
-                f"Error from Conversations service for project {project_uuid}\
-                    , conversation {conversation_uuid}: {error_message}",
-                extra={
-                    "project_uuid": project_uuid,
-                    "conversation_uuid": conversation_uuid,
-                    "status_code": status_code,
-                    "error_message": error_message,
-                    "error_details": error_details,
-                },
+                f"Error from Conversations service for project {project_uuid}, "
+                f"conversation {conversation_uuid}: status_code={status_code}, "
+                f"error_message={error_message}, error_details={error_details}",
                 exc_info=True,
             )
             return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
