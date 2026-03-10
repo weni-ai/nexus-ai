@@ -519,8 +519,7 @@ class TestBedrockClientElasticAPM(TestCase):
         environment = call_kwargs["Environment"]
         env_vars = environment["Variables"]
 
-        # Verify that only APM variables are present (5 variables including ELASTIC_APM_ENVIRONMENT)
-        self.assertEqual(len(env_vars), 5)
+        self.assertEqual(len(env_vars), 6)
         self.assertEqual(env_vars["AWS_LAMBDA_EXEC_WRAPPER"], "/opt/python/bin/elasticapm-lambda")
         self.assertEqual(env_vars["ELASTIC_APM_LAMBDA_APM_SERVER"], "https://apm-server.example.com")
         self.assertEqual(env_vars["ELASTIC_APM_SECRET_TOKEN"], "test-secret-token")
@@ -528,6 +527,9 @@ class TestBedrockClientElasticAPM(TestCase):
         # ELASTIC_APM_ENVIRONMENT is always present
         self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
         self.assertEqual(env_vars["ELASTIC_APM_ENVIRONMENT"], "")
+        # ELASTIC_APM_LOG_LEVEL is always present
+        self.assertIn("ELASTIC_APM_LOG_LEVEL", env_vars)
+        self.assertEqual(env_vars["ELASTIC_APM_LOG_LEVEL"], "off")
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
@@ -618,11 +620,12 @@ class TestBedrockClientElasticAPM(TestCase):
         call_kwargs = call_args.kwargs
         env_vars = call_kwargs["Environment"]["Variables"]
 
-        # Verify that only APM variables are present (5 variables including ELASTIC_APM_ENVIRONMENT)
-        self.assertEqual(len(env_vars), 5)
+        self.assertEqual(len(env_vars), 6)
         self.assertEqual(env_vars["AWS_LAMBDA_EXEC_WRAPPER"], "/opt/python/bin/elasticapm-lambda")
         self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
         self.assertEqual(env_vars["ELASTIC_APM_ENVIRONMENT"], "")
+        self.assertIn("ELASTIC_APM_LOG_LEVEL", env_vars)
+        self.assertEqual(env_vars["ELASTIC_APM_LOG_LEVEL"], "off")
 
         # Verify that layers fallback to settings architecture (x86_64) when config fetch fails
         self.assertIn("Layers", call_kwargs)
