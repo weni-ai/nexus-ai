@@ -229,30 +229,33 @@ class ConversationsProxyView(APIView):
             return None
 
     def _handle_http_error(self, e, project_uuid):
-        status_code = e.response.status_code if e.response else 500
-        error_message, error_details = self.usecase.extract_error_message(e.response)
+        status_code = e.response.status_code
 
-        if status_code != 404:
-            self.usecase.send_to_sentry(project_uuid, status_code, error_message, error_details, exception=e)
+        if status_code == 404:
+            return Response({}, status=status.HTTP_200_OK)
+
+        try:
+            error_message, error_details = self.usecase.extract_error_message(e.response)
+        except Exception:
+            error_message = str(e.response) if e.response else str(e)
+            error_details = None
+
+        self.usecase.send_to_sentry(project_uuid, status_code, error_message, error_details, exception=e)
 
         if status_code == 400:
             return Response({"error": error_message or "Bad request"}, status=status.HTTP_400_BAD_REQUEST)
-        elif status_code == 404:
-            return Response(
-                {"error": f"Conversations not found for project {project_uuid}"}, status=status.HTTP_404_NOT_FOUND
-            )
-        else:
-            logger.error(
-                f"Error from Conversations service for project {project_uuid}: {error_message}",
-                extra={
-                    "project_uuid": project_uuid,
-                    "status_code": status_code,
-                    "error_message": error_message,
-                    "error_details": error_details,
-                },
-                exc_info=True,
-            )
-            return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        logger.error(
+            f"Error from Conversations service for project {project_uuid}: {error_message}",
+            extra={
+                "project_uuid": project_uuid,
+                "status_code": status_code,
+                "error_message": error_message,
+                "error_details": error_details,
+            },
+            exc_info=True,
+        )
+        return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _handle_generic_error(self, e, project_uuid):
         """Handle all other errors (connection, timeout, validation, etc.) - return generic error."""
