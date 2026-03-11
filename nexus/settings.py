@@ -632,7 +632,7 @@ COMPLEXITY_LAYER_LAMBDA = env.str("COMPLEXITY_LAYER_LAMBDA", "lambda-complexity-
 GUARDRAILS_LAYER_LAMBDA = env.str("GUARDRAILS_LAYER_LAMBDA", "lambda-complexity-layer-openai")
 
 # Lambda architecture configuration
-AWS_LAMBDA_ARCHITECTURE = env.str("AWS_LAMBDA_ARCHITECTURE", "arm64")  # x86_64 or arm64
+AWS_LAMBDA_ARCHITECTURE = env.str("AWS_LAMBDA_ARCHITECTURE", "x86_64")  # x86_64 or arm64
 AWS_LAMBDA_LOG_GROUP = env.str("AWS_LAMBDA_LOG_GROUP", "")
 
 # Elastic APM Lambda configuration
