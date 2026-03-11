@@ -633,6 +633,7 @@ GUARDRAILS_LAYER_LAMBDA = env.str("GUARDRAILS_LAYER_LAMBDA", "lambda-complexity-
 
 # Lambda architecture configuration
 AWS_LAMBDA_ARCHITECTURE = env.str("AWS_LAMBDA_ARCHITECTURE", "arm64")  # x86_64 or arm64
+AWS_LAMBDA_LOG_GROUP = env.str("AWS_LAMBDA_LOG_GROUP", "")
 
 # Elastic APM Lambda configuration
 ELASTIC_APM_LAMBDA_ENABLED = env.bool("ELASTIC_APM_LAMBDA_ENABLED", False)
