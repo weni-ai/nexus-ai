@@ -80,6 +80,9 @@ class BedrockClient:
         # Get Lambda architecture from settings
         lambda_architecture = getattr(settings, "AWS_LAMBDA_ARCHITECTURE", "x86_64")
 
+        # Get Lambda log group from settings
+        lambda_log_group = getattr(settings, "AWS_LAMBDA_LOG_GROUP", "")
+
         create_function_params = {
             "FunctionName": lambda_name,
             "Runtime": "python3.12",
@@ -88,6 +91,7 @@ class BedrockClient:
             "Code": {"ZipFile": zip_buffer.getvalue()},
             "Handler": skill_handler,
             "Architectures": [lambda_architecture],
+            "LoggingConfig": {"LogGroup": lambda_log_group},
         }
 
         # Add layers if Elastic APM is enabled
@@ -134,6 +138,7 @@ class BedrockClient:
             "ELASTIC_APM_SECRET_TOKEN",
             "ELASTIC_APM_SEND_STRATEGY",
             "ELASTIC_APM_ENVIRONMENT",
+            "ELASTIC_APM_LOG_LEVEL",
         }
         return var_name in apm_var_names
 
