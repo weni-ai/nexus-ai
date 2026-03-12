@@ -1628,7 +1628,7 @@ class SubTopicsViewSet(ModelViewSet):
 
 class SupervisorViewset(ModelViewSet):
     serializer_class = SupervisorDataSerializer
-    permission_classes = [ProjectPermission]
+    permission_classes = [ProjectPermission | InternalCommunicationPermission]
     pagination_class = SupervisorPagination
     lookup_field = "uuid"
     filter_backends = [filters.DjangoFilterBackend, SearchFilter, OrderingFilter]
