@@ -41,3 +41,12 @@ class AssignAgentsUsecase:
             raise ValueError("Agent not found") from e
         except Project.DoesNotExist as e:
             raise ValueError("Project not found") from e
+
+    def set_agent_active(self, agent_uuid: str, project_uuid: str, active: bool) -> IntegratedAgent:
+        integrated_agent = IntegratedAgent.objects.get(
+            agent__uuid=agent_uuid,
+            project__uuid=project_uuid,
+        )
+        integrated_agent.is_active = active
+        integrated_agent.save(update_fields=["is_active"])
+        return integrated_agent

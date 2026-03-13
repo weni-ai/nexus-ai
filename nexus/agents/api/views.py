@@ -959,7 +959,7 @@ class DeleteAgentView(APIView):
     def _delete_inline_agent(self, agent: InlineAgent, project_uuid: str, logger):
         """Delete an inline agent (nexus.inline_agents.models.Agent)"""
         # Check if agent is integrated into any projects
-        integrated_agents = IntegratedAgent.objects.filter(agent=agent)
+        integrated_agents = IntegratedAgent.objects.filter(agent=agent, is_active=True)
         if integrated_agents.exists():
             projects = [
                 {"project_uuid": str(ia.project.uuid), "project_name": ia.project.name} for ia in integrated_agents
