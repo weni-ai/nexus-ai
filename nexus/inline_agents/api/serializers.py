@@ -161,7 +161,7 @@ class AgentSerializer(serializers.ModelSerializer):
         if not project_uuid:
             return None
         integrated = IntegratedAgent.objects.filter(project_id=project_uuid, agent=obj).first()
-        return integrated.is_active if integrated else None
+        return integrated.is_active if integrated else False
 
     def get_credentials(self, obj):
         credentials = obj.agentcredential_set.all().distinct("key")
