@@ -1,4 +1,5 @@
 import json
+from unittest import mock
 from urllib.parse import urlencode
 
 from django.contrib.auth.models import Permission
@@ -10,7 +11,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.agents.models import Team
 from nexus.inline_agents.models import Agent as InlineAgent
-from nexus.inline_agents.models import IntegratedAgent, Version
+from nexus.inline_agents.models import AgentGroup, IntegratedAgent, Version
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
@@ -288,6 +289,61 @@ class ActivateAgentViewTestCase(TestCase):
         response = client.patch(url, {"active": True}, format="json")
         self.assertEqual(response.status_code, 404)
         self.assertIn("Integrated agent not found", response.json().get("error", ""))
+
+
+class GroupUnassignmentTestCase(TestCase):
+    """Regression: group unassignment must delete all IntegratedAgent rows in the group (active and inactive)."""
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_group_unassignment_deletes_active_and_inactive_integrated_agents(self, mock_has_permission):
+        mock_has_permission.return_value = True
+
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        owner_project = ProjectFactory()
+
+        group = AgentGroup.objects.create(name="Test Group", slug="test-group-unassign", shared_config={})
+
+        agent1 = InlineAgent.objects.create(
+            name="Group Agent 1",
+            slug="group-agent-1",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=owner_project,
+            group=group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        agent2 = InlineAgent.objects.create(
+            name="Group Agent 2",
+            slug="group-agent-2",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=owner_project,
+            group=group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=agent1)
+        Version.objects.create(skills=[], display_skills=[], agent=agent2)
+
+        ia_active = IntegratedAgent.objects.create(agent=agent1, project=target_project, is_active=True)
+        ia_inactive = IntegratedAgent.objects.create(agent=agent2, project=target_project, is_active=False)
+
+        self.assertEqual(IntegratedAgent.objects.filter(project=target_project).count(), 2)
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        url = reverse("v1-official-agents")
+        url = f"{url}?project_uuid={target_project.uuid}&group={group.slug}"
+        response = client.post(url, {"assigned": False}, format="json", HTTP_AUTHORIZATION="Bearer test-token")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(IntegratedAgent.objects.filter(pk=ia_active.pk).exists())
+        self.assertFalse(IntegratedAgent.objects.filter(pk=ia_inactive.pk).exists())
+        self.assertEqual(IntegratedAgent.objects.filter(project=target_project).count(), 0)
 
 
 class TestCommunicateInternallyPermission(TestCase):
