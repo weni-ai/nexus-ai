@@ -957,9 +957,10 @@ class DeleteAgentView(APIView):
         return Response({"message": "Agent deleted successfully", **deletion_summary}, status=200)
 
     def _delete_inline_agent(self, agent: InlineAgent, project_uuid: str, logger):
-        """Delete an inline agent (nexus.inline_agents.models.Agent)"""
-        # Check if agent is integrated into any projects
-        integrated_agents = IntegratedAgent.objects.filter(agent=agent, is_active=True)
+        """Delete an inline agent (nexus.inline_agents.models.Agent).
+        Blocked if the agent is integrated into any project (active or inactive); must be unassigned first.
+        """
+        integrated_agents = IntegratedAgent.objects.filter(agent=agent)
         if integrated_agents.exists():
             projects = [
                 {"project_uuid": str(ia.project.uuid), "project_name": ia.project.name} for ia in integrated_agents

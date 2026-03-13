@@ -688,17 +688,16 @@ class OfficialAgentsV1(APIView):
         integrated_agent.save(update_fields=["metadata"])
 
     def _handle_group_unassignment(self, project_uuid, group_slug):
-        """Handles unassignment of all agents in a group."""
-        active_agents = IntegratedAgent.objects.filter(
+        """Handles unassignment of all agents in a group (active and inactive)."""
+        integrated_agents_in_group = IntegratedAgent.objects.filter(
             project__uuid=project_uuid,
             agent__group__slug=group_slug,
             agent__is_official=True,
-            is_active=True,
         )
-        if active_agents.exists():
+        if integrated_agents_in_group.exists():
             first_uuid = None
             usecase = AssignAgentsUsecase()
-            for ia in active_agents:
+            for ia in integrated_agents_in_group:
                 uid = str(ia.agent.uuid)
                 if not first_uuid:
                     first_uuid = uid
