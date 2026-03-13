@@ -123,6 +123,7 @@ class AgentSerializer(serializers.ModelSerializer):
             "description",
             "skills",
             "assigned",
+            "active",
             # "external_id",
             "slug",
             "model",
@@ -135,6 +136,7 @@ class AgentSerializer(serializers.ModelSerializer):
     model = serializers.CharField(source="foundation_model")
     skills = serializers.SerializerMethodField("get_skills")
     assigned = serializers.SerializerMethodField("get_is_assigned")
+    active = serializers.SerializerMethodField("get_active")
 
     credentials = serializers.SerializerMethodField("get_credentials")
 
@@ -152,6 +154,14 @@ class AgentSerializer(serializers.ModelSerializer):
         if not self.context.get("include_inactive_integrated"):
             qs = qs.filter(is_active=True)
         return qs.exists()
+
+    def get_active(self, obj):
+        """Return whether the IntegratedAgent for this agent+project is active, or None if not integrated."""
+        project_uuid = self.context.get("project_uuid")
+        if not project_uuid:
+            return None
+        integrated = IntegratedAgent.objects.filter(project_id=project_uuid, agent=obj).first()
+        return integrated.is_active if integrated else None
 
     def get_credentials(self, obj):
         credentials = obj.agentcredential_set.all().distinct("key")
