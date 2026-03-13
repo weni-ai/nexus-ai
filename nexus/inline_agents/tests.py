@@ -79,6 +79,24 @@ class TestAgentsUsecase(TestCase):
         self.assertFalse(deleted)
         self.assertIsNone(integrated_agent)
 
+    def test_set_agent_active_activate(self):
+        self.usecase.assign_agent(self.agent.uuid, self.project.uuid)
+        integrated_agent = self.usecase.set_agent_active(str(self.agent.uuid), str(self.project.uuid), True)
+        self.assertTrue(integrated_agent.is_active)
+        integrated_agent.refresh_from_db()
+        self.assertTrue(integrated_agent.is_active)
+
+    def test_set_agent_active_deactivate(self):
+        self.usecase.assign_agent(self.agent.uuid, self.project.uuid)
+        integrated_agent = self.usecase.set_agent_active(str(self.agent.uuid), str(self.project.uuid), False)
+        self.assertFalse(integrated_agent.is_active)
+        integrated_agent.refresh_from_db()
+        self.assertFalse(integrated_agent.is_active)
+
+    def test_set_agent_active_not_found_raises(self):
+        with self.assertRaises(IntegratedAgent.DoesNotExist):
+            self.usecase.set_agent_active(str(self.agent.uuid), str(self.project.uuid), True)
+
 
 class MockBedrockClient:
     def __init__(self):

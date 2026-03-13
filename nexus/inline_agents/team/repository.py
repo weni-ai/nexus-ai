@@ -21,7 +21,7 @@ class ORMTeamRepository(TeamRepository):
         try:
             logger.info(f"Fetching team for project {project_uuid}")
             orm_team = (
-                ORMIntegratedAgent.objects.filter(project__uuid=project_uuid)
+                ORMIntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True)
                 .select_related("agent")
                 .prefetch_related("agent__versions")
             )

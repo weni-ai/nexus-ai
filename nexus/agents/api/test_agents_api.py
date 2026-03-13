@@ -10,7 +10,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.agents.models import Team
 from nexus.inline_agents.models import Agent as InlineAgent
-from nexus.inline_agents.models import IntegratedAgent
+from nexus.inline_agents.models import IntegratedAgent, Version
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
@@ -157,6 +157,137 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertEqual(len(content["agents"]), 1)
         self.assertEqual(content["agents"][0].get("uuid"), str(agent.uuid))
         self.assertEqual(content["agents"][0].get("name"), agent.name)
+        self.assertTrue(content["agents"][0].get("active", True))
+
+    def test_get_team_excludes_inactive_integrated_agents(self):
+        """Agents with is_active=False on IntegratedAgent do not appear in team list."""
+
+        agent = InlineAgent.objects.create(
+            name="Inactive Agent",
+            slug="inactive_agent",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        Version.objects.create(
+            skills=[],
+            display_skills=[],
+            agent=agent,
+        )
+        IntegratedAgent.objects.create(
+            agent=agent,
+            project=self.project,
+            is_active=False,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(content["agents"]), 0)
+
+
+class ActivateAgentViewTestCase(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.agent = InlineAgent.objects.create(
+            name="Test Agent",
+            slug="test-agent",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        from nexus.inline_agents.models import Version
+
+        Version.objects.create(skills=[], display_skills=[], agent=self.agent)
+        IntegratedAgent.objects.create(agent=self.agent, project=self.project)
+
+    def test_patch_activate_returns_200_and_active_true(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "activate-agent",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {"active": True}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"active": True})
+        ia = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
+        self.assertTrue(ia.is_active)
+
+    def test_patch_deactivate_returns_200_and_active_false(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "activate-agent",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {"active": False}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"active": False})
+        ia = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
+        self.assertFalse(ia.is_active)
+
+    def test_patch_missing_active_returns_400(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "activate-agent",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("active", response.json().get("error", ""))
+
+    def test_patch_invalid_active_returns_400(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "activate-agent",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {"active": "true"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("active", response.json().get("error", ""))
+
+    def test_patch_integrated_agent_not_found_returns_404(self):
+        agent2 = InlineAgent.objects.create(
+            name="Other Agent",
+            slug="other-agent",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "activate-agent",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(agent2.uuid),
+            },
+        )
+        response = client.patch(url, {"active": True}, format="json")
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("Integrated agent not found", response.json().get("error", ""))
 
 
 class TestCommunicateInternallyPermission(TestCase):
