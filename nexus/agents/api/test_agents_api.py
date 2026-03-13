@@ -291,6 +291,63 @@ class ActivateAgentViewTestCase(TestCase):
         self.assertIn("Integrated agent not found", response.json().get("error", ""))
 
 
+class AssignAgentViewTestCase(TestCase):
+    """Assign endpoint must reactivate existing inactive IntegratedAgent and return active state."""
+
+    def setUp(self):
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.agent = InlineAgent.objects.create(
+            name="Assign Test Agent",
+            slug="assign-test-agent",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=self.agent)
+
+    def test_assign_reactivates_deactivated_integrated_agent_and_appears_in_team(self):
+        IntegratedAgent.objects.create(
+            agent=self.agent,
+            project=self.project,
+            is_active=False,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "assign-agents",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {"assigned": True}, format="json")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["assigned"], "assign endpoint should return assigned=True")
+        self.assertTrue(data["active"], "assign endpoint should return active=True after reactivation")
+
+        integrated_agent = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
+        self.assertTrue(
+            integrated_agent.is_active,
+            "IntegratedAgent should be active after assign when it was previously deactivated",
+        )
+
+        team_url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        team_response = client.get(team_url)
+        team_response.render()
+        team_content = json.loads(team_response.content)
+        self.assertEqual(team_response.status_code, 200)
+        agent_uuids = [a["uuid"] for a in team_content.get("agents", [])]
+        self.assertIn(
+            str(self.agent.uuid),
+            agent_uuids,
+            "Reactivated agent should appear in team list (filtered by is_active=True)",
+        )
+
+
 class GroupUnassignmentTestCase(TestCase):
     """Regression: group unassignment must delete all IntegratedAgent rows in the group (active and inactive)."""
 
