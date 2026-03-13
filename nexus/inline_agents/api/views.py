@@ -337,7 +337,9 @@ def _check_group_assignment(group_agents, project_uuid):
     if not project_uuid:
         return False
     agent_uuids = [agent.uuid for agent in group_agents]
-    return IntegratedAgent.objects.filter(project__uuid=project_uuid, agent__uuid__in=agent_uuids).exists()
+    return IntegratedAgent.objects.filter(
+        project__uuid=project_uuid, agent__uuid__in=agent_uuids, is_active=True
+    ).exists()
 
 
 def _get_group_credentials(group_slug, all_systems):
@@ -362,9 +364,9 @@ def _build_agents_list(group_agents, project_uuid):
         # Single query to get all assigned agents in the group
         group_agent_uuids = [agent.uuid for agent in group_agents]
         assigned_agent_uuids = set(
-            IntegratedAgent.objects.filter(project__uuid=project_uuid, agent__uuid__in=group_agent_uuids).values_list(
-                "agent__uuid", flat=True
-            )
+            IntegratedAgent.objects.filter(
+                project__uuid=project_uuid, agent__uuid__in=group_agent_uuids, is_active=True
+            ).values_list("agent__uuid", flat=True)
         )
 
     agents_list = []
@@ -686,16 +688,16 @@ class OfficialAgentsV1(APIView):
         integrated_agent.save(update_fields=["metadata"])
 
     def _handle_group_unassignment(self, project_uuid, group_slug):
-        """Handles unassignment of all agents in a group."""
-        active_agents = IntegratedAgent.objects.filter(
+        """Handles unassignment of all agents in a group (active and inactive)."""
+        integrated_agents_in_group = IntegratedAgent.objects.filter(
             project__uuid=project_uuid,
             agent__group__slug=group_slug,
             agent__is_official=True,
         )
-        if active_agents.exists():
+        if integrated_agents_in_group.exists():
             first_uuid = None
             usecase = AssignAgentsUsecase()
-            for ia in active_agents:
+            for ia in integrated_agents_in_group:
                 uid = str(ia.agent.uuid)
                 if not first_uuid:
                     first_uuid = uid
@@ -1044,7 +1046,7 @@ class ActiveAgentsView(APIView):
 
         try:
             if assign:
-                usecase.assign_agent(agent_uuid, project_uuid)
+                _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
 
                 # Fire cache invalidation event for team update (agent assigned) (async observer)
                 notify_async(
@@ -1052,7 +1054,10 @@ class ActiveAgentsView(APIView):
                     project_uuid=project_uuid,
                 )
 
-                return Response({"assigned": True}, status=200)
+                return Response(
+                    {"assigned": True, "active": integrated_agent.is_active},
+                    status=200,
+                )
 
             usecase.unassign_agent(agent_uuid, project_uuid)
 
@@ -1132,7 +1137,9 @@ class AgentProjectsView(APIView):
         project_ids.add(agent.project_id)
 
         # Projects that have integrated this agent
-        integrated_project_ids = IntegratedAgent.objects.filter(agent=agent).values_list("project_id", flat=True)
+        integrated_project_ids = IntegratedAgent.objects.filter(agent=agent, is_active=True).values_list(
+            "project_id", flat=True
+        )
         project_ids.update(integrated_project_ids)
 
         projects = Project.objects.filter(pk__in=project_ids, is_active=True)
@@ -1261,6 +1268,30 @@ class InternalCommunicationPermission(BasePermission):
         return user.has_perm("users.can_communicate_internally")
 
 
+class ActivateAgentView(APIView):
+    permission_classes = [ProjectPermission | InternalCommunicationPermission]
+
+    def patch(self, request, project_uuid, agent_uuid):
+        active = request.data.get("active")
+        if not isinstance(active, bool):
+            return Response(
+                {"error": "Field 'active' is required and must be a boolean."},
+                status=400,
+            )
+        try:
+            integrated_agent = AssignAgentsUsecase().set_agent_active(agent_uuid, project_uuid, active)
+            notify_async(
+                event="cache_invalidation:team",
+                project_uuid=project_uuid,
+            )
+            return Response({"active": integrated_agent.is_active}, status=200)
+        except IntegratedAgent.DoesNotExist:
+            return Response(
+                {"error": "Integrated agent not found for this project and agent."},
+                status=404,
+            )
+
+
 class VtexAppActiveAgentsView(APIView):
     permission_classes = [InternalCommunicationPermission]
 
@@ -1309,7 +1340,9 @@ class VtexAppAgentsView(APIView):
             query_filter = Q(name__icontains=search)
             agents = agents.filter(query_filter).distinct("uuid")
 
-        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        serializer = AgentSerializer(
+            agents, many=True, context={"project_uuid": project_uuid, "include_inactive_integrated": True}
+        )
         return Response(serializer.data)
 
 
@@ -1327,7 +1360,9 @@ class VtexAppOfficialAgentsView(APIView):
             query_filter = Q(name__icontains=search)
             agents = agents.filter(query_filter).distinct("uuid")
 
-        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        serializer = AgentSerializer(
+            agents, many=True, context={"project_uuid": project_uuid, "include_inactive_integrated": True}
+        )
         return Response(serializer.data)
 
 
@@ -1337,7 +1372,7 @@ class VTexAppTeamView(APIView):
     def get(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         usecase = GetInlineAgentsUsecase()
-        agents = usecase.get_active_agents(project_uuid)
+        agents = usecase.get_integrated_agents(project_uuid)
         serializer = IntegratedAgentSerializer(agents, many=True)
 
         data = {"manager": {"external_id": ""}, "agents": serializer.data}
@@ -1349,11 +1384,16 @@ class VtexAppProjectCredentialsView(APIView):
 
     def get(self, request, project_uuid):
         usecase = GetInlineCredentialsUsecase()
-        official_credentials, custom_credentials = usecase.get_credentials_by_project(project_uuid)
+        official_credentials, custom_credentials = usecase.get_credentials_by_project_all_integrated(project_uuid)
+        context = {"include_inactive_integrated": True}
         return Response(
             {
-                "official_agents_credentials": ProjectCredentialsListSerializer(official_credentials, many=True).data,
-                "my_agents_credentials": ProjectCredentialsListSerializer(custom_credentials, many=True).data,
+                "official_agents_credentials": ProjectCredentialsListSerializer(
+                    official_credentials, many=True, context=context
+                ).data,
+                "my_agents_credentials": ProjectCredentialsListSerializer(
+                    custom_credentials, many=True, context=context
+                ).data,
             }
         )
 

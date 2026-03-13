@@ -468,7 +468,9 @@ class LambdaUseCase:
             from nexus.inline_agents.models import IntegratedAgent
 
             integrated_agent = (
-                IntegratedAgent.objects.filter(project__uuid=project_uuid).select_related("agent").first()
+                IntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True)
+                .select_related("agent")
+                .first()
             )
             if integrated_agent:
                 return str(integrated_agent.agent.uuid)
@@ -814,7 +816,9 @@ def create_lambda_conversation(
             IntegratedAgent = None
         if IntegratedAgent and project_uuid:
             integrated_agent = (
-                IntegratedAgent.objects.filter(project__uuid=project_uuid).select_related("agent").first()
+                IntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True)
+                .select_related("agent")
+                .first()
             )
             if integrated_agent:
                 agent_uuid = str(integrated_agent.agent.uuid)

@@ -290,7 +290,7 @@ class ProjectsUseCase:
         return json.dumps(contact_fields_dict)
 
     def _get_integrated_agents_data(self, project: Project) -> list[dict]:
-        integrated_agents = project.integrated_agents.select_related("agent").all()
+        integrated_agents = project.integrated_agents.filter(is_active=True).select_related("agent").all()
 
         return [
             {

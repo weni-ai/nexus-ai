@@ -20,8 +20,9 @@ class AgentSystemSerializer(serializers.ModelSerializer):
 class IntegratedAgentSerializer(serializers.ModelSerializer):
     class Meta:
         model = IntegratedAgent
-        fields = ["uuid", "id", "name", "skills", "is_official", "description", "mcp"]
+        fields = ["uuid", "id", "name", "skills", "is_official", "description", "mcp", "active"]
 
+    active = serializers.BooleanField(source="is_active", read_only=True)
     uuid = serializers.UUIDField(source="agent.uuid")
     name = serializers.SerializerMethodField("get_name")
     id = serializers.SerializerMethodField("get_id")
@@ -122,6 +123,7 @@ class AgentSerializer(serializers.ModelSerializer):
             "description",
             "skills",
             "assigned",
+            "active",
             # "external_id",
             "slug",
             "model",
@@ -134,6 +136,7 @@ class AgentSerializer(serializers.ModelSerializer):
     model = serializers.CharField(source="foundation_model")
     skills = serializers.SerializerMethodField("get_skills")
     assigned = serializers.SerializerMethodField("get_is_assigned")
+    active = serializers.SerializerMethodField("get_active")
 
     credentials = serializers.SerializerMethodField("get_credentials")
 
@@ -145,8 +148,20 @@ class AgentSerializer(serializers.ModelSerializer):
 
     def get_is_assigned(self, obj):
         project_uuid = self.context.get("project_uuid")
-        active_agent = IntegratedAgent.objects.filter(project_id=project_uuid, agent=obj)
-        return active_agent.exists()
+        if not project_uuid:
+            return False
+        qs = IntegratedAgent.objects.filter(project_id=project_uuid, agent=obj)
+        if not self.context.get("include_inactive_integrated"):
+            qs = qs.filter(is_active=True)
+        return qs.exists()
+
+    def get_active(self, obj):
+        """Return whether the IntegratedAgent for this agent+project is active, or None if not integrated."""
+        project_uuid = self.context.get("project_uuid")
+        if not project_uuid:
+            return None
+        integrated = IntegratedAgent.objects.filter(project_id=project_uuid, agent=obj).first()
+        return integrated.is_active if integrated else False
 
     def get_credentials(self, obj):
         credentials = obj.agentcredential_set.all().distinct("key")
@@ -171,12 +186,15 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
         fields = ["name", "label", "placeholder", "is_confidential", "value", "agents_using"]
 
     def get_agents_using(self, obj):
+        qs = IntegratedAgent.objects.filter(project=obj.project)
+        if not self.context.get("include_inactive_integrated"):
+            qs = qs.filter(is_active=True)
         return [
             {
                 "uuid": integrated_agent.agent.uuid,
                 "name": integrated_agent.agent.name,
             }
-            for integrated_agent in IntegratedAgent.objects.filter(project=obj.project)
+            for integrated_agent in qs
         ]
 
     def get_value(self, obj):
@@ -202,7 +220,7 @@ class OfficialAgentListSerializer(serializers.Serializer):
         project_uuid = self.context.get("project_uuid")
         assigned = False
         if project_uuid:
-            assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
+            assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj, is_active=True).exists()
         from nexus.inline_agents.api.views import get_all_mcps_for_group
 
         systems = list(AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct())
@@ -296,7 +314,7 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         selected_system = system or (available_systems[0] if available_systems else "")
         assigned = False
         if project_uuid:
-            assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj).exists()
+            assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj, is_active=True).exists()
         system_mcps = []
         if group_name:
             all_group_mcps = get_all_mcps_for_group(group_name)

@@ -132,7 +132,9 @@ class DataLakeEventService:
             try:
                 from nexus.inline_agents.models import IntegratedAgent
 
-                team_agent = IntegratedAgent.objects.get(agent__slug=agent_identifier, project__uuid=project_uuid)
+                team_agent = IntegratedAgent.objects.get(
+                    agent__slug=agent_identifier, project__uuid=project_uuid, is_active=True
+                )
                 metadata["agent_uuid"] = str(team_agent.agent.uuid)
             except IntegratedAgent.DoesNotExist:
                 logger.warning(
