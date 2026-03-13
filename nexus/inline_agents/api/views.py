@@ -1046,7 +1046,7 @@ class ActiveAgentsView(APIView):
 
         try:
             if assign:
-                usecase.assign_agent(agent_uuid, project_uuid)
+                _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
 
                 # Fire cache invalidation event for team update (agent assigned) (async observer)
                 notify_async(
@@ -1054,7 +1054,10 @@ class ActiveAgentsView(APIView):
                     project_uuid=project_uuid,
                 )
 
-                return Response({"assigned": True}, status=200)
+                return Response(
+                    {"assigned": True, "active": integrated_agent.is_active},
+                    status=200,
+                )
 
             usecase.unassign_agent(agent_uuid, project_uuid)
 

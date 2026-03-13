@@ -12,8 +12,11 @@ class AssignAgentsUsecase:
             integrated_agent, created = IntegratedAgent.objects.get_or_create(
                 agent=agent,
                 project=project,
-                defaults={"metadata": {}},
+                defaults={"metadata": {}, "is_active": True},
             )
+            if not created and not integrated_agent.is_active:
+                integrated_agent.is_active = True
+                integrated_agent.save(update_fields=["is_active"])
             return created, integrated_agent
         except Agent.DoesNotExist as e:
             raise ValueError("Agent not found") from e
