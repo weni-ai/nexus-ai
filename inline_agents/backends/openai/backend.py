@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import logging
+import re
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -43,6 +44,12 @@ from router.traces_observers.save_traces import save_inline_message_async
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_langfuse_id(value: str, max_length: int = 64) -> str:
+    """Sanitize string for Langfuse id/trace_id: only letters, numbers, underscores, dashes."""
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", value)
+    return sanitized[:max_length]
 
 
 class OpenAIBackend(InlineAgentsBackend):
@@ -659,7 +666,8 @@ class OpenAIBackend(InlineAgentsBackend):
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
-            trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
+            trace_id_raw = f"trace_urn_{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}"
+            trace_id = _sanitize_langfuse_id(trace_id_raw)
 
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
@@ -707,19 +715,23 @@ class OpenAIBackend(InlineAgentsBackend):
                     except Exception:
                         final_response = None
 
+                    usage_dict, request_entries = self._get_usage_metadata_and_request_entries(result)
+                    metadata = {
+                        "project_uuid": project_uuid,
+                        "contact_urn": contact_urn,
+                        "channel_uuid": channel_uuid,
+                        "preview": preview,
+                        "trace_id": trace_id,
+                        "error": True,
+                        "error_type": type(stream_error).__name__,
+                        "error_message": str(stream_error)[:500],
+                    }
+                    if usage_dict:
+                        self._log_cache_usage_per_request(request_entries, project_uuid, contact_urn, trace_id)
                     root_span.update_trace(
                         input=input_text,
                         output=final_response,
-                        metadata={
-                            "project_uuid": project_uuid,
-                            "contact_urn": contact_urn,
-                            "channel_uuid": channel_uuid,
-                            "preview": preview,
-                            "trace_id": trace_id,
-                            "error": True,
-                            "error_type": type(stream_error).__name__,
-                            "error_message": str(stream_error)[:500],
-                        },
+                        metadata=metadata,
                     )
 
                     if use_components and final_response:
@@ -753,16 +765,20 @@ class OpenAIBackend(InlineAgentsBackend):
                     )
                     final_response = formatted_response
 
+                usage_dict, request_entries = self._get_usage_metadata_and_request_entries(result)
+                metadata = {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "channel_uuid": channel_uuid,
+                    "preview": preview,
+                    "trace_id": trace_id,
+                }
+                if usage_dict:
+                    self._log_cache_usage_per_request(request_entries, project_uuid, contact_urn, trace_id)
                 root_span.update_trace(
                     input=input_text,
                     output=final_response,
-                    metadata={
-                        "project_uuid": project_uuid,
-                        "contact_urn": contact_urn,
-                        "channel_uuid": channel_uuid,
-                        "preview": preview,
-                        "trace_id": trace_id,
-                    },
+                    metadata=metadata,
                 )
 
             return final_response
@@ -773,6 +789,96 @@ class OpenAIBackend(InlineAgentsBackend):
         else:
             final_response = result.final_output
         return final_response
+
+    def _extract_usage_from_result(self, result) -> Optional[Dict[str, Any]]:
+        """Extract token usage (including cache) from openai-agents run result.
+
+        Uses result.context_wrapper.usage when available. Returns a dict suitable for
+        Langfuse usage_details: input, output, cache_read_input_tokens.
+        Returns None if usage is not available (e.g. SDK version or provider).
+        """
+        try:
+            wrapper = getattr(result, "context_wrapper", None)
+            if wrapper is None:
+                return None
+            usage = getattr(wrapper, "usage", None)
+            if usage is None:
+                return None
+            input_tokens = getattr(usage, "input_tokens", 0) or 0
+            output_tokens = getattr(usage, "output_tokens", 0) or 0
+            input_details = getattr(usage, "input_tokens_details", None)
+            cached = 0
+            if input_details is not None:
+                cached = getattr(input_details, "cached_tokens", 0) or 0
+            if input_tokens == 0 and output_tokens == 0:
+                return None
+            return {
+                "input": input_tokens,
+                "output": output_tokens,
+                "cache_read_input_tokens": cached,
+            }
+        except Exception as e:
+            logger.debug("Could not extract usage from result: %s", e)
+            return None
+
+    def _get_usage_metadata_and_request_entries(self, result):
+        """Get usage and per-request entries for logging (usage is sent to Langfuse/OTEL in hooks).
+
+        Returns (usage_dict, request_usage_entries_list).
+        """
+        usage_dict = self._extract_usage_from_result(result)
+        request_entries = []
+        try:
+            wrapper = getattr(result, "context_wrapper", None)
+            usage = getattr(wrapper, "usage", None) if wrapper else None
+            if usage is not None:
+                request_entries = getattr(usage, "request_usage_entries", []) or []
+        except Exception:
+            pass
+        return usage_dict, request_entries
+
+    def _log_cache_usage_per_request(
+        self,
+        request_entries: list,
+        project_uuid: str,
+        contact_urn: str,
+        trace_id: str,
+    ) -> None:
+        """Log token and cache usage per LLM request for instrumentation."""
+        if not request_entries:
+            return
+        for i, entry in enumerate(request_entries):
+            input_tokens = getattr(entry, "input_tokens", 0) or 0
+            output_tokens = getattr(entry, "output_tokens", 0) or 0
+            input_details = getattr(entry, "input_tokens_details", None)
+            cached = getattr(input_details, "cached_tokens", 0) or 0 if input_details else 0
+            logger.debug(
+                "[Cache/usage] request=%s project_uuid=%s contact_urn=%s trace_id=%s "
+                "input_tokens=%s output_tokens=%s cached_tokens=%s",
+                i + 1,
+                project_uuid,
+                contact_urn,
+                trace_id,
+                input_tokens,
+                output_tokens,
+                cached,
+            )
+        total_input = sum(getattr(e, "input_tokens", 0) or 0 for e in request_entries)
+        total_output = sum(getattr(e, "output_tokens", 0) or 0 for e in request_entries)
+        total_cached = sum(
+            (getattr(getattr(e, "input_tokens_details", None), "cached_tokens", 0) or 0) for e in request_entries
+        )
+        logger.debug(
+            "[Cache/usage] total project_uuid=%s contact_urn=%s trace_id=%s "
+            "input_tokens=%s output_tokens=%s cached_tokens=%s requests=%s",
+            project_uuid,
+            contact_urn,
+            trace_id,
+            total_input,
+            total_output,
+            total_cached,
+            len(request_entries),
+        )
 
     def _sentry_capture_exception(
         self, exception, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger

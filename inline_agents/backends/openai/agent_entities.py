@@ -48,13 +48,17 @@ class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
         else:
             model_name = foundation_model
 
+        model = self.get_model(model_name, user_model_credentials)
+        model_settings_kw = dict(model_settings)
+        if isinstance(model, LitellmModel):
+            model_settings_kw["include_usage"] = True
         super().__init__(
             name=name,
             instructions=instructions,
             tools=tools,
-            model=self.get_model(model_name, user_model_credentials),
+            model=model,
             hooks=hooks,
-            model_settings=ModelSettings(**model_settings),
+            model_settings=ModelSettings(**model_settings_kw),
         )
 
 
@@ -90,6 +94,8 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
             "parallel_tool_calls": parallel_tool_calls,
             "extra_args": extra_args,
         }
+        if isinstance(model, LitellmModel):
+            model_settings_kwargs["include_usage"] = True
 
         if model_has_reasoning and reasoning_effort:
             model_settings_kwargs["reasoning"] = Reasoning(effort=reasoning_effort, summary=reasoning_summary)

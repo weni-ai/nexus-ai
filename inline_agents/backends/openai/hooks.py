@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import pendulum
 import sentry_sdk
@@ -16,11 +16,106 @@ if TYPE_CHECKING:
     pass
 from agents.extensions.models.litellm_model import LitellmModel
 from django.conf import settings
+from langfuse import get_client
+from opentelemetry import trace
 
 from inline_agents.adapter import DataLakeEventAdapter
 from inline_agents.backends.openai.entities import FinalResponse, HooksState
 
 logger = logging.getLogger(__name__)
+
+
+def _usage_dict_from_request_entry(entry: Any) -> Optional[Dict[str, int]]:
+    """Build Langfuse usage_details from a single request_usage_entry (one LLM call)."""
+    if entry is None:
+        return None
+    try:
+        input_tokens = getattr(entry, "input_tokens", 0) or 0
+        output_tokens = getattr(entry, "output_tokens", 0) or 0
+        input_details = getattr(entry, "input_tokens_details", None)
+        cached = 0
+        if input_details is not None:
+            cached = getattr(input_details, "cached_tokens", 0) or 0
+        if input_tokens == 0 and output_tokens == 0:
+            return None
+        return {
+            "input": input_tokens,
+            "output": output_tokens,
+            "cache_read_input_tokens": cached,
+        }
+    except Exception as e:
+        logger.debug("Could not build usage_dict from request entry: %s", e)
+        return None
+
+
+def _usage_dict_from_response_usage(usage: Any) -> Optional[Dict[str, int]]:
+    """Build Langfuse usage_details from response.usage (e.g. OpenAI-style)."""
+    if usage is None:
+        return None
+    try:
+        input_tokens = getattr(usage, "input_tokens", None) or getattr(usage, "prompt_tokens", 0) or 0
+        output_tokens = getattr(usage, "output_tokens", None) or getattr(usage, "completion_tokens", 0) or 0
+        input_details = getattr(usage, "input_tokens_details", None)
+        cached = 0
+        if input_details is not None:
+            cached = getattr(input_details, "cached_tokens", 0) or 0
+        if input_tokens == 0 and output_tokens == 0:
+            return None
+        return {
+            "input": input_tokens,
+            "output": output_tokens,
+            "cache_read_input_tokens": cached,
+        }
+    except Exception as e:
+        logger.debug("Could not build usage_dict from response usage: %s", e)
+        return None
+
+
+def _set_current_span_usage_attributes(usage_dict: Dict[str, int]) -> None:
+    """Set usage attributes on the current OpenTelemetry span."""
+    if not usage_dict:
+        return
+    try:
+        span = trace.get_current_span()
+        if not span or not span.is_recording():
+            return
+        span.set_attribute("gen_ai.usage.input_tokens", usage_dict.get("input", 0))
+        span.set_attribute("gen_ai.usage.output_tokens", usage_dict.get("output", 0))
+        cache_read = usage_dict.get("cache_read_input_tokens", 0)
+        if cache_read is not None:
+            span.set_attribute("gen_ai.usage.cache_read.input_tokens", cache_read)
+    except Exception as e:
+        logger.debug("Could not set usage on current span: %s", e)
+
+
+def _update_langfuse_current_generation_usage(
+    usage_dict: Dict[str, int],
+    model: Optional[str] = None,
+) -> None:
+    """Update the current Langfuse generation with usage_details."""
+    if not usage_dict:
+        return
+    try:
+        langfuse = get_client()
+        update = getattr(langfuse, "update_current_generation", None)
+        if not callable(update):
+            return
+        kwargs = {"usage_details": usage_dict}
+        if model:
+            kwargs["model"] = model
+        update(**kwargs)
+    except Exception as e:
+        logger.debug("Could not update current Langfuse generation with usage: %s", e)
+
+
+def _get_model_name_from_agent(agent) -> str:
+    """Get a display model name from the agent for Langfuse generation naming."""
+    m = getattr(agent, "model", None)
+    if isinstance(m, str):
+        return m
+    if m is not None and hasattr(m, "model"):
+        return getattr(m, "model", "llm") or "llm"
+    return "llm"
 
 
 def _get_agent_slug(agent, hooks_state=None) -> str:
@@ -257,9 +352,98 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         await self.trace_handler.send_trace(
             context_data, _get_agent_slug(agent, self.trace_handler.hooks_state), "invoking_model"
         )
+        # When Logfire instrument_openai_agents is on, it creates an OTel span "Responses API with ..." that
+        # Langfuse ingests. Do not create our own Langfuse generation or we get two spans (langfuse-sdk + logfire).
+        if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
+            return
+        try:
+            state = self.trace_handler.hooks_state
+            gen_ctx = getattr(state, "current_langfuse_gen_ctx", None)
+            if gen_ctx is not None:
+                try:
+                    exit_fn = getattr(gen_ctx, "__exit__", None)
+                    if callable(exit_fn):
+                        exit_fn(None, None, None)
+                except Exception as e:
+                    logger.debug("[RunnerHooks] on_llm_start: could not close previous Langfuse generation: %s", e)
+                state.current_langfuse_generation = None
+                state.current_langfuse_gen_ctx = None
+
+            langfuse = get_client()
+            start_current = getattr(langfuse, "start_as_current_observation", None)
+            if callable(start_current):
+                model_name = _get_model_name_from_agent(agent)
+                name = f"Responses API with '{model_name}'"
+                ctx = start_current(as_type="generation", name=name, model=model_name or None)
+                generation = ctx.__enter__()
+                state.current_langfuse_generation = generation
+                state.current_langfuse_gen_ctx = ctx
+        except Exception as e:
+            logger.debug("[RunnerHooks] on_llm_start: could not start Langfuse generation: %s", e)
+            self.trace_handler.hooks_state.current_langfuse_generation = None
+            self.trace_handler.hooks_state.current_langfuse_gen_ctx = None
 
     async def on_llm_end(self, context, agent, response, **kwargs):
         context_data = context.context
+        # Update our Langfuse generation (created in on_llm_start) with usage including cache
+        # so cache_read_input_tokens appears in "Responses API with ...", not on the parent span.
+        try:
+            usage_dict = None
+            usage = getattr(context, "usage", None)
+            if usage is not None:
+                request_entries = getattr(usage, "request_usage_entries", None) or []
+                if request_entries:
+                    last_entry = request_entries[-1]
+                    usage_dict = _usage_dict_from_request_entry(last_entry)
+            if usage_dict is None and hasattr(response, "usage"):
+                usage_dict = _usage_dict_from_response_usage(response.usage)
+            model_name = getattr(response, "model", None) or (
+                response.get("model") if isinstance(response, dict) else None
+            )
+            if usage_dict:
+                state = self.trace_handler.hooks_state
+                cum = getattr(state, "cumulative_usage", None)
+                if cum is not None:
+                    cum["input"] = cum.get("input", 0) + (usage_dict.get("input") or 0)
+                    cum["output"] = cum.get("output", 0) + (usage_dict.get("output") or 0)
+                    cr = usage_dict.get("cache_read_input_tokens")
+                    cum["cache_read_input_tokens"] = cum.get("cache_read_input_tokens", 0) + (
+                        cr if cr is not None else 0
+                    )
+                cumulative_for_manager = dict(cum) if cum is not None else usage_dict
+                _set_current_span_usage_attributes(cumulative_for_manager)
+
+            # Update and close the generation we opened in on_llm_start (generation.update + ctx.__exit__).
+            gen = getattr(self.trace_handler.hooks_state, "current_langfuse_generation", None)
+            gen_ctx = getattr(self.trace_handler.hooks_state, "current_langfuse_gen_ctx", None)
+            if gen is not None:
+                try:
+                    update = getattr(gen, "update", None)
+                    if callable(update):
+                        update_kwargs = {}
+                        if usage_dict:
+                            update_kwargs["usage_details"] = usage_dict
+                        if model_name:
+                            update_kwargs["model"] = model_name
+                        if update_kwargs:
+                            update(**update_kwargs)
+                    if gen_ctx is not None:
+                        exit_fn = getattr(gen_ctx, "__exit__", None)
+                        if callable(exit_fn):
+                            exit_fn(None, None, None)
+                    else:
+                        end_fn = getattr(gen, "end", None)
+                        if callable(end_fn):
+                            end_fn()
+                except Exception as e:
+                    logger.debug("[RunnerHooks] on_llm_end: could not update/end Langfuse generation: %s", e)
+                self.trace_handler.hooks_state.current_langfuse_generation = None
+                self.trace_handler.hooks_state.current_langfuse_gen_ctx = None
+            elif usage_dict:
+                _update_langfuse_current_generation_usage(cumulative_for_manager, model=model_name)
+        except Exception as e:
+            logger.debug("[RunnerHooks] on_llm_end: could not update Langfuse generation usage: %s", e)
+
         for reasoning_item in response.output:
             if (
                 getattr(reasoning_item, "type", None) == "reasoning"
@@ -318,6 +502,30 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         self.hooks_state = hooks_state
         self.preview = preview
         self.conversation = conversation
+
+    async def on_llm_end(self, context, agent, response, **kwargs):
+        """Accumulate collaborator LLM usage into shared cumulative_usage so manager span shows sum of all generations."""
+        try:
+            usage_dict = None
+            usage = getattr(context, "usage", None)
+            if usage is not None:
+                request_entries = getattr(usage, "request_usage_entries", None) or []
+                if request_entries:
+                    last_entry = request_entries[-1]
+                    usage_dict = _usage_dict_from_request_entry(last_entry)
+            if usage_dict is None and hasattr(response, "usage"):
+                usage_dict = _usage_dict_from_response_usage(response.usage)
+            if not usage_dict:
+                return
+            state = self.hooks_state
+            cum = getattr(state, "cumulative_usage", None)
+            if cum is not None:
+                cum["input"] = cum.get("input", 0) + (usage_dict.get("input") or 0)
+                cum["output"] = cum.get("output", 0) + (usage_dict.get("output") or 0)
+                cr = usage_dict.get("cache_read_input_tokens")
+                cum["cache_read_input_tokens"] = cum.get("cache_read_input_tokens", 0) + (cr if cr is not None else 0)
+        except Exception as e:
+            logger.debug("[CollaboratorHooks] on_llm_end: could not accumulate usage: %s", e)
 
     async def on_start(self, context, agent):
         agent_slug = _get_agent_slug(agent, self.hooks_state)
