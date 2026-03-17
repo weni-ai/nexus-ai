@@ -422,6 +422,60 @@ class ManagerAgentRepositoryTestCase(TestCase):
             self.manager_agent.audio_orchestration_collaborator_max_tokens,
         )
 
+    def test_get_supervisor_max_tokens_allows_none(self):
+        """Test get_supervisor returns None in max_tokens dict when fields are null."""
+        manager_with_null_tokens = ManagerAgent.objects.create(
+            name="Manager with null max_tokens",
+            base_prompt="Prompt",
+            foundation_model="gpt-4",
+            model_vendor="openai",
+            model_has_reasoning=False,
+            max_tokens=None,
+            collaborator_max_tokens=None,
+            audio_orchestration_max_tokens=None,
+            audio_orchestration_collaborator_max_tokens=None,
+            formatter_agent_foundation_model="gpt-4",
+            collaborators_foundation_model="gpt-4",
+            default=False,
+            public=False,
+            release_date=pendulum.now(),
+        )
+        result = self.repository.get_supervisor(
+            supervisor_agent_uuid=str(manager_with_null_tokens.uuid),
+        )
+        self.assertIn("max_tokens", result)
+        self.assertIsNone(result["max_tokens"]["supervisor"])
+        self.assertIsNone(result["max_tokens"]["collaborator"])
+        self.assertIsNone(result["max_tokens"]["audio_orchestration"])
+        self.assertIsNone(result["max_tokens"]["audio_orchestration_collaborator"])
+
+    def test_get_supervisor_max_tokens_supervisor_null_collaborator_2048(self):
+        """Test get_supervisor with supervisor max_tokens null and collaborator max_tokens 2048."""
+        manager = ManagerAgent.objects.create(
+            name="Manager supervisor null collaborator 2048",
+            base_prompt="Prompt",
+            foundation_model="gpt-4",
+            model_vendor="openai",
+            model_has_reasoning=False,
+            max_tokens=None,
+            collaborator_max_tokens=2048,
+            audio_orchestration_max_tokens=None,
+            audio_orchestration_collaborator_max_tokens=2048,
+            formatter_agent_foundation_model="gpt-4",
+            collaborators_foundation_model="gpt-4",
+            default=False,
+            public=False,
+            release_date=pendulum.now(),
+        )
+        result = self.repository.get_supervisor(
+            supervisor_agent_uuid=str(manager.uuid),
+        )
+        self.assertIn("max_tokens", result)
+        self.assertIsNone(result["max_tokens"]["supervisor"])
+        self.assertEqual(result["max_tokens"]["collaborator"], 2048)
+        self.assertIsNone(result["max_tokens"]["audio_orchestration"])
+        self.assertEqual(result["max_tokens"]["audio_orchestration_collaborator"], 2048)
+
     def test_get_supervisor_formatter_agent_configurations(self):
         """Test get_supervisor includes correct formatter_agent_configurations."""
         result = self.repository.get_supervisor(
