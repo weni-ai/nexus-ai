@@ -89,11 +89,12 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
 
         model = self.get_model(model, user_model_credentials)
 
-        model_settings_kwargs = {
-            "max_tokens": max_tokens,
+        model_settings_kwargs: Dict[str, Any] = {
             "parallel_tool_calls": parallel_tool_calls,
             "extra_args": extra_args,
         }
+        if max_tokens is not None:
+            model_settings_kwargs["max_tokens"] = max_tokens
         if isinstance(model, LitellmModel):
             model_settings_kwargs["include_usage"] = True
 

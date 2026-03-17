@@ -112,11 +112,11 @@ class OpenAITeamAdapter(TeamAdapter):
         msg_external_id,
         turn_off_rationale,
         session_factory,
-        max_tokens: Dict[str, int],
+        max_tokens: Dict[str, Optional[int]],
     ):
         agents_as_tools = []
         user_model_credentials: Dict[str, Any] = supervisor.get("user_model_credentials", {})
-        max_tokens_collaborator: int = max_tokens.get("collaborator", 2048)
+        max_tokens_collaborator: Optional[int] = max_tokens.get("collaborator")
 
         collaborator_configurations = supervisor.get("collaborator_configurations", {})
         collaborator_extra_args = collaborator_configurations.get("collaborator_extra_args", {})
@@ -151,6 +151,9 @@ class OpenAITeamAdapter(TeamAdapter):
                 msg_external_id=msg_external_id,
                 turn_off_rationale=turn_off_rationale,
             )
+            model_settings = {"extra_args": collaborator_extra_args}
+            if max_tokens_collaborator is not None:
+                model_settings["max_tokens"] = max_tokens_collaborator
             collaborator = CollaboratorEntity(
                 name=agent_name,
                 instructions=agent_instructions,
@@ -158,7 +161,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 foundation_model=agent.get("foundationModel"),
                 user_model_credentials=user_model_credentials,
                 hooks=hooks,
-                model_settings={"max_tokens": max_tokens_collaborator, "extra_args": collaborator_extra_args},
+                model_settings=model_settings,
                 collaborator_configurations=supervisor.get("collaborator_configurations", {}),
             )
 
@@ -208,8 +211,8 @@ class OpenAITeamAdapter(TeamAdapter):
     ):
         supervisor_instructions: str = cls.prepare_instructions(instructions)
         llm_formatted_time: str = cls.prepare_time()
-        max_tokens: Dict[str, int] = supervisor.get("max_tokens")
-        max_tokens_supervisor: int = max_tokens.get("supervisor", 2048)
+        max_tokens: Dict[str, Optional[int]] = supervisor.get("max_tokens") or {}
+        max_tokens_supervisor: Optional[int] = max_tokens.get("supervisor")
         supervisor_model_settings = supervisor.get("model_settings", {})
         user_model_credentials: Dict[str, Any] = supervisor.get("user_model_credentials", {})
 
