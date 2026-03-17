@@ -80,8 +80,8 @@ class ManagerAgent(models.Model):
     api_base = models.CharField(max_length=255, null=True, blank=True)
     api_version = models.CharField(max_length=255, null=True, blank=True)
 
-    max_tokens = models.PositiveIntegerField(default=2048)
-    collaborator_max_tokens = models.PositiveIntegerField(default=2048)
+    max_tokens = models.PositiveIntegerField(default=2048, null=True, blank=True)
+    collaborator_max_tokens = models.PositiveIntegerField(default=2048, null=True, blank=True)
     reasoning_effort = models.CharField(max_length=50, blank=True, null=True)
     reasoning_summary = models.CharField(max_length=50, blank=True, null=True, default="auto")
     parallel_tool_calls = models.BooleanField(default=False)
@@ -93,8 +93,8 @@ class ManagerAgent(models.Model):
     human_support_tools = models.JSONField(null=True, blank=True)
 
     # audio orchestration
-    audio_orchestration_max_tokens = models.PositiveIntegerField(default=2048)
-    audio_orchestration_collaborator_max_tokens = models.PositiveIntegerField(default=2048)
+    audio_orchestration_max_tokens = models.PositiveIntegerField(default=2048, null=True, blank=True)
+    audio_orchestration_collaborator_max_tokens = models.PositiveIntegerField(default=2048, null=True, blank=True)
 
     # components
     header_components_prompt = models.TextField(null=True, blank=True)
