@@ -11,7 +11,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.agents.models import Team
 from nexus.inline_agents.models import Agent as InlineAgent
-from nexus.inline_agents.models import AgentGroup, IntegratedAgent, Version
+from nexus.inline_agents.models import AgentGroup, AgentGroupModal, IntegratedAgent, Version
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
@@ -66,6 +66,47 @@ class AgentViewsetSetTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(content), 1)
         self.assertEqual(content[0].get("name"), "Information Analyst")
+
+    def test_get_my_agents_name_is_group_not_agent_template(self):
+        group = AgentGroup.objects.create(name="Returns & exchanges", slug="returns-group-test-unique")
+        agent_grouped = InlineAgent.objects.create(
+            name="Reversso - Returns Agent",
+            slug="reversso-returns-test",
+            instruction="x",
+            collaboration_instructions="y",
+            foundation_model="model:version",
+            project=self.project,
+            group=group,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
+        self.assertEqual(row["name"], "Returns & exchanges")
+
+    def test_get_my_agents_name_prefers_modal_agent_name(self):
+        group = AgentGroup.objects.create(name="Group Title", slug="modal-group-test-unique")
+        AgentGroupModal.objects.create(group=group, agent_name="Product Concierge")
+        agent_grouped = InlineAgent.objects.create(
+            name="Product Concierge Default VTEX",
+            slug="pc-modal-test",
+            instruction="x",
+            collaboration_instructions="y",
+            foundation_model="model:version",
+            project=self.project,
+            group=group,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
+        self.assertEqual(row["name"], "Product Concierge")
 
     def make_agents_official(self):
         self.agent.is_official = True
