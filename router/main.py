@@ -43,6 +43,18 @@ def messages(request: Request, message: MessageHTTPBody):
             f"Message received, from project_uuid: {message.project_uuid}, "
             f"text: {message.text}, contact_urn: {message.contact_urn}"
         )
+        logger.info(
+            "[TraceIncoming] POST /messages accepted",
+            extra={
+                "project_uuid": str(message.project_uuid),
+                "contact_urn": message.contact_urn,
+                "channel_uuid": message.channel_uuid or "",
+                "channel_type": getattr(message, "channel_type", None) or "",
+                "channel_uuid_missing": not bool(message.channel_uuid),
+                "inline_agent_switch": project.inline_agent_switch,
+                "text_len": len(message.text or ""),
+            },
+        )
 
         if project.inline_agent_switch:
             logger.info("Starting Inline Agent")

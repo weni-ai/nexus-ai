@@ -101,6 +101,17 @@ def _initialize_workflow(ctx: WorkflowContext) -> None:
     logger.info(
         f"[Workflow] Starting workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
     )
+    logger.info(
+        "[TraceIncoming] workflow task received",
+        extra={
+            "project_uuid": ctx.project_uuid,
+            "contact_urn": ctx.contact_urn,
+            "channel_uuid": ctx.message.get("channel_uuid") or "",
+            "channel_type": ctx.message.get("channel_type") or "",
+            "channel_uuid_missing": not bool(ctx.message.get("channel_uuid")),
+            "workflow_id": ctx.workflow_id,
+        },
+    )
 
     # Send typing indicator (async, non-blocking)
     logger.info(f"[Workflow] Dispatching typing indicator for project {ctx.project_uuid}, contact {ctx.contact_urn}")
@@ -281,6 +292,17 @@ def _run_generation(ctx: WorkflowContext) -> str:
 
     # Send incoming to SQS when message is received
     if not ctx.preview:
+        wf_ch = message_obj.channel_uuid or ctx.message.get("channel_uuid", "") or ""
+        logger.info(
+            "[TraceIncoming] sending message.received to SQS (workflow path)",
+            extra={
+                "project_uuid": ctx.project_uuid,
+                "contact_urn": ctx.contact_urn,
+                "channel_uuid": wf_ch,
+                "channel_uuid_missing": not bool(wf_ch),
+                "turn_id": ctx.turn_id,
+            },
+        )
         received_event = build_message_received_event(
             project_uuid=ctx.project_uuid,
             contact_urn=ctx.contact_urn,

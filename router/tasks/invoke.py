@@ -379,6 +379,21 @@ def start_inline_agents(
 ) -> bool:  # pragma: no cover
     _apm_set_context(message=message, preview=preview)
     project_uuid = message.get("project_uuid")
+    msg_event = message.get("msg_event") or {}
+    if not isinstance(msg_event, dict):
+        msg_event = {}
+    logger.info(
+        "[TraceIncoming] start_inline_agents task received",
+        extra={
+            "project_uuid": project_uuid,
+            "contact_urn": message.get("contact_urn"),
+            "channel_uuid": message.get("channel_uuid") or "",
+            "channel_type": message.get("channel_type") or "",
+            "channel_uuid_missing": not bool(message.get("channel_uuid")),
+            "preview": preview,
+            "has_msg_event_dict": bool(msg_event),
+        },
+    )
 
     # Feature flag: list of project UUIDs that use new workflow architecture
     # Set WORKFLOW_ARCHITECTURE_PROJECTS=["uuid1", "uuid2"] or ["*"] for all
@@ -402,10 +417,10 @@ def start_inline_agents(
 
     try:
         incoming_created_at = None  # Set right before _invoke_backend (same point as InlineAgentMessage save)
-        turn_id = message.get("msg_event", {}).get("msg_external_id") or str(uuid.uuid4())
+        turn_id = msg_event.get("msg_external_id") or str(uuid.uuid4())
         TypingUsecase().send_typing_message(
             contact_urn=message.get("contact_urn"),
-            msg_external_id=message.get("msg_event", {}).get("msg_external_id", ""),
+            msg_external_id=msg_event.get("msg_external_id", ""),
             project_uuid=project_uuid,
             preview=preview,
         )
@@ -475,6 +490,17 @@ def start_inline_agents(
 
         # Send incoming to SQS when message is received
         if not preview:
+            ch_uuid = message_obj.channel_uuid or ""
+            logger.info(
+                "[TraceIncoming] sending message.received to SQS (legacy path)",
+                extra={
+                    "project_uuid": project_uuid,
+                    "contact_urn": message_obj.contact_urn,
+                    "channel_uuid": ch_uuid,
+                    "channel_uuid_missing": not bool(ch_uuid),
+                    "turn_id": turn_id,
+                },
+            )
             received_event = build_message_received_event(
                 project_uuid=project_uuid,
                 contact_urn=message_obj.contact_urn,
