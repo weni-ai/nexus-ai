@@ -1,12 +1,16 @@
-from typing import Any, Dict
+import ast
+import json
+from typing import Any, Dict, List
 
 import boto3
 from agents import Agent, ModelSettings, RunContextWrapper, function_tool
+from agents.agent import FunctionToolResult, ToolsToFinalOutputResult
 from agents.extensions.models.litellm_model import LitellmModel
 from django.conf import settings
 from openai.types.shared import Reasoning
 
 from inline_agents.backends.openai.entities import Context
+from inline_agents.backends.openai.invoke_result import SkipDirectBroadcastResult
 from nexus.utils import get_datasource_id
 
 
@@ -28,6 +32,33 @@ class AgentModel:
 
             return LitellmModel(**kwargs)
         return model
+
+    def custom_tool_handler(
+        self, context: RunContextWrapper[Any], tool_results: List[FunctionToolResult]
+    ) -> ToolsToFinalOutputResult:
+        if tool_results:
+            for result in tool_results:
+                parsed = self._try_parse_output(result.output)
+                if isinstance(parsed, dict) and parsed.get("is_final_output", False):
+                    message_send = parsed.get("messages", [])
+                    return ToolsToFinalOutputResult(
+                        is_final_output=True,
+                        final_output=SkipDirectBroadcastResult(messages=message_send),
+                    )
+        return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
+
+    def _try_parse_output(self, raw_output) -> object:
+        if isinstance(raw_output, (dict, list)):
+            return raw_output
+        if isinstance(raw_output, str):
+            try:
+                return json.loads(raw_output)
+            except json.JSONDecodeError:
+                try:
+                    return ast.literal_eval(raw_output)
+                except (ValueError, SyntaxError):
+                    pass
+        return raw_output
 
 
 class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
@@ -59,6 +90,7 @@ class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
             model=model,
             hooks=hooks,
             model_settings=ModelSettings(**model_settings_kw),
+            tool_use_behavior=self.custom_tool_handler,
         )
 
 
@@ -108,6 +140,7 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
             tools=tools,
             hooks=hooks,
             model_settings=ModelSettings(**model_settings_kwargs),
+            tool_use_behavior=self.custom_tool_handler,
         )
 
     @function_tool
