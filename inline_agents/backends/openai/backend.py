@@ -29,6 +29,7 @@ from inline_agents.backends.openai.hooks import (
     RunnerHooks,
     SupervisorHooks,
 )
+from inline_agents.backends.openai.invoke_result import SkipDirectBroadcastResult
 from inline_agents.backends.openai.sessions import (
     RedisSession,
     make_session_factory,
@@ -424,7 +425,10 @@ class OpenAIBackend(InlineAgentsBackend):
         # Send completed message through the persistent stream and close
         if grpc_session and grpc_session.is_active:
             try:
-                content = result if isinstance(result, str) else str(result)
+                if isinstance(result, SkipDirectBroadcastResult):
+                    content = ""
+                else:
+                    content = result if isinstance(result, str) else str(result)
                 grpc_session.send_completed(content)
             except Exception as e:
                 logger.error(f"gRPC completion failed: {e}", exc_info=True)
@@ -734,7 +738,7 @@ class OpenAIBackend(InlineAgentsBackend):
                         metadata=metadata,
                     )
 
-                    if use_components and final_response:
+                    if use_components and final_response and not isinstance(final_response, SkipDirectBroadcastResult):
                         try:
                             formatted_response = await self._run_formatter_agent_async(
                                 final_response,
@@ -754,7 +758,7 @@ class OpenAIBackend(InlineAgentsBackend):
 
                 final_response = self._get_final_response(result)
 
-                if use_components:
+                if use_components and not isinstance(final_response, SkipDirectBroadcastResult):
                     formatted_response = await self._run_formatter_agent_async(
                         final_response,
                         session,

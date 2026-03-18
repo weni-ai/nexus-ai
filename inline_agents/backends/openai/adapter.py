@@ -494,7 +494,11 @@ class OpenAITeamAdapter(TeamAdapter):
 
         credentials = cls._get_credentials(project_uuid)
         contact = {"urn": contact_urn, "channel_uuid": channel_uuid, "name": contact_name, "fields": contact_fields}
-        project = {"uuid": project_uuid, "auth_token": auth_token}
+        project = {
+            "uuid": project_uuid,
+            "auth_token": auth_token,
+            "sqs_queue_url": settings.LAMBDA_BROADCAST_SQS_QUEUE_URL,
+        }
         content_base = {"uuid": content_base_uuid}
 
         return Context(

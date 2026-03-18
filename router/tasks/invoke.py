@@ -13,6 +13,7 @@ import sentry_sdk
 from django.conf import settings
 
 from inline_agents.backends import BackendsRegistry
+from inline_agents.backends.openai.invoke_result import SkipDirectBroadcastResult
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
@@ -511,10 +512,17 @@ def start_inline_agents(
             message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
-        if response is None or response == "":
+        if response is None:
+            raise EmptyFinalResponseException("Final response is empty")
+        if not isinstance(response, SkipDirectBroadcastResult) and response == "":
             raise EmptyFinalResponseException("Final response is empty")
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
+
+        if isinstance(response, SkipDirectBroadcastResult):
+            response_text_for_notify = json.dumps(response.messages, ensure_ascii=False, default=str)
+        else:
+            response_text_for_notify = response or ""
 
         notify_async(
             event="inline_message:received",
@@ -524,24 +532,34 @@ def start_inline_agents(
             contact_name=message_obj.contact_name or "",
             preview=preview,
             message_text=message.get("text"),
-            response_text=response or "",
+            response_text=response_text_for_notify,
             incoming_created_at=incoming_created_at,
             outgoing_created_at=pendulum.now().to_iso8601_string(),
             message_conversation_log_uuid=message_conversation_log_uuid,
             turn_id=turn_id,
         )
 
+        if isinstance(response, SkipDirectBroadcastResult):
+            if preview:
+                return dispatch_preview(
+                    response.messages,
+                    message_obj,
+                    broadcast,
+                    user_email,
+                    agents_backend,
+                    flows_user_email,
+                )
+            return True
         if preview:
             return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)
-        else:
-            return dispatch(
-                llm_response=response,
-                message=message_obj,
-                direct_message=broadcast,
-                user_email=flows_user_email,
-                full_chunks=[],
-                backend=agents_backend,
-            )
+        return dispatch(
+            llm_response=response,
+            message=message_obj,
+            direct_message=broadcast,
+            user_email=flows_user_email,
+            full_chunks=[],
+            backend=agents_backend,
+        )
 
     except UnsafeMessageException as e:
         message_obj = message_factory(

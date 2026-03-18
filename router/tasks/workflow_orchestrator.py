@@ -14,6 +14,7 @@ The orchestrator is designed to be simple and clean - it only:
 All complex logic is delegated to helper functions or the phase tasks themselves.
 """
 
+import json
 import logging
 import os
 import uuid as uuid_lib
@@ -25,6 +26,7 @@ import sentry_sdk
 from django.conf import settings
 
 from inline_agents.backends import BackendsRegistry
+from inline_agents.backends.openai.invoke_result import SkipDirectBroadcastResult
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
@@ -321,7 +323,7 @@ def _run_generation(ctx: WorkflowContext) -> str:
     return response
 
 
-def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
+def _run_post_generation(ctx: WorkflowContext, response: Any) -> Any:
     """
     Execute the post-generation phase.
 
@@ -341,6 +343,11 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
     # Clear pending tasks (legacy compatibility)
     ctx.task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
 
+    if isinstance(response, SkipDirectBroadcastResult):
+        response_text_notify = json.dumps(response.messages, ensure_ascii=False, default=str)
+    else:
+        response_text_notify = response or ""
+
     notify_async(
         event="inline_message:received",
         project_uuid=ctx.project_uuid,
@@ -349,14 +356,25 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
         contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
         preview=ctx.preview,
         message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
-        response_text=response or "",
+        response_text=response_text_notify,
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
         outgoing_created_at=pendulum.now().to_iso8601_string(),
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
         turn_id=ctx.turn_id,
     )
 
-    # Dispatch response
+    if isinstance(response, SkipDirectBroadcastResult):
+        if ctx.preview:
+            return dispatch_preview(
+                response.messages,
+                message_obj,
+                ctx.broadcast,
+                ctx.user_email,
+                ctx.agents_backend,
+                ctx.flows_user_email,
+            )
+        return True
+
     if ctx.preview:
         return dispatch_preview(
             response,
@@ -366,15 +384,14 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
             ctx.agents_backend,
             ctx.flows_user_email,
         )
-    else:
-        return dispatch(
-            llm_response=response,
-            message=message_obj,
-            direct_message=ctx.broadcast,
-            user_email=ctx.flows_user_email,
-            full_chunks=[],
-            backend=ctx.agents_backend,
-        )
+    return dispatch(
+        llm_response=response,
+        message=message_obj,
+        direct_message=ctx.broadcast,
+        user_email=ctx.flows_user_email,
+        full_chunks=[],
+        backend=ctx.agents_backend,
+    )
 
 
 # =============================================================================
