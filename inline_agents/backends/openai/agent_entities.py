@@ -1,5 +1,3 @@
-import ast
-import json
 from typing import Any, Dict, List
 
 import boto3
@@ -10,7 +8,7 @@ from django.conf import settings
 from openai.types.shared import Reasoning
 
 from inline_agents.backends.openai.entities import Context
-from inline_agents.backends.openai.invoke_result import SkipDirectBroadcastResult
+from inline_agents.backends.openai.invoke_result import parse_skip_direct_from_tool_output
 from nexus.utils import get_datasource_id
 
 
@@ -38,32 +36,10 @@ class AgentModel:
     ) -> ToolsToFinalOutputResult:
         if tool_results:
             for result in tool_results:
-                if isinstance(result.output, SkipDirectBroadcastResult):
-                    return ToolsToFinalOutputResult(
-                        is_final_output=True,
-                        final_output=result.output,
-                    )
-                parsed = self._try_parse_output(result.output)
-                if isinstance(parsed, dict) and parsed.get("is_final_output", False):
-                    message_send = parsed.get("messages", [])
-                    return ToolsToFinalOutputResult(
-                        is_final_output=True,
-                        final_output=SkipDirectBroadcastResult(messages=message_send),
-                    )
+                skip = parse_skip_direct_from_tool_output(result.output)
+                if skip is not None:
+                    return ToolsToFinalOutputResult(is_final_output=True, final_output=skip)
         return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
-
-    def _try_parse_output(self, raw_output) -> object:
-        if isinstance(raw_output, (dict, list)):
-            return raw_output
-        if isinstance(raw_output, str):
-            try:
-                return json.loads(raw_output)
-            except json.JSONDecodeError:
-                try:
-                    return ast.literal_eval(raw_output)
-                except (ValueError, SyntaxError):
-                    pass
-        return raw_output
 
 
 class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
