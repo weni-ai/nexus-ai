@@ -18,6 +18,7 @@ from inline_agents.backends.openai.agent_entities import Supervisor as Superviso
 from inline_agents.backends.openai.entities import Context, HooksState
 from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.hooks import CollaboratorHooks, RunnerHooks, SupervisorHooks
+from inline_agents.backends.openai.invoke_result import SkipDirectBroadcastResult
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
     AgentCredential,
@@ -35,7 +36,7 @@ def make_agent_proxy_tool(agent, tool_name: str, tool_description: str, session_
     from inline_agents.backends.openai.sessions import get_watermark, only_turns, set_watermark
 
     @function_tool
-    async def _proxy(ctx: RunContextWrapper[Context], question: str) -> str:
+    async def _proxy(ctx: RunContextWrapper[Context], question: str) -> Any:
         """
         Args:
             question: Plain-text instruction for the agent in "Agent Name", aligned with
@@ -62,7 +63,10 @@ def make_agent_proxy_tool(agent, tool_name: str, tool_description: str, session_
             context=ctx.context,
             session=agent_session,
         )
-        return result.final_output
+        final_output = result.final_output
+        if isinstance(final_output, SkipDirectBroadcastResult):
+            return {"is_final_output": True, "messages": final_output.messages}
+        return final_output
 
     _proxy.name = tool_name
     _proxy.description = tool_description
