@@ -30,10 +30,6 @@ def _coerce_tool_output_value(raw: Any) -> Any:
 
 
 def parse_skip_direct_from_tool_output(raw: Any) -> Optional[SkipDirectBroadcastResult]:
-    """
-    Única fonte de verdade para: tool devolveu encerramento direto (Lambda / is_final_output).
-    Usado pelo `tool_use_behavior` do colaborador e do supervisor e pelo proxy colaborador→manager.
-    """
     if isinstance(raw, SkipDirectBroadcastResult):
         return raw
     if getattr(raw, "__class__", type(None)).__name__ == "SkipDirectBroadcastResult" and hasattr(raw, "messages"):
@@ -44,14 +40,3 @@ def parse_skip_direct_from_tool_output(raw: Any) -> Optional[SkipDirectBroadcast
         if messages is not None:
             return SkipDirectBroadcastResult(messages=messages)
     return None
-
-
-def collaborator_run_output_for_manager(sub_run_final: Any) -> Any:
-    """
-    Resultado do `Runner.run` do colaborador → payload que o manager trata no mesmo `custom_tool_handler`
-    (`is_final_output` + `messages`), ou o valor original se não for final.
-    """
-    skip = parse_skip_direct_from_tool_output(sub_run_final)
-    if skip is not None:
-        return {"is_final_output": True, "messages": skip.messages}
-    return sub_run_final

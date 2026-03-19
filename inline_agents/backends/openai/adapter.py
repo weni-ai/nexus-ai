@@ -18,7 +18,6 @@ from inline_agents.backends.openai.agent_entities import Supervisor as Superviso
 from inline_agents.backends.openai.entities import Context, HooksState
 from inline_agents.backends.openai.event_extractor import OpenAIEventExtractor
 from inline_agents.backends.openai.hooks import CollaboratorHooks, RunnerHooks, SupervisorHooks
-from inline_agents.backends.openai.invoke_result import collaborator_run_output_for_manager
 from inline_agents.data_lake.event_service import DataLakeEventService
 from nexus.inline_agents.models import (
     AgentCredential,
@@ -63,7 +62,7 @@ def make_agent_proxy_tool(agent, tool_name: str, tool_description: str, session_
             context=ctx.context,
             session=agent_session,
         )
-        return collaborator_run_output_for_manager(result.final_output)
+        return result.final_output
 
     _proxy.name = tool_name
     _proxy.description = tool_description
