@@ -38,6 +38,11 @@ class AgentModel:
     ) -> ToolsToFinalOutputResult:
         if tool_results:
             for result in tool_results:
+                if isinstance(result.output, SkipDirectBroadcastResult):
+                    return ToolsToFinalOutputResult(
+                        is_final_output=True,
+                        final_output=result.output,
+                    )
                 parsed = self._try_parse_output(result.output)
                 if isinstance(parsed, dict) and parsed.get("is_final_output", False):
                     message_send = parsed.get("messages", [])
