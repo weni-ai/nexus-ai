@@ -1,13 +1,33 @@
-from typing import Any, Dict
+import ast
+import json
+import logging
+from typing import Any, Dict, List
 
 import boto3
 from agents import Agent, ModelSettings, RunContextWrapper, function_tool
+from agents.agent import FunctionToolResult, ToolsToFinalOutputResult
 from agents.extensions.models.litellm_model import LitellmModel
 from django.conf import settings
 from openai.types.shared import Reasoning
 
 from inline_agents.backends.openai.entities import Context
 from nexus.utils import get_datasource_id
+
+logger = logging.getLogger(__name__)
+
+_DEBUG_PREFIX = "[is_final_output]"
+
+
+def _is_final_debug(msg: str) -> None:
+    logger.debug("%s %s", _DEBUG_PREFIX, msg)
+    print(f"{_DEBUG_PREFIX} {msg}", flush=True)
+
+
+def _trunc_preview(value: Any, max_len: int = 200) -> str:
+    s = repr(value) if not isinstance(value, str) else value
+    if len(s) <= max_len:
+        return s
+    return s[:max_len] + "..."
 
 
 class AgentModel:
@@ -28,6 +48,71 @@ class AgentModel:
 
             return LitellmModel(**kwargs)
         return model
+
+    def custom_tool_handler(
+        self, context: RunContextWrapper[Any], tool_results: List[FunctionToolResult]
+    ) -> ToolsToFinalOutputResult:
+        agent_label = type(self).__name__
+        n = len(tool_results) if tool_results else 0
+        _is_final_debug(f"A handler_enter agent={agent_label} tool_results_count={n}")
+
+        if not tool_results:
+            _is_final_debug("D return is_final_output=False (no tool_results)")
+            return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
+
+        hooks_state = getattr(context.context, "hooks_state", None)
+
+        for result in tool_results:
+            raw_out = result.output
+            tool_name = getattr(getattr(result, "tool", None), "name", "?")
+            _is_final_debug(
+                f"A tool={tool_name} raw_output_type={type(raw_out).__name__} raw_preview={_trunc_preview(raw_out)}"
+            )
+
+            parsed = self._try_parse_output(raw_out)
+            if isinstance(parsed, dict):
+                keys_preview = list(parsed.keys())
+                has_msgs = "messages" in parsed
+                io_flag = bool(parsed.get("is_final_output"))
+                _is_final_debug(f"B parsed=dict keys={keys_preview} is_final_output={io_flag} has_messages={has_msgs}")
+            else:
+                _is_final_debug(f"B parsed=non-dict type={type(parsed).__name__} preview={_trunc_preview(parsed)}")
+
+            if isinstance(parsed, dict) and parsed.get("is_final_output", False):
+                messages = parsed.get("messages") or []
+                # Only the top-level manager run should set this; nested collaborator runs share
+                # hooks_state and would otherwise skip dispatch while the manager may still respond.
+                if hooks_state is not None and agent_label == "Supervisor":
+                    hooks_state.skip_outgoing_dispatch = True
+                _is_final_debug(
+                    f"C is_final_output=True tool={tool_name} agent={agent_label} messages_len={len(messages)} "
+                    f"skip_outgoing_dispatch_set={hooks_state is not None and agent_label == 'Supervisor'}"
+                )
+                payload = {"is_final_output": True, "messages": messages}
+                final_str = json.dumps(payload, ensure_ascii=False)
+                _is_final_debug(
+                    f"D return ToolsToFinalOutputResult(is_final_output=True) final_preview={_trunc_preview(final_str)}"
+                )
+                return ToolsToFinalOutputResult(is_final_output=True, final_output=final_str)
+
+        _is_final_debug("D return is_final_output=False (no matching tool)")
+        return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
+
+    @staticmethod
+    def _try_parse_output(raw_output: Any) -> Any:
+        if isinstance(raw_output, dict):
+            return raw_output
+        if isinstance(raw_output, list):
+            return raw_output
+        if isinstance(raw_output, str):
+            try:
+                return json.loads(raw_output)
+            except json.JSONDecodeError:
+                try:
+                    return ast.literal_eval(raw_output)
+                except (ValueError, SyntaxError):
+                    pass
+        return raw_output
 
 
 class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
@@ -59,6 +144,7 @@ class Collaborator(Agent[Context], AgentModel):  # type: ignore[misc]
             model=model,
             hooks=hooks,
             model_settings=ModelSettings(**model_settings_kw),
+            tool_use_behavior=self.custom_tool_handler,
         )
 
 
@@ -108,6 +194,7 @@ class Supervisor(Agent[Context], AgentModel):  # type: ignore[misc]
             tools=tools,
             hooks=hooks,
             model_settings=ModelSettings(**model_settings_kwargs),
+            tool_use_behavior=self.custom_tool_handler,
         )
 
     @function_tool

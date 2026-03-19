@@ -18,7 +18,7 @@ import logging
 import os
 import uuid as uuid_lib
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import pendulum
 import sentry_sdk
@@ -32,11 +32,13 @@ from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.actions_client import get_action_clients
+from router.tasks.exceptions import EmptyFinalResponseException
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.invoke import (
     ThrottlingException,
     UnsafeMessageException,
     _invoke_backend,
+    _invoke_is_final_debug,
     _preprocess_message_input,
     dispatch_preview,
 )
@@ -250,12 +252,12 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
     return result
 
 
-def _run_generation(ctx: WorkflowContext) -> str:
+def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
     """
     Execute the generation phase.
 
     This is currently inline but will be replaced by generation_task.
-    Returns the LLM response string.
+    Returns (response_text, skip_dispatch).
     """
     ctx.task_manager.update_workflow_status(
         project_uuid=ctx.project_uuid,
@@ -302,7 +304,7 @@ def _run_generation(ctx: WorkflowContext) -> str:
 
     backend = BackendsRegistry.get_backend(ctx.agents_backend)
 
-    response = _invoke_backend(
+    response, skip_dispatch = _invoke_backend(
         backend=backend,
         cached_data=ctx.cached_data,
         message_obj=message_obj,
@@ -318,10 +320,10 @@ def _run_generation(ctx: WorkflowContext) -> str:
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
     )
 
-    return response
+    return response, skip_dispatch
 
 
-def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
+def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: bool = False) -> Any:
     """
     Execute the post-generation phase.
 
@@ -358,6 +360,7 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
 
     # Dispatch response
     if ctx.preview:
+        _invoke_is_final_debug("H workflow post_generation branch=dispatch_preview")
         return dispatch_preview(
             response,
             message_obj,
@@ -366,15 +369,18 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
             ctx.agents_backend,
             ctx.flows_user_email,
         )
-    else:
-        return dispatch(
-            llm_response=response,
-            message=message_obj,
-            direct_message=ctx.broadcast,
-            user_email=ctx.flows_user_email,
-            full_chunks=[],
-            backend=ctx.agents_backend,
-        )
+    if skip_dispatch:
+        _invoke_is_final_debug("H workflow post_generation branch=skip_dispatch (no dispatch)")
+        return True
+    _invoke_is_final_debug("H workflow post_generation branch=dispatch")
+    return dispatch(
+        llm_response=response,
+        message=message_obj,
+        direct_message=ctx.broadcast,
+        user_email=ctx.flows_user_email,
+        full_chunks=[],
+        backend=ctx.agents_backend,
+    )
 
 
 # =============================================================================
@@ -476,10 +482,13 @@ def inline_agent_workflow(
         _run_pre_generation(ctx)
 
         # Phase 2: Generation (will be generation_task.apply() later)
-        response = _run_generation(ctx)
+        response, skip_dispatch = _run_generation(ctx)
+
+        if (response is None or response == "") and not skip_dispatch:
+            raise EmptyFinalResponseException("Final response is empty")
 
         # Phase 3: Post-Generation (will be post_generation_task.apply() later)
-        result = _run_post_generation(ctx, response)
+        result = _run_post_generation(ctx, response, skip_dispatch)
 
         # Finalize workflow
         _finalize_workflow(ctx)
