@@ -44,7 +44,7 @@ from router.tasks.invoke import (
 )
 from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
 from router.tasks.redis_task_manager import RedisTaskManager
-from router.tasks.sqs_message_events import build_message_received_event
+from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
 
 logger = logging.getLogger(__name__)
 
@@ -351,7 +351,7 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
         contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
         preview=ctx.preview,
         message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
-        response_text=response or "",
+        response_text=sqs_response_text_from_agent_output(response or "", skip_dispatch=skip_dispatch),
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
         outgoing_created_at=pendulum.now().to_iso8601_string(),
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,

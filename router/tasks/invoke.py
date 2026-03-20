@@ -25,7 +25,7 @@ from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.redis_task_manager import RedisTaskManager
-from router.tasks.sqs_message_events import build_message_received_event
+from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
 
 from .actions_client import get_action_clients
 
@@ -552,7 +552,7 @@ def start_inline_agents(
             contact_name=message_obj.contact_name or "",
             preview=preview,
             message_text=message.get("text"),
-            response_text=response or "",
+            response_text=sqs_response_text_from_agent_output(response or "", skip_dispatch=skip_dispatch),
             incoming_created_at=incoming_created_at,
             outgoing_created_at=pendulum.now().to_iso8601_string(),
             message_conversation_log_uuid=message_conversation_log_uuid,
