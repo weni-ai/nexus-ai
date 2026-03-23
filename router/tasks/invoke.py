@@ -25,7 +25,10 @@ from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.redis_task_manager import RedisTaskManager
-from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
+from router.tasks.sqs_message_events import (
+    build_message_received_event,
+    merge_sqs_outgoing_text,
+)
 
 from .actions_client import get_action_clients
 
@@ -37,22 +40,23 @@ def _invoke_is_final_debug(msg: str) -> None:
     print(f"[is_final_output] {msg}", flush=True)
 
 
-def _normalize_invoke_agents_return(raw) -> Tuple[str, bool]:
+def _normalize_invoke_agents_return(raw) -> Tuple[str, bool, str]:
     if isinstance(raw, InvokeAgentsResult):
-        text, skip = raw.text, raw.skip_dispatch
+        text, skip, tool_txt = raw.text, raw.skip_dispatch, raw.sqs_tool_messages_text
         preview = (text[:200] + "...") if len(text) > 200 else text
         _invoke_is_final_debug(
-            f"G normalize_invoke type=InvokeAgentsResult skip_dispatch={skip} text_preview={preview!r}"
+            f"G normalize_invoke type=InvokeAgentsResult skip_dispatch={skip} "
+            f"sqs_tool_messages_len={len(tool_txt or '')} text_preview={preview!r}"
         )
-        return text, skip
+        return text, skip, tool_txt
     if raw is None:
         _invoke_is_final_debug("G normalize_invoke type=None -> empty str, skip_dispatch=False")
-        return "", False
+        return "", False, ""
     if isinstance(raw, str):
         _invoke_is_final_debug("G normalize_invoke type=str legacy skip_dispatch=False")
-        return raw, False
+        return raw, False, ""
     _invoke_is_final_debug(f"G normalize_invoke type={type(raw).__name__} coerced str skip_dispatch=False")
-    return str(raw), False
+    return str(raw), False, ""
 
 
 def _apm_set_context(**kwargs):
@@ -344,15 +348,15 @@ def _invoke_backend(
     stream_support: bool = False,
     supervisor_agent_uuid: Optional[str] = None,
     message_conversation_log_uuid: Optional[str] = None,
-) -> Tuple[str, bool]:
+) -> Tuple[str, bool, str]:
     """
     Invoke backend with cached data to avoid database queries.
 
     This helper function simplifies the backend invocation by grouping
     all cached data and parameters into a cleaner interface.
 
-    Returns (response_text, skip_dispatch). OpenAIBackend yields InvokeAgentsResult internally;
-    legacy backends may still return a plain str (skip_dispatch=False).
+    Returns (response_text, skip_dispatch, sqs_tool_messages_text). OpenAIBackend yields
+    InvokeAgentsResult internally; legacy backends may still return a plain str (extras empty).
     """
     invoke_kwargs = cached_data.get_invoke_kwargs(team=cached_data.team)
 
@@ -523,7 +527,7 @@ def start_inline_agents(
                 sentry_sdk.capture_exception(exc)
 
         backend = BackendsRegistry.get_backend(agents_backend)
-        response, skip_dispatch = _invoke_backend(
+        response, skip_dispatch, sqs_tool_messages = _invoke_backend(
             backend=backend,
             cached_data=cached_data,
             message_obj=message_obj,
@@ -552,7 +556,11 @@ def start_inline_agents(
             contact_name=message_obj.contact_name or "",
             preview=preview,
             message_text=message.get("text"),
-            response_text=sqs_response_text_from_agent_output(response or "", skip_dispatch=skip_dispatch),
+            response_text=merge_sqs_outgoing_text(
+                response or "",
+                skip_dispatch=skip_dispatch,
+                tool_messages_text=sqs_tool_messages,
+            ),
             incoming_created_at=incoming_created_at,
             outgoing_created_at=pendulum.now().to_iso8601_string(),
             message_conversation_log_uuid=message_conversation_log_uuid,

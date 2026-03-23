@@ -30,6 +30,33 @@ def _trunc_preview(value: Any, max_len: int = 200) -> str:
     return s[:max_len] + "..."
 
 
+def _texts_from_messages_list(messages: Any) -> list[str]:
+    if not isinstance(messages, list):
+        return []
+    parts: list[str] = []
+    for item in messages:
+        if isinstance(item, dict):
+            t = str(item.get("text", "")).strip()
+            if t:
+                parts.append(t)
+    return parts
+
+
+def _append_tool_messages_to_hooks_state(hooks_state: Any, messages: Any, tool_name: str) -> None:
+    if hooks_state is None:
+        return
+    texts = _texts_from_messages_list(messages)
+    if not texts:
+        return
+    if not hasattr(hooks_state, "tool_messages_for_sqs"):
+        return
+    hooks_state.tool_messages_for_sqs.extend(texts)
+    _is_final_debug(
+        f"I non_final_tool_messages tool={tool_name} appended_count={len(texts)} "
+        f"total_accumulated={len(hooks_state.tool_messages_for_sqs)}"
+    )
+
+
 class AgentModel:
     def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
         if "litellm" in model:
@@ -94,6 +121,9 @@ class AgentModel:
                     f"D return ToolsToFinalOutputResult(is_final_output=True) final_preview={_trunc_preview(final_str)}"
                 )
                 return ToolsToFinalOutputResult(is_final_output=True, final_output=final_str)
+
+            if isinstance(parsed, dict) and not parsed.get("is_final_output") and "messages" in parsed:
+                _append_tool_messages_to_hooks_state(hooks_state, parsed.get("messages"), tool_name=tool_name)
 
         _is_final_debug("D return is_final_output=False (no matching tool)")
         return ToolsToFinalOutputResult(is_final_output=False, final_output=None)

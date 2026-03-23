@@ -457,7 +457,8 @@ class OpenAIBackend(InlineAgentsBackend):
         if grpc_client:
             grpc_client.close()
 
-        return InvokeAgentsResult(text=text, skip_dispatch=skip_dispatch)
+        tool_msgs = "\n".join(getattr(hooks_state, "tool_messages_for_sqs", []) or [])
+        return InvokeAgentsResult(text=text, skip_dispatch=skip_dispatch, sqs_tool_messages_text=tool_msgs)
 
     async def _run_formatter_agent_async(
         self,

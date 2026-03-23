@@ -44,7 +44,7 @@ from router.tasks.invoke import (
 )
 from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
 from router.tasks.redis_task_manager import RedisTaskManager
-from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
+from router.tasks.sqs_message_events import build_message_received_event, merge_sqs_outgoing_text
 
 logger = logging.getLogger(__name__)
 
@@ -252,12 +252,12 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
     return result
 
 
-def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
+def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool, str]:
     """
     Execute the generation phase.
 
     This is currently inline but will be replaced by generation_task.
-    Returns (response_text, skip_dispatch).
+    Returns (response_text, skip_dispatch, sqs_tool_messages_text).
     """
     ctx.task_manager.update_workflow_status(
         project_uuid=ctx.project_uuid,
@@ -304,7 +304,7 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
 
     backend = BackendsRegistry.get_backend(ctx.agents_backend)
 
-    response, skip_dispatch = _invoke_backend(
+    response, skip_dispatch, sqs_tool_messages = _invoke_backend(
         backend=backend,
         cached_data=ctx.cached_data,
         message_obj=message_obj,
@@ -320,10 +320,15 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
     )
 
-    return response, skip_dispatch
+    return response, skip_dispatch, sqs_tool_messages
 
 
-def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: bool = False) -> Any:
+def _run_post_generation(
+    ctx: WorkflowContext,
+    response: str,
+    skip_dispatch: bool = False,
+    sqs_tool_messages: str = "",
+) -> Any:
     """
     Execute the post-generation phase.
 
@@ -351,7 +356,11 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
         contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
         preview=ctx.preview,
         message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
-        response_text=sqs_response_text_from_agent_output(response or "", skip_dispatch=skip_dispatch),
+        response_text=merge_sqs_outgoing_text(
+            response or "",
+            skip_dispatch=skip_dispatch,
+            tool_messages_text=sqs_tool_messages,
+        ),
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
         outgoing_created_at=pendulum.now().to_iso8601_string(),
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
@@ -482,13 +491,13 @@ def inline_agent_workflow(
         _run_pre_generation(ctx)
 
         # Phase 2: Generation (will be generation_task.apply() later)
-        response, skip_dispatch = _run_generation(ctx)
+        response, skip_dispatch, sqs_tool_messages = _run_generation(ctx)
 
         if (response is None or response == "") and not skip_dispatch:
             raise EmptyFinalResponseException("Final response is empty")
 
         # Phase 3: Post-Generation (will be post_generation_task.apply() later)
-        result = _run_post_generation(ctx, response, skip_dispatch)
+        result = _run_post_generation(ctx, response, skip_dispatch, sqs_tool_messages)
 
         # Finalize workflow
         _finalize_workflow(ctx)

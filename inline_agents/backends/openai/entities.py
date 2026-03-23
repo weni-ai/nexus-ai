@@ -22,6 +22,8 @@ class HooksState:
         # Accumulated usage for the whole run (manager + collaborators) when updating manager span
         self.cumulative_usage = {"input": 0, "output": 0, "cache_read_input_tokens": 0}
         self.skip_outgoing_dispatch: bool = False
+        # Non-final tool outputs with messages[] — appended for message.sent (SQS) alongside final text
+        self.tool_messages_for_sqs: list[str] = []
 
         for agent in self.agents:
             self.agents_names.append(agent.get("agentName"))
