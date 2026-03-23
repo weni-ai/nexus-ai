@@ -348,6 +348,12 @@ def _run_post_generation(
     # Clear pending tasks (legacy compatibility)
     ctx.task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
 
+    outgoing_merged = merge_sqs_outgoing_text(
+        response or "",
+        skip_dispatch=skip_dispatch,
+        tool_messages_text=sqs_tool_messages,
+    )
+
     notify_async(
         event="inline_message:received",
         project_uuid=ctx.project_uuid,
@@ -356,11 +362,7 @@ def _run_post_generation(
         contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
         preview=ctx.preview,
         message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
-        response_text=merge_sqs_outgoing_text(
-            response or "",
-            skip_dispatch=skip_dispatch,
-            tool_messages_text=sqs_tool_messages,
-        ),
+        response_text=outgoing_merged,
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
         outgoing_created_at=pendulum.now().to_iso8601_string(),
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
@@ -371,7 +373,7 @@ def _run_post_generation(
     if ctx.preview:
         _invoke_is_final_debug("H workflow post_generation branch=dispatch_preview")
         return dispatch_preview(
-            response,
+            outgoing_merged,
             message_obj,
             ctx.broadcast,
             ctx.user_email,
@@ -383,7 +385,7 @@ def _run_post_generation(
         return True
     _invoke_is_final_debug("H workflow post_generation branch=dispatch")
     return dispatch(
-        llm_response=response,
+        llm_response=outgoing_merged,
         message=message_obj,
         direct_message=ctx.broadcast,
         user_email=ctx.flows_user_email,
@@ -493,7 +495,13 @@ def inline_agent_workflow(
         # Phase 2: Generation (will be generation_task.apply() later)
         response, skip_dispatch, sqs_tool_messages = _run_generation(ctx)
 
-        if (response is None or response == "") and not skip_dispatch:
+        if not skip_dispatch and not (
+            merge_sqs_outgoing_text(
+                response or "",
+                skip_dispatch=skip_dispatch,
+                tool_messages_text=sqs_tool_messages,
+            ).strip()
+        ):
             raise EmptyFinalResponseException("Final response is empty")
 
         # Phase 3: Post-Generation (will be post_generation_task.apply() later)
