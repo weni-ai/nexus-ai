@@ -543,7 +543,13 @@ def start_inline_agents(
             message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
-        if (response is None or response == "") and not skip_dispatch:
+        outgoing_merged = merge_sqs_outgoing_text(
+            response or "",
+            skip_dispatch=skip_dispatch,
+            tool_messages_text=sqs_tool_messages,
+        )
+
+        if not skip_dispatch and not (outgoing_merged or "").strip():
             raise EmptyFinalResponseException("Final response is empty")
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
@@ -556,11 +562,7 @@ def start_inline_agents(
             contact_name=message_obj.contact_name or "",
             preview=preview,
             message_text=message.get("text"),
-            response_text=merge_sqs_outgoing_text(
-                response or "",
-                skip_dispatch=skip_dispatch,
-                tool_messages_text=sqs_tool_messages,
-            ),
+            response_text=outgoing_merged,
             incoming_created_at=incoming_created_at,
             outgoing_created_at=pendulum.now().to_iso8601_string(),
             message_conversation_log_uuid=message_conversation_log_uuid,
@@ -569,13 +571,15 @@ def start_inline_agents(
 
         if preview:
             _invoke_is_final_debug("H start_inline_agents branch=dispatch_preview")
-            return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)
+            return dispatch_preview(
+                outgoing_merged, message_obj, broadcast, user_email, agents_backend, flows_user_email
+            )
         if skip_dispatch:
             _invoke_is_final_debug("H start_inline_agents branch=skip_dispatch (no dispatch)")
             return True
         _invoke_is_final_debug("H start_inline_agents branch=dispatch")
         return dispatch(
-            llm_response=response,
+            llm_response=outgoing_merged,
             message=message_obj,
             direct_message=broadcast,
             user_email=flows_user_email,
