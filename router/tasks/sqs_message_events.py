@@ -45,6 +45,26 @@ def sqs_response_text_from_agent_output(response: str, *, skip_dispatch: bool) -
     return "\n".join(parts)
 
 
+def merge_sqs_outgoing_text(
+    response: str,
+    *,
+    skip_dispatch: bool,
+    tool_messages_text: str = "",
+) -> str:
+    """
+    Full outgoing text for message.sent: optional tool-level messages (non-final_output tools)
+    plus the normal base from final agent response (including skip_dispatch JSON extraction).
+    Tool lines first (chronological), then base, when both are non-empty.
+    """
+    base = sqs_response_text_from_agent_output(response, skip_dispatch=skip_dispatch)
+    extra = (tool_messages_text or "").strip()
+    if not extra:
+        return base
+    if not (base or "").strip():
+        return extra
+    return f"{extra}\n\n{base}"
+
+
 @dataclass(frozen=True)
 class MessagePayload:
     id: str

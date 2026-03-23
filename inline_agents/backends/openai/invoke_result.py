@@ -6,3 +6,4 @@ class InvokeAgentsResult(NamedTuple):
 
     text: str
     skip_dispatch: bool
+    sqs_tool_messages_text: str = ""
