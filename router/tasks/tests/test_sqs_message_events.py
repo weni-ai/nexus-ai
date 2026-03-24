@@ -6,7 +6,7 @@ from router.tasks.sqs_message_events import sqs_response_text_from_agent_output
 
 class TestSqsResponseTextFromAgentOutput(unittest.TestCase):
     def test_skip_dispatch_false_returns_unchanged(self):
-        raw = '{"is_final_output": true, "messages": [{"text": "a"}]}'
+        raw = '{"is_final_output": true, "messages_sent": [{"text": "a"}]}'
         self.assertEqual(
             sqs_response_text_from_agent_output(raw, skip_dispatch=False),
             raw,
@@ -16,7 +16,7 @@ class TestSqsResponseTextFromAgentOutput(unittest.TestCase):
         raw = json.dumps(
             {
                 "is_final_output": True,
-                "messages": [{"text": " first "}, {"text": "second"}],
+                "messages_sent": [{"text": " first "}, {"text": "second"}],
             },
             ensure_ascii=False,
         )
@@ -36,14 +36,14 @@ class TestSqsResponseTextFromAgentOutput(unittest.TestCase):
         self.assertEqual(sqs_response_text_from_agent_output("", skip_dispatch=True), "")
 
     def test_skip_dispatch_true_messages_empty_list_falls_back_to_response(self):
-        raw = '{"is_final_output": true, "messages": []}'
+        raw = '{"is_final_output": true, "messages_sent": []}'
         self.assertEqual(
             sqs_response_text_from_agent_output(raw, skip_dispatch=True),
             raw,
         )
 
     def test_skip_dispatch_true_all_empty_text_parts_falls_back(self):
-        raw = '{"is_final_output": true, "messages": [{"text": ""}, {"text": "   "}]}'
+        raw = '{"is_final_output": true, "messages_sent": [{"text": ""}, {"text": "   "}]}'
         self.assertEqual(
             sqs_response_text_from_agent_output(raw, skip_dispatch=True),
             raw,
