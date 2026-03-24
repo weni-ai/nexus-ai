@@ -30,6 +30,28 @@ def _trunc_preview(value: Any, max_len: int = 200) -> str:
     return s[:max_len] + "..."
 
 
+def _final_output_from_tool_dict(parsed: dict) -> tuple[bool, list]:
+    """
+    Flat or Lambda-style payloads: is_final_output may live under result while
+    messages_sent stays at the top level.
+    """
+    messages_sent: list = []
+    top_msgs = parsed.get("messages_sent")
+    if isinstance(top_msgs, list):
+        messages_sent = top_msgs
+    is_final = bool(parsed.get("is_final_output"))
+
+    inner = parsed.get("result")
+    if isinstance(inner, dict):
+        if not is_final:
+            is_final = bool(inner.get("is_final_output"))
+        if not messages_sent:
+            inner_msgs = inner.get("messages_sent")
+            if isinstance(inner_msgs, list):
+                messages_sent = inner_msgs
+    return is_final, messages_sent
+
+
 class AgentModel:
     def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
         if "litellm" in model:
@@ -70,18 +92,18 @@ class AgentModel:
             )
 
             parsed = self._try_parse_output(raw_out)
+            is_final, messages_sent = False, []
             if isinstance(parsed, dict):
+                is_final, messages_sent = _final_output_from_tool_dict(parsed)
                 keys_preview = list(parsed.keys())
-                has_msgs = "messages_sent" in parsed
-                io_flag = bool(parsed.get("is_final_output"))
                 _is_final_debug(
-                    f"B parsed=dict keys={keys_preview} is_final_output={io_flag} has_messages_sent={has_msgs}"
+                    f"B parsed=dict keys={keys_preview} is_final_output={is_final} has_messages_sent={bool(messages_sent)}"
                 )
             else:
                 _is_final_debug(f"B parsed=non-dict type={type(parsed).__name__} preview={_trunc_preview(parsed)}")
 
-            if isinstance(parsed, dict) and parsed.get("is_final_output", False):
-                messages_sent = parsed.get("messages_sent") or []
+            if is_final:
+                messages_sent = messages_sent or []
                 # Only the top-level manager run should set this; nested collaborator runs share
                 # hooks_state and would otherwise skip dispatch while the manager may still respond.
                 if hooks_state is not None and agent_label == "Supervisor":
