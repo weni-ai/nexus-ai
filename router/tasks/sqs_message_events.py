@@ -19,8 +19,8 @@ def sqs_response_text_from_agent_output(response: str, *, skip_dispatch: bool) -
     """
     Text used in message.sent (via notify_async → observers) for SQS.
 
-    When skip_dispatch is True, agent output is often JSON with is_final_output and messages;
-    we join messages[].text with newlines for the conversation microservice. Otherwise
+    When skip_dispatch is True, agent output is often JSON with is_final_output and messages_sent;
+    we join messages_sent[].text with newlines for the conversation microservice. Otherwise
     return response unchanged.
     """
     if not skip_dispatch or not (response or "").strip():
@@ -31,11 +31,11 @@ def sqs_response_text_from_agent_output(response: str, *, skip_dispatch: bool) -
         return response
     if not isinstance(parsed, dict):
         return response
-    messages = parsed.get("messages")
-    if not isinstance(messages, list):
+    messages_sent = parsed.get("messages_sent")
+    if not isinstance(messages_sent, list):
         return response
     parts: list[str] = []
-    for item in messages:
+    for item in messages_sent:
         if isinstance(item, dict):
             t = str(item.get("text", "")).strip()
             if t:
