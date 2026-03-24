@@ -72,23 +72,26 @@ class AgentModel:
             parsed = self._try_parse_output(raw_out)
             if isinstance(parsed, dict):
                 keys_preview = list(parsed.keys())
-                has_msgs = "messages" in parsed
+                has_msgs = "messages_sent" in parsed
                 io_flag = bool(parsed.get("is_final_output"))
-                _is_final_debug(f"B parsed=dict keys={keys_preview} is_final_output={io_flag} has_messages={has_msgs}")
+                _is_final_debug(
+                    f"B parsed=dict keys={keys_preview} is_final_output={io_flag} has_messages_sent={has_msgs}"
+                )
             else:
                 _is_final_debug(f"B parsed=non-dict type={type(parsed).__name__} preview={_trunc_preview(parsed)}")
 
             if isinstance(parsed, dict) and parsed.get("is_final_output", False):
-                messages = parsed.get("messages") or []
+                messages_sent = parsed.get("messages_sent") or []
                 # Only the top-level manager run should set this; nested collaborator runs share
                 # hooks_state and would otherwise skip dispatch while the manager may still respond.
                 if hooks_state is not None and agent_label == "Supervisor":
                     hooks_state.skip_outgoing_dispatch = True
                 _is_final_debug(
-                    f"C is_final_output=True tool={tool_name} agent={agent_label} messages_len={len(messages)} "
+                    f"C is_final_output=True tool={tool_name} agent={agent_label}"
+                    f"messages_sent_len={len(messages_sent)}"
                     f"skip_outgoing_dispatch_set={hooks_state is not None and agent_label == 'Supervisor'}"
                 )
-                payload = {"is_final_output": True, "messages": messages}
+                payload = {"is_final_output": True, "messages_sent": messages_sent}
                 final_str = json.dumps(payload, ensure_ascii=False)
                 _is_final_debug(
                     f"D return ToolsToFinalOutputResult(is_final_output=True) final_preview={_trunc_preview(final_str)}"
