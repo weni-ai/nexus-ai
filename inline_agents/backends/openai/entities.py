@@ -21,6 +21,7 @@ class HooksState:
         self.current_langfuse_gen_ctx = None  # context manager from start_as_current_observation
         # Accumulated usage for the whole run (manager + collaborators) when updating manager span
         self.cumulative_usage = {"input": 0, "output": 0, "cache_read_input_tokens": 0}
+        self.skip_outgoing_dispatch: bool = False
 
         for agent in self.agents:
             self.agents_names.append(agent.get("agentName"))

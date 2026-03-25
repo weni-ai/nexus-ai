@@ -1,6 +1,7 @@
 # ruff: noqa: E501
 import asyncio
 import hashlib
+import json
 import logging
 import re
 from datetime import datetime
@@ -29,6 +30,7 @@ from inline_agents.backends.openai.hooks import (
     RunnerHooks,
     SupervisorHooks,
 )
+from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from inline_agents.backends.openai.sessions import (
     RedisSession,
     make_session_factory,
@@ -46,6 +48,10 @@ from router.utils.redis_clients import get_redis_read_client, get_redis_write_cl
 logger = logging.getLogger(__name__)
 
 
+def _is_final_out_debug(msg: str) -> None:
+    logger.debug("[is_final_output] %s", msg)
+
+
 def _sanitize_langfuse_id(value: str, max_length: int = 64) -> str:
     """Sanitize string for Langfuse id/trace_id: only letters, numbers, underscores, dashes."""
     sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", value)
@@ -54,6 +60,17 @@ def _sanitize_langfuse_id(value: str, max_length: int = 64) -> str:
 
 class OpenAIBackend(InlineAgentsBackend):
     team_adapter = OpenAITeamAdapter
+
+    @staticmethod
+    def _coerce_final_response_text(final_response: Any) -> str:
+        if final_response is None:
+            return ""
+        if isinstance(final_response, str):
+            return final_response
+        try:
+            return json.dumps(final_response, ensure_ascii=False)
+        except TypeError:
+            return str(final_response)
 
     def get_supervisor(
         self,
@@ -421,11 +438,15 @@ class OpenAIBackend(InlineAgentsBackend):
             )
         )
 
+        text = self._coerce_final_response_text(result)
+        skip_dispatch = getattr(hooks_state, "skip_outgoing_dispatch", False)
+        preview_txt = text[:200] + "..." if len(text) > 200 else text
+        _is_final_out_debug(f"F invoke_agents_return skip_dispatch={skip_dispatch} text_preview={preview_txt!r}")
+
         # Send completed message through the persistent stream and close
         if grpc_session and grpc_session.is_active:
             try:
-                content = result if isinstance(result, str) else str(result)
-                grpc_session.send_completed(content)
+                grpc_session.send_completed(text)
             except Exception as e:
                 logger.error(f"gRPC completion failed: {e}", exc_info=True)
             finally:
@@ -435,7 +456,7 @@ class OpenAIBackend(InlineAgentsBackend):
         if grpc_client:
             grpc_client.close()
 
-        return result
+        return InvokeAgentsResult(text=text, skip_dispatch=skip_dispatch)
 
     async def _run_formatter_agent_async(
         self,
@@ -734,7 +755,12 @@ class OpenAIBackend(InlineAgentsBackend):
                         metadata=metadata,
                     )
 
-                    if use_components and final_response:
+                    skip_fmt = getattr(hooks_state, "skip_outgoing_dispatch", False)
+                    _is_final_out_debug(
+                        f"E _invoke_agents_async(error_path) skip_outgoing_dispatch={skip_fmt} "
+                        f"use_components={use_components} has_final_response={bool(final_response)}"
+                    )
+                    if use_components and final_response and not skip_fmt:
                         try:
                             formatted_response = await self._run_formatter_agent_async(
                                 final_response,
@@ -749,12 +775,18 @@ class OpenAIBackend(InlineAgentsBackend):
                             logger.error(
                                 f"[OpenAIBackend] Error in formatter agent after streaming error: {formatter_error} - project_uuid: {project_uuid}, contact_urn: {contact_urn}"
                             )
+                    elif use_components and skip_fmt:
+                        _is_final_out_debug("E skip_formatter=True (tool is_final_output / skip_outgoing_dispatch)")
 
                     return final_response
 
                 final_response = self._get_final_response(result)
 
-                if use_components:
+                skip_fmt = getattr(hooks_state, "skip_outgoing_dispatch", False)
+                _is_final_out_debug(
+                    f"E _invoke_agents_async(success_path) skip_outgoing_dispatch={skip_fmt} use_components={use_components}"
+                )
+                if use_components and not skip_fmt:
                     formatted_response = await self._run_formatter_agent_async(
                         final_response,
                         session,
@@ -764,6 +796,8 @@ class OpenAIBackend(InlineAgentsBackend):
                         formatter_agent_configurations,
                     )
                     final_response = formatted_response
+                elif use_components and skip_fmt:
+                    _is_final_out_debug("E skip_formatter=True (tool is_final_output / skip_outgoing_dispatch)")
 
                 usage_dict, request_entries = self._get_usage_metadata_and_request_entries(result)
                 metadata = {

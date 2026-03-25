@@ -13,6 +13,7 @@ import sentry_sdk
 from django.conf import settings
 
 from inline_agents.backends import BackendsRegistry
+from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
@@ -24,11 +25,33 @@ from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.redis_task_manager import RedisTaskManager
-from router.tasks.sqs_message_events import build_message_received_event
+from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
 
 from .actions_client import get_action_clients
 
 logger = logging.getLogger(__name__)
+
+
+def _invoke_is_final_debug(msg: str) -> None:
+    logger.debug("[is_final_output] %s", msg)
+
+
+def _normalize_invoke_agents_return(raw) -> Tuple[str, bool]:
+    if isinstance(raw, InvokeAgentsResult):
+        text, skip = raw.text, raw.skip_dispatch
+        preview = (text[:200] + "...") if len(text) > 200 else text
+        _invoke_is_final_debug(
+            f"G normalize_invoke type=InvokeAgentsResult skip_dispatch={skip} text_preview={preview!r}"
+        )
+        return text, skip
+    if raw is None:
+        _invoke_is_final_debug("G normalize_invoke type=None -> empty str, skip_dispatch=False")
+        return "", False
+    if isinstance(raw, str):
+        _invoke_is_final_debug("G normalize_invoke type=str legacy skip_dispatch=False")
+        return raw, False
+    _invoke_is_final_debug(f"G normalize_invoke type={type(raw).__name__} coerced str skip_dispatch=False")
+    return str(raw), False
 
 
 def _apm_set_context(**kwargs):
@@ -320,12 +343,15 @@ def _invoke_backend(
     stream_support: bool = False,
     supervisor_agent_uuid: Optional[str] = None,
     message_conversation_log_uuid: Optional[str] = None,
-):
+) -> Tuple[str, bool]:
     """
     Invoke backend with cached data to avoid database queries.
 
     This helper function simplifies the backend invocation by grouping
     all cached data and parameters into a cleaner interface.
+
+    Returns (response_text, skip_dispatch). OpenAIBackend yields InvokeAgentsResult internally;
+    legacy backends may still return a plain str (skip_dispatch=False).
     """
     invoke_kwargs = cached_data.get_invoke_kwargs(team=cached_data.team)
 
@@ -354,7 +380,8 @@ def _invoke_backend(
         }
     )
 
-    return backend.invoke_agents(**invoke_kwargs)
+    raw = backend.invoke_agents(**invoke_kwargs)
+    return _normalize_invoke_agents_return(raw)
 
 
 @celery_app.task(
@@ -495,7 +522,7 @@ def start_inline_agents(
                 sentry_sdk.capture_exception(exc)
 
         backend = BackendsRegistry.get_backend(agents_backend)
-        response = _invoke_backend(
+        response, skip_dispatch = _invoke_backend(
             backend=backend,
             cached_data=cached_data,
             message_obj=message_obj,
@@ -511,7 +538,7 @@ def start_inline_agents(
             message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
-        if response is None or response == "":
+        if (response is None or response == "") and not skip_dispatch:
             raise EmptyFinalResponseException("Final response is empty")
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
@@ -524,7 +551,7 @@ def start_inline_agents(
             contact_name=message_obj.contact_name or "",
             preview=preview,
             message_text=message.get("text"),
-            response_text=response or "",
+            response_text=sqs_response_text_from_agent_output(response or "", skip_dispatch=skip_dispatch),
             incoming_created_at=incoming_created_at,
             outgoing_created_at=pendulum.now().to_iso8601_string(),
             message_conversation_log_uuid=message_conversation_log_uuid,
@@ -532,16 +559,20 @@ def start_inline_agents(
         )
 
         if preview:
+            _invoke_is_final_debug("H start_inline_agents branch=dispatch_preview")
             return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)
-        else:
-            return dispatch(
-                llm_response=response,
-                message=message_obj,
-                direct_message=broadcast,
-                user_email=flows_user_email,
-                full_chunks=[],
-                backend=agents_backend,
-            )
+        if skip_dispatch:
+            _invoke_is_final_debug("H start_inline_agents branch=skip_dispatch (no dispatch)")
+            return True
+        _invoke_is_final_debug("H start_inline_agents branch=dispatch")
+        return dispatch(
+            llm_response=response,
+            message=message_obj,
+            direct_message=broadcast,
+            user_email=flows_user_email,
+            full_chunks=[],
+            backend=agents_backend,
+        )
 
     except UnsafeMessageException as e:
         message_obj = message_factory(
