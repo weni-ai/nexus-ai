@@ -107,12 +107,7 @@ class EnableHumanSupportView(APIView):
             return Response({"error": "Invalid UUID format"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            user_email = kwargs.get("user_email")
-
-            if not user_email:
-                user_email = request.user.email
-
-            project = get_project(project_uuid, user_email)
+            project = ProjectsUseCase().get_by_uuid(project_uuid)
 
             return Response(
                 {"human_support": project.human_support, "human_support_prompt": project.human_support_prompt}
