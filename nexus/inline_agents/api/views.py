@@ -1674,68 +1674,33 @@ class AgentManagersView(APIView):
         except ProjectDoesNotExist:
             return Response(data={"error": "Project not found"}, status=404)
 
-        data = {
-            "serverTime": str(pendulum.now()),
-        }
-
-        managers = get_public_managers(limit=2)
-        managers_list = list(managers)
-
-        deprecated_manager_agent_obj = DeprecatedManagerAgent.objects.order_by("id").last()
-
-        if managers_list:
-            if len(managers_list) == 2:
-                new_manager = managers_list[0]
-                legacy_manager = managers_list[1]
-                try:
-                    deprecation_date = pendulum.instance(new_manager.release_date).to_iso8601_string()
-                except (AttributeError, TypeError):
-                    deprecation_date = None
-
-                manager_data = {
-                    "new": {"id": str(new_manager.uuid), "label": new_manager.name},
-                    "legacy": {
-                        "id": str(legacy_manager.uuid),
-                        "label": legacy_manager.name,
-                        "deprecation": deprecation_date,
-                    },
-                }
-            else:
-                new_manager = managers_list[0]
-
-                try:
-                    deprecation_date = pendulum.instance(new_manager.release_date).to_iso8601_string()
-                except (AttributeError, TypeError):
-                    deprecation_date = None
-
-                manager_data = {
-                    "new": {"id": str(new_manager.uuid), "label": new_manager.name},
-                }
-                if deprecated_manager_agent_obj:
-                    manager_data["legacy"] = {
-                        "id": str(deprecated_manager_agent_obj.id),
-                        "label": deprecated_manager_agent_obj.name,
-                        "deprecation": deprecation_date,
-                    }
-
-            data.update(manager_data)
-
+        server_time = str(pendulum.now())
         current_manager: ManagerAgent | None = project.manager_agent
+        data = {"serverTime": server_time}
+
+        if current_manager and not current_manager.public:
+            data.update({"currentManager": str(current_manager.uuid)})
+            return Response(data=data)
+
+        managers = list(get_public_managers(limit=2))
+
+        if managers:
+            new_manager = managers[0]
+            data["new"] = {"id": str(new_manager.uuid), "label": new_manager.name}
+
+            if len(managers) > 1:
+                legacy_manager = managers[1]
+                try:
+                    deprecation_date = pendulum.instance(new_manager.release_date).to_iso8601_string()
+                except (AttributeError, TypeError):
+                    deprecation_date = None
+                data["legacy"] = {
+                    "id": str(legacy_manager.uuid),
+                    "label": legacy_manager.name,
+                    "deprecation": deprecation_date,
+                }
 
         if current_manager:
-            current_manager_id = str(current_manager.uuid)
-            if not current_manager.public:
-                data = {
-                    "serverTime": str(pendulum.now()),
-                    "new": {"id": str(current_manager.uuid), "label": current_manager.name},
-                    "currentManager": current_manager_id,
-                }
-                return Response(data=data)
-        else:
-            current_manager = deprecated_manager_agent_obj
-            current_manager_id = str(current_manager.id) if current_manager else None
-
-        if current_manager_id:
-            data.update({"currentManager": current_manager_id})
+            data["currentManager"] = str(current_manager.uuid)
 
         return Response(data=data)
