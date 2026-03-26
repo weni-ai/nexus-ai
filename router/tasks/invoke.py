@@ -37,7 +37,6 @@ logger = logging.getLogger(__name__)
 
 def _invoke_is_final_debug(msg: str) -> None:
     logger.debug("[is_final_output] %s", msg)
-    print(f"[is_final_output] {msg}", flush=True)
 
 
 def _normalize_invoke_agents_return(raw) -> Tuple[str, bool, str]:

@@ -20,7 +20,6 @@ _DEBUG_PREFIX = "[is_final_output]"
 
 def _is_final_debug(msg: str) -> None:
     logger.debug("%s %s", _DEBUG_PREFIX, msg)
-    print(f"{_DEBUG_PREFIX} {msg}", flush=True)
 
 
 def _trunc_preview(value: Any, max_len: int = 200) -> str:

@@ -50,7 +50,6 @@ logger = logging.getLogger(__name__)
 
 def _is_final_out_debug(msg: str) -> None:
     logger.debug("[is_final_output] %s", msg)
-    print(f"[is_final_output] {msg}", flush=True)
 
 
 def _sanitize_langfuse_id(value: str, max_length: int = 64) -> str:
