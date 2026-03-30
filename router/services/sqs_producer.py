@@ -11,6 +11,15 @@ logger = logging.getLogger(__name__)
 
 # SQS FIFO MessageDeduplicationId: max 128 chars, alphanumeric + hyphen
 SQS_DEDUP_ID_MAX_LENGTH = 128
+# SQS FIFO MessageGroupId max length (same as conversation_ms billing producer)
+SQS_GROUP_ID_MAX_LENGTH = 128
+
+
+def _fifo_message_group_id(channel_uuid: str, contact_urn: str) -> str:
+    raw = f"{channel_uuid}:{contact_urn}"
+    if len(raw) <= SQS_GROUP_ID_MAX_LENGTH:
+        return raw
+    return raw[:SQS_GROUP_ID_MAX_LENGTH]
 
 
 def _normalize_sqs_deduplication_id(value: str) -> str:
@@ -51,7 +60,7 @@ class ConversationEventsSQSProducer:
         correlation_id = _normalize_sqs_deduplication_id(payload.get("correlation_id") or str(uuid.uuid4()))
         event_type = payload.get("event_type", "message.received")
 
-        message_group_id = f"{project_uuid}:{contact_urn}:{channel_uuid}"
+        message_group_id = _fifo_message_group_id(channel_uuid, contact_urn)
         message_attributes = {
             "event_type": {"StringValue": event_type, "DataType": "String"},
             "project_uuid": {"StringValue": project_uuid, "DataType": "String"},
