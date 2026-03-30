@@ -20,6 +20,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
+from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import event_manager, notify_async
 from nexus.intelligences.api.filters import ConversationFilter
@@ -35,7 +36,6 @@ from nexus.intelligences.models import (
 )
 from nexus.orgs import permissions
 from nexus.paginations import CustomCursorPagination, SupervisorPagination
-from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ExternalTokenPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project

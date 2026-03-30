@@ -27,12 +27,12 @@ from django.conf import settings
 from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
+from nexus.projects.channel_ops import channel_matches_default_preview
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from router.entities import message_factory
 from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.actions_client import get_action_clients
 from router.tasks.invocation_context import CachedProjectData
-from nexus.projects.channel_ops import channel_matches_default_preview
 from router.tasks.invoke import (
     ThrottlingException,
     UnsafeMessageException,

@@ -34,7 +34,11 @@ class ChannelWwcConsumer(EDAConsumer):
             if not channel_uuid or not project_uuid or channel_type is None or channel_type == "":
                 logger.warning(
                     "[ChannelWwcConsumer] Missing required fields",
-                    extra={"has_uuid": bool(channel_uuid), "has_project": bool(project_uuid), "channel_type": channel_type},
+                    extra={
+                        "has_uuid": bool(channel_uuid),
+                        "has_project": bool(project_uuid),
+                        "channel_type": channel_type,
+                    },
                 )
                 message.channel.basic_reject(message.delivery_tag, requeue=False)
                 return
