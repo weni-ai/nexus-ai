@@ -86,7 +86,6 @@ class TypingIndicatorObserver(EventObserver):
         contact_urn = kwargs.get("contact_urn")
         msg_external_id = kwargs.get("msg_external_id")
         project_uuid = kwargs.get("project_uuid")
-        preview = kwargs.get("preview", False)
 
         logger.info(f"[TypingIndicatorObserver] Starting for project {project_uuid}")
 
@@ -95,10 +94,6 @@ class TypingIndicatorObserver(EventObserver):
                 "[TypingIndicatorObserver] Missing required parameters",
                 extra={"contact_urn": contact_urn, "project_uuid": project_uuid},
             )
-            return
-
-        if preview:
-            logger.debug("[TypingIndicatorObserver] Skipping typing indicator for preview mode")
             return
 
         try:
@@ -110,7 +105,6 @@ class TypingIndicatorObserver(EventObserver):
                 contact_urn=contact_urn,
                 msg_external_id=msg_external_id or "",
                 project_uuid=project_uuid,
-                preview=False,  # Already checked above
             )
 
             logger.info(f"[TypingIndicatorObserver] Completed for {project_uuid}")

@@ -16,6 +16,7 @@ from inline_agents.backends import BackendsRegistry
 from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
+from nexus.projects.channel_ops import channel_matches_default_preview
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.dispatcher import dispatch
@@ -151,22 +152,30 @@ def complexity_layer(input_text: str) -> str | None:
             return None
 
 
-def dispatch_preview(
-    response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str
+def dispatch_with_optional_builder_websocket(
+    llm_response: str,
+    message_obj,
+    broadcast: Dict,
+    flows_user_email: str,
+    agents_backend: str,
+    is_simulator: bool,
+    user_email: str,
 ) -> str:
+    """Production dispatch; fan out copy to agent-builder WebSocket when this is simulator traffic."""
     response_msg = dispatch(
-        llm_response=response,
+        llm_response=llm_response,
         message=message_obj,
         direct_message=broadcast,
         user_email=flows_user_email,
         full_chunks=[],
         backend=agents_backend,
     )
-    send_preview_message_to_websocket(
-        project_uuid=message_obj.project_uuid,
-        user_email=user_email,
-        message_data={"type": "preview", "content": response_msg},
-    )
+    if is_simulator and user_email:
+        send_preview_message_to_websocket(
+            project_uuid=message_obj.project_uuid,
+            user_email=user_email,
+            message_data={"type": "preview", "content": response_msg},
+        )
     return response_msg
 
 
@@ -282,7 +291,7 @@ def _handle_task_error(
     task_manager: RedisTaskManager,
     message: Dict,
     task_id: str,
-    preview: bool,
+    is_simulator: bool,
     language: str,
     user_email: str,
 ):
@@ -300,14 +309,14 @@ def _handle_task_error(
             "channel_uuid": message.get("channel_uuid"),
             "contact_name": message.get("contact_name"),
             "text": message.get("text", ""),
-            "preview": preview,
+            "is_simulator": is_simulator,
             "language": language,
             "user_email": user_email,
             "task_id": task_id,
             "pending_task_id": task_manager.get_pending_task_id(project_uuid, contact_urn) if task_manager else None,
         },
     )
-    sentry_sdk.set_tag("preview_mode", preview)
+    sentry_sdk.set_tag("is_simulator", is_simulator)
     sentry_sdk.set_tag("project_uuid", project_uuid)
     sentry_sdk.set_tag("task_id", task_id)
     sentry_sdk.set_tag("contact_urn", contact_urn)
@@ -334,7 +343,7 @@ def _invoke_backend(
     cached_data: CachedProjectData,
     message_obj,
     processed_message: Dict,
-    preview: bool,
+    is_simulator: bool,
     language: str,
     user_email: str,
     foundation_model: Optional[str],
@@ -369,7 +378,7 @@ def _invoke_backend(
             "contact_name": message_obj.contact_name,
             "channel_uuid": message_obj.channel_uuid,
             "msg_external_id": processed_message.get("msg_event", {}).get("msg_external_id", ""),
-            "preview": preview,
+            "preview": is_simulator,
             "language": language,
             "user_email": user_email,
             "foundation_model": foundation_model,
@@ -404,8 +413,9 @@ def start_inline_agents(
     task_manager: Optional[RedisTaskManager] = None,
     supervisor_agent_uuid: Optional[str] = None,
 ) -> bool:  # pragma: no cover
-    _apm_set_context(message=message, preview=preview)
     project_uuid = message.get("project_uuid")
+    is_simulator = preview or channel_matches_default_preview(project_uuid or "", message.get("channel_uuid"))
+    _apm_set_context(message=message, preview=is_simulator)
 
     # Feature flag: list of project UUIDs that use new workflow architecture
     # Set WORKFLOW_ARCHITECTURE_PROJECTS=["uuid1", "uuid2"] or ["*"] for all
@@ -419,7 +429,7 @@ def start_inline_agents(
         # Call directly using .run() to avoid Celery's "never call .get() within a task" error
         return inline_agent_workflow.run(
             message,
-            preview=preview,
+            preview=is_simulator,
             language=language,
             user_email=user_email,
             supervisor_agent_uuid=supervisor_agent_uuid,
@@ -434,7 +444,6 @@ def start_inline_agents(
             contact_urn=message.get("contact_urn"),
             msg_external_id=message.get("msg_event", {}).get("msg_external_id", ""),
             project_uuid=project_uuid,
-            preview=preview,
         )
 
         # Pre-Generation: Fetch and cache all project data
@@ -458,7 +467,6 @@ def start_inline_agents(
 
         # Use cached dict value instead of accessing Django object
         broadcast, _ = get_action_clients(
-            preview=preview,
             multi_agents=True,
             project_use_components=project_dict["use_components"],
             project_uuid=project_uuid,
@@ -500,8 +508,7 @@ def start_inline_agents(
         # Invoke backend (incoming saved inside backend via save_inline_message_async)
         incoming_created_at = pendulum.now().to_iso8601_string()
 
-        # Send incoming to SQS when message is received
-        if not preview:
+        if not is_simulator:
             received_event = build_message_received_event(
                 project_uuid=project_uuid,
                 contact_urn=message_obj.contact_urn,
@@ -527,7 +534,7 @@ def start_inline_agents(
             cached_data=cached_data,
             message_obj=message_obj,
             processed_message=processed_message,
-            preview=preview,
+            is_simulator=is_simulator,
             language=language,
             user_email=user_email,
             foundation_model=foundation_model,
@@ -549,7 +556,7 @@ def start_inline_agents(
             contact_urn=message_obj.contact_urn,
             channel_uuid=message_obj.channel_uuid,
             contact_name=message_obj.contact_name or "",
-            preview=preview,
+            preview=is_simulator,
             message_text=message.get("text"),
             response_text=sqs_response_text_from_agent_output(response or "", skip_dispatch=skip_dispatch),
             incoming_created_at=incoming_created_at,
@@ -558,20 +565,18 @@ def start_inline_agents(
             turn_id=turn_id,
         )
 
-        if preview:
-            _invoke_is_final_debug("H start_inline_agents branch=dispatch_preview")
-            return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)
         if skip_dispatch:
             _invoke_is_final_debug("H start_inline_agents branch=skip_dispatch (no dispatch)")
             return True
-        _invoke_is_final_debug("H start_inline_agents branch=dispatch")
-        return dispatch(
-            llm_response=response,
-            message=message_obj,
-            direct_message=broadcast,
-            user_email=flows_user_email,
-            full_chunks=[],
-            backend=agents_backend,
+        _invoke_is_final_debug("H start_inline_agents branch=dispatch_with_optional_builder_websocket")
+        return dispatch_with_optional_builder_websocket(
+            response,
+            message_obj,
+            broadcast,
+            flows_user_email,
+            agents_backend,
+            is_simulator,
+            user_email,
         )
 
     except UnsafeMessageException as e:
@@ -593,7 +598,7 @@ def start_inline_agents(
             contact_urn=message_obj.contact_urn,
             channel_uuid=message_obj.channel_uuid,
             contact_name=message_obj.contact_name or "",
-            preview=preview,
+            preview=is_simulator,
             message_text=message.get("text"),
             response_text=e.message,
             incoming_created_at=incoming_created_at or pendulum.now().to_iso8601_string(),
@@ -601,15 +606,14 @@ def start_inline_agents(
             message_conversation_log_uuid=message_conversation_log_uuid,
             turn_id=turn_id,
         )
-        if preview:
-            return dispatch_preview(e.message, message_obj, broadcast, user_email, agents_backend, flows_user_email)
-        return dispatch(
-            llm_response=e.message,
-            message=message_obj,
-            direct_message=broadcast,
-            user_email=flows_user_email,
-            full_chunks=[],
-            backend=agents_backend,
+        return dispatch_with_optional_builder_websocket(
+            e.message,
+            message_obj,
+            broadcast,
+            flows_user_email,
+            agents_backend,
+            is_simulator,
+            user_email,
         )
 
     except (openai.APIError, EmptyFinalResponseException) as e:
@@ -622,6 +626,6 @@ def start_inline_agents(
                 priority=0,
                 jitter=False,
             ) from e
-        _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
+        _handle_task_error(e, task_manager, message, self.request.id, is_simulator, language, user_email)
     except Exception as e:
-        _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
+        _handle_task_error(e, task_manager, message, self.request.id, is_simulator, language, user_email)

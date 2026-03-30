@@ -50,7 +50,7 @@ class WorkflowContextTestCase(SimpleTestCase):
             project_uuid="proj-123",
             contact_urn="tel:+5511999999999",
             message=message,
-            preview=False,
+            is_simulator=False,
             language="en",
             user_email="user@example.com",
             task_id="task-123",
@@ -60,7 +60,7 @@ class WorkflowContextTestCase(SimpleTestCase):
         self.assertEqual(ctx.workflow_id, "wf-123")
         self.assertEqual(ctx.project_uuid, "proj-123")
         self.assertEqual(ctx.contact_urn, "tel:+5511999999999")
-        self.assertFalse(ctx.preview)
+        self.assertFalse(ctx.is_simulator)
         self.assertEqual(ctx.language, "en")
         self.assertIsNone(ctx.cached_data)
         self.assertIsNone(ctx.agents_backend)
@@ -80,7 +80,7 @@ class CreateWorkflowContextTestCase(SimpleTestCase):
         ctx = _create_workflow_context(
             task_id="task-123",
             message=message,
-            preview=False,
+            is_simulator=False,
             language="pt",
             user_email="test@test.com",
         )
@@ -92,19 +92,19 @@ class CreateWorkflowContextTestCase(SimpleTestCase):
         self.assertEqual(ctx.user_email, "test@test.com")
         self.assertIsNotNone(ctx.workflow_id)  # Should be generated
 
-    def test_create_workflow_context_preview_mode(self):
-        """Test creating workflow context in preview mode."""
+    def test_create_workflow_context_simulator_mode(self):
+        """Test creating workflow context in simulator (builder) mode."""
         message = {"project_uuid": "proj-123", "contact_urn": "tel:+5511999999999", "text": "Test"}
 
         ctx = _create_workflow_context(
             task_id="task-123",
             message=message,
-            preview=True,
+            is_simulator=True,
             language="en",
             user_email="preview@test.com",
         )
 
-        self.assertTrue(ctx.preview)
+        self.assertTrue(ctx.is_simulator)
 
 
 class InitializeWorkflowTestCase(SimpleTestCase):
@@ -121,7 +121,7 @@ class InitializeWorkflowTestCase(SimpleTestCase):
             project_uuid="proj-123",
             contact_urn="urn:test",
             message={"project_uuid": "proj-123", "contact_urn": "urn:test", "text": "Hello"},
-            preview=False,
+            is_simulator=False,
             language="en",
             user_email="",
             task_id="task-123",
@@ -141,8 +141,8 @@ class InitializeWorkflowTestCase(SimpleTestCase):
             self.assertIn("project_uuid", call_kwargs)
 
     @patch("router.tasks.workflow_orchestrator.notify_async")
-    def test_initialize_workflow_preview_skips_typing(self, mock_notify_async):
-        """Test that preview mode still dispatches typing (observer handles skip)."""
+    def test_initialize_workflow_simulator_still_dispatches_typing(self, mock_notify_async):
+        """Simulator mode still dispatches typing observer (observer does not skip on preview kwarg)."""
         mock_redis = MockRedisClient()
         task_manager = RedisTaskManager(redis_client=mock_redis)
 
@@ -151,7 +151,7 @@ class InitializeWorkflowTestCase(SimpleTestCase):
             project_uuid="proj-123",
             contact_urn="urn:test",
             message={"project_uuid": "proj-123", "contact_urn": "urn:test", "text": "Hello"},
-            preview=True,  # Preview mode
+            is_simulator=True,
             language="en",
             user_email="",
             task_id="task-123",
@@ -160,7 +160,6 @@ class InitializeWorkflowTestCase(SimpleTestCase):
 
         _initialize_workflow(ctx)
 
-        # Typing indicator observer is dispatched but handles preview internally
         mock_notify_async.assert_called_once()
 
 
@@ -185,7 +184,7 @@ class FinalizeWorkflowTestCase(SimpleTestCase):
             project_uuid="proj-123",
             contact_urn="urn:test",
             message={"project_uuid": "proj-123", "contact_urn": "urn:test", "text": "Hello"},
-            preview=False,
+            is_simulator=False,
             language="en",
             user_email="",
             task_id="task-123",
@@ -221,7 +220,7 @@ class HandleWorkflowErrorTestCase(SimpleTestCase):
             project_uuid="proj-123",
             contact_urn="urn:test",
             message={"project_uuid": "proj-123", "contact_urn": "urn:test", "text": "Hello"},
-            preview=False,
+            is_simulator=False,
             language="en",
             user_email="",
             task_id="task-123",
