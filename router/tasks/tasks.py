@@ -656,7 +656,6 @@ def start_multi_agents(
     try:
         # Stream supervisor response
         broadcast, _ = get_action_clients(
-            preview,
             multi_agents=True,
             project_use_components=project_use_components,
             project_uuid=str(message.project_uuid),
