@@ -139,7 +139,7 @@ def save_inline_message_async(
         sentry_sdk.set_tag("project_uuid", project_uuid)
         sentry_sdk.set_tag("contact_urn", contact_urn)
         sentry_sdk.capture_exception(e)
-        raise self.retry(exc=e)
+        raise self.retry(exc=e) from None
 
 
 def _get_message_service():
