@@ -79,6 +79,7 @@ class BedrockClient:
 
         # Get Lambda architecture from settings
         lambda_architecture = getattr(settings, "AWS_LAMBDA_ARCHITECTURE", "x86_64")
+        lambda_memory_size = getattr(settings, "AWS_LAMBDA_MEMORY_SIZE", 512)
 
         create_function_params = {
             "FunctionName": lambda_name,
@@ -88,6 +89,7 @@ class BedrockClient:
             "Code": {"ZipFile": zip_buffer.getvalue()},
             "Handler": skill_handler,
             "Architectures": [lambda_architecture],
+            "MemorySize": lambda_memory_size,
         }
 
         # Add layers if Elastic APM is enabled
@@ -157,6 +159,7 @@ class BedrockClient:
             # Read the actual architecture of the existing Lambda function
             current_architectures = current_config.get("Architectures", ["x86_64"])
             current_architecture = current_architectures[0] if current_architectures else "x86_64"
+            current_memory_size = current_config.get("MemorySize", 128)
         except Exception as e:
             logger.error(
                 "Failed to get current Lambda function configuration",
@@ -170,10 +173,12 @@ class BedrockClient:
             current_layer_arns = []
             existing_vars = {}
             current_architecture = getattr(settings, "AWS_LAMBDA_ARCHITECTURE", "x86_64")
+            current_memory_size = 128  # default when config read fails (AWS minimum tier)
 
         # Get desired APM configuration using the Lambda's actual architecture
         desired_layers = self._get_elastic_apm_layers(architecture=current_architecture)
         desired_environment_variables = self._get_elastic_apm_environment_variables()
+        desired_memory_size = getattr(settings, "AWS_LAMBDA_MEMORY_SIZE", 512)
 
         # Check if we need to update configuration
         # We need to update if:
@@ -181,6 +186,10 @@ class BedrockClient:
         # 2. APM is disabled but APM layers/env vars are still present (need to remove them)
         needs_update = False
         update_config_params = {"FunctionName": lambda_name}
+
+        if current_memory_size != desired_memory_size:
+            update_config_params["MemorySize"] = desired_memory_size
+            needs_update = True
 
         # Check layers: update if desired layers differ from current, or if APM layers need removal
         if desired_layers:

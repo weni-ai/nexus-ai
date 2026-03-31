@@ -14,6 +14,8 @@ import os
 import sys
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 from .environment import env
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -634,6 +636,12 @@ GUARDRAILS_LAYER_LAMBDA = env.str("GUARDRAILS_LAYER_LAMBDA", "lambda-complexity-
 
 # Lambda architecture configuration
 AWS_LAMBDA_ARCHITECTURE = env.str("AWS_LAMBDA_ARCHITECTURE", "x86_64")
+AWS_LAMBDA_MEMORY_SIZE = env.int("AWS_LAMBDA_MEMORY_SIZE", 512)
+
+if not (128 <= AWS_LAMBDA_MEMORY_SIZE <= 10240):
+    raise ImproperlyConfigured(
+        "AWS_LAMBDA_MEMORY_SIZE must be between 128 and 10240 (inclusive); " f"got {AWS_LAMBDA_MEMORY_SIZE}"
+    )
 
 # Elastic APM Lambda configuration
 ELASTIC_APM_LAMBDA_ENABLED = env.bool("ELASTIC_APM_LAMBDA_ENABLED", False)
