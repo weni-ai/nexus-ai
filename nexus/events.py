@@ -2,8 +2,6 @@ import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-from django.db import close_old_connections
-
 from nexus.event_domain.event_manager import AsyncEventManager, EventManager
 
 logger = logging.getLogger(__name__)
@@ -29,8 +27,6 @@ def notify_async(event: str, **kwargs):
                 asyncio.run(async_event_manager.notify(event, **kwargs))
             except Exception as e:
                 logger.error(f"Error in async event notification for {event}: {e}", exc_info=True)
-            finally:
-                close_old_connections()
 
         _executor.submit(run_async)
 

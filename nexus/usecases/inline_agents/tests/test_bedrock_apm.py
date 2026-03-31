@@ -55,6 +55,53 @@ class TestBedrockClientElasticAPM(TestCase):
         self.assertEqual(call_args.kwargs["Architectures"], ["arm64"])
 
     @override_settings(
+        ELASTIC_APM_LAMBDA_ENABLED=False,
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+    )
+    def test_create_lambda_function_uses_default_memory_size(self):
+        """Tests that MemorySize defaults to 512 when AWS_LAMBDA_MEMORY_SIZE is not set"""
+        mock_lambda_client = Mock()
+        mock_lambda_client.create_function.return_value = {
+            "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function"
+        }
+        self.client.lambda_client = mock_lambda_client
+
+        self.client.create_lambda_function(
+            lambda_name=self.lambda_name,
+            lambda_role=self.lambda_role,
+            skill_handler=self.skill_handler,
+            zip_buffer=self.zip_buffer,
+        )
+
+        call_kwargs = mock_lambda_client.create_function.call_args.kwargs
+        self.assertIn("MemorySize", call_kwargs)
+        self.assertEqual(call_kwargs["MemorySize"], 512)
+
+    @override_settings(
+        ELASTIC_APM_LAMBDA_ENABLED=False,
+        AWS_LAMBDA_MEMORY_SIZE=1024,
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+    )
+    def test_create_lambda_function_uses_custom_memory_size(self):
+        """Tests that MemorySize matches AWS_LAMBDA_MEMORY_SIZE when overridden"""
+        mock_lambda_client = Mock()
+        mock_lambda_client.create_function.return_value = {
+            "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function"
+        }
+        self.client.lambda_client = mock_lambda_client
+
+        self.client.create_lambda_function(
+            lambda_name=self.lambda_name,
+            lambda_role=self.lambda_role,
+            skill_handler=self.skill_handler,
+            zip_buffer=self.zip_buffer,
+        )
+
+        call_kwargs = mock_lambda_client.create_function.call_args.kwargs
+        self.assertIn("MemorySize", call_kwargs)
+        self.assertEqual(call_kwargs["MemorySize"], 1024)
+
+    @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
         ELASTIC_APM_LAMBDA_APM_SERVER="https://apm-server.example.com",
         ELASTIC_APM_LAMBDA_SECRET_TOKEN="test-secret-token",
@@ -275,6 +322,60 @@ class TestBedrockClientElasticAPM(TestCase):
         mock_lambda_client.update_function_configuration.assert_not_called()
         # Verify that update_lambda_alias was called
         mock_update_alias.assert_called_once_with(self.lambda_name, "1")
+
+    @override_settings(
+        ELASTIC_APM_LAMBDA_ENABLED=False,
+        AWS_LAMBDA_MEMORY_SIZE=1024,
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+    )
+    @patch.object(BedrockClient, "update_lambda_alias")
+    def test_update_lambda_function_updates_memory_size_when_different(self, mock_update_alias):
+        """Tests that update_function_configuration is called with MemorySize when it differs from settings"""
+        mock_lambda_client = Mock()
+        mock_lambda_client.update_function_code.return_value = {
+            "Version": "1",
+            "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function",
+        }
+        mock_lambda_client.get_waiter.return_value.wait = Mock()
+        mock_lambda_client.get_function_configuration.return_value = {
+            "Architectures": ["x86_64"],
+            "Layers": [],
+            "Environment": {"Variables": {}},
+            "MemorySize": 512,
+        }
+        self.client.lambda_client = mock_lambda_client
+
+        self.client.update_lambda_function(self.lambda_name, self.zip_buffer)
+
+        mock_lambda_client.update_function_configuration.assert_called_once()
+        call_kwargs = mock_lambda_client.update_function_configuration.call_args.kwargs
+        self.assertEqual(call_kwargs["MemorySize"], 1024)
+
+    @override_settings(
+        ELASTIC_APM_LAMBDA_ENABLED=False,
+        AWS_LAMBDA_MEMORY_SIZE=512,
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+    )
+    @patch.object(BedrockClient, "update_lambda_alias")
+    def test_update_lambda_function_skips_update_when_memory_size_matches(self, mock_update_alias):
+        """Tests that update_function_configuration is not called when MemorySize already matches settings"""
+        mock_lambda_client = Mock()
+        mock_lambda_client.update_function_code.return_value = {
+            "Version": "1",
+            "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function",
+        }
+        mock_lambda_client.get_waiter.return_value.wait = Mock()
+        mock_lambda_client.get_function_configuration.return_value = {
+            "Architectures": ["x86_64"],
+            "Layers": [],
+            "Environment": {"Variables": {}},
+            "MemorySize": 512,
+        }
+        self.client.lambda_client = mock_lambda_client
+
+        self.client.update_lambda_function(self.lambda_name, self.zip_buffer)
+
+        mock_lambda_client.update_function_configuration.assert_not_called()
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=False,
