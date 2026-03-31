@@ -16,30 +16,23 @@ class ChannelWwcConsumer(EDAConsumer):
     """Consumes WWC channel create events (exchange channel-events.topic, routing key wwc-create)."""
 
     def consume(self, message: amqp.Message):
-        logger.debug(
-            "[ChannelWwcConsumer] Consuming a message",
-            extra={"body_len": len(message.body) if hasattr(message, "body") else None},
-        )
+        logger.debug(f"[ChannelWwcConsumer] Consuming a message {message.body}")
         channel_uuid = project_uuid = None
         try:
             body = JSONParser.parse(message.body)
             action = body.get("action")
             if action is not None:
-                logger.debug("[ChannelWwcConsumer] action=%s", action)
+                logger.debug(f"[ChannelWwcConsumer] action={action}")
 
             channel_uuid = body.get("uuid")
             project_uuid = body.get("project_uuid")
             channel_type = body.get("channel_type")
 
             if not channel_uuid or not project_uuid or channel_type is None or channel_type == "":
-                logger.warning(
-                    "[ChannelWwcConsumer] Missing required fields",
-                    extra={
-                        "has_uuid": bool(channel_uuid),
-                        "has_project": bool(project_uuid),
-                        "channel_type": channel_type,
-                    },
-                )
+                logger.warning(f"[ChannelWwcConsumer] Missing required fields "
+                               f"has_uuid={bool(channel_uuid)} "
+                               f"has_project={bool(project_uuid)} "
+                               f"channel_type={channel_type}")
                 message.channel.basic_reject(message.delivery_tag, requeue=False)
                 return
 
@@ -50,20 +43,25 @@ class ChannelWwcConsumer(EDAConsumer):
             )
             message.channel.basic_ack(message.delivery_tag)
             logger.info(
-                "[ChannelWwcConsumer] Channel created",
-                extra={"channel_uuid": channel_uuid, "project_uuid": project_uuid},
+                f"[ChannelWwcConsumer] Channel created channel_uuid={channel_uuid} "
+                f"project_uuid={project_uuid}",
             )
         except IntegrityError as exc:
             capture_exception(exc)
             message.channel.basic_ack(message.delivery_tag)
             logger.warning(
-                "[ChannelWwcConsumer] Duplicate channel uuid (IntegrityError)",
-                extra={"channel_uuid": channel_uuid, "project_uuid": project_uuid},
+                f"[ChannelWwcConsumer] Duplicate channel uuid (IntegrityError) "
+                f"channel_uuid={channel_uuid} project_uuid={project_uuid}",
             )
         except (Project.DoesNotExist, ValueError) as exc:
             message.channel.basic_ack(message.delivery_tag)
-            logger.warning("[ChannelWwcConsumer] Skipping message: %s", exc)
+            logger.warning(
+                f"[ChannelWwcConsumer] Skipping message: {exc}",
+            )
         except Exception as exception:
             capture_exception(exception)
             message.channel.basic_reject(message.delivery_tag, requeue=False)
-            logger.error("[ChannelWwcConsumer] Message rejected", exc_info=True)
+            logger.error(
+                "[ChannelWwcConsumer] Message rejected",
+                exc_info=True,
+            )
