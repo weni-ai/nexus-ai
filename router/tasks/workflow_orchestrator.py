@@ -27,8 +27,8 @@ from django.conf import settings
 from inline_agents.backends import BackendsRegistry
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
+from nexus.projects.channel_ops import channel_matches_default_preview
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
-from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.actions_client import get_action_clients
@@ -40,7 +40,7 @@ from router.tasks.invoke import (
     _invoke_backend,
     _invoke_is_final_debug,
     _preprocess_message_input,
-    dispatch_preview,
+    dispatch_with_optional_builder_websocket,
 )
 from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
 from router.tasks.redis_task_manager import RedisTaskManager
@@ -68,7 +68,7 @@ class WorkflowContext:
     project_uuid: str
     contact_urn: str
     message: Dict
-    preview: bool
+    is_simulator: bool
     language: str
     user_email: str
     task_id: str
@@ -111,7 +111,7 @@ def _initialize_workflow(ctx: WorkflowContext) -> None:
         contact_urn=ctx.contact_urn,
         msg_external_id=ctx.message.get("msg_event", {}).get("msg_external_id", ""),
         project_uuid=ctx.project_uuid,
-        preview=ctx.preview,
+        preview=ctx.is_simulator,
     )
 
     # Handle message concatenation and revoke existing workflow
@@ -182,7 +182,7 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         contact_urn=ctx.contact_urn,
         channel_uuid=message_obj.channel_uuid or ctx.message.get("channel_uuid"),
         contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
-        preview=ctx.preview,
+        preview=ctx.is_simulator,
         message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
         response_text=error.message or "",
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
@@ -191,22 +191,14 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         turn_id=ctx.turn_id,
     )
 
-    if ctx.preview and ctx.broadcast:
-        return dispatch_preview(
-            error.message,
-            message_obj,
-            ctx.broadcast,
-            ctx.user_email,
-            ctx.agents_backend or "unknown",
-            ctx.flows_user_email,
-        )
-    return dispatch(
-        llm_response=error.message,
-        message=message_obj,
-        direct_message=ctx.broadcast or {},
-        user_email=ctx.flows_user_email,
-        full_chunks=[],
-        backend=ctx.agents_backend or "unknown",
+    return dispatch_with_optional_builder_websocket(
+        error.message,
+        message_obj,
+        ctx.broadcast or {},
+        ctx.flows_user_email,
+        ctx.agents_backend or "unknown",
+        ctx.is_simulator,
+        ctx.user_email,
     )
 
 
@@ -226,7 +218,7 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
     # Call directly using .run() to avoid Celery's "never call .get() within a task" error
     result = pre_generation_task.run(
         ctx.message,
-        preview=ctx.preview,
+        preview=ctx.is_simulator,
         language=ctx.language,
         workflow_id=ctx.workflow_id,
     )
@@ -242,7 +234,6 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
 
     # Get action clients (needed for post-generation)
     ctx.broadcast, _ = get_action_clients(
-        preview=ctx.preview,
         multi_agents=True,
         project_use_components=ctx.cached_data.project_dict.get("use_components", False),
         project_uuid=ctx.project_uuid,
@@ -281,8 +272,7 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
     ctx.incoming_created_at = pendulum.now().to_iso8601_string()
     ctx.turn_id = ctx.message.get("msg_event", {}).get("msg_external_id") or str(uuid_lib.uuid4())
 
-    # Send incoming to SQS when message is received
-    if not ctx.preview:
+    if not ctx.is_simulator:
         received_event = build_message_received_event(
             project_uuid=ctx.project_uuid,
             contact_urn=ctx.contact_urn,
@@ -309,7 +299,7 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
         cached_data=ctx.cached_data,
         message_obj=message_obj,
         processed_message=processed_message,
-        preview=ctx.preview,
+        is_simulator=ctx.is_simulator,
         language=ctx.language,
         user_email=ctx.user_email,
         foundation_model=foundation_model,
@@ -349,7 +339,7 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
         contact_urn=ctx.contact_urn,
         channel_uuid=message_obj.channel_uuid or ctx.message.get("channel_uuid"),
         contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
-        preview=ctx.preview,
+        preview=ctx.is_simulator,
         message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
         response_text=sqs_response_text_from_agent_output(response or "", skip_dispatch=skip_dispatch),
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
@@ -358,28 +348,18 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
         turn_id=ctx.turn_id,
     )
 
-    # Dispatch response
-    if ctx.preview:
-        _invoke_is_final_debug("H workflow post_generation branch=dispatch_preview")
-        return dispatch_preview(
-            response,
-            message_obj,
-            ctx.broadcast,
-            ctx.user_email,
-            ctx.agents_backend,
-            ctx.flows_user_email,
-        )
     if skip_dispatch:
         _invoke_is_final_debug("H workflow post_generation branch=skip_dispatch (no dispatch)")
         return True
-    _invoke_is_final_debug("H workflow post_generation branch=dispatch")
-    return dispatch(
-        llm_response=response,
-        message=message_obj,
-        direct_message=ctx.broadcast,
-        user_email=ctx.flows_user_email,
-        full_chunks=[],
-        backend=ctx.agents_backend,
+    _invoke_is_final_debug("H workflow post_generation branch=dispatch_with_optional_builder_websocket")
+    return dispatch_with_optional_builder_websocket(
+        response,
+        message_obj,
+        ctx.broadcast,
+        ctx.flows_user_email,
+        ctx.agents_backend,
+        ctx.is_simulator,
+        ctx.user_email,
     )
 
 
@@ -406,7 +386,7 @@ def _create_message_object(message: Dict):
 def _create_workflow_context(
     task_id: str,
     message: Dict,
-    preview: bool,
+    is_simulator: bool,
     language: str,
     user_email: str,
     supervisor_agent_uuid: Optional[str] = None,
@@ -417,7 +397,7 @@ def _create_workflow_context(
         project_uuid=message.get("project_uuid"),
         contact_urn=message.get("contact_urn"),
         message=message,
-        preview=preview,
+        is_simulator=is_simulator,
         language=language,
         user_email=user_email,
         task_id=task_id,
@@ -464,10 +444,12 @@ def inline_agent_workflow(
     to the phase tasks and helper functions.
     """
     message_conversation_log_uuid = str(uuid_lib.uuid4())
+    project_uuid = message.get("project_uuid")
+    is_simulator = preview or channel_matches_default_preview(project_uuid or "", message.get("channel_uuid"))
     ctx = _create_workflow_context(
         task_id=self.request.id,
         message=message,
-        preview=preview,
+        is_simulator=is_simulator,
         language=language,
         user_email=user_email,
         supervisor_agent_uuid=supervisor_agent_uuid,

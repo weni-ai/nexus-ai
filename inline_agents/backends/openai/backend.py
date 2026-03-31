@@ -156,12 +156,10 @@ class OpenAIBackend(InlineAgentsBackend):
         self, project_uuid: str, contact_urn: str, contact_name: str, channel_uuid: str, preview: bool = False
     ) -> Optional[object]:
         """Ensure conversation exists and return it, or None if creation fails or channel_uuid is missing."""
-        # Don't create conversations in preview mode
         if preview:
             return None
 
         if not channel_uuid:
-            # channel_uuid is None - log to Sentry for debugging
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_tag("contact_urn", contact_urn)
             sentry_sdk.set_context(
@@ -188,7 +186,6 @@ class OpenAIBackend(InlineAgentsBackend):
                 project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
             )
         except Exception as e:
-            # If conversation lookup/creation fails, continue without it but log to Sentry
             sentry_sdk.set_tag("project_uuid", project_uuid)
             sentry_sdk.set_tag("contact_urn", contact_urn)
             sentry_sdk.set_tag("channel_uuid", channel_uuid)
@@ -255,7 +252,7 @@ class OpenAIBackend(InlineAgentsBackend):
         )
         data_lake_event_adapter = self._get_data_lake_event_adapter()
 
-        # Ensure conversation exists and get it for data lake events (skip in preview mode)
+        # Ensure conversation exists and get it for data lake events
         conversation = self._ensure_conversation(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
@@ -401,17 +398,15 @@ class OpenAIBackend(InlineAgentsBackend):
                 },
             )
 
-        grpc_client, grpc_session, grpc_msg_id = None, None, None
-        if not preview:
-            grpc_client, grpc_session, grpc_msg_id = self._initialize_grpc_session(
-                channel_uuid=channel_uuid,
-                contact_urn=contact_urn,
-                session_id=session_id,
-                project_uuid=project_uuid,
-                language=language,
-                use_components=use_components,
-                stream_support=stream_support,
-            )
+        grpc_client, grpc_session, grpc_msg_id = self._initialize_grpc_session(
+            channel_uuid=channel_uuid,
+            contact_urn=contact_urn,
+            session_id=session_id,
+            project_uuid=project_uuid,
+            language=language,
+            use_components=use_components,
+            stream_support=stream_support,
+        )
 
         result = asyncio.run(
             self._invoke_agents_async(

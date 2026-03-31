@@ -8,6 +8,7 @@ from nexus.events import event_manager, notify_async
 from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.models import ContactField
 from nexus.intelligences.models import ContentBase, IntegratedIntelligence
+from nexus.projects.channel_ops import get_default_channel_uuid
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
@@ -286,10 +287,12 @@ class ProjectsUseCase:
 
         try:
             project = self._get_project_with_optimized_queries(project_uuid)
+            default_channel_uuid = get_default_channel_uuid(project_uuid)
 
             if not project.inline_agent_switch:
                 return {
                     "indexed_database": project.indexer_database,
+                    "default_channel_uuid": default_channel_uuid,
                 }
 
             content_base = get_default_content_base_by_project(project_uuid)
@@ -307,6 +310,7 @@ class ProjectsUseCase:
                 "manager_foundation_model": supervisor_data["foundation_model"],
                 "integrated_agents": integrated_agents_data,
                 "instruction_character_count": len(formatted_instruction),
+                "default_channel_uuid": default_channel_uuid,
             }
 
         except Exception as e:

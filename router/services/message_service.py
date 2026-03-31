@@ -87,7 +87,6 @@ class MessageService:
         message = {"text": msg_text, "source": source, "created_at": self._get_current_timestamp()}
         self.message_repository.add_message(project_uuid, contact_urn, message, channel_uuid)
 
-        # Ensure conversation exists only if channel_uuid is not None
         self._get_conversation_service().ensure_conversation_exists(
             project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
         )
@@ -123,7 +122,6 @@ class MessageService:
         )
 
     def _get_conversation_service(self):
-        """Get conversation service instance, creating it if it doesn't exist."""
         if self._conversation_service is None:
             from router.services.conversation_service import ConversationService
 

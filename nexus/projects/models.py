@@ -3,6 +3,7 @@ import secrets
 from enum import Enum
 
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 from nexus.db.models import BaseModel, SoftDeleteModel
@@ -128,6 +129,25 @@ class ProjectAuth(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.project} - {self.role}"
+
+
+class Channel(models.Model):
+    uuid = models.UUIDField(primary_key=True, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="channels", db_index=True)
+    channel_type = models.CharField(max_length=64)
+    is_default_for_preview = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project"],
+                condition=Q(is_default_for_preview=True),
+                name="projects_channel_unique_default_per_project",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.uuid} - {self.project_id} ({self.channel_type})"
 
 
 class IntegratedFeature(models.Model):
