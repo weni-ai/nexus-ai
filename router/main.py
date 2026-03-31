@@ -46,7 +46,23 @@ def messages(request: Request, message: MessageHTTPBody):
 
         if project.inline_agent_switch:
             logger.info("Starting Inline Agent")
-            start_inline_agents.delay(message.dict())
+            queue = "inline-agents"
+            task_kwargs = {
+                "message": message.dict(),
+            }
+            preview: bool = bool(message.preview)
+
+            user_email = message.contact_urn.replace("ext:", "")
+            if preview:
+                task_kwargs.update(
+                    {
+                        "preview": True,
+                        "user_email": user_email,
+                    }
+                )
+                queue = "celery"
+
+            start_inline_agents.apply_async(kwargs=task_kwargs, queue=queue)
         else:
             start_route.delay(message.dict())
 
