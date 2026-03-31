@@ -1,6 +1,7 @@
 from io import BytesIO
 from unittest.mock import Mock, patch
 
+from django.conf import settings
 from django.test import TestCase, override_settings
 
 from nexus.usecases.inline_agents.bedrock import BedrockClient
@@ -264,6 +265,7 @@ class TestBedrockClientElasticAPM(TestCase):
             "Architectures": ["x86_64"],
             "Layers": [],
             "Environment": {"Variables": {"OTHER_VAR": "value"}},
+            "MemorySize": getattr(settings, "AWS_LAMBDA_MEMORY_SIZE", 512),
         }
         self.client.lambda_client = mock_lambda_client
 
