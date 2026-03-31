@@ -236,6 +236,51 @@ class ProjectsUseCase:
 
         return project.agents_backend
 
+    def enable_human_support(self, project_uuid: str, human_support: bool) -> Project:
+        project = self.get_by_uuid(project_uuid)
+        project.human_support = human_support
+        project.save()
+
+        # Fire cache invalidation event for project update (async observer)
+        notify_async(
+            event="cache_invalidation:project",
+            project=project,
+        )
+
+        return project
+
+    def update_human_support_prompt(self, project_uuid: str, human_support_prompt: str) -> Project:
+        project = self.get_by_uuid(project_uuid)
+        project.human_support_prompt = human_support_prompt
+        project.save()
+
+        notify_async(
+            event="cache_invalidation:project",
+            project=project,
+        )
+
+        return project
+
+    def update_human_support_config(
+        self, project_uuid: str, human_support: bool | None = None, human_support_prompt: str | None = None
+    ) -> Project:
+        project = self.get_by_uuid(project_uuid)
+
+        if human_support is not None:
+            project.human_support = human_support
+
+        if human_support_prompt is not None:
+            project.human_support_prompt = human_support_prompt
+
+        project.save()
+
+        notify_async(
+            event="cache_invalidation:project",
+            project=project,
+        )
+
+        return project
+
     def get_agent_builder_project_details(self, project_uuid: str) -> dict:
         # TODO: Organize code, remove instruction formatting from this class
         from inline_agents.backends import BackendsRegistry  # to avoid circular import

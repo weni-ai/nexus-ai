@@ -18,7 +18,7 @@ import logging
 import os
 import uuid as uuid_lib
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import pendulum
 import sentry_sdk
@@ -32,17 +32,19 @@ from nexus.projects.websockets.consumers import send_preview_message_to_websocke
 from router.entities import message_factory
 from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.actions_client import get_action_clients
+from router.tasks.exceptions import EmptyFinalResponseException
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.invoke import (
     ThrottlingException,
     UnsafeMessageException,
     _invoke_backend,
+    _invoke_is_final_debug,
     _preprocess_message_input,
     dispatch_with_optional_builder_websocket,
 )
 from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
 from router.tasks.redis_task_manager import RedisTaskManager
-from router.tasks.sqs_message_events import build_message_received_event
+from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
 
 logger = logging.getLogger(__name__)
 
@@ -241,12 +243,12 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
     return result
 
 
-def _run_generation(ctx: WorkflowContext) -> str:
+def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
     """
     Execute the generation phase.
 
     This is currently inline but will be replaced by generation_task.
-    Returns the LLM response string.
+    Returns (response_text, skip_dispatch).
     """
     ctx.task_manager.update_workflow_status(
         project_uuid=ctx.project_uuid,
@@ -292,7 +294,7 @@ def _run_generation(ctx: WorkflowContext) -> str:
 
     backend = BackendsRegistry.get_backend(ctx.agents_backend)
 
-    response = _invoke_backend(
+    response, skip_dispatch = _invoke_backend(
         backend=backend,
         cached_data=ctx.cached_data,
         message_obj=message_obj,
@@ -308,10 +310,10 @@ def _run_generation(ctx: WorkflowContext) -> str:
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
     )
 
-    return response
+    return response, skip_dispatch
 
 
-def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
+def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: bool = False) -> Any:
     """
     Execute the post-generation phase.
 
@@ -339,13 +341,17 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
         contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
         preview=ctx.is_simulator,
         message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
-        response_text=response or "",
+        response_text=sqs_response_text_from_agent_output(response or "", skip_dispatch=skip_dispatch),
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
         outgoing_created_at=pendulum.now().to_iso8601_string(),
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
         turn_id=ctx.turn_id,
     )
 
+    if skip_dispatch:
+        _invoke_is_final_debug("H workflow post_generation branch=skip_dispatch (no dispatch)")
+        return True
+    _invoke_is_final_debug("H workflow post_generation branch=dispatch_with_optional_builder_websocket")
     return dispatch_with_optional_builder_websocket(
         response,
         message_obj,
@@ -458,10 +464,13 @@ def inline_agent_workflow(
         _run_pre_generation(ctx)
 
         # Phase 2: Generation (will be generation_task.apply() later)
-        response = _run_generation(ctx)
+        response, skip_dispatch = _run_generation(ctx)
+
+        if (response is None or response == "") and not skip_dispatch:
+            raise EmptyFinalResponseException("Final response is empty")
 
         # Phase 3: Post-Generation (will be post_generation_task.apply() later)
-        result = _run_post_generation(ctx, response)
+        result = _run_post_generation(ctx, response, skip_dispatch)
 
         # Finalize workflow
         _finalize_workflow(ctx)

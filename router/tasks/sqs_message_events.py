@@ -6,12 +6,43 @@ channel_uuid, message with id, text, source, created_at, contact_name).
 All fields are required.
 """
 
+import json
 import uuid
 from dataclasses import dataclass
 from typing import Optional
 
 EVENT_TYPE_MESSAGE_RECEIVED = "message.received"
 EVENT_TYPE_MESSAGE_SENT = "message.sent"
+
+
+def sqs_response_text_from_agent_output(response: str, *, skip_dispatch: bool) -> str:
+    """
+    Text used in message.sent (via notify_async → observers) for SQS.
+
+    When skip_dispatch is True, agent output is often JSON with is_final_output and messages_sent;
+    we join messages_sent[].text with newlines for the conversation microservice. Otherwise
+    return response unchanged.
+    """
+    if not skip_dispatch or not (response or "").strip():
+        return response
+    try:
+        parsed = json.loads(response)
+    except (json.JSONDecodeError, TypeError):
+        return response
+    if not isinstance(parsed, dict):
+        return response
+    messages_sent = parsed.get("messages_sent")
+    if not isinstance(messages_sent, list):
+        return response
+    parts: list[str] = []
+    for item in messages_sent:
+        if isinstance(item, dict):
+            t = str(item.get("text", "")).strip()
+            if t:
+                parts.append(t)
+    if not parts:
+        return response
+    return "\n".join(parts)
 
 
 @dataclass(frozen=True)
