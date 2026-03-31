@@ -657,7 +657,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 )
         return delta_counter
 
-    async def _invoke_agents_async(
+    async def _invoke_agents_async(  # noqa: C901
         self,
         client,
         external_team,
