@@ -26,6 +26,15 @@ def authenticate(token: str):
     raise HTTPException(status_code=403, detail="Wrong credentials")
 
 
+def _normalize_preview_contact_urn(contact_urn: str, preview: bool) -> str:
+    if not preview or not contact_urn:
+        return contact_urn
+    # New broadcast can send plain email; preview flows expect ext: URN.
+    if "@" in contact_urn and not contact_urn.startswith("ext:"):
+        return f"ext:{contact_urn}"
+    return contact_urn
+
+
 @app.get("/")
 def healthcheck():
     return {}
@@ -47,12 +56,13 @@ def messages(request: Request, message: MessageHTTPBody):
         if project.inline_agent_switch:
             logger.info("Starting Inline Agent")
             queue = "inline-agents"
+            preview: bool = bool(message.preview)
+            normalized_contact_urn = _normalize_preview_contact_urn(message.contact_urn, preview)
             task_kwargs = {
                 "message": message.dict(),
             }
-            preview: bool = bool(message.preview)
-
-            user_email = message.contact_urn.replace("ext:", "")
+            task_kwargs["message"]["contact_urn"] = normalized_contact_urn
+            user_email = normalized_contact_urn.replace("ext:", "").lstrip(":")
             if preview:
                 task_kwargs.update(
                     {
