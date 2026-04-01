@@ -49,6 +49,8 @@ class SendMessageHTTPClient(DirectMessage):
 
         payload = json.dumps(payload).encode("utf-8")
 
+        logger.info(f"SendMessage payload - url: {url}, payload: {payload}, headers: {headers}")
+
         response = requests.post(url, data=payload, headers=headers)
         logger.debug(f"SendMessage response - text_len: {len(response.text or '')}")
         try:
