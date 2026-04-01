@@ -19,6 +19,7 @@ from nexus.agents.models import (
     Credential,
     Team,
 )
+from nexus.events import notify_async
 from nexus.inline_agents.models import Agent as InlineAgent
 from nexus.inline_agents.models import AgentCredential, IntegratedAgent
 from nexus.projects.api.permissions import ProjectPermission
@@ -590,6 +591,17 @@ class ProjectCredentialsView(APIView):
             except Credential.DoesNotExist:
                 continue
 
+        if updated_credentials:
+            try:
+                project = Project.objects.get(uuid=project_uuid)
+            except Project.DoesNotExist:
+                pass
+            else:
+                notify_async(
+                    event="cache_invalidation:project",
+                    project=project,
+                )
+
         return Response({"message": "Credentials updated successfully", "updated_credentials": updated_credentials})
 
     def post(self, request, project_uuid):
@@ -603,6 +615,11 @@ class ProjectCredentialsView(APIView):
             agent = Agent.objects.get(uuid=agent_uuid)
         except Agent.DoesNotExist:
             return Response({"error": "Agent not found"}, status=404)
+
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return Response({"error": "Project not found"}, status=404)
 
         created_credentials = []
         for cred_item in credentials_data:
@@ -637,6 +654,12 @@ class ProjectCredentialsView(APIView):
 
             credential.agents.add(agent)
             created_credentials.append(key)
+
+        if created_credentials:
+            notify_async(
+                event="cache_invalidation:project",
+                project=project,
+            )
 
         return Response({"message": "Credentials created successfully", "created_credentials": created_credentials})
 
@@ -692,6 +715,17 @@ class VtexAppProjectCredentialsView(APIView):
             except Credential.DoesNotExist:
                 continue
 
+        if updated_credentials:
+            try:
+                project = Project.objects.get(uuid=project_uuid)
+            except Project.DoesNotExist:
+                pass
+            else:
+                notify_async(
+                    event="cache_invalidation:project",
+                    project=project,
+                )
+
         return Response({"message": "Credentials updated successfully", "updated_credentials": updated_credentials})
 
     def post(self, request, project_uuid):
@@ -705,6 +739,11 @@ class VtexAppProjectCredentialsView(APIView):
             agent = Agent.objects.get(uuid=agent_uuid)
         except Agent.DoesNotExist:
             return Response({"error": "Agent not found"}, status=404)
+
+        try:
+            project = Project.objects.get(uuid=project_uuid)
+        except Project.DoesNotExist:
+            return Response({"error": "Project not found"}, status=404)
 
         created_credentials = []
         for cred_item in credentials_data:
@@ -739,6 +778,12 @@ class VtexAppProjectCredentialsView(APIView):
 
             credential.agents.add(agent)
             created_credentials.append(key)
+
+        if created_credentials:
+            notify_async(
+                event="cache_invalidation:project",
+                project=project,
+            )
 
         return Response({"message": "Credentials created successfully", "created_credentials": created_credentials})
 

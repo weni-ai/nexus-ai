@@ -646,6 +646,12 @@ class OfficialAgentsV1(APIView):
             if "agent" not in result:
                 result["agent"] = OfficialAgentListSerializer(agent, context={"project_uuid": project_uuid}).data
 
+            # Credentials affect invocation; refresh full project cache (team invalidation alone is not enough).
+            notify_async(
+                event="cache_invalidation:project",
+                project=project,
+            )
+
         return Response(result or {"message": "No changes applied"}, status=200)
 
     def _find_better_agent(self, current_agent, mcp, system):
@@ -1079,10 +1085,14 @@ class AgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(project__uuid=project_uuid)
+        agents = Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
 
         if search:
-            query_filter = Q(name__icontains=search)
+            query_filter = (
+                Q(name__icontains=search)
+                | Q(group__name__icontains=search)
+                | Q(group__modal__agent_name__icontains=search)
+            )
             agents = agents.filter(query_filter).distinct("uuid")
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
@@ -1195,10 +1205,16 @@ class OfficialAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).select_related(
+            "group", "group__modal"
+        )
 
         if search:
-            query_filter = Q(name__icontains=search)
+            query_filter = (
+                Q(name__icontains=search)
+                | Q(group__name__icontains=search)
+                | Q(group__modal__agent_name__icontains=search)
+            )
             agents = agents.filter(query_filter).distinct("uuid")
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
@@ -1228,6 +1244,17 @@ class ProjectCredentialsView(APIView):
             if updated:
                 updated_credentials.append(key)
 
+        if updated_credentials:
+            try:
+                project = Project.objects.get(uuid=project_uuid)
+            except Project.DoesNotExist:
+                pass
+            else:
+                notify_async(
+                    event="cache_invalidation:project",
+                    project=project,
+                )
+
         return Response({"message": "Credentials updated successfully", "updated_credentials": updated_credentials})
 
     def post(self, request, project_uuid):
@@ -1255,9 +1282,14 @@ class ProjectCredentialsView(APIView):
                 }
             )
 
-        created_credentials = CreateAgentUseCase().create_credentials(
-            agent, Project.objects.get(uuid=project_uuid), credentials
-        )
+        project = Project.objects.get(uuid=project_uuid)
+        created_credentials = CreateAgentUseCase().create_credentials(agent, project, credentials)
+
+        if created_credentials:
+            notify_async(
+                event="cache_invalidation:project",
+                project=project,
+            )
 
         return Response({"message": "Credentials created successfully", "created_credentials": created_credentials})
 
@@ -1334,10 +1366,14 @@ class VtexAppAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(project__uuid=project_uuid)
+        agents = Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
 
         if search:
-            query_filter = Q(name__icontains=search)
+            query_filter = (
+                Q(name__icontains=search)
+                | Q(group__name__icontains=search)
+                | Q(group__modal__agent_name__icontains=search)
+            )
             agents = agents.filter(query_filter).distinct("uuid")
 
         serializer = AgentSerializer(
@@ -1354,10 +1390,16 @@ class VtexAppOfficialAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.VTEX_APP)
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.VTEX_APP).select_related(
+            "group", "group__modal"
+        )
 
         if search:
-            query_filter = Q(name__icontains=search)
+            query_filter = (
+                Q(name__icontains=search)
+                | Q(group__name__icontains=search)
+                | Q(group__modal__agent_name__icontains=search)
+            )
             agents = agents.filter(query_filter).distinct("uuid")
 
         serializer = AgentSerializer(
@@ -1407,6 +1449,17 @@ class VtexAppProjectCredentialsView(APIView):
             if updated:
                 updated_credentials.append(key)
 
+        if updated_credentials:
+            try:
+                project = Project.objects.get(uuid=project_uuid)
+            except Project.DoesNotExist:
+                pass
+            else:
+                notify_async(
+                    event="cache_invalidation:project",
+                    project=project,
+                )
+
         return Response({"message": "Credentials updated successfully", "updated_credentials": updated_credentials})
 
     def post(self, request, project_uuid):
@@ -1434,9 +1487,14 @@ class VtexAppProjectCredentialsView(APIView):
                 }
             )
 
-        created_credentials = CreateAgentUseCase().create_credentials(
-            agent, Project.objects.get(uuid=project_uuid), credentials
-        )
+        project = Project.objects.get(uuid=project_uuid)
+        created_credentials = CreateAgentUseCase().create_credentials(agent, project, credentials)
+
+        if created_credentials:
+            notify_async(
+                event="cache_invalidation:project",
+                project=project,
+            )
 
         return Response({"message": "Credentials created successfully", "created_credentials": created_credentials})
 

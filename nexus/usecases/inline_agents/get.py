@@ -3,12 +3,16 @@ from nexus.usecases.inline_agents.bedrock import BedrockClient
 
 
 class GetInlineAgentsUsecase:
+    _agent_group_prefetch = ("agent", "agent__group", "agent__group__modal")
+
     def get_active_agents(self, project_uuid: str):
-        return IntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True)
+        return IntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True).select_related(
+            *self._agent_group_prefetch
+        )
 
     def get_integrated_agents(self, project_uuid: str):
         """Return all integrated agents for the project, regardless of is_active."""
-        return IntegratedAgent.objects.filter(project__uuid=project_uuid).select_related("agent")
+        return IntegratedAgent.objects.filter(project__uuid=project_uuid).select_related(*self._agent_group_prefetch)
 
 
 class GetInlineCredentialsUsecase:

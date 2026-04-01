@@ -1,7 +1,23 @@
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from nexus.inline_agents.models import Agent, AgentCredential, AgentSystem, IntegratedAgent
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
+
+
+def inline_agent_list_display_name(agent: Agent) -> str:
+    """User-facing label for agent lists: group name (or modal catalog name), not internal template name."""
+    if not getattr(agent, "group_id", None):
+        raw = agent.name
+        return raw.split("(")[0].strip() if "(" in raw else raw
+    group = agent.group
+    try:
+        modal = group.modal
+        if modal.agent_name:
+            return modal.agent_name
+    except ObjectDoesNotExist:
+        pass
+    return group.name
 
 
 class AgentSystemSerializer(serializers.ModelSerializer):
@@ -35,7 +51,7 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         return obj.agent.slug
 
     def get_name(self, obj):
-        return obj.agent.name
+        return inline_agent_list_display_name(obj.agent)
 
     def get_description(self, obj):
         return obj.agent.collaboration_instructions
@@ -132,6 +148,7 @@ class AgentSerializer(serializers.ModelSerializer):
             "credentials",
         ]
 
+    name = serializers.SerializerMethodField("get_list_display_name")
     description = serializers.CharField(source="collaboration_instructions")
     model = serializers.CharField(source="foundation_model")
     skills = serializers.SerializerMethodField("get_skills")
@@ -139,6 +156,9 @@ class AgentSerializer(serializers.ModelSerializer):
     active = serializers.SerializerMethodField("get_active")
 
     credentials = serializers.SerializerMethodField("get_credentials")
+
+    def get_list_display_name(self, obj):
+        return inline_agent_list_display_name(obj)
 
     def get_skills(self, obj):
         if obj.current_version:
@@ -192,7 +212,7 @@ class ProjectCredentialsListSerializer(serializers.ModelSerializer):
         return [
             {
                 "uuid": integrated_agent.agent.uuid,
-                "name": integrated_agent.agent.name,
+                "name": inline_agent_list_display_name(integrated_agent.agent),
             }
             for integrated_agent in qs
         ]
