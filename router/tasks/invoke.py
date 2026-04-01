@@ -163,6 +163,12 @@ def dispatch_with_optional_builder_websocket(
 ) -> str:
     """Production dispatch; fan out copy to agent-builder WebSocket when this is simulator traffic."""
     try:
+        contact_urn = getattr(message_obj, "contact_urn", "")
+        if is_simulator and contact_urn and "@" in contact_urn and not contact_urn.startswith("ext:"):
+            normalized_urn = f"ext:{contact_urn}"
+            logger.info(f"Normalizing simulator contact_urn for dispatch, urn_before:{contact_urn}, urn_after:{normalized_urn}")
+            message_obj.contact_urn = normalized_urn
+
         response_msg = dispatch(
             llm_response=llm_response,
             message=message_obj,
