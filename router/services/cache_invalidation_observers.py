@@ -328,9 +328,17 @@ class TeamCacheInvalidationObserver(EventObserver):
             cache_service = CacheService()
 
             # Get fresh data
-            project_obj, content_base_obj, _ = get_project_and_content_base_data(project_uuid)
+            project_obj, content_base_obj, inline_agent_config = get_project_and_content_base_data(project_uuid)
             agents_backend = project_obj.agents_backend
             team = ORMTeamRepository(agents_backend=agents_backend, project=project_obj).get_team(project_uuid)
+
+            def _get_inline_agent_config(config):
+                if config:
+                    return {
+                        "agents_backend": config.agents_backend,
+                        "configuration": config.configuration,
+                    }
+                return None
 
             # Refresh team cache
             cache_service.invalidate_team_cache(
@@ -339,6 +347,14 @@ class TeamCacheInvalidationObserver(EventObserver):
                 fetch_func=lambda uuid, backend: team,
             )
 
-            logger.info(f"Refreshed team cache for {project_uuid}")
+            # Keep inline_agent_config in sync with team so composite project:{uuid}:all is not rebuilt
+            # with stale OPTIONAL_FOR_COMPOSITE data after team-only invalidation.
+            cache_service.invalidate_inline_agent_config_cache(
+                project_uuid=project_uuid,
+                fetch_func=lambda uuid: _get_inline_agent_config(inline_agent_config),
+                agents_backend=agents_backend,
+            )
+
+            logger.info(f"Refreshed team and inline agent config cache for {project_uuid}")
         except Exception as e:
             logger.error(f"Failed to refresh team cache: {e}", exc_info=True)
