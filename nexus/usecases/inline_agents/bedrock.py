@@ -258,13 +258,14 @@ class BedrockClient:
 
         response = self.cloudwatch_client.describe_log_groups(logGroupNamePrefix=log_group_name, limit=1)
 
-        log_group = response.get("logGroups", {})
+        log_groups = response.get("logGroups", [])
 
-        if log_group:
-            return {
-                "tool_name": tool_name,
-                "log_group_name": log_group[0].get("logGroupName"),
-                "log_group_arn": log_group[0].get("logGroupArn"),
-            }
+        for lg in log_groups:
+            if lg.get("logGroupName") == log_group_name:
+                return {
+                    "tool_name": tool_name,
+                    "log_group_name": lg.get("logGroupName"),
+                    "log_group_arn": lg.get("logGroupArn"),
+                }
 
-        return log_group
+        return {}
