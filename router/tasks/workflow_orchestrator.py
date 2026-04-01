@@ -37,6 +37,7 @@ from router.tasks.invocation_context import CachedProjectData
 from router.tasks.invoke import (
     ThrottlingException,
     UnsafeMessageException,
+    _get_simulation_manager_model,
     _invoke_backend,
     _invoke_is_final_debug,
     _preprocess_message_input,
@@ -71,6 +72,7 @@ class WorkflowContext:
     is_simulator: bool
     language: str
     user_email: str
+    is_simulation_request: bool
     task_id: str
     task_manager: RedisTaskManager
     supervisor_agent_uuid: Optional[str] = None
@@ -264,6 +266,14 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
 
     # Preprocess message
     processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(ctx.message, ctx.agents_backend)
+    if ctx.is_simulation_request:
+        cached_model = _get_simulation_manager_model(ctx.project_uuid)
+        if cached_model:
+            foundation_model = cached_model
+            logger.info(
+                "Using simulation manager model override",
+                extra={"project_uuid": ctx.project_uuid, "foundation_model": cached_model},
+            )
 
     # Create message object
     message_obj = _create_message_object(processed_message)
@@ -387,6 +397,7 @@ def _create_workflow_context(
     task_id: str,
     message: Dict,
     is_simulator: bool,
+    is_simulation_request: bool,
     language: str,
     user_email: str,
     supervisor_agent_uuid: Optional[str] = None,
@@ -398,6 +409,7 @@ def _create_workflow_context(
         contact_urn=message.get("contact_urn"),
         message=message,
         is_simulator=is_simulator,
+        is_simulation_request=is_simulation_request,
         language=language,
         user_email=user_email,
         task_id=task_id,
@@ -427,6 +439,7 @@ def inline_agent_workflow(
     self,
     message: Dict,
     preview: bool = False,
+    simulation: bool = False,
     language: str = "en",
     user_email: str = "",
     supervisor_agent_uuid: Optional[str] = None,
@@ -450,6 +463,7 @@ def inline_agent_workflow(
         task_id=self.request.id,
         message=message,
         is_simulator=is_simulator,
+        is_simulation_request=bool(simulation),
         language=language,
         user_email=user_email,
         supervisor_agent_uuid=supervisor_agent_uuid,

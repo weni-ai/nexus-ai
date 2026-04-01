@@ -3,7 +3,7 @@ import logging
 import uuid
 from typing import Dict, List
 from unittest import skip
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
@@ -11,7 +11,10 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from nexus.actions.api.views import (
     FlowsViewset,
     MessagePreviewView,
+    MessageSimulationView,
     SearchFlowView,
+    SimulationEndSessionView,
+    SimulationManagerModelView,
     TemplateActionView,
 )
 from nexus.actions.models import Flow
@@ -243,6 +246,105 @@ class TestListFlowsUseCase(TestCase):
     def test_search_flows_by_project_list_project_flows(self):
         data = self.usecase.search_flows_by_project(project_uuid=self.project_uuid, page_size=2, page=1)
         self.assertIsInstance(data, dict)
+
+
+class SimulationEndpointsTestCase(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.project = ProjectFactory(name="Router", brain_on=True)
+        self.user = self.project.created_by
+
+    @patch("nexus.actions.api.views.start_inline_agents.apply_async")
+    def test_preview_keeps_legacy_task_kwargs(self, mock_apply_async):
+        request = self.factory.post(
+            f"/{self.project.uuid}/preview/",
+            data={"text": "hello", "contact_urn": "ext:user@example.com"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = MessagePreviewView.as_view()(request, project_uuid=str(self.project.uuid))
+
+        self.assertEqual(response.status_code, 200)
+        kwargs = mock_apply_async.call_args.kwargs["kwargs"]
+        self.assertTrue(kwargs["preview"])
+        self.assertNotIn("simulation", kwargs)
+
+    @patch("nexus.actions.api.views.start_inline_agents.apply_async")
+    def test_simulation_adds_simulation_flag(self, mock_apply_async):
+        request = self.factory.post(
+            f"/{self.project.uuid}/simulation/",
+            data={"text": "hello", "contact_urn": "ext:user@example.com"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = MessageSimulationView.as_view()(request, project_uuid=str(self.project.uuid))
+
+        self.assertEqual(response.status_code, 200)
+        kwargs = mock_apply_async.call_args.kwargs["kwargs"]
+        self.assertTrue(kwargs["preview"])
+        self.assertTrue(kwargs["simulation"])
+
+    @patch("nexus.actions.api.views.get_redis_write_client")
+    def test_simulation_manager_model_post_sets_ttl(self, mock_get_redis_write_client):
+        redis_client = MagicMock()
+        mock_get_redis_write_client.return_value = redis_client
+        request = self.factory.post(
+            f"/{self.project.uuid}/simulation/manager-model/",
+            data={"manager_foundation_model": "gpt-4.1"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = SimulationManagerModelView.as_view()(request, project_uuid=str(self.project.uuid))
+
+        self.assertEqual(response.status_code, 200)
+        redis_client.setex.assert_called_once_with(
+            f"simulation_manager_model:{self.project.uuid}",
+            86400,
+            "gpt-4.1",
+        )
+
+    @patch("nexus.actions.api.views.get_redis_read_client")
+    def test_simulation_manager_model_get_falls_back_to_project_default(self, mock_get_redis_read_client):
+        redis_client = MagicMock()
+        redis_client.get.return_value = None
+        mock_get_redis_read_client.return_value = redis_client
+        request = self.factory.get(f"/{self.project.uuid}/simulation/manager-model/")
+        force_authenticate(request, user=self.user)
+
+        response = SimulationManagerModelView.as_view()(request, project_uuid=str(self.project.uuid))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["manager_foundation_model"], self.project.default_supervisor_foundation_model)
+
+    @patch("inline_agents.backends.BackendsRegistry.get_backend")
+    @patch("nexus.actions.api.views.projects.ProjectsUseCase.get_agents_backend_by_project")
+    @patch("nexus.actions.api.views.message_factory")
+    def test_simulation_end_session_calls_backend(
+        self,
+        mock_message_factory,
+        mock_get_agents_backend,
+        mock_get_backend,
+    ):
+        message_obj = MagicMock(project_uuid=str(self.project.uuid), sanitized_urn="ext:user@example.com")
+        backend = MagicMock()
+        mock_message_factory.return_value = message_obj
+        mock_get_agents_backend.return_value = "openai"
+        mock_get_backend.return_value = backend
+
+        request = self.factory.post(
+            f"/{self.project.uuid}/simulation/end-session/",
+            data={"contact_urn": "user@example.com"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = SimulationEndSessionView.as_view()(request, project_uuid=str(self.project.uuid))
+
+        self.assertEqual(response.status_code, 200)
+        backend.end_session.assert_called_once_with(str(self.project.uuid), "ext:user@example.com")
 
 
 @skip("View Testing")

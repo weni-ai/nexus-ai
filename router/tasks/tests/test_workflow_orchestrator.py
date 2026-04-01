@@ -53,6 +53,7 @@ class WorkflowContextTestCase(SimpleTestCase):
             is_simulator=False,
             language="en",
             user_email="user@example.com",
+            is_simulation_request=False,
             task_id="task-123",
             task_manager=task_manager,
         )
@@ -81,6 +82,7 @@ class CreateWorkflowContextTestCase(SimpleTestCase):
             task_id="task-123",
             message=message,
             is_simulator=False,
+            is_simulation_request=False,
             language="pt",
             user_email="test@test.com",
         )
@@ -90,6 +92,7 @@ class CreateWorkflowContextTestCase(SimpleTestCase):
         self.assertEqual(ctx.contact_urn, "tel:+5511999999999")
         self.assertEqual(ctx.language, "pt")
         self.assertEqual(ctx.user_email, "test@test.com")
+        self.assertFalse(ctx.is_simulation_request)
         self.assertIsNotNone(ctx.workflow_id)  # Should be generated
 
     def test_create_workflow_context_simulator_mode(self):
@@ -100,11 +103,13 @@ class CreateWorkflowContextTestCase(SimpleTestCase):
             task_id="task-123",
             message=message,
             is_simulator=True,
+            is_simulation_request=True,
             language="en",
             user_email="preview@test.com",
         )
 
         self.assertTrue(ctx.is_simulator)
+        self.assertTrue(ctx.is_simulation_request)
 
 
 class InitializeWorkflowTestCase(SimpleTestCase):
@@ -124,6 +129,7 @@ class InitializeWorkflowTestCase(SimpleTestCase):
             is_simulator=False,
             language="en",
             user_email="",
+            is_simulation_request=False,
             task_id="task-123",
             task_manager=task_manager,
         )
@@ -154,6 +160,7 @@ class InitializeWorkflowTestCase(SimpleTestCase):
             is_simulator=True,
             language="en",
             user_email="",
+            is_simulation_request=False,
             task_id="task-123",
             task_manager=task_manager,
         )
@@ -187,6 +194,7 @@ class FinalizeWorkflowTestCase(SimpleTestCase):
             is_simulator=False,
             language="en",
             user_email="",
+            is_simulation_request=False,
             task_id="task-123",
             task_manager=task_manager,
         )
@@ -223,6 +231,7 @@ class HandleWorkflowErrorTestCase(SimpleTestCase):
             is_simulator=False,
             language="en",
             user_email="",
+            is_simulation_request=False,
             task_id="task-123",
             task_manager=task_manager,
         )
