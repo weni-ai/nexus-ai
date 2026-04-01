@@ -162,21 +162,39 @@ def dispatch_with_optional_builder_websocket(
     user_email: str,
 ) -> str:
     """Production dispatch; fan out copy to agent-builder WebSocket when this is simulator traffic."""
-    response_msg = dispatch(
-        llm_response=llm_response,
-        message=message_obj,
-        direct_message=broadcast,
-        user_email=flows_user_email,
-        full_chunks=[],
-        backend=agents_backend,
-    )
-    if is_simulator and user_email:
-        send_preview_message_to_websocket(
-            project_uuid=message_obj.project_uuid,
-            user_email=user_email,
-            message_data={"type": "preview", "content": response_msg},
+    try:
+        response_msg = dispatch(
+            llm_response=llm_response,
+            message=message_obj,
+            direct_message=broadcast,
+            user_email=flows_user_email,
+            full_chunks=[],
+            backend=agents_backend,
         )
-    return response_msg
+        if is_simulator and user_email:
+            send_preview_message_to_websocket(
+                project_uuid=message_obj.project_uuid,
+                user_email=user_email,
+                message_data={"type": "preview", "content": response_msg},
+            )
+        return response_msg
+    except Exception as exc:
+        logger.error(f"Dispatch failed, project_uuid:{message_obj.project_uuid}, urn:{message_obj.contact_urn}")
+        sentry_sdk.set_tag("project_uuid", str(getattr(message_obj, "project_uuid", "")))
+        sentry_sdk.set_tag("contact_urn", str(getattr(message_obj, "contact_urn", "")))
+        sentry_sdk.set_tag("agents_backend", agents_backend)
+        sentry_sdk.set_tag("preview", is_simulator)
+        sentry_sdk.set_context(
+            "dispatch_context",
+            {
+                "flows_user_email": flows_user_email,
+                "preview_user_email": user_email,
+                "llm_response_preview": (llm_response or "")[:200],
+            },
+        )
+        sentry_sdk.capture_exception(exc)
+        logger.exception(f"Dispatch failed for inline agent response: sentry_id={sentry_sdk.last_event_id()}")
+        raise
 
 
 def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
