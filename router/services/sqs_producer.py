@@ -1,5 +1,7 @@
+import hashlib
 import json
 import logging
+import string
 import uuid
 from typing import Any, Dict, List, Optional
 
@@ -14,23 +16,46 @@ SQS_DEDUP_ID_MAX_LENGTH = 128
 # SQS FIFO MessageGroupId max length
 SQS_GROUP_ID_MAX_LENGTH = 128
 
+# Ref: AWS SQS — MessageGroupId ≤128 chars, alphanumeric + punctuation
+_MESSAGE_GROUP_ID_ALLOWED = frozenset(string.ascii_letters + string.digits + "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
+
+
+def _message_group_id_needs_hashed_suffix(prefix: str, contact_urn: str) -> bool:
+    """
+    True when the literal group id is too long or contains characters outside the SQS
+    allowlist (e.g. spaces). Naive substitution would merge distinct URNs such as
+    "a b" and "a-b", so we use a digest suffix instead.
+    """
+    combined = prefix + contact_urn
+    if len(combined) > SQS_GROUP_ID_MAX_LENGTH:
+        return True
+    return any(c not in _MESSAGE_GROUP_ID_ALLOWED for c in combined)
+
+
+def _fifo_message_group_digest_suffix(project_uuid: str, channel_uuid: str, contact_urn: str) -> str:
+    """Deterministic short hex suffix for group id (same contact → same group, distinct contacts → distinct)."""
+    raw = f"{project_uuid}:{channel_uuid}:{contact_urn}".encode()
+    return hashlib.sha256(raw).hexdigest()
+
 
 def _fifo_message_group_id(project_uuid: str, channel_uuid: str, contact_urn: str) -> str:
     """
     Build a FIFO MessageGroupId scoped by project and channel.
 
-    Format: project_uuid:channel_uuid:contact_urn — capped at 128 characters.
-    When over limit, project and channel UUIDs are kept intact; only the tail
-    of contact_urn is truncated (avoids splitting UUIDs and matches SQS rules).
+    Uses project_uuid:channel_uuid:contact_urn when it fits ≤128 chars and matches
+    AWS allowed characters. Otherwise uses a deterministic SHA-256 hex suffix so
+    length and invalid characters (e.g. spaces) are safe without merging different
+    URNs that would collide after naive replacement.
     """
     prefix = f"{project_uuid}:{channel_uuid}:"
-    combined = prefix + contact_urn
-    if len(combined) <= SQS_GROUP_ID_MAX_LENGTH:
-        return combined
-    max_urn_len = SQS_GROUP_ID_MAX_LENGTH - len(prefix)
-    if max_urn_len < 1:
-        return combined[:SQS_GROUP_ID_MAX_LENGTH]
-    return prefix + contact_urn[:max_urn_len]
+    if _message_group_id_needs_hashed_suffix(prefix, contact_urn):
+        digest = _fifo_message_group_digest_suffix(project_uuid, channel_uuid, contact_urn)
+        max_suffix = SQS_GROUP_ID_MAX_LENGTH - len(prefix)
+        if max_suffix < 1:
+            return digest[:SQS_GROUP_ID_MAX_LENGTH]
+        return prefix + digest[:max_suffix]
+
+    return prefix + contact_urn
 
 
 def _normalize_sqs_deduplication_id(value: str) -> str:
