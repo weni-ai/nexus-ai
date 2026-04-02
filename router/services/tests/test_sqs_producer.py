@@ -15,7 +15,12 @@ from router.services.sqs_producer import (
 def _expected_hashed_group_id(project: str, channel: str, urn: str) -> str:
     prefix = f"{project}:{channel}:"
     digest = _fifo_message_group_digest_suffix(project, channel, urn)
+    prefix_safe = all(c in _MESSAGE_GROUP_ID_ALLOWED for c in prefix)
+    if not prefix_safe:
+        return digest[:128]
     max_suffix = 128 - len(prefix)
+    if max_suffix < 1:
+        return digest[:128]
     return prefix + digest[:max_suffix]
 
 
@@ -39,6 +44,18 @@ class FifoMessageGroupIdTests(SimpleTestCase):
         self.assertEqual(len(out), 128)
         self.assertEqual(out, _expected_hashed_group_id(project, channel, urn))
         self.assertTrue(out.startswith(prefix))
+        self.assertTrue(all(c in _MESSAGE_GROUP_ID_ALLOWED for c in out))
+
+    def test_invalid_chars_in_prefix_use_digest_only(self):
+        """Malformed project/channel must not be prepended on the hashed path (Qodo / SQS safety)."""
+        project = "00000000-0000-0000-0000-00000000 00"  # space in UUID-shaped string
+        channel = "10000000-0000-0000-0000-000000000001"
+        urn = "whatsapp:1"
+        digest = _fifo_message_group_digest_suffix(project, channel, urn)
+        out = _fifo_message_group_id(project, channel, urn)
+        self.assertEqual(out, digest[:128])
+        self.assertEqual(len(out), 64)
+        self.assertNotIn(" ", out)
         self.assertTrue(all(c in _MESSAGE_GROUP_ID_ALLOWED for c in out))
 
     def test_americanas_style_long_urn_uses_digest_suffix(self):
