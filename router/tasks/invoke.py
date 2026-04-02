@@ -27,10 +27,12 @@ from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextExcept
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.redis_task_manager import RedisTaskManager
 from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
+from router.utils.redis_clients import get_redis_read_client
 
 from .actions_client import get_action_clients
 
 logger = logging.getLogger(__name__)
+SIMULATION_MANAGER_MODEL_KEY_PREFIX = "simulation_manager_model"
 
 
 def _invoke_is_final_debug(msg: str) -> None:
@@ -65,6 +67,21 @@ def _apm_set_context(**kwargs):
 def get_task_manager() -> RedisTaskManager:
     """Get the default task manager instance."""
     return RedisTaskManager()
+
+
+def _simulation_manager_model_key(project_uuid: str) -> str:
+    return f"{SIMULATION_MANAGER_MODEL_KEY_PREFIX}:{project_uuid}"
+
+
+def _get_simulation_manager_model(project_uuid: str) -> Optional[str]:
+    try:
+        raw = get_redis_read_client().get(_simulation_manager_model_key(project_uuid))
+        if not raw:
+            return None
+        return raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+    except Exception:
+        logger.warning("Failed to read simulation manager model from cache", exc_info=True)
+        return None
 
 
 def handle_attachments(text: str, attachments: list[str]) -> tuple[str, bool]:
@@ -166,7 +183,9 @@ def dispatch_with_optional_builder_websocket(
         contact_urn = getattr(message_obj, "contact_urn", "")
         if is_simulator and contact_urn and "@" in contact_urn and not contact_urn.startswith("ext:"):
             normalized_urn = f"ext:{contact_urn}"
-            logger.info(f"Normalizing simulator contact_urn for dispatch, urn_before:{contact_urn}, urn_after:{normalized_urn}")
+            logger.info(
+                f"Normalizing simulator contact_urn for dispatch, urn_before:{contact_urn}, urn_after:{normalized_urn}"
+            )
             message_obj.contact_urn = normalized_urn
 
         response_msg = dispatch(
@@ -432,6 +451,7 @@ def start_inline_agents(
     self,
     message: Dict,
     preview: bool = False,
+    simulation: bool = False,
     language: str = "en",
     user_email: str = "",
     task_manager: Optional[RedisTaskManager] = None,
@@ -454,6 +474,7 @@ def start_inline_agents(
         return inline_agent_workflow.run(
             message,
             preview=is_simulator,
+            simulation=bool(simulation),
             language=language,
             user_email=user_email,
             supervisor_agent_uuid=supervisor_agent_uuid,
@@ -500,6 +521,14 @@ def start_inline_agents(
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
         processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(message, agents_backend)
+        if simulation:
+            cached_model = _get_simulation_manager_model(project_uuid)
+            if cached_model:
+                foundation_model = cached_model
+                logger.info(
+                    "Using simulation manager model override",
+                    extra={"project_uuid": project_uuid, "foundation_model": cached_model},
+                )
 
         # TODO: Logs
         message_obj = message_factory(
