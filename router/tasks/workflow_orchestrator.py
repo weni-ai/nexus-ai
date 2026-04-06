@@ -166,7 +166,16 @@ def _handle_workflow_error(ctx: WorkflowContext, error: Exception) -> None:
     _finalize_workflow(ctx, status="failed")
 
     # Send error to preview if applicable
+    _ue_ok = bool(ctx.user_email and str(ctx.user_email).strip())
+    logger.info(
+        f"[preview_ws] workflow _handle_workflow_error project_uuid={ctx.project_uuid} "
+        f"user_email_nonempty={_ue_ok} will_send_error_ws={_ue_ok}"
+    )
     if ctx.user_email:
+        logger.info(
+            f"[preview_ws] workflow _handle_workflow_error send_preview_message_to_websocket type=error "
+            f"project_uuid={ctx.project_uuid}"
+        )
         send_preview_message_to_websocket(
             user_email=ctx.user_email,
             project_uuid=str(ctx.project_uuid),
@@ -197,6 +206,11 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
     )
 
     if ctx.preview and ctx.broadcast:
+        _ue_ok = bool(ctx.user_email and str(ctx.user_email).strip())
+        logger.info(
+            f"[preview_ws] workflow guardrails_block return=dispatch_preview project_uuid={ctx.project_uuid} "
+            f"user_email_nonempty={_ue_ok}"
+        )
         return dispatch_preview(
             error.message,
             message_obj,
@@ -205,6 +219,10 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
             ctx.agents_backend or "unknown",
             ctx.flows_user_email,
         )
+    logger.info(
+        f"[preview_ws] workflow guardrails_block return=dispatch preview={ctx.preview} "
+        f"has_broadcast={bool(ctx.broadcast)} project_uuid={ctx.project_uuid}"
+    )
     return dispatch(
         llm_response=error.message,
         message=message_obj,
@@ -315,6 +333,12 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
 
     backend = BackendsRegistry.get_backend(ctx.agents_backend)
 
+    _ue_ok = bool(ctx.user_email and str(ctx.user_email).strip())
+    logger.info(
+        f"[preview_ws] workflow _run_generation before_invoke_backend project_uuid={ctx.project_uuid} "
+        f"preview={ctx.preview} user_email_nonempty={_ue_ok} agents_backend={ctx.agents_backend}"
+    )
+
     response, skip_dispatch = _invoke_backend(
         backend=backend,
         cached_data=ctx.cached_data,
@@ -370,8 +394,13 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
     )
 
     # Dispatch response
+    _ue_ok = bool(ctx.user_email and str(ctx.user_email).strip())
     if ctx.preview:
         _invoke_is_final_debug("H workflow post_generation branch=dispatch_preview")
+        logger.info(
+            f"[preview_ws] workflow _run_post_generation return=dispatch_preview project_uuid={ctx.project_uuid} "
+            f"user_email_nonempty={_ue_ok}"
+        )
         return dispatch_preview(
             response,
             message_obj,
@@ -382,8 +411,16 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
         )
     if skip_dispatch:
         _invoke_is_final_debug("H workflow post_generation branch=skip_dispatch (no dispatch)")
+        logger.info(
+            f"[preview_ws] workflow _run_post_generation return=skip_dispatch project_uuid={ctx.project_uuid} "
+            f"preview={ctx.preview}"
+        )
         return True
     _invoke_is_final_debug("H workflow post_generation branch=dispatch")
+    logger.info(
+        f"[preview_ws] workflow _run_post_generation return=dispatch project_uuid={ctx.project_uuid} "
+        f"preview={ctx.preview}"
+    )
     return dispatch(
         llm_response=response,
         message=message_obj,
@@ -493,6 +530,13 @@ def inline_agent_workflow(
         supervisor_agent_uuid=supervisor_agent_uuid,
     )
     ctx.message_conversation_log_uuid = message_conversation_log_uuid
+
+    _ue_ok = bool(user_email and str(user_email).strip())
+    logger.info(
+        f"[preview_ws] inline_agent_workflow task_id={self.request.id} project_uuid={ctx.project_uuid} "
+        f"preview={preview} simulation={simulation} simulation_channel={ctx.simulation_channel} "
+        f"user_email_nonempty={_ue_ok}"
+    )
 
     try:
         # Initialize workflow (typing indicator, message concat, state creation)

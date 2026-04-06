@@ -199,6 +199,11 @@ def complexity_layer(input_text: str) -> str | None:
 def dispatch_preview(
     response: str, message_obj: Dict, broadcast: Dict, user_email: str, agents_backend: str, flows_user_email: str
 ) -> str:
+    _ue_ok = bool(user_email and str(user_email).strip())
+    logger.info(
+        f"[preview_ws] dispatch_preview enter project_uuid={message_obj.project_uuid} "
+        f"user_email_nonempty={_ue_ok} agents_backend={agents_backend}"
+    )
     response_msg = dispatch(
         llm_response=response,
         message=message_obj,
@@ -206,6 +211,11 @@ def dispatch_preview(
         user_email=flows_user_email,
         full_chunks=[],
         backend=agents_backend,
+    )
+    logger.info(
+        f"[preview_ws] dispatch_preview send_preview_message_to_websocket type=preview "
+        f"project_uuid={message_obj.project_uuid} user_email_nonempty={_ue_ok} "
+        f"response_len={len(response_msg or '')}"
     )
     send_preview_message_to_websocket(
         project_uuid=message_obj.project_uuid,
@@ -365,7 +375,16 @@ def _handle_task_error(
     if isinstance(exc, botocore.exceptions.EventStreamError) and "throttlingException" in str(exc):
         raise ThrottlingException(str(exc))
 
+    _ue_ok = bool(user_email and str(user_email).strip())
+    logger.info(
+        f"[preview_ws] _handle_task_error project_uuid={project_uuid} user_email_nonempty={_ue_ok} "
+        f"will_send_error_ws={_ue_ok}"
+    )
     if user_email:
+        logger.info(
+            f"[preview_ws] _handle_task_error send_preview_message_to_websocket type=error "
+            f"project_uuid={project_uuid}"
+        )
         send_preview_message_to_websocket(
             user_email=user_email, project_uuid=str(project_uuid), message_data={"type": "error", "content": str(exc)}
         )
@@ -425,6 +444,11 @@ def _invoke_backend(
         }
     )
 
+    _ue_ok = bool(user_email and str(user_email).strip())
+    logger.info(
+        f"[preview_ws] _invoke_backend invoke_agents preview={preview} user_email_nonempty={_ue_ok} "
+        f"project_uuid={message_obj.project_uuid} backend={type(backend).__name__}"
+    )
     raw = backend.invoke_agents(**invoke_kwargs)
     return _normalize_invoke_agents_return(raw)
 
@@ -462,9 +486,20 @@ def start_inline_agents(
     use_workflow = project_uuid in workflow_projects or "*" in workflow_projects
     message_conversation_log_uuid = str(uuid.uuid4())
 
+    _ue_ok = bool(user_email and str(user_email).strip())
+    logger.info(
+        f"[preview_ws] start_inline_agents task_id={self.request.id} project_uuid={project_uuid} "
+        f"preview={preview} simulation={simulation} simulation_channel_effective={simulation_channel_effective} "
+        f"skip_sqs={skip_sqs} use_workflow={use_workflow} user_email_nonempty={_ue_ok}"
+    )
+
     if use_workflow:
         from router.tasks.workflow_orchestrator import inline_agent_workflow
 
+        logger.info(
+            f"[preview_ws] start_inline_agents delegating_inline_agent_workflow project_uuid={project_uuid} "
+            f"preview={preview} user_email_nonempty={_ue_ok}"
+        )
         # Call directly using .run() to avoid Celery's "never call .get() within a task" error
         return inline_agent_workflow.run(
             message,
@@ -575,6 +610,10 @@ def start_inline_agents(
                 sentry_sdk.capture_exception(exc)
 
         backend = BackendsRegistry.get_backend(agents_backend)
+        logger.info(
+            f"[preview_ws] start_inline_agents legacy before_invoke_backend project_uuid={project_uuid} "
+            f"preview={preview} user_email_nonempty={_ue_ok} agents_backend={agents_backend}"
+        )
         response, skip_dispatch = _invoke_backend(
             backend=backend,
             cached_data=cached_data,
@@ -613,11 +652,22 @@ def start_inline_agents(
 
         if preview:
             _invoke_is_final_debug("H start_inline_agents branch=dispatch_preview")
+            logger.info(
+                f"[preview_ws] start_inline_agents legacy return=dispatch_preview project_uuid={project_uuid} "
+                f"user_email_nonempty={_ue_ok}"
+            )
             return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)
         if skip_dispatch:
             _invoke_is_final_debug("H start_inline_agents branch=skip_dispatch (no dispatch)")
+            logger.info(
+                f"[preview_ws] start_inline_agents legacy return=skip_dispatch preview={preview} "
+                f"project_uuid={project_uuid}"
+            )
             return True
         _invoke_is_final_debug("H start_inline_agents branch=dispatch")
+        logger.info(
+            f"[preview_ws] start_inline_agents legacy return=dispatch project_uuid={project_uuid} preview={preview}"
+        )
         return dispatch(
             llm_response=response,
             message=message_obj,
@@ -655,7 +705,15 @@ def start_inline_agents(
             turn_id=turn_id,
         )
         if preview:
+            logger.info(
+                f"[preview_ws] start_inline_agents unsafe_message return=dispatch_preview "
+                f"project_uuid={message.get('project_uuid')} user_email_nonempty={_ue_ok}"
+            )
             return dispatch_preview(e.message, message_obj, broadcast, user_email, agents_backend, flows_user_email)
+        logger.info(
+            f"[preview_ws] start_inline_agents unsafe_message return=dispatch preview={preview} "
+            f"project_uuid={message.get('project_uuid')}"
+        )
         return dispatch(
             llm_response=e.message,
             message=message_obj,

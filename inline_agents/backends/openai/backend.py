@@ -390,7 +390,16 @@ class OpenAIBackend(InlineAgentsBackend):
 
         client = self._get_client()
 
+        _ue_ok = bool(user_email)
+        logger.info(
+            f"[preview_ws] OpenAIBackend.invoke_agents before_status_ws preview={preview} "
+            f"user_email_nonempty={_ue_ok} project_uuid={project_uuid} will_send={bool(preview and user_email)}"
+        )
         if preview and user_email:
+            logger.info(
+                f"[preview_ws] OpenAIBackend.invoke_agents send_preview_message_to_websocket type=status "
+                f"project_uuid={project_uuid}"
+            )
             send_preview_message_to_websocket(
                 project_uuid=str(project_uuid),
                 user_email=user_email,
@@ -399,6 +408,10 @@ class OpenAIBackend(InlineAgentsBackend):
                     "content": "Starting OpenAI agent processing",
                     "session_id": session_id,
                 },
+            )
+        elif preview and not user_email:
+            logger.info(
+                f"[preview_ws] OpenAIBackend.invoke_agents skip_status_ws reason=no_user_email project_uuid={project_uuid}"
             )
 
         grpc_client, grpc_session, grpc_msg_id = None, None, None
@@ -662,7 +675,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 )
         return delta_counter
 
-    async def _invoke_agents_async(
+    async def _invoke_agents_async(  # noqa: C901
         self,
         client,
         external_team,
