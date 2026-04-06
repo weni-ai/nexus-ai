@@ -357,4 +357,7 @@ class TeamCacheInvalidationObserver(EventObserver):
 
             logger.info(f"Refreshed team and inline agent config cache for {project_uuid}")
         except Exception as e:
-            logger.error(f"Failed to refresh team cache: {e}", exc_info=True)
+            logger.error(
+                f"Failed to refresh team and inline agent config cache: {e}",
+                exc_info=True,
+            )

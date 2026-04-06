@@ -1,3 +1,4 @@
+import json
 import logging
 
 import pendulum
@@ -11,6 +12,10 @@ from rest_framework.views import APIView
 from inline_agents.backends import BackendsRegistry
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import notify_async
+from nexus.inline_agents.api.official_agents_helpers import (
+    get_all_mcps_for_group,
+    get_mcps_for_agent_system,
+)
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     AgentSystemSerializer,
@@ -24,7 +29,7 @@ from nexus.inline_agents.api.serializers import (
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
-from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
+from nexus.inline_agents.models import Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.api.serializers import ProjectMinimalSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
@@ -61,8 +66,6 @@ class PushAgents(APIView):
 
         files = request.FILES
         validate_file_size(files)
-
-        import json
 
         logger.debug(f"InlineAgentsView payload - keys: {list(request.data.keys())}")
 
@@ -128,148 +131,6 @@ class PushAgents(APIView):
             return Response({"error": "Project not found"}, status=404)
 
         return Response({})
-
-
-def _sort_mcps(mcps: list) -> list:
-    """Sort MCPs so that 'Default' appears first, then alphabetical order"""
-    if not isinstance(mcps, list):
-        return mcps
-
-    def sort_key(mcp):
-        name = mcp.get("name", "") if isinstance(mcp, dict) else ""
-        is_default = name.lower() == "default"
-        return (0 if is_default else 1, name.lower())
-
-    return sorted(mcps, key=sort_key)
-
-
-def _serialize_mcp(mcp) -> dict:
-    """Helper to serialize MCP with config and credentials"""
-    mcp_data = {
-        "name": mcp.name,
-        "description_en": mcp.description_en,
-        "description_es": mcp.description_es,
-        "description_pt": mcp.description_pt,
-        "system": mcp.system.slug if mcp.system else None,
-        "config": [],
-        "credentials": [],
-    }
-
-    # Add config options
-    for config_option in mcp.config_options.all():
-        # For SWITCH, NUMBER, TEXT, CHECKBOX - ensure options is always an empty list
-        options = config_option.options
-        if config_option.type in ["SWITCH", "NUMBER", "TEXT", "CHECKBOX"]:
-            if not isinstance(options, list):
-                options = []
-
-        config_item = {
-            "name": config_option.name,
-            "label": config_option.label,
-            "type": config_option.type,
-            "options": options,
-        }
-        # Add default_value if it exists
-        if config_option.default_value is not None:
-            config_item["default_value"] = config_option.default_value
-        mcp_data["config"].append(config_item)
-
-    # Add credentials templates
-    for template in mcp.credential_templates.all():
-        mcp_data["credentials"].append(
-            {
-                "name": template.name,
-                "label": template.label,
-                "placeholder": template.placeholder,
-                "is_confidential": template.is_confidential,
-            }
-        )
-
-    return mcp_data
-
-
-def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
-    """
-    Get MCPs for an agent/system combination from database models.
-    """
-    agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
-    system = AgentSystem.objects.filter(slug__iexact=system_slug).first()
-
-    if not agent or not system:
-        return []
-
-    mcps = (
-        agent.mcps.filter(system=system, is_active=True)
-        .select_related("system")
-        .prefetch_related("config_options", "credential_templates")
-    )
-
-    result = [_serialize_mcp(mcp) for mcp in mcps]
-    return _sort_mcps(result)
-
-
-def _sort_systems(systems: list) -> list:
-    """
-    Sort systems list ensuring 'vtex' comes first, followed by alphabetical order.
-    """
-    sorted_systems = sorted(systems)
-    if "vtex" in sorted_systems:
-        sorted_systems.remove("vtex")
-        sorted_systems.insert(0, "vtex")
-    return sorted_systems
-
-
-def get_all_systems_for_group(group_slug: str) -> list:
-    """
-    Get all unique system slugs for a group, derived from its associated MCPs.
-    Top-down approach: Group -> MCPs -> System
-    """
-    # Get systems from MCPs that have a system
-    systems = list(
-        AgentSystem.objects.filter(mcps__groups__slug=group_slug, mcps__is_active=True)
-        .values_list("slug", flat=True)
-        .distinct()
-    )
-
-    # Check if there are any active MCPs in the group without a system
-    has_no_system_mcps = MCP.objects.filter(groups__slug=group_slug, is_active=True, system__isnull=True).exists()
-
-    if has_no_system_mcps:
-        systems.append("no_system")
-
-    return _sort_systems(systems)
-
-
-def get_all_mcps_for_group(group_slug: str) -> dict:
-    """
-    Get all MCPs for a group, organized by system.
-    Top-down approach: Group -> MCPs
-    """
-    try:
-        group = AgentGroup.objects.get(slug=group_slug)
-    except AgentGroup.DoesNotExist:
-        return {}
-
-    # Get MCPs directly from the group (Source of Truth)
-    mcps = (
-        group.mcps.filter(is_active=True)
-        .select_related("system")
-        .prefetch_related("config_options", "credential_templates")
-    )
-
-    result = {}
-    for mcp in mcps:
-        system_slug = mcp.system.slug if mcp.system else "no_system"
-        if system_slug not in result:
-            result[system_slug] = []
-
-        result[system_slug].append(_serialize_mcp(mcp))
-
-    # Sort MCPs for each system
-    for system_slug in result:
-        result[system_slug] = _sort_mcps(result[system_slug])
-
-    return result
 
 
 def get_all_credentials_for_group(group_slug: str) -> list:

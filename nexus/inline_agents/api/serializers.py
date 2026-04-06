@@ -1,7 +1,12 @@
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
-from nexus.inline_agents.api.views import _sort_mcps, _sort_systems, get_all_mcps_for_group, get_all_systems_for_group
+from nexus.inline_agents.api.official_agents_helpers import (
+    _sort_mcps,
+    _sort_systems,
+    get_all_mcps_for_group,
+    get_all_systems_for_group,
+)
 from nexus.inline_agents.models import Agent, AgentCredential, AgentSystem, IntegratedAgent
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
@@ -318,8 +323,6 @@ class OfficialAgentListSerializer(serializers.Serializer):
         assigned = False
         if project_uuid:
             assigned = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj, is_active=True).exists()
-        from nexus.inline_agents.api.views import get_all_mcps_for_group
-
         systems = list(AgentSystem.objects.filter(agents__uuid=obj.uuid).values_list("slug", flat=True).distinct())
         group_name = obj.group.slug if getattr(obj, "group", None) else None
 
