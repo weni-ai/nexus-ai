@@ -445,7 +445,7 @@ class GroupUnassignmentTestCase(TestCase):
 
 
 class OfficialAgentsV1I18nPresentationTestCase(TestCase):
-    """Official list/detail APIs expose all locale-specific modal and MCP description fields."""
+    """Official list/detail APIs expose presentation and MCP description as nested locale maps (en/pt/es)."""
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_list_and_detail_include_locale_fields(self, mock_has_permission):
@@ -502,12 +502,12 @@ class OfficialAgentsV1I18nPresentationTestCase(TestCase):
         listed = list_resp.json()["new"]["agents"]
         entry = next(a for a in listed if a.get("group") == group.slug)
         pres = entry["presentation"]
-        self.assertEqual(pres["about_en"], "About EN")
-        self.assertEqual(pres["about_es"], "About ES")
-        self.assertEqual(pres["about_pt"], "About PT")
-        self.assertEqual(pres["conversation_example_en"][0]["text"], "EN")
-        self.assertEqual(pres["conversation_example_es"][0]["text"], "ES")
-        self.assertEqual(pres["conversation_example_pt"][0]["text"], "PT")
+        self.assertEqual(pres["about"]["en"], "About EN")
+        self.assertEqual(pres["about"]["es"], "About ES")
+        self.assertEqual(pres["about"]["pt"], "About PT")
+        self.assertEqual(pres["conversation_example"]["en"][0]["text"], "EN")
+        self.assertEqual(pres["conversation_example"]["es"][0]["text"], "ES")
+        self.assertEqual(pres["conversation_example"]["pt"][0]["text"], "PT")
 
         detail_url = reverse("v1-official-agent-detail", kwargs={"identifier": group.slug})
         detail_resp = client.get(
@@ -518,16 +518,17 @@ class OfficialAgentsV1I18nPresentationTestCase(TestCase):
         self.assertEqual(detail_resp.status_code, 200)
         body = detail_resp.json()
         dp = body["presentation"]
-        self.assertEqual(dp["about_en"], "About EN")
-        self.assertEqual(dp["about_pt"], "About PT")
-        self.assertEqual(dp["conversation_example_es"][0]["text"], "ES")
+        self.assertEqual(dp["about"]["en"], "About EN")
+        self.assertEqual(dp["about"]["pt"], "About PT")
+        self.assertEqual(dp["conversation_example"]["es"][0]["text"], "ES")
 
         mcps_flat = body.get("MCPs") or []
         self.assertTrue(mcps_flat, "expected MCPs in detail response")
         mcp_payload = next(m for m in mcps_flat if m["name"] == "Test MCP")
-        self.assertEqual(mcp_payload["description_en"], "Desc EN")
-        self.assertEqual(mcp_payload["description_es"], "Desc ES")
-        self.assertEqual(mcp_payload["description_pt"], "Desc PT")
+        desc = mcp_payload["description"]
+        self.assertEqual(desc["en"], "Desc EN")
+        self.assertEqual(desc["es"], "Desc ES")
+        self.assertEqual(desc["pt"], "Desc PT")
 
 
 class TestCommunicateInternallyPermission(TestCase):

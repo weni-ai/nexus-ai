@@ -20,9 +20,11 @@ def _serialize_mcp(mcp) -> dict:
     """Serialize MCP with config and credentials."""
     mcp_data = {
         "name": mcp.name,
-        "description_en": mcp.description_en,
-        "description_es": mcp.description_es,
-        "description_pt": mcp.description_pt,
+        "description": {
+            "en": mcp.description_en,
+            "pt": mcp.description_pt,
+            "es": mcp.description_es,
+        },
         "system": mcp.system.slug if mcp.system else None,
         "config": [],
         "credentials": [],

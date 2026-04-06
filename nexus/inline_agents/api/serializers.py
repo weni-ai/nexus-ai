@@ -12,15 +12,19 @@ from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
 
 def official_agent_modal_presentation_payload(modal) -> dict:
-    """Presentation for official agent APIs (en, es, pt); frontend picks by project language."""
+    """Presentation for official agent APIs; locale maps for frontend (DB fields unchanged)."""
     return {
         "agent_name": modal.agent_name,
-        "about_en": modal.about_en,
-        "about_es": modal.about_es,
-        "about_pt": modal.about_pt,
-        "conversation_example_en": modal.conversation_example_en,
-        "conversation_example_es": modal.conversation_example_es,
-        "conversation_example_pt": modal.conversation_example_pt,
+        "about": {
+            "en": modal.about_en,
+            "pt": modal.about_pt,
+            "es": modal.about_es,
+        },
+        "conversation_example": {
+            "en": list(modal.conversation_example_en or []),
+            "pt": list(modal.conversation_example_pt or []),
+            "es": list(modal.conversation_example_es or []),
+        },
     }
 
 
