@@ -40,7 +40,10 @@ from router.tasks.invoke import (
     _invoke_backend,
     _invoke_is_final_debug,
     _preprocess_message_input,
+    apply_simulation_foundation_model_override,
     dispatch_preview,
+    effective_simulation_channel,
+    should_skip_conversation_sqs,
 )
 from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
 from router.tasks.redis_task_manager import RedisTaskManager
@@ -69,6 +72,8 @@ class WorkflowContext:
     contact_urn: str
     message: Dict
     preview: bool
+    simulation: bool
+    simulation_channel: bool
     language: str
     user_email: str
     task_id: str
@@ -273,6 +278,12 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
 
     # Preprocess message
     processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(ctx.message, ctx.agents_backend)
+    foundation_model = apply_simulation_foundation_model_override(
+        ctx.simulation,
+        ctx.project_uuid or "",
+        ctx.message.get("contact_urn") or "",
+        foundation_model,
+    )
 
     # Create message object
     message_obj = _create_message_object(processed_message)
@@ -281,8 +292,8 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
     ctx.incoming_created_at = pendulum.now().to_iso8601_string()
     ctx.turn_id = ctx.message.get("msg_event", {}).get("msg_external_id") or str(uuid_lib.uuid4())
 
-    # Send incoming to SQS when message is received
-    if not ctx.preview:
+    # Conversation SQS: same rules as start_inline_agents (Cases 1–3)
+    if not should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel):
         received_event = build_message_received_event(
             project_uuid=ctx.project_uuid,
             contact_urn=ctx.contact_urn,
@@ -407,17 +418,22 @@ def _create_workflow_context(
     task_id: str,
     message: Dict,
     preview: bool,
+    simulation: bool,
+    simulation_channel: bool,
     language: str,
     user_email: str,
     supervisor_agent_uuid: Optional[str] = None,
 ) -> WorkflowContext:
     """Create a workflow context from task parameters."""
+    simulation_channel_effective = effective_simulation_channel(message, simulation_channel)
     return WorkflowContext(
         workflow_id=f"workflow-{uuid_lib.uuid4()}",
         project_uuid=message.get("project_uuid"),
         contact_urn=message.get("contact_urn"),
         message=message,
         preview=preview,
+        simulation=simulation,
+        simulation_channel=simulation_channel_effective,
         language=language,
         user_email=user_email,
         task_id=task_id,
@@ -447,6 +463,8 @@ def inline_agent_workflow(
     self,
     message: Dict,
     preview: bool = False,
+    simulation: bool = False,
+    simulation_channel: bool = False,
     language: str = "en",
     user_email: str = "",
     supervisor_agent_uuid: Optional[str] = None,
@@ -468,6 +486,8 @@ def inline_agent_workflow(
         task_id=self.request.id,
         message=message,
         preview=preview,
+        simulation=simulation,
+        simulation_channel=simulation_channel,
         language=language,
         user_email=user_email,
         supervisor_agent_uuid=supervisor_agent_uuid,

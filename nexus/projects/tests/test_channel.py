@@ -6,6 +6,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
+from nexus.projects.api.serializers import ProjectSerializer
 from nexus.projects.channel_ops import (
     channel_matches_default_preview,
     create_channel_from_wwc_event,
@@ -140,3 +141,16 @@ class ProjectDetailsDefaultChannelTestCase(TestCase):
         create_channel_from_wwc_event(str(project.uuid), str(ch), "WWC")
         result2 = usecase.get_agent_builder_project_details(str(project.uuid))
         self.assertEqual(result2["default_channel_uuid"], str(ch))
+
+
+class ProjectSerializerDefaultChannelTestCase(TestCase):
+    def test_project_serializer_includes_default_channel_uuid(self) -> None:
+        project = ProjectFactory()
+        payload = ProjectSerializer(project).data
+        self.assertIn("default_channel_uuid", payload)
+        self.assertIsNone(payload["default_channel_uuid"])
+
+        ch = uuid4()
+        create_channel_from_wwc_event(str(project.uuid), str(ch), "WWC")
+        payload = ProjectSerializer(project).data
+        self.assertEqual(payload["default_channel_uuid"], str(ch))

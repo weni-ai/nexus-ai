@@ -3,6 +3,7 @@ import logging
 import os
 import uuid
 from typing import Dict, Optional, Tuple
+from uuid import UUID
 
 import boto3
 import botocore
@@ -16,6 +17,8 @@ from inline_agents.backends import BackendsRegistry
 from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
+from nexus.projects.channel_ops import channel_matches_default_preview
+from nexus.projects.simulation_model_cache import simulation_manager_model_redis_key
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.dispatcher import dispatch
@@ -26,10 +29,52 @@ from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextExcept
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.redis_task_manager import RedisTaskManager
 from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
+from router.utils.redis_clients import get_redis_read_client
 
 from .actions_client import get_action_clients
 
 logger = logging.getLogger(__name__)
+
+
+def effective_simulation_channel(message: Dict, simulation_channel: bool = False) -> bool:
+    """Whether to treat this message as default preview-channel traffic for conversation SQS gating."""
+    if bool(simulation_channel):
+        return True
+    project_uuid = message.get("project_uuid") or ""
+    try:
+        UUID(str(project_uuid))
+    except (ValueError, TypeError, AttributeError):
+        return False
+    return channel_matches_default_preview(project_uuid, message.get("channel_uuid"))
+
+
+def should_skip_conversation_sqs(preview: bool, simulation_channel_effective: bool) -> bool:
+    """Whether to omit sending conversation message.received events to SQS."""
+    return bool(preview) or bool(simulation_channel_effective)
+
+
+def _get_simulation_manager_model(project_uuid: str, contact_urn: str) -> Optional[str]:
+    try:
+        raw = get_redis_read_client().get(simulation_manager_model_redis_key(project_uuid, contact_urn))
+        if not raw:
+            return None
+        return raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+    except Exception:
+        logger.warning("Failed to read simulation manager model from Redis", exc_info=True)
+        return None
+
+
+def apply_simulation_foundation_model_override(
+    simulation: bool,
+    project_uuid: str,
+    contact_urn: str,
+    foundation_model: Optional[str],
+) -> Optional[str]:
+    """Replace foundation model with Redis-cached value when ``simulation`` is True."""
+    if not simulation or not project_uuid:
+        return foundation_model
+    cached = _get_simulation_manager_model(project_uuid, contact_urn or "")
+    return cached if cached else foundation_model
 
 
 def _invoke_is_final_debug(msg: str) -> None:
@@ -399,6 +444,8 @@ def start_inline_agents(
     self,
     message: Dict,
     preview: bool = False,
+    simulation: bool = False,
+    simulation_channel: bool = False,
     language: str = "en",
     user_email: str = "",
     task_manager: Optional[RedisTaskManager] = None,
@@ -406,6 +453,8 @@ def start_inline_agents(
 ) -> bool:  # pragma: no cover
     _apm_set_context(message=message, preview=preview)
     project_uuid = message.get("project_uuid")
+    simulation_channel_effective = effective_simulation_channel(message, simulation_channel)
+    skip_sqs = should_skip_conversation_sqs(preview, simulation_channel_effective)
 
     # Feature flag: list of project UUIDs that use new workflow architecture
     # Set WORKFLOW_ARCHITECTURE_PROJECTS=["uuid1", "uuid2"] or ["*"] for all
@@ -420,6 +469,8 @@ def start_inline_agents(
         return inline_agent_workflow.run(
             message,
             preview=preview,
+            simulation=simulation,
+            simulation_channel=simulation_channel,
             language=language,
             user_email=user_email,
             supervisor_agent_uuid=supervisor_agent_uuid,
@@ -468,6 +519,9 @@ def start_inline_agents(
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
         processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(message, agents_backend)
+        foundation_model = apply_simulation_foundation_model_override(
+            simulation, project_uuid or "", message.get("contact_urn") or "", foundation_model
+        )
 
         # TODO: Logs
         message_obj = message_factory(
@@ -500,8 +554,7 @@ def start_inline_agents(
         # Invoke backend (incoming saved inside backend via save_inline_message_async)
         incoming_created_at = pendulum.now().to_iso8601_string()
 
-        # Send incoming to SQS when message is received
-        if not preview:
+        if not skip_sqs:
             received_event = build_message_received_event(
                 project_uuid=project_uuid,
                 contact_urn=message_obj.contact_urn,

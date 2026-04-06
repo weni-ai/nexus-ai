@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
+from inline_agents.backends import BackendsRegistry
 from nexus.actions.api.serializers import (
     FlowSerializer,
     TemplateActionSerializer,
@@ -18,6 +19,10 @@ from nexus.orgs.permissions import is_super_user
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.exceptions import ProjectAuthorizationDenied
 from nexus.projects.permissions import has_external_general_project_permission
+from nexus.projects.simulation_model_cache import (
+    SIMULATION_MANAGER_MODEL_TTL_SECONDS,
+    simulation_manager_model_redis_key,
+)
 from nexus.usecases import projects
 from nexus.usecases.actions.create import (
     CreateFlowDTO,
@@ -48,8 +53,10 @@ from nexus.usecases.intelligences.exceptions import (
     IntelligencePermissionDenied,
 )
 from router.entities import Message as UserMessage
+from router.entities import message_factory
 from router.tasks.invoke import start_inline_agents
 from router.tasks.tasks import start_route
+from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +249,113 @@ class MessagePreviewView(APIView):
             return Response(status=status.HTTP_401_UNAUTHORIZED)
         except TaskRevokedError:
             return Response(data={"type": "cancelled", "message": "", "fonts": []})
+
+
+class MessageSimulationView(APIView):
+    permission_classes = [ProjectPermission]
+
+    def post(self, request, *args, **kwargs):
+        try:
+            project_uuid = kwargs.get("project_uuid")
+            project = projects.get_project_by_uuid(project_uuid)
+
+            data = request.data
+            language = data.get("language", "en")
+            supervisor_agent_uuid = data.get("manager_agent_uuid")
+            message = UserMessage(
+                project_uuid=project_uuid,
+                text=data.get("text"),
+                contact_urn=data.get("contact_urn"),
+                attachments=data.get("attachments", []),
+                metadata=data.get("metadata", {}),
+            )
+            if project.inline_agent_switch:
+                logger.info("Starting Inline Agent (simulation endpoint)")
+                task_kwargs = {
+                    "message": message.dict(),
+                    "preview": True,
+                    "simulation": True,
+                    "user_email": request.user.email,
+                    "language": language,
+                }
+                if supervisor_agent_uuid:
+                    try:
+                        int(supervisor_agent_uuid)
+                    except ValueError:
+                        task_kwargs["supervisor_agent_uuid"] = supervisor_agent_uuid
+
+                start_inline_agents.apply_async(
+                    kwargs=task_kwargs,
+                    queue="celery",
+                )
+                return Response(data={"type": "simulation", "message": "Processing started", "fonts": []})
+            else:
+                task = start_route.delay(message=message.__dict__, preview=True)
+                response = task.wait()
+
+            return Response(data=response)
+        except IntelligencePermissionDenied:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+        except TaskRevokedError:
+            return Response(data={"type": "cancelled", "message": "", "fonts": []})
+
+
+class SimulationEndSessionView(APIView):
+    permission_classes = [ProjectPermission]
+
+    def post(self, request, project_uuid):
+        contact_urn = request.data.get("contact_urn")
+        if not contact_urn:
+            return Response({"error": "contact_urn is required"}, status=400)
+
+        message_obj = message_factory(text="", project_uuid=project_uuid, contact_urn=contact_urn)
+        projects_use_case = projects.ProjectsUseCase()
+        agents_backend = projects_use_case.get_agents_backend_by_project(project_uuid)
+        backend = BackendsRegistry.get_backend(agents_backend)
+        backend.end_session(message_obj.project_uuid, message_obj.sanitized_urn)
+        return Response({"message": "Simulation session ended successfully"})
+
+
+class SimulationManagerModelView(APIView):
+    permission_classes = [ProjectPermission]
+
+    def get(self, request, project_uuid):
+        contact_urn = request.query_params.get("contact_urn")
+        if not contact_urn:
+            return Response({"error": "contact_urn query parameter is required"}, status=400)
+        project = projects.get_project_by_uuid(project_uuid)
+        key = simulation_manager_model_redis_key(project_uuid, contact_urn)
+        cached = get_redis_read_client().get(key)
+        if cached:
+            model = cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
+            return Response({"manager_foundation_model": model, "source": "cache"})
+        return Response(
+            {
+                "manager_foundation_model": project.default_supervisor_foundation_model,
+                "source": "project_default",
+            }
+        )
+
+    def post(self, request, project_uuid):
+        manager_foundation_model = request.data.get("manager_foundation_model")
+        contact_urn = request.data.get("contact_urn")
+        if manager_foundation_model is None or manager_foundation_model == "":
+            return Response({"error": "manager_foundation_model is required"}, status=400)
+        if not contact_urn:
+            return Response({"error": "contact_urn is required"}, status=400)
+
+        key = simulation_manager_model_redis_key(project_uuid, contact_urn)
+        get_redis_write_client().setex(
+            key,
+            SIMULATION_MANAGER_MODEL_TTL_SECONDS,
+            str(manager_foundation_model),
+        )
+        return Response(
+            {
+                "manager_foundation_model": manager_foundation_model,
+                "ttl_seconds": SIMULATION_MANAGER_MODEL_TTL_SECONDS,
+            }
+        )
 
 
 class GenerateActionNameView(APIView):
