@@ -122,6 +122,7 @@ class PreviewConsumer(WebsocketConsumer):
 
         async_to_sync(self.channel_layer.group_add)(self.room_group_name, self.channel_name)
         self.accept()
+        logger.info(f"[preview_ws] PreviewConsumer connected room_group_name={self.room_group_name}")
 
     def receive(self, text_data=None, bytes_data=None):
         text_data_json = json.loads(text_data)
@@ -141,12 +142,20 @@ class PreviewConsumer(WebsocketConsumer):
         mtype = {"ping": "pong"}
         message = event["message"]
         message_type = event["message_type"]
+        logger.info(
+            f"[preview_ws] PreviewConsumer preview_message delivering type={message_type} room={self.room_group_name}"
+        )
         self.send(text_data=json.dumps({"type": mtype.get(message_type, message_type), "message": message}))
 
 
 def send_preview_message_to_websocket(project_uuid, message_data, user_email):
     channel_layer = get_channel_layer()
     room_name = f"preview_{project_uuid}_{sanitize_user_email(user_email)}"
+    _mt = (message_data or {}).get("type")
+    logger.info(
+        f"[preview_ws] send_preview_message_to_websocket group_send room={room_name} msg_type={_mt} "
+        f"project_uuid={project_uuid}"
+    )
 
     async_to_sync(channel_layer.group_send)(
         room_name,
