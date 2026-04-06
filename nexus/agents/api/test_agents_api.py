@@ -10,8 +10,8 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.agents.models import Team
+from nexus.inline_agents.models import MCP, AgentGroup, AgentGroupModal, AgentSystem, IntegratedAgent, Version
 from nexus.inline_agents.models import Agent as InlineAgent
-from nexus.inline_agents.models import AgentGroup, AgentGroupModal, IntegratedAgent, Version
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
@@ -442,6 +442,92 @@ class GroupUnassignmentTestCase(TestCase):
         self.assertFalse(IntegratedAgent.objects.filter(pk=ia_active.pk).exists())
         self.assertFalse(IntegratedAgent.objects.filter(pk=ia_inactive.pk).exists())
         self.assertEqual(IntegratedAgent.objects.filter(project=target_project).count(), 0)
+
+
+class OfficialAgentsV1I18nPresentationTestCase(TestCase):
+    """Official list/detail APIs expose all locale-specific modal and MCP description fields."""
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_list_and_detail_include_locale_fields(self, mock_has_permission):
+        mock_has_permission.return_value = True
+
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        owner_project = ProjectFactory()
+
+        group = AgentGroup.objects.create(name="I18n Group", slug="i18n-group-official-test", shared_config={})
+        AgentGroupModal.objects.create(
+            group=group,
+            agent_name="Catalog",
+            about_en="About EN",
+            about_es="About ES",
+            about_pt="About PT",
+            conversation_example_en=[{"text": "EN", "direction": "incoming"}],
+            conversation_example_es=[{"text": "ES", "direction": "incoming"}],
+            conversation_example_pt=[{"text": "PT", "direction": "incoming"}],
+        )
+        system = AgentSystem.objects.create(name="VTEX I18n Test", slug="vtex-i18n-official-test")
+        mcp = MCP.objects.create(
+            name="Test MCP",
+            slug="test-mcp-i18n-official",
+            description_en="Desc EN",
+            description_es="Desc ES",
+            description_pt="Desc PT",
+            system=system,
+        )
+        group.mcps.add(mcp)
+
+        agent = InlineAgent.objects.create(
+            name="Agent",
+            slug="i18n-agent-official-test",
+            instruction="i",
+            collaboration_instructions="collab",
+            foundation_model="m",
+            project=owner_project,
+            group=group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        list_url = reverse("v1-official-agents")
+        list_resp = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid)},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(list_resp.status_code, 200)
+        listed = list_resp.json()["new"]["agents"]
+        entry = next(a for a in listed if a.get("group") == group.slug)
+        pres = entry["presentation"]
+        self.assertEqual(pres["about_en"], "About EN")
+        self.assertEqual(pres["about_es"], "About ES")
+        self.assertEqual(pres["about_pt"], "About PT")
+        self.assertEqual(pres["conversation_example_en"][0]["text"], "EN")
+        self.assertEqual(pres["conversation_example_es"][0]["text"], "ES")
+        self.assertEqual(pres["conversation_example_pt"][0]["text"], "PT")
+
+        detail_url = reverse("v1-official-agent-detail", kwargs={"identifier": group.slug})
+        detail_resp = client.get(
+            detail_url,
+            {"project_uuid": str(target_project.uuid)},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(detail_resp.status_code, 200)
+        body = detail_resp.json()
+        dp = body["presentation"]
+        self.assertEqual(dp["about_en"], "About EN")
+        self.assertEqual(dp["about_pt"], "About PT")
+        self.assertEqual(dp["conversation_example_es"][0]["text"], "ES")
+
+        mcps_flat = body.get("MCPs") or []
+        self.assertTrue(mcps_flat, "expected MCPs in detail response")
+        mcp_payload = next(m for m in mcps_flat if m["name"] == "Test MCP")
+        self.assertEqual(mcp_payload["description_en"], "Desc EN")
+        self.assertEqual(mcp_payload["description_es"], "Desc ES")
+        self.assertEqual(mcp_payload["description_pt"], "Desc PT")
 
 
 class TestCommunicateInternallyPermission(TestCase):

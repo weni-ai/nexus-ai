@@ -20,6 +20,7 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignRequestSerializer,
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
+    official_agent_modal_presentation_payload,
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
@@ -146,7 +147,9 @@ def _serialize_mcp(mcp) -> dict:
     """Helper to serialize MCP with config and credentials"""
     mcp_data = {
         "name": mcp.name,
-        "description": mcp.description,
+        "description_en": mcp.description_en,
+        "description_es": mcp.description_es,
+        "description_pt": mcp.description_pt,
         "system": mcp.system.slug if mcp.system else None,
         "config": [],
         "credentials": [],
@@ -413,12 +416,7 @@ def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, cr
 
     try:
         modal = base_agent.group.modal
-        presentation = {
-            "conversation_example": modal.conversation_example,
-            "about": modal.about,
-            "agent_name": modal.agent_name,
-        }
-        payload["presentation"] = presentation
+        payload["presentation"] = official_agent_modal_presentation_payload(modal)
     except Exception:
         pass
 
@@ -500,7 +498,11 @@ class OfficialAgentsV1(APIView):
         category_filter = request.query_params.get("category")
         system_filter = request.query_params.get("system")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).prefetch_related("systems")
+        agents = (
+            Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+            .select_related("group", "group__modal")
+            .prefetch_related("systems")
+        )
 
         latest_version_skills = Subquery(
             Version.objects.filter(agent=OuterRef("pk"))
@@ -528,9 +530,11 @@ class OfficialAgentsV1(APIView):
                 agents.filter(systems__slug__iexact=system_filter).distinct("uuid").values_list("uuid", flat=True)
             )
             # Fetch agents again without the systems filter to avoid queryset state issues
-            agents = Agent.objects.filter(
-                uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM
-            ).prefetch_related("systems")
+            agents = (
+                Agent.objects.filter(uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM)
+                .select_related("group", "group__modal")
+                .prefetch_related("systems")
+            )
             agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
 
         consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
@@ -1011,17 +1015,20 @@ class OfficialAgentDetailV1(APIView):
         group = request.query_params.get("group")
         mcp = request.query_params.get("mcp")
 
+        official_agent_qs = Agent.objects.select_related("group", "group__modal").filter(
+            is_official=True, source_type=Agent.PLATFORM
+        )
         try:
-            agent = Agent.objects.get(uuid=identifier, is_official=True, source_type=Agent.PLATFORM)
+            agent = official_agent_qs.get(uuid=identifier)
         except Exception:
-            agent = Agent.objects.filter(slug=identifier, is_official=True, source_type=Agent.PLATFORM).first()
+            agent = official_agent_qs.filter(slug=identifier).first()
 
             if not agent:
                 group_obj = AgentGroup.objects.filter(slug=identifier).first()
                 if not group_obj:
                     return Response({"error": "Agent not found"}, status=404)
 
-                agent = Agent.objects.filter(group=group_obj, is_official=True, source_type=Agent.PLATFORM).first()
+                agent = official_agent_qs.filter(group=group_obj).first()
                 if not agent:
                     return Response({"error": "Agent not found"}, status=404)
 
