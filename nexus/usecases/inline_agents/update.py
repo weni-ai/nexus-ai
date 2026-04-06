@@ -74,7 +74,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                             slug=mcp_item,
                             name=mcp_item,
                             system=None,
-                            description=f"Auto-created MCP for {mcp_item}",
+                            description_en=f"Auto-created MCP for {mcp_item}",
                         )
 
                         if "credentials" in agent_data:
