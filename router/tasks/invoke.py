@@ -474,7 +474,7 @@ def start_inline_agents(
     simulation_channel_effective = effective_simulation_channel(message, simulation_channel)
 
     if simulation_channel_effective:
-        user_email = message.contact_urn.replace("ext:", "")
+        user_email = message.get("contact_urn").replace("ext:", "")
 
     preview_websocket = simulation_channel_effective and bool(user_email and str(user_email).strip())
     skip_sqs = should_skip_conversation_sqs(preview, simulation_channel_effective)
