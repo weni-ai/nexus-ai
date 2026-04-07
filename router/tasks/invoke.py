@@ -207,12 +207,17 @@ def dispatch_preview(
         full_chunks=[],
         backend=agents_backend,
     )
+    ws_content = (
+        response_msg
+        if response_msg is not None
+        else {"type": "broadcast", "message": response, "fonts": []}
+    )
     send_preview_message_to_websocket(
         project_uuid=message_obj.project_uuid,
         user_email=user_email,
-        message_data={"type": "preview", "content": response_msg},
+        message_data={"type": "preview", "content": ws_content},
     )
-    return response_msg
+    return response_msg if response_msg is not None else response
 
 
 def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
