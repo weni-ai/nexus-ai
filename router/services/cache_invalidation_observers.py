@@ -26,6 +26,7 @@ import logging
 
 from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver
+from router.services.inline_agent_config_cache import inline_agent_config_dict_for_cache
 
 logger = logging.getLogger(__name__)
 
@@ -80,14 +81,6 @@ class ProjectCacheInvalidationObserver(EventObserver):
                     "intelligence_uuid": str(cb.intelligence.uuid),
                 }
 
-            def _get_inline_agent_config(config):
-                if config:
-                    return {
-                        "agents_backend": config.agents_backend,
-                        "configuration": config.configuration,
-                    }
-                return None
-
             # Refresh all caches with fresh data
             cache_service.invalidate_project_cache(
                 project_uuid=project_uuid,
@@ -97,7 +90,7 @@ class ProjectCacheInvalidationObserver(EventObserver):
                     "content_base": lambda uuid: _content_base_to_dict(content_base_obj),
                     "team": lambda uuid, backend: team,
                     "guardrails": lambda uuid: GuardrailsUsecase.get_guardrail_as_dict(uuid),
-                    "inline_agent_config": lambda uuid: _get_inline_agent_config(inline_agent_config),
+                    "inline_agent_config": lambda uuid: inline_agent_config_dict_for_cache(inline_agent_config),
                 },
             )
 
@@ -327,18 +320,10 @@ class TeamCacheInvalidationObserver(EventObserver):
 
             cache_service = CacheService()
 
-            # Get fresh data
-            project_obj, content_base_obj, inline_agent_config = get_project_and_content_base_data(project_uuid)
+            # Get fresh data (content base not needed for team / inline_agent_config refresh)
+            project_obj, _, inline_agent_config = get_project_and_content_base_data(project_uuid)
             agents_backend = project_obj.agents_backend
             team = ORMTeamRepository(agents_backend=agents_backend, project=project_obj).get_team(project_uuid)
-
-            def _get_inline_agent_config(config):
-                if config:
-                    return {
-                        "agents_backend": config.agents_backend,
-                        "configuration": config.configuration,
-                    }
-                return None
 
             # Refresh team cache
             cache_service.invalidate_team_cache(
@@ -351,7 +336,7 @@ class TeamCacheInvalidationObserver(EventObserver):
             # with stale OPTIONAL_FOR_COMPOSITE data after team-only invalidation.
             cache_service.invalidate_inline_agent_config_cache(
                 project_uuid=project_uuid,
-                fetch_func=lambda uuid: _get_inline_agent_config(inline_agent_config),
+                fetch_func=lambda uuid: inline_agent_config_dict_for_cache(inline_agent_config),
                 agents_backend=agents_backend,
             )
 
