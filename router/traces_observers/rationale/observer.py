@@ -104,6 +104,7 @@ class RationaleObserver(EventObserver):
         channel_uuid: str = None,
         send_message_callback: Optional[Callable] = None,
         preview: bool = False,
+        preview_websocket: bool = False,
         rationale_switch: bool = False,
         message_external_id: str = "",
         user_email: str = None,
@@ -141,6 +142,7 @@ class RationaleObserver(EventObserver):
                 context.contact_urn,
                 context.project_uuid,
                 context.preview,
+                context.preview_websocket,
                 context.user_email,
             )
 
@@ -201,7 +203,14 @@ class RationaleObserver(EventObserver):
         handler.handle(rationale_text, context, session_data)
 
     def _setup_message_callback_if_needed(
-        self, send_message_callback, message_external_id, contact_urn, project_uuid, preview, user_email
+        self,
+        send_message_callback,
+        message_external_id,
+        contact_urn,
+        project_uuid,
+        preview,
+        preview_websocket,
+        user_email,
     ):
         if send_message_callback is None:
             if message_external_id:
@@ -220,6 +229,7 @@ class RationaleObserver(EventObserver):
                     user=user,
                     full_chunks=full_chunks,
                     preview=preview,
+                    preview_websocket=preview_websocket,
                     user_email=user_email,
                 )
 
@@ -235,6 +245,7 @@ class RationaleObserver(EventObserver):
         user: str,
         full_chunks: list[Dict] = None,
         preview: bool = False,
+        preview_websocket: bool = False,
         user_email: str = None,
     ) -> None:
         if preview and user_email:
@@ -255,3 +266,12 @@ class RationaleObserver(EventObserver):
         broadcast.send_direct_message(
             text=text, urns=urns, project_uuid=project_uuid, user=user, full_chunks=full_chunks
         )
+
+        if preview_websocket and user_email and not preview:
+            from nexus.projects.websockets.consumers import send_preview_message_to_websocket
+
+            send_preview_message_to_websocket(
+                project_uuid=str(project_uuid),
+                user_email=user_email,
+                message_data={"type": "preview", "content": text},
+            )

@@ -251,55 +251,6 @@ class MessagePreviewView(APIView):
             return Response(data={"type": "cancelled", "message": "", "fonts": []})
 
 
-class MessageSimulationView(APIView):
-    permission_classes = [ProjectPermission]
-
-    def post(self, request, *args, **kwargs):
-        try:
-            project_uuid = kwargs.get("project_uuid")
-            project = projects.get_project_by_uuid(project_uuid)
-
-            data = request.data
-            language = data.get("language", "en")
-            supervisor_agent_uuid = data.get("manager_agent_uuid")
-            message = UserMessage(
-                project_uuid=project_uuid,
-                text=data.get("text"),
-                contact_urn=data.get("contact_urn"),
-                attachments=data.get("attachments", []),
-                metadata=data.get("metadata", {}),
-            )
-            if project.inline_agent_switch:
-                logger.info("Starting Inline Agent (simulation endpoint)")
-                task_kwargs = {
-                    "message": message.dict(),
-                    "preview": True,
-                    "simulation": True,
-                    "user_email": request.user.email,
-                    "language": language,
-                }
-                if supervisor_agent_uuid:
-                    try:
-                        int(supervisor_agent_uuid)
-                    except ValueError:
-                        task_kwargs["supervisor_agent_uuid"] = supervisor_agent_uuid
-
-                start_inline_agents.apply_async(
-                    kwargs=task_kwargs,
-                    queue="celery",
-                )
-                return Response(data={"type": "simulation", "message": "Processing started", "fonts": []})
-            else:
-                task = start_route.delay(message=message.__dict__, preview=True)
-                response = task.wait()
-
-            return Response(data=response)
-        except IntelligencePermissionDenied:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
-        except TaskRevokedError:
-            return Response(data={"type": "cancelled", "message": "", "fonts": []})
-
-
 class SimulationEndSessionView(APIView):
     permission_classes = [ProjectPermission]
 

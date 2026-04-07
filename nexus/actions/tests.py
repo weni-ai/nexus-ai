@@ -11,7 +11,6 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from nexus.actions.api.views import (
     FlowsViewset,
     MessagePreviewView,
-    MessageSimulationView,
     SearchFlowView,
     SimulationEndSessionView,
     SimulationManagerModelView,
@@ -449,20 +448,6 @@ class SimulationActionsApiTestCase(TestCase):
         kwargs = mock_apply_async.call_args.kwargs["kwargs"]
         self.assertTrue(kwargs["preview"])
         self.assertNotIn("simulation", kwargs)
-
-    @patch("nexus.actions.api.views.start_inline_agents.apply_async")
-    def test_simulation_endpoint_matches_preview_plus_simulation_flag(self, mock_apply_async):
-        request = self.factory.post(
-            f"/{self.project.uuid}/simulation/",
-            data={"text": "hello", "contact_urn": "ext:user@example.com"},
-            format="json",
-        )
-        force_authenticate(request, user=self.user)
-        response = MessageSimulationView.as_view()(request, project_uuid=str(self.project.uuid))
-        self.assertEqual(response.status_code, 200)
-        kwargs = mock_apply_async.call_args.kwargs["kwargs"]
-        self.assertTrue(kwargs["preview"])
-        self.assertTrue(kwargs["simulation"])
 
     @patch("nexus.actions.api.views.get_redis_write_client")
     def test_simulation_manager_model_post_requires_contact_urn(self, mock_redis):

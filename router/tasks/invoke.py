@@ -65,13 +65,13 @@ def _get_simulation_manager_model(project_uuid: str, contact_urn: str) -> Option
 
 
 def apply_simulation_foundation_model_override(
-    simulation: bool,
+    on_default_simulation_channel: bool,
     project_uuid: str,
     contact_urn: str,
     foundation_model: Optional[str],
 ) -> Optional[str]:
-    """Replace foundation model with Redis-cached value when ``simulation`` is True."""
-    if not simulation or not project_uuid:
+    """Replace foundation model with Redis-cached value on default preview-channel traffic."""
+    if not on_default_simulation_channel or not project_uuid:
         return foundation_model
     cached = _get_simulation_manager_model(project_uuid, contact_urn or "")
     return cached if cached else foundation_model
@@ -330,6 +330,7 @@ def _handle_task_error(
     preview: bool,
     language: str,
     user_email: str,
+    preview_websocket: bool = False,
 ):
     """
     Centralized error handling for the Celery task.
@@ -346,6 +347,7 @@ def _handle_task_error(
             "contact_name": message.get("contact_name"),
             "text": message.get("text", ""),
             "preview": preview,
+            "preview_websocket": preview_websocket,
             "language": language,
             "user_email": user_email,
             "task_id": task_id,
@@ -365,7 +367,7 @@ def _handle_task_error(
     if isinstance(exc, botocore.exceptions.EventStreamError) and "throttlingException" in str(exc):
         raise ThrottlingException(str(exc))
 
-    if user_email:
+    if user_email and (preview or preview_websocket):
         send_preview_message_to_websocket(
             user_email=user_email, project_uuid=str(project_uuid), message_data={"type": "error", "content": str(exc)}
         )
@@ -388,6 +390,7 @@ def _invoke_backend(
     stream_support: bool = False,
     supervisor_agent_uuid: Optional[str] = None,
     message_conversation_log_uuid: Optional[str] = None,
+    preview_websocket: bool = False,
 ) -> Tuple[str, bool]:
     """
     Invoke backend with cached data to avoid database queries.
@@ -415,6 +418,7 @@ def _invoke_backend(
             "channel_uuid": message_obj.channel_uuid,
             "msg_external_id": processed_message.get("msg_event", {}).get("msg_external_id", ""),
             "preview": preview,
+            "preview_websocket": preview_websocket,
             "language": language,
             "user_email": user_email,
             "foundation_model": foundation_model,
@@ -444,7 +448,6 @@ def start_inline_agents(
     self,
     message: Dict,
     preview: bool = False,
-    simulation: bool = False,
     simulation_channel: bool = False,
     language: str = "en",
     user_email: str = "",
@@ -454,6 +457,7 @@ def start_inline_agents(
     _apm_set_context(message=message, preview=preview)
     project_uuid = message.get("project_uuid")
     simulation_channel_effective = effective_simulation_channel(message, simulation_channel)
+    preview_websocket = simulation_channel_effective and bool(user_email and str(user_email).strip())
     skip_sqs = should_skip_conversation_sqs(preview, simulation_channel_effective)
 
     # Feature flag: list of project UUIDs that use new workflow architecture
@@ -469,7 +473,6 @@ def start_inline_agents(
         return inline_agent_workflow.run(
             message,
             preview=preview,
-            simulation=simulation,
             simulation_channel=simulation_channel,
             language=language,
             user_email=user_email,
@@ -520,7 +523,7 @@ def start_inline_agents(
 
         processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(message, agents_backend)
         foundation_model = apply_simulation_foundation_model_override(
-            simulation, project_uuid or "", message.get("contact_urn") or "", foundation_model
+            simulation_channel_effective, project_uuid or "", message.get("contact_urn") or "", foundation_model
         )
 
         # TODO: Logs
@@ -589,6 +592,7 @@ def start_inline_agents(
             stream_support=message.get("stream_support", False),
             supervisor_agent_uuid=supervisor_agent_uuid,
             message_conversation_log_uuid=message_conversation_log_uuid,
+            preview_websocket=preview_websocket,
         )
 
         if (response is None or response == "") and not skip_dispatch:
@@ -611,7 +615,7 @@ def start_inline_agents(
             turn_id=turn_id,
         )
 
-        if preview:
+        if preview or preview_websocket:
             _invoke_is_final_debug("H start_inline_agents branch=dispatch_preview")
             return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)
         if skip_dispatch:
@@ -654,7 +658,7 @@ def start_inline_agents(
             message_conversation_log_uuid=message_conversation_log_uuid,
             turn_id=turn_id,
         )
-        if preview:
+        if preview or preview_websocket:
             return dispatch_preview(e.message, message_obj, broadcast, user_email, agents_backend, flows_user_email)
         return dispatch(
             llm_response=e.message,
@@ -675,6 +679,24 @@ def start_inline_agents(
                 priority=0,
                 jitter=False,
             ) from e
-        _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
+        _handle_task_error(
+            e,
+            task_manager,
+            message,
+            self.request.id,
+            preview,
+            language,
+            user_email,
+            preview_websocket=preview_websocket,
+        )
     except Exception as e:
-        _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
+        _handle_task_error(
+            e,
+            task_manager,
+            message,
+            self.request.id,
+            preview,
+            language,
+            user_email,
+            preview_websocket=preview_websocket,
+        )
