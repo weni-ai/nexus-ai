@@ -457,6 +457,10 @@ def start_inline_agents(
     _apm_set_context(message=message, preview=preview)
     project_uuid = message.get("project_uuid")
     simulation_channel_effective = effective_simulation_channel(message, simulation_channel)
+
+    if simulation_channel_effective:
+        user_email = message.contact_urn.replace("ext:", "")
+
     preview_websocket = simulation_channel_effective and bool(user_email and str(user_email).strip())
     skip_sqs = should_skip_conversation_sqs(preview, simulation_channel_effective)
 
