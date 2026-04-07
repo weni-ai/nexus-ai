@@ -11,6 +11,21 @@ from nexus.inline_agents.models import Agent, AgentCredential, AgentSystem, Inte
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
 
 
+def agent_modal_about_locale_map(agent: Agent) -> dict | None:
+    """Localized about copy from AgentGroupModal (same keys as official APIs)."""
+    if not getattr(agent, "group_id", None):
+        return None
+    try:
+        modal = agent.group.modal
+        return {
+            "en": modal.about_en,
+            "pt": modal.about_pt,
+            "es": modal.about_es,
+        }
+    except ObjectDoesNotExist:
+        return None
+
+
 def official_agent_modal_presentation_payload(modal) -> dict:
     """Presentation for official agent APIs; locale maps for frontend (DB fields unchanged)."""
     return {
@@ -222,7 +237,7 @@ class AgentSerializer(serializers.ModelSerializer):
         fields = [
             "uuid",
             "name",
-            "description",
+            "about",
             "skills",
             "assigned",
             "active",
@@ -235,7 +250,7 @@ class AgentSerializer(serializers.ModelSerializer):
         ]
 
     name = serializers.SerializerMethodField("get_list_display_name")
-    description = serializers.CharField(source="collaboration_instructions")
+    about = serializers.SerializerMethodField("get_about")
     model = serializers.CharField(source="foundation_model")
     skills = serializers.SerializerMethodField("get_skills")
     assigned = serializers.SerializerMethodField("get_is_assigned")
@@ -245,6 +260,10 @@ class AgentSerializer(serializers.ModelSerializer):
 
     def get_list_display_name(self, obj):
         return inline_agent_list_display_name(obj)
+
+    def get_about(self, obj):
+        """AgentGroupModal about locales; null when no group/modal."""
+        return agent_modal_about_locale_map(obj)
 
     def get_skills(self, obj):
         if obj.current_version:
