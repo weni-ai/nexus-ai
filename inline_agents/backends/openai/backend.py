@@ -213,6 +213,7 @@ class OpenAIBackend(InlineAgentsBackend):
         sanitized_urn: str,
         contact_fields: str,
         preview: bool = False,
+        preview_websocket: bool = False,
         language: str = "en",
         contact_name: str = "",
         contact_urn: str = "",
@@ -283,6 +284,7 @@ class OpenAIBackend(InlineAgentsBackend):
         supervisor_hooks = SupervisorHooks(
             agent_name="manager",
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -300,6 +302,7 @@ class OpenAIBackend(InlineAgentsBackend):
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -341,6 +344,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 hooks_state=hooks_state,
                 event_manager_notify=self._event_manager_notify,
                 preview=preview,
+                preview_websocket=preview_websocket,
                 rationale_switch=rationale_switch,
                 language=language,
                 user_email=user_email,
@@ -370,6 +374,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 session=session,
                 data_lake_event_adapter=data_lake_event_adapter,
                 preview=preview,
+                preview_websocket=preview_websocket,
                 hooks_state=hooks_state,
                 event_manager_notify=self._event_manager_notify,
                 # Pass cached data to avoid database queries
@@ -390,16 +395,7 @@ class OpenAIBackend(InlineAgentsBackend):
 
         client = self._get_client()
 
-        _ue_ok = bool(user_email)
-        logger.info(
-            f"[preview_ws] OpenAIBackend.invoke_agents before_status_ws preview={preview} "
-            f"user_email_nonempty={_ue_ok} project_uuid={project_uuid} will_send={bool(preview and user_email)}"
-        )
-        if preview and user_email:
-            logger.info(
-                f"[preview_ws] OpenAIBackend.invoke_agents send_preview_message_to_websocket type=status "
-                f"project_uuid={project_uuid}"
-            )
+        if (preview or preview_websocket) and user_email:
             send_preview_message_to_websocket(
                 project_uuid=str(project_uuid),
                 user_email=user_email,
@@ -409,7 +405,7 @@ class OpenAIBackend(InlineAgentsBackend):
                     "session_id": session_id,
                 },
             )
-        elif preview and not user_email:
+        elif (preview or preview_websocket) and not user_email:
             logger.info(
                 f"[preview_ws] OpenAIBackend.invoke_agents skip_status_ws reason=no_user_email project_uuid={project_uuid}"
             )

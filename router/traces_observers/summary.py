@@ -127,6 +127,7 @@ class SummaryTracesObserver(EventObserver):
         event_content=None,
         inline_traces=None,
         preview=False,
+        preview_websocket=False,
         project_uuid=None,
         user_email=None,
         session_id=None,
@@ -135,7 +136,7 @@ class SummaryTracesObserver(EventObserver):
         # TODO: Fix circular import
         from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 
-        if not preview:
+        if not preview and not preview_websocket:
             return
 
         try:
@@ -175,6 +176,7 @@ class AsyncSummaryTracesObserver(EventObserver):
         event_content=None,
         inline_traces=None,
         preview=False,
+        preview_websocket=False,
         project_uuid=None,
         user_email=None,
         session_id=None,
@@ -183,7 +185,7 @@ class AsyncSummaryTracesObserver(EventObserver):
         # TODO: Fix circular import
         from nexus.projects.websockets.consumers import send_preview_message_to_websocket_async
 
-        if not preview:
+        if not preview and not preview_websocket:
             return
 
         try:
