@@ -117,7 +117,7 @@ class FlowsRESTClient(RestClient):
         url = self._get_url("/api/v2/internals/clean_contacts_fields")
 
         jwt_usecase = JWTUsecase()
-        jwt_token = jwt_usecase.generate_broadcast_jwt_token()
+        jwt_token = jwt_usecase.generate_jwt_token(project_uuid)
 
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {jwt_token}"}
 
