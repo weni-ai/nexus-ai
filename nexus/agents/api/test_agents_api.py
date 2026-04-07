@@ -108,52 +108,6 @@ class AgentViewsetSetTestCase(TestCase):
         row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
         self.assertEqual(row["name"], "Product Concierge")
 
-    def test_get_my_agents_includes_about_locale_map_when_group_modal_exists(self):
-        group = AgentGroup.objects.create(name="Modal Pres", slug="modal-pres-my-agents-unique")
-        AgentGroupModal.objects.create(
-            group=group,
-            agent_name="Catalog",
-            about_en="About EN",
-            about_es="About ES",
-            about_pt="About PT",
-            conversation_example_en=[{"text": "Hello", "direction": "incoming"}],
-            conversation_example_es=[],
-            conversation_example_pt=[],
-        )
-        agent_grouped = InlineAgent.objects.create(
-            name="Template Name",
-            slug="modal-pres-agent",
-            instruction="x",
-            collaboration_instructions="y",
-            foundation_model="model:version",
-            project=self.project,
-            group=group,
-        )
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
-        response = client.get(url)
-        response.render()
-        content = json.loads(response.content)
-        row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
-        about = row["about"]
-        self.assertEqual(about["en"], "About EN")
-        self.assertEqual(about["pt"], "About PT")
-        self.assertEqual(about["es"], "About ES")
-        self.assertNotIn("description", row)
-        self.assertNotIn("presentation", row)
-
-    def test_get_my_agents_about_null_without_group(self):
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
-        response = client.get(url)
-        response.render()
-        content = json.loads(response.content)
-        row = next(c for c in content if c.get("uuid") == str(self.agent.uuid))
-        self.assertIsNone(row.get("about"))
-        self.assertNotIn("description", row)
-
     def make_agents_official(self):
         self.agent.is_official = True
         self.agent.source_type = InlineAgent.PLATFORM
@@ -276,6 +230,64 @@ class TeamViewsetSetTestCase(TestCase):
         content = json.loads(response.content)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(content["agents"]), 0)
+
+    def test_get_team_includes_about_locale_map_when_group_modal_exists(self):
+        group = AgentGroup.objects.create(name="Modal Pres", slug="modal-pres-teams-unique")
+        AgentGroupModal.objects.create(
+            group=group,
+            agent_name="Catalog",
+            about_en="About EN",
+            about_es="About ES",
+            about_pt="About PT",
+            conversation_example_en=[{"text": "Hello", "direction": "incoming"}],
+            conversation_example_es=[],
+            conversation_example_pt=[],
+        )
+        agent_grouped = InlineAgent.objects.create(
+            name="Template Name",
+            slug="modal-pres-agent-teams",
+            instruction="x",
+            collaboration_instructions="y",
+            foundation_model="model:version",
+            project=self.project,
+            group=group,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=agent_grouped)
+        IntegratedAgent.objects.create(agent=agent_grouped, project=self.project)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = next(a for a in content["agents"] if a.get("uuid") == str(agent_grouped.uuid))
+        about = row["about"]
+        self.assertEqual(about["en"], "About EN")
+        self.assertEqual(about["pt"], "About PT")
+        self.assertEqual(about["es"], "About ES")
+        self.assertNotIn("presentation", row)
+
+    def test_get_team_about_null_without_group(self):
+        agent = InlineAgent.objects.create(
+            name="No Group Agent",
+            slug="no_group_team_agent",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+        IntegratedAgent.objects.create(agent=agent, project=self.project)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = content["agents"][0]
+        self.assertIsNone(row.get("about"))
 
 
 class ActivateAgentViewTestCase(TestCase):
