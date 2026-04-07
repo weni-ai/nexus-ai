@@ -137,11 +137,12 @@ class AgentSystemSerializer(serializers.ModelSerializer):
 class IntegratedAgentSerializer(serializers.ModelSerializer):
     class Meta:
         model = IntegratedAgent
-        fields = ["uuid", "id", "name", "skills", "is_official", "description", "mcp", "active"]
+        fields = ["uuid", "id", "name", "about", "skills", "is_official", "description", "mcp", "active"]
 
     active = serializers.BooleanField(source="is_active", read_only=True)
     uuid = serializers.UUIDField(source="agent.uuid")
     name = serializers.SerializerMethodField("get_name")
+    about = serializers.SerializerMethodField("get_about")
     id = serializers.SerializerMethodField("get_id")
     skills = serializers.SerializerMethodField("get_skills")
     description = serializers.SerializerMethodField("get_description")
@@ -153,6 +154,10 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
 
     def get_name(self, obj):
         return inline_agent_list_display_name(obj.agent)
+
+    def get_about(self, obj):
+        """AgentGroupModal about locales; null when no group/modal."""
+        return agent_modal_about_locale_map(obj.agent)
 
     def get_description(self, obj):
         return obj.agent.collaboration_instructions
@@ -237,7 +242,7 @@ class AgentSerializer(serializers.ModelSerializer):
         fields = [
             "uuid",
             "name",
-            "about",
+            "description",
             "skills",
             "assigned",
             "active",
@@ -250,7 +255,7 @@ class AgentSerializer(serializers.ModelSerializer):
         ]
 
     name = serializers.SerializerMethodField("get_list_display_name")
-    about = serializers.SerializerMethodField("get_about")
+    description = serializers.CharField(source="collaboration_instructions")
     model = serializers.CharField(source="foundation_model")
     skills = serializers.SerializerMethodField("get_skills")
     assigned = serializers.SerializerMethodField("get_is_assigned")
@@ -260,10 +265,6 @@ class AgentSerializer(serializers.ModelSerializer):
 
     def get_list_display_name(self, obj):
         return inline_agent_list_display_name(obj)
-
-    def get_about(self, obj):
-        """AgentGroupModal about locales; null when no group/modal."""
-        return agent_modal_about_locale_map(obj)
 
     def get_skills(self, obj):
         if obj.current_version:
