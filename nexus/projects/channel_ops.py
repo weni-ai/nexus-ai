@@ -35,8 +35,6 @@ def create_channel_from_wwc_event(project_uuid: str, channel_uuid: str, channel_
     except ValueError as exc:
         raise ValueError("invalid channel_uuid") from exc
 
-    Channel.objects.filter(project=project).update(is_default_for_preview=False)
-
     return Channel.objects.create(
         uuid=cid,
         project=project,
