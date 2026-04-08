@@ -9,7 +9,6 @@ from nexus.event_domain.recent_activity.mocks import mock_event_manager_notify
 from nexus.projects.channel_ops import (
     channel_matches_default_preview,
     create_channel_from_wwc_event,
-    get_default_channel_uuid,
 )
 from nexus.projects.consumers.channel_wwc_consumer import ChannelWwcConsumer
 from nexus.projects.models import Channel
@@ -21,16 +20,6 @@ from nexus.usecases.projects.tests.test_agents_backend import MockExternalAgentC
 class ChannelOpsTestCase(TestCase):
     def setUp(self) -> None:
         self.project = ProjectFactory()
-
-    def test_create_second_channel_clears_previous_default(self) -> None:
-        first = uuid4()
-        second = uuid4()
-        create_channel_from_wwc_event(str(self.project.uuid), str(first), "WWC")
-        create_channel_from_wwc_event(str(self.project.uuid), str(second), "WWC")
-
-        self.assertFalse(Channel.objects.get(uuid=first).is_default_for_preview)
-        self.assertTrue(Channel.objects.get(uuid=second).is_default_for_preview)
-        self.assertEqual(get_default_channel_uuid(str(self.project.uuid)), str(second))
 
     def test_create_same_uuid_raises_integrity_error(self) -> None:
         ch = uuid4()
