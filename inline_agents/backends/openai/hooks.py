@@ -226,9 +226,11 @@ class TraceHandler:
         turn_off_rationale,
         hooks_state,
         message_uuid=None,
+        preview_websocket: bool = False,
     ):
         self.event_manager_notify = event_manager_notify
         self.preview = preview
+        self.preview_websocket = preview_websocket
         self.rationale_switch = rationale_switch
         self.language = language
         self.user_email = user_email
@@ -258,6 +260,7 @@ class TraceHandler:
             project_uuid=context_data.project.get("uuid"),
             send_message_callback=None,
             preview=self.preview,
+            preview_websocket=self.preview_websocket,
             rationale_switch=self.rationale_switch,
             language=self.language,
             user_email=self.user_email,
@@ -310,10 +313,12 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         agents: list,
         hooks_state: HooksState,
         message_uuid: str = None,
+        preview_websocket: bool = False,
     ):
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -478,6 +483,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         hooks_state: HooksState,
         event_manager_notify: callable = None,
         preview: bool = False,
+        preview_websocket: bool = False,
         rationale_switch: bool = False,
         language: str = "en",
         user_email: str = None,
@@ -489,6 +495,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -735,12 +742,14 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
         turn_off_rationale: bool = False,
         conversation: Optional[object] = None,
         use_components: bool = False,
+        preview_websocket: bool = False,
         **kwargs,
     ):
         message_uuid = kwargs.pop("message_uuid", None)
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
