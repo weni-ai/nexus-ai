@@ -19,8 +19,10 @@ from nexus.orgs.permissions import is_super_user
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.exceptions import ProjectAuthorizationDenied
 from nexus.projects.permissions import has_external_general_project_permission
+from nexus.internals.flows import FlowsRESTClient
 from nexus.projects.simulation_model_cache import (
     SIMULATION_MANAGER_MODEL_TTL_SECONDS,
+    clear_simulation_manager_model,
     simulation_manager_model_redis_key,
 )
 from nexus.usecases import projects
@@ -264,6 +266,21 @@ class SimulationEndSessionView(APIView):
         agents_backend = projects_use_case.get_agents_backend_by_project(project_uuid)
         backend = BackendsRegistry.get_backend(agents_backend)
         backend.end_session(message_obj.project_uuid, message_obj.sanitized_urn)
+
+        try:
+            FlowsRESTClient().clear_contact_fields(message_obj.contact_urn, str(project_uuid))
+        except Exception:
+            logger.exception(
+                "Flows API exception after simulation end-session",
+            )
+
+        try:
+            clear_simulation_manager_model(project_uuid, message_obj.contact_urn)
+        except Exception:
+            logger.exception(
+                "Redis simulation manager model clear exception after simulation end-session",
+            )
+
         return Response({"message": "Simulation session ended successfully"})
 
 

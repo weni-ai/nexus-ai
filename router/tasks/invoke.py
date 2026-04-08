@@ -74,7 +74,12 @@ def apply_simulation_foundation_model_override(
     if not on_default_simulation_channel or not project_uuid:
         return foundation_model
     cached = _get_simulation_manager_model(project_uuid, contact_urn or "")
-    return cached if cached else foundation_model
+    effective = cached if cached else foundation_model
+    urn_tail = (contact_urn or "")[-8:] if contact_urn else ""
+    logger.info(
+        f"Simulation model override: project_uuid={project_uuid}, contact_urn_suffix={urn_tail}, foundation_model={effective}, manager_model_source={cached}",
+    )
+    return effective
 
 
 def _invoke_is_final_debug(msg: str) -> None:
