@@ -18,6 +18,7 @@ class RationaleContext:
     channel_uuid: Optional[str]
     send_message_callback: Optional[Callable]
     preview: bool
+    preview_websocket: bool
     message_external_id: str
     user_email: Optional[str]
 
@@ -33,6 +34,7 @@ class RationaleContext:
             channel_uuid=kwargs.get("channel_uuid"),
             send_message_callback=kwargs.get("send_message_callback"),
             preview=kwargs.get("preview", False),
+            preview_websocket=kwargs.get("preview_websocket", False),
             message_external_id=kwargs.get("message_external_id", ""),
             user_email=kwargs.get("user_email"),
         )
