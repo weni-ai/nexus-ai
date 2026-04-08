@@ -1,6 +1,7 @@
 import logging
 from typing import Dict
 
+import sentry_sdk
 from celery.exceptions import TaskRevokedError
 from django.core.exceptions import PermissionDenied
 from rest_framework import status
@@ -261,27 +262,40 @@ class SimulationEndSessionView(APIView):
         if not contact_urn:
             return Response({"error": "contact_urn is required"}, status=400)
 
-        message_obj = message_factory(text="", project_uuid=project_uuid, contact_urn=contact_urn)
-        projects_use_case = projects.ProjectsUseCase()
-        agents_backend = projects_use_case.get_agents_backend_by_project(project_uuid)
-        backend = BackendsRegistry.get_backend(agents_backend)
-        backend.end_session(message_obj.project_uuid, message_obj.sanitized_urn)
+        if not contact_urn.startswith("ext:"):
+            contact_urn = f"ext:{contact_urn}"
 
         try:
-            FlowsRESTClient().clear_contact_fields(message_obj.contact_urn, str(project_uuid))
-        except Exception:
-            logger.exception(
-                "Flows API exception after simulation end-session",
-            )
+            message_obj = message_factory(text="", project_uuid=project_uuid, contact_urn=contact_urn)
+            projects_use_case = projects.ProjectsUseCase()
+            agents_backend = projects_use_case.get_agents_backend_by_project(project_uuid)
+            backend = BackendsRegistry.get_backend(agents_backend)
+            backend.end_session(message_obj.project_uuid, message_obj.sanitized_urn)
 
-        try:
-            clear_simulation_manager_model(project_uuid, message_obj.contact_urn)
-        except Exception:
-            logger.exception(
-                "Redis simulation manager model clear exception after simulation end-session",
-            )
+            try:
+                FlowsRESTClient().clear_contact_fields(contact_urn, str(project_uuid))
+            except Exception as exc:
+                logger.exception(
+                    "Flows API exception after simulation end-session",
+                )
+                sentry_sdk.capture_exception(exc)
 
-        return Response({"message": "Simulation session ended successfully"})
+            try:
+                clear_simulation_manager_model(project_uuid, message_obj.contact_urn)
+            except Exception as exc:
+                logger.exception(
+                    "Redis simulation manager model clear exception after simulation end-session",
+                )
+                sentry_sdk.capture_exception(exc)
+
+            return Response({"message": "Simulation session ended successfully"})
+        except Exception as exc:
+            logger.exception("Simulation end-session failed")
+            sentry_sdk.capture_exception(exc)
+            return Response(
+                {"error": "Couldn't end simulation session"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class SimulationManagerModelView(APIView):
@@ -291,18 +305,30 @@ class SimulationManagerModelView(APIView):
         contact_urn = request.query_params.get("contact_urn")
         if not contact_urn:
             return Response({"error": "contact_urn query parameter is required"}, status=400)
-        project = projects.get_project_by_uuid(project_uuid)
-        key = simulation_manager_model_redis_key(project_uuid, contact_urn)
-        cached = get_redis_read_client().get(key)
-        if cached:
-            model = cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
-            return Response({"manager_foundation_model": model, "source": "cache"})
-        return Response(
-            {
-                "manager_foundation_model": project.default_supervisor_foundation_model,
-                "source": "project_default",
-            }
-        )
+
+        if not contact_urn.startswith("ext:"):
+            contact_urn = f"ext:{contact_urn}"
+
+        try:
+            project = projects.get_project_by_uuid(project_uuid)
+            key = simulation_manager_model_redis_key(project_uuid, contact_urn)
+            cached = get_redis_read_client().get(key)
+            if cached:
+                model = cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
+                return Response({"manager_foundation_model": model, "source": "cache"})
+            return Response(
+                {
+                    "manager_foundation_model": project.default_supervisor_foundation_model,
+                    "source": "project_default",
+                }
+            )
+        except Exception as exc:
+            logger.exception("Simulation manager model GET failed")
+            sentry_sdk.capture_exception(exc)
+            return Response(
+                {"error": "Couldn't load simulation manager model"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def post(self, request, project_uuid):
         manager_foundation_model = request.data.get("manager_foundation_model")
@@ -312,18 +338,29 @@ class SimulationManagerModelView(APIView):
         if not contact_urn:
             return Response({"error": "contact_urn is required"}, status=400)
 
-        key = simulation_manager_model_redis_key(project_uuid, contact_urn)
-        get_redis_write_client().setex(
-            key,
-            SIMULATION_MANAGER_MODEL_TTL_SECONDS,
-            str(manager_foundation_model),
-        )
-        return Response(
-            {
-                "manager_foundation_model": manager_foundation_model,
-                "ttl_seconds": SIMULATION_MANAGER_MODEL_TTL_SECONDS,
-            }
-        )
+        if not contact_urn.startswith("ext:"):
+            contact_urn = f"ext:{contact_urn}"
+
+        try:
+            key = simulation_manager_model_redis_key(project_uuid, contact_urn)
+            get_redis_write_client().setex(
+                key,
+                SIMULATION_MANAGER_MODEL_TTL_SECONDS,
+                str(manager_foundation_model),
+            )
+            return Response(
+                {
+                    "manager_foundation_model": manager_foundation_model,
+                    "ttl_seconds": SIMULATION_MANAGER_MODEL_TTL_SECONDS,
+                }
+            )
+        except Exception as exc:
+            logger.exception("Simulation manager model POST failed")
+            sentry_sdk.capture_exception(exc)
+            return Response(
+                {"error": "Couldn't save simulation manager model"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class GenerateActionNameView(APIView):
