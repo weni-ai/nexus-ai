@@ -185,7 +185,6 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
             return None
 
         config_with_labels = {}
-        mcp_description = None
 
         # Try to find MCP with system if available in metadata, or fallback to name lookup
         mcp = None
@@ -211,7 +210,6 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
             )
 
         if mcp:
-            mcp_description = (mcp.description_en or mcp.description_pt or mcp.description_es or "").strip() or None
             if mcp_config:
                 name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
                 for name, value in mcp_config.items():
@@ -219,19 +217,21 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
                     config_with_labels[label] = value
             else:
                 config_with_labels = mcp_config
-        else:
-            config_with_labels = mcp_config
 
-        result = {"name": mcp_name, "config": config_with_labels}
-        if mcp_description:
-            result["description"] = mcp_description
-
-        if mcp and mcp.system:
-            result["system"] = {
-                "name": mcp.system.name,
-                "slug": mcp.system.slug,
-                "logo": mcp.system.logo.url if mcp.system.logo else None,
+            result = {"name": mcp_name, "config": config_with_labels}
+            result["description"] = {
+                "en": (mcp.description_en or "").strip(),
+                "pt": (mcp.description_pt or "").strip(),
+                "es": (mcp.description_es or "").strip(),
             }
+            if mcp.system:
+                result["system"] = {
+                    "name": mcp.system.name,
+                    "slug": mcp.system.slug,
+                    "logo": mcp.system.logo.url if mcp.system.logo else None,
+                }
+        else:
+            result = {"name": mcp_name, "config": mcp_config}
 
         return result
 
@@ -472,3 +472,28 @@ class OfficialAgentsAssignResponseSerializer(serializers.Serializer):
     assigned_created = serializers.BooleanField(required=False)
     assigned_deleted = serializers.BooleanField(required=False)
     created_credentials = serializers.ListField(child=serializers.CharField(), required=False)
+
+
+class ProviderCredentialSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    type = serializers.CharField()
+    label = serializers.CharField()
+    value = serializers.CharField(default="")
+
+
+class ModelProviderSerializer(serializers.Serializer):
+    uuid = serializers.UUIDField()
+    label = serializers.CharField()
+    models = serializers.ListField(child=serializers.CharField())
+    credentials = serializers.SerializerMethodField()
+
+    def get_credentials(self, obj):
+        template = obj.credentials if isinstance(obj.credentials, list) else []
+        return [{**item, "value": ""} for item in template]
+
+
+class CurrentProviderSerializer(serializers.Serializer):
+    uuid = serializers.UUIDField()
+    label = serializers.CharField()
+    model = serializers.CharField()
+    credentials = ProviderCredentialSerializer(many=True)
