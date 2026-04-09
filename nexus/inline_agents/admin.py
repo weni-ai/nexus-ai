@@ -153,8 +153,26 @@ class MCPInline(admin.TabularInline):
 
     model = MCP
     extra = 0
-    fields = ("name", "system", "description", "order", "is_active", "view_link")
-    readonly_fields = ("name", "system", "description", "order", "is_active", "view_link")
+    fields = (
+        "name",
+        "system",
+        "description_en",
+        "description_es",
+        "description_pt",
+        "order",
+        "is_active",
+        "view_link",
+    )
+    readonly_fields = (
+        "name",
+        "system",
+        "description_en",
+        "description_es",
+        "description_pt",
+        "order",
+        "is_active",
+        "view_link",
+    )
     can_delete = False
     show_change_link = True
 
@@ -307,11 +325,8 @@ class AgentAdmin(admin.ModelAdmin):
             view_url = reverse("admin:inline_agents_mcp_change", args=[mcp.pk])
             status = "Active" if mcp.is_active else "Inactive"
             status_color = "green" if mcp.is_active else "gray"
-            description = (
-                mcp.description[:50] + "..."
-                if mcp.description and len(mcp.description) > 50
-                else (mcp.description or "-")
-            )
+            desc_preview = (mcp.description_en or mcp.description_pt or mcp.description_es or "") or "-"
+            description = desc_preview[:50] + "..." if len(desc_preview) > 50 else desc_preview
 
             html += "<tr>"
             html += f'<td style="padding: 8px; border: 1px solid #ddd;"><strong>{mcp.name}</strong></td>'
@@ -340,7 +355,20 @@ class AgentAdmin(admin.ModelAdmin):
 class AgentGroupModalInline(admin.StackedInline):
     model = AgentGroupModal
     extra = 0
-    fields = ("agent_name", "about", "conversation_example")
+    fieldsets = (
+        (None, {"fields": ("agent_name",)}),
+        ("About", {"fields": ("about_en", "about_es", "about_pt")}),
+        (
+            "Conversation example",
+            {
+                "fields": (
+                    "conversation_example_en",
+                    "conversation_example_es",
+                    "conversation_example_pt",
+                )
+            },
+        ),
+    )
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "vLargeTextField"})},
     }
@@ -377,7 +405,7 @@ class AgentGroupMCPInline(admin.TabularInline):
     get_system.short_description = "System"
 
     def get_description(self, obj):
-        return obj.mcp.description
+        return obj.mcp.description_en or obj.mcp.description_pt or obj.mcp.description_es or "-"
 
     get_description.short_description = "Description"
 
@@ -479,12 +507,23 @@ class MCPCredentialTemplateInline(admin.TabularInline):
 class MCPAdmin(admin.ModelAdmin):
     list_display = ("name", "slug", "system", "order", "is_active")
     list_filter = ("is_active", "system")
-    search_fields = ("name", "slug", "description", "system__name", "system__slug")
+    search_fields = (
+        "name",
+        "slug",
+        "description_en",
+        "description_es",
+        "description_pt",
+        "system__name",
+        "system__slug",
+    )
     ordering = ("system", "order", "name")
     autocomplete_fields = ["system"]
     inlines = [MCPConfigOptionInline, MCPCredentialTemplateInline]
 
-    fieldsets = ((None, {"fields": ("name", "slug", "description", "system", "order", "is_active")}),)
+    fieldsets = (
+        (None, {"fields": ("name", "slug", "system", "order", "is_active")}),
+        ("Description", {"fields": ("description_en", "description_es", "description_pt")}),
+    )
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)

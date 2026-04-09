@@ -87,7 +87,9 @@ class CreateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                             slug=slug,
                             name=mcp_item.get("name", slug),
                             system=system,
-                            description=mcp_item.get("description", ""),
+                            description_en=mcp_item.get("description", "") or mcp_item.get("description_en", ""),
+                            description_es=mcp_item.get("description_es", ""),
+                            description_pt=mcp_item.get("description_pt", ""),
                         )
 
                     # Update or create config options if constants provided

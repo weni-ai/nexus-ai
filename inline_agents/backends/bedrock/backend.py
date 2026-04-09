@@ -118,6 +118,7 @@ class BedrockBackend(InlineAgentsBackend):
         project_uuid: str,
         sanitized_urn: str,
         preview: bool = False,
+        preview_websocket: bool = False,
         rationale_switch: bool = False,
         language: str = "en",
         user_email: str = None,
@@ -200,8 +201,8 @@ class BedrockBackend(InlineAgentsBackend):
         logger.debug("Log present", extra={"has_log": log is not None})
         logger.debug("External team built", extra={"agents_count": len(external_team.get("agents", []))})
 
-        # Send initial status message if in preview mode and user_email is provided
-        if preview and user_email:
+        # Send initial status message for preview WebSocket fanout when user_email is provided
+        if (preview or preview_websocket) and user_email:
             send_preview_message_to_websocket(
                 project_uuid=str(project_uuid),
                 user_email=user_email,
@@ -224,8 +225,8 @@ class BedrockBackend(InlineAgentsBackend):
                 chunk = event["chunk"]["bytes"].decode()
                 full_response += chunk
 
-                # Send chunk through WebSocket if in preview mode and user_email is provided
-                if preview and user_email:
+                # Send chunk through WebSocket when preview fanout is active and user_email is provided
+                if (preview or preview_websocket) and user_email:
                     send_preview_message_to_websocket(
                         project_uuid=str(project_uuid),
                         user_email=user_email,
@@ -289,6 +290,7 @@ class BedrockBackend(InlineAgentsBackend):
                     project_uuid=project_uuid,
                     send_message_callback=None,
                     preview=preview,
+                    preview_websocket=preview_websocket,
                     rationale_switch=rationale_switch,
                     language=language,
                     user_email=user_email,
@@ -323,7 +325,7 @@ class BedrockBackend(InlineAgentsBackend):
             channel_uuid=channel_uuid,
         )
 
-        if preview and user_email:
+        if (preview or preview_websocket) and user_email:
             send_preview_message_to_websocket(
                 project_uuid=str(project_uuid),
                 user_email=user_email,

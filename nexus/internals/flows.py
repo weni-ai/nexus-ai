@@ -112,3 +112,19 @@ class FlowsRESTClient(RestClient):
             f"status_code: {response.status_code}, project: {project_uuid}"
         )
         return response
+
+    def clear_contact_fields(self, contact_urn: str, project_uuid: str) -> None:
+        url = self._get_url("/api/v2/internals/clean_contacts_fields")
+
+        jwt_usecase = JWTUsecase()
+        jwt_token = jwt_usecase.generate_jwt_token(project_uuid)
+
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {jwt_token}"}
+
+        body = {
+            "contact_urn": contact_urn,
+            "project_uuid": project_uuid,
+        }
+
+        response = requests.post(url, json=body, headers=headers)
+        response.raise_for_status()
