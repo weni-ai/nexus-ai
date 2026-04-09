@@ -491,6 +491,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
         conversation: Optional[object] = None,
+        skip_conversation_sqs: bool = False,
     ):
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
@@ -509,6 +510,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         self.hooks_state = hooks_state
         self.preview = preview
         self.conversation = conversation
+        self.skip_conversation_sqs = skip_conversation_sqs
 
     async def on_llm_end(self, context, agent, response, **kwargs):
         """Accumulate collaborator LLM usage into shared cumulative_usage so manager span shows sum of all generations."""
@@ -642,6 +644,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                     agent_name=_get_agent_slug(agent, self.hooks_state),
                     preview=self.preview,
                     conversation=self.conversation,
+                    skip_conversation_sqs=self.skip_conversation_sqs,
                 )
             except Exception as e:
                 logger.error(f"Error calling custom_event_data in CollaboratorHooks: {str(e)}")
@@ -743,6 +746,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
         conversation: Optional[object] = None,
         use_components: bool = False,
         preview_websocket: bool = False,
+        skip_conversation_sqs: bool = False,
         **kwargs,
     ):
         message_uuid = kwargs.pop("message_uuid", None)
@@ -767,6 +771,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
         self.hooks_state = hooks_state
         self.conversation = conversation
         self.use_components = use_components
+        self.skip_conversation_sqs = skip_conversation_sqs
         # this field is updated before calling formatter agent
         self.save_components_trace = False
 
@@ -901,6 +906,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                     agent_name=_get_agent_slug(agent, self.hooks_state),
                     preview=self.preview,
                     conversation=self.conversation,
+                    skip_conversation_sqs=self.skip_conversation_sqs,
                 )
             except Exception as e:
                 logger.error(f"Error calling custom_event_data in SupervisorHooks: {str(e)}")

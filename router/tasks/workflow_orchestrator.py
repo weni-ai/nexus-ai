@@ -322,6 +322,7 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
         f"preview={ctx.preview} user_email_nonempty={_ue_ok} agents_backend={ctx.agents_backend}"
     )
 
+    skip_conv_sqs = should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel)
     response, skip_dispatch = _invoke_backend(
         backend=backend,
         cached_data=ctx.cached_data,
@@ -337,6 +338,7 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
         supervisor_agent_uuid=ctx.supervisor_agent_uuid,
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
         preview_websocket=ctx.preview_websocket,
+        skip_conversation_sqs=skip_conv_sqs,
     )
 
     return response, skip_dispatch

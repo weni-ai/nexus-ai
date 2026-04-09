@@ -407,6 +407,7 @@ def _invoke_backend(
     supervisor_agent_uuid: Optional[str] = None,
     message_conversation_log_uuid: Optional[str] = None,
     preview_websocket: bool = False,
+    skip_conversation_sqs: bool = False,
 ) -> Tuple[str, bool]:
     """
     Invoke backend with cached data to avoid database queries.
@@ -442,6 +443,7 @@ def _invoke_backend(
             "channel_type": channel_type,
             "stream_support": stream_support,
             "message_conversation_log_uuid": message_conversation_log_uuid,
+            "skip_conversation_sqs": skip_conversation_sqs,
         }
     )
 
@@ -634,6 +636,7 @@ def start_inline_agents(
             supervisor_agent_uuid=supervisor_agent_uuid,
             message_conversation_log_uuid=message_conversation_log_uuid,
             preview_websocket=preview_websocket,
+            skip_conversation_sqs=skip_sqs,
         )
 
         if (response is None or response == "") and not skip_dispatch:
