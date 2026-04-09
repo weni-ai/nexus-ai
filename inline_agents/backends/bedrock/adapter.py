@@ -515,6 +515,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         collaborator_name: str = "",
         preview: bool = False,
         conversation: Optional[object] = None,
+        skip_conversation_sqs: bool = False,
     ):
         """Delegate custom event processing to the service."""
         trace_data = {
@@ -532,6 +533,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             extractor=extractor,
             preview=preview,
             conversation=conversation,
+            skip_conversation_sqs=skip_conversation_sqs,
         )
 
     def to_data_lake_custom_event(

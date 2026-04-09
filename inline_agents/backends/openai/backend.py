@@ -268,6 +268,7 @@ class OpenAIBackend(InlineAgentsBackend):
         hooks_state = HooksState(agents=team)
 
         message_conversation_log_uuid = kwargs.pop("message_conversation_log_uuid", None)
+        skip_conversation_sqs = kwargs.pop("skip_conversation_sqs", False)
 
         save_inline_message_async.delay(
             project_uuid=project_uuid,
@@ -298,6 +299,7 @@ class OpenAIBackend(InlineAgentsBackend):
             conversation=conversation,
             use_components=use_components,
             message_uuid=message_conversation_log_uuid,
+            skip_conversation_sqs=skip_conversation_sqs,
         )
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
@@ -356,6 +358,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 session_id=session_id,
                 msg_external_id=msg_external_id,
                 turn_off_rationale=turn_off_rationale,
+                skip_conversation_sqs=skip_conversation_sqs,
             )
         else:
             external_team = self.team_adapter.to_external(
@@ -391,6 +394,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 turn_off_rationale=turn_off_rationale,
                 auth_token=auth_token,
                 use_components=use_components,
+                skip_conversation_sqs=skip_conversation_sqs,
             )
 
         client = self._get_client()
