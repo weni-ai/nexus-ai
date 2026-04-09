@@ -289,6 +289,52 @@ class TeamViewsetSetTestCase(TestCase):
         row = content["agents"][0]
         self.assertIsNone(row.get("about"))
 
+    def test_get_team_mcp_description_locale_map(self):
+        """Teams API returns MCP description as en/pt/es map (not a single collapsed string)."""
+        system = AgentSystem.objects.create(name="Team MCP System", slug="team-mcp-sys-unique")
+        mcp = MCP.objects.create(
+            name="Team Catalog MCP",
+            slug="team-catalog-mcp-unique",
+            description_en="English MCP",
+            description_pt="Portuguese MCP",
+            description_es="Spanish MCP",
+            system=system,
+        )
+        agent = InlineAgent.objects.create(
+            name="MCP Agent",
+            slug="team-mcp-agent-unique",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        agent.mcps.add(mcp)
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+        IntegratedAgent.objects.create(
+            agent=agent,
+            project=self.project,
+            metadata={
+                "mcp": "Team Catalog MCP",
+                "system": system.slug,
+                "mcp_config": {},
+            },
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        self.assertEqual(response.status_code, 200)
+        response.render()
+        content = json.loads(response.content)
+        row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
+        mcp_payload = row["mcp"]
+        self.assertEqual(mcp_payload["name"], "Team Catalog MCP")
+        desc = mcp_payload["description"]
+        self.assertEqual(desc["en"], "English MCP")
+        self.assertEqual(desc["pt"], "Portuguese MCP")
+        self.assertEqual(desc["es"], "Spanish MCP")
+
 
 class ActivateAgentViewTestCase(TestCase):
     def setUp(self):
