@@ -217,23 +217,21 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
                     config_with_labels[label] = value
             else:
                 config_with_labels = mcp_config
-        else:
-            config_with_labels = mcp_config
 
-        result = {"name": mcp_name, "config": config_with_labels}
-        if mcp:
+            result = {"name": mcp_name, "config": config_with_labels}
             result["description"] = {
                 "en": (mcp.description_en or "").strip(),
                 "pt": (mcp.description_pt or "").strip(),
                 "es": (mcp.description_es or "").strip(),
             }
-
-        if mcp and mcp.system:
-            result["system"] = {
-                "name": mcp.system.name,
-                "slug": mcp.system.slug,
-                "logo": mcp.system.logo.url if mcp.system.logo else None,
-            }
+            if mcp.system:
+                result["system"] = {
+                    "name": mcp.system.name,
+                    "slug": mcp.system.slug,
+                    "logo": mcp.system.logo.url if mcp.system.logo else None,
+                }
+        else:
+            result = {"name": mcp_name, "config": mcp_config}
 
         return result
 
