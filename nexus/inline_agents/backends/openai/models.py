@@ -123,3 +123,24 @@ class ManagerAgent(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class ModelProvider(models.Model):
+    uuid = models.UUIDField(default=uuid4, editable=False)
+    label = models.CharField(max_length=255)
+    model_vendor = models.CharField(max_length=255)
+    credentials = models.JSONField(default=dict)
+    models = ArrayField(models.CharField(max_length=255))
+
+    def __str__(self):
+        return self.label
+
+
+class ProjectModelProvider(models.Model):
+    uuid = models.UUIDField(default=uuid4, editable=False)
+    project = models.OneToOneField("projects.Project", on_delete=models.CASCADE, related_name="model_provider")
+    provider = models.ForeignKey(ModelProvider, on_delete=models.CASCADE)
+    credentials = models.JSONField(default=list)
+
+    def __str__(self):
+        return f"{self.project} - {self.provider}"
