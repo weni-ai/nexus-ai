@@ -44,9 +44,23 @@ from nexus.usecases.intelligences.get_by_uuid import (
     get_project_and_content_base_data,
 )
 from nexus.usecases.projects import get_project_by_uuid
+from nexus.usecases.projects.project_type_update_eda import publish_project_type_update
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.users.api.authentication import UserGlobalTokenAuthentication
 from router.entities import message_factory
+
+
+def _multi_agent_request_user_email(request) -> str:
+    user = getattr(request, "user", None)
+    if user is None or getattr(user, "is_anonymous", True):
+        return ""
+
+    email = getattr(user, "email", None)
+    if isinstance(email, str):
+        return email.strip()
+
+    return ""
+
 
 logger = logging.getLogger(__name__)
 
@@ -1446,6 +1460,7 @@ class MultiAgentView(APIView):
 
         try:
             project = Project.objects.get(uuid=project_uuid)
+            previous_inline_agent_switch = project.inline_agent_switch
 
             # AB 1.0 projects have inline_agent_switch=False and use BedrockBackend
             is_legacy_project_enabling = (
@@ -1465,6 +1480,13 @@ class MultiAgentView(APIView):
                 event="cache_invalidation:project",
                 project=project,
             )
+
+            if not previous_inline_agent_switch and multi_agents:
+                publish_project_type_update(
+                    project_uuid=str(project.uuid),
+                    user_email=_multi_agent_request_user_email(request),
+                    is_multi_agents=True,
+                )
 
             return Response({"message": "Project updated successfully", "multi_agents": multi_agents}, status=200)
         except Exception as e:
