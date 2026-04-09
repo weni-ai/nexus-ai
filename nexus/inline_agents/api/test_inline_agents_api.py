@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient, APIRequestFactory
 
+from nexus.events import notify_async_sync
 from nexus.usecases.projects.tests.project_factory import ProjectAuthFactory, ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
@@ -13,6 +14,13 @@ from nexus.usecases.users.tests.user_factory import UserFactory
 class MultiAgentViewTestCase(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
+
+        patch_notify = mock.patch(
+            "nexus.inline_agents.api.views.notify_async",
+            side_effect=lambda event, **kwargs: notify_async_sync(event, **kwargs),
+        )
+        patch_notify.start()
+        self.addCleanup(patch_notify.stop)
 
         self.project = ProjectFactory()
         self.project_2 = ProjectFactory()
@@ -106,8 +114,8 @@ class MultiAgentViewTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(content.get("multi_agents"), True)
 
-    @mock.patch("nexus.inline_agents.api.views.publish_project_type_update")
-    def test_patch_ab1_to_ab2_publishes_project_type_update_eda_superuser_token(self, mock_publish):
+    @mock.patch("nexus.usecases.projects.project_type_update_eda.publish_project_type_update")
+    def test_patch_inline_switch_false_to_true_publishes_eda_superuser_token(self, mock_publish):
         client = APIClient()
         url = reverse("multi-agents", kwargs={"project_uuid": str(self.project.uuid)})
 
@@ -123,8 +131,8 @@ class MultiAgentViewTestCase(TestCase):
             is_multi_agents=True,
         )
 
-    @mock.patch("nexus.inline_agents.api.views.publish_project_type_update")
-    def test_patch_ab1_to_ab2_publishes_eda_with_request_user_email(self, mock_publish):
+    @mock.patch("nexus.usecases.projects.project_type_update_eda.publish_project_type_update")
+    def test_patch_inline_switch_false_to_true_publishes_eda_with_request_user_email(self, mock_publish):
         client = APIClient()
         client.force_authenticate(user=self.user_weni)
         url = reverse("multi-agents", kwargs={"project_uuid": str(self.project.uuid)})
@@ -141,8 +149,8 @@ class MultiAgentViewTestCase(TestCase):
             is_multi_agents=True,
         )
 
-    @mock.patch("nexus.inline_agents.api.views.publish_project_type_update")
-    def test_patch_ab2_stays_ab2_does_not_publish_again(self, mock_publish):
+    @mock.patch("nexus.usecases.projects.project_type_update_eda.publish_project_type_update")
+    def test_patch_inline_switch_stays_true_does_not_publish_eda_again(self, mock_publish):
         self.project.inline_agent_switch = True
         self.project.save(update_fields=["inline_agent_switch"])
 
@@ -158,8 +166,8 @@ class MultiAgentViewTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         mock_publish.assert_not_called()
 
-    @mock.patch("nexus.inline_agents.api.views.publish_project_type_update")
-    def test_patch_ab2_to_ab1_does_not_publish(self, mock_publish):
+    @mock.patch("nexus.usecases.projects.project_type_update_eda.publish_project_type_update")
+    def test_patch_inline_switch_true_to_false_does_not_publish_eda(self, mock_publish):
         self.project.inline_agent_switch = True
         self.project.save(update_fields=["inline_agent_switch"])
 
@@ -170,6 +178,34 @@ class MultiAgentViewTestCase(TestCase):
         with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", []):
             response = client.patch(
                 url, {"multi_agents": False}, format="json", HTTP_AUTHORIZATION="Bearer invalid-token"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        mock_publish.assert_not_called()
+
+    @mock.patch("nexus.usecases.projects.project_type_update_eda.publish_project_type_update")
+    def test_patch_multi_agents_invalid_type_returns_400(self, mock_publish):
+        client = APIClient()
+        client.force_authenticate(user=self.user_weni)
+        url = reverse("multi-agents", kwargs={"project_uuid": str(self.project.uuid)})
+
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", []):
+            response = client.patch(
+                url, {"multi_agents": "not-a-boolean"}, format="json", HTTP_AUTHORIZATION="Bearer invalid-token"
+            )
+
+        self.assertEqual(response.status_code, 400)
+        mock_publish.assert_not_called()
+
+    @mock.patch("nexus.usecases.projects.project_type_update_eda.publish_project_type_update")
+    def test_patch_multi_agents_string_false_no_eda_publish(self, mock_publish):
+        client = APIClient()
+        client.force_authenticate(user=self.user_weni)
+        url = reverse("multi-agents", kwargs={"project_uuid": str(self.project.uuid)})
+
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", []):
+            response = client.patch(
+                url, {"multi_agents": "false"}, format="json", HTTP_AUTHORIZATION="Bearer invalid-token"
             )
 
         self.assertEqual(response.status_code, 200)
