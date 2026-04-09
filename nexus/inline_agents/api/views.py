@@ -14,14 +14,16 @@ from nexus.events import notify_async
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     AgentSystemSerializer,
+    CurrentProviderSerializer,
     IntegratedAgentSerializer,
+    ModelProviderSerializer,
     OfficialAgentDetailSerializer,
     OfficialAgentListSerializer,
     OfficialAgentsAssignRequestSerializer,
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
 )
-from nexus.inline_agents.backends.openai.models import ManagerAgent
+from nexus.inline_agents.backends.openai.models import ManagerAgent, ModelProvider, ProjectModelProvider
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
 from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
@@ -1739,3 +1741,82 @@ class AgentManagersView(APIView):
             data.update({"currentManager": current_manager_id})
 
         return Response(data=data)
+
+
+class ProjectModelProvidersView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        current = None
+        manager_agent: ManagerAgent | None = project.manager_agent
+
+        if manager_agent:
+            providers = ModelProvider.objects.filter(model_vendor=manager_agent.model_vendor)
+        else:
+            providers = ModelProvider.objects.none()
+
+        providers_data = ModelProviderSerializer(providers, many=True).data
+
+        if manager_agent:
+            try:
+                project_provider = ProjectModelProvider.objects.select_related("provider").get(project=project)
+                credentials = project_provider.credentials if isinstance(project_provider.credentials, list) else []
+                current = CurrentProviderSerializer(
+                    {
+                        "uuid": project_provider.provider.uuid,
+                        "label": project_provider.provider.label,
+                        "model": manager_agent.foundation_model,
+                        "credentials": credentials,
+                    }
+                ).data
+            except ProjectModelProvider.DoesNotExist:
+                current = None
+
+        return Response(data={"current": current, "providers": providers_data})
+
+    def post(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        provider_uuid = request.data.get("provider_uuid")
+        credentials = request.data.get("credentials", [])
+
+        if not provider_uuid:
+            return Response(data={"error": "provider_uuid is required"}, status=400)
+
+        try:
+            provider = ModelProvider.objects.get(uuid=provider_uuid)
+        except (ModelProvider.DoesNotExist, ValueError):
+            return Response(data={"error": "Provider not found"}, status=404)
+
+        manager_agent = project.manager_agent
+        if manager_agent and provider.model_vendor != manager_agent.model_vendor:
+            return Response(data={"error": "Provider does not match project model vendor"}, status=400)
+
+        ProjectModelProvider.objects.update_or_create(
+            project=project,
+            defaults={"provider": provider, "credentials": credentials},
+        )
+
+        return Response(data={"provider_uuid": str(provider.uuid), "credentials": credentials}, status=200)
+
+
+class ProjectEngineSourceView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        has_own = ProjectModelProvider.objects.filter(project=project).exclude(credentials=[]).exists()
+
+        return Response(data={"engine_source": "OWN" if has_own else "STANDARD"})
