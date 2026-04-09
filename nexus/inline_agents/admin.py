@@ -8,7 +8,12 @@ from django.utils.html import format_html
 
 from nexus.admin_widgets import ArrayJSONWidget, PrettyJSONWidget
 from nexus.inline_agents.backends.bedrock.models import Supervisor
-from nexus.inline_agents.backends.openai.models import ManagerAgent, OpenAISupervisor
+from nexus.inline_agents.backends.openai.models import (
+    ManagerAgent,
+    ModelProvider,
+    OpenAISupervisor,
+    ProjectModelProvider,
+)
 from nexus.inline_agents.models import (
     MCP,
     Agent,
@@ -533,6 +538,29 @@ class MCPAdmin(admin.ModelAdmin):
                 )
             except Exception as e:
                 logger.warning(f"[Admin] Failed to trigger cache invalidation after MCP deletion: {e}")
+
+
+@admin.register(ModelProvider)
+class ModelProviderAdmin(admin.ModelAdmin):
+    list_display = ("label",)
+    search_fields = ("label",)
+
+    formfield_overrides = {
+        models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 20, "cols": 80, "class": "vLargeTextField"})},
+        ArrayField: {"widget": PrettyJSONWidget(attrs={"rows": 10, "cols": 80, "class": "aLargeTextField"})},
+    }
+
+
+@admin.register(ProjectModelProvider)
+class ProjectModelProviderAdmin(admin.ModelAdmin):
+    list_display = ("project", "provider")
+    list_filter = ("provider",)
+    search_fields = ("project__name", "project__uuid")
+    autocomplete_fields = ["project", "provider"]
+
+    formfield_overrides = {
+        models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 20, "cols": 80, "class": "vLargeTextField"})},
+    }
 
 
 @admin.register(ManagerAgent)
