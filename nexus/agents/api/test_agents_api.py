@@ -324,6 +324,7 @@ class TeamViewsetSetTestCase(TestCase):
         client.force_authenticate(user=self.user)
         url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
         response = client.get(url)
+        self.assertEqual(response.status_code, 200)
         response.render()
         content = json.loads(response.content)
         row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))

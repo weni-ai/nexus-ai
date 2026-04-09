@@ -222,13 +222,11 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
 
         result = {"name": mcp_name, "config": config_with_labels}
         if mcp:
-            description_locales = {
-                "en": (mcp.description_en or "").strip() or None,
-                "pt": (mcp.description_pt or "").strip() or None,
-                "es": (mcp.description_es or "").strip() or None,
+            result["description"] = {
+                "en": (mcp.description_en or "").strip(),
+                "pt": (mcp.description_pt or "").strip(),
+                "es": (mcp.description_es or "").strip(),
             }
-            if any(description_locales.values()):
-                result["description"] = description_locales
 
         if mcp and mcp.system:
             result["system"] = {
