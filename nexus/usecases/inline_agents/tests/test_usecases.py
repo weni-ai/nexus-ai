@@ -109,7 +109,7 @@ class TestCreateAgentsUsecase(TestCase):
 
 
 class TestInvalidateTeamCacheForAgentIntegrations(TestCase):
-    @patch("nexus.events.notify_async")
+    @patch("nexus.usecases.inline_agents.update.notify_async")
     def test_invalidates_owner_and_active_integrated_projects(self, mock_notify):
         owner_project = ProjectFactory(name="Owner", brain_on=True)
         consumer_project = ProjectFactory(name="Consumer", brain_on=True)
@@ -134,7 +134,7 @@ class TestInvalidateTeamCacheForAgentIntegrations(TestCase):
             },
         )
 
-    @patch("nexus.events.notify_async")
+    @patch("nexus.usecases.inline_agents.update.notify_async")
     def test_skips_inactive_integrations(self, mock_notify):
         owner_project = ProjectFactory(name="Owner2", brain_on=True)
         consumer_project = ProjectFactory(name="Consumer2", brain_on=True)

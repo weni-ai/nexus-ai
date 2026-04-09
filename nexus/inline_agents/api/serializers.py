@@ -185,7 +185,6 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
             return None
 
         config_with_labels = {}
-        mcp_description = None
 
         # Try to find MCP with system if available in metadata, or fallback to name lookup
         mcp = None
@@ -211,7 +210,6 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
             )
 
         if mcp:
-            mcp_description = (mcp.description_en or mcp.description_pt or mcp.description_es or "").strip() or None
             if mcp_config:
                 name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
                 for name, value in mcp_config.items():
@@ -223,8 +221,12 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
             config_with_labels = mcp_config
 
         result = {"name": mcp_name, "config": config_with_labels}
-        if mcp_description:
-            result["description"] = mcp_description
+        if mcp:
+            result["description"] = {
+                "en": (mcp.description_en or "").strip(),
+                "pt": (mcp.description_pt or "").strip(),
+                "es": (mcp.description_es or "").strip(),
+            }
 
         if mcp and mcp.system:
             result["system"] = {

@@ -222,11 +222,7 @@ def dispatch_preview(
         f"project_uuid={message_obj.project_uuid} user_email_nonempty={_ue_ok} "
         f"response_len={len(response_msg or '')}"
     )
-    ws_content = (
-        response_msg
-        if response_msg is not None
-        else {"type": "broadcast", "message": response, "fonts": []}
-    )
+    ws_content = response_msg if response_msg is not None else {"type": "broadcast", "message": response, "fonts": []}
     send_preview_message_to_websocket(
         project_uuid=message_obj.project_uuid,
         user_email=user_email,
@@ -652,6 +648,7 @@ def start_inline_agents(
             channel_uuid=message_obj.channel_uuid,
             contact_name=message_obj.contact_name or "",
             preview=preview,
+            skip_conversation_sqs=skip_sqs,
             message_text=message.get("text"),
             response_text=sqs_response_text_from_agent_output(response or "", skip_dispatch=skip_dispatch),
             incoming_created_at=incoming_created_at,
@@ -707,6 +704,7 @@ def start_inline_agents(
             channel_uuid=message_obj.channel_uuid,
             contact_name=message_obj.contact_name or "",
             preview=preview,
+            skip_conversation_sqs=skip_sqs,
             message_text=message.get("text"),
             response_text=e.message,
             incoming_created_at=incoming_created_at or pendulum.now().to_iso8601_string(),

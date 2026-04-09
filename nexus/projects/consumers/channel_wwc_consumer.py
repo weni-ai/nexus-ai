@@ -17,8 +17,7 @@ class ChannelWwcConsumer(EDAConsumer):
 
     def consume(self, message: amqp.Message):
         logger.debug(
-            "[ChannelWwcConsumer] Consuming a message",
-            extra={"body_len": len(message.body) if hasattr(message, "body") else None},
+            f"[ChannelWwcConsumer] Consuming a message, body: {message.body}",
         )
         channel_uuid = project_uuid = None
         try:
@@ -33,8 +32,7 @@ class ChannelWwcConsumer(EDAConsumer):
 
             if not channel_uuid or not project_uuid or channel_type is None or channel_type == "":
                 logger.warning(
-                    "[ChannelWwcConsumer] Missing required fields",
-                    extra={"has_uuid": bool(channel_uuid), "has_project": bool(project_uuid), "channel_type": channel_type},
+                    f"[ChannelWwcConsumer] Missing required fields: {body}",
                 )
                 message.channel.basic_reject(message.delivery_tag, requeue=False)
                 return
@@ -46,15 +44,13 @@ class ChannelWwcConsumer(EDAConsumer):
             )
             message.channel.basic_ack(message.delivery_tag)
             logger.info(
-                "[ChannelWwcConsumer] Channel created",
-                extra={"channel_uuid": channel_uuid, "project_uuid": project_uuid},
+                f"[ChannelWwcConsumer] Channel created, project_uuid: {project_uuid}, channel_uuid: {channel_uuid}",
             )
         except IntegrityError as exc:
             capture_exception(exc)
             message.channel.basic_ack(message.delivery_tag)
             logger.warning(
-                "[ChannelWwcConsumer] Duplicate channel uuid (IntegrityError)",
-                extra={"channel_uuid": channel_uuid, "project_uuid": project_uuid},
+                f"[ChannelWwcConsumer] Duplicate channel uuid (IntegrityError), channel_uuid: {channel_uuid}",
             )
         except (Project.DoesNotExist, ValueError) as exc:
             message.channel.basic_ack(message.delivery_tag)
