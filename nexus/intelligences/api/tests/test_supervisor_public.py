@@ -83,6 +83,36 @@ class TestSupervisorPublicAPI(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("date", response.json())
 
+    def test_v2_start_before_cut_date_returns_400(self):
+        url = reverse(
+            "public-supervisor-conversations-v2",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+        response = self.client.get(
+            f"{url}?start=2026-03-26",
+            HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.json()["date"],
+            "It's not possible to consult data before 27/03/2026.",
+        )
+
+    def test_v2_end_before_cut_date_returns_400(self):
+        url = reverse(
+            "public-supervisor-conversations-v2",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+        response = self.client.get(
+            f"{url}?end=2026-03-26",
+            HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.json()["date"],
+            "It's not possible to consult data before 27/03/2026.",
+        )
+
     def test_invalid_status(self):
         url = reverse(
             "public-supervisor-conversations",

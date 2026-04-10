@@ -28,6 +28,28 @@ from router.services.message_service import MessageService
 
 logger = logging.getLogger(__name__)
 
+# V2 (nexus-conversations): earliest calendar day (UTC); data before this is not available from that service.
+SUPERVISOR_PUBLIC_CONVERSATIONS_V2_CUT_DATE = pendulum.datetime(2026, 3, 27, 0, 0, 0, tz="UTC")
+
+
+def _validate_supervisor_public_v2_query_dates(start, end):
+    """
+    Validate optional start/end query strings for SupervisorPublicConversationsViewV2 against
+    the cut date (UTC calendar day).
+    Raises ValidationError for invalid ISO dates or any bound before SUPERVISOR_PUBLIC_CONVERSATIONS_V2_CUT_DATE.
+    """
+    cut_date = SUPERVISOR_PUBLIC_CONVERSATIONS_V2_CUT_DATE.date()
+    try:
+        if start:
+            if pendulum.parse(start).in_timezone("UTC").date() < cut_date:
+                raise ValidationError({"date": "It's not possible to consult data before 27/03/2026."})
+        if end:
+            if pendulum.parse(end).in_timezone("UTC").date() < cut_date:
+                raise ValidationError({"date": "It's not possible to consult data before 27/03/2026."})
+    except pendulum.parsing.exceptions.ParserError:
+        raise ValidationError({"date": "Invalid date format. Please use ISO 8601."}) from None
+
+
 # Resolution choices matching nexus-conversations model (for status_summary keys)
 NEXUS_CONVERSATIONS_RESOLUTION_KEYS = ("0", "1", "2", "3", "4")
 
@@ -439,11 +461,17 @@ class SupervisorPublicConversationsViewV2(APIView):
 
     def _parse_request_params(self, request):
         """Parse and validate query params for nexus-conversations API. Raises ValidationError on invalid input."""
+        start = request.query_params.get("start")
+        end = request.query_params.get("end")
+        _validate_supervisor_public_v2_query_dates(start, end)
+
         params = {}
-        if request.query_params.get("start"):
-            params["start_date"] = request.query_params.get("start")
-        if request.query_params.get("end"):
-            params["end_date"] = request.query_params.get("end")
+        if start:
+            params["start_date"] = start
+        if end:
+            params["end_date"] = end
+        if not start and not end and not request.query_params.get("cursor"):
+            params["start_date"] = SUPERVISOR_PUBLIC_CONVERSATIONS_V2_CUT_DATE.format("YYYY-MM-DD")
         status_param = request.query_params.get("status")
         if status_param is not None:
             if status_param not in NEXUS_CONVERSATIONS_RESOLUTION_KEYS:
@@ -488,13 +516,19 @@ class SupervisorPublicConversationsViewV2(APIView):
         parameters=[
             OpenApiParameter(
                 name="start",
-                description="Start date (ISO 8601). Mapped to start_date filter on nexus-conversations.",
+                description=(
+                    "Start date (ISO 8601). Mapped to start_date on nexus-conversations. "
+                    "Must not be before 2026-03-27 (UTC calendar day)."
+                ),
                 required=False,
                 type=OpenApiTypes.STR,
             ),
             OpenApiParameter(
                 name="end",
-                description="End date (ISO 8601). Mapped to end_date filter on nexus-conversations.",
+                description=(
+                    "End date (ISO 8601). Mapped to end_date on nexus-conversations. "
+                    "Must not be before 2026-03-27 (UTC calendar day)."
+                ),
                 required=False,
                 type=OpenApiTypes.STR,
             ),
