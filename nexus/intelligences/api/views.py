@@ -1578,6 +1578,26 @@ class TopicsViewSet(ModelViewSet):
             return Topics.objects.filter(project__uuid=project_uuid)
         return Topics.objects.none()
 
+    def _format_external_topic(self, topic: dict) -> dict:
+        subtopics = topic.get("subtopic") or []
+        return {
+            "name": topic.get("name", ""),
+            "uuid": topic.get("uuid", ""),
+            "created_at": topic.get("created_at", ""),
+            "description": topic.get("description", ""),
+            "subtopic": [
+                {
+                    "name": st.get("name", ""),
+                    "uuid": st.get("uuid", ""),
+                    "created_at": st.get("created_at", ""),
+                    "description": st.get("description", ""),
+                    "topic_uuid": st.get("topic_uuid", topic.get("uuid", "")),
+                    "topic_name": st.get("topic_name", topic.get("name", "")),
+                }
+                for st in subtopics
+            ],
+        }
+
     def list(self, request, *args, **kwargs):
         project_uuid = self.kwargs.get("project_uuid")
         if project_uuid:
@@ -1591,12 +1611,9 @@ class TopicsViewSet(ModelViewSet):
 
             if project.inline_agent_switch:
                 client = ConversationsRESTClient()
-                response_data = client.get_topics(
-                    project_uuid=str(project_uuid),
-                    page=request.query_params.get("page"),
-                    page_size=request.query_params.get("page_size"),
-                )
-                return Response(response_data)
+                topics = client.get_topics(project_uuid=str(project_uuid))
+                formatted = [self._format_external_topic(t) for t in topics]
+                return Response(formatted)
 
         return super().list(request, *args, **kwargs)
 
