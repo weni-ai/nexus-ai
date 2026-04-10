@@ -87,25 +87,21 @@ class ConversationsRESTClient(RestClient):
         response.raise_for_status()
         return response.json()
 
-    def get_topics(
-        self,
-        project_uuid: str,
-        page: str = None,
-        page_size: str = None,
-    ):
+    def get_topics(self, project_uuid: str):
+        """Fetch all topics for a project, iterating through all pages."""
         endpoint = f"/api/v1/projects/{project_uuid}/topics/"
-        params = {}
+        all_results = []
+        url = self._get_url(endpoint)
 
-        if page is not None:
-            params["page"] = page
-        if page_size is not None:
-            params["page_size"] = page_size
+        while url:
+            response = requests.get(
+                url,
+                headers=self.headers,
+                timeout=45,
+            )
+            response.raise_for_status()
+            data = response.json()
+            all_results.extend(data.get("results", []))
+            url = data.get("next")
 
-        response = requests.get(
-            self._get_url(endpoint),
-            headers=self.headers,
-            params=params if params else None,
-            timeout=45,
-        )
-        response.raise_for_status()
-        return response.json()
+        return all_results
