@@ -1600,20 +1600,11 @@ class TopicsViewSet(ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         project_uuid = self.kwargs.get("project_uuid")
-        if project_uuid:
-            try:
-                project = Project.objects.get(uuid=project_uuid)
-            except Project.DoesNotExist:
-                return Response(
-                    {"error": "Project not found"},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-            if project.inline_agent_switch:
-                client = ConversationsRESTClient()
-                topics = client.get_topics(project_uuid=str(project_uuid))
-                formatted = [self._format_external_topic(t) for t in topics]
-                return Response(formatted)
+        if project_uuid and settings.CONVERSATIONS_AS_TOPICS_SOURCE:
+            client = ConversationsRESTClient()
+            topics = client.get_topics(project_uuid=str(project_uuid))
+            formatted = [self._format_external_topic(t) for t in topics]
+            return Response(formatted)
 
         return super().list(request, *args, **kwargs)
 
