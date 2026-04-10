@@ -1,13 +1,19 @@
 from rest_framework import serializers
 
+from nexus.projects.channel_ops import get_default_channel_uuid
 from nexus.projects.models import Project
 
 
 class ProjectSerializer(serializers.ModelSerializer):
+    default_channel_uuid = serializers.SerializerMethodField()
+
     class Meta:
         model = Project
-        fields = ["uuid", "name", "brain_on", "indexer_database"]
-        read_only_fields = ["uuid", "name", "indexer_database"]
+        fields = ["uuid", "name", "brain_on", "indexer_database", "default_channel_uuid"]
+        read_only_fields = ["uuid", "name", "indexer_database", "default_channel_uuid"]
+
+    def get_default_channel_uuid(self, obj):
+        return get_default_channel_uuid(str(obj.uuid))
 
 
 class ProjectMinimalSerializer(serializers.ModelSerializer):

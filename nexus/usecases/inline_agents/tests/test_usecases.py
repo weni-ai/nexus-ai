@@ -7,8 +7,10 @@ from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.test import TestCase
 from django.utils.datastructures import MultiValueDict
 
+from nexus.inline_agents.models import Agent, IntegratedAgent
 from nexus.inline_agents.tests import MockBedrockClient
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
+from nexus.usecases.inline_agents.update import invalidate_team_cache_for_agent_integration_projects
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
@@ -104,3 +106,50 @@ class TestCreateAgentsUsecase(TestCase):
             self.assertEqual(agent.backend_foundation_models, settings.DEFAULT_FOUNDATION_MODELS)
 
         mock_instance.list_project_contact_fields.assert_called()
+
+
+class TestInvalidateTeamCacheForAgentIntegrations(TestCase):
+    @patch("nexus.usecases.inline_agents.update.notify_async")
+    def test_invalidates_owner_and_active_integrated_projects(self, mock_notify):
+        owner_project = ProjectFactory(name="Owner", brain_on=True)
+        consumer_project = ProjectFactory(name="Consumer", brain_on=True)
+        agent = Agent.objects.create(
+            name="Shared Agent",
+            slug="shared-agent",
+            instruction="x",
+            collaboration_instructions="y",
+            project=owner_project,
+        )
+        IntegratedAgent.objects.create(agent=agent, project=consumer_project, is_active=True)
+
+        invalidate_team_cache_for_agent_integration_projects(agent)
+
+        self.assertEqual(mock_notify.call_count, 2)
+        called = {(c.kwargs["event"], c.kwargs["project_uuid"]) for c in mock_notify.call_args_list}
+        self.assertEqual(
+            called,
+            {
+                ("cache_invalidation:team", str(owner_project.uuid)),
+                ("cache_invalidation:team", str(consumer_project.uuid)),
+            },
+        )
+
+    @patch("nexus.usecases.inline_agents.update.notify_async")
+    def test_skips_inactive_integrations(self, mock_notify):
+        owner_project = ProjectFactory(name="Owner2", brain_on=True)
+        consumer_project = ProjectFactory(name="Consumer2", brain_on=True)
+        agent = Agent.objects.create(
+            name="Agent B",
+            slug="agent-b",
+            instruction="x",
+            collaboration_instructions="y",
+            project=owner_project,
+        )
+        IntegratedAgent.objects.create(agent=agent, project=consumer_project, is_active=False)
+
+        invalidate_team_cache_for_agent_integration_projects(agent)
+
+        mock_notify.assert_called_once_with(
+            event="cache_invalidation:team",
+            project_uuid=str(owner_project.uuid),
+        )

@@ -213,6 +213,7 @@ class OpenAIBackend(InlineAgentsBackend):
         sanitized_urn: str,
         contact_fields: str,
         preview: bool = False,
+        preview_websocket: bool = False,
         language: str = "en",
         contact_name: str = "",
         contact_urn: str = "",
@@ -267,6 +268,7 @@ class OpenAIBackend(InlineAgentsBackend):
         hooks_state = HooksState(agents=team)
 
         message_conversation_log_uuid = kwargs.pop("message_conversation_log_uuid", None)
+        skip_conversation_sqs = kwargs.pop("skip_conversation_sqs", False)
 
         save_inline_message_async.delay(
             project_uuid=project_uuid,
@@ -283,6 +285,7 @@ class OpenAIBackend(InlineAgentsBackend):
         supervisor_hooks = SupervisorHooks(
             agent_name="manager",
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -296,10 +299,12 @@ class OpenAIBackend(InlineAgentsBackend):
             conversation=conversation,
             use_components=use_components,
             message_uuid=message_conversation_log_uuid,
+            skip_conversation_sqs=skip_conversation_sqs,
         )
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -341,6 +346,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 hooks_state=hooks_state,
                 event_manager_notify=self._event_manager_notify,
                 preview=preview,
+                preview_websocket=preview_websocket,
                 rationale_switch=rationale_switch,
                 language=language,
                 user_email=user_email,
@@ -352,6 +358,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 session_id=session_id,
                 msg_external_id=msg_external_id,
                 turn_off_rationale=turn_off_rationale,
+                skip_conversation_sqs=skip_conversation_sqs,
             )
         else:
             external_team = self.team_adapter.to_external(
@@ -370,6 +377,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 session=session,
                 data_lake_event_adapter=data_lake_event_adapter,
                 preview=preview,
+                preview_websocket=preview_websocket,
                 hooks_state=hooks_state,
                 event_manager_notify=self._event_manager_notify,
                 # Pass cached data to avoid database queries
@@ -386,11 +394,12 @@ class OpenAIBackend(InlineAgentsBackend):
                 turn_off_rationale=turn_off_rationale,
                 auth_token=auth_token,
                 use_components=use_components,
+                skip_conversation_sqs=skip_conversation_sqs,
             )
 
         client = self._get_client()
 
-        if preview and user_email:
+        if (preview or preview_websocket) and user_email:
             send_preview_message_to_websocket(
                 project_uuid=str(project_uuid),
                 user_email=user_email,

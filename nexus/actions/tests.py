@@ -12,6 +12,7 @@ from nexus.actions.api.views import (
     FlowsViewset,
     MessagePreviewView,
     SearchFlowView,
+    SimulationManagerModelView,
     TemplateActionView,
 )
 from nexus.actions.models import Flow
@@ -425,3 +426,21 @@ class TemplateActionViewSetTestCase(TestCase):
         response.render()
         logger.info("Response content rendered", extra={"length": len(response.content or b"")})
         self.assertEqual(response.status_code, 200)
+
+
+class SimulationActionsApiTestCase(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.project = ProjectFactory(name="Router", brain_on=True)
+        self.user = self.project.created_by
+
+    @patch("nexus.actions.api.views.get_redis_write_client")
+    def test_simulation_manager_model_post_requires_contact_urn(self, mock_redis):
+        request = self.factory.post(
+            f"/{self.project.uuid}/simulation/manager-model/",
+            data={"manager_foundation_model": "gpt-4.1"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = SimulationManagerModelView.as_view()(request, project_uuid=str(self.project.uuid))
+        self.assertEqual(response.status_code, 400)

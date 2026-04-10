@@ -46,7 +46,7 @@ def messages(request: Request, message: MessageHTTPBody):
 
         if project.inline_agent_switch:
             logger.info("Starting Inline Agent")
-            start_inline_agents.delay(message.dict())
+            start_inline_agents.delay(message.dict(), user_email=message.user_email or "")
         else:
             start_route.delay(message.dict())
 

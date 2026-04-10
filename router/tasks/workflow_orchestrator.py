@@ -40,7 +40,10 @@ from router.tasks.invoke import (
     _invoke_backend,
     _invoke_is_final_debug,
     _preprocess_message_input,
+    apply_simulation_foundation_model_override,
     dispatch_preview,
+    effective_simulation_channel,
+    should_skip_conversation_sqs,
 )
 from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
 from router.tasks.redis_task_manager import RedisTaskManager
@@ -69,6 +72,8 @@ class WorkflowContext:
     contact_urn: str
     message: Dict
     preview: bool
+    preview_websocket: bool
+    simulation_channel: bool
     language: str
     user_email: str
     task_id: str
@@ -160,8 +165,8 @@ def _handle_workflow_error(ctx: WorkflowContext, error: Exception) -> None:
 
     _finalize_workflow(ctx, status="failed")
 
-    # Send error to preview if applicable
-    if ctx.user_email:
+    # Send error to preview WebSocket when applicable
+    if ctx.user_email and (ctx.preview or ctx.preview_websocket):
         send_preview_message_to_websocket(
             user_email=ctx.user_email,
             project_uuid=str(ctx.project_uuid),
@@ -183,6 +188,7 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         channel_uuid=message_obj.channel_uuid or ctx.message.get("channel_uuid"),
         contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
         preview=ctx.preview,
+        skip_conversation_sqs=should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel),
         message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
         response_text=error.message or "",
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
@@ -191,7 +197,7 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         turn_id=ctx.turn_id,
     )
 
-    if ctx.preview and ctx.broadcast:
+    if (ctx.preview or ctx.preview_websocket) and ctx.broadcast:
         return dispatch_preview(
             error.message,
             message_obj,
@@ -273,6 +279,12 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
 
     # Preprocess message
     processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(ctx.message, ctx.agents_backend)
+    foundation_model = apply_simulation_foundation_model_override(
+        ctx.simulation_channel,
+        ctx.project_uuid or "",
+        ctx.message.get("contact_urn") or "",
+        foundation_model,
+    )
 
     # Create message object
     message_obj = _create_message_object(processed_message)
@@ -281,8 +293,9 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
     ctx.incoming_created_at = pendulum.now().to_iso8601_string()
     ctx.turn_id = ctx.message.get("msg_event", {}).get("msg_external_id") or str(uuid_lib.uuid4())
 
-    # Send incoming to SQS when message is received
-    if not ctx.preview:
+    skip_conv_sqs = should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel)
+    # Conversation SQS: same rules as start_inline_agents (Cases 1–3)
+    if not skip_conv_sqs:
         received_event = build_message_received_event(
             project_uuid=ctx.project_uuid,
             contact_urn=ctx.contact_urn,
@@ -318,6 +331,8 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
         stream_support=ctx.message.get("stream_support", False),
         supervisor_agent_uuid=ctx.supervisor_agent_uuid,
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
+        preview_websocket=ctx.preview_websocket,
+        skip_conversation_sqs=skip_conv_sqs,
     )
 
     return response, skip_dispatch
@@ -350,6 +365,7 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
         channel_uuid=message_obj.channel_uuid or ctx.message.get("channel_uuid"),
         contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
         preview=ctx.preview,
+        skip_conversation_sqs=should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel),
         message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
         response_text=sqs_response_text_from_agent_output(response or "", skip_dispatch=skip_dispatch),
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
@@ -359,7 +375,7 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
     )
 
     # Dispatch response
-    if ctx.preview:
+    if ctx.preview or ctx.preview_websocket:
         _invoke_is_final_debug("H workflow post_generation branch=dispatch_preview")
         return dispatch_preview(
             response,
@@ -407,17 +423,22 @@ def _create_workflow_context(
     task_id: str,
     message: Dict,
     preview: bool,
+    simulation_channel: bool,
     language: str,
     user_email: str,
     supervisor_agent_uuid: Optional[str] = None,
 ) -> WorkflowContext:
     """Create a workflow context from task parameters."""
+    simulation_channel_effective = effective_simulation_channel(message, simulation_channel)
+    preview_websocket = simulation_channel_effective and bool(user_email and str(user_email).strip())
     return WorkflowContext(
         workflow_id=f"workflow-{uuid_lib.uuid4()}",
         project_uuid=message.get("project_uuid"),
         contact_urn=message.get("contact_urn"),
         message=message,
         preview=preview,
+        preview_websocket=preview_websocket,
+        simulation_channel=simulation_channel_effective,
         language=language,
         user_email=user_email,
         task_id=task_id,
@@ -447,6 +468,7 @@ def inline_agent_workflow(
     self,
     message: Dict,
     preview: bool = False,
+    simulation_channel: bool = False,
     language: str = "en",
     user_email: str = "",
     supervisor_agent_uuid: Optional[str] = None,
@@ -468,6 +490,7 @@ def inline_agent_workflow(
         task_id=self.request.id,
         message=message,
         preview=preview,
+        simulation_channel=simulation_channel,
         language=language,
         user_email=user_email,
         supervisor_agent_uuid=supervisor_agent_uuid,

@@ -237,13 +237,14 @@ class LambdaUseCase:
                 )
                 sentry_sdk.capture_message("Lambda returned topic_uuid but topic_name is None/empty", level="warning")
 
-        self.send_datalake_event(
-            event_data=event_data,
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            channel_uuid=channel_uuid,
-            conversation=conversation,
-        )
+        if settings.SEND_LAMBDA_TOPICS_EVENTS:
+            self.send_datalake_event(
+                event_data=event_data,
+                project_uuid=project_uuid,
+                contact_urn=contact_urn,
+                channel_uuid=channel_uuid,
+                conversation=conversation,
+            )
 
         topic_uuid = event_data.get("metadata").get("topic_uuid")
 

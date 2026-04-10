@@ -105,6 +105,7 @@ class OpenAITeamAdapter(TeamAdapter):
         hooks_state,
         event_manager_notify,
         preview,
+        preview_websocket,
         rationale_switch,
         language,
         user_email,
@@ -113,6 +114,7 @@ class OpenAITeamAdapter(TeamAdapter):
         turn_off_rationale,
         session_factory,
         max_tokens: Dict[str, Optional[int]],
+        skip_conversation_sqs: bool = False,
     ):
         agents_as_tools = []
         user_model_credentials: Dict[str, Any] = supervisor.get("user_model_credentials", {})
@@ -144,12 +146,14 @@ class OpenAITeamAdapter(TeamAdapter):
                 hooks_state=hooks_state,
                 event_manager_notify=event_manager_notify,
                 preview=preview,
+                preview_websocket=preview_websocket,
                 rationale_switch=rationale_switch,
                 language=language,
                 user_email=user_email,
                 session_id=session_id,
                 msg_external_id=msg_external_id,
                 turn_off_rationale=turn_off_rationale,
+                skip_conversation_sqs=skip_conversation_sqs,
             )
             model_settings = {"extra_args": collaborator_extra_args}
             if max_tokens_collaborator is not None:
@@ -197,6 +201,7 @@ class OpenAITeamAdapter(TeamAdapter):
         hooks_state: HooksState,
         event_manager_notify: callable,
         preview: bool,
+        preview_websocket: bool,
         rationale_switch: bool,
         language: str,
         user_email: str,
@@ -208,6 +213,7 @@ class OpenAITeamAdapter(TeamAdapter):
         session_id: str,
         msg_external_id: str,
         turn_off_rationale: bool,
+        skip_conversation_sqs: bool = False,
     ):
         supervisor_instructions: str = cls.prepare_instructions(instructions)
         llm_formatted_time: str = cls.prepare_time()
@@ -245,6 +251,7 @@ class OpenAITeamAdapter(TeamAdapter):
             hooks_state=hooks_state,
             event_manager_notify=event_manager_notify,
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -253,6 +260,7 @@ class OpenAITeamAdapter(TeamAdapter):
             session_id=session_id,
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
+            skip_conversation_sqs=skip_conversation_sqs,
         )
 
         supervisor_tools = cls._get_tools(supervisor["tools"])
@@ -317,6 +325,7 @@ class OpenAITeamAdapter(TeamAdapter):
         session: Any = None,
         data_lake_event_adapter: DataLakeEventAdapter = None,
         preview: bool = False,
+        preview_websocket: bool = False,
         hooks_state: HooksState = None,
         event_manager_notify: callable = None,
         rationale_switch: bool = False,
@@ -326,6 +335,7 @@ class OpenAITeamAdapter(TeamAdapter):
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
         use_components: bool = False,
+        skip_conversation_sqs: bool = False,
         # Cached data parameters (optional, used to avoid database queries)
         content_base_uuid: str = None,
         business_rules: str = None,
@@ -399,12 +409,14 @@ class OpenAITeamAdapter(TeamAdapter):
                 hooks_state=hooks_state,
                 event_manager_notify=event_manager_notify,
                 preview=preview,
+                preview_websocket=preview_websocket,
                 rationale_switch=rationale_switch,
                 language=language,
                 user_email=user_email,
                 session_id=session_id,
                 msg_external_id=msg_external_id,
                 turn_off_rationale=turn_off_rationale,
+                skip_conversation_sqs=skip_conversation_sqs,
             )
 
             from agents import Agent, ModelSettings
@@ -1318,6 +1330,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         preview: bool = False,
         agent_name: str = "",
         conversation: Optional[object] = None,
+        skip_conversation_sqs: bool = False,
     ):
         """Delegate custom event processing to the service."""
         trace_data = {"project_uuid": project_uuid, "contact_urn": contact_urn}
@@ -1330,6 +1343,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             extractor=extractor,
             preview=preview,
             conversation=conversation,
+            skip_conversation_sqs=skip_conversation_sqs,
         )
 
     def to_data_lake_custom_event(

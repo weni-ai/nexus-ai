@@ -48,7 +48,7 @@ class InlineMessageReceivedObserver(EventObserver):
         preview: bool = False,
         **kwargs: Any,
     ) -> None:
-        if preview:
+        if preview or kwargs.get("skip_conversation_sqs"):
             return
 
         message_conversation_log_uuid = kwargs.get("message_conversation_log_uuid")
@@ -93,7 +93,7 @@ class InlineMessageReceivedMetricsObserver(EventObserver):
         preview: bool = False,
         **kwargs: Any,
     ) -> None:
-        if preview:
+        if preview or kwargs.get("skip_conversation_sqs"):
             return
 
         message_conversation_log_uuid = kwargs.get("message_conversation_log_uuid")

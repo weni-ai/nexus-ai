@@ -187,6 +187,7 @@ class DataLakeEventService:
         extractor: EventExtractor,
         preview: bool = False,
         conversation: Optional[object] = None,
+        skip_conversation_sqs: bool = False,
     ) -> None:
         """Process custom events using backend-specific extractor."""
         if preview:
@@ -204,7 +205,12 @@ class DataLakeEventService:
                 # Handle special events (CSAT, NPS, etc.) first
                 if event_key in special_handlers:
                     special_handlers[event_key].process(
-                        event_to_send, project_uuid, contact_urn, channel_uuid, conversation=conversation
+                        event_to_send,
+                        project_uuid,
+                        contact_urn,
+                        channel_uuid,
+                        conversation=conversation,
+                        skip_conversation_sqs=skip_conversation_sqs,
                     )
 
                 self.send_custom_event(

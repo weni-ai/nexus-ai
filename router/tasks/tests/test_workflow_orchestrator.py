@@ -1,5 +1,5 @@
 import logging
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
@@ -51,6 +51,8 @@ class WorkflowContextTestCase(SimpleTestCase):
             contact_urn="tel:+5511999999999",
             message=message,
             preview=False,
+            preview_websocket=False,
+            simulation_channel=False,
             language="en",
             user_email="user@example.com",
             task_id="task-123",
@@ -69,7 +71,8 @@ class WorkflowContextTestCase(SimpleTestCase):
 class CreateWorkflowContextTestCase(SimpleTestCase):
     """Tests for _create_workflow_context helper."""
 
-    def test_create_workflow_context(self):
+    @patch("router.tasks.workflow_orchestrator.RedisTaskManager", return_value=MagicMock())
+    def test_create_workflow_context(self, _mock_rtm):
         """Test creating workflow context from task inputs."""
         message = {
             "project_uuid": "proj-123",
@@ -81,6 +84,7 @@ class CreateWorkflowContextTestCase(SimpleTestCase):
             task_id="task-123",
             message=message,
             preview=False,
+            simulation_channel=False,
             language="pt",
             user_email="test@test.com",
         )
@@ -92,7 +96,8 @@ class CreateWorkflowContextTestCase(SimpleTestCase):
         self.assertEqual(ctx.user_email, "test@test.com")
         self.assertIsNotNone(ctx.workflow_id)  # Should be generated
 
-    def test_create_workflow_context_preview_mode(self):
+    @patch("router.tasks.workflow_orchestrator.RedisTaskManager", return_value=MagicMock())
+    def test_create_workflow_context_preview_mode(self, _mock_rtm):
         """Test creating workflow context in preview mode."""
         message = {"project_uuid": "proj-123", "contact_urn": "tel:+5511999999999", "text": "Test"}
 
@@ -100,6 +105,7 @@ class CreateWorkflowContextTestCase(SimpleTestCase):
             task_id="task-123",
             message=message,
             preview=True,
+            simulation_channel=False,
             language="en",
             user_email="preview@test.com",
         )
@@ -122,6 +128,8 @@ class InitializeWorkflowTestCase(SimpleTestCase):
             contact_urn="urn:test",
             message={"project_uuid": "proj-123", "contact_urn": "urn:test", "text": "Hello"},
             preview=False,
+            preview_websocket=False,
+            simulation_channel=False,
             language="en",
             user_email="",
             task_id="task-123",
@@ -152,6 +160,8 @@ class InitializeWorkflowTestCase(SimpleTestCase):
             contact_urn="urn:test",
             message={"project_uuid": "proj-123", "contact_urn": "urn:test", "text": "Hello"},
             preview=True,  # Preview mode
+            preview_websocket=False,
+            simulation_channel=False,
             language="en",
             user_email="",
             task_id="task-123",
@@ -186,6 +196,8 @@ class FinalizeWorkflowTestCase(SimpleTestCase):
             contact_urn="urn:test",
             message={"project_uuid": "proj-123", "contact_urn": "urn:test", "text": "Hello"},
             preview=False,
+            preview_websocket=False,
+            simulation_channel=False,
             language="en",
             user_email="",
             task_id="task-123",
@@ -222,6 +234,8 @@ class HandleWorkflowErrorTestCase(SimpleTestCase):
             contact_urn="urn:test",
             message={"project_uuid": "proj-123", "contact_urn": "urn:test", "text": "Hello"},
             preview=False,
+            preview_websocket=False,
+            simulation_channel=False,
             language="en",
             user_email="",
             task_id="task-123",

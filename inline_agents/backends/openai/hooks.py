@@ -226,9 +226,11 @@ class TraceHandler:
         turn_off_rationale,
         hooks_state,
         message_uuid=None,
+        preview_websocket: bool = False,
     ):
         self.event_manager_notify = event_manager_notify
         self.preview = preview
+        self.preview_websocket = preview_websocket
         self.rationale_switch = rationale_switch
         self.language = language
         self.user_email = user_email
@@ -258,6 +260,7 @@ class TraceHandler:
             project_uuid=context_data.project.get("uuid"),
             send_message_callback=None,
             preview=self.preview,
+            preview_websocket=self.preview_websocket,
             rationale_switch=self.rationale_switch,
             language=self.language,
             user_email=self.user_email,
@@ -310,10 +313,12 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         agents: list,
         hooks_state: HooksState,
         message_uuid: str = None,
+        preview_websocket: bool = False,
     ):
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -478,6 +483,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         hooks_state: HooksState,
         event_manager_notify: callable = None,
         preview: bool = False,
+        preview_websocket: bool = False,
         rationale_switch: bool = False,
         language: str = "en",
         user_email: str = None,
@@ -485,10 +491,12 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         msg_external_id: str = None,
         turn_off_rationale: bool = False,
         conversation: Optional[object] = None,
+        skip_conversation_sqs: bool = False,
     ):
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -502,6 +510,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         self.hooks_state = hooks_state
         self.preview = preview
         self.conversation = conversation
+        self.skip_conversation_sqs = skip_conversation_sqs
 
     async def on_llm_end(self, context, agent, response, **kwargs):
         """Accumulate collaborator LLM usage into shared cumulative_usage so manager span shows sum of all generations."""
@@ -635,6 +644,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                     agent_name=_get_agent_slug(agent, self.hooks_state),
                     preview=self.preview,
                     conversation=self.conversation,
+                    skip_conversation_sqs=self.skip_conversation_sqs,
                 )
             except Exception as e:
                 logger.error(f"Error calling custom_event_data in CollaboratorHooks: {str(e)}")
@@ -735,12 +745,15 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
         turn_off_rationale: bool = False,
         conversation: Optional[object] = None,
         use_components: bool = False,
+        preview_websocket: bool = False,
+        skip_conversation_sqs: bool = False,
         **kwargs,
     ):
         message_uuid = kwargs.pop("message_uuid", None)
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -758,6 +771,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
         self.hooks_state = hooks_state
         self.conversation = conversation
         self.use_components = use_components
+        self.skip_conversation_sqs = skip_conversation_sqs
         # this field is updated before calling formatter agent
         self.save_components_trace = False
 
@@ -892,6 +906,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                     agent_name=_get_agent_slug(agent, self.hooks_state),
                     preview=self.preview,
                     conversation=self.conversation,
+                    skip_conversation_sqs=self.skip_conversation_sqs,
                 )
             except Exception as e:
                 logger.error(f"Error calling custom_event_data in SupervisorHooks: {str(e)}")
