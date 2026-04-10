@@ -1,6 +1,7 @@
 import logging
 import os
 
+import requests as python_requests
 import sentry_sdk
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
@@ -20,6 +21,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
+from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import event_manager, notify_async
 from nexus.intelligences.api.filters import ConversationFilter
@@ -33,9 +35,9 @@ from nexus.intelligences.models import (
     SubTopics,
     Topics,
 )
+from nexus.internals.conversations import ConversationsRESTClient
 from nexus.orgs import permissions
 from nexus.paginations import CustomCursorPagination, SupervisorPagination
-from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ExternalTokenPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
@@ -1576,6 +1578,60 @@ class TopicsViewSet(ModelViewSet):
         if project_uuid:
             return Topics.objects.filter(project__uuid=project_uuid)
         return Topics.objects.none()
+
+    def _format_external_topic(self, topic: dict) -> dict:
+        subtopics = topic.get("subtopic") or []
+        return {
+            "name": topic.get("name", ""),
+            "uuid": topic.get("uuid", ""),
+            "created_at": topic.get("created_at", ""),
+            "description": topic.get("description", ""),
+            "subtopic": [
+                {
+                    "name": st.get("name", ""),
+                    "uuid": st.get("uuid", ""),
+                    "created_at": st.get("created_at", ""),
+                    "description": st.get("description", ""),
+                    "topic_uuid": st.get("topic_uuid", topic.get("uuid", "")),
+                    "topic_name": st.get("topic_name", topic.get("name", "")),
+                }
+                for st in subtopics
+            ],
+        }
+
+    def list(self, request, *args, **kwargs):
+        project_uuid = self.kwargs.get("project_uuid")
+        if project_uuid and settings.CONVERSATIONS_AS_TOPICS_SOURCE:
+            try:
+                client = ConversationsRESTClient()
+                topics = client.get_topics(project_uuid=str(project_uuid))
+                formatted = [self._format_external_topic(t) for t in topics]
+                return Response(formatted)
+            except python_requests.exceptions.HTTPError as e:
+                status_code = getattr(e.response, "status_code", 500) if e.response is not None else 500
+                logger.error(
+                    f"Conversations service HTTP error for project {project_uuid}: status={status_code}",
+                    exc_info=True,
+                )
+                return Response(
+                    {"error": "Failed to fetch topics from conversations service"},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+            except (
+                python_requests.exceptions.ConnectionError,
+                python_requests.exceptions.Timeout,
+                python_requests.exceptions.RequestException,
+            ) as e:
+                logger.error(
+                    f"Conversations service connection error for project {project_uuid}: {e}",
+                    exc_info=True,
+                )
+                return Response(
+                    {"error": "Failed to fetch topics from conversations service"},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
+        return super().list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         project_uuid = self.kwargs.get("project_uuid")

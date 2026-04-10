@@ -1,3 +1,5 @@
+from urllib.parse import urljoin
+
 import requests
 from django.conf import settings
 
@@ -86,3 +88,23 @@ class ConversationsRESTClient(RestClient):
         )
         response.raise_for_status()
         return response.json()
+
+    def get_topics(self, project_uuid: str):
+        """Fetch all topics for a project, iterating through all pages."""
+        endpoint = f"/api/v1/projects/{project_uuid}/topics/"
+        all_results = []
+        url = self._get_url(endpoint)
+
+        while url:
+            response = requests.get(
+                url,
+                headers=self.headers,
+                timeout=45,
+            )
+            response.raise_for_status()
+            data = response.json()
+            all_results.extend(data.get("results", []))
+            next_url = data.get("next")
+            url = urljoin(self.base_url, next_url) if next_url else None
+
+        return all_results
