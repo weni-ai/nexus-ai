@@ -293,8 +293,9 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
     ctx.incoming_created_at = pendulum.now().to_iso8601_string()
     ctx.turn_id = ctx.message.get("msg_event", {}).get("msg_external_id") or str(uuid_lib.uuid4())
 
+    skip_conv_sqs = should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel)
     # Conversation SQS: same rules as start_inline_agents (Cases 1–3)
-    if not should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel):
+    if not skip_conv_sqs:
         received_event = build_message_received_event(
             project_uuid=ctx.project_uuid,
             contact_urn=ctx.contact_urn,
@@ -316,7 +317,6 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
 
     backend = BackendsRegistry.get_backend(ctx.agents_backend)
 
-    skip_conv_sqs = should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel)
     response, skip_dispatch = _invoke_backend(
         backend=backend,
         cached_data=ctx.cached_data,
