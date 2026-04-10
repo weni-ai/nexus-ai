@@ -137,6 +137,7 @@ class BedrockBackend(InlineAgentsBackend):
         project: Project = None,
         **kwargs,
     ):
+        skip_conversation_sqs = kwargs.pop("skip_conversation_sqs", False)
         supervisor = self.supervisor_repository.get_supervisor(project=project, foundation_model=foundation_model)
 
         # Set dependencies
@@ -255,6 +256,7 @@ class BedrockBackend(InlineAgentsBackend):
                     preview=preview,
                     collaborator_name=collaborator_name,
                     conversation=conversation,
+                    skip_conversation_sqs=skip_conversation_sqs,
                 )
 
                 self._data_lake_event_adapter.to_data_lake_event(

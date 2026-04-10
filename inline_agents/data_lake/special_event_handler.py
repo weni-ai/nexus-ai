@@ -55,10 +55,12 @@ class SpecialEventHandler:
         contact_urn: str,
         channel_uuid: str,
         conversation: Optional[object] = None,
+        *,
+        skip_conversation_sqs: bool = False,
     ) -> None:
         """Process the special event."""
-        # Send to SQS for conversation-ms
-        self._send_to_sqs(event_data, project_uuid, contact_urn, channel_uuid)
+        if not skip_conversation_sqs:
+            self._send_to_sqs(event_data, project_uuid, contact_urn, channel_uuid)
 
         event_data.setdefault("metadata", {})
         event_data["metadata"]["agent_uuid"] = self.agent_uuid
