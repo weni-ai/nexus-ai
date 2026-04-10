@@ -1,7 +1,9 @@
 import json
 import logging
 import os
+import uuid
 from typing import Dict, Optional, Tuple
+from uuid import UUID
 
 import boto3
 import botocore
@@ -12,20 +14,94 @@ import sentry_sdk
 from django.conf import settings
 
 from inline_agents.backends import BackendsRegistry
+from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
+from nexus.projects.channel_ops import channel_matches_default_preview
+from nexus.projects.simulation_model_cache import simulation_manager_model_redis_key
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.dispatcher import dispatch
 from router.entities import message_factory
 from router.services.pre_generation_service import PreGenerationService
+from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.exceptions import EmptyFinalResponseException, EmptyTextException
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.redis_task_manager import RedisTaskManager
+from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
+from router.utils.redis_clients import get_redis_read_client
 
 from .actions_client import get_action_clients
 
 logger = logging.getLogger(__name__)
+
+
+def effective_simulation_channel(message: Dict, simulation_channel: bool = False) -> bool:
+    """Whether to treat this message as default preview-channel traffic for conversation SQS gating."""
+    if bool(simulation_channel):
+        return True
+    project_uuid = message.get("project_uuid") or ""
+    try:
+        UUID(str(project_uuid))
+    except (ValueError, TypeError, AttributeError):
+        return False
+    return channel_matches_default_preview(project_uuid, message.get("channel_uuid"))
+
+
+def should_skip_conversation_sqs(preview: bool, simulation_channel_effective: bool) -> bool:
+    """Whether to omit sending conversation message.received events to SQS."""
+    return bool(preview) or bool(simulation_channel_effective)
+
+
+def _get_simulation_manager_model(project_uuid: str, contact_urn: str) -> Optional[str]:
+    try:
+        raw = get_redis_read_client().get(simulation_manager_model_redis_key(project_uuid, contact_urn))
+        if not raw:
+            return None
+        return raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+    except Exception:
+        logger.warning("Failed to read simulation manager model from Redis", exc_info=True)
+        return None
+
+
+def apply_simulation_foundation_model_override(
+    on_default_simulation_channel: bool,
+    project_uuid: str,
+    contact_urn: str,
+    foundation_model: Optional[str],
+) -> Optional[str]:
+    """Replace foundation model with Redis-cached value on default preview-channel traffic."""
+    if not on_default_simulation_channel or not project_uuid:
+        return foundation_model
+    cached = _get_simulation_manager_model(project_uuid, contact_urn or "")
+    effective = cached if cached else foundation_model
+    urn_tail = (contact_urn or "")[-8:] if contact_urn else ""
+    logger.info(
+        f"Simulation model override: project_uuid={project_uuid}, contact_urn_suffix={urn_tail}, foundation_model={effective}, manager_model_source={cached}",
+    )
+    return effective
+
+
+def _invoke_is_final_debug(msg: str) -> None:
+    logger.debug("[is_final_output] %s", msg)
+
+
+def _normalize_invoke_agents_return(raw) -> Tuple[str, bool]:
+    if isinstance(raw, InvokeAgentsResult):
+        text, skip = raw.text, raw.skip_dispatch
+        preview = (text[:200] + "...") if len(text) > 200 else text
+        _invoke_is_final_debug(
+            f"G normalize_invoke type=InvokeAgentsResult skip_dispatch={skip} text_preview={preview!r}"
+        )
+        return text, skip
+    if raw is None:
+        _invoke_is_final_debug("G normalize_invoke type=None -> empty str, skip_dispatch=False")
+        return "", False
+    if isinstance(raw, str):
+        _invoke_is_final_debug("G normalize_invoke type=str legacy skip_dispatch=False")
+        return raw, False
+    _invoke_is_final_debug(f"G normalize_invoke type={type(raw).__name__} coerced str skip_dispatch=False")
+    return str(raw), False
 
 
 def _apm_set_context(**kwargs):
@@ -136,17 +212,25 @@ def dispatch_preview(
         full_chunks=[],
         backend=agents_backend,
     )
+    ws_content = (
+        response_msg
+        if response_msg is not None
+        else {"type": "broadcast", "message": response, "fonts": []}
+    )
     send_preview_message_to_websocket(
         project_uuid=message_obj.project_uuid,
         user_email=user_email,
-        message_data={"type": "preview", "content": response_msg},
+        message_data={"type": "preview", "content": ws_content},
     )
-    return response_msg
+    return response_msg if response_msg is not None else response
 
 
 def guardrails_complexity_layer(input_text: str, guardrail_id: str, guardrail_version: str) -> str | None:
     logger.debug(
-        f"Guardrails complexity layer - text_len: {len(input_text or '')}, guardrail_id: {guardrail_id}, guardrail_version: {guardrail_version}"
+        "Guardrails complexity layer - text_len: %s, guardrail_id: %s, guardrail_version: %s",
+        len(input_text or ""),
+        guardrail_id,
+        guardrail_version,
     )
     try:
         payload = {
@@ -256,6 +340,7 @@ def _handle_task_error(
     preview: bool,
     language: str,
     user_email: str,
+    preview_websocket: bool = False,
 ):
     """
     Centralized error handling for the Celery task.
@@ -272,6 +357,7 @@ def _handle_task_error(
             "contact_name": message.get("contact_name"),
             "text": message.get("text", ""),
             "preview": preview,
+            "preview_websocket": preview_websocket,
             "language": language,
             "user_email": user_email,
             "task_id": task_id,
@@ -291,7 +377,7 @@ def _handle_task_error(
     if isinstance(exc, botocore.exceptions.EventStreamError) and "throttlingException" in str(exc):
         raise ThrottlingException(str(exc))
 
-    if user_email:
+    if user_email and (preview or preview_websocket):
         send_preview_message_to_websocket(
             user_email=user_email, project_uuid=str(project_uuid), message_data={"type": "error", "content": str(exc)}
         )
@@ -313,12 +399,18 @@ def _invoke_backend(
     channel_type: str = "",
     stream_support: bool = False,
     supervisor_agent_uuid: Optional[str] = None,
-):
+    message_conversation_log_uuid: Optional[str] = None,
+    preview_websocket: bool = False,
+    skip_conversation_sqs: bool = False,
+) -> Tuple[str, bool]:
     """
     Invoke backend with cached data to avoid database queries.
 
     This helper function simplifies the backend invocation by grouping
     all cached data and parameters into a cleaner interface.
+
+    Returns (response_text, skip_dispatch). OpenAIBackend yields InvokeAgentsResult internally;
+    legacy backends may still return a plain str (skip_dispatch=False).
     """
     invoke_kwargs = cached_data.get_invoke_kwargs(team=cached_data.team)
 
@@ -337,16 +429,20 @@ def _invoke_backend(
             "channel_uuid": message_obj.channel_uuid,
             "msg_external_id": processed_message.get("msg_event", {}).get("msg_external_id", ""),
             "preview": preview,
+            "preview_websocket": preview_websocket,
             "language": language,
             "user_email": user_email,
             "foundation_model": foundation_model,
             "turn_off_rationale": turn_off_rationale,
             "channel_type": channel_type,
             "stream_support": stream_support,
+            "message_conversation_log_uuid": message_conversation_log_uuid,
+            "skip_conversation_sqs": skip_conversation_sqs,
         }
     )
 
-    return backend.invoke_agents(**invoke_kwargs)
+    raw = backend.invoke_agents(**invoke_kwargs)
+    return _normalize_invoke_agents_return(raw)
 
 
 @celery_app.task(
@@ -364,6 +460,7 @@ def start_inline_agents(
     self,
     message: Dict,
     preview: bool = False,
+    simulation_channel: bool = False,
     language: str = "en",
     user_email: str = "",
     task_manager: Optional[RedisTaskManager] = None,
@@ -371,11 +468,19 @@ def start_inline_agents(
 ) -> bool:  # pragma: no cover
     _apm_set_context(message=message, preview=preview)
     project_uuid = message.get("project_uuid")
+    simulation_channel_effective = effective_simulation_channel(message, simulation_channel)
+
+    if simulation_channel_effective:
+        user_email = message.get("contact_urn").replace("ext:", "")
+
+    preview_websocket = simulation_channel_effective and bool(user_email and str(user_email).strip())
+    skip_sqs = should_skip_conversation_sqs(preview, simulation_channel_effective)
 
     # Feature flag: list of project UUIDs that use new workflow architecture
     # Set WORKFLOW_ARCHITECTURE_PROJECTS=["uuid1", "uuid2"] or ["*"] for all
     workflow_projects = getattr(settings, "WORKFLOW_ARCHITECTURE_PROJECTS", [])
     use_workflow = project_uuid in workflow_projects or "*" in workflow_projects
+    message_conversation_log_uuid = str(uuid.uuid4())
 
     if use_workflow:
         from router.tasks.workflow_orchestrator import inline_agent_workflow
@@ -384,6 +489,7 @@ def start_inline_agents(
         return inline_agent_workflow.run(
             message,
             preview=preview,
+            simulation_channel=simulation_channel,
             language=language,
             user_email=user_email,
             supervisor_agent_uuid=supervisor_agent_uuid,
@@ -393,6 +499,7 @@ def start_inline_agents(
 
     try:
         incoming_created_at = None  # Set right before _invoke_backend (same point as InlineAgentMessage save)
+        turn_id = message.get("msg_event", {}).get("msg_external_id") or str(uuid.uuid4())
         TypingUsecase().send_typing_message(
             contact_urn=message.get("contact_urn"),
             msg_external_id=message.get("msg_event", {}).get("msg_external_id", ""),
@@ -431,6 +538,9 @@ def start_inline_agents(
         flows_user_email = os.environ.get("FLOW_USER_EMAIL")
 
         processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(message, agents_backend)
+        foundation_model = apply_simulation_foundation_model_override(
+            simulation_channel_effective, project_uuid or "", message.get("contact_urn") or "", foundation_model
+        )
 
         # TODO: Logs
         message_obj = message_factory(
@@ -462,8 +572,29 @@ def start_inline_agents(
 
         # Invoke backend (incoming saved inside backend via save_inline_message_async)
         incoming_created_at = pendulum.now().to_iso8601_string()
+
+        if not skip_sqs:
+            received_event = build_message_received_event(
+                project_uuid=project_uuid,
+                contact_urn=message_obj.contact_urn,
+                channel_uuid=message_obj.channel_uuid,
+                contact_name=message_obj.contact_name or "",
+                message_text=(message_obj.text or message.get("text", "")),
+                created_at=incoming_created_at,
+                message_id=turn_id,
+                correlation_id=turn_id,
+            )
+            try:
+                get_conversation_events_producer().send_event(received_event.to_dict())
+            except Exception as exc:
+                logger.exception(
+                    "Failed to send message.received event to SQS",
+                    extra={"project_uuid": project_uuid, "turn_id": turn_id},
+                )
+                sentry_sdk.capture_exception(exc)
+
         backend = BackendsRegistry.get_backend(agents_backend)
-        response = _invoke_backend(
+        response, skip_dispatch = _invoke_backend(
             backend=backend,
             cached_data=cached_data,
             message_obj=message_obj,
@@ -476,9 +607,12 @@ def start_inline_agents(
             channel_type=message.get("channel_type", ""),
             stream_support=message.get("stream_support", False),
             supervisor_agent_uuid=supervisor_agent_uuid,
+            message_conversation_log_uuid=message_conversation_log_uuid,
+            preview_websocket=preview_websocket,
+            skip_conversation_sqs=skip_sqs,
         )
 
-        if response is None or response == "":
+        if (response is None or response == "") and not skip_dispatch:
             raise EmptyFinalResponseException("Final response is empty")
 
         task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
@@ -490,23 +624,30 @@ def start_inline_agents(
             channel_uuid=message_obj.channel_uuid,
             contact_name=message_obj.contact_name or "",
             preview=preview,
+            skip_conversation_sqs=skip_sqs,
             message_text=message.get("text"),
-            response_text=response or "",
+            response_text=sqs_response_text_from_agent_output(response or "", skip_dispatch=skip_dispatch),
             incoming_created_at=incoming_created_at,
             outgoing_created_at=pendulum.now().to_iso8601_string(),
+            message_conversation_log_uuid=message_conversation_log_uuid,
+            turn_id=turn_id,
         )
 
-        if preview:
+        if preview or preview_websocket:
+            _invoke_is_final_debug("H start_inline_agents branch=dispatch_preview")
             return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)
-        else:
-            return dispatch(
-                llm_response=response,
-                message=message_obj,
-                direct_message=broadcast,
-                user_email=flows_user_email,
-                full_chunks=[],
-                backend=agents_backend,
-            )
+        if skip_dispatch:
+            _invoke_is_final_debug("H start_inline_agents branch=skip_dispatch (no dispatch)")
+            return True
+        _invoke_is_final_debug("H start_inline_agents branch=dispatch")
+        return dispatch(
+            llm_response=response,
+            message=message_obj,
+            direct_message=broadcast,
+            user_email=flows_user_email,
+            full_chunks=[],
+            backend=agents_backend,
+        )
 
     except UnsafeMessageException as e:
         message_obj = message_factory(
@@ -520,6 +661,7 @@ def start_inline_agents(
             contact_name=message.get("contact_name", ""),
             channel_uuid=message.get("channel_uuid", ""),
         )
+        # Reuse turn_id from try block so received/sent correlation is consistent
         notify_async(
             event="inline_message:received",
             project_uuid=message.get("project_uuid"),
@@ -527,12 +669,15 @@ def start_inline_agents(
             channel_uuid=message_obj.channel_uuid,
             contact_name=message_obj.contact_name or "",
             preview=preview,
+            skip_conversation_sqs=skip_sqs,
             message_text=message.get("text"),
             response_text=e.message,
-            incoming_created_at=incoming_created_at,
+            incoming_created_at=incoming_created_at or pendulum.now().to_iso8601_string(),
             outgoing_created_at=pendulum.now().to_iso8601_string(),
+            message_conversation_log_uuid=message_conversation_log_uuid,
+            turn_id=turn_id,
         )
-        if preview:
+        if preview or preview_websocket:
             return dispatch_preview(e.message, message_obj, broadcast, user_email, agents_backend, flows_user_email)
         return dispatch(
             llm_response=e.message,
@@ -553,6 +698,24 @@ def start_inline_agents(
                 priority=0,
                 jitter=False,
             ) from e
-        _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
+        _handle_task_error(
+            e,
+            task_manager,
+            message,
+            self.request.id,
+            preview,
+            language,
+            user_email,
+            preview_websocket=preview_websocket,
+        )
     except Exception as e:
-        _handle_task_error(e, task_manager, message, self.request.id, preview, language, user_email)
+        _handle_task_error(
+            e,
+            task_manager,
+            message,
+            self.request.id,
+            preview,
+            language,
+            user_email,
+            preview_websocket=preview_websocket,
+        )

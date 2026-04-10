@@ -2,12 +2,14 @@ import logging
 from typing import Dict
 
 from nexus.agents.encryption import encrypt_value
+from nexus.events import notify_async
 from nexus.inline_agents.models import (
     MCP,
     Agent,
     AgentCredential,
     AgentGroup,
     InlineAgentMessage,
+    IntegratedAgent,
     MCPConfigOption,
     MCPCredentialTemplate,
 )
@@ -18,6 +20,24 @@ from nexus.usecases.inline_agents.instructions import InstructionsUseCase
 from nexus.usecases.inline_agents.tools import ToolsUseCase
 
 logger = logging.getLogger(__name__)
+
+
+def invalidate_team_cache_for_agent_integration_projects(agent: Agent) -> None:
+    """Invalidate router team cache for the agent's owner project and all active integrations.
+
+    Shared official agents are updated once in the DB; each consuming project has its own
+    Redis team (and composite) keys. Push previously only cleared the pushed project.
+    """
+    project_uuids: set[str] = set()
+    if agent.project_id:
+        project_uuids.add(str(agent.project.uuid))
+    for pu in IntegratedAgent.objects.filter(agent=agent, is_active=True).values_list("project__uuid", flat=True):
+        project_uuids.add(str(pu))
+    for project_uuid in project_uuids:
+        notify_async(
+            event="cache_invalidation:team",
+            project_uuid=project_uuid,
+        )
 
 
 class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
@@ -74,7 +94,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                             slug=mcp_item,
                             name=mcp_item,
                             system=None,
-                            description=f"Auto-created MCP for {mcp_item}",
+                            description_en=f"Auto-created MCP for {mcp_item}",
                         )
 
                         if "credentials" in agent_data:
@@ -139,6 +159,8 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
 
         if agent_obj.group:
             agent_obj.group.update_mcps_from_agents()
+
+        invalidate_team_cache_for_agent_integration_projects(agent_obj)
 
         return agent_data
 

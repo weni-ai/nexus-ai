@@ -1,7 +1,9 @@
 # ruff: noqa: E501
 import asyncio
 import hashlib
+import json
 import logging
+import re
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -28,6 +30,7 @@ from inline_agents.backends.openai.hooks import (
     RunnerHooks,
     SupervisorHooks,
 )
+from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from inline_agents.backends.openai.sessions import (
     RedisSession,
     make_session_factory,
@@ -45,8 +48,29 @@ from router.utils.redis_clients import get_redis_read_client, get_redis_write_cl
 logger = logging.getLogger(__name__)
 
 
+def _is_final_out_debug(msg: str) -> None:
+    logger.debug("[is_final_output] %s", msg)
+
+
+def _sanitize_langfuse_id(value: str, max_length: int = 64) -> str:
+    """Sanitize string for Langfuse id/trace_id: only letters, numbers, underscores, dashes."""
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", value)
+    return sanitized[:max_length]
+
+
 class OpenAIBackend(InlineAgentsBackend):
     team_adapter = OpenAITeamAdapter
+
+    @staticmethod
+    def _coerce_final_response_text(final_response: Any) -> str:
+        if final_response is None:
+            return ""
+        if isinstance(final_response, str):
+            return final_response
+        try:
+            return json.dumps(final_response, ensure_ascii=False)
+        except TypeError:
+            return str(final_response)
 
     def get_supervisor(
         self,
@@ -189,6 +213,7 @@ class OpenAIBackend(InlineAgentsBackend):
         sanitized_urn: str,
         contact_fields: str,
         preview: bool = False,
+        preview_websocket: bool = False,
         language: str = "en",
         contact_name: str = "",
         contact_urn: str = "",
@@ -242,6 +267,9 @@ class OpenAIBackend(InlineAgentsBackend):
 
         hooks_state = HooksState(agents=team)
 
+        message_conversation_log_uuid = kwargs.pop("message_conversation_log_uuid", None)
+        skip_conversation_sqs = kwargs.pop("skip_conversation_sqs", False)
+
         save_inline_message_async.delay(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
@@ -251,11 +279,13 @@ class OpenAIBackend(InlineAgentsBackend):
             source_type="user",
             contact_name=contact_name,
             channel_uuid=channel_uuid,
+            message_uuid=message_conversation_log_uuid,
         )
 
         supervisor_hooks = SupervisorHooks(
             agent_name="manager",
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -268,10 +298,13 @@ class OpenAIBackend(InlineAgentsBackend):
             data_lake_event_adapter=data_lake_event_adapter,
             conversation=conversation,
             use_components=use_components,
+            message_uuid=message_conversation_log_uuid,
+            skip_conversation_sqs=skip_conversation_sqs,
         )
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
             preview=preview,
+            preview_websocket=preview_websocket,
             rationale_switch=rationale_switch,
             language=language,
             user_email=user_email,
@@ -281,6 +314,7 @@ class OpenAIBackend(InlineAgentsBackend):
             event_manager_notify=self._event_manager_notify,
             agents=team,
             hooks_state=hooks_state,
+            message_uuid=message_conversation_log_uuid,
         )
 
         jwt_usecase = JWTUsecase()
@@ -312,6 +346,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 hooks_state=hooks_state,
                 event_manager_notify=self._event_manager_notify,
                 preview=preview,
+                preview_websocket=preview_websocket,
                 rationale_switch=rationale_switch,
                 language=language,
                 user_email=user_email,
@@ -323,6 +358,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 session_id=session_id,
                 msg_external_id=msg_external_id,
                 turn_off_rationale=turn_off_rationale,
+                skip_conversation_sqs=skip_conversation_sqs,
             )
         else:
             external_team = self.team_adapter.to_external(
@@ -341,6 +377,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 session=session,
                 data_lake_event_adapter=data_lake_event_adapter,
                 preview=preview,
+                preview_websocket=preview_websocket,
                 hooks_state=hooks_state,
                 event_manager_notify=self._event_manager_notify,
                 # Pass cached data to avoid database queries
@@ -357,11 +394,12 @@ class OpenAIBackend(InlineAgentsBackend):
                 turn_off_rationale=turn_off_rationale,
                 auth_token=auth_token,
                 use_components=use_components,
+                skip_conversation_sqs=skip_conversation_sqs,
             )
 
         client = self._get_client()
 
-        if preview and user_email:
+        if (preview or preview_websocket) and user_email:
             send_preview_message_to_websocket(
                 project_uuid=str(project_uuid),
                 user_email=user_email,
@@ -409,11 +447,15 @@ class OpenAIBackend(InlineAgentsBackend):
             )
         )
 
+        text = self._coerce_final_response_text(result)
+        skip_dispatch = getattr(hooks_state, "skip_outgoing_dispatch", False)
+        preview_txt = text[:200] + "..." if len(text) > 200 else text
+        _is_final_out_debug(f"F invoke_agents_return skip_dispatch={skip_dispatch} text_preview={preview_txt!r}")
+
         # Send completed message through the persistent stream and close
         if grpc_session and grpc_session.is_active:
             try:
-                content = result if isinstance(result, str) else str(result)
-                grpc_session.send_completed(content)
+                grpc_session.send_completed(text)
             except Exception as e:
                 logger.error(f"gRPC completion failed: {e}", exc_info=True)
             finally:
@@ -423,7 +465,7 @@ class OpenAIBackend(InlineAgentsBackend):
         if grpc_client:
             grpc_client.close()
 
-        return result
+        return InvokeAgentsResult(text=text, skip_dispatch=skip_dispatch)
 
     async def _run_formatter_agent_async(
         self,
@@ -654,7 +696,8 @@ class OpenAIBackend(InlineAgentsBackend):
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
-            trace_id = f"trace_urn:{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}".replace(":", "__")[:64]
+            trace_id_raw = f"trace_urn_{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}"
+            trace_id = _sanitize_langfuse_id(trace_id_raw)
 
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
@@ -702,22 +745,31 @@ class OpenAIBackend(InlineAgentsBackend):
                     except Exception:
                         final_response = None
 
+                    usage_dict, request_entries = self._get_usage_metadata_and_request_entries(result)
+                    metadata = {
+                        "project_uuid": project_uuid,
+                        "contact_urn": contact_urn,
+                        "channel_uuid": channel_uuid,
+                        "preview": preview,
+                        "trace_id": trace_id,
+                        "error": True,
+                        "error_type": type(stream_error).__name__,
+                        "error_message": str(stream_error)[:500],
+                    }
+                    if usage_dict:
+                        self._log_cache_usage_per_request(request_entries, project_uuid, contact_urn, trace_id)
                     root_span.update_trace(
                         input=input_text,
                         output=final_response,
-                        metadata={
-                            "project_uuid": project_uuid,
-                            "contact_urn": contact_urn,
-                            "channel_uuid": channel_uuid,
-                            "preview": preview,
-                            "trace_id": trace_id,
-                            "error": True,
-                            "error_type": type(stream_error).__name__,
-                            "error_message": str(stream_error)[:500],
-                        },
+                        metadata=metadata,
                     )
 
-                    if use_components and final_response:
+                    skip_fmt = getattr(hooks_state, "skip_outgoing_dispatch", False)
+                    _is_final_out_debug(
+                        f"E _invoke_agents_async(error_path) skip_outgoing_dispatch={skip_fmt} "
+                        f"use_components={use_components} has_final_response={bool(final_response)}"
+                    )
+                    if use_components and final_response and not skip_fmt:
                         try:
                             formatted_response = await self._run_formatter_agent_async(
                                 final_response,
@@ -732,12 +784,18 @@ class OpenAIBackend(InlineAgentsBackend):
                             logger.error(
                                 f"[OpenAIBackend] Error in formatter agent after streaming error: {formatter_error} - project_uuid: {project_uuid}, contact_urn: {contact_urn}"
                             )
+                    elif use_components and skip_fmt:
+                        _is_final_out_debug("E skip_formatter=True (tool is_final_output / skip_outgoing_dispatch)")
 
                     return final_response
 
                 final_response = self._get_final_response(result)
 
-                if use_components:
+                skip_fmt = getattr(hooks_state, "skip_outgoing_dispatch", False)
+                _is_final_out_debug(
+                    f"E _invoke_agents_async(success_path) skip_outgoing_dispatch={skip_fmt} use_components={use_components}"
+                )
+                if use_components and not skip_fmt:
                     formatted_response = await self._run_formatter_agent_async(
                         final_response,
                         session,
@@ -747,17 +805,23 @@ class OpenAIBackend(InlineAgentsBackend):
                         formatter_agent_configurations,
                     )
                     final_response = formatted_response
+                elif use_components and skip_fmt:
+                    _is_final_out_debug("E skip_formatter=True (tool is_final_output / skip_outgoing_dispatch)")
 
+                usage_dict, request_entries = self._get_usage_metadata_and_request_entries(result)
+                metadata = {
+                    "project_uuid": project_uuid,
+                    "contact_urn": contact_urn,
+                    "channel_uuid": channel_uuid,
+                    "preview": preview,
+                    "trace_id": trace_id,
+                }
+                if usage_dict:
+                    self._log_cache_usage_per_request(request_entries, project_uuid, contact_urn, trace_id)
                 root_span.update_trace(
                     input=input_text,
                     output=final_response,
-                    metadata={
-                        "project_uuid": project_uuid,
-                        "contact_urn": contact_urn,
-                        "channel_uuid": channel_uuid,
-                        "preview": preview,
-                        "trace_id": trace_id,
-                    },
+                    metadata=metadata,
                 )
 
             return final_response
@@ -768,6 +832,96 @@ class OpenAIBackend(InlineAgentsBackend):
         else:
             final_response = result.final_output
         return final_response
+
+    def _extract_usage_from_result(self, result) -> Optional[Dict[str, Any]]:
+        """Extract token usage (including cache) from openai-agents run result.
+
+        Uses result.context_wrapper.usage when available. Returns a dict suitable for
+        Langfuse usage_details: input, output, cache_read_input_tokens.
+        Returns None if usage is not available (e.g. SDK version or provider).
+        """
+        try:
+            wrapper = getattr(result, "context_wrapper", None)
+            if wrapper is None:
+                return None
+            usage = getattr(wrapper, "usage", None)
+            if usage is None:
+                return None
+            input_tokens = getattr(usage, "input_tokens", 0) or 0
+            output_tokens = getattr(usage, "output_tokens", 0) or 0
+            input_details = getattr(usage, "input_tokens_details", None)
+            cached = 0
+            if input_details is not None:
+                cached = getattr(input_details, "cached_tokens", 0) or 0
+            if input_tokens == 0 and output_tokens == 0:
+                return None
+            return {
+                "input": input_tokens,
+                "output": output_tokens,
+                "cache_read_input_tokens": cached,
+            }
+        except Exception as e:
+            logger.debug("Could not extract usage from result: %s", e)
+            return None
+
+    def _get_usage_metadata_and_request_entries(self, result):
+        """Get usage and per-request entries for logging (usage is sent to Langfuse/OTEL in hooks).
+
+        Returns (usage_dict, request_usage_entries_list).
+        """
+        usage_dict = self._extract_usage_from_result(result)
+        request_entries = []
+        try:
+            wrapper = getattr(result, "context_wrapper", None)
+            usage = getattr(wrapper, "usage", None) if wrapper else None
+            if usage is not None:
+                request_entries = getattr(usage, "request_usage_entries", []) or []
+        except Exception:
+            pass
+        return usage_dict, request_entries
+
+    def _log_cache_usage_per_request(
+        self,
+        request_entries: list,
+        project_uuid: str,
+        contact_urn: str,
+        trace_id: str,
+    ) -> None:
+        """Log token and cache usage per LLM request for instrumentation."""
+        if not request_entries:
+            return
+        for i, entry in enumerate(request_entries):
+            input_tokens = getattr(entry, "input_tokens", 0) or 0
+            output_tokens = getattr(entry, "output_tokens", 0) or 0
+            input_details = getattr(entry, "input_tokens_details", None)
+            cached = getattr(input_details, "cached_tokens", 0) or 0 if input_details else 0
+            logger.debug(
+                "[Cache/usage] request=%s project_uuid=%s contact_urn=%s trace_id=%s "
+                "input_tokens=%s output_tokens=%s cached_tokens=%s",
+                i + 1,
+                project_uuid,
+                contact_urn,
+                trace_id,
+                input_tokens,
+                output_tokens,
+                cached,
+            )
+        total_input = sum(getattr(e, "input_tokens", 0) or 0 for e in request_entries)
+        total_output = sum(getattr(e, "output_tokens", 0) or 0 for e in request_entries)
+        total_cached = sum(
+            (getattr(getattr(e, "input_tokens_details", None), "cached_tokens", 0) or 0) for e in request_entries
+        )
+        logger.debug(
+            "[Cache/usage] total project_uuid=%s contact_urn=%s trace_id=%s "
+            "input_tokens=%s output_tokens=%s cached_tokens=%s requests=%s",
+            project_uuid,
+            contact_urn,
+            trace_id,
+            total_input,
+            total_output,
+            total_cached,
+            len(request_entries),
+        )
 
     def _sentry_capture_exception(
         self, exception, project_uuid, contact_urn, channel_uuid, session_id, input_text, enable_logger

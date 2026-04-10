@@ -1,8 +1,9 @@
+import json
 import logging
 
 import pendulum
 from django.conf import settings
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import Count, OuterRef, Q, Subquery
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -11,6 +12,10 @@ from rest_framework.views import APIView
 from inline_agents.backends import BackendsRegistry
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import notify_async
+from nexus.inline_agents.api.official_agents_helpers import (
+    get_all_mcps_for_group,
+    get_mcps_for_agent_system,
+)
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     AgentSystemSerializer,
@@ -20,11 +25,13 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignRequestSerializer,
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
+    official_agent_modal_presentation_payload,
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
-from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
+from nexus.inline_agents.models import Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
+from nexus.projects.api.serializers import ProjectMinimalSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.usecases.agents.exceptions import SkillFileTooLarge
@@ -38,6 +45,7 @@ from nexus.usecases.intelligences.get_by_uuid import (
 )
 from nexus.usecases.projects import get_project_by_uuid
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
+from nexus.users.api.authentication import UserGlobalTokenAuthentication
 from router.entities import message_factory
 
 logger = logging.getLogger(__name__)
@@ -58,8 +66,6 @@ class PushAgents(APIView):
 
         files = request.FILES
         validate_file_size(files)
-
-        import json
 
         logger.debug(f"InlineAgentsView payload - keys: {list(request.data.keys())}")
 
@@ -125,146 +131,6 @@ class PushAgents(APIView):
             return Response({"error": "Project not found"}, status=404)
 
         return Response({})
-
-
-def _sort_mcps(mcps: list) -> list:
-    """Sort MCPs so that 'Default' appears first, then alphabetical order"""
-    if not isinstance(mcps, list):
-        return mcps
-
-    def sort_key(mcp):
-        name = mcp.get("name", "") if isinstance(mcp, dict) else ""
-        is_default = name.lower() == "default"
-        return (0 if is_default else 1, name.lower())
-
-    return sorted(mcps, key=sort_key)
-
-
-def _serialize_mcp(mcp) -> dict:
-    """Helper to serialize MCP with config and credentials"""
-    mcp_data = {
-        "name": mcp.name,
-        "description": mcp.description,
-        "system": mcp.system.slug if mcp.system else None,
-        "config": [],
-        "credentials": [],
-    }
-
-    # Add config options
-    for config_option in mcp.config_options.all():
-        # For SWITCH, NUMBER, TEXT, CHECKBOX - ensure options is always an empty list
-        options = config_option.options
-        if config_option.type in ["SWITCH", "NUMBER", "TEXT", "CHECKBOX"]:
-            if not isinstance(options, list):
-                options = []
-
-        config_item = {
-            "name": config_option.name,
-            "label": config_option.label,
-            "type": config_option.type,
-            "options": options,
-        }
-        # Add default_value if it exists
-        if config_option.default_value is not None:
-            config_item["default_value"] = config_option.default_value
-        mcp_data["config"].append(config_item)
-
-    # Add credentials templates
-    for template in mcp.credential_templates.all():
-        mcp_data["credentials"].append(
-            {
-                "name": template.name,
-                "label": template.label,
-                "placeholder": template.placeholder,
-                "is_confidential": template.is_confidential,
-            }
-        )
-
-    return mcp_data
-
-
-def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
-    """
-    Get MCPs for an agent/system combination from database models.
-    """
-    agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()
-    system = AgentSystem.objects.filter(slug__iexact=system_slug).first()
-
-    if not agent or not system:
-        return []
-
-    mcps = (
-        agent.mcps.filter(system=system, is_active=True)
-        .select_related("system")
-        .prefetch_related("config_options", "credential_templates")
-    )
-
-    result = [_serialize_mcp(mcp) for mcp in mcps]
-    return _sort_mcps(result)
-
-
-def _sort_systems(systems: list) -> list:
-    """
-    Sort systems list ensuring 'vtex' comes first, followed by alphabetical order.
-    """
-    sorted_systems = sorted(systems)
-    if "vtex" in sorted_systems:
-        sorted_systems.remove("vtex")
-        sorted_systems.insert(0, "vtex")
-    return sorted_systems
-
-
-def get_all_systems_for_group(group_slug: str) -> list:
-    """
-    Get all unique system slugs for a group, derived from its associated MCPs.
-    Top-down approach: Group -> MCPs -> System
-    """
-    # Get systems from MCPs that have a system
-    systems = list(
-        AgentSystem.objects.filter(mcps__groups__slug=group_slug, mcps__is_active=True)
-        .values_list("slug", flat=True)
-        .distinct()
-    )
-
-    # Check if there are any active MCPs in the group without a system
-    has_no_system_mcps = MCP.objects.filter(groups__slug=group_slug, is_active=True, system__isnull=True).exists()
-
-    if has_no_system_mcps:
-        systems.append("no_system")
-
-    return _sort_systems(systems)
-
-
-def get_all_mcps_for_group(group_slug: str) -> dict:
-    """
-    Get all MCPs for a group, organized by system.
-    Top-down approach: Group -> MCPs
-    """
-    try:
-        group = AgentGroup.objects.get(slug=group_slug)
-    except AgentGroup.DoesNotExist:
-        return {}
-
-    # Get MCPs directly from the group (Source of Truth)
-    mcps = (
-        group.mcps.filter(is_active=True)
-        .select_related("system")
-        .prefetch_related("config_options", "credential_templates")
-    )
-
-    result = {}
-    for mcp in mcps:
-        system_slug = mcp.system.slug if mcp.system else "no_system"
-        if system_slug not in result:
-            result[system_slug] = []
-
-        result[system_slug].append(_serialize_mcp(mcp))
-
-    # Sort MCPs for each system
-    for system_slug in result:
-        result[system_slug] = _sort_mcps(result[system_slug])
-
-    return result
 
 
 def get_all_credentials_for_group(group_slug: str) -> list:
@@ -335,7 +201,9 @@ def _check_group_assignment(group_agents, project_uuid):
     if not project_uuid:
         return False
     agent_uuids = [agent.uuid for agent in group_agents]
-    return IntegratedAgent.objects.filter(project__uuid=project_uuid, agent__uuid__in=agent_uuids).exists()
+    return IntegratedAgent.objects.filter(
+        project__uuid=project_uuid, agent__uuid__in=agent_uuids, is_active=True
+    ).exists()
 
 
 def _get_group_credentials(group_slug, all_systems):
@@ -360,9 +228,9 @@ def _build_agents_list(group_agents, project_uuid):
         # Single query to get all assigned agents in the group
         group_agent_uuids = [agent.uuid for agent in group_agents]
         assigned_agent_uuids = set(
-            IntegratedAgent.objects.filter(project__uuid=project_uuid, agent__uuid__in=group_agent_uuids).values_list(
-                "agent__uuid", flat=True
-            )
+            IntegratedAgent.objects.filter(
+                project__uuid=project_uuid, agent__uuid__in=group_agent_uuids, is_active=True
+            ).values_list("agent__uuid", flat=True)
         )
 
     agents_list = []
@@ -409,12 +277,7 @@ def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, cr
 
     try:
         modal = base_agent.group.modal
-        presentation = {
-            "conversation_example": modal.conversation_example,
-            "about": modal.about,
-            "agent_name": modal.agent_name,
-        }
-        payload["presentation"] = presentation
+        payload["presentation"] = official_agent_modal_presentation_payload(modal)
     except Exception:
         pass
 
@@ -496,7 +359,11 @@ class OfficialAgentsV1(APIView):
         category_filter = request.query_params.get("category")
         system_filter = request.query_params.get("system")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).prefetch_related("systems")
+        agents = (
+            Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+            .select_related("group", "group__modal")
+            .prefetch_related("systems")
+        )
 
         latest_version_skills = Subquery(
             Version.objects.filter(agent=OuterRef("pk"))
@@ -524,9 +391,11 @@ class OfficialAgentsV1(APIView):
                 agents.filter(systems__slug__iexact=system_filter).distinct("uuid").values_list("uuid", flat=True)
             )
             # Fetch agents again without the systems filter to avoid queryset state issues
-            agents = Agent.objects.filter(
-                uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM
-            ).prefetch_related("systems")
+            agents = (
+                Agent.objects.filter(uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM)
+                .select_related("group", "group__modal")
+                .prefetch_related("systems")
+            )
             agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
 
         consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
@@ -621,6 +490,12 @@ class OfficialAgentsV1(APIView):
                 return res
             result.update(res)
 
+            # Fire cache invalidation so team cache reflects assignment change
+            notify_async(
+                event="cache_invalidation:team",
+                project_uuid=project_uuid,
+            )
+
         if credentials_data:
             if not agent:
                 agent = self._resolve_agent_fallback(group_slug, system, mcp, agent_uuid)
@@ -635,6 +510,12 @@ class OfficialAgentsV1(APIView):
 
             if "agent" not in result:
                 result["agent"] = OfficialAgentListSerializer(agent, context={"project_uuid": project_uuid}).data
+
+            # Credentials affect invocation; refresh full project cache (team invalidation alone is not enough).
+            notify_async(
+                event="cache_invalidation:project",
+                project=project,
+            )
 
         return Response(result or {"message": "No changes applied"}, status=200)
 
@@ -678,16 +559,16 @@ class OfficialAgentsV1(APIView):
         integrated_agent.save(update_fields=["metadata"])
 
     def _handle_group_unassignment(self, project_uuid, group_slug):
-        """Handles unassignment of all agents in a group."""
-        active_agents = IntegratedAgent.objects.filter(
+        """Handles unassignment of all agents in a group (active and inactive)."""
+        integrated_agents_in_group = IntegratedAgent.objects.filter(
             project__uuid=project_uuid,
             agent__group__slug=group_slug,
             agent__is_official=True,
         )
-        if active_agents.exists():
+        if integrated_agents_in_group.exists():
             first_uuid = None
             usecase = AssignAgentsUsecase()
-            for ia in active_agents:
+            for ia in integrated_agents_in_group:
                 uid = str(ia.agent.uuid)
                 if not first_uuid:
                     first_uuid = uid
@@ -995,17 +876,20 @@ class OfficialAgentDetailV1(APIView):
         group = request.query_params.get("group")
         mcp = request.query_params.get("mcp")
 
+        official_agent_qs = Agent.objects.select_related("group", "group__modal").filter(
+            is_official=True, source_type=Agent.PLATFORM
+        )
         try:
-            agent = Agent.objects.get(uuid=identifier, is_official=True, source_type=Agent.PLATFORM)
+            agent = official_agent_qs.get(uuid=identifier)
         except Exception:
-            agent = Agent.objects.filter(slug=identifier, is_official=True, source_type=Agent.PLATFORM).first()
+            agent = official_agent_qs.filter(slug=identifier).first()
 
             if not agent:
                 group_obj = AgentGroup.objects.filter(slug=identifier).first()
                 if not group_obj:
                     return Response({"error": "Agent not found"}, status=404)
 
-                agent = Agent.objects.filter(group=group_obj, is_official=True, source_type=Agent.PLATFORM).first()
+                agent = official_agent_qs.filter(group=group_obj).first()
                 if not agent:
                     return Response({"error": "Agent not found"}, status=404)
 
@@ -1036,7 +920,7 @@ class ActiveAgentsView(APIView):
 
         try:
             if assign:
-                usecase.assign_agent(agent_uuid, project_uuid)
+                _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
 
                 # Fire cache invalidation event for team update (agent assigned) (async observer)
                 notify_async(
@@ -1044,7 +928,10 @@ class ActiveAgentsView(APIView):
                     project_uuid=project_uuid,
                 )
 
-                return Response({"assigned": True}, status=200)
+                return Response(
+                    {"assigned": True, "active": integrated_agent.is_active},
+                    status=200,
+                )
 
             usecase.unassign_agent(agent_uuid, project_uuid)
 
@@ -1066,14 +953,103 @@ class AgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(project__uuid=project_uuid)
+        agents = Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
 
         if search:
-            query_filter = Q(name__icontains=search)
+            query_filter = (
+                Q(name__icontains=search)
+                | Q(group__name__icontains=search)
+                | Q(group__modal__agent_name__icontains=search)
+            )
             agents = agents.filter(query_filter).distinct("uuid")
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
         return Response(serializer.data)
+
+
+class AgentProjectsView(APIView):
+    """Returns all projects that use a given agent (owner project + integrated projects)."""
+
+    permission_classes = [IsAuthenticated]
+    # Token-only: User API token
+    authentication_classes = [UserGlobalTokenAuthentication]
+
+    @extend_schema(
+        operation_id="agent_projects_list",
+        summary="List projects using an agent",
+        description=(
+            "Returns all projects that use the given agent. "
+            "Includes the project that owns the agent and any projects that have integrated it. "
+            "Optional min_conversations filters out projects with fewer conversations (e.g. test projects)."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="min_conversations",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.INT,
+                description="Minimum number of conversations; projects below this are excluded.",
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(description="Summary with count and list of projects (name, uuid)"),
+            400: OpenApiResponse(description="Invalid agent UUID or min_conversations"),
+            404: OpenApiResponse(description="Agent not found"),
+        },
+    )
+    def get(self, request, *args, **kwargs):
+        agent_uuid = kwargs.get("agent_uuid")
+
+        try:
+            agent = Agent.objects.get(uuid=agent_uuid)
+        except (ValueError, TypeError):
+            return Response({"error": "Invalid agent UUID format"}, status=400)
+        except Agent.DoesNotExist:
+            return Response({"error": "Agent not found"}, status=404)
+        except Agent.MultipleObjectsReturned:
+            return Response({"error": "Agent not found"}, status=404)
+
+        project_ids = set()
+
+        # Project that owns the agent
+        project_ids.add(agent.project_id)
+
+        # Projects that have integrated this agent
+        integrated_project_ids = IntegratedAgent.objects.filter(agent=agent, is_active=True).values_list(
+            "project_id", flat=True
+        )
+        project_ids.update(integrated_project_ids)
+
+        projects = Project.objects.filter(pk__in=project_ids, is_active=True)
+
+        min_conversations = request.query_params.get("min_conversations")
+        if min_conversations is not None:
+            try:
+                min_n = int(min_conversations)
+            except ValueError:
+                return Response(
+                    {"error": "min_conversations must be an integer"},
+                    status=400,
+                )
+
+            if min_n < 0:
+                return Response(
+                    {"error": "min_conversations must be a non-negative integer"},
+                    status=400,
+                )
+
+            projects = projects.annotate(conversation_count=Count("conversations")).filter(
+                conversation_count__gte=min_n
+            )
+
+        serializer = ProjectMinimalSerializer(projects, many=True)
+        projects_data = serializer.data
+        return Response(
+            {
+                "summary": {"count": len(projects_data)},
+                "projects": projects_data,
+            }
+        )
 
 
 class TeamView(APIView):
@@ -1097,10 +1073,16 @@ class OfficialAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).select_related(
+            "group", "group__modal"
+        )
 
         if search:
-            query_filter = Q(name__icontains=search)
+            query_filter = (
+                Q(name__icontains=search)
+                | Q(group__name__icontains=search)
+                | Q(group__modal__agent_name__icontains=search)
+            )
             agents = agents.filter(query_filter).distinct("uuid")
 
         serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
@@ -1130,6 +1112,17 @@ class ProjectCredentialsView(APIView):
             if updated:
                 updated_credentials.append(key)
 
+        if updated_credentials:
+            try:
+                project = Project.objects.get(uuid=project_uuid)
+            except Project.DoesNotExist:
+                pass
+            else:
+                notify_async(
+                    event="cache_invalidation:project",
+                    project=project,
+                )
+
         return Response({"message": "Credentials updated successfully", "updated_credentials": updated_credentials})
 
     def post(self, request, project_uuid):
@@ -1157,9 +1150,14 @@ class ProjectCredentialsView(APIView):
                 }
             )
 
-        created_credentials = CreateAgentUseCase().create_credentials(
-            agent, Project.objects.get(uuid=project_uuid), credentials
-        )
+        project = Project.objects.get(uuid=project_uuid)
+        created_credentials = CreateAgentUseCase().create_credentials(agent, project, credentials)
+
+        if created_credentials:
+            notify_async(
+                event="cache_invalidation:project",
+                project=project,
+            )
 
         return Response({"message": "Credentials created successfully", "created_credentials": created_credentials})
 
@@ -1168,6 +1166,30 @@ class InternalCommunicationPermission(BasePermission):
     def has_permission(self, request, view):
         user = request.user
         return user.has_perm("users.can_communicate_internally")
+
+
+class ActivateAgentView(APIView):
+    permission_classes = [ProjectPermission | InternalCommunicationPermission]
+
+    def patch(self, request, project_uuid, agent_uuid):
+        active = request.data.get("active")
+        if not isinstance(active, bool):
+            return Response(
+                {"error": "Field 'active' is required and must be a boolean."},
+                status=400,
+            )
+        try:
+            integrated_agent = AssignAgentsUsecase().set_agent_active(agent_uuid, project_uuid, active)
+            notify_async(
+                event="cache_invalidation:team",
+                project_uuid=project_uuid,
+            )
+            return Response({"active": integrated_agent.is_active}, status=200)
+        except IntegratedAgent.DoesNotExist:
+            return Response(
+                {"error": "Integrated agent not found for this project and agent."},
+                status=404,
+            )
 
 
 class VtexAppActiveAgentsView(APIView):
@@ -1212,13 +1234,19 @@ class VtexAppAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(project__uuid=project_uuid)
+        agents = Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
 
         if search:
-            query_filter = Q(name__icontains=search)
+            query_filter = (
+                Q(name__icontains=search)
+                | Q(group__name__icontains=search)
+                | Q(group__modal__agent_name__icontains=search)
+            )
             agents = agents.filter(query_filter).distinct("uuid")
 
-        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        serializer = AgentSerializer(
+            agents, many=True, context={"project_uuid": project_uuid, "include_inactive_integrated": True}
+        )
         return Response(serializer.data)
 
 
@@ -1230,13 +1258,21 @@ class VtexAppOfficialAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.VTEX_APP)
+        agents = Agent.objects.filter(is_official=True, source_type=Agent.VTEX_APP).select_related(
+            "group", "group__modal"
+        )
 
         if search:
-            query_filter = Q(name__icontains=search)
+            query_filter = (
+                Q(name__icontains=search)
+                | Q(group__name__icontains=search)
+                | Q(group__modal__agent_name__icontains=search)
+            )
             agents = agents.filter(query_filter).distinct("uuid")
 
-        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
+        serializer = AgentSerializer(
+            agents, many=True, context={"project_uuid": project_uuid, "include_inactive_integrated": True}
+        )
         return Response(serializer.data)
 
 
@@ -1246,7 +1282,7 @@ class VTexAppTeamView(APIView):
     def get(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         usecase = GetInlineAgentsUsecase()
-        agents = usecase.get_active_agents(project_uuid)
+        agents = usecase.get_integrated_agents(project_uuid)
         serializer = IntegratedAgentSerializer(agents, many=True)
 
         data = {"manager": {"external_id": ""}, "agents": serializer.data}
@@ -1258,11 +1294,16 @@ class VtexAppProjectCredentialsView(APIView):
 
     def get(self, request, project_uuid):
         usecase = GetInlineCredentialsUsecase()
-        official_credentials, custom_credentials = usecase.get_credentials_by_project(project_uuid)
+        official_credentials, custom_credentials = usecase.get_credentials_by_project_all_integrated(project_uuid)
+        context = {"include_inactive_integrated": True}
         return Response(
             {
-                "official_agents_credentials": ProjectCredentialsListSerializer(official_credentials, many=True).data,
-                "my_agents_credentials": ProjectCredentialsListSerializer(custom_credentials, many=True).data,
+                "official_agents_credentials": ProjectCredentialsListSerializer(
+                    official_credentials, many=True, context=context
+                ).data,
+                "my_agents_credentials": ProjectCredentialsListSerializer(
+                    custom_credentials, many=True, context=context
+                ).data,
             }
         )
 
@@ -1275,6 +1316,17 @@ class VtexAppProjectCredentialsView(APIView):
             updated = usecase.update_credential_value(project_uuid, key, value)
             if updated:
                 updated_credentials.append(key)
+
+        if updated_credentials:
+            try:
+                project = Project.objects.get(uuid=project_uuid)
+            except Project.DoesNotExist:
+                pass
+            else:
+                notify_async(
+                    event="cache_invalidation:project",
+                    project=project,
+                )
 
         return Response({"message": "Credentials updated successfully", "updated_credentials": updated_credentials})
 
@@ -1303,9 +1355,14 @@ class VtexAppProjectCredentialsView(APIView):
                 }
             )
 
-        created_credentials = CreateAgentUseCase().create_credentials(
-            agent, Project.objects.get(uuid=project_uuid), credentials
-        )
+        project = Project.objects.get(uuid=project_uuid)
+        created_credentials = CreateAgentUseCase().create_credentials(agent, project, credentials)
+
+        if created_credentials:
+            notify_async(
+                event="cache_invalidation:project",
+                project=project,
+            )
 
         return Response({"message": "Credentials created successfully", "created_credentials": created_credentials})
 

@@ -1,16 +1,18 @@
 from django.urls import path
 
 from nexus.agents.api.views import AgentTracesView, DeleteAgentView, RationaleView
-from nexus.inline_agents.api.views import ActiveAgentsView as ActiveInlineAgentsView
 from nexus.inline_agents.api.views import (
+    ActivateAgentView,
     AgentBuilderAudio,
     AgentEndSessionView,
     AgentManagersView,
+    AgentProjectsView,
     LogGroupView,
     MultiAgentView,
     OfficialAgentDetailV1,
     OfficialAgentsV1,
 )
+from nexus.inline_agents.api.views import ActiveAgentsView as ActiveInlineAgentsView
 from nexus.inline_agents.api.views import AgentsView as InlineAgentsView
 from nexus.inline_agents.api.views import OfficialAgentsView as InlineOfficialAgentsView
 from nexus.inline_agents.api.views import ProjectComponentsView as InlineProjectComponentsView
@@ -26,6 +28,7 @@ from nexus.reports.views import ReportView
 
 urlpatterns = [
     path("agents/push", PushInlineAgents.as_view(), name="push-agents"),
+    path("agents/<str:agent_uuid>/projects", AgentProjectsView.as_view(), name="agent-projects"),
     path("v1/official/agents", OfficialAgentsV1.as_view(), name="v1-official-agents"),
     path("v1/official/agents/<str:identifier>", OfficialAgentDetailV1.as_view(), name="v1-official-agent-detail"),
     path("agents/teams/<project_uuid>", InlineTeamView.as_view(), name="teams"),
@@ -36,6 +39,11 @@ urlpatterns = [
     path("agents/traces/", AgentTracesView.as_view(), name="traces"),
     path("agents/app-official/<project_uuid>", VtexAppOfficialInlineAgentsView.as_view(), name="vtex-official-agents"),
     path("project/<project_uuid>/assign/<str:agent_uuid>", ActiveInlineAgentsView.as_view(), name="assign-agents"),
+    path(
+        "project/<project_uuid>/activate-agent/<str:agent_uuid>",
+        ActivateAgentView.as_view(),
+        name="activate-agent",
+    ),
     path(
         "project/<project_uuid>/app-assign/<str:agent_uuid>",
         VtexAppActiveInlineAgentsView.as_view(),

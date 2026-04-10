@@ -95,6 +95,7 @@ class IntegratedAgent(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="integrated_agents")
     created_on = models.DateTimeField(auto_now_add=True)
     metadata = models.JSONField(default=dict, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         unique_together = ("agent", "project")
@@ -298,7 +299,9 @@ class MCP(models.Model):
 
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True)
-    description = models.TextField(blank=True)
+    description_en = models.TextField(blank=True)
+    description_es = models.TextField(blank=True)
+    description_pt = models.TextField(blank=True)
     system = models.ForeignKey(
         AgentSystem,
         on_delete=models.CASCADE,
@@ -320,9 +323,13 @@ class MCP(models.Model):
 
 class AgentGroupModal(models.Model):
     group = models.OneToOneField(AgentGroup, on_delete=models.CASCADE, related_name="modal")
-    conversation_example = models.JSONField(default=list, blank=True)
+    conversation_example_en = models.JSONField(default=list, blank=True)
+    conversation_example_es = models.JSONField(default=list, blank=True)
+    conversation_example_pt = models.JSONField(default=list, blank=True)
     agent_name = models.CharField(max_length=255, null=True, blank=True)
-    about = models.TextField(null=True, blank=True)
+    about_en = models.TextField(null=True, blank=True)
+    about_es = models.TextField(null=True, blank=True)
+    about_pt = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return f"Modal for {self.group.name}"

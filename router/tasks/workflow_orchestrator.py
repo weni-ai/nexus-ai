@@ -18,7 +18,7 @@ import logging
 import os
 import uuid as uuid_lib
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import pendulum
 import sentry_sdk
@@ -30,17 +30,24 @@ from nexus.events import notify_async
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from router.dispatcher import dispatch
 from router.entities import message_factory
+from router.services.sqs_producer import get_conversation_events_producer
 from router.tasks.actions_client import get_action_clients
+from router.tasks.exceptions import EmptyFinalResponseException
 from router.tasks.invocation_context import CachedProjectData
 from router.tasks.invoke import (
     ThrottlingException,
     UnsafeMessageException,
     _invoke_backend,
+    _invoke_is_final_debug,
     _preprocess_message_input,
+    apply_simulation_foundation_model_override,
     dispatch_preview,
+    effective_simulation_channel,
+    should_skip_conversation_sqs,
 )
 from router.tasks.pre_generation import deserialize_cached_data, pre_generation_task
 from router.tasks.redis_task_manager import RedisTaskManager
+from router.tasks.sqs_message_events import build_message_received_event, sqs_response_text_from_agent_output
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +72,8 @@ class WorkflowContext:
     contact_urn: str
     message: Dict
     preview: bool
+    preview_websocket: bool
+    simulation_channel: bool
     language: str
     user_email: str
     task_id: str
@@ -77,6 +86,8 @@ class WorkflowContext:
     cached_data: Optional[CachedProjectData] = None
     flows_user_email: str = field(default_factory=lambda: os.environ.get("FLOW_USER_EMAIL", ""))
     incoming_created_at: Optional[str] = None
+    message_conversation_log_uuid: Optional[str] = None
+    turn_id: Optional[str] = None  # Stable id for SQS/conversation-ms deduplication
 
 
 # =============================================================================
@@ -154,8 +165,8 @@ def _handle_workflow_error(ctx: WorkflowContext, error: Exception) -> None:
 
     _finalize_workflow(ctx, status="failed")
 
-    # Send error to preview if applicable
-    if ctx.user_email:
+    # Send error to preview WebSocket when applicable
+    if ctx.user_email and (ctx.preview or ctx.preview_websocket):
         send_preview_message_to_websocket(
             user_email=ctx.user_email,
             project_uuid=str(ctx.project_uuid),
@@ -177,13 +188,16 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         channel_uuid=message_obj.channel_uuid or ctx.message.get("channel_uuid"),
         contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
         preview=ctx.preview,
+        skip_conversation_sqs=should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel),
         message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
         response_text=error.message or "",
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
         outgoing_created_at=pendulum.now().to_iso8601_string(),
+        message_conversation_log_uuid=ctx.message_conversation_log_uuid,
+        turn_id=ctx.turn_id,
     )
 
-    if ctx.preview and ctx.broadcast:
+    if (ctx.preview or ctx.preview_websocket) and ctx.broadcast:
         return dispatch_preview(
             error.message,
             message_obj,
@@ -244,12 +258,12 @@ def _run_pre_generation(ctx: WorkflowContext) -> Dict:
     return result
 
 
-def _run_generation(ctx: WorkflowContext) -> str:
+def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
     """
     Execute the generation phase.
 
     This is currently inline but will be replaced by generation_task.
-    Returns the LLM response string.
+    Returns (response_text, skip_dispatch).
     """
     ctx.task_manager.update_workflow_status(
         project_uuid=ctx.project_uuid,
@@ -265,15 +279,45 @@ def _run_generation(ctx: WorkflowContext) -> str:
 
     # Preprocess message
     processed_message, foundation_model, turn_off_rationale = _preprocess_message_input(ctx.message, ctx.agents_backend)
+    foundation_model = apply_simulation_foundation_model_override(
+        ctx.simulation_channel,
+        ctx.project_uuid or "",
+        ctx.message.get("contact_urn") or "",
+        foundation_model,
+    )
 
     # Create message object
     message_obj = _create_message_object(processed_message)
 
     # Get backend and invoke (incoming message is saved inside backend via save_inline_message_async)
     ctx.incoming_created_at = pendulum.now().to_iso8601_string()
+    ctx.turn_id = ctx.message.get("msg_event", {}).get("msg_external_id") or str(uuid_lib.uuid4())
+
+    skip_conv_sqs = should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel)
+    # Conversation SQS: same rules as start_inline_agents (Cases 1–3)
+    if not skip_conv_sqs:
+        received_event = build_message_received_event(
+            project_uuid=ctx.project_uuid,
+            contact_urn=ctx.contact_urn,
+            channel_uuid=message_obj.channel_uuid or ctx.message.get("channel_uuid", ""),
+            contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
+            message_text=getattr(message_obj, "text", "") or ctx.message.get("text", ""),
+            created_at=ctx.incoming_created_at,
+            message_id=ctx.turn_id,
+            correlation_id=ctx.turn_id,
+        )
+        try:
+            get_conversation_events_producer().send_event(received_event.to_dict())
+        except Exception as exc:
+            logger.exception(
+                "Failed to send message.received event to SQS",
+                extra={"project_uuid": ctx.project_uuid, "turn_id": ctx.turn_id},
+            )
+            sentry_sdk.capture_exception(exc)
+
     backend = BackendsRegistry.get_backend(ctx.agents_backend)
 
-    response = _invoke_backend(
+    response, skip_dispatch = _invoke_backend(
         backend=backend,
         cached_data=ctx.cached_data,
         message_obj=message_obj,
@@ -286,12 +330,15 @@ def _run_generation(ctx: WorkflowContext) -> str:
         channel_type=ctx.message.get("channel_type", ""),
         stream_support=ctx.message.get("stream_support", False),
         supervisor_agent_uuid=ctx.supervisor_agent_uuid,
+        message_conversation_log_uuid=ctx.message_conversation_log_uuid,
+        preview_websocket=ctx.preview_websocket,
+        skip_conversation_sqs=skip_conv_sqs,
     )
 
-    return response
+    return response, skip_dispatch
 
 
-def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
+def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: bool = False) -> Any:
     """
     Execute the post-generation phase.
 
@@ -318,14 +365,18 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
         channel_uuid=message_obj.channel_uuid or ctx.message.get("channel_uuid"),
         contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
         preview=ctx.preview,
+        skip_conversation_sqs=should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel),
         message_text=ctx.message.get("text", "") or getattr(message_obj, "text", ""),
-        response_text=response or "",
+        response_text=sqs_response_text_from_agent_output(response or "", skip_dispatch=skip_dispatch),
         incoming_created_at=ctx.incoming_created_at or pendulum.now().to_iso8601_string(),
         outgoing_created_at=pendulum.now().to_iso8601_string(),
+        message_conversation_log_uuid=ctx.message_conversation_log_uuid,
+        turn_id=ctx.turn_id,
     )
 
     # Dispatch response
-    if ctx.preview:
+    if ctx.preview or ctx.preview_websocket:
+        _invoke_is_final_debug("H workflow post_generation branch=dispatch_preview")
         return dispatch_preview(
             response,
             message_obj,
@@ -334,15 +385,18 @@ def _run_post_generation(ctx: WorkflowContext, response: str) -> Any:
             ctx.agents_backend,
             ctx.flows_user_email,
         )
-    else:
-        return dispatch(
-            llm_response=response,
-            message=message_obj,
-            direct_message=ctx.broadcast,
-            user_email=ctx.flows_user_email,
-            full_chunks=[],
-            backend=ctx.agents_backend,
-        )
+    if skip_dispatch:
+        _invoke_is_final_debug("H workflow post_generation branch=skip_dispatch (no dispatch)")
+        return True
+    _invoke_is_final_debug("H workflow post_generation branch=dispatch")
+    return dispatch(
+        llm_response=response,
+        message=message_obj,
+        direct_message=ctx.broadcast,
+        user_email=ctx.flows_user_email,
+        full_chunks=[],
+        backend=ctx.agents_backend,
+    )
 
 
 # =============================================================================
@@ -369,17 +423,22 @@ def _create_workflow_context(
     task_id: str,
     message: Dict,
     preview: bool,
+    simulation_channel: bool,
     language: str,
     user_email: str,
     supervisor_agent_uuid: Optional[str] = None,
 ) -> WorkflowContext:
     """Create a workflow context from task parameters."""
+    simulation_channel_effective = effective_simulation_channel(message, simulation_channel)
+    preview_websocket = simulation_channel_effective and bool(user_email and str(user_email).strip())
     return WorkflowContext(
         workflow_id=f"workflow-{uuid_lib.uuid4()}",
         project_uuid=message.get("project_uuid"),
         contact_urn=message.get("contact_urn"),
         message=message,
         preview=preview,
+        preview_websocket=preview_websocket,
+        simulation_channel=simulation_channel_effective,
         language=language,
         user_email=user_email,
         task_id=task_id,
@@ -409,6 +468,7 @@ def inline_agent_workflow(
     self,
     message: Dict,
     preview: bool = False,
+    simulation_channel: bool = False,
     language: str = "en",
     user_email: str = "",
     supervisor_agent_uuid: Optional[str] = None,
@@ -425,14 +485,17 @@ def inline_agent_workflow(
     The orchestrator is intentionally simple - all complex logic is delegated
     to the phase tasks and helper functions.
     """
+    message_conversation_log_uuid = str(uuid_lib.uuid4())
     ctx = _create_workflow_context(
         task_id=self.request.id,
         message=message,
         preview=preview,
+        simulation_channel=simulation_channel,
         language=language,
         user_email=user_email,
         supervisor_agent_uuid=supervisor_agent_uuid,
     )
+    ctx.message_conversation_log_uuid = message_conversation_log_uuid
 
     try:
         # Initialize workflow (typing indicator, message concat, state creation)
@@ -442,10 +505,13 @@ def inline_agent_workflow(
         _run_pre_generation(ctx)
 
         # Phase 2: Generation (will be generation_task.apply() later)
-        response = _run_generation(ctx)
+        response, skip_dispatch = _run_generation(ctx)
+
+        if (response is None or response == "") and not skip_dispatch:
+            raise EmptyFinalResponseException("Final response is empty")
 
         # Phase 3: Post-Generation (will be post_generation_task.apply() later)
-        result = _run_post_generation(ctx, response)
+        result = _run_post_generation(ctx, response, skip_dispatch)
 
         # Finalize workflow
         _finalize_workflow(ctx)

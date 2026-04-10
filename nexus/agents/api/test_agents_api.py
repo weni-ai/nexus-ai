@@ -1,4 +1,5 @@
 import json
+from unittest import mock
 from urllib.parse import urlencode
 
 from django.contrib.auth.models import Permission
@@ -9,8 +10,8 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.agents.models import Team
+from nexus.inline_agents.models import MCP, AgentGroup, AgentGroupModal, AgentSystem, IntegratedAgent, Version
 from nexus.inline_agents.models import Agent as InlineAgent
-from nexus.inline_agents.models import IntegratedAgent
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
 
@@ -65,6 +66,47 @@ class AgentViewsetSetTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(content), 1)
         self.assertEqual(content[0].get("name"), "Information Analyst")
+
+    def test_get_my_agents_name_is_group_not_agent_template(self):
+        group = AgentGroup.objects.create(name="Returns & exchanges", slug="returns-group-test-unique")
+        agent_grouped = InlineAgent.objects.create(
+            name="Reversso - Returns Agent",
+            slug="reversso-returns-test",
+            instruction="x",
+            collaboration_instructions="y",
+            foundation_model="model:version",
+            project=self.project,
+            group=group,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
+        self.assertEqual(row["name"], "Returns & exchanges")
+
+    def test_get_my_agents_name_prefers_modal_agent_name(self):
+        group = AgentGroup.objects.create(name="Group Title", slug="modal-group-test-unique")
+        AgentGroupModal.objects.create(group=group, agent_name="Product Concierge")
+        agent_grouped = InlineAgent.objects.create(
+            name="Product Concierge Default VTEX",
+            slug="pc-modal-test",
+            instruction="x",
+            collaboration_instructions="y",
+            foundation_model="model:version",
+            project=self.project,
+            group=group,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
+        self.assertEqual(row["name"], "Product Concierge")
 
     def make_agents_official(self):
         self.agent.is_official = True
@@ -157,6 +199,440 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertEqual(len(content["agents"]), 1)
         self.assertEqual(content["agents"][0].get("uuid"), str(agent.uuid))
         self.assertEqual(content["agents"][0].get("name"), agent.name)
+        self.assertTrue(content["agents"][0].get("active", True))
+
+    def test_get_team_excludes_inactive_integrated_agents(self):
+        """Agents with is_active=False on IntegratedAgent do not appear in team list."""
+
+        agent = InlineAgent.objects.create(
+            name="Inactive Agent",
+            slug="inactive_agent",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        Version.objects.create(
+            skills=[],
+            display_skills=[],
+            agent=agent,
+        )
+        IntegratedAgent.objects.create(
+            agent=agent,
+            project=self.project,
+            is_active=False,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(content["agents"]), 0)
+
+    def test_get_team_includes_about_locale_map_when_group_modal_exists(self):
+        group = AgentGroup.objects.create(name="Modal Pres", slug="modal-pres-teams-unique")
+        AgentGroupModal.objects.create(
+            group=group,
+            agent_name="Catalog",
+            about_en="About EN",
+            about_es="About ES",
+            about_pt="About PT",
+            conversation_example_en=[{"text": "Hello", "direction": "incoming"}],
+            conversation_example_es=[],
+            conversation_example_pt=[],
+        )
+        agent_grouped = InlineAgent.objects.create(
+            name="Template Name",
+            slug="modal-pres-agent-teams",
+            instruction="x",
+            collaboration_instructions="y",
+            foundation_model="model:version",
+            project=self.project,
+            group=group,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=agent_grouped)
+        IntegratedAgent.objects.create(agent=agent_grouped, project=self.project)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = next(a for a in content["agents"] if a.get("uuid") == str(agent_grouped.uuid))
+        about = row["about"]
+        self.assertEqual(about["en"], "About EN")
+        self.assertEqual(about["pt"], "About PT")
+        self.assertEqual(about["es"], "About ES")
+        self.assertNotIn("presentation", row)
+
+    def test_get_team_about_null_without_group(self):
+        agent = InlineAgent.objects.create(
+            name="No Group Agent",
+            slug="no_group_team_agent",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+        IntegratedAgent.objects.create(agent=agent, project=self.project)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        content = json.loads(response.content)
+        row = content["agents"][0]
+        self.assertIsNone(row.get("about"))
+
+    def test_get_team_mcp_description_locale_map(self):
+        """Teams API returns MCP description as en/pt/es map (not a single collapsed string)."""
+        system = AgentSystem.objects.create(name="Team MCP System", slug="team-mcp-sys-unique")
+        mcp = MCP.objects.create(
+            name="Team Catalog MCP",
+            slug="team-catalog-mcp-unique",
+            description_en="English MCP",
+            description_pt="Portuguese MCP",
+            description_es="Spanish MCP",
+            system=system,
+        )
+        agent = InlineAgent.objects.create(
+            name="MCP Agent",
+            slug="team-mcp-agent-unique",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        agent.mcps.add(mcp)
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+        IntegratedAgent.objects.create(
+            agent=agent,
+            project=self.project,
+            metadata={
+                "mcp": "Team Catalog MCP",
+                "system": system.slug,
+                "mcp_config": {},
+            },
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        self.assertEqual(response.status_code, 200)
+        response.render()
+        content = json.loads(response.content)
+        row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
+        mcp_payload = row["mcp"]
+        self.assertEqual(mcp_payload["name"], "Team Catalog MCP")
+        desc = mcp_payload["description"]
+        self.assertEqual(desc["en"], "English MCP")
+        self.assertEqual(desc["pt"], "Portuguese MCP")
+        self.assertEqual(desc["es"], "Spanish MCP")
+
+
+class ActivateAgentViewTestCase(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.agent = InlineAgent.objects.create(
+            name="Test Agent",
+            slug="test-agent",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        from nexus.inline_agents.models import Version
+
+        Version.objects.create(skills=[], display_skills=[], agent=self.agent)
+        IntegratedAgent.objects.create(agent=self.agent, project=self.project)
+
+    def test_patch_activate_returns_200_and_active_true(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "activate-agent",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {"active": True}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"active": True})
+        ia = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
+        self.assertTrue(ia.is_active)
+
+    def test_patch_deactivate_returns_200_and_active_false(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "activate-agent",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {"active": False}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"active": False})
+        ia = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
+        self.assertFalse(ia.is_active)
+
+    def test_patch_missing_active_returns_400(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "activate-agent",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("active", response.json().get("error", ""))
+
+    def test_patch_invalid_active_returns_400(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "activate-agent",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {"active": "true"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("active", response.json().get("error", ""))
+
+    def test_patch_integrated_agent_not_found_returns_404(self):
+        agent2 = InlineAgent.objects.create(
+            name="Other Agent",
+            slug="other-agent",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "activate-agent",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(agent2.uuid),
+            },
+        )
+        response = client.patch(url, {"active": True}, format="json")
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("Integrated agent not found", response.json().get("error", ""))
+
+
+class AssignAgentViewTestCase(TestCase):
+    """Assign endpoint must reactivate existing inactive IntegratedAgent and return active state."""
+
+    def setUp(self):
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.agent = InlineAgent.objects.create(
+            name="Assign Test Agent",
+            slug="assign-test-agent",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=self.agent)
+
+    def test_assign_reactivates_deactivated_integrated_agent_and_appears_in_team(self):
+        IntegratedAgent.objects.create(
+            agent=self.agent,
+            project=self.project,
+            is_active=False,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "assign-agents",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {"assigned": True}, format="json")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["assigned"], "assign endpoint should return assigned=True")
+        self.assertTrue(data["active"], "assign endpoint should return active=True after reactivation")
+
+        integrated_agent = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
+        self.assertTrue(
+            integrated_agent.is_active,
+            "IntegratedAgent should be active after assign when it was previously deactivated",
+        )
+
+        team_url = reverse("teams", kwargs={"project_uuid": str(self.project.uuid)})
+        team_response = client.get(team_url)
+        team_response.render()
+        team_content = json.loads(team_response.content)
+        self.assertEqual(team_response.status_code, 200)
+        agent_uuids = [a["uuid"] for a in team_content.get("agents", [])]
+        self.assertIn(
+            str(self.agent.uuid),
+            agent_uuids,
+            "Reactivated agent should appear in team list (filtered by is_active=True)",
+        )
+
+
+class GroupUnassignmentTestCase(TestCase):
+    """Regression: group unassignment must delete all IntegratedAgent rows in the group (active and inactive)."""
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_group_unassignment_deletes_active_and_inactive_integrated_agents(self, mock_has_permission):
+        mock_has_permission.return_value = True
+
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        owner_project = ProjectFactory()
+
+        group = AgentGroup.objects.create(name="Test Group", slug="test-group-unassign", shared_config={})
+
+        agent1 = InlineAgent.objects.create(
+            name="Group Agent 1",
+            slug="group-agent-1",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=owner_project,
+            group=group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        agent2 = InlineAgent.objects.create(
+            name="Group Agent 2",
+            slug="group-agent-2",
+            instruction="Test",
+            collaboration_instructions="Test",
+            foundation_model="model:version",
+            project=owner_project,
+            group=group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=agent1)
+        Version.objects.create(skills=[], display_skills=[], agent=agent2)
+
+        ia_active = IntegratedAgent.objects.create(agent=agent1, project=target_project, is_active=True)
+        ia_inactive = IntegratedAgent.objects.create(agent=agent2, project=target_project, is_active=False)
+
+        self.assertEqual(IntegratedAgent.objects.filter(project=target_project).count(), 2)
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        url = reverse("v1-official-agents")
+        url = f"{url}?project_uuid={target_project.uuid}&group={group.slug}"
+        response = client.post(url, {"assigned": False}, format="json", HTTP_AUTHORIZATION="Bearer test-token")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(IntegratedAgent.objects.filter(pk=ia_active.pk).exists())
+        self.assertFalse(IntegratedAgent.objects.filter(pk=ia_inactive.pk).exists())
+        self.assertEqual(IntegratedAgent.objects.filter(project=target_project).count(), 0)
+
+
+class OfficialAgentsV1I18nPresentationTestCase(TestCase):
+    """Official list/detail APIs expose presentation and MCP description as nested locale maps (en/pt/es)."""
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_list_and_detail_include_locale_fields(self, mock_has_permission):
+        mock_has_permission.return_value = True
+
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        owner_project = ProjectFactory()
+
+        group = AgentGroup.objects.create(name="I18n Group", slug="i18n-group-official-test", shared_config={})
+        AgentGroupModal.objects.create(
+            group=group,
+            agent_name="Catalog",
+            about_en="About EN",
+            about_es="About ES",
+            about_pt="About PT",
+            conversation_example_en=[{"text": "EN", "direction": "incoming"}],
+            conversation_example_es=[{"text": "ES", "direction": "incoming"}],
+            conversation_example_pt=[{"text": "PT", "direction": "incoming"}],
+        )
+        system = AgentSystem.objects.create(name="VTEX I18n Test", slug="vtex-i18n-official-test")
+        mcp = MCP.objects.create(
+            name="Test MCP",
+            slug="test-mcp-i18n-official",
+            description_en="Desc EN",
+            description_es="Desc ES",
+            description_pt="Desc PT",
+            system=system,
+        )
+        group.mcps.add(mcp)
+
+        agent = InlineAgent.objects.create(
+            name="Agent",
+            slug="i18n-agent-official-test",
+            instruction="i",
+            collaboration_instructions="collab",
+            foundation_model="m",
+            project=owner_project,
+            group=group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        list_url = reverse("v1-official-agents")
+        list_resp = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid)},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(list_resp.status_code, 200)
+        listed = list_resp.json()["new"]["agents"]
+        entry = next(a for a in listed if a.get("group") == group.slug)
+        pres = entry["presentation"]
+        self.assertEqual(pres["about"]["en"], "About EN")
+        self.assertEqual(pres["about"]["es"], "About ES")
+        self.assertEqual(pres["about"]["pt"], "About PT")
+        self.assertEqual(pres["conversation_example"]["en"][0]["text"], "EN")
+        self.assertEqual(pres["conversation_example"]["es"][0]["text"], "ES")
+        self.assertEqual(pres["conversation_example"]["pt"][0]["text"], "PT")
+
+        detail_url = reverse("v1-official-agent-detail", kwargs={"identifier": group.slug})
+        detail_resp = client.get(
+            detail_url,
+            {"project_uuid": str(target_project.uuid)},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(detail_resp.status_code, 200)
+        body = detail_resp.json()
+        dp = body["presentation"]
+        self.assertEqual(dp["about"]["en"], "About EN")
+        self.assertEqual(dp["about"]["pt"], "About PT")
+        self.assertEqual(dp["conversation_example"]["es"][0]["text"], "ES")
+
+        mcps_flat = body.get("MCPs") or []
+        self.assertTrue(mcps_flat, "expected MCPs in detail response")
+        mcp_payload = next(m for m in mcps_flat if m["name"] == "Test MCP")
+        desc = mcp_payload["description"]
+        self.assertEqual(desc["en"], "Desc EN")
+        self.assertEqual(desc["es"], "Desc ES")
+        self.assertEqual(desc["pt"], "Desc PT")
 
 
 class TestCommunicateInternallyPermission(TestCase):

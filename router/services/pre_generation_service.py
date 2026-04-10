@@ -2,6 +2,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 from router.services.cache_service import CacheService
+from router.services.inline_agent_config_cache import inline_agent_config_dict_for_cache
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +63,7 @@ class PreGenerationService:
         return None
 
     def _get_inline_agent_config(self, config) -> Optional[Dict]:
-        if config:
-            return {
-                "agents_backend": config.agents_backend,
-                "configuration": config.configuration,
-                "default_instructions_for_collaborators": config.default_instructions_for_collaborators,
-            }
-        return None
+        return inline_agent_config_dict_for_cache(config)
 
     def fetch_pre_generation_data(
         self, project_uuid: str

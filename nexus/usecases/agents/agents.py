@@ -1034,8 +1034,13 @@ class AgentUsecase:
     def get_inline_traces(self, project_uuid: str, log_id: str):
         from nexus.inline_agents.models import InlineAgentMessage
 
-        log = InlineAgentMessage.objects.get(id=log_id)
-        key = f"inline_traces/{project_uuid}/{log.uuid}.jsonl"
+        if log_id.isnumeric():
+            log = InlineAgentMessage.objects.get(id=log_id)
+            log_uuid = log.uuid
+        else:
+            log_uuid = log_id
+
+        key = f"inline_traces/{project_uuid}/{log_uuid}.jsonl"
         traces_data = BedrockFileDatabase().get_inline_trace_file(key)
         if traces_data:
             traces = [json.loads(line) for line in traces_data.splitlines() if line]

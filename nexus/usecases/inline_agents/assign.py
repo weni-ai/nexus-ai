@@ -12,8 +12,11 @@ class AssignAgentsUsecase:
             integrated_agent, created = IntegratedAgent.objects.get_or_create(
                 agent=agent,
                 project=project,
-                defaults={"metadata": {}},
+                defaults={"metadata": {}, "is_active": True},
             )
+            if not created and not integrated_agent.is_active:
+                integrated_agent.is_active = True
+                integrated_agent.save(update_fields=["is_active"])
             return created, integrated_agent
         except Agent.DoesNotExist as e:
             raise ValueError("Agent not found") from e
@@ -41,3 +44,12 @@ class AssignAgentsUsecase:
             raise ValueError("Agent not found") from e
         except Project.DoesNotExist as e:
             raise ValueError("Project not found") from e
+
+    def set_agent_active(self, agent_uuid: str, project_uuid: str, active: bool) -> IntegratedAgent:
+        integrated_agent = IntegratedAgent.objects.get(
+            agent__uuid=agent_uuid,
+            project__uuid=project_uuid,
+        )
+        integrated_agent.is_active = active
+        integrated_agent.save(update_fields=["is_active"])
+        return integrated_agent

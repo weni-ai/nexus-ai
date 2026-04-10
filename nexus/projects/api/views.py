@@ -1,15 +1,19 @@
 import logging
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from uuid import UUID
 
 import requests
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers, status, views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.api.serializers import ConversationSerializer
+from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.usecases.projects.conversations import ConversationsUsecase
 from nexus.usecases.projects.dto import UpdateProjectDTO
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -87,6 +91,89 @@ class AgentsBackendView(APIView):
             if "does not exists" in msg or "not found" in msg:
                 return Response({"error": msg}, status=404)
             return Response({"error": msg}, status=500)
+
+
+class EnableHumanSupportView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
+
+    def get(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            UUID(project_uuid)
+        except (ValueError, TypeError):
+            return Response({"error": "Invalid UUID format"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            project = ProjectsUseCase().get_by_uuid(project_uuid)
+
+            return Response(
+                {"human_support": project.human_support, "human_support_prompt": project.human_support_prompt}
+            )
+        except ProjectDoesNotExist:
+            return Response(
+                {"error": f"Project with uuid `{project_uuid}` does not exist"}, status=status.HTTP_404_NOT_FOUND
+            )
+        except DjangoValidationError as e:
+            return Response({"error": f"Invalid UUID: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            msg = str(e)
+            if "does not exists" in msg or "not found" in msg:
+                return Response({"error": msg}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": msg}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def patch(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        human_support = request.data.get("human_support")
+        human_support_prompt = request.data.get("human_support_prompt")
+
+        if human_support is None and human_support_prompt is None:
+            return Response(
+                {"error": "At least one of 'human_support' or 'human_support_prompt' is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if human_support is not None and not isinstance(human_support, bool):
+            return Response({"error": "human_support must be a boolean"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if human_support_prompt is not None and not isinstance(human_support_prompt, str):
+            return Response({"error": "human_support_prompt must be a string"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            UUID(project_uuid)
+        except (ValueError, TypeError):
+            return Response({"error": "Invalid UUID format"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            usecase = ProjectsUseCase()
+            updated_project = usecase.update_human_support_config(
+                project_uuid=project_uuid,
+                human_support=human_support,
+                human_support_prompt=human_support_prompt,
+            )
+
+            return Response(
+                {
+                    "human_support": updated_project.human_support,
+                    "human_support_prompt": updated_project.human_support_prompt,
+                }
+            )
+        except ProjectDoesNotExist:
+            return Response(
+                {"error": f"Project with uuid `{project_uuid}` does not exist"}, status=status.HTTP_404_NOT_FOUND
+            )
+        except DjangoValidationError as e:
+            return Response({"error": f"Invalid UUID: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            msg = str(e)
+            if "does not exists" in msg or "not found" in msg:
+                return Response({"error": msg}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": msg}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class AgentBuilderProjectDetailsView(APIView):
@@ -229,30 +316,32 @@ class ConversationsProxyView(APIView):
             return None
 
     def _handle_http_error(self, e, project_uuid):
-        status_code = e.response.status_code if e.response else 500
-        error_message, error_details = self.usecase.extract_error_message(e.response)
+        if e.response is None:
+            status_code = 500
+        else:
+            status_code = getattr(e.response, "status_code", 500)
 
-        if status_code != 404:
-            self.usecase.send_to_sentry(project_uuid, status_code, error_message, error_details, exception=e)
+        if status_code == 404:
+            return Response({}, status=status.HTTP_200_OK)
+
+        try:
+            error_message, error_details = self.usecase.extract_error_message(e.response)
+        except Exception:
+            error_message = str(e.response) if e.response else str(e)
+            error_details = None
+
+        self.usecase.send_to_sentry(project_uuid, status_code, error_message, error_details, exception=e)
 
         if status_code == 400:
             return Response({"error": error_message or "Bad request"}, status=status.HTTP_400_BAD_REQUEST)
-        elif status_code == 404:
-            return Response(
-                {"error": f"Conversations not found for project {project_uuid}"}, status=status.HTTP_404_NOT_FOUND
-            )
-        else:
-            logger.error(
-                f"Error from Conversations service for project {project_uuid}: {error_message}",
-                extra={
-                    "project_uuid": project_uuid,
-                    "status_code": status_code,
-                    "error_message": error_message,
-                    "error_details": error_details,
-                },
-                exc_info=True,
-            )
-            return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        logger.error(
+            f"Error from Conversations service for project {project_uuid}: "
+            f"status_code={status_code}, error_message={error_message}, "
+            f"error_details={error_details}",
+            exc_info=True,
+        )
+        return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _handle_generic_error(self, e, project_uuid):
         """Handle all other errors (connection, timeout, validation, etc.) - return generic error."""
@@ -417,15 +506,9 @@ class ConversationDetailProxyView(APIView):
             )
         else:
             logger.error(
-                f"Error from Conversations service for project {project_uuid}\
-                    , conversation {conversation_uuid}: {error_message}",
-                extra={
-                    "project_uuid": project_uuid,
-                    "conversation_uuid": conversation_uuid,
-                    "status_code": status_code,
-                    "error_message": error_message,
-                    "error_details": error_details,
-                },
+                f"Error from Conversations service for project {project_uuid}, "
+                f"conversation {conversation_uuid}: status_code={status_code}, "
+                f"error_message={error_message}, error_details={error_details}",
                 exc_info=True,
             )
             return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

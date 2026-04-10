@@ -132,7 +132,9 @@ class DataLakeEventService:
             try:
                 from nexus.inline_agents.models import IntegratedAgent
 
-                team_agent = IntegratedAgent.objects.get(agent__slug=agent_identifier, project__uuid=project_uuid)
+                team_agent = IntegratedAgent.objects.get(
+                    agent__slug=agent_identifier, project__uuid=project_uuid, is_active=True
+                )
                 metadata["agent_uuid"] = str(team_agent.agent.uuid)
             except IntegratedAgent.DoesNotExist:
                 logger.warning(
@@ -185,6 +187,7 @@ class DataLakeEventService:
         extractor: EventExtractor,
         preview: bool = False,
         conversation: Optional[object] = None,
+        skip_conversation_sqs: bool = False,
     ) -> None:
         """Process custom events using backend-specific extractor."""
         if preview:
@@ -202,7 +205,12 @@ class DataLakeEventService:
                 # Handle special events (CSAT, NPS, etc.) first
                 if event_key in special_handlers:
                     special_handlers[event_key].process(
-                        event_to_send, project_uuid, contact_urn, channel_uuid, conversation=conversation
+                        event_to_send,
+                        project_uuid,
+                        contact_urn,
+                        channel_uuid,
+                        conversation=conversation,
+                        skip_conversation_sqs=skip_conversation_sqs,
                     )
 
                 self.send_custom_event(
