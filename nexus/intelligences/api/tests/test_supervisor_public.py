@@ -216,8 +216,48 @@ class TestSupervisorPublicAPI(TestCase):
         mock_call.assert_called_once()
         call_kw = mock_call.call_args
         self.assertEqual(str(call_kw[0][0]), str(self.project.uuid))
-        self.assertEqual(call_kw[0][1]["start_date"], "2026-03-27")
+        self.assertEqual(call_kw[0][1]["start_date"], "2026-03-27T00:00:00Z")
         mock_fetch_messages.assert_called_once()
+
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_fetch_conversation_messages")
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_call_conversations_api")
+    def test_v2_date_only_end_normalized_to_utc_end_of_day(self, mock_call, mock_fetch_messages):
+        mock_fetch_messages.return_value = []
+        mock_call.return_value = {"results": [], "next": None, "previous": None}
+
+        url = reverse(
+            "public-supervisor-conversations-v2",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+        self.client.get(
+            f"{url}?end=2026-04-02",
+            HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}",
+        )
+
+        self.assertEqual(
+            mock_call.call_args[0][1]["end_date"],
+            "2026-04-02T23:59:59.999999Z",
+        )
+
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_fetch_conversation_messages")
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_call_conversations_api")
+    def test_v2_date_only_start_normalized_to_utc_start_of_day(self, mock_call, mock_fetch_messages):
+        mock_fetch_messages.return_value = []
+        mock_call.return_value = {"results": [], "next": None, "previous": None}
+
+        url = reverse(
+            "public-supervisor-conversations-v2",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+        self.client.get(
+            f"{url}?start=2026-04-02",
+            HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}",
+        )
+
+        self.assertEqual(
+            mock_call.call_args[0][1]["start_date"],
+            "2026-04-02T00:00:00Z",
+        )
 
     @mock.patch.object(SupervisorPublicConversationsViewV2, "_fetch_conversation_messages")
     @mock.patch.object(SupervisorPublicConversationsViewV2, "_call_conversations_api")

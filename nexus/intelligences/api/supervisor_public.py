@@ -50,6 +50,16 @@ def _validate_supervisor_public_v2_query_dates(start, end):
         raise ValidationError({"date": "Invalid date format. Please use ISO 8601."}) from None
 
 
+def _supervisor_public_v2_utc_start_of_day_iso(raw: str) -> str:
+    """Inclusive UTC calendar-day lower bound for nexus-conversations start_date."""
+    return pendulum.parse(raw).in_timezone("UTC").start_of("day").to_iso8601_string()
+
+
+def _supervisor_public_v2_utc_end_of_day_iso(raw: str) -> str:
+    """Inclusive UTC calendar-day upper bound for nexus-conversations end_date (lte on start_date)."""
+    return pendulum.parse(raw).in_timezone("UTC").end_of("day").to_iso8601_string()
+
+
 # Resolution choices matching nexus-conversations model (for status_summary keys)
 NEXUS_CONVERSATIONS_RESOLUTION_KEYS = ("0", "1", "2", "3", "4")
 
@@ -467,11 +477,11 @@ class SupervisorPublicConversationsViewV2(APIView):
 
         params = {}
         if start:
-            params["start_date"] = start
+            params["start_date"] = _supervisor_public_v2_utc_start_of_day_iso(start)
         if end:
-            params["end_date"] = end
+            params["end_date"] = _supervisor_public_v2_utc_end_of_day_iso(end)
         if not start and not end and not request.query_params.get("cursor"):
-            params["start_date"] = SUPERVISOR_PUBLIC_CONVERSATIONS_V2_CUT_DATE.format("YYYY-MM-DD")
+            params["start_date"] = SUPERVISOR_PUBLIC_CONVERSATIONS_V2_CUT_DATE.start_of("day").to_iso8601_string()
         status_param = request.query_params.get("status")
         if status_param is not None:
             if status_param not in NEXUS_CONVERSATIONS_RESOLUTION_KEYS:
@@ -517,8 +527,8 @@ class SupervisorPublicConversationsViewV2(APIView):
             OpenApiParameter(
                 name="start",
                 description=(
-                    "Start date (ISO 8601). Mapped to start_date on nexus-conversations. "
-                    "Must not be before 2026-03-27 (UTC calendar day)."
+                    "Start of range (ISO 8601). Interpreted as the start of that calendar day in UTC "
+                    "and sent to nexus-conversations as start_date. Must not be before 2026-03-27 (UTC day)."
                 ),
                 required=False,
                 type=OpenApiTypes.STR,
@@ -526,8 +536,8 @@ class SupervisorPublicConversationsViewV2(APIView):
             OpenApiParameter(
                 name="end",
                 description=(
-                    "End date (ISO 8601). Mapped to end_date on nexus-conversations. "
-                    "Must not be before 2026-03-27 (UTC calendar day)."
+                    "End of range (ISO 8601). Interpreted as the end of that calendar day in UTC "
+                    "and sent to nexus-conversations as end_date. Must not be before 2026-03-27 (UTC day)."
                 ),
                 required=False,
                 type=OpenApiTypes.STR,
