@@ -41,6 +41,7 @@ def _serialize_mcp(mcp) -> dict:
             "label": config_option.label,
             "type": config_option.type,
             "options": options,
+            "is_required": config_option.is_required,
         }
         if config_option.default_value is not None:
             config_item["default_value"] = config_option.default_value
