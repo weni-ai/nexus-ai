@@ -30,6 +30,7 @@ class ProjectConsumer(EDAConsumer):
                 brain_on=body.get("brain_on"),
                 authorizations=body.get("authorizations"),
                 indexer_database=body.get("indexer_database") or Project.BEDROCK,
+                inline_agent_switch=bool(body.get("inline_agent_switch")),
             )
 
             project_creation = ProjectsUseCase()
