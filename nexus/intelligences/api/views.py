@@ -1,6 +1,7 @@
 import logging
 import os
 
+import requests as python_requests
 import sentry_sdk
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
@@ -1601,10 +1602,34 @@ class TopicsViewSet(ModelViewSet):
     def list(self, request, *args, **kwargs):
         project_uuid = self.kwargs.get("project_uuid")
         if project_uuid and settings.CONVERSATIONS_AS_TOPICS_SOURCE:
-            client = ConversationsRESTClient()
-            topics = client.get_topics(project_uuid=str(project_uuid))
-            formatted = [self._format_external_topic(t) for t in topics]
-            return Response(formatted)
+            try:
+                client = ConversationsRESTClient()
+                topics = client.get_topics(project_uuid=str(project_uuid))
+                formatted = [self._format_external_topic(t) for t in topics]
+                return Response(formatted)
+            except python_requests.exceptions.HTTPError as e:
+                status_code = getattr(e.response, "status_code", 500) if e.response is not None else 500
+                logger.error(
+                    f"Conversations service HTTP error for project {project_uuid}: status={status_code}",
+                    exc_info=True,
+                )
+                return Response(
+                    {"error": "Failed to fetch topics from conversations service"},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+            except (
+                python_requests.exceptions.ConnectionError,
+                python_requests.exceptions.Timeout,
+                python_requests.exceptions.RequestException,
+            ) as e:
+                logger.error(
+                    f"Conversations service connection error for project {project_uuid}: {e}",
+                    exc_info=True,
+                )
+                return Response(
+                    {"error": "Failed to fetch topics from conversations service"},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
 
         return super().list(request, *args, **kwargs)
 

@@ -1,3 +1,5 @@
+from urllib.parse import urljoin
+
 import requests
 from django.conf import settings
 
@@ -102,6 +104,7 @@ class ConversationsRESTClient(RestClient):
             response.raise_for_status()
             data = response.json()
             all_results.extend(data.get("results", []))
-            url = data.get("next")
+            next_url = data.get("next")
+            url = urljoin(self.base_url, next_url) if next_url else None
 
         return all_results
