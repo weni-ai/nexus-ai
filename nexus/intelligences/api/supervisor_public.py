@@ -585,9 +585,14 @@ class SupervisorPublicConversationsViewV2(APIView):
             # status_summary: count by resolution from current page (cursor API doesn't provide totals).
             status_summary = {k: 0 for k in NEXUS_CONVERSATIONS_RESOLUTION_KEYS}
             for item in results_data:
-                res = str(item.get("resolution") or "")
-                if res in status_summary:
-                    status_summary[res] += 1
+                raw_resolution = item.get("resolution")
+                if raw_resolution is None:
+                    bucket = "3"
+                else:
+                    bucket = str(raw_resolution)
+                    if bucket not in status_summary:
+                        bucket = "3"
+                status_summary[bucket] += 1
 
             # count/total_pages: cursor pagination does not provide total count.
             # Use len(results) as approximate; total_pages=1 when no next, else 2+ (unknown)
