@@ -20,6 +20,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
+from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import event_manager, notify_async
 from nexus.intelligences.api.filters import ConversationFilter
@@ -33,9 +34,9 @@ from nexus.intelligences.models import (
     SubTopics,
     Topics,
 )
+from nexus.internals.conversations import ConversationsRESTClient
 from nexus.orgs import permissions
 from nexus.paginations import CustomCursorPagination, SupervisorPagination
-from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ExternalTokenPermission, ProjectPermission
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
@@ -1576,6 +1577,28 @@ class TopicsViewSet(ModelViewSet):
         if project_uuid:
             return Topics.objects.filter(project__uuid=project_uuid)
         return Topics.objects.none()
+
+    def list(self, request, *args, **kwargs):
+        project_uuid = self.kwargs.get("project_uuid")
+        if project_uuid:
+            try:
+                project = Project.objects.get(uuid=project_uuid)
+            except Project.DoesNotExist:
+                return Response(
+                    {"error": "Project not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if project.inline_agent_switch:
+                client = ConversationsRESTClient()
+                response_data = client.get_topics(
+                    project_uuid=str(project_uuid),
+                    page=request.query_params.get("page"),
+                    page_size=request.query_params.get("page_size"),
+                )
+                return Response(response_data)
+
+        return super().list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         project_uuid = self.kwargs.get("project_uuid")
