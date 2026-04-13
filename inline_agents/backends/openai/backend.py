@@ -35,6 +35,7 @@ from inline_agents.backends.openai.sessions import (
     RedisSession,
     delete_openai_inline_session_keys_for_contact,
     make_session_factory,
+    openai_session_base_id,
 )
 from nexus.inline_agents.backends.openai.repository import (
     ManagerAgentRepository,
@@ -118,7 +119,7 @@ class OpenAIBackend(InlineAgentsBackend):
     ) -> tuple[RedisSession, str]:
         read_client = get_redis_read_client()
         write_client = get_redis_write_client()
-        session_id = f"project-{project_uuid}-session-{sanitized_urn}"
+        session_id = openai_session_base_id(project_uuid, sanitized_urn)
         return RedisSession(
             session_id=session_id,
             r=write_client,
@@ -134,7 +135,7 @@ class OpenAIBackend(InlineAgentsBackend):
     ):
         read_client = get_redis_read_client()
         write_client = get_redis_write_client()
-        session_id = f"project-{project_uuid}-session-{sanitized_urn}"
+        session_id = openai_session_base_id(project_uuid, sanitized_urn)
         return make_session_factory(
             redis=write_client,
             read_redis=read_client,
@@ -148,11 +149,20 @@ class OpenAIBackend(InlineAgentsBackend):
         """Clear Redis session lists for supervisor and integrated collaborator agents (by slug)."""
         from nexus.inline_agents.models import IntegratedAgent
 
-        collaborator_slugs = list(
-            IntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True)
-            .select_related("agent")
-            .values_list("agent__slug", flat=True)
-        )
+        collaborator_slugs: list[str] = []
+        try:
+            collaborator_slugs = list(
+                IntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True)
+                .select_related("agent")
+                .values_list("agent__slug", flat=True)
+            )
+        except Exception as exc:
+            logger.warning(
+                f"Could not load collaborator slugs for session cleanup; "
+                f"clearing supervisor Redis key only. project={project_uuid} error={exc!s}"
+            )
+            sentry_sdk.capture_exception(exc)
+
         delete_openai_inline_session_keys_for_contact(
             get_redis_write_client(),
             project_uuid,
