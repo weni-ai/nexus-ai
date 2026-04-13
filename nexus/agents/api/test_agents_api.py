@@ -10,7 +10,15 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from nexus.agents.api.views import InternalCommunicationPermission
 from nexus.agents.models import Team
-from nexus.inline_agents.models import MCP, AgentGroup, AgentGroupModal, AgentSystem, IntegratedAgent, Version
+from nexus.inline_agents.models import (
+    MCP,
+    AgentGroup,
+    AgentGroupModal,
+    AgentSystem,
+    IntegratedAgent,
+    MCPConfigOption,
+    Version,
+)
 from nexus.inline_agents.models import Agent as InlineAgent
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
@@ -580,6 +588,22 @@ class OfficialAgentsV1I18nPresentationTestCase(TestCase):
             system=system,
         )
         group.mcps.add(mcp)
+        MCPConfigOption.objects.create(
+            mcp=mcp,
+            name="REQ_FIELD",
+            label="Required field",
+            type=MCPConfigOption.TEXT,
+            is_required=True,
+            order=0,
+        )
+        MCPConfigOption.objects.create(
+            mcp=mcp,
+            name="OPT_FIELD",
+            label="Optional field",
+            type=MCPConfigOption.TEXT,
+            is_required=False,
+            order=1,
+        )
 
         agent = InlineAgent.objects.create(
             name="Agent",
@@ -633,6 +657,9 @@ class OfficialAgentsV1I18nPresentationTestCase(TestCase):
         self.assertEqual(desc["en"], "Desc EN")
         self.assertEqual(desc["es"], "Desc ES")
         self.assertEqual(desc["pt"], "Desc PT")
+        cfg_by_name = {c["name"]: c for c in mcp_payload["config"]}
+        self.assertTrue(cfg_by_name["REQ_FIELD"]["is_required"])
+        self.assertFalse(cfg_by_name["OPT_FIELD"]["is_required"])
 
 
 class TestCommunicateInternallyPermission(TestCase):
