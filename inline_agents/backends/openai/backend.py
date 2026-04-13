@@ -33,6 +33,7 @@ from inline_agents.backends.openai.hooks import (
 from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from inline_agents.backends.openai.sessions import (
     RedisSession,
+    delete_openai_inline_session_keys_for_contact,
     make_session_factory,
 )
 from nexus.inline_agents.backends.openai.repository import (
@@ -142,8 +143,20 @@ class OpenAIBackend(InlineAgentsBackend):
         )
 
     def end_session(self, project_uuid: str, sanitized_urn: str):
-        session, session_id = self._get_session(project_uuid=project_uuid, sanitized_urn=sanitized_urn)
-        session.clear_session()
+        """Clear Redis session lists for supervisor and integrated collaborator agents (by slug)."""
+        from nexus.inline_agents.models import IntegratedAgent
+
+        collaborator_slugs = list(
+            IntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True)
+            .select_related("agent")
+            .values_list("agent__slug", flat=True)
+        )
+        delete_openai_inline_session_keys_for_contact(
+            get_redis_write_client(),
+            project_uuid,
+            sanitized_urn,
+            collaborator_agent_slugs=collaborator_slugs,
+        )
 
     def _get_event_manager_notify(self):
         if self._event_manager_notify is None:
