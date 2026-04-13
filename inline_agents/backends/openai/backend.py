@@ -146,11 +146,20 @@ class OpenAIBackend(InlineAgentsBackend):
         """Clear Redis session lists for supervisor and integrated collaborator agents (by slug)."""
         from nexus.inline_agents.models import IntegratedAgent
 
-        collaborator_slugs = list(
-            IntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True)
-            .select_related("agent")
-            .values_list("agent__slug", flat=True)
-        )
+        collaborator_slugs: list[str] = []
+        try:
+            collaborator_slugs = list(
+                IntegratedAgent.objects.filter(project__uuid=project_uuid, is_active=True)
+                .select_related("agent")
+                .values_list("agent__slug", flat=True)
+            )
+        except Exception as exc:
+            logger.warning(
+                f"Could not load collaborator slugs for session cleanup; "
+                f"clearing supervisor Redis key only. project={project_uuid} error={exc!s}"
+            )
+            sentry_sdk.capture_exception(exc)
+
         delete_openai_inline_session_keys_for_contact(
             get_redis_write_client(),
             project_uuid,
