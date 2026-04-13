@@ -12,7 +12,7 @@ def _apply_unique_mcp_metadata_to_integrated_agent(integrated_agent: IntegratedA
     if prefetched is None:
         mcps = list(agent.mcps.filter(is_active=True).select_related("system"))
     else:
-        mcps = [m for m in prefetched if m.is_active]
+        mcps = [mcp for mcp in prefetched if mcp.is_active]
 
     if len(mcps) != 1:
         return False
