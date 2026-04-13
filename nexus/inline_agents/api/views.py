@@ -954,7 +954,7 @@ class ActiveAgentsView(APIView):
 
         try:
             if assign:
-                _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
+                _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid, infer_mcp_metadata=True)
 
                 # Fire cache invalidation event for team update (agent assigned) (async observer)
                 notify_async(

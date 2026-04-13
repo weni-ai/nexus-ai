@@ -500,6 +500,72 @@ class AssignAgentViewTestCase(TestCase):
             "Reactivated agent should appear in team list (filtered by is_active=True)",
         )
 
+    def test_assign_sets_mcp_metadata_when_agent_has_single_active_mcp(self):
+        """Legacy PATCH assign infers mcp/system when the agent has exactly one active MCP."""
+        system = AgentSystem.objects.create(name="Infer MCP System", slug="infer-mcp-system-unique")
+        mcp = MCP.objects.create(
+            name="Infer Catalog MCP",
+            slug="infer-catalog-mcp-unique",
+            system=system,
+        )
+        agent = InlineAgent.objects.create(
+            name="Single MCP Assign Agent",
+            slug="single-mcp-assign-agent-unique",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        agent.mcps.add(mcp)
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "assign-agents",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(agent.uuid),
+            },
+        )
+        response = client.patch(url, {"assigned": True}, format="json")
+        self.assertEqual(response.status_code, 200)
+
+        integrated_agent = IntegratedAgent.objects.get(agent=agent, project=self.project)
+        self.assertEqual(integrated_agent.metadata.get("mcp"), "Infer Catalog MCP")
+        self.assertEqual(integrated_agent.metadata.get("system"), "infer-mcp-system-unique")
+
+    def test_assign_does_not_set_mcp_metadata_when_multiple_active_mcps(self):
+        system = AgentSystem.objects.create(name="Multi MCP System", slug="multi-mcp-system-unique")
+        mcp_a = MCP.objects.create(name="MCP A", slug="multi-mcp-a-unique", system=system)
+        mcp_b = MCP.objects.create(name="MCP B", slug="multi-mcp-b-unique", system=system)
+        agent = InlineAgent.objects.create(
+            name="Multi MCP Assign Agent",
+            slug="multi-mcp-assign-agent-unique",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        agent.mcps.add(mcp_a, mcp_b)
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "assign-agents",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(agent.uuid),
+            },
+        )
+        response = client.patch(url, {"assigned": True}, format="json")
+        self.assertEqual(response.status_code, 200)
+
+        integrated_agent = IntegratedAgent.objects.get(agent=agent, project=self.project)
+        self.assertIsNone(integrated_agent.metadata.get("mcp"))
+        self.assertIsNone(integrated_agent.metadata.get("system"))
+
 
 class GroupUnassignmentTestCase(TestCase):
     """Regression: group unassignment must delete all IntegratedAgent rows in the group (active and inactive)."""
