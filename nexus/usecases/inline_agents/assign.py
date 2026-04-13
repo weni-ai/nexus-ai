@@ -8,17 +8,24 @@ from nexus.projects.models import Project
 
 def _apply_unique_mcp_metadata_to_integrated_agent(integrated_agent: IntegratedAgent, agent: Agent) -> bool:
     """When the agent has exactly one active MCP, set metadata mcp/system (same keys as v1 official assign)."""
-    mcps = list(agent.mcps.filter(is_active=True).select_related("system"))
+    prefetched = getattr(agent, "_prefetched_objects_cache", {}).get("mcps")
+    if prefetched is None:
+        mcps = list(agent.mcps.filter(is_active=True).select_related("system"))
+    else:
+        mcps = [m for m in prefetched if m.is_active]
+
     if len(mcps) != 1:
         return False
+
     mcp = mcps[0]
     if integrated_agent.metadata is None:
         integrated_agent.metadata = {}
+
     integrated_agent.metadata["mcp"] = mcp.name
-    if mcp.system_id:
-        integrated_agent.metadata["system"] = mcp.system.slug
-    else:
+    if not mcp.system_id:
         integrated_agent.metadata.pop("system", None)
+    else:
+        integrated_agent.metadata["system"] = mcp.system.slug
     return True
 
 
