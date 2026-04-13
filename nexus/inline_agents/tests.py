@@ -8,7 +8,7 @@ from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.test import TestCase
 from django.utils.datastructures import MultiValueDict
 
-from nexus.inline_agents.models import Agent, AgentCredential, IntegratedAgent
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentSystem, IntegratedAgent
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
 from nexus.usecases.inline_agents.create import CreateAgentUseCase
 from nexus.usecases.inline_agents.get import GetInlineCredentialsUsecase, GetLogGroupUsecase
@@ -58,6 +58,23 @@ class TestAgentsUsecase(TestCase):
         created, integrated_agent = self.usecase.assign_agent(self.agent.uuid, self.project.uuid)
         self.assertFalse(created)
         self.assertEqual(integrated_agent.agent, self.agent)
+
+    def test_assign_agent_infer_mcp_metadata_single_mcp(self):
+        system = AgentSystem.objects.create(name="Usecase MCP Sys", slug="usecase-mcp-sys-unique")
+        mcp = MCP.objects.create(name="Only MCP", slug="usecase-only-mcp-unique", system=system)
+        self.agent.mcps.add(mcp)
+        _, integrated_agent = self.usecase.assign_agent(self.agent.uuid, self.project.uuid, infer_mcp_metadata=True)
+        self.assertEqual(integrated_agent.metadata.get("mcp"), "Only MCP")
+        self.assertEqual(integrated_agent.metadata.get("system"), "usecase-mcp-sys-unique")
+
+    def test_assign_agent_infer_mcp_metadata_skipped_when_multiple_mcps(self):
+        system = AgentSystem.objects.create(name="Usecase Multi Sys", slug="usecase-multi-sys-unique")
+        self.agent.mcps.add(
+            MCP.objects.create(name="M1", slug="usecase-m1-unique", system=system),
+            MCP.objects.create(name="M2", slug="usecase-m2-unique", system=system),
+        )
+        _, integrated_agent = self.usecase.assign_agent(self.agent.uuid, self.project.uuid, infer_mcp_metadata=True)
+        self.assertIsNone(integrated_agent.metadata.get("mcp"))
 
     def test_unassign_agent_doesnt_exist(self):
         with self.assertRaises(ValueError):
