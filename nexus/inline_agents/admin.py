@@ -581,8 +581,8 @@ class MCPAdmin(admin.ModelAdmin):
 
 @admin.register(ModelProvider)
 class ModelProviderAdmin(admin.ModelAdmin):
-    list_display = ("label",)
-    search_fields = ("label",)
+    list_display = ("label", "model_vendor")
+    search_fields = ("label", "model_vendor")
 
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 20, "cols": 80, "class": "vLargeTextField"})},
@@ -592,10 +592,11 @@ class ModelProviderAdmin(admin.ModelAdmin):
 
 @admin.register(ProjectModelProvider)
 class ProjectModelProviderAdmin(admin.ModelAdmin):
-    list_display = ("project", "provider")
-    list_filter = ("provider",)
+    list_display = ("project", "provider", "is_active", "created_on")
+    list_filter = ("provider", "is_active")
     search_fields = ("project__name", "project__uuid")
     autocomplete_fields = ["project", "provider"]
+    readonly_fields = ("created_on", "updated_on")
 
     formfield_overrides = {
         models.JSONField: {"widget": PrettyJSONWidget(attrs={"rows": 20, "cols": 80, "class": "vLargeTextField"})},

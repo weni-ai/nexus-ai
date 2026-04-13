@@ -1549,6 +1549,22 @@ class AgentBuilderAudio(APIView):
             return Response({"error": str(e)}, status=500)
 
 
+def _sync_provider_credentials_on_manager_change(project, new_manager_agent):
+    """Deactivate/reactivate ProjectModelProvider credentials when the manager changes."""
+    new_vendor = new_manager_agent.model_vendor if new_manager_agent else None
+
+    ProjectModelProvider.objects.filter(project=project, is_active=True).exclude(
+        provider__model_vendor=new_vendor
+    ).update(is_active=False)
+
+    if new_vendor:
+        ProjectModelProvider.objects.filter(
+            project=project,
+            provider__model_vendor=new_vendor,
+            is_active=False,
+        ).update(is_active=True)
+
+
 def set_project_manager_agent(project_uuid, manager_identifier: str):
     project = get_project_by_uuid(project_uuid)
 
@@ -1557,6 +1573,7 @@ def set_project_manager_agent(project_uuid, manager_identifier: str):
         if DeprecatedManagerAgent.objects.filter(id=manager_id).exists():
             project.manager_agent = None
             project.save()
+            _sync_provider_credentials_on_manager_change(project, None)
             notify_async(event="cache_invalidation:project", project=project)
             return manager_identifier
     except ValueError:
@@ -1565,6 +1582,7 @@ def set_project_manager_agent(project_uuid, manager_identifier: str):
     manager = ManagerAgent.objects.get(uuid=manager_identifier)
     project.manager_agent = manager
     project.save()
+    _sync_provider_credentials_on_manager_change(project, manager)
     notify_async(event="cache_invalidation:project", project=project)
     return str(manager.uuid)
 
@@ -1690,14 +1708,21 @@ class ProjectModelProvidersView(APIView):
 
         if manager_agent:
             try:
-                project_provider = ProjectModelProvider.objects.select_related("provider").get(project=project)
-                credentials = project_provider.credentials if isinstance(project_provider.credentials, list) else []
+                project_provider = ProjectModelProvider.objects.select_related("provider").get(
+                    project=project,
+                    provider__model_vendor=manager_agent.model_vendor,
+                    is_active=True,
+                )
+                provider_schema = project_provider.provider.credentials
+                if not isinstance(provider_schema, list):
+                    provider_schema = []
+
                 current = CurrentProviderSerializer(
                     {
                         "uuid": project_provider.provider.uuid,
                         "label": project_provider.provider.label,
                         "model": manager_agent.foundation_model,
-                        "credentials": credentials,
+                        "credentials": project_provider.masked_credentials(provider_schema),
                     }
                 ).data
             except ProjectModelProvider.DoesNotExist:
@@ -1711,6 +1736,10 @@ class ProjectModelProvidersView(APIView):
         except ProjectDoesNotExist:
             return Response(data={"error": "Project not found"}, status=404)
 
+        manager_agent = project.manager_agent
+        if not manager_agent:
+            return Response(data={"error": "Project has no manager agent"}, status=400)
+
         provider_uuid = request.data.get("provider_uuid")
         credentials = request.data.get("credentials", [])
 
@@ -1722,16 +1751,39 @@ class ProjectModelProvidersView(APIView):
         except (ModelProvider.DoesNotExist, ValueError):
             return Response(data={"error": "Provider not found"}, status=404)
 
-        manager_agent = project.manager_agent
-        if manager_agent and provider.model_vendor != manager_agent.model_vendor:
+        if provider.model_vendor != manager_agent.model_vendor:
             return Response(data={"error": "Provider does not match project model vendor"}, status=400)
 
-        ProjectModelProvider.objects.update_or_create(
+        project_provider, _ = ProjectModelProvider.objects.update_or_create(
             project=project,
-            defaults={"provider": provider, "credentials": credentials},
+            provider=provider,
+            defaults={"credentials": credentials, "is_active": True},
         )
+        project_provider.encrypt_credentials()
+        project_provider.save()
 
-        return Response(data={"provider_uuid": str(provider.uuid), "credentials": credentials}, status=200)
+        return Response(data={"provider_uuid": str(provider.uuid)}, status=200)
+
+    def delete(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        manager_agent = project.manager_agent
+        if not manager_agent:
+            return Response(data={"error": "Project has no manager agent"}, status=400)
+
+        updated = ProjectModelProvider.objects.filter(
+            project=project,
+            provider__model_vendor=manager_agent.model_vendor,
+            is_active=True,
+        ).update(is_active=False)
+
+        if not updated:
+            return Response(data={"error": "No active credentials found"}, status=404)
+
+        return Response(status=204)
 
 
 class ProjectEngineSourceView(APIView):
@@ -1743,6 +1795,18 @@ class ProjectEngineSourceView(APIView):
         except ProjectDoesNotExist:
             return Response(data={"error": "Project not found"}, status=404)
 
-        has_own = ProjectModelProvider.objects.filter(project=project).exclude(credentials=[]).exists()
+        manager_agent = project.manager_agent
+        if not manager_agent:
+            return Response(data={"engine_source": "STANDARD"})
+
+        has_own = (
+            ProjectModelProvider.objects.filter(
+                project=project,
+                provider__model_vendor=manager_agent.model_vendor,
+                is_active=True,
+            )
+            .exclude(credentials=[])
+            .exists()
+        )
 
         return Response(data={"engine_source": "OWN" if has_own else "STANDARD"})

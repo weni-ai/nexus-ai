@@ -478,7 +478,7 @@ class ProviderCredentialSerializer(serializers.Serializer):
     id = serializers.CharField()
     type = serializers.CharField()
     label = serializers.CharField()
-    value = serializers.CharField(default="")
+    value = serializers.CharField(default="", allow_blank=True)
 
 
 class ModelProviderSerializer(serializers.Serializer):
