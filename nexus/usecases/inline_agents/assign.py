@@ -1,13 +1,38 @@
 from typing import Optional, Tuple
 
-from nexus.inline_agents.models import Agent, AgentCredential, IntegratedAgent
+from django.db.models import Prefetch
+
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, IntegratedAgent
 from nexus.projects.models import Project
 
 
+def _apply_unique_mcp_metadata_to_integrated_agent(integrated_agent: IntegratedAgent, agent: Agent) -> bool:
+    """When the agent has exactly one active MCP, set metadata mcp/system (same keys as v1 official assign)."""
+    mcps = list(agent.mcps.filter(is_active=True).select_related("system"))
+    if len(mcps) != 1:
+        return False
+    mcp = mcps[0]
+    if integrated_agent.metadata is None:
+        integrated_agent.metadata = {}
+    integrated_agent.metadata["mcp"] = mcp.name
+    if mcp.system_id:
+        integrated_agent.metadata["system"] = mcp.system.slug
+    else:
+        integrated_agent.metadata.pop("system", None)
+    return True
+
+
 class AssignAgentsUsecase:
-    def assign_agent(self, agent_uuid: str, project_uuid: str) -> Tuple[bool, IntegratedAgent]:
+    def assign_agent(
+        self, agent_uuid: str, project_uuid: str, *, infer_mcp_metadata: bool = False
+    ) -> Tuple[bool, IntegratedAgent]:
         try:
-            agent = Agent.objects.get(uuid=agent_uuid)
+            if infer_mcp_metadata:
+                agent = Agent.objects.prefetch_related(
+                    Prefetch("mcps", queryset=MCP.objects.filter(is_active=True).select_related("system"))
+                ).get(uuid=agent_uuid)
+            else:
+                agent = Agent.objects.get(uuid=agent_uuid)
             project = Project.objects.get(uuid=project_uuid)
             integrated_agent, created = IntegratedAgent.objects.get_or_create(
                 agent=agent,
@@ -17,6 +42,8 @@ class AssignAgentsUsecase:
             if not created and not integrated_agent.is_active:
                 integrated_agent.is_active = True
                 integrated_agent.save(update_fields=["is_active"])
+            if infer_mcp_metadata and _apply_unique_mcp_metadata_to_integrated_agent(integrated_agent, agent):
+                integrated_agent.save(update_fields=["metadata"])
             return created, integrated_agent
         except Agent.DoesNotExist as e:
             raise ValueError("Agent not found") from e
