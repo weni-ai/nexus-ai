@@ -229,6 +229,7 @@ def generate_env():
         "ELASTIC_APM_LAMBDA_SECRET_TOKEN": "",
         "ELASTIC_APM_ENVIRONMENT": "",
         "AWS_LAMBDA_ARCHITECTURE": "arm64",
+        "AWS_LAMBDA_LOG_GROUP": "",
         "ELASTIC_APM_LAMBDA_EXTENSION_VERSION": "1-6-0",
         "ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION": "6-25-0",
         "EMAIL_PORT": "0",
