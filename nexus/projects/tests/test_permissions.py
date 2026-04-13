@@ -1,10 +1,14 @@
+from unittest import mock
+
 from django.test.testcases import TestCase
 from rest_framework.permissions import SAFE_METHODS
 
 from nexus.projects.exceptions import ProjectAuthorizationDenied
 from nexus.projects.models import ProjectAuth, ProjectAuthorizationRole
 from nexus.projects.permissions import (
+    _check_project_authorization,
     _has_project_general_permission,
+    _user_email_from_authorization_payload,
     get_user_auth,
     is_admin,
     is_contributor,
@@ -94,3 +98,30 @@ class TestProjectPermissions(TestCase):
 
         created_project_auth = get_user_auth(org_auth.user, project)
         self.assertIsInstance(created_project_auth, ProjectAuth)
+
+    def test_user_email_from_authorization_payload_with_email(self):
+        email = _user_email_from_authorization_payload(
+            {"user": {"email": "  someone@example.com  "}, "project_authorization": 3}
+        )
+        self.assertEqual(email, "someone@example.com")
+
+    def test_user_email_from_authorization_payload_missing_or_invalid(self):
+        self.assertIsNone(_user_email_from_authorization_payload({}))
+        self.assertIsNone(_user_email_from_authorization_payload({"user": None}))
+        self.assertIsNone(_user_email_from_authorization_payload({"user": "not-a-dict"}))
+        self.assertIsNone(_user_email_from_authorization_payload({"user": {"email": ""}}))
+        self.assertIsNone(_user_email_from_authorization_payload({"user": {"email": 123}}))
+
+    @mock.patch("nexus.projects.permissions.requests.get")
+    def test_check_project_authorization_returns_email_for_moderator(self, mock_get):
+        mock_response = mock.Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "project_authorization": 3,
+            "user": {"email": "moderator@example.com"},
+        }
+        mock_get.return_value = mock_response
+
+        ok, email = _check_project_authorization("Bearer t", "project-uuid", "POST")
+        self.assertTrue(ok)
+        self.assertEqual(email, "moderator@example.com")
