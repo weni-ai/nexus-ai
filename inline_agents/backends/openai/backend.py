@@ -79,6 +79,7 @@ class OpenAIBackend(InlineAgentsBackend):
         human_support: bool,
         default_supervisor_foundation_model: str,
         supervisor_agent_uuid: str,
+        project_uuid: str = None,
     ):
         if supervisor_agent_uuid:
             supervisor_repository = ManagerAgentRepository()
@@ -86,6 +87,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 use_components=use_components,
                 human_support=human_support,
                 supervisor_agent_uuid=supervisor_agent_uuid,
+                project_uuid=project_uuid,
             )
 
         supervisor_repository = OpenAISupervisorRepository()
@@ -260,12 +262,12 @@ class OpenAIBackend(InlineAgentsBackend):
             project_uuid=project_uuid, sanitized_urn=sanitized_urn, conversation_turns_to_include=turns_to_include
         )
 
-        # Cached data is always provided from start_inline_agents
         supervisor: Dict[str, Any] = self.get_supervisor(
             use_components=use_components_cached,
             human_support=human_support_cached,
             default_supervisor_foundation_model=default_supervisor_foundation_model_cached,
             supervisor_agent_uuid=supervisor_agent_uuid,
+            project_uuid=project_uuid,
         )
         data_lake_event_adapter = self._get_data_lake_event_adapter()
 

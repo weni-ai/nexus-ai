@@ -31,8 +31,14 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('uuid', models.UUIDField(default=uuid.uuid4, editable=False)),
                 ('credentials', models.JSONField(default=list)),
-                ('project', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='model_provider', to='projects.project')),
+                ('is_active', models.BooleanField(default=True)),
+                ('created_on', models.DateTimeField(auto_now_add=True, null=True)),
+                ('updated_on', models.DateTimeField(auto_now=True, null=True)),
+                ('project', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='model_providers', to='projects.project')),
                 ('provider', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='inline_agents.modelprovider')),
             ],
+            options={
+                'unique_together': {('project', 'provider')},
+            },
         ),
     ]
