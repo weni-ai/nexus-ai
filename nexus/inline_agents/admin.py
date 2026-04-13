@@ -234,7 +234,7 @@ class VersionAdmin(admin.ModelAdmin):
 class AgentAdmin(admin.ModelAdmin):
     list_display = ("uuid", "name", "project", "is_official", "agent_type", "category")
     list_filter = ("is_official", "source_type", "agent_type", "category")
-    search_fields = ("name", "project__name", "project__uuid", "slug")
+    search_fields = ("name", "project__name", "project__uuid", "slug", "uuid")
     ordering = ("project__name",)
     autocomplete_fields = ["project", "group", "systems", "agent_type", "category", "mcps"]
     inlines = [VersionInline]
