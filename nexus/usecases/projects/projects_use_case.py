@@ -8,8 +8,8 @@ from nexus.events import event_manager, notify_async
 from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.models import ContactField
 from nexus.intelligences.models import ContentBase, IntegratedIntelligence
-from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.channel_ops import get_default_channel_uuid
+from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.models import Project
 from nexus.projects.project_dto import ProjectCreationDTO
 from nexus.task_managers.file_database.bedrock import BedrockFileDatabase
@@ -134,6 +134,7 @@ class ProjectsUseCase:
             indexer_database=project_dto.indexer_database,
             agents_backend=backend,
             manager_agent=manager_agent,
+            inline_agent_switch=project_dto.inline_agent_switch,
         )
 
         self.create_brain_project_base(project_dto=project_dto, user_email=user_email, project=project)
