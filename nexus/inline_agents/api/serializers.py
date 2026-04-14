@@ -486,10 +486,15 @@ class ModelProviderSerializer(serializers.Serializer):
     label = serializers.CharField()
     models = serializers.ListField(child=serializers.CharField())
     credentials = serializers.SerializerMethodField()
+    foundation_model = serializers.SerializerMethodField()
 
     def get_credentials(self, obj):
         template = obj.credentials if isinstance(obj.credentials, list) else []
         return [{**item, "value": ""} for item in template]
+
+    def get_foundation_model(self, obj):
+        manager = getattr(obj, "manager_agent", None)
+        return manager.foundation_model if manager else None
 
 
 class CurrentProviderSerializer(serializers.Serializer):

@@ -3,7 +3,6 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from nexus.agents.encryption import encrypt_value
-from nexus.inline_agents.api.views import _sync_provider_credentials_on_manager_change
 from nexus.inline_agents.backends.openai.models import (
     ManagerAgent,
     ModelProvider,
@@ -29,7 +28,7 @@ def _create_manager(model_vendor="openai", **kwargs):
     return ManagerAgent.objects.create(**defaults)
 
 
-def _create_provider(model_vendor="openai"):
+def _create_provider(model_vendor="openai", manager_agent=None):
     schema_map = {
         "openai": {
             "label": "OpenAI",
@@ -60,6 +59,7 @@ def _create_provider(model_vendor="openai"):
         label=data["label"],
         credentials=data["credentials"],
         models=data["models"],
+        manager_agent=manager_agent,
     )
 
 
@@ -67,7 +67,8 @@ def _create_provider(model_vendor="openai"):
 class TestProjectModelProviderEncryption(TestCase):
     def setUp(self):
         self.project = ProjectFactory(name="EncryptProject")
-        self.provider = _create_provider("openai")
+        self.manager = _create_manager("openai")
+        self.provider = _create_provider("openai", manager_agent=self.manager)
 
     def test_encrypt_and_decrypt_credentials(self):
         pmp = ProjectModelProvider.objects.create(
@@ -121,7 +122,8 @@ class TestProjectModelProviderEncryption(TestCase):
         self.assertEqual(api_base_masked["value"], "https://api.example.com")
 
     def test_masked_credentials_textarea_returns_empty(self):
-        provider = _create_provider("vertex_ai")
+        vertex_manager = _create_manager("vertex_ai")
+        provider = _create_provider("vertex_ai", manager_agent=vertex_manager)
         pmp = ProjectModelProvider.objects.create(
             project=self.project,
             provider=provider,
@@ -140,66 +142,105 @@ class TestProjectModelProviderEncryption(TestCase):
         self.assertEqual(sa_masked["value"], "")
 
 
-class TestSyncProviderCredentialsOnManagerChange(TestCase):
+class TestProviderSelectsManager(TestCase):
+    """POST /model-providers switches the project's manager_agent to the provider's manager."""
+
     def setUp(self):
-        self.project = ProjectFactory(name="SyncProject")
-        self.openai_provider = _create_provider("openai")
-        self.gemini_provider = _create_provider("gemini")
-        self.openai_manager = _create_manager(model_vendor="openai")
-        self.gemini_manager = _create_manager(model_vendor="gemini")
+        self.project = ProjectFactory(name="ProviderSelectsProject")
+        self.openai_manager = _create_manager(model_vendor="openai", name="OpenAI Manager")
+        self.gemini_manager = _create_manager(model_vendor="gemini", name="Gemini Manager")
+        self.openai_provider = _create_provider("openai", manager_agent=self.openai_manager)
+        self.gemini_provider = _create_provider("gemini", manager_agent=self.gemini_manager)
 
-    def test_deactivates_on_vendor_change(self):
-        pmp = ProjectModelProvider.objects.create(
+    def test_saving_credentials_updates_project_manager(self):
+        self.project.manager_agent = self.openai_manager
+        self.project.save()
+
+        ProjectModelProvider.objects.update_or_create(
+            project=self.project,
+            provider=self.gemini_provider,
+            defaults={"credentials": [{"id": "api_key", "value": "gem-key"}], "is_active": True},
+        )
+        self.project.manager_agent = self.gemini_provider.manager_agent
+        self.project.save()
+
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.manager_agent_id, self.gemini_manager.id)
+
+    def test_deactivates_previous_provider_on_switch(self):
+        openai_pmp = ProjectModelProvider.objects.create(
             project=self.project,
             provider=self.openai_provider,
-            credentials=[{"id": "api_key", "type": "PASSWORD", "label": "API key", "value": "sk-test"}],
+            credentials=[{"id": "api_key", "value": "sk-test"}],
             is_active=True,
         )
 
-        _sync_provider_credentials_on_manager_change(self.project, self.gemini_manager)
+        ProjectModelProvider.objects.filter(project=self.project, is_active=True).exclude(
+            provider=self.gemini_provider
+        ).update(is_active=False)
+
+        ProjectModelProvider.objects.update_or_create(
+            project=self.project,
+            provider=self.gemini_provider,
+            defaults={"credentials": [{"id": "api_key", "value": "gem-key"}], "is_active": True},
+        )
+
+        openai_pmp.refresh_from_db()
+        self.assertFalse(openai_pmp.is_active)
+
+        gemini_pmp = ProjectModelProvider.objects.get(project=self.project, provider=self.gemini_provider)
+        self.assertTrue(gemini_pmp.is_active)
+
+    def test_project_without_manager_can_set_provider(self):
+        self.assertIsNone(self.project.manager_agent)
+
+        ProjectModelProvider.objects.update_or_create(
+            project=self.project,
+            provider=self.openai_provider,
+            defaults={"credentials": [{"id": "api_key", "value": "sk-test"}], "is_active": True},
+        )
+        self.project.manager_agent = self.openai_provider.manager_agent
+        self.project.save()
+
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.manager_agent_id, self.openai_manager.id)
+
+
+class TestDeleteRevertsToDefaultManager(TestCase):
+    """DELETE /model-providers deactivates credentials and reverts manager to default."""
+
+    def setUp(self):
+        self.project = ProjectFactory(name="DeleteRevertProject")
+        self.default_manager = _create_manager(model_vendor="openai", name="Default Manager", default=True, public=True)
+        self.gemini_manager = _create_manager(model_vendor="gemini", name="Gemini Manager")
+        self.gemini_provider = _create_provider("gemini", manager_agent=self.gemini_manager)
+
+    def test_delete_deactivates_and_reverts_manager(self):
+        self.project.manager_agent = self.gemini_manager
+        self.project.save()
+
+        pmp = ProjectModelProvider.objects.create(
+            project=self.project,
+            provider=self.gemini_provider,
+            credentials=[{"id": "api_key", "value": "gem-key"}],
+            is_active=True,
+        )
+
+        ProjectModelProvider.objects.filter(project=self.project, is_active=True).update(is_active=False)
+
+        default = ManagerAgent.objects.filter(default=True, public=True).order_by("created_on").last()
+        self.project.manager_agent = default
+        self.project.save()
 
         pmp.refresh_from_db()
         self.assertFalse(pmp.is_active)
 
-    def test_reactivates_when_vendor_returns(self):
-        pmp = ProjectModelProvider.objects.create(
-            project=self.project,
-            provider=self.openai_provider,
-            credentials=[{"id": "api_key", "type": "PASSWORD", "label": "API key", "value": "sk-test"}],
-            is_active=False,
-        )
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.manager_agent_id, self.default_manager.id)
 
-        _sync_provider_credentials_on_manager_change(self.project, self.openai_manager)
-
-        pmp.refresh_from_db()
-        self.assertTrue(pmp.is_active)
-
-    def test_deactivates_all_when_no_manager(self):
-        pmp = ProjectModelProvider.objects.create(
-            project=self.project,
-            provider=self.openai_provider,
-            credentials=[{"id": "api_key", "type": "PASSWORD", "label": "API key", "value": "sk-test"}],
-            is_active=True,
-        )
-
-        _sync_provider_credentials_on_manager_change(self.project, None)
-
-        pmp.refresh_from_db()
-        self.assertFalse(pmp.is_active)
-
-    def test_keeps_active_when_same_vendor(self):
-        pmp = ProjectModelProvider.objects.create(
-            project=self.project,
-            provider=self.openai_provider,
-            credentials=[{"id": "api_key", "type": "PASSWORD", "label": "API key", "value": "sk-test"}],
-            is_active=True,
-        )
-        another_openai_manager = _create_manager(model_vendor="openai", name="OpenAI v2")
-
-        _sync_provider_credentials_on_manager_change(self.project, another_openai_manager)
-
-        pmp.refresh_from_db()
-        self.assertTrue(pmp.is_active)
+    def test_delete_returns_none_when_no_active_credentials(self):
+        updated = ProjectModelProvider.objects.filter(project=self.project, is_active=True).update(is_active=False)
+        self.assertEqual(updated, 0)
 
 
 @override_settings(CREDENTIAL_ENCRYPTION_KEY=TEST_ENCRYPTION_KEY)
@@ -209,7 +250,7 @@ class TestManagerAgentRepositoryProjectCredentials(TestCase):
         self.manager = _create_manager(model_vendor="openai")
         self.project.manager_agent = self.manager
         self.project.save()
-        self.provider = _create_provider("openai")
+        self.provider = _create_provider("openai", manager_agent=self.manager)
 
     def test_uses_project_credentials_when_active(self):
         ProjectModelProvider.objects.create(
@@ -302,13 +343,12 @@ class TestEngineSourceLogic(TestCase):
         self.manager = _create_manager(model_vendor="openai")
         self.project.manager_agent = self.manager
         self.project.save()
-        self.provider = _create_provider("openai")
+        self.provider = _create_provider("openai", manager_agent=self.manager)
 
     def test_standard_when_no_credentials(self):
         has_own = (
             ProjectModelProvider.objects.filter(
                 project=self.project,
-                provider__model_vendor=self.manager.model_vendor,
                 is_active=True,
             )
             .exclude(credentials=[])
@@ -328,7 +368,6 @@ class TestEngineSourceLogic(TestCase):
         has_own = (
             ProjectModelProvider.objects.filter(
                 project=self.project,
-                provider__model_vendor=self.manager.model_vendor,
                 is_active=True,
             )
             .exclude(credentials=[])
@@ -348,28 +387,6 @@ class TestEngineSourceLogic(TestCase):
         has_own = (
             ProjectModelProvider.objects.filter(
                 project=self.project,
-                provider__model_vendor=self.manager.model_vendor,
-                is_active=True,
-            )
-            .exclude(credentials=[])
-            .exists()
-        )
-        self.assertFalse(has_own)
-
-    def test_standard_when_different_vendor(self):
-        gemini_provider = _create_provider("gemini")
-        ProjectModelProvider.objects.create(
-            project=self.project,
-            provider=gemini_provider,
-            credentials=[
-                {"id": "api_key", "type": "PASSWORD", "label": "API key", "value": "gem-key"},
-            ],
-            is_active=True,
-        )
-        has_own = (
-            ProjectModelProvider.objects.filter(
-                project=self.project,
-                provider__model_vendor=self.manager.model_vendor,
                 is_active=True,
             )
             .exclude(credentials=[])
@@ -385,7 +402,7 @@ class TestVertexAICredentialInjection(TestCase):
         self.manager = _create_manager(model_vendor="vertex_ai")
         self.project.manager_agent = self.manager
         self.project.save()
-        self.provider = _create_provider("vertex_ai")
+        self.provider = _create_provider("vertex_ai", manager_agent=self.manager)
 
     def test_injects_vertex_credentials_into_extra_args(self):
         sa_json = '{"type":"service_account","project_id":"my-proj"}'
@@ -501,7 +518,7 @@ class TestVertexAICredentialInjection(TestCase):
         openai_project.manager_agent = openai_manager
         openai_project.save()
 
-        openai_provider = _create_provider("openai")
+        openai_provider = _create_provider("openai", manager_agent=openai_manager)
         ProjectModelProvider.objects.create(
             project=openai_project,
             provider=openai_provider,

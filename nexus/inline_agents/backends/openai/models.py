@@ -131,6 +131,12 @@ class ModelProvider(models.Model):
     model_vendor = models.CharField(max_length=255)
     credentials = models.JSONField(default=dict)
     models = ArrayField(models.CharField(max_length=255))
+    manager_agent = models.ForeignKey(
+        ManagerAgent,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
 
     def __str__(self):
         return self.label
