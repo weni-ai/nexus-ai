@@ -10,7 +10,6 @@ PROVIDERS = [
             {"id": "api_base", "label": "API base URL", "type": "TEXT"},
             {"id": "api_version", "label": "API version", "type": "TEXT"},
         ],
-        "models": ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"],
     },
     {
         "label": "Azure OpenAI",
@@ -20,7 +19,6 @@ PROVIDERS = [
             {"id": "api_base", "label": "Endpoint URL", "type": "TEXT"},
             {"id": "api_version", "label": "API version", "type": "TEXT"},
         ],
-        "models": ["gpt-4o", "gpt-4o-mini"],
     },
     {
         "label": "Google Gemini",
@@ -28,7 +26,6 @@ PROVIDERS = [
         "credentials": [
             {"id": "api_key", "label": "API key", "type": "PASSWORD"},
         ],
-        "models": ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
     },
     {
         "label": "Vertex AI",
@@ -38,7 +35,6 @@ PROVIDERS = [
             {"id": "vertex_project", "label": "Project ID", "type": "TEXT"},
             {"id": "vertex_location", "label": "Location", "type": "TEXT"},
         ],
-        "models": ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
     },
 ]
 
@@ -53,7 +49,6 @@ def seed_providers(apps, schema_editor):
             defaults={
                 "label": provider_data["label"],
                 "credentials": provider_data["credentials"],
-                "models": provider_data["models"],
                 "manager_agent": manager,
             },
         )

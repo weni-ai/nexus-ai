@@ -36,21 +36,18 @@ def _create_provider(model_vendor="openai", manager_agent=None):
                 {"id": "api_key", "label": "API key", "type": "PASSWORD"},
                 {"id": "api_base", "label": "API base URL", "type": "TEXT"},
             ],
-            "models": ["gpt-4o", "gpt-4o-mini"],
         },
         "gemini": {
             "label": "Google Gemini",
             "credentials": [
                 {"id": "api_key", "label": "API key", "type": "PASSWORD"},
             ],
-            "models": ["gemini-2.5-pro"],
         },
         "vertex_ai": {
             "label": "Vertex AI",
             "credentials": [
                 {"id": "service_account_json", "label": "Service account JSON", "type": "TEXTAREA"},
             ],
-            "models": ["gemini-2.5-pro"],
         },
     }
     data = schema_map[model_vendor]
@@ -58,7 +55,6 @@ def _create_provider(model_vendor="openai", manager_agent=None):
         model_vendor=model_vendor,
         label=data["label"],
         credentials=data["credentials"],
-        models=data["models"],
         manager_agent=manager_agent,
     )
 
