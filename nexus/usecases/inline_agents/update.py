@@ -10,13 +10,12 @@ from nexus.inline_agents.models import (
     AgentGroup,
     InlineAgentMessage,
     IntegratedAgent,
-    MCPConfigOption,
-    MCPCredentialTemplate,
 )
 from nexus.intelligences.models import Conversation
 from nexus.projects.models import Project
 from nexus.usecases.inline_agents.bedrock import BedrockClient
 from nexus.usecases.inline_agents.instructions import InstructionsUseCase
+from nexus.usecases.inline_agents.mcp_definition_sync import sync_mcp_templates_from_agent_payload
 from nexus.usecases.inline_agents.tools import ToolsUseCase
 
 logger = logging.getLogger(__name__)
@@ -97,30 +96,9 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                             description_en=f"Auto-created MCP for {mcp_item}",
                         )
 
-                        if "credentials" in agent_data:
-                            for key, cred_data in agent_data["credentials"].items():
-                                if isinstance(cred_data, dict):
-                                    MCPCredentialTemplate.objects.create(
-                                        mcp=mcp,
-                                        name=key,
-                                        label=cred_data.get("label", key),
-                                        placeholder=cred_data.get("placeholder", ""),
-                                        is_confidential=cred_data.get("is_confidential", True),
-                                    )
-
-                        if "constants" in agent_data:
-                            for key, value in agent_data["constants"].items():
-                                default_val = value
-                                if isinstance(value, dict) and "default" in value:
-                                    default_val = value["default"]
-
-                                MCPConfigOption.objects.create(
-                                    mcp=mcp,
-                                    name=key,
-                                    default_value=str(default_val),
-                                    label=key,
-                                    type=MCPConfigOption.TEXT,
-                                )
+                    sync_mcp_templates_from_agent_payload(
+                        mcp, agent_data.get("credentials"), agent_data.get("constants")
+                    )
 
                     agent_obj.mcps.add(mcp)
                 elif isinstance(mcp_item, dict):
@@ -131,26 +109,7 @@ class UpdateAgentUseCase(ToolsUseCase, InstructionsUseCase):
                     if not mcp:
                         continue
 
-                    # Update or create config options if constants provided
-                    if "constants" in mcp_item:
-                        for key, value in mcp_item["constants"].items():
-                            config_option = MCPConfigOption.objects.filter(mcp=mcp, name=key).first()
-                            if config_option:
-                                config_option.default_value = value
-                                config_option.save()
-
-                    # Update or create credential templates if credentials provided
-                    if "credentials" in mcp_item:
-                        for key, cred_data in mcp_item["credentials"].items():
-                            cred_template = MCPCredentialTemplate.objects.filter(mcp=mcp, name=key).first()
-                            if cred_template:
-                                if isinstance(cred_data, dict):
-                                    cred_template.label = cred_data.get("label", cred_template.label)
-                                    cred_template.placeholder = cred_data.get("placeholder", cred_template.placeholder)
-                                    cred_template.is_confidential = cred_data.get(
-                                        "is_confidential", cred_template.is_confidential
-                                    )
-                                    cred_template.save()
+                    sync_mcp_templates_from_agent_payload(mcp, mcp_item.get("credentials"), mcp_item.get("constants"))
 
                     agent_obj.mcps.add(mcp)
 
