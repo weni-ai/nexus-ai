@@ -491,7 +491,7 @@ class ModelProviderSerializer(serializers.Serializer):
         template = obj.credentials if isinstance(obj.credentials, list) else []
         return [{**item, "value": ""} for item in template]
 
-    def get_foundation_model(self, obj):
+    def get_models(self, obj):
         manager = getattr(obj, "manager_agent", None)
         return [manager.foundation_model] if manager else None
 
