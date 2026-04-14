@@ -286,9 +286,10 @@ def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, cr
 
 def _word_prefix_match_q(lookup: str, needle: str) -> Q:
     """
-    Case-insensitive: needle matches as a prefix of the full string or of any token after
-    common separators (space, underscore, open bracket, slash). Hyphen is omitted so ``-back``
-    inside ``non-backend`` does not match the query ``back``.
+    Case-insensitive: needle matches as a prefix of the full string or of any token that
+    starts immediately after one of these separators: space, ``_``, ``(``, ``/``, ``[``.
+    Hyphen (``-``) is intentionally *not* a separator, so ``back`` does not match inside
+    ``non-backend`` via a ``-back`` token boundary.
     Works on SQLite and PostgreSQL (no DB-specific regex).
     """
     if not needle:
@@ -372,9 +373,10 @@ class OfficialAgentsV1(APIView):
             "Optional filters: `type`, `group`, `category`, `system`. "
             "Query `name` is a case-insensitive word-prefix match on the list title: legacy agents use "
             "`Agent.name`; grouped agents use modal `agent_name` when set (same label as the UI), else "
-            "`AgentGroup.name` (not template `Agent.name`). A word is any segment after whitespace or `_([/`; "
-            "mid-word substrings do not match. "
-            "Use `project_uuid` to mark `assigned`."
+            "`AgentGroup.name` (not template `Agent.name`). A word starts at the beginning of the field or "
+            "after a separator among space, `_`, `(`, `[`, `/`. Hyphen `-` is not a separator, so hyphenated "
+            "text stays one word (for example, `back` does not match `non-backend`). Mid-word substrings do not "
+            "match. Use `project_uuid` to mark `assigned`."
         ),
         parameters=[
             OpenApiParameter(
