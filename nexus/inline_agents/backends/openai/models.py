@@ -123,3 +123,90 @@ class ManagerAgent(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class ModelProvider(models.Model):
+    uuid = models.UUIDField(default=uuid4, editable=False)
+    label = models.CharField(max_length=255)
+    model_vendor = models.CharField(max_length=255)
+    credentials = models.JSONField(default=dict)
+    manager_agent = models.ForeignKey(
+        ManagerAgent,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    def __str__(self):
+        return self.label
+
+
+class ProjectModelProvider(models.Model):
+    uuid = models.UUIDField(default=uuid4, editable=False)
+    project = models.ForeignKey("projects.Project", on_delete=models.CASCADE, related_name="model_providers")
+    provider = models.ForeignKey(ModelProvider, on_delete=models.CASCADE)
+    credentials = models.JSONField(default=list)
+    is_active = models.BooleanField(default=True)
+    created_on = models.DateTimeField(auto_now_add=True, null=True)
+    updated_on = models.DateTimeField(auto_now=True, null=True)
+
+    class Meta:
+        unique_together = ("project", "provider")
+
+    def __str__(self):
+        return f"{self.project} - {self.provider}"
+
+    @property
+    def decrypted_credentials(self):
+        from nexus.agents.encryption import decrypt_value
+
+        if not isinstance(self.credentials, list):
+            return self.credentials
+        result = []
+        for field in self.credentials:
+            entry = dict(field)
+            if entry.get("value") and entry.get("type") in ("PASSWORD", "TEXTAREA"):
+                entry["value"] = decrypt_value(entry["value"])
+            result.append(entry)
+        return result
+
+    def encrypt_credentials(self):
+        from nexus.agents.encryption import encrypt_value
+
+        if not isinstance(self.credentials, list):
+            return
+        encrypted = []
+        for field in self.credentials:
+            entry = dict(field)
+            if entry.get("value") and entry.get("type") in ("PASSWORD", "TEXTAREA"):
+                entry["value"] = encrypt_value(entry["value"])
+            encrypted.append(entry)
+        self.credentials = encrypted
+
+    def masked_credentials(self, provider_schema):
+        """Return credentials with sensitive values masked for API responses."""
+        decrypted = self.decrypted_credentials
+        decrypted_map = {f["id"]: f.get("value", "") for f in decrypted if isinstance(f, dict)}
+
+        result = []
+        for schema_field in provider_schema:
+            field_id = schema_field["id"]
+            field_type = schema_field["type"]
+            raw_value = decrypted_map.get(field_id, "")
+
+            if field_type == "TEXTAREA":
+                masked = ""
+            elif field_type == "PASSWORD" and raw_value:
+                masked = raw_value[:4] + "..." + raw_value[-4:] if len(raw_value) > 8 else "****"
+            else:
+                masked = raw_value
+
+            result.append(
+                {
+                    "id": field_id,
+                    "type": field_type,
+                    "label": schema_field["label"],
+                    "value": masked,
+                }
+            )
+        return result
