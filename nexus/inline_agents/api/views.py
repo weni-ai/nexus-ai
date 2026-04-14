@@ -284,6 +284,47 @@ def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, cr
     return payload
 
 
+def _word_prefix_match_q(lookup: str, needle: str) -> Q:
+    """
+    Case-insensitive: needle matches as a prefix of the full string or of any token that
+    starts immediately after one of these separators: space, ``_``, ``(``, ``/``, ``[``.
+    Hyphen (``-``) is intentionally *not* a separator, so ``back`` does not match inside
+    ``non-backend`` via a ``-back`` token boundary.
+    Works on SQLite and PostgreSQL (no DB-specific regex).
+    """
+    if not needle:
+        return Q(pk__in=[])
+
+    q = Q(**{f"{lookup}__istartswith": needle})
+    for sep in (" ", "_", "(", "/", "["):
+        q |= Q(**{f"{lookup}__icontains": f"{sep}{needle}"})
+    return q
+
+
+def _official_agents_v1_name_filter_q(name_filter: str) -> Q:
+    """
+    Word-prefix search aligned with the list card title (_build_group_payload).
+
+    Grouped: if ``AgentGroupModal.agent_name`` is set, match only that (same as the UI).
+    Otherwise match ``AgentGroup.name``. Legacy (no group): ``Agent.name``.
+    """
+    needle = name_filter.strip()
+    if not needle:
+        return Q(pk__in=[])
+
+    modal_title_set = Q(group__modal__agent_name__isnull=False) & ~Q(group__modal__agent_name__exact="")
+    modal_title_unset = (
+        Q(group__modal__isnull=True) | Q(group__modal__agent_name__isnull=True) | Q(group__modal__agent_name__exact="")
+    )
+
+    grouped_match = Q(group__isnull=False) & (
+        (modal_title_set & _word_prefix_match_q("group__modal__agent_name", needle))
+        | (modal_title_unset & _word_prefix_match_q("group__name", needle))
+    )
+    legacy_match = Q(group__isnull=True) & _word_prefix_match_q("name", needle)
+    return grouped_match | legacy_match
+
+
 def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dict:
     """
     Consolidate agents that belong to the same group into a single entry with agents list.
@@ -329,7 +370,13 @@ class OfficialAgentsV1(APIView):
             "New agents (with group) are consolidated by group with consolidated systems, MCPs, and credentials. "
             "Each grouped agent includes a 'agents' array listing all available agents with their UUIDs, "
             "allowing the frontend to select which agent to view details for. "
-            "Optional filters: `type`, `group`, `category`, `system`. Use `project_uuid` to mark `assigned`."
+            "Optional filters: `type`, `group`, `category`, `system`. "
+            "Query `name` is a case-insensitive word-prefix match on the list title: legacy agents use "
+            "`Agent.name`; grouped agents use modal `agent_name` when set (same label as the UI), else "
+            "`AgentGroup.name` (not template `Agent.name`). A word starts at the beginning of the field or "
+            "after a separator among space, `_`, `(`, `[`, `/`. Hyphen `-` is not a separator, so hyphenated "
+            "text stays one word (for example, `back` does not match `non-backend`). Mid-word substrings do not "
+            "match. Use `project_uuid` to mark `assigned`."
         ),
         parameters=[
             OpenApiParameter(
@@ -353,7 +400,7 @@ class OfficialAgentsV1(APIView):
     )
     def get(self, request, *args, **kwargs):
         project_uuid = request.query_params.get("project_uuid")
-        name_filter = request.query_params.get("name")
+        name_filter = (request.query_params.get("name") or "").strip()
         type_filter = request.query_params.get("type")
         group_filter = request.query_params.get("group")
         category_filter = request.query_params.get("category")
@@ -374,7 +421,7 @@ class OfficialAgentsV1(APIView):
 
         agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
         if name_filter:
-            agents = agents.filter(name__icontains=name_filter)
+            agents = agents.filter(_official_agents_v1_name_filter_q(name_filter))
         if type_filter:
             agents = agents.filter(agent_type__slug__iexact=type_filter)
         if group_filter:
