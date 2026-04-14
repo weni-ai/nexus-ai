@@ -19,7 +19,9 @@ from nexus.inline_agents.api.official_agents_helpers import (
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     AgentSystemSerializer,
+    CurrentProviderSerializer,
     IntegratedAgentSerializer,
+    ModelProviderSerializer,
     OfficialAgentDetailSerializer,
     OfficialAgentListSerializer,
     OfficialAgentsAssignRequestSerializer,
@@ -27,7 +29,7 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer,
     official_agent_modal_presentation_payload,
 )
-from nexus.inline_agents.backends.openai.models import ManagerAgent
+from nexus.inline_agents.backends.openai.models import ManagerAgent, ModelProvider, ProjectModelProvider
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
 from nexus.inline_agents.models import Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
@@ -1605,7 +1607,7 @@ def set_project_manager_agent(project_uuid, manager_identifier: str):
             notify_async(event="cache_invalidation:project", project=project)
             return manager_identifier
     except ValueError:
-        pass  # ignoring error because it's not a deprecated manager agent
+        pass
 
     manager = ManagerAgent.objects.get(uuid=manager_identifier)
     project.manager_agent = manager
@@ -1712,3 +1714,122 @@ class AgentManagersView(APIView):
             data.update({"currentManager": current_manager_id})
 
         return Response(data=data)
+
+
+class ProjectModelProvidersView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        current = None
+        providers = ModelProvider.objects.select_related("manager_agent").all()
+        providers_data = ModelProviderSerializer(providers, many=True).data
+
+        try:
+            project_provider = ProjectModelProvider.objects.select_related("provider", "provider__manager_agent").get(
+                project=project, is_active=True
+            )
+
+            provider_schema = project_provider.provider.credentials
+            if not isinstance(provider_schema, list):
+                provider_schema = []
+
+            manager = project_provider.provider.manager_agent
+            model_name = manager.foundation_model if manager else ""
+
+            current = CurrentProviderSerializer(
+                {
+                    "uuid": project_provider.provider.uuid,
+                    "label": project_provider.provider.label,
+                    "model": model_name,
+                    "credentials": project_provider.masked_credentials(provider_schema),
+                }
+            ).data
+        except ProjectModelProvider.DoesNotExist:
+            current = None
+
+        return Response(data={"current": current, "providers": providers_data})
+
+    def post(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        provider_uuid = request.data.get("provider_uuid")
+        credentials = request.data.get("credentials", [])
+
+        if not provider_uuid:
+            return Response(data={"error": "provider_uuid is required"}, status=400)
+
+        try:
+            provider = ModelProvider.objects.select_related("manager_agent").get(uuid=provider_uuid)
+        except (ModelProvider.DoesNotExist, ValueError):
+            return Response(data={"error": "Provider not found"}, status=404)
+
+        if not provider.manager_agent:
+            return Response(data={"error": "Provider has no associated manager agent"}, status=400)
+
+        ProjectModelProvider.objects.filter(project=project, is_active=True).exclude(provider=provider).update(
+            is_active=False
+        )
+
+        project_provider, _ = ProjectModelProvider.objects.update_or_create(
+            project=project,
+            provider=provider,
+            defaults={"credentials": credentials, "is_active": True},
+        )
+        project_provider.encrypt_credentials()
+        project_provider.save()
+
+        project.manager_agent = provider.manager_agent
+        project.save()
+        notify_async(event="cache_invalidation:project", project=project)
+
+        return Response(data={"provider_uuid": str(provider.uuid)}, status=200)
+
+    def delete(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        updated = ProjectModelProvider.objects.filter(
+            project=project,
+            is_active=True,
+        ).update(is_active=False)
+
+        if not updated:
+            return Response(data={"error": "No active credentials found"}, status=404)
+
+        default_manager = ManagerAgent.objects.filter(default=True, public=True).order_by("created_on").last()
+        project.manager_agent = default_manager
+        project.save()
+        notify_async(event="cache_invalidation:project", project=project)
+
+        return Response(status=204)
+
+
+class ProjectEngineSourceView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        has_own = (
+            ProjectModelProvider.objects.filter(
+                project=project,
+                is_active=True,
+            )
+            .exclude(credentials=[])
+            .exists()
+        )
+
+        return Response(data={"engine_source": "OWN" if has_own else "STANDARD"})
