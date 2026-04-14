@@ -115,6 +115,9 @@ class ManagerAgentRepository(SupervisorRepository):
         use_components: bool = use_components
 
         project_creds = self._get_project_credentials(project_uuid, supervisor_data["model_vendor"])
+        print(f"[DEBUG CREDS] project_uuid={project_uuid}, model_vendor={supervisor_data['model_vendor']}")
+        print(f"[DEBUG CREDS] project_creds={project_creds}")
+        print(f"[DEBUG CREDS] supervisor api_key={repr(supervisor_data.get('api_key'))}")
 
         if project_creds:
             user_model_credentials = {
@@ -122,14 +125,17 @@ class ManagerAgentRepository(SupervisorRepository):
                 "api_base": project_creds.get("api_base", ""),
                 "api_version": project_creds.get("api_version", ""),
             }
+            print(f"[DEBUG CREDS] BRANCH=project_creds -> api_key={repr(user_model_credentials.get('api_key', '')[:8])}")
         elif supervisor_data["api_key"]:
             user_model_credentials = {
                 "api_key": supervisor_data["api_key"],
                 "api_base": supervisor_data["api_base"],
                 "api_version": supervisor_data["api_version"],
             }
+            print(f"[DEBUG CREDS] BRANCH=supervisor -> api_key={repr(user_model_credentials.get('api_key', '')[:8])}")
         else:
             user_model_credentials = {}
+            print("[DEBUG CREDS] BRANCH=empty -> user_model_credentials={}")
 
         manager_extra_args = supervisor_data["manager_extra_args"] or {}
 

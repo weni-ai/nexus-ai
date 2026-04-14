@@ -728,6 +728,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
                 user_model_credentials = external_team.pop("user_model_credentials", {})
                 model_vendor = external_team.pop("model_vendor", "")
+                print(f"[DEBUG CREDS] backend before _set_openai_client: creds={user_model_credentials}, vendor={model_vendor}")
                 self._set_openai_client(user_model_credentials, model_vendor)
                 result = client.run_streamed(
                     **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
@@ -976,16 +977,22 @@ class OpenAIBackend(InlineAgentsBackend):
         sentry_sdk.capture_exception(exception)
 
     def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
+        print(f"[DEBUG CREDS] _set_openai_client called: creds_truthy={bool(user_model_credentials)}, vendor={model_vendor}")
         if user_model_credentials and model_vendor.lower() == "openai":
             api_key = user_model_credentials.get("api_key", "")
             base_url = user_model_credentials.get("api_base", "")
+            print(f"[DEBUG CREDS] _set_openai_client INSIDE IF: api_key={repr(api_key[:8] if api_key else '')}, base_url={repr(base_url)}")
 
             if user_model_credentials.get("api_base", ""):
                 client = AsyncOpenAI(
                     base_url=base_url,
                     api_key=api_key,
                 )
+                print(f"[DEBUG CREDS] _set_openai_client -> set_default_openai_client with custom base_url")
                 set_default_openai_client(client)
                 return
 
+            print(f"[DEBUG CREDS] _set_openai_client -> set_default_openai_key({repr(api_key[:8] if api_key else '')})")
             set_default_openai_key(api_key)
+        else:
+            print(f"[DEBUG CREDS] _set_openai_client -> SKIPPED (no creds or vendor != openai)")

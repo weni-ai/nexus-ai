@@ -53,6 +53,7 @@ def _final_output_from_tool_dict(parsed: dict) -> tuple[bool, list]:
 
 class AgentModel:
     def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
+        print(f"[DEBUG CREDS] AgentModel.get_model model={model}, creds_keys={list(user_model_credentials.keys()) if user_model_credentials else 'None'}")
         if "litellm" in model:
             cleaned_model = model.replace("litellm/", "")
             kwargs = {
@@ -60,14 +61,19 @@ class AgentModel:
             }
 
             if "vertex" in model:
+                print(f"[DEBUG CREDS] AgentModel.get_model -> vertex path, kwargs={kwargs}")
                 return LitellmModel(**kwargs)
 
             if user_model_credentials.get("api_key"):
                 kwargs["api_key"] = user_model_credentials.get("api_key")
+                print(f"[DEBUG CREDS] AgentModel.get_model -> set api_key={repr(kwargs['api_key'][:8])}")
             if user_model_credentials.get("api_base"):
                 kwargs["base_url"] = user_model_credentials.get("api_base")
+                print(f"[DEBUG CREDS] AgentModel.get_model -> set base_url={kwargs['base_url']}")
 
+            print(f"[DEBUG CREDS] AgentModel.get_model -> LitellmModel kwargs_keys={list(kwargs.keys())}")
             return LitellmModel(**kwargs)
+        print(f"[DEBUG CREDS] AgentModel.get_model -> raw string model={model}")
         return model
 
     def custom_tool_handler(
