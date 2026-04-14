@@ -286,7 +286,7 @@ def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, cr
 
 def _official_agents_v1_name_filter_q(name_filter: str) -> Q:
     """Match list card semantics: grouped agents by group/modal title, legacy by Agent.name."""
-    grouped_title = Q(group__name__icontains=name_filter) | Q(group__modal__agent_name__icontains=name_filter)
+    grouped_title = Q(group__modal__agent_name__icontains=name_filter)
     return (Q(group__isnull=False) & grouped_title) | Q(group__isnull=True, name__icontains=name_filter)
 
 
