@@ -749,6 +749,122 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
         self.assertEqual(miss.status_code, 200)
         self.assertEqual(miss.json()["legacy"], [])
 
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_name_prefix_does_not_match_mid_word_substring(self, mock_has_permission):
+        mock_has_permission.return_value = True
+
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        owner_project = ProjectFactory()
+
+        group = AgentGroup.objects.create(
+            name="Feedback Recorder", slug="official-name-prefix-midword-group", shared_config={}
+        )
+        agent = InlineAgent.objects.create(
+            name="NPS Recorder 2.0",
+            slug="official-name-prefix-midword-agent",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="m",
+            project=owner_project,
+            group=group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid), "name": "order"},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(group.slug, [a["group"] for a in resp.json()["new"]["agents"]])
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_name_prefix_matches_start_of_second_word(self, mock_has_permission):
+        mock_has_permission.return_value = True
+
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        owner_project = ProjectFactory()
+
+        legacy = InlineAgent.objects.create(
+            name="VTEX Order Helper",
+            slug="official-name-prefix-second-word",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="m",
+            project=owner_project,
+            group=None,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=legacy)
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid), "name": "order"},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(str(legacy.uuid), [a["uuid"] for a in resp.json()["legacy"]])
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_name_prefix_backend_not_feedback_recorder(self, mock_has_permission):
+        mock_has_permission.return_value = True
+
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        owner_project = ProjectFactory()
+
+        fb_group = AgentGroup.objects.create(
+            name="Feedback Recorder", slug="official-name-prefix-fb-group", shared_config={}
+        )
+        fb_agent = InlineAgent.objects.create(
+            name="NPS Recorder 2.0",
+            slug="official-name-prefix-fb-agent",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="m",
+            project=owner_project,
+            group=fb_group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=fb_agent)
+
+        be_legacy = InlineAgent.objects.create(
+            name="Backend Agent",
+            slug="official-name-prefix-backend-agent",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="m",
+            project=owner_project,
+            group=None,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=be_legacy)
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid), "name": "back"},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(fb_group.slug, [a["group"] for a in resp.json()["new"]["agents"]])
+        self.assertIn(str(be_legacy.uuid), [a["uuid"] for a in resp.json()["legacy"]])
+
 
 class OfficialAgentsV1I18nPresentationTestCase(TestCase):
     """Official list/detail APIs expose presentation and MCP description as nested locale maps (en/pt/es)."""
