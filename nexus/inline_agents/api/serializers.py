@@ -472,3 +472,32 @@ class OfficialAgentsAssignResponseSerializer(serializers.Serializer):
     assigned_created = serializers.BooleanField(required=False)
     assigned_deleted = serializers.BooleanField(required=False)
     created_credentials = serializers.ListField(child=serializers.CharField(), required=False)
+
+
+class ProviderCredentialSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    type = serializers.CharField()
+    label = serializers.CharField()
+    value = serializers.CharField(default="", allow_blank=True)
+
+
+class ModelProviderSerializer(serializers.Serializer):
+    uuid = serializers.UUIDField()
+    label = serializers.CharField()
+    credentials = serializers.SerializerMethodField()
+    models = serializers.SerializerMethodField()
+
+    def get_credentials(self, obj):
+        template = obj.credentials if isinstance(obj.credentials, list) else []
+        return [{**item, "value": ""} for item in template]
+
+    def get_models(self, obj):
+        manager = getattr(obj, "manager_agent", None)
+        return [manager.foundation_model] if manager else None
+
+
+class CurrentProviderSerializer(serializers.Serializer):
+    uuid = serializers.UUIDField()
+    label = serializers.CharField()
+    model = serializers.CharField()
+    credentials = ProviderCredentialSerializer(many=True)
