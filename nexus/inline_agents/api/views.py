@@ -302,18 +302,26 @@ def _word_prefix_match_q(lookup: str, needle: str) -> Q:
 
 def _official_agents_v1_name_filter_q(name_filter: str) -> Q:
     """
-    Word-prefix search on display-aligned fields: grouped agents use AgentGroup.name and
-    modal agent_name; legacy (no group) uses Agent.name. Does not match mid-word substrings
-    (e.g. 'order' in 'Recorder').
+    Word-prefix search aligned with the list card title (_build_group_payload).
+
+    Grouped: if ``AgentGroupModal.agent_name`` is set, match only that (same as the UI).
+    Otherwise match ``AgentGroup.name``. Legacy (no group): ``Agent.name``.
     """
     needle = name_filter.strip()
     if not needle:
         return Q(pk__in=[])
 
-    grouped_title = _word_prefix_match_q("group__name", needle) | _word_prefix_match_q(
-        "group__modal__agent_name", needle
+    modal_title_set = Q(group__modal__agent_name__isnull=False) & ~Q(group__modal__agent_name__exact="")
+    modal_title_unset = (
+        Q(group__modal__isnull=True) | Q(group__modal__agent_name__isnull=True) | Q(group__modal__agent_name__exact="")
     )
-    return (Q(group__isnull=False) & grouped_title) | (Q(group__isnull=True) & _word_prefix_match_q("name", needle))
+
+    grouped_match = Q(group__isnull=False) & (
+        (modal_title_set & _word_prefix_match_q("group__modal__agent_name", needle))
+        | (modal_title_unset & _word_prefix_match_q("group__name", needle))
+    )
+    legacy_match = Q(group__isnull=True) & _word_prefix_match_q("name", needle)
+    return grouped_match | legacy_match
 
 
 def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dict:
@@ -363,8 +371,9 @@ class OfficialAgentsV1(APIView):
             "allowing the frontend to select which agent to view details for. "
             "Optional filters: `type`, `group`, `category`, `system`. "
             "Query `name` is a case-insensitive word-prefix match on the list title: legacy agents use "
-            "`Agent.name`; grouped agents use `AgentGroup.name` and modal `agent_name` (not template "
-            "`Agent.name`). A word is any segment after whitespace or `_([/`; mid-word substrings do not match. "
+            "`Agent.name`; grouped agents use modal `agent_name` when set (same label as the UI), else "
+            "`AgentGroup.name` (not template `Agent.name`). A word is any segment after whitespace or `_([/`; "
+            "mid-word substrings do not match. "
             "Use `project_uuid` to mark `assigned`."
         ),
         parameters=[
