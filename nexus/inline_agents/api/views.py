@@ -318,6 +318,12 @@ def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, cr
     return payload
 
 
+def _official_agents_v1_name_filter_q(name_filter: str) -> Q:
+    """Match list card semantics: grouped agents by group/modal title, legacy by Agent.name."""
+    grouped_title = Q(group__modal__agent_name__icontains=name_filter)
+    return (Q(group__isnull=False) & grouped_title) | Q(group__isnull=True, name__icontains=name_filter)
+
+
 def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dict:
     """
     Consolidate agents that belong to the same group into a single entry with agents list.
@@ -363,7 +369,10 @@ class OfficialAgentsV1(APIView):
             "New agents (with group) are consolidated by group with consolidated systems, MCPs, and credentials. "
             "Each grouped agent includes a 'agents' array listing all available agents with their UUIDs, "
             "allowing the frontend to select which agent to view details for. "
-            "Optional filters: `type`, `group`, `category`, `system`. Use `project_uuid` to mark `assigned`."
+            "Optional filters: `type`, `group`, `category`, `system`. "
+            "Query `name` matches legacy agents on `Agent.name`; for grouped agents it matches the group title "
+            "(`AgentGroup.name` or modal `agent_name`), not individual template agent names. "
+            "Use `project_uuid` to mark `assigned`."
         ),
         parameters=[
             OpenApiParameter(
@@ -408,7 +417,7 @@ class OfficialAgentsV1(APIView):
 
         agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
         if name_filter:
-            agents = agents.filter(name__icontains=name_filter)
+            agents = agents.filter(_official_agents_v1_name_filter_q(name_filter))
         if type_filter:
             agents = agents.filter(agent_type__slug__iexact=type_filter)
         if group_filter:
@@ -431,6 +440,8 @@ class OfficialAgentsV1(APIView):
                 .prefetch_related("systems")
             )
             agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
+            if name_filter:
+                agents = agents.filter(_official_agents_v1_name_filter_q(name_filter))
 
         consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
 
