@@ -484,7 +484,6 @@ class ProviderCredentialSerializer(serializers.Serializer):
 class ModelProviderSerializer(serializers.Serializer):
     uuid = serializers.UUIDField()
     label = serializers.CharField()
-    models = serializers.ListField(child=serializers.CharField())
     credentials = serializers.SerializerMethodField()
     foundation_model = serializers.SerializerMethodField()
 

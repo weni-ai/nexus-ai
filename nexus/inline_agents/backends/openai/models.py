@@ -130,7 +130,6 @@ class ModelProvider(models.Model):
     label = models.CharField(max_length=255)
     model_vendor = models.CharField(max_length=255)
     credentials = models.JSONField(default=dict)
-    models = ArrayField(models.CharField(max_length=255))
     manager_agent = models.ForeignKey(
         ManagerAgent,
         on_delete=models.SET_NULL,
