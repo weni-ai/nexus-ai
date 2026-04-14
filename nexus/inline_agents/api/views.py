@@ -1549,22 +1549,6 @@ class AgentBuilderAudio(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-def _sync_provider_credentials_on_manager_change(project, new_manager_agent):
-    """Deactivate/reactivate ProjectModelProvider credentials when the manager changes."""
-    new_vendor = new_manager_agent.model_vendor if new_manager_agent else None
-
-    ProjectModelProvider.objects.filter(project=project, is_active=True).exclude(
-        provider__model_vendor=new_vendor
-    ).update(is_active=False)
-
-    if new_vendor:
-        ProjectModelProvider.objects.filter(
-            project=project,
-            provider__model_vendor=new_vendor,
-            is_active=False,
-        ).update(is_active=True)
-
-
 def set_project_manager_agent(project_uuid, manager_identifier: str):
     project = get_project_by_uuid(project_uuid)
 
@@ -1573,16 +1557,14 @@ def set_project_manager_agent(project_uuid, manager_identifier: str):
         if DeprecatedManagerAgent.objects.filter(id=manager_id).exists():
             project.manager_agent = None
             project.save()
-            _sync_provider_credentials_on_manager_change(project, None)
             notify_async(event="cache_invalidation:project", project=project)
             return manager_identifier
     except ValueError:
-        pass  # ignoring error because it's not a deprecated manager agent
+        pass
 
     manager = ManagerAgent.objects.get(uuid=manager_identifier)
     project.manager_agent = manager
     project.save()
-    _sync_provider_credentials_on_manager_change(project, manager)
     notify_async(event="cache_invalidation:project", project=project)
     return str(manager.uuid)
 
@@ -1697,36 +1679,31 @@ class ProjectModelProvidersView(APIView):
             return Response(data={"error": "Project not found"}, status=404)
 
         current = None
-        manager_agent: ManagerAgent | None = project.manager_agent
-
-        if manager_agent:
-            providers = ModelProvider.objects.filter(model_vendor=manager_agent.model_vendor)
-        else:
-            providers = ModelProvider.objects.none()
-
+        providers = ModelProvider.objects.select_related("manager_agent").all()
         providers_data = ModelProviderSerializer(providers, many=True).data
 
-        if manager_agent:
-            try:
-                project_provider = ProjectModelProvider.objects.select_related("provider").get(
-                    project=project,
-                    provider__model_vendor=manager_agent.model_vendor,
-                    is_active=True,
-                )
-                provider_schema = project_provider.provider.credentials
-                if not isinstance(provider_schema, list):
-                    provider_schema = []
+        try:
+            project_provider = ProjectModelProvider.objects.select_related("provider", "provider__manager_agent").get(
+                project=project, is_active=True
+            )
 
-                current = CurrentProviderSerializer(
-                    {
-                        "uuid": project_provider.provider.uuid,
-                        "label": project_provider.provider.label,
-                        "model": manager_agent.foundation_model,
-                        "credentials": project_provider.masked_credentials(provider_schema),
-                    }
-                ).data
-            except ProjectModelProvider.DoesNotExist:
-                current = None
+            provider_schema = project_provider.provider.credentials
+            if not isinstance(provider_schema, list):
+                provider_schema = []
+
+            manager = project_provider.provider.manager_agent
+            model_name = manager.foundation_model if manager else ""
+
+            current = CurrentProviderSerializer(
+                {
+                    "uuid": project_provider.provider.uuid,
+                    "label": project_provider.provider.label,
+                    "model": model_name,
+                    "credentials": project_provider.masked_credentials(provider_schema),
+                }
+            ).data
+        except ProjectModelProvider.DoesNotExist:
+            current = None
 
         return Response(data={"current": current, "providers": providers_data})
 
@@ -1736,10 +1713,6 @@ class ProjectModelProvidersView(APIView):
         except ProjectDoesNotExist:
             return Response(data={"error": "Project not found"}, status=404)
 
-        manager_agent = project.manager_agent
-        if not manager_agent:
-            return Response(data={"error": "Project has no manager agent"}, status=400)
-
         provider_uuid = request.data.get("provider_uuid")
         credentials = request.data.get("credentials", [])
 
@@ -1747,12 +1720,16 @@ class ProjectModelProvidersView(APIView):
             return Response(data={"error": "provider_uuid is required"}, status=400)
 
         try:
-            provider = ModelProvider.objects.get(uuid=provider_uuid)
+            provider = ModelProvider.objects.select_related("manager_agent").get(uuid=provider_uuid)
         except (ModelProvider.DoesNotExist, ValueError):
             return Response(data={"error": "Provider not found"}, status=404)
 
-        if provider.model_vendor != manager_agent.model_vendor:
-            return Response(data={"error": "Provider does not match project model vendor"}, status=400)
+        if not provider.manager_agent:
+            return Response(data={"error": "Provider has no associated manager agent"}, status=400)
+
+        ProjectModelProvider.objects.filter(project=project, is_active=True).exclude(provider=provider).update(
+            is_active=False
+        )
 
         project_provider, _ = ProjectModelProvider.objects.update_or_create(
             project=project,
@@ -1762,6 +1739,10 @@ class ProjectModelProvidersView(APIView):
         project_provider.encrypt_credentials()
         project_provider.save()
 
+        project.manager_agent = provider.manager_agent
+        project.save()
+        notify_async(event="cache_invalidation:project", project=project)
+
         return Response(data={"provider_uuid": str(provider.uuid)}, status=200)
 
     def delete(self, request, project_uuid):
@@ -1770,18 +1751,18 @@ class ProjectModelProvidersView(APIView):
         except ProjectDoesNotExist:
             return Response(data={"error": "Project not found"}, status=404)
 
-        manager_agent = project.manager_agent
-        if not manager_agent:
-            return Response(data={"error": "Project has no manager agent"}, status=400)
-
         updated = ProjectModelProvider.objects.filter(
             project=project,
-            provider__model_vendor=manager_agent.model_vendor,
             is_active=True,
         ).update(is_active=False)
 
         if not updated:
             return Response(data={"error": "No active credentials found"}, status=404)
+
+        default_manager = ManagerAgent.objects.filter(default=True, public=True).order_by("created_on").last()
+        project.manager_agent = default_manager
+        project.save()
+        notify_async(event="cache_invalidation:project", project=project)
 
         return Response(status=204)
 
@@ -1795,14 +1776,9 @@ class ProjectEngineSourceView(APIView):
         except ProjectDoesNotExist:
             return Response(data={"error": "Project not found"}, status=404)
 
-        manager_agent = project.manager_agent
-        if not manager_agent:
-            return Response(data={"engine_source": "STANDARD"})
-
         has_own = (
             ProjectModelProvider.objects.filter(
                 project=project,
-                provider__model_vendor=manager_agent.model_vendor,
                 is_active=True,
             )
             .exclude(credentials=[])

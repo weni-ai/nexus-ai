@@ -45,13 +45,16 @@ PROVIDERS = [
 
 def seed_providers(apps, schema_editor):
     ModelProvider = apps.get_model("inline_agents", "ModelProvider")
+    ManagerAgent = apps.get_model("inline_agents", "ManagerAgent")
     for provider_data in PROVIDERS:
+        manager = ManagerAgent.objects.filter(model_vendor=provider_data["model_vendor"]).first()
         ModelProvider.objects.update_or_create(
             model_vendor=provider_data["model_vendor"],
             defaults={
                 "label": provider_data["label"],
                 "credentials": provider_data["credentials"],
                 "models": provider_data["models"],
+                "manager_agent": manager,
             },
         )
 

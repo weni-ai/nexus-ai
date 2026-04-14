@@ -23,6 +23,7 @@ class Migration(migrations.Migration):
                 ('model_vendor', models.CharField(max_length=255)),
                 ('credentials', models.JSONField(default=dict)),
                 ('models', django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=255), size=None)),
+                ('manager_agent', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='inline_agents.manageragent')),
             ],
         ),
         migrations.CreateModel(
