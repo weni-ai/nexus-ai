@@ -75,7 +75,7 @@ class ManagerAgentRepository(SupervisorRepository):
         try:
             project_provider = ProjectModelProvider.objects.select_related("provider").get(
                 project__uuid=project_uuid,
-                provider__model_vendor=model_vendor,
+                provider__model_vendor__iexact=model_vendor,
                 is_active=True,
             )
         except ProjectModelProvider.DoesNotExist:
@@ -139,7 +139,7 @@ class ManagerAgentRepository(SupervisorRepository):
 
         manager_extra_args = supervisor_data["manager_extra_args"] or {}
 
-        if project_creds and supervisor_data["model_vendor"] == "vertex_ai":
+        if project_creds and supervisor_data["model_vendor"].lower() == "vertex_ai":
             sa_json = project_creds.get("service_account_json", "")
             if sa_json:
                 manager_extra_args = {**manager_extra_args, "vertex_credentials": sa_json}
