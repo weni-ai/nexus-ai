@@ -485,7 +485,7 @@ class ModelProviderSerializer(serializers.Serializer):
     uuid = serializers.UUIDField()
     label = serializers.CharField()
     credentials = serializers.SerializerMethodField()
-    foundation_model = serializers.SerializerMethodField()
+    models = serializers.SerializerMethodField()
 
     def get_credentials(self, obj):
         template = obj.credentials if isinstance(obj.credentials, list) else []
@@ -493,7 +493,7 @@ class ModelProviderSerializer(serializers.Serializer):
 
     def get_foundation_model(self, obj):
         manager = getattr(obj, "manager_agent", None)
-        return manager.foundation_model if manager else None
+        return [manager.foundation_model] if manager else None
 
 
 class CurrentProviderSerializer(serializers.Serializer):
