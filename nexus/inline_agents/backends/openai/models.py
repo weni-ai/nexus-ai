@@ -128,8 +128,8 @@ class ManagerAgent(models.Model):
 class ModelProvider(models.Model):
     uuid = models.UUIDField(default=uuid4, editable=False)
     label = models.CharField(max_length=255)
-    model_vendor = models.CharField(max_length=255)
-    credentials = models.JSONField(default=dict)
+    model_vendor = models.CharField(max_length=255, unique=True)
+    credentials = models.JSONField(default=list)
     manager_agent = models.ForeignKey(
         ManagerAgent,
         on_delete=models.SET_NULL,
