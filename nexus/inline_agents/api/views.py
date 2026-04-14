@@ -318,10 +318,36 @@ def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, cr
     return payload
 
 
+def _word_prefix_match_q(lookup: str, needle: str) -> Q:
+    """
+    Case-insensitive: needle matches as a prefix of the full string or of any token after
+    common separators (space, underscore, open bracket, slash). Hyphen is omitted so ``-back``
+    inside ``non-backend`` does not match the query ``back``.
+    Works on SQLite and PostgreSQL (no DB-specific regex).
+    """
+    if not needle:
+        return Q(pk__in=[])
+
+    q = Q(**{f"{lookup}__istartswith": needle})
+    for sep in (" ", "_", "(", "/", "["):
+        q |= Q(**{f"{lookup}__icontains": f"{sep}{needle}"})
+    return q
+
+
 def _official_agents_v1_name_filter_q(name_filter: str) -> Q:
-    """Match list card semantics: grouped agents by group/modal title, legacy by Agent.name."""
-    grouped_title = Q(group__modal__agent_name__icontains=name_filter)
-    return (Q(group__isnull=False) & grouped_title) | Q(group__isnull=True, name__icontains=name_filter)
+    """
+    Word-prefix search on display-aligned fields: grouped agents use AgentGroup.name and
+    modal agent_name; legacy (no group) uses Agent.name. Does not match mid-word substrings
+    (e.g. 'order' in 'Recorder').
+    """
+    needle = name_filter.strip()
+    if not needle:
+        return Q(pk__in=[])
+
+    grouped_title = _word_prefix_match_q("group__name", needle) | _word_prefix_match_q(
+        "group__modal__agent_name", needle
+    )
+    return (Q(group__isnull=False) & grouped_title) | (Q(group__isnull=True) & _word_prefix_match_q("name", needle))
 
 
 def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dict:
@@ -370,8 +396,9 @@ class OfficialAgentsV1(APIView):
             "Each grouped agent includes a 'agents' array listing all available agents with their UUIDs, "
             "allowing the frontend to select which agent to view details for. "
             "Optional filters: `type`, `group`, `category`, `system`. "
-            "Query `name` matches legacy agents on `Agent.name`; for grouped agents it matches the group title "
-            "(`AgentGroup.name` or modal `agent_name`), not individual template agent names. "
+            "Query `name` is a case-insensitive word-prefix match on the list title: legacy agents use "
+            "`Agent.name`; grouped agents use `AgentGroup.name` and modal `agent_name` (not template "
+            "`Agent.name`). A word is any segment after whitespace or `_([/`; mid-word substrings do not match. "
             "Use `project_uuid` to mark `assigned`."
         ),
         parameters=[
@@ -396,7 +423,7 @@ class OfficialAgentsV1(APIView):
     )
     def get(self, request, *args, **kwargs):
         project_uuid = request.query_params.get("project_uuid")
-        name_filter = request.query_params.get("name")
+        name_filter = (request.query_params.get("name")).strip()
         type_filter = request.query_params.get("type")
         group_filter = request.query_params.get("group")
         category_filter = request.query_params.get("category")
@@ -440,8 +467,6 @@ class OfficialAgentsV1(APIView):
                 .prefetch_related("systems")
             )
             agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
-            if name_filter:
-                agents = agents.filter(_official_agents_v1_name_filter_q(name_filter))
 
         consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
 
