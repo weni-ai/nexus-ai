@@ -1,9 +1,12 @@
+import logging
 from typing import Any, Dict, List, Optional
 
 from inline_agents.repository import SupervisorRepository
-from nexus.inline_agents.backends.openai.models import ManagerAgent
+from nexus.inline_agents.backends.openai.models import ManagerAgent, ProjectModelProvider
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as Supervisor
 from nexus.inline_agents.models import Agent
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAISupervisorRepository(SupervisorRepository):
@@ -65,11 +68,37 @@ class ManagerAgentRepository(SupervisorRepository):
         supervisor_dict.pop("_state")
         return supervisor_dict
 
+    def _get_project_credentials(self, project_uuid: Optional[str], model_vendor: str) -> Dict[str, Any]:
+        """Check for active project-level provider credentials."""
+        if not project_uuid:
+            return {}
+        try:
+            project_provider = ProjectModelProvider.objects.select_related("provider").get(
+                project__uuid=project_uuid,
+                provider__model_vendor=model_vendor,
+                is_active=True,
+            )
+        except ProjectModelProvider.DoesNotExist:
+            return {}
+
+        decrypted = project_provider.decrypted_credentials
+        cred_map = {}
+        for field in decrypted:
+            if isinstance(field, dict) and field.get("id") and field.get("value"):
+                cred_map[field["id"]] = field["value"]
+
+        if not cred_map:
+            return {}
+
+        logger.info("Using project-level credentials for project %s, vendor %s", project_uuid, model_vendor)
+        return cred_map
+
     def get_supervisor(
         self,
         human_support: Optional[bool] = None,
         use_components: Optional[bool] = None,
         supervisor_agent_uuid: Optional[str] = None,
+        project_uuid: Optional[str] = None,
     ) -> dict:
         def get_supervisor_object(supervisor_uuid: str) -> ManagerAgent:
             try:
@@ -85,22 +114,42 @@ class ManagerAgentRepository(SupervisorRepository):
         use_human_support: bool = human_support
         use_components: bool = use_components
 
-        user_model_credentials = (
-            {
+        project_creds = self._get_project_credentials(project_uuid, supervisor_data["model_vendor"])
+
+        if project_creds:
+            user_model_credentials = {
+                "api_key": project_creds.get("api_key", ""),
+                "api_base": project_creds.get("api_base", ""),
+                "api_version": project_creds.get("api_version", ""),
+            }
+        elif supervisor_data["api_key"]:
+            user_model_credentials = {
                 "api_key": supervisor_data["api_key"],
                 "api_base": supervisor_data["api_base"],
                 "api_version": supervisor_data["api_version"],
             }
-            if supervisor_data["api_key"]
-            else {}
-        )
+        else:
+            user_model_credentials = {}
+
+        manager_extra_args = supervisor_data["manager_extra_args"] or {}
+
+        if project_creds and supervisor_data["model_vendor"] == "vertex_ai":
+            sa_json = project_creds.get("service_account_json", "")
+            if sa_json:
+                manager_extra_args = {**manager_extra_args, "vertex_credentials": sa_json}
+                vertex_project = project_creds.get("vertex_project", "")
+                if vertex_project:
+                    manager_extra_args["vertex_project"] = vertex_project
+                vertex_location = project_creds.get("vertex_location", "")
+                if vertex_location:
+                    manager_extra_args["vertex_location"] = vertex_location
 
         model_settings: Dict[str, Any] = {
             "model_has_reasoning": supervisor_data["model_has_reasoning"],
             "reasoning_effort": supervisor_data["reasoning_effort"],
             "reasoning_summary": supervisor_data["reasoning_summary"],
             "parallel_tool_calls": supervisor_data["parallel_tool_calls"],
-            "manager_extra_args": supervisor_data["manager_extra_args"] or {},
+            "manager_extra_args": manager_extra_args,
         }
 
         supervisor_dict = {
