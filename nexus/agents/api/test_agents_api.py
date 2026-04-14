@@ -707,6 +707,58 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
         groups = [a["group"] for a in resp.json()["new"]["agents"]]
         self.assertIn(group.slug, groups)
 
+        miss_internal = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid), "name": "internal"},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(miss_internal.status_code, 200)
+        self.assertNotIn(group.slug, [a["group"] for a in miss_internal.json()["new"]["agents"]])
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_grouped_modal_title_does_not_fall_back_to_group_name(self, mock_has_permission):
+        """When modal agent_name is set, `name` must not match only AgentGroup.name (UI shows modal)."""
+        mock_has_permission.return_value = True
+
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        owner_project = ProjectFactory()
+
+        group = AgentGroup.objects.create(name="order_payment", slug="official-name-modal-only-group", shared_config={})
+        AgentGroupModal.objects.create(group=group, agent_name="Payment Agent")
+        agent = InlineAgent.objects.create(
+            name="Payment Agent (VTEX)",
+            slug="official-name-modal-only-agent",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="m",
+            project=owner_project,
+            group=group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        list_url = reverse("v1-official-agents")
+
+        no_order = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid), "name": "order"},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(no_order.status_code, 200)
+        self.assertNotIn(group.slug, [a["group"] for a in no_order.json()["new"]["agents"]])
+
+        yes_pay = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid), "name": "pay"},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(yes_pay.status_code, 200)
+        self.assertIn(group.slug, [a["group"] for a in yes_pay.json()["new"]["agents"]])
+
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_legacy_without_group_matches_agent_name(self, mock_has_permission):
         mock_has_permission.return_value = True
