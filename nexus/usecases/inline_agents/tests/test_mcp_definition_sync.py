@@ -42,3 +42,42 @@ class TestSyncMcpTemplatesFromAgentPayload(TestCase):
         self.assertEqual(opt.default_value, "false")
         self.assertEqual(opt.options, [{"name": "Enabled", "value": "true"}])
         self.assertEqual(opt.label, "Send WhatsApp Catalog")
+
+    def test_scalar_constant_only_updates_default_preserves_type_and_options(self):
+        MCPConfigOption.objects.create(
+            mcp=self.mcp,
+            name="DISPLAY_MODE",
+            label="Send catalog",
+            type=MCPConfigOption.RADIO,
+            default_value="false",
+            options=[{"name": "Enabled", "value": "true"}],
+        )
+        sync_mcp_templates_from_agent_payload(self.mcp, None, {"DISPLAY_MODE": "true"})
+        opt = MCPConfigOption.objects.get(mcp=self.mcp, name="DISPLAY_MODE")
+        self.assertEqual(opt.type, MCPConfigOption.RADIO)
+        self.assertEqual(opt.default_value, "true")
+        self.assertEqual(opt.options, [{"name": "Enabled", "value": "true"}])
+        self.assertEqual(opt.label, "Send catalog")
+
+    def test_dict_without_default_preserves_existing_default_value(self):
+        MCPConfigOption.objects.create(
+            mcp=self.mcp,
+            name="TRADE_POLICY",
+            label="Old label",
+            type=MCPConfigOption.TEXT,
+            default_value="1",
+            options=[],
+        )
+        sync_mcp_templates_from_agent_payload(
+            self.mcp,
+            None,
+            {"TRADE_POLICY": {"label": "Trade Policy (sc)"}},
+        )
+        opt = MCPConfigOption.objects.get(mcp=self.mcp, name="TRADE_POLICY")
+        self.assertEqual(opt.default_value, "1")
+        self.assertEqual(opt.label, "Trade Policy (sc)")
+        self.assertEqual(opt.type, MCPConfigOption.TEXT)
+
+    def test_empty_constant_dict_does_not_create_row(self):
+        sync_mcp_templates_from_agent_payload(self.mcp, None, {"UNUSED": {}})
+        self.assertFalse(MCPConfigOption.objects.filter(mcp=self.mcp, name="UNUSED").exists())

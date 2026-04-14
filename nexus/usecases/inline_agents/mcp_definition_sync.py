@@ -1,5 +1,3 @@
-"""Apply agent-definition credentials/constants to MCP templates (CLI push / YAML)."""
-
 from __future__ import annotations
 
 from typing import Any
@@ -22,14 +20,6 @@ def _mcp_constant_type(raw: Any) -> str:
     return _TYPE_MAP.get(raw.strip().lower(), MCPConfigOption.TEXT)
 
 
-def _scalar_default(value: Any) -> Any:
-    if isinstance(value, dict):
-        if "default" in value:
-            return value["default"]
-        return None
-    return value
-
-
 def _normalize_select_options(options: Any) -> list[dict[str, Any]]:
     if not isinstance(options, list):
         return []
@@ -44,33 +34,111 @@ def _normalize_select_options(options: Any) -> list[dict[str, Any]]:
     return normalized
 
 
-def _config_option_defaults(name: str, value: Any) -> dict[str, Any]:
+def _upsert_credential_template(mcp: MCP, key: str, cred_data: dict[str, Any]) -> None:
+    """Create or partially update a credential template (only keys present in cred_data)."""
+    existing = MCPCredentialTemplate.objects.filter(mcp=mcp, name=key).first()
+    if existing:
+        fields: list[str] = []
+        if "label" in cred_data:
+            existing.label = str(cred_data["label"])[:255]
+            fields.append("label")
+        if "placeholder" in cred_data:
+            existing.placeholder = str(cred_data.get("placeholder") or "")[:255]
+            fields.append("placeholder")
+        if "is_confidential" in cred_data:
+            existing.is_confidential = bool(cred_data["is_confidential"])
+            fields.append("is_confidential")
+        if fields:
+            existing.save(update_fields=fields)
+        return
+
+    MCPCredentialTemplate.objects.create(
+        mcp=mcp,
+        name=key,
+        label=str(cred_data.get("label", key))[:255],
+        placeholder=str(cred_data.get("placeholder") or "")[:255],
+        is_confidential=cred_data.get("is_confidential", True),
+    )
+
+
+def _apply_scalar_config_option(mcp: MCP, name: str, value: Any, existing: MCPConfigOption | None) -> None:
+    if existing:
+        MCPConfigOption.objects.filter(pk=existing.pk).update(default_value=value)
+        return
+    MCPConfigOption.objects.create(
+        mcp=mcp,
+        name=name,
+        label=str(name)[:255],
+        type=MCPConfigOption.TEXT,
+        options=[],
+        is_required=False,
+        default_value=value,
+    )
+
+
+def _config_option_updates_from_dict(value: dict[str, Any], existing: MCPConfigOption | None) -> dict[str, Any]:
+    updates: dict[str, Any] = {}
+    if "label" in value and isinstance(value["label"], str):
+        updates["label"] = value["label"][:255]
+
+    if "type" in value:
+        updates["type"] = _mcp_constant_type(value["type"])
+
+    merged_type = updates.get("type") or (existing.type if existing else MCPConfigOption.TEXT)
+
+    if "options" in value:
+        if merged_type in (MCPConfigOption.RADIO, MCPConfigOption.SELECT):
+            updates["options"] = _normalize_select_options(value["options"])
+        else:
+            updates["options"] = []
+
+    if "default" in value:
+        updates["default_value"] = value["default"]
+
+    if "required" in value:
+        updates["is_required"] = bool(value["required"])
+
+    if "type" in value and updates["type"] not in (MCPConfigOption.RADIO, MCPConfigOption.SELECT):
+        updates["options"] = []
+
+    return updates
+
+
+def _apply_dict_config_option(mcp: MCP, name: str, value: dict[str, Any], existing: MCPConfigOption | None) -> None:
+    updates = _config_option_updates_from_dict(value, existing)
+    if existing:
+        if not updates:
+            return
+        for field, val in updates.items():
+            setattr(existing, field, val)
+        existing.save()
+        return
+
+    if not updates:
+        return
+
+    MCPConfigOption.objects.create(
+        mcp=mcp,
+        name=name,
+        label=updates.get("label", str(name)[:255]),
+        type=updates.get("type", MCPConfigOption.TEXT),
+        options=updates.get("options", []),
+        is_required=updates.get("is_required", False),
+        default_value=updates.get("default_value"),
+    )
+
+
+def _upsert_mcp_config_option_from_constant(mcp: MCP, name: str, value: Any) -> None:
+    """Create or partially update a config option.
+
+    - Scalar value: existing rows only get ``default_value`` updated (type/label/options preserved).
+    - Dict value: only keys present in the dict are applied; omitting ``default`` leaves ``default_value`` unchanged.
+    """
+    existing = MCPConfigOption.objects.filter(mcp=mcp, name=name).first()
     if not isinstance(value, dict):
-        return {
-            "default_value": value,
-            "label": str(name)[:255],
-            "type": MCPConfigOption.TEXT,
-            "options": [],
-            "is_required": False,
-        }
-
-    opt_type = _mcp_constant_type(value.get("type"))
-    raw_options = value.get("options") or []
-    if opt_type in (MCPConfigOption.RADIO, MCPConfigOption.SELECT):
-        options_payload = _normalize_select_options(raw_options)
-    else:
-        options_payload = []
-
-    label_raw = value.get("label")
-    label = str(label_raw)[:255] if isinstance(label_raw, str) else str(name)[:255]
-
-    return {
-        "default_value": _scalar_default(value),
-        "label": label,
-        "type": opt_type,
-        "options": options_payload,
-        "is_required": bool(value.get("required", False)),
-    }
+        _apply_scalar_config_option(mcp, name, value, existing)
+        return
+    _apply_dict_config_option(mcp, name, value, existing)
 
 
 def sync_mcp_templates_from_agent_payload(
@@ -82,21 +150,8 @@ def sync_mcp_templates_from_agent_payload(
     if credentials:
         for key, cred_data in credentials.items():
             if isinstance(cred_data, dict):
-                MCPCredentialTemplate.objects.update_or_create(
-                    mcp=mcp,
-                    name=key,
-                    defaults={
-                        "label": str(cred_data.get("label", key))[:255],
-                        "placeholder": str(cred_data.get("placeholder") or "")[:255],
-                        "is_confidential": cred_data.get("is_confidential", True),
-                    },
-                )
+                _upsert_credential_template(mcp, key, cred_data)
 
     if constants:
         for key, value in constants.items():
-            defaults = _config_option_defaults(key, value)
-            MCPConfigOption.objects.update_or_create(
-                mcp=mcp,
-                name=key,
-                defaults=defaults,
-            )
+            _upsert_mcp_config_option_from_constant(mcp, key, value)
