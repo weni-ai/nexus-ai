@@ -432,7 +432,7 @@ class OfficialAgentsV1(APIView):
     )
     def get(self, request, *args, **kwargs):
         project_uuid = request.query_params.get("project_uuid")
-        name_filter = (request.query_params.get("name")).strip()
+        name_filter = (request.query_params.get("name") or "").strip()
         type_filter = request.query_params.get("type")
         group_filter = request.query_params.get("group")
         category_filter = request.query_params.get("category")
