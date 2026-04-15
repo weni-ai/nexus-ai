@@ -6,6 +6,7 @@ from typing import Optional
 import logfire
 import nest_asyncio
 from celery import Celery, schedules
+from celery.signals import worker_ready
 from django.conf import settings
 from langfuse import get_client
 
@@ -59,16 +60,22 @@ if "test" in sys.argv or getattr(settings, "CELERY_ALWAYS_EAGER", False):
 
 nest_asyncio.apply()
 
-logfire.configure(
-    service_name="openai-agents",
-    send_to_logfire=False,
-)
 
-if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
-    logfire.instrument_openai_agents()
-    langfuse = get_client()
+@worker_ready.connect
+def setup_logfire_and_langfuse(sender, **kwargs):
+    logfire.configure(
+        service_name="openai-agents",
+        send_to_logfire=False,
+    )
 
-    if langfuse.auth_check():
-        logger.info("Langfuse client is authenticated and ready!")
-    else:
-        logger.error("Langfuse authentication failed. Check credentials and host.")
+    if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
+        logfire.instrument_openai_agents()
+
+        try:
+            langfuse = get_client()
+            if langfuse.auth_check():
+                logger.info("Langfuse client is authenticated and ready!")
+            else:
+                logger.error("Langfuse authentication failed. Check credentials and host.")
+        except Exception:
+            logger.exception("Failed to connect to Langfuse, worker will continue without it.")
