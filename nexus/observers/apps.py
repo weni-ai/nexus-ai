@@ -9,6 +9,7 @@ OBSERVER_MODULES = [
     "nexus.intelligences.observer",
     "nexus.logs.observers",
     "nexus.projects.observer",
+    "nexus.usecases.projects.project_type_update_eda_observer",
     "router.services.cache_invalidation_observers",
     "router.tasks.inline_message_observers",
     "router.tasks.workflow_observers",

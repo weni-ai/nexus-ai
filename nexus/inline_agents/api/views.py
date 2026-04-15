@@ -46,9 +46,41 @@ from nexus.usecases.intelligences.get_by_uuid import (
     get_project_and_content_base_data,
 )
 from nexus.usecases.projects import get_project_by_uuid
+from nexus.usecases.projects.project_type_update_eda_observer import PROJECT_TYPE_UPDATE_EDA_EVENT
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.users.api.authentication import UserGlobalTokenAuthentication
 from router.entities import message_factory
+
+
+def _multi_agent_request_user_email(request) -> str:
+    user = getattr(request, "user", None)
+    if user is None or getattr(user, "is_anonymous", True):
+        return ""
+
+    email = getattr(user, "email", None)
+    if isinstance(email, str):
+        return email.strip()
+
+    return ""
+
+
+def _parse_multi_agents_bool(raw) -> tuple[bool | None, str | None]:
+    """Coerce API input to bool. Returns (value, error_message)."""
+    if isinstance(raw, bool):
+        return raw, None
+
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized in ("true", "1", "yes", "on"):
+            return True, None
+        if normalized in ("false", "0", "no", "off", ""):
+            return False, None
+
+    if isinstance(raw, int) and raw in (0, 1):
+        return bool(raw), None
+
+    return None, "multi_agents must be a boolean"
+
 
 logger = logging.getLogger(__name__)
 
@@ -1489,12 +1521,17 @@ class MultiAgentView(APIView):
             return Response({"error": str(e)}, status=500)
 
     def patch(self, request, project_uuid):
-        multi_agents = request.data.get("multi_agents")
-        if multi_agents is None:
+        multi_agents_raw = request.data.get("multi_agents")
+        if multi_agents_raw is None:
             return Response({"error": "multi_agents field is required"}, status=400)
+
+        multi_agents, parse_error = _parse_multi_agents_bool(multi_agents_raw)
+        if parse_error:
+            return Response({"error": parse_error}, status=400)
 
         try:
             project = Project.objects.get(uuid=project_uuid)
+            previous_inline_agent_switch = project.inline_agent_switch
 
             # AB 1.0 projects have inline_agent_switch=False and use BedrockBackend
             is_legacy_project_enabling = (
@@ -1514,6 +1551,14 @@ class MultiAgentView(APIView):
                 event="cache_invalidation:project",
                 project=project,
             )
+
+            if not previous_inline_agent_switch and multi_agents:
+                notify_async(
+                    event=PROJECT_TYPE_UPDATE_EDA_EVENT,
+                    project_uuid=str(project.uuid),
+                    user_email=_multi_agent_request_user_email(request),
+                    is_multi_agents=True,
+                )
 
             return Response({"message": "Project updated successfully", "multi_agents": multi_agents}, status=200)
         except Exception as e:
