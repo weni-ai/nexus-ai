@@ -105,10 +105,14 @@ class TestProjectPermissions(TestCase):
         )
         self.assertEqual(email, "someone@example.com")
 
+    def test_user_email_from_authorization_payload_user_is_email_string(self):
+        email = _user_email_from_authorization_payload({"user": "  caller@example.com  ", "project_authorization": 3})
+        self.assertEqual(email, "caller@example.com")
+
     def test_user_email_from_authorization_payload_missing_or_invalid(self):
         self.assertIsNone(_user_email_from_authorization_payload({}))
         self.assertIsNone(_user_email_from_authorization_payload({"user": None}))
-        self.assertIsNone(_user_email_from_authorization_payload({"user": "not-a-dict"}))
+        self.assertIsNone(_user_email_from_authorization_payload({"user": "   "}))
         self.assertIsNone(_user_email_from_authorization_payload({"user": {"email": ""}}))
         self.assertIsNone(_user_email_from_authorization_payload({"user": {"email": 123}}))
 
@@ -119,6 +123,20 @@ class TestProjectPermissions(TestCase):
         mock_response.json.return_value = {
             "project_authorization": 3,
             "user": {"email": "moderator@example.com"},
+        }
+        mock_get.return_value = mock_response
+
+        ok, email = _check_project_authorization("Bearer t", "project-uuid", "POST")
+        self.assertTrue(ok)
+        self.assertEqual(email, "moderator@example.com")
+
+    @mock.patch("nexus.projects.permissions.requests.get")
+    def test_check_project_authorization_returns_email_when_user_is_string(self, mock_get):
+        mock_response = mock.Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "project_authorization": 3,
+            "user": "moderator@example.com",
         }
         mock_get.return_value = mock_response
 
