@@ -16,12 +16,14 @@ def _is_authorized_response(response):
 def _user_email_from_authorization_payload(payload: dict) -> str | None:
     """Reads email from the project authorization API `user` object when present."""
     user = payload.get("user")
-    if not isinstance(user, dict):
-        return None
-    email = user.get("email")
-    if isinstance(email, str):
-        stripped = email.strip()
+    if isinstance(user, str):
+        stripped = user.strip()
         return stripped or None
+    if isinstance(user, dict):
+        email = user.get("email")
+        if isinstance(email, str):
+            stripped = email.strip()
+            return stripped or None
     return None
 
 
