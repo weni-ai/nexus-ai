@@ -53,6 +53,13 @@ from router.entities import message_factory
 
 
 def _multi_agent_request_user_email(request) -> str:
+    """Prefer email from project-auth API (CombinedExternalProjectPermission), then Django user."""
+    external = getattr(request, "project_auth_user_email", None)
+    if isinstance(external, str):
+        stripped = external.strip()
+        if stripped:
+            return stripped
+
     user = getattr(request, "user", None)
     if user is None or getattr(user, "is_anonymous", True):
         return ""

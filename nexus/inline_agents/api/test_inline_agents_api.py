@@ -150,6 +150,25 @@ class MultiAgentViewTestCase(TestCase):
         )
 
     @mock.patch("nexus.usecases.projects.project_type_update_eda.publish_project_type_update")
+    @mock.patch("nexus.projects.permissions._check_project_authorization")
+    def test_patch_inline_switch_publishes_eda_with_project_auth_api_user_email(self, mock_check_auth, mock_publish):
+        mock_check_auth.return_value = (True, "identity-from-auth-api@example.com")
+        client = APIClient()
+        url = reverse("multi-agents", kwargs={"project_uuid": str(self.project.uuid)})
+
+        with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", []):
+            response = client.patch(
+                url, {"multi_agents": True}, format="json", HTTP_AUTHORIZATION="Bearer project-token"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        mock_publish.assert_called_once_with(
+            project_uuid=str(self.project.uuid),
+            user_email="identity-from-auth-api@example.com",
+            is_multi_agents=True,
+        )
+
+    @mock.patch("nexus.usecases.projects.project_type_update_eda.publish_project_type_update")
     def test_patch_inline_switch_stays_true_does_not_publish_eda_again(self, mock_publish):
         self.project.inline_agent_switch = True
         self.project.save(update_fields=["inline_agent_switch"])
