@@ -238,10 +238,11 @@ class OpenAITeamAdapter(TeamAdapter):
             channel_uuid=channel_uuid,
             content_base_uuid=content_base_uuid,
             use_components=use_components,
-            use_human_support=supervisor.get("use_components"),
+            use_human_support=supervisor.get("use_human_support", False),
             components_instructions=supervisor.get("components_instructions", ""),
             components_instructions_up=supervisor.get("components_instructions_up", ""),
             human_support_instructions=supervisor.get("human_support_instructions", ""),
+            include_streaming_merge_prompts=use_components,
         )
 
         agents_as_tools: List[CollaboratorEntity] = cls.build_agents(
@@ -265,6 +266,15 @@ class OpenAITeamAdapter(TeamAdapter):
 
         supervisor_tools = cls._get_tools(supervisor["tools"])
         supervisor_tools.extend(agents_as_tools)
+
+        if use_components:
+            from inline_agents.backends.openai.components_tools_stream import (
+                get_supervisor_component_tools_for_streaming_merge,
+            )
+
+            fmt_cfg = supervisor.get("formatter_agent_configurations") or {}
+            ftd = fmt_cfg.get("formatter_tools_descriptions")
+            supervisor_tools.extend(get_supervisor_component_tools_for_streaming_merge(ftd))
 
         supervisor_agent = SupervisorEntity(
             name="manager",
@@ -299,7 +309,6 @@ class OpenAITeamAdapter(TeamAdapter):
                 hooks_state=hooks_state,
                 contact_fields=contact_fields,
             ),
-            "formatter_agent_instructions": supervisor.get("formatter_agent_components_instructions", ""),
             "user_model_credentials": user_model_credentials,
             "model_vendor": supervisor.get("model_vendor", ""),
         }
@@ -387,6 +396,7 @@ class OpenAITeamAdapter(TeamAdapter):
             components_instructions=supervisor.get("components_instructions", ""),
             components_instructions_up=supervisor.get("components_instructions_up", ""),
             human_support_instructions=supervisor.get("human_support_instructions", ""),
+            include_streaming_merge_prompts=False,
         )
 
         for agent in agents:
@@ -478,7 +488,6 @@ class OpenAITeamAdapter(TeamAdapter):
                 hooks_state=hooks_state,
                 contact_fields=contact_fields,
             ),
-            "formatter_agent_instructions": supervisor.get("formatter_agent_components_instructions", ""),
         }
 
     @classmethod
@@ -1056,6 +1065,7 @@ class OpenAITeamAdapter(TeamAdapter):
         components_instructions,
         components_instructions_up,
         human_support_instructions,
+        include_streaming_merge_prompts: bool = False,
     ) -> str:
         general_context_data = {
             "PROJECT_ID": project_id,
@@ -1086,6 +1096,15 @@ class OpenAITeamAdapter(TeamAdapter):
             components_template_up = Template(components_instructions_up)
             components_context_up = TemplateContext(general_context_data)
             components_instructions_up = components_template_up.render(components_context_up)
+
+            if include_streaming_merge_prompts:
+                from inline_agents.backends.openai.prompts_components_stream import (
+                    PROMPT_SUPERVISOR_COMPONENTS,
+                    PROMPT_SUPERVISOR_COMPONENTS_UP,
+                )
+
+                components_instructions_up = components_instructions_up + "\n\n" + PROMPT_SUPERVISOR_COMPONENTS_UP
+                components_instructions = components_instructions + "\n\n" + PROMPT_SUPERVISOR_COMPONENTS
 
         template_string = instruction
         template = Template(template_string)
