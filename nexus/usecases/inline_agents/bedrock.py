@@ -102,6 +102,10 @@ class BedrockClient:
         if environment_variables:
             create_function_params["Environment"] = {"Variables": environment_variables}
 
+        log_group = getattr(settings, "AWS_LAMBDA_LOG_GROUP", "")
+        if log_group:
+            create_function_params["LoggingConfig"] = {"LogGroup": log_group}
+
         try:
             lambda_function = self.lambda_client.create_function(**create_function_params)
             lambda_arn = lambda_function.get("FunctionArn")
@@ -173,6 +177,7 @@ class BedrockClient:
                 },
                 exc_info=True,
             )
+            current_config = {}
             current_layer_arns = []
             existing_vars = {}
             current_architecture = getattr(settings, "AWS_LAMBDA_ARCHITECTURE", "x86_64")
@@ -232,6 +237,13 @@ class BedrockClient:
                 update_config_params["Environment"] = {"Variables": non_apm_vars}
                 needs_update = True
 
+        desired_log_group = getattr(settings, "AWS_LAMBDA_LOG_GROUP", "")
+        if desired_log_group:
+            current_log_group = current_config.get("LoggingConfig", {}).get("LogGroup", "")
+            if current_log_group != desired_log_group:
+                update_config_params["LoggingConfig"] = {"LogGroup": desired_log_group}
+                needs_update = True
+
         # Update configuration if needed
         if needs_update:
             self.lambda_client.update_function_configuration(**update_config_params)
@@ -251,15 +263,20 @@ class BedrockClient:
             )
 
     def get_log_group(self, tool_name: str) -> dict:
-        response = self.cloudwatch_client.describe_log_groups(logGroupNamePrefix=f"/aws/lambda/{tool_name}", limit=1)
+        log_group_name = getattr(settings, "AWS_LAMBDA_LOG_GROUP", "")
 
-        log_group = response.get("logGroups", {})
+        if not log_group_name:
+            log_group_name = f"/aws/lambda/{tool_name}"
 
-        if log_group:
+        response = self.cloudwatch_client.describe_log_groups(logGroupNamePrefix=log_group_name, limit=1)
+
+        log_groups = response.get("logGroups", [])
+
+        if log_groups and log_groups[0].get("logGroupName") == log_group_name:
             return {
                 "tool_name": tool_name,
-                "log_group_name": log_group[0].get("logGroupName"),
-                "log_group_arn": log_group[0].get("logGroupArn"),
+                "log_group_name": log_groups[0].get("logGroupName"),
+                "log_group_arn": log_groups[0].get("logGroupArn"),
             }
 
-        return log_group
+        return {}
