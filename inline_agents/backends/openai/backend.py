@@ -10,15 +10,14 @@ from typing import Any, Dict, Optional
 import openai
 import pendulum
 import sentry_sdk
-from agents import Agent, ModelSettings, set_default_openai_client, set_default_openai_key, trace
+from agents import set_default_openai_client, set_default_openai_key, trace
 from django.conf import settings
 from langfuse import get_client
 from openai import AsyncOpenAI
-from openai.types.shared import Reasoning
 
 from inline_agents.backend import InlineAgentsBackend
 from inline_agents.backends.openai.adapter import OpenAIDataLakeEventAdapter, OpenAITeamAdapter
-from inline_agents.backends.openai.components_tools import get_component_tools as get_component_tools_module
+from inline_agents.backends.openai.components_response_merge import merge_streaming_components_response
 from inline_agents.backends.openai.entities import FinalResponse
 from inline_agents.backends.openai.grpc import (
     MessageStreamingClient,
@@ -258,7 +257,7 @@ class OpenAIBackend(InlineAgentsBackend):
         rationale_switch_cached = kwargs.pop("rationale_switch", rationale_switch)
         human_support_cached = kwargs.pop("human_support", None)
         default_supervisor_foundation_model_cached = kwargs.pop("default_supervisor_foundation_model", None)
-        formatter_agent_configurations = kwargs.pop("formatter_agent_configurations", None)
+        kwargs.pop("formatter_agent_configurations", None)
         supervisor_agent_uuid = kwargs.pop("supervisor_agent_uuid", None)
         rationale_switch = rationale_switch_cached
 
@@ -322,10 +321,12 @@ class OpenAIBackend(InlineAgentsBackend):
             hooks_state=hooks_state,
             data_lake_event_adapter=data_lake_event_adapter,
             conversation=conversation,
-            use_components=use_components,
+            use_components=use_components_cached,
             message_uuid=message_conversation_log_uuid,
             skip_conversation_sqs=skip_conversation_sqs,
         )
+        if use_components_cached:
+            supervisor_hooks.save_components_trace = True
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
             preview=preview,
@@ -353,7 +354,6 @@ class OpenAIBackend(InlineAgentsBackend):
         default_instructions_for_collaborators_cached = kwargs.pop("default_instructions_for_collaborators", None)
 
         if supervisor_agent_uuid:
-            formatter_agent_configurations = supervisor.get("formatter_agent_configurations")
             external_team = self.team_adapter.to_external_enhanced(
                 supervisor=supervisor,
                 agents=team,
@@ -418,7 +418,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 msg_external_id=msg_external_id,
                 turn_off_rationale=turn_off_rationale,
                 auth_token=auth_token,
-                use_components=use_components,
+                use_components=use_components_cached,
                 skip_conversation_sqs=skip_conversation_sqs,
             )
 
@@ -443,7 +443,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 session_id=session_id,
                 project_uuid=project_uuid,
                 language=language,
-                use_components=use_components,
+                use_components=use_components_cached,
                 stream_support=stream_support,
             )
 
@@ -466,9 +466,8 @@ class OpenAIBackend(InlineAgentsBackend):
                 supervisor_hooks,
                 runner_hooks,
                 hooks_state,
-                use_components,
+                use_components_cached,
                 grpc_session=grpc_session,
-                formatter_agent_configurations=formatter_agent_configurations,
             )
         )
 
@@ -491,121 +490,6 @@ class OpenAIBackend(InlineAgentsBackend):
             grpc_client.close()
 
         return InvokeAgentsResult(text=text, skip_dispatch=skip_dispatch)
-
-    async def _run_formatter_agent_async(
-        self,
-        final_response: str,
-        session,
-        supervisor_hooks,
-        context,
-        formatter_instructions="",
-        formatter_agent_configurations=None,
-    ):
-        """Run the formatter agent asynchronously within the trace context"""
-        # Create formatter agent to process the final response
-        formatter_agent = self._create_formatter_agent(
-            supervisor_hooks, formatter_instructions, formatter_agent_configurations
-        )
-
-        # Run the formatter agent with the final response
-        formatter_result = await self._run_formatter_agent(
-            formatter_agent, final_response, session, context, formatter_agent_configurations
-        )
-
-        return formatter_result
-
-    def _create_formatter_agent(self, supervisor_hooks, formatter_instructions="", formatter_agent_configurations=None):
-        """Create the formatter agent with component tools"""
-
-        def custom_tool_handler(context, tool_results):
-            if tool_results:
-                first_result = tool_results[0]
-                from agents.agent import ToolsToFinalOutputResult
-
-                return ToolsToFinalOutputResult(is_final_output=True, final_output=first_result.output)
-            from agents.agent import ToolsToFinalOutputResult
-
-            return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
-
-        # Use custom instructions if provided, otherwise use default
-        instructions = (
-            formatter_instructions
-            or "Format the final response using appropriate JSON components. Analyze all provided information (simple message, products, options, links, context) and choose the best component automatically."
-        )
-        logger.debug(f"Formatter agent configurations - keys: {list((formatter_agent_configurations or {}).keys())}")
-        # Handle None case for formatter_agent_configurations
-        if formatter_agent_configurations is None:
-            formatter_agent_configurations = {}
-
-        # Use value if not None, otherwise use default
-        formatter_agent_model: str = (
-            formatter_agent_configurations.get("formatter_foundation_model") or settings.FORMATTER_AGENT_MODEL
-        )
-        formatter_instructions: str = formatter_agent_configurations.get("formatter_instructions") or instructions
-        formatter_reasoning_effort: str = formatter_agent_configurations.get("formatter_reasoning_effort")
-        formatter_reasoning_summary: str = formatter_agent_configurations.get("formatter_reasoning_summary") or "auto"
-        formatter_tools_descriptions: bool = formatter_agent_configurations.get("formatter_tools_descriptions")
-        tools = get_component_tools_module(formatter_tools_descriptions)
-
-        supervisor_hooks.save_components_trace = True
-
-        formatter_agent = Agent(
-            name="Response Formatter Agent",
-            instructions=formatter_instructions,
-            model=formatter_agent_model,
-            tools=tools,
-            hooks=supervisor_hooks,
-            tool_use_behavior=custom_tool_handler,
-            model_settings=ModelSettings(tool_choice="required", parallel_tool_calls=False),
-        )
-
-        if formatter_reasoning_effort:
-            formatter_agent.model_settings = ModelSettings(
-                tool_choice="required",
-                parallel_tool_calls=False,
-                reasoning=Reasoning(
-                    effort=formatter_reasoning_effort,
-                    summary=formatter_reasoning_summary,
-                ),
-            )
-
-        return formatter_agent
-
-    async def _run_formatter_agent(
-        self, formatter_agent, final_response, session, context, formatter_agent_configurations
-    ):
-        """Run the formatter agent with the final response"""
-        from agents import Runner
-
-        try:
-            formatter_send_only_assistant_message = (
-                formatter_agent_configurations.get("formatter_send_only_assistant_message") or False
-            )
-            if formatter_send_only_assistant_message:
-                input_formatter = await session.get_items()
-                result = await Runner.run(
-                    starting_agent=formatter_agent,
-                    input=input_formatter,
-                    context=context,
-                )
-                return result.final_output
-
-            result = await Runner.run(
-                starting_agent=formatter_agent,
-                input=final_response,
-                context=context,
-                session=session,
-            )
-            # Only stream events if the result has stream_events method
-            stream_events = getattr(result, "stream_events", None)
-            if stream_events and callable(stream_events):
-                async for _ in stream_events():
-                    pass
-            return self._get_final_response(result)
-        except Exception as e:
-            logger.error("Error in formatter agent: %s", e, exc_info=True)
-            # Return the original response if formatter fails
-            return final_response
 
     def _initialize_grpc_session(
         self,
@@ -696,7 +580,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 )
         return delta_counter
 
-    async def _invoke_agents_async(
+    async def _invoke_agents_async(  # noqa: C901
         self,
         client,
         external_team,
@@ -717,7 +601,6 @@ class OpenAIBackend(InlineAgentsBackend):
         hooks_state,
         use_components,
         grpc_session: Optional[StreamingSession] = None,
-        formatter_agent_configurations=None,
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
@@ -725,7 +608,6 @@ class OpenAIBackend(InlineAgentsBackend):
             trace_id = _sanitize_langfuse_id(trace_id_raw)
 
             with trace(workflow_name=project_uuid, trace_id=trace_id):
-                formatter_agent_instructions = external_team.pop("formatter_agent_instructions", "")
                 user_model_credentials = external_team.pop("user_model_credentials", {})
                 model_vendor = external_team.pop("model_vendor", "")
                 self._set_openai_client(user_model_credentials, model_vendor)
@@ -796,21 +678,21 @@ class OpenAIBackend(InlineAgentsBackend):
                     )
                     if use_components and final_response and not skip_fmt:
                         try:
-                            formatted_response = await self._run_formatter_agent_async(
+                            final_response = merge_streaming_components_response(
                                 final_response,
-                                session,
-                                supervisor_hooks,
-                                external_team["context"],
-                                formatter_agent_instructions,
-                                formatter_agent_configurations,
+                                getattr(result, "new_items", None),
+                                hooks_state.tool_calls,
                             )
-                            final_response = formatted_response
-                        except Exception as formatter_error:
+                        except Exception as merge_error:
                             logger.error(
-                                f"[OpenAIBackend] Error in formatter agent after streaming error: {formatter_error} - project_uuid: {project_uuid}, contact_urn: {contact_urn}"
+                                "[OpenAIBackend] Error merging streaming components after streaming error: %s "
+                                "- project_uuid: %s, contact_urn: %s",
+                                merge_error,
+                                project_uuid,
+                                contact_urn,
                             )
                     elif use_components and skip_fmt:
-                        _is_final_out_debug("E skip_formatter=True (tool is_final_output / skip_outgoing_dispatch)")
+                        _is_final_out_debug("E skip_components_merge=True (skip_outgoing_dispatch)")
 
                     return final_response
 
@@ -821,17 +703,21 @@ class OpenAIBackend(InlineAgentsBackend):
                     f"E _invoke_agents_async(success_path) skip_outgoing_dispatch={skip_fmt} use_components={use_components}"
                 )
                 if use_components and not skip_fmt:
-                    formatted_response = await self._run_formatter_agent_async(
-                        final_response,
-                        session,
-                        supervisor_hooks,
-                        external_team["context"],
-                        formatter_agent_instructions,
-                        formatter_agent_configurations,
-                    )
-                    final_response = formatted_response
+                    try:
+                        final_response = merge_streaming_components_response(
+                            final_response,
+                            getattr(result, "new_items", None),
+                            hooks_state.tool_calls,
+                        )
+                    except Exception as merge_error:
+                        logger.error(
+                            "[OpenAIBackend] Error merging streaming components: %s - project_uuid: %s, contact_urn: %s",
+                            merge_error,
+                            project_uuid,
+                            contact_urn,
+                        )
                 elif use_components and skip_fmt:
-                    _is_final_out_debug("E skip_formatter=True (tool is_final_output / skip_outgoing_dispatch)")
+                    _is_final_out_debug("E skip_components_merge=True (skip_outgoing_dispatch)")
 
                 usage_dict, request_entries = self._get_usage_metadata_and_request_entries(result)
                 metadata = {
