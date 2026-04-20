@@ -18,8 +18,8 @@ class ProjectTypeUpdateEdaObserver(EventObserver):
         is_multi_agents = kwargs.get("is_multi_agents")
         if not project_uuid or not isinstance(is_multi_agents, bool):
             logger.warning(
-                "Skipping EDA project type update: missing project_uuid or invalid is_multi_agents",
-                extra={"project_uuid": project_uuid, "is_multi_agents": is_multi_agents},
+                "Skipping EDA project type update: missing project_uuid or invalid is_multi_agents "
+                f"(project_uuid={project_uuid!r}, is_multi_agents={is_multi_agents!r})"
             )
             return
 
