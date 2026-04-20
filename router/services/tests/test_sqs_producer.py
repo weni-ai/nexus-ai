@@ -128,3 +128,42 @@ class ConversationEventsSQSProducerTests(SimpleTestCase):
         self.assertTrue(all(c in _MESSAGE_GROUP_ID_ALLOWED for c in call_kw["MessageGroupId"]))
         body = json.loads(call_kw["MessageBody"])
         self.assertEqual(body, payload)
+
+    @override_settings(
+        CONVERSATION_EVENTS_SQS_QUEUE_URL="https://sqs.us-east-1.amazonaws.com/1/q.fifo",
+        CONVERSATION_EVENTS_SQS_REGION="us-east-1",
+    )
+    @patch("router.services.sqs_producer.boto3.client")
+    def test_received_and_sent_long_correlation_distinct_deduplication_ids(self, mock_boto_client):
+        """FIFO dedup must differ per event_type; long IG ids used to truncate to the same 128 chars."""
+        mock_client = MagicMock()
+        mock_boto_client.return_value = mock_client
+
+        long_correlation = "a" * 200
+        base_data = {
+            "project_uuid": "385c8443-249e-462e-a287-f4a0dc292915",
+            "contact_urn": "instagram:2321136655051672",
+            "channel_uuid": "41d3e926-3656-4ef4-ba2c-38b2b4b01b31",
+        }
+
+        producer = ConversationEventsSQSProducer()
+        producer.send_event(
+            {
+                "correlation_id": long_correlation,
+                "event_type": "message.received",
+                "data": base_data,
+            }
+        )
+        producer.send_event(
+            {
+                "correlation_id": f"{long_correlation}:outgoing",
+                "event_type": "message.sent",
+                "data": base_data,
+            }
+        )
+
+        dedup_received = mock_client.send_message.call_args_list[0].kwargs["MessageDeduplicationId"]
+        dedup_sent = mock_client.send_message.call_args_list[1].kwargs["MessageDeduplicationId"]
+        self.assertNotEqual(dedup_received, dedup_sent)
+        self.assertLessEqual(len(dedup_received), 128)
+        self.assertLessEqual(len(dedup_sent), 128)
