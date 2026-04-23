@@ -436,6 +436,7 @@ class TestBedrockClientElasticAPM(TestCase):
         self.assertNotIn("ELASTIC_APM_SECRET_TOKEN", env_vars)
         self.assertNotIn("ELASTIC_APM_SEND_STRATEGY", env_vars)
         self.assertNotIn("ELASTIC_APM_ENVIRONMENT", env_vars)
+        self.assertNotIn("ELASTIC_APM_SERVICE_NAME", env_vars)
 
         # Verify that non-APM variables were preserved
         self.assertEqual(env_vars["OTHER_VAR"], "value")
@@ -622,7 +623,7 @@ class TestBedrockClientElasticAPM(TestCase):
         environment = call_kwargs["Environment"]
         env_vars = environment["Variables"]
 
-        self.assertEqual(len(env_vars), 6)
+        self.assertEqual(len(env_vars), 7)
         self.assertEqual(env_vars["AWS_LAMBDA_EXEC_WRAPPER"], "/opt/python/bin/elasticapm-lambda")
         self.assertEqual(env_vars["ELASTIC_APM_LAMBDA_APM_SERVER"], "https://apm-server.example.com")
         self.assertEqual(env_vars["ELASTIC_APM_SECRET_TOKEN"], "test-secret-token")
@@ -633,6 +634,9 @@ class TestBedrockClientElasticAPM(TestCase):
         # ELASTIC_APM_LOG_LEVEL is always present
         self.assertIn("ELASTIC_APM_LOG_LEVEL", env_vars)
         self.assertEqual(env_vars["ELASTIC_APM_LOG_LEVEL"], "off")
+        # ELASTIC_APM_SERVICE_NAME is always present
+        self.assertIn("ELASTIC_APM_SERVICE_NAME", env_vars)
+        self.assertEqual(env_vars["ELASTIC_APM_SERVICE_NAME"], "")
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
@@ -723,12 +727,14 @@ class TestBedrockClientElasticAPM(TestCase):
         call_kwargs = call_args.kwargs
         env_vars = call_kwargs["Environment"]["Variables"]
 
-        self.assertEqual(len(env_vars), 6)
+        self.assertEqual(len(env_vars), 7)
         self.assertEqual(env_vars["AWS_LAMBDA_EXEC_WRAPPER"], "/opt/python/bin/elasticapm-lambda")
         self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
         self.assertEqual(env_vars["ELASTIC_APM_ENVIRONMENT"], "")
         self.assertIn("ELASTIC_APM_LOG_LEVEL", env_vars)
         self.assertEqual(env_vars["ELASTIC_APM_LOG_LEVEL"], "off")
+        self.assertIn("ELASTIC_APM_SERVICE_NAME", env_vars)
+        self.assertEqual(env_vars["ELASTIC_APM_SERVICE_NAME"], "")
 
         # Verify that layers fallback to settings architecture (x86_64) when config fetch fails
         self.assertIn("Layers", call_kwargs)

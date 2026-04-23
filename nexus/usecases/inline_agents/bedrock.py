@@ -57,6 +57,7 @@ class BedrockClient:
         secret_token = getattr(settings, "ELASTIC_APM_LAMBDA_SECRET_TOKEN", "")
         apm_environment = getattr(settings, "ELASTIC_APM_ENVIRONMENT", "")
         apm_log_level = getattr(settings, "ELASTIC_APM_LAMBDA_LOG_LEVEL", "off")
+        apm_service_name = getattr(settings, "ELASTIC_APM_SERVICE_NAME", "")
 
         if not apm_server or not secret_token:
             return {}
@@ -68,6 +69,7 @@ class BedrockClient:
             "ELASTIC_APM_SEND_STRATEGY": "background",
             "ELASTIC_APM_ENVIRONMENT": apm_environment,
             "ELASTIC_APM_LOG_LEVEL": apm_log_level,
+            "ELASTIC_APM_SERVICE_NAME": apm_service_name,
         }
 
     def create_lambda_function(
@@ -137,6 +139,7 @@ class BedrockClient:
             "ELASTIC_APM_SEND_STRATEGY",
             "ELASTIC_APM_ENVIRONMENT",
             "ELASTIC_APM_LOG_LEVEL",
+            "ELASTIC_APM_SERVICE_NAME",
         }
         return var_name in apm_var_names
 
