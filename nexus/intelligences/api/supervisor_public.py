@@ -413,6 +413,10 @@ class SupervisorPublicConversationsViewV2(APIView):
 
     @staticmethod
     def _v2_status_summary_from_upstream_or_page(data, results_data):
+        """
+        Prefer status_summary from nexus-conversations (computed without status/resolution filters on the list
+        queryset, so it matches public supervisor V1). Fallback: aggregate from the current page only.
+        """
         upstream = data.get("status_summary")
         if isinstance(upstream, dict):
             summary = {k: 0 for k in NEXUS_CONVERSATIONS_RESOLUTION_KEYS}
@@ -553,8 +557,8 @@ class SupervisorPublicConversationsViewV2(APIView):
         description=(
             "Retrieve a list of conversations from nexus-conversations. Response shape matches public supervisor V1 "
             "(count, page, total_pages, page_size, status_summary, results) with next/previous for cursor pagination. "
-            "count and status_summary are DB totals for the filter period (same semantics as V1: count respects "
-            "status filter; status_summary is the mix for the same filters without status/resolution). "
+            "count is the DB total for the current filters (including status). status_summary comes from "
+            "nexus-conversations with status/resolution query params omitted (same mix semantics as public V1). "
             "Use next/previous to paginate; page echoes the optional page query param (default 1) like V1. "
             "By default includes messages per conversation (DynamoDB for In Progress via nexus-conversations detail)."
         ),
