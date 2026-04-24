@@ -279,12 +279,16 @@ class SupervisorPublicConversationsView(APIView):
 
 
 class SupervisorPublicConversationListV2Serializer(serializers.Serializer):
-    """V2 response includes cursor-based pagination (next/previous) from nexus-conversations."""
+    """
+    Same top-level shape as V1 (SupervisorPublicConversationListSerializer), plus cursor links.
+    Pagination uses next/previous; page echoes the optional page query param like V1 (default 1).
+    """
 
     count = serializers.IntegerField()
+    page = serializers.IntegerField()
     total_pages = serializers.IntegerField()
-    status_summary = serializers.DictField()
     page_size = serializers.IntegerField()
+    status_summary = serializers.DictField()
     results = SupervisorPublicConversationItemSerializer(many=True)
     next = serializers.URLField(allow_null=True, required=False)
     previous = serializers.URLField(allow_null=True, required=False)
@@ -407,6 +411,31 @@ class SupervisorPublicConversationsViewV2(APIView):
             "messages": messages,
         }
 
+    @staticmethod
+    def _v2_status_summary_from_upstream_or_page(data, results_data):
+        upstream = data.get("status_summary")
+        if isinstance(upstream, dict):
+            summary = {k: 0 for k in NEXUS_CONVERSATIONS_RESOLUTION_KEYS}
+            for k in NEXUS_CONVERSATIONS_RESOLUTION_KEYS:
+                val = upstream.get(k)
+                if val is not None:
+                    try:
+                        summary[k] = int(val)
+                    except (TypeError, ValueError):
+                        pass
+            return summary
+        summary = {k: 0 for k in NEXUS_CONVERSATIONS_RESOLUTION_KEYS}
+        for item in results_data:
+            raw_resolution = item.get("resolution")
+            if raw_resolution is None:
+                bucket = "3"
+            else:
+                bucket = str(raw_resolution)
+                if bucket not in summary:
+                    bucket = "3"
+            summary[bucket] += 1
+        return summary
+
     def _fetch_messages_for_conversations(self, project_uuid, results_data, request):
         """Fetch messages for all conversations in parallel (from DynamoDB for In Progress)."""
         include_messages = request.query_params.get("include_messages", "true").lower() in (
@@ -437,10 +466,22 @@ class SupervisorPublicConversationsViewV2(APIView):
                     messages_by_uuid[conv_uuid] = []
         return messages_by_uuid
 
+    @staticmethod
+    def _parse_response_page(request):
+        """Match V1 page parsing (optional page query, default 1, minimum 1)."""
+        try:
+            page = int(request.query_params.get("page", 1))
+        except (TypeError, ValueError):
+            page = 1
+        if page < 1:
+            page = 1
+        return page
+
     def _build_list_response(
         self,
         results,
         count,
+        page,
         total_pages,
         status_summary,
         page_size,
@@ -448,12 +489,13 @@ class SupervisorPublicConversationsViewV2(APIView):
         previous_url,
         request,
     ):
-        """Build the paginated list response payload."""
+        """Build list response: same key order as public supervisor V1, then cursor links."""
         return {
             "count": count,
+            "page": page,
             "total_pages": total_pages,
-            "status_summary": status_summary,
             "page_size": page_size,
+            "status_summary": status_summary,
             "results": results,
             "next": self._rewrite_pagination_url(next_url, request) if next_url else None,
             "previous": self._rewrite_pagination_url(previous_url, request) if previous_url else None,
@@ -509,9 +551,12 @@ class SupervisorPublicConversationsViewV2(APIView):
     @extend_schema(
         summary="List Conversations (V2)",
         description=(
-            "Retrieve a list of conversations from nexus-conversations. Uses cursor-based pagination. "
-            "By default includes messages for each conversation; for 'In Progress' conversations "
-            "messages are fetched from DynamoDB via nexus-conversations detail API."
+            "Retrieve a list of conversations from nexus-conversations. Response shape matches public supervisor V1 "
+            "(count, page, total_pages, page_size, status_summary, results) with next/previous for cursor pagination. "
+            "count and status_summary are DB totals for the filter period (same semantics as V1: count respects "
+            "status filter; status_summary is the mix for the same filters without status/resolution). "
+            "Use next/previous to paginate; page echoes the optional page query param (default 1) like V1. "
+            "By default includes messages per conversation (DynamoDB for In Progress via nexus-conversations detail)."
         ),
         parameters=[
             OpenApiParameter(
@@ -554,6 +599,15 @@ class SupervisorPublicConversationsViewV2(APIView):
                 type=OpenApiTypes.INT,
             ),
             OpenApiParameter(
+                name="page",
+                description=(
+                    "Echoed in the response like V1 (default 1). Pagination is cursor-based (next/previous); "
+                    "this does not select a page on the upstream service."
+                ),
+                required=False,
+                type=OpenApiTypes.INT,
+            ),
+            OpenApiParameter(
                 name="include_messages",
                 description=(
                     "Include messages for each conversation. For 'In Progress' conversations, "
@@ -582,28 +636,29 @@ class SupervisorPublicConversationsViewV2(APIView):
                 for item in results_data
             ]
 
-            # status_summary: count by resolution from current page (cursor API doesn't provide totals).
-            status_summary = {k: 0 for k in NEXUS_CONVERSATIONS_RESOLUTION_KEYS}
-            for item in results_data:
-                raw_resolution = item.get("resolution")
-                if raw_resolution is None:
-                    bucket = "3"
-                else:
-                    bucket = str(raw_resolution)
-                    if bucket not in status_summary:
-                        bucket = "3"
-                status_summary[bucket] += 1
+            status_summary = self._v2_status_summary_from_upstream_or_page(data, results_data)
 
-            # count/total_pages: cursor pagination does not provide total count.
-            # Use len(results) as approximate; total_pages=1 when no next, else 2+ (unknown)
-            count = len(results)
-            has_next = bool(next_url)
-            total_pages = 2 if has_next else 1
+            raw_total = data.get("total_count")
+            try:
+                total_count = int(raw_total)
+            except (TypeError, ValueError):
+                total_count = None
+
+            if total_count is not None and total_count >= 0:
+                count = total_count
+                total_pages = math.ceil(count / page_size) if page_size > 0 else 1
+            else:
+                count = len(results)
+                has_next = bool(next_url)
+                total_pages = 2 if has_next else 1
+
+            page = self._parse_response_page(request)
 
             return Response(
                 self._build_list_response(
                     results=results,
                     count=count,
+                    page=page,
                     total_pages=total_pages,
                     status_summary=status_summary,
                     page_size=page_size,
