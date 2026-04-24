@@ -223,10 +223,12 @@ class ConversationsProxyView(APIView):
 
                 return Response(
                     {
-                        "count": response.get("count"),
+                        "count": response.get("total_count", response.get("count")),
                         "next": next_url,
                         "previous": previous_url,
                         "results": serializer.data,
+                        "status_summary": response.get("status_summary"),
+                        "total_count": response.get("total_count"),
                     },
                     status=status.HTTP_200_OK,
                 )
