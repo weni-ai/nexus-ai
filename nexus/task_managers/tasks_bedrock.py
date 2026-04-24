@@ -222,11 +222,15 @@ def bedrock_upload_text_file(text: str, content_base_dto: Dict, content_base_tex
     project = ProjectsUseCase().get_project_by_content_base_uuid(content_base_uuid)
     file_database = BedrockFileDatabase(project_uuid=str(project.uuid))
 
+    content_base_text = ContentBaseText.objects.get(uuid=content_base_text_uuid)
+    old_file_name = content_base_text.file_name
+
+    if old_file_name:
+        file_database.delete_file_and_metadata(content_base_uuid, old_file_name)
+
     with open(f"/tmp/{file_name}", "rb") as file:
         file_database_response = file_database.add_file(file, content_base_uuid, content_base_text_uuid)
 
-    # TODO: USECASE
-    content_base_text = ContentBaseText.objects.get(uuid=content_base_text_uuid)
     content_base_text.file = file_database_response.file_url
     content_base_text.file_name = file_database_response.file_name
     content_base_text.save(update_fields=["file", "file_name"])
