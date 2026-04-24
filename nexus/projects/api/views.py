@@ -187,7 +187,7 @@ class AgentBuilderProjectDetailsView(APIView):
 
 
 class ConversationsProxyView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -354,7 +354,7 @@ class ConversationsProxyView(APIView):
 
 
 class ConversationDetailProxyView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
