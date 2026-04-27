@@ -60,6 +60,45 @@ def _serialize_mcp(mcp) -> dict:
     return mcp_data
 
 
+def aggregate_mcp_definitions_for_agent(agent: Agent) -> dict:
+    """
+    Merge MCP config options (constants) and credential templates for all active MCPs on an agent.
+
+    Used by inline AgentSerializer (e.g. my-agents) so clients receive the same MCP shape as official
+    helpers, with deduplication by field name across MCPs.
+    """
+    config_items: list = []
+    credential_items: list = []
+    seen_config: set[str] = set()
+    seen_cred: set[str] = set()
+
+    cached_mcps = getattr(agent, "_prefetched_objects_cache", {}).get("mcps")
+    if cached_mcps is not None:
+        mcp_iter = [m for m in cached_mcps if m.is_active]
+    else:
+        mcp_iter = (
+            agent.mcps.filter(is_active=True)
+            .select_related("system")
+            .prefetch_related("config_options", "credential_templates")
+            .order_by("order", "name")
+        )
+
+    for mcp in mcp_iter:
+        data = _serialize_mcp(mcp)
+        for c in data["config"]:
+            name = c.get("name")
+            if name and name not in seen_config:
+                seen_config.add(name)
+                config_items.append(c)
+        for t in data["credentials"]:
+            name = t.get("name")
+            if name and name not in seen_cred:
+                seen_cred.add(name)
+                credential_items.append(t)
+
+    return {"config": config_items, "credentials": credential_items}
+
+
 def get_mcps_for_agent_system(agent_slug: str, system_slug: str) -> list:
     """MCPs for an agent/system combination from database models."""
     agent = Agent.objects.filter(slug=agent_slug, is_official=True).first()

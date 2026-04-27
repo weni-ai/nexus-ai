@@ -4,6 +4,7 @@ from rest_framework import serializers
 from nexus.inline_agents.api.official_agents_helpers import (
     _sort_mcps,
     _sort_systems,
+    aggregate_mcp_definitions_for_agent,
     get_all_mcps_for_group,
     get_all_systems_for_group,
 )
@@ -252,6 +253,7 @@ class AgentSerializer(serializers.ModelSerializer):
             "is_official",
             "project",
             "credentials",
+            "mcp",
         ]
 
     name = serializers.SerializerMethodField("get_list_display_name")
@@ -262,6 +264,7 @@ class AgentSerializer(serializers.ModelSerializer):
     active = serializers.SerializerMethodField("get_active")
 
     credentials = serializers.SerializerMethodField("get_credentials")
+    mcp = serializers.SerializerMethodField("get_mcp")
 
     def get_list_display_name(self, obj):
         return inline_agent_list_display_name(obj)
@@ -289,17 +292,34 @@ class AgentSerializer(serializers.ModelSerializer):
         integrated = IntegratedAgent.objects.filter(project_id=project_uuid, agent=obj).first()
         return integrated.is_active if integrated else False
 
+    def _mcp_definitions(self, obj):
+        cached = getattr(obj, "_inline_agent_mcp_definitions_cache", None)
+        if cached is None:
+            cached = aggregate_mcp_definitions_for_agent(obj)
+            obj._inline_agent_mcp_definitions_cache = cached
+        return cached
+
+    def get_mcp(self, obj):
+        """MCP constants (config) and credential templates from the agent's MCP definitions."""
+        return self._mcp_definitions(obj)
+
     def get_credentials(self, obj):
-        credentials = obj.agentcredential_set.all().distinct("key")
-        return [
+        rows = list(obj.agentcredential_set.all().distinct("key"))
+        by_key = {c.key: c for c in rows if c.key}
+        result = [
             {
                 "name": credential.key,
                 "label": credential.label,
                 "placeholder": credential.placeholder,
                 "is_confidential": credential.is_confidential,
             }
-            for credential in credentials
+            for credential in rows
         ]
+        for template in self._mcp_definitions(obj)["credentials"]:
+            name = template.get("name")
+            if name and name not in by_key:
+                result.append(dict(template))
+        return result
 
 
 class ProjectCredentialsListSerializer(serializers.ModelSerializer):
