@@ -324,7 +324,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         contact_fields=message.get("contact_fields", {}),
     )
 
-    mailroom_msg_event = message.msg_event
+    mailroom_msg_event = message.msg_event or {}
     mailroom_msg_event["attachments"] = mailroom_msg_event.get("attachments") or []
     mailroom_msg_event["metadata"] = mailroom_msg_event.get("metadata") or {}
 
