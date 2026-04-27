@@ -16,11 +16,11 @@ from nexus.actions.api.serializers import (
 )
 from nexus.actions.models import Flow, TemplateAction
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.internals.flows import FlowsRESTClient
 from nexus.orgs.permissions import is_super_user
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.exceptions import ProjectAuthorizationDenied
 from nexus.projects.permissions import has_external_general_project_permission
-from nexus.internals.flows import FlowsRESTClient
 from nexus.projects.simulation_model_cache import (
     SIMULATION_MANAGER_MODEL_TTL_SECONDS,
     clear_simulation_manager_model,
@@ -244,8 +244,15 @@ class MessagePreviewView(APIView):
                 )
                 return Response(data={"type": "preview", "message": "Processing started", "fonts": []})
             else:
-                task = start_route.delay(message=message.__dict__, preview=True)
-                response = task.wait()
+                task = start_route.delay(message=message.model_dump(exclude_none=True), preview=True)
+                try:
+                    response = task.wait()
+                except Exception as task_exc:
+                    remote_tb = getattr(task_exc, "__traceback__", None)
+                    logger.error(
+                        "start_route task failed: %s", task_exc, exc_info=(type(task_exc), task_exc, remote_tb)
+                    )
+                    raise
 
             return Response(data=response)
         except IntelligencePermissionDenied:
