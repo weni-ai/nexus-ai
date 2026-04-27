@@ -163,6 +163,35 @@ class TestBedrockClientElasticAPM(TestCase):
         # ELASTIC_APM_ENVIRONMENT is always present (default is empty string)
         self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
         self.assertEqual(env_vars["ELASTIC_APM_ENVIRONMENT"], "")
+        self.assertEqual(env_vars["ELASTIC_APM_TRANSACTION_SAMPLE_RATE"], "1.0")
+
+    @override_settings(
+        ELASTIC_APM_LAMBDA_ENABLED=True,
+        ELASTIC_APM_LAMBDA_APM_SERVER="https://apm-server.example.com",
+        ELASTIC_APM_LAMBDA_SECRET_TOKEN="test-secret-token",
+        ELASTIC_APM_TRANSACTION_SAMPLE_RATE=0.25,
+        AWS_LAMBDA_ARCHITECTURE="x86_64",
+        ELASTIC_APM_LAMBDA_EXTENSION_VERSION="1-6-0",
+        ELASTIC_APM_LAMBDA_PYTHON_AGENT_VERSION="6-25-0",
+        AWS_BEDROCK_REGION_NAME="us-east-1",
+    )
+    def test_create_lambda_function_with_apm_transaction_sample_rate(self):
+        """Tests that ELASTIC_APM_TRANSACTION_SAMPLE_RATE is passed to the Lambda environment"""
+        mock_lambda_client = Mock()
+        mock_lambda_client.create_function.return_value = {
+            "FunctionArn": "arn:aws:lambda:us-east-1:123456789012:function:test-lambda-function"
+        }
+        self.client.lambda_client = mock_lambda_client
+
+        self.client.create_lambda_function(
+            lambda_name=self.lambda_name,
+            lambda_role=self.lambda_role,
+            skill_handler=self.skill_handler,
+            zip_buffer=self.zip_buffer,
+        )
+
+        env_vars = mock_lambda_client.create_function.call_args.kwargs["Environment"]["Variables"]
+        self.assertEqual(env_vars["ELASTIC_APM_TRANSACTION_SAMPLE_RATE"], "0.25")
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
@@ -407,6 +436,7 @@ class TestBedrockClientElasticAPM(TestCase):
                     "ELASTIC_APM_SECRET_TOKEN": "old-token",
                     "ELASTIC_APM_SEND_STRATEGY": "background",
                     "ELASTIC_APM_ENVIRONMENT": "staging",
+                    "ELASTIC_APM_TRANSACTION_SAMPLE_RATE": "1.0",
                 }
             },
         }
@@ -436,6 +466,7 @@ class TestBedrockClientElasticAPM(TestCase):
         self.assertNotIn("ELASTIC_APM_SECRET_TOKEN", env_vars)
         self.assertNotIn("ELASTIC_APM_SEND_STRATEGY", env_vars)
         self.assertNotIn("ELASTIC_APM_ENVIRONMENT", env_vars)
+        self.assertNotIn("ELASTIC_APM_TRANSACTION_SAMPLE_RATE", env_vars)
 
         # Verify that non-APM variables were preserved
         self.assertEqual(env_vars["OTHER_VAR"], "value")
@@ -540,6 +571,7 @@ class TestBedrockClientElasticAPM(TestCase):
         self.assertEqual(env_vars["ELASTIC_APM_SEND_STRATEGY"], "background")
         # ELASTIC_APM_ENVIRONMENT is always present
         self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
+        self.assertEqual(env_vars["ELASTIC_APM_TRANSACTION_SAMPLE_RATE"], "1.0")
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
@@ -622,7 +654,7 @@ class TestBedrockClientElasticAPM(TestCase):
         environment = call_kwargs["Environment"]
         env_vars = environment["Variables"]
 
-        self.assertEqual(len(env_vars), 6)
+        self.assertEqual(len(env_vars), 7)
         self.assertEqual(env_vars["AWS_LAMBDA_EXEC_WRAPPER"], "/opt/python/bin/elasticapm-lambda")
         self.assertEqual(env_vars["ELASTIC_APM_LAMBDA_APM_SERVER"], "https://apm-server.example.com")
         self.assertEqual(env_vars["ELASTIC_APM_SECRET_TOKEN"], "test-secret-token")
@@ -633,6 +665,7 @@ class TestBedrockClientElasticAPM(TestCase):
         # ELASTIC_APM_LOG_LEVEL is always present
         self.assertIn("ELASTIC_APM_LOG_LEVEL", env_vars)
         self.assertEqual(env_vars["ELASTIC_APM_LOG_LEVEL"], "off")
+        self.assertEqual(env_vars["ELASTIC_APM_TRANSACTION_SAMPLE_RATE"], "1.0")
 
     @override_settings(
         ELASTIC_APM_LAMBDA_ENABLED=True,
@@ -723,12 +756,13 @@ class TestBedrockClientElasticAPM(TestCase):
         call_kwargs = call_args.kwargs
         env_vars = call_kwargs["Environment"]["Variables"]
 
-        self.assertEqual(len(env_vars), 6)
+        self.assertEqual(len(env_vars), 7)
         self.assertEqual(env_vars["AWS_LAMBDA_EXEC_WRAPPER"], "/opt/python/bin/elasticapm-lambda")
         self.assertIn("ELASTIC_APM_ENVIRONMENT", env_vars)
         self.assertEqual(env_vars["ELASTIC_APM_ENVIRONMENT"], "")
         self.assertIn("ELASTIC_APM_LOG_LEVEL", env_vars)
         self.assertEqual(env_vars["ELASTIC_APM_LOG_LEVEL"], "off")
+        self.assertEqual(env_vars["ELASTIC_APM_TRANSACTION_SAMPLE_RATE"], "1.0")
 
         # Verify that layers fallback to settings architecture (x86_64) when config fetch fails
         self.assertIn("Layers", call_kwargs)
