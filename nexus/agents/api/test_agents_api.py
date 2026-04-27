@@ -154,11 +154,11 @@ class AgentViewsetSetTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         content = json.loads(response.content)
         row = next(c for c in content if c.get("uuid") == str(agent_with_mcp.uuid))
-        self.assertIn("mcp", row)
-        self.assertEqual(len(row["mcp"]["config"]), 1)
-        self.assertEqual(row["mcp"]["config"][0]["name"], "REGION_TOGGLE")
-        self.assertEqual(len(row["mcp"]["credentials"]), 1)
-        self.assertEqual(row["mcp"]["credentials"][0]["name"], "SYNERISE_API_TOKEN")
+        self.assertIn("mcp_definitions", row)
+        self.assertEqual(len(row["mcp_definitions"]["config"]), 1)
+        self.assertEqual(row["mcp_definitions"]["config"][0]["name"], "REGION_TOGGLE")
+        self.assertEqual(len(row["mcp_definitions"]["credentials"]), 1)
+        self.assertEqual(row["mcp_definitions"]["credentials"][0]["name"], "SYNERISE_API_TOKEN")
         cred_names = {c["name"] for c in row["credentials"]}
         self.assertIn("SYNERISE_API_TOKEN", cred_names)
 

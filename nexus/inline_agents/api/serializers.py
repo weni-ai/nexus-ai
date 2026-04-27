@@ -253,7 +253,7 @@ class AgentSerializer(serializers.ModelSerializer):
             "is_official",
             "project",
             "credentials",
-            "mcp",
+            "mcp_definitions",
         ]
 
     name = serializers.SerializerMethodField("get_list_display_name")
@@ -264,7 +264,7 @@ class AgentSerializer(serializers.ModelSerializer):
     active = serializers.SerializerMethodField("get_active")
 
     credentials = serializers.SerializerMethodField("get_credentials")
-    mcp = serializers.SerializerMethodField("get_mcp")
+    mcp_definitions = serializers.SerializerMethodField("get_mcp_definitions")
 
     def get_list_display_name(self, obj):
         return inline_agent_list_display_name(obj)
@@ -299,12 +299,21 @@ class AgentSerializer(serializers.ModelSerializer):
             obj._inline_agent_mcp_definitions_cache = cached
         return cached
 
-    def get_mcp(self, obj):
-        """MCP constants (config) and credential templates from the agent's MCP definitions."""
+    def get_mcp_definitions(self, obj):
+        """MCP config options and credential templates (schema), distinct from IntegratedAgentSerializer.mcp."""
         return self._mcp_definitions(obj)
 
     def get_credentials(self, obj):
-        rows = list(obj.agentcredential_set.all().distinct("key"))
+        # Use .all() so prefetched agentcredential_set is used; de-dupe by key in Python (.distinct("key") re-queries).
+        credentials = list(obj.agentcredential_set.all())
+        seen_keys = set()
+        rows = []
+        for credential in credentials:
+            k = credential.key
+            if k in seen_keys:
+                continue
+            seen_keys.add(k)
+            rows.append(credential)
         by_key = {c.key: c for c in rows if c.key}
         result = [
             {

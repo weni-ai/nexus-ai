@@ -60,6 +60,14 @@ def _serialize_mcp(mcp) -> dict:
     return mcp_data
 
 
+def _mcp_nested_prefetch_ready(mcp: MCP) -> bool:
+    """True when config_options and credential_templates were prefetched on this MCP instance."""
+    cache = getattr(mcp, "_prefetched_objects_cache", None)
+    if not isinstance(cache, dict):
+        return False
+    return "config_options" in cache and "credential_templates" in cache
+
+
 def aggregate_mcp_definitions_for_agent(agent: Agent) -> dict:
     """
     Merge MCP config options (constants) and credential templates for all active MCPs on an agent.
@@ -74,7 +82,19 @@ def aggregate_mcp_definitions_for_agent(agent: Agent) -> dict:
 
     cached_mcps = getattr(agent, "_prefetched_objects_cache", {}).get("mcps")
     if cached_mcps is not None:
-        mcp_iter = [m for m in cached_mcps if m.is_active]
+        active = [m for m in cached_mcps if m.is_active]
+        if not active:
+            mcp_iter = []
+        elif all(_mcp_nested_prefetch_ready(m) for m in active):
+            mcp_iter = active
+        else:
+            # Parent prefetched mcps without nested relations — one query with full prefetch
+            mcp_iter = (
+                MCP.objects.filter(pk__in=[m.pk for m in active], is_active=True)
+                .select_related("system")
+                .prefetch_related("config_options", "credential_templates")
+                .order_by("order", "name")
+            )
     else:
         mcp_iter = (
             agent.mcps.filter(is_active=True)
