@@ -3,7 +3,7 @@ import logging
 
 import pendulum
 from django.conf import settings
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Count, OuterRef, Prefetch, Q, Subquery
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -31,7 +31,7 @@ from nexus.inline_agents.api.serializers import (
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent, ModelProvider, ProjectModelProvider
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
-from nexus.inline_agents.models import Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.api.serializers import ProjectMinimalSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
@@ -92,6 +92,18 @@ def _parse_multi_agents_bool(raw) -> tuple[bool | None, str | None]:
 logger = logging.getLogger(__name__)
 
 SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
+
+_INLINE_AGENT_MCP_PREFETCH = Prefetch(
+    "mcps",
+    queryset=MCP.objects.filter(is_active=True)
+    .select_related("system")
+    .prefetch_related("config_options", "credential_templates")
+    .order_by("order", "name"),
+)
+
+
+def _prefetch_inline_agent_mcp_credentials(queryset):
+    return queryset.prefetch_related(_INLINE_AGENT_MCP_PREFETCH, "agentcredential_set")
 
 
 class PushAgents(APIView):
@@ -1041,7 +1053,9 @@ class AgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
+        agents = _prefetch_inline_agent_mcp_credentials(
+            Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
+        )
 
         if search:
             query_filter = (
@@ -1161,8 +1175,8 @@ class OfficialAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).select_related(
-            "group", "group__modal"
+        agents = _prefetch_inline_agent_mcp_credentials(
+            Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).select_related("group", "group__modal")
         )
 
         if search:
@@ -1322,7 +1336,9 @@ class VtexAppAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
+        agents = _prefetch_inline_agent_mcp_credentials(
+            Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
+        )
 
         if search:
             query_filter = (
@@ -1346,8 +1362,8 @@ class VtexAppOfficialAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.VTEX_APP).select_related(
-            "group", "group__modal"
+        agents = _prefetch_inline_agent_mcp_credentials(
+            Agent.objects.filter(is_official=True, source_type=Agent.VTEX_APP).select_related("group", "group__modal")
         )
 
         if search:
