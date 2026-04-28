@@ -17,6 +17,7 @@ from nexus.inline_agents.models import (
     AgentSystem,
     IntegratedAgent,
     MCPConfigOption,
+    MCPCredentialTemplate,
     Version,
 )
 from nexus.inline_agents.models import Agent as InlineAgent
@@ -115,6 +116,51 @@ class AgentViewsetSetTestCase(TestCase):
         content = json.loads(response.content)
         row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
         self.assertEqual(row["name"], "Product Concierge")
+
+    def test_get_my_agents_includes_mcp_definition(self):
+        system = AgentSystem.objects.create(name="Test MCP System", slug="test-mcp-system-my-agents-xyz")
+        mcp = MCP.objects.create(name="Test MCP", slug="test-mcp-my-agents-xyz", system=system)
+        MCPConfigOption.objects.create(
+            mcp=mcp,
+            name="REGION_TOGGLE",
+            label="Regionalization",
+            type=MCPConfigOption.SWITCH,
+            options=[],
+            is_required=False,
+            default_value=True,
+        )
+        MCPCredentialTemplate.objects.create(
+            mcp=mcp,
+            name="SYNERISE_API_TOKEN",
+            label="Synerise API Key",
+            placeholder="your-api-key-here",
+            is_confidential=True,
+        )
+        agent_with_mcp = InlineAgent.objects.create(
+            name="Concierge With MCP",
+            slug="concierge-mcp-my-agents-xyz",
+            instruction="x",
+            collaboration_instructions="y",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        agent_with_mcp.mcps.add(mcp)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
+        response = client.get(url)
+        response.render()
+        self.assertEqual(response.status_code, 200)
+        content = json.loads(response.content)
+        row = next(c for c in content if c.get("uuid") == str(agent_with_mcp.uuid))
+        self.assertIn("mcp_definition", row)
+        self.assertEqual(len(row["mcp_definition"]["config"]), 1)
+        self.assertEqual(row["mcp_definition"]["config"][0]["name"], "REGION_TOGGLE")
+        self.assertEqual(len(row["mcp_definition"]["credentials"]), 1)
+        self.assertEqual(row["mcp_definition"]["credentials"][0]["name"], "SYNERISE_API_TOKEN")
+        cred_names = {c["name"] for c in row["credentials"]}
+        self.assertNotIn("SYNERISE_API_TOKEN", cred_names)
 
     def make_agents_official(self):
         self.agent.is_official = True
@@ -336,7 +382,7 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
-        mcp_payload = row["mcp"]
+        mcp_payload = row["mcp_definition"]
         self.assertEqual(mcp_payload["name"], "Team Catalog MCP")
         desc = mcp_payload["description"]
         self.assertEqual(desc["en"], "English MCP")
