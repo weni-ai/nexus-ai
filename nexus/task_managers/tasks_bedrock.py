@@ -62,7 +62,8 @@ def check_ingestion_job_status(
 
             file_database.search_data(content_base_uuid=content_base_uuid, text="test", number_of_results=1)
             logger.info(
-                f"🦑 BEDROCK: Knowledge base is accessible for content_base_uuid {content_base_uuid}, marking as success"
+                f"🦑 BEDROCK: Knowledge base is accessible for content_base_uuid "
+                f"{content_base_uuid}, marking as success"
             )
             task_manager_usecase.update_task_status(celery_task_manager_uuid, status, file_type)
 
@@ -225,21 +226,21 @@ def bedrock_upload_text_file(text: str, content_base_dto: Dict, content_base_tex
     content_base_text = ContentBaseText.objects.get(uuid=content_base_text_uuid)
     old_file_name = content_base_text.file_name
 
-    if old_file_name:
-        file_database.delete_file_and_metadata(content_base_uuid, old_file_name)
-
     with open(f"/tmp/{file_name}", "rb") as file:
         file_database_response = file_database.add_file(file, content_base_uuid, content_base_text_uuid)
-
-    content_base_text.file = file_database_response.file_url
-    content_base_text.file_name = file_database_response.file_name
-    content_base_text.save(update_fields=["file", "file_name"])
 
     if file_database_response.status != 0:
         file_database.delete_file_and_metadata(content_base_uuid, file_database_response.file_name)
         return {"task_status": ContentBaseFileTaskManager.STATUS_FAIL, "error": file_database_response.err}
 
     logger.info("🦑 BEDROCK: Text File was added")
+
+    content_base_text.file = file_database_response.file_url
+    content_base_text.file_name = file_database_response.file_name
+    content_base_text.save(update_fields=["file", "file_name"])
+
+    if old_file_name:
+        file_database.delete_file_and_metadata(content_base_uuid, old_file_name)
 
     task_manager = CeleryTaskManagerUseCase().create_celery_text_file_manager(content_base_text=content_base_text)
     start_ingestion_job(str(task_manager.uuid), "text", project_uuid=str(project.uuid))
