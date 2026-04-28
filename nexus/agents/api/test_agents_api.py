@@ -117,7 +117,7 @@ class AgentViewsetSetTestCase(TestCase):
         row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
         self.assertEqual(row["name"], "Product Concierge")
 
-    def test_get_my_agents_includes_mcp_config_and_credentials(self):
+    def test_get_my_agents_includes_mcp_definition(self):
         system = AgentSystem.objects.create(name="Test MCP System", slug="test-mcp-system-my-agents-xyz")
         mcp = MCP.objects.create(name="Test MCP", slug="test-mcp-my-agents-xyz", system=system)
         MCPConfigOption.objects.create(
@@ -154,13 +154,13 @@ class AgentViewsetSetTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         content = json.loads(response.content)
         row = next(c for c in content if c.get("uuid") == str(agent_with_mcp.uuid))
-        self.assertIn("mcp_definitions", row)
-        self.assertEqual(len(row["mcp_definitions"]["config"]), 1)
-        self.assertEqual(row["mcp_definitions"]["config"][0]["name"], "REGION_TOGGLE")
-        self.assertEqual(len(row["mcp_definitions"]["credentials"]), 1)
-        self.assertEqual(row["mcp_definitions"]["credentials"][0]["name"], "SYNERISE_API_TOKEN")
+        self.assertIn("mcp_definition", row)
+        self.assertEqual(len(row["mcp_definition"]["config"]), 1)
+        self.assertEqual(row["mcp_definition"]["config"][0]["name"], "REGION_TOGGLE")
+        self.assertEqual(len(row["mcp_definition"]["credentials"]), 1)
+        self.assertEqual(row["mcp_definition"]["credentials"][0]["name"], "SYNERISE_API_TOKEN")
         cred_names = {c["name"] for c in row["credentials"]}
-        self.assertIn("SYNERISE_API_TOKEN", cred_names)
+        self.assertNotIn("SYNERISE_API_TOKEN", cred_names)
 
     def make_agents_official(self):
         self.agent.is_official = True
@@ -382,7 +382,7 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
-        mcp_payload = row["mcp"]
+        mcp_payload = row["mcp_definition"]
         self.assertEqual(mcp_payload["name"], "Team Catalog MCP")
         desc = mcp_payload["description"]
         self.assertEqual(desc["en"], "English MCP")
