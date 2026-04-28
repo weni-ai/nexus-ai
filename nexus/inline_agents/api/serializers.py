@@ -314,7 +314,6 @@ class AgentSerializer(serializers.ModelSerializer):
                 continue
             seen_keys.add(k)
             rows.append(credential)
-        by_key = {c.key: c for c in rows if c.key}
         result = [
             {
                 "name": credential.key,
@@ -324,10 +323,6 @@ class AgentSerializer(serializers.ModelSerializer):
             }
             for credential in rows
         ]
-        for template in self._mcp_definitions(obj)["credentials"]:
-            name = template.get("name")
-            if name and name not in by_key:
-                result.append(dict(template))
         return result
 
 
