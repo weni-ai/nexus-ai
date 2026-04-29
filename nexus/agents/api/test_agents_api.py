@@ -589,7 +589,7 @@ class AssignAgentViewTestCase(TestCase):
             {"REGION_TOGGLE": True, "OTHER": "x"},
         )
 
-    def test_assign_mcp_config_replaces_existing_metadata(self):
+    def test_assign_mcp_config_replaces_existing_mcp_config(self):
         IntegratedAgent.objects.create(
             agent=self.agent,
             project=self.project,

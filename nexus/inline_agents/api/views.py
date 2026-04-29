@@ -94,11 +94,22 @@ logger = logging.getLogger(__name__)
 SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
 
 
+def _store_mcp_config_value_on_metadata(metadata: dict, mcp_config: dict) -> None:
+    """Assign ``metadata['mcp_config']`` to a shallow copy of ``mcp_config`` (shared write shape).
+
+    Callers differ on *when* to invoke this:
+    - Official assign uses ``if mcp_config:`` (truthy), so ``{}`` is skipped and prior DB value is unchanged.
+    - Custom assign uses ``if mcp_config is not None`` after validating a dict, so explicit ``{}`` clears.
+    """
+
+    metadata["mcp_config"] = dict(mcp_config)
+
+
 def _replace_integrated_agent_mcp_config(integrated_agent: IntegratedAgent, mcp_config: dict) -> None:
-    """Replace ``integrated_agent.metadata['mcp_config']`` with the request payload (full replace)."""
+    """Full replace of ``integrated_agent.metadata['mcp_config']`` (including explicit empty ``{}``)."""
     if integrated_agent.metadata is None:
         integrated_agent.metadata = {}
-    integrated_agent.metadata["mcp_config"] = dict(mcp_config)
+    _store_mcp_config_value_on_metadata(integrated_agent.metadata, mcp_config)
     integrated_agent.save(update_fields=["metadata"])
 
 
@@ -649,7 +660,7 @@ class OfficialAgentsV1(APIView):
         if mcp:
             integrated_agent.metadata["mcp"] = mcp
         if mcp_config:
-            integrated_agent.metadata["mcp_config"] = mcp_config
+            _store_mcp_config_value_on_metadata(integrated_agent.metadata, mcp_config)
         if system:
             integrated_agent.metadata["system"] = system
         integrated_agent.save(update_fields=["metadata"])
