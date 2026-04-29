@@ -94,6 +94,14 @@ logger = logging.getLogger(__name__)
 SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
 
 
+def _replace_integrated_agent_mcp_config(integrated_agent: IntegratedAgent, mcp_config: dict) -> None:
+    """Replace ``integrated_agent.metadata['mcp_config']`` with the request payload (full replace)."""
+    if integrated_agent.metadata is None:
+        integrated_agent.metadata = {}
+    integrated_agent.metadata["mcp_config"] = dict(mcp_config)
+    integrated_agent.save(update_fields=["metadata"])
+
+
 class PushAgents(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1003,12 +1011,22 @@ class ActiveAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         agent_uuid = kwargs.get("agent_uuid")
         assign: bool = request.data.get("assigned")
+        mcp_config = request.data.get("mcp_config") if "mcp_config" in request.data else None
+        if mcp_config is not None and not isinstance(mcp_config, dict):
+            return Response({"error": "mcp_config must be a JSON object"}, status=400)
 
         usecase = AssignAgentsUsecase()
 
         try:
             if assign:
                 _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid, infer_mcp_metadata=True)
+
+                if mcp_config is not None:
+                    _replace_integrated_agent_mcp_config(integrated_agent, mcp_config)
+                    notify_async(
+                        event="cache_invalidation:project",
+                        project=integrated_agent.project,
+                    )
 
                 # Fire cache invalidation event for team update (agent assigned) (async observer)
                 notify_async(
@@ -1287,12 +1305,22 @@ class VtexAppActiveAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         agent_uuid = kwargs.get("agent_uuid")
         assign: bool = request.data.get("assigned")
+        mcp_config = request.data.get("mcp_config") if "mcp_config" in request.data else None
+        if mcp_config is not None and not isinstance(mcp_config, dict):
+            return Response({"error": "mcp_config must be a JSON object"}, status=400)
 
         usecase = AssignAgentsUsecase()
 
         try:
             if assign:
-                usecase.assign_agent(agent_uuid, project_uuid)
+                _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
+
+                if mcp_config is not None:
+                    _replace_integrated_agent_mcp_config(integrated_agent, mcp_config)
+                    notify_async(
+                        event="cache_invalidation:project",
+                        project=integrated_agent.project,
+                    )
 
                 # Fire cache invalidation event for team update (agent assigned)
                 notify_async(
