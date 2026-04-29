@@ -272,6 +272,7 @@ class BedrockClient:
         if log_groups and log_groups[0].get("logGroupName") == log_group_name:
             return {
                 "tool_name": tool_name,
+                "lambda_name": tool_name,
                 "log_group_name": log_groups[0].get("logGroupName"),
                 "log_group_arn": log_groups[0].get("logGroupArn"),
             }
