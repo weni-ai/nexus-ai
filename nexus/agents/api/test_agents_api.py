@@ -612,6 +612,69 @@ class AssignAgentViewTestCase(TestCase):
         self.assertIsNone(integrated_agent.metadata.get("mcp"))
         self.assertIsNone(integrated_agent.metadata.get("system"))
 
+    def test_assign_accepts_mcp_config_and_persists_to_integrated_agent_metadata(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "assign-agents",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(
+            url,
+            {"assigned": True, "mcp_config": {"REGION_TOGGLE": True, "OTHER": "x"}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        integrated_agent = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
+        self.assertEqual(
+            integrated_agent.metadata.get("mcp_config"),
+            {"REGION_TOGGLE": True, "OTHER": "x"},
+        )
+
+    def test_assign_mcp_config_replaces_existing_mcp_config(self):
+        IntegratedAgent.objects.create(
+            agent=self.agent,
+            project=self.project,
+            metadata={"mcp_config": {"KEEP": 1}},
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "assign-agents",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(
+            url,
+            {"assigned": True, "mcp_config": {"NEW": 2}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        integrated_agent = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
+        self.assertEqual(integrated_agent.metadata.get("mcp_config"), {"NEW": 2})
+
+    def test_assign_rejects_non_object_mcp_config(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "assign-agents",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {"assigned": True, "mcp_config": ["invalid"]}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("json object", response.json().get("error", "").lower())
+
 
 class GroupUnassignmentTestCase(TestCase):
     """Regression: group unassignment must delete all IntegratedAgent rows in the group (active and inactive)."""
