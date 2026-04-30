@@ -282,7 +282,7 @@ def get_trace_summary(language, trace):
         return "Processing your request now"
 
 
-@celery_app.task(bind=True)
+@celery_app.task(bind=True, ignore_result=False)
 def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: no cover
     # TODO: remove get_action_clients from this function
     def get_action_clients(preview: bool = False):
@@ -324,7 +324,7 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         contact_fields=message.get("contact_fields", {}),
     )
 
-    mailroom_msg_event = message.msg_event
+    mailroom_msg_event = message.msg_event or {}
     mailroom_msg_event["attachments"] = mailroom_msg_event.get("attachments") or []
     mailroom_msg_event["metadata"] = mailroom_msg_event.get("metadata") or {}
 
