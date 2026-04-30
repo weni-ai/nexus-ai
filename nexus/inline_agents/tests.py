@@ -358,6 +358,7 @@ class MockLogGroupBedrockClient:
     def get_log_group(self, tool_name: str) -> dict:
         return {
             "tool_name": tool_name,
+            "lambda_name": tool_name,
             "log_group_name": f"/aws/lambda/{tool_name}",
             "log_group_arn": f"arn:aws:logs:region:XXXXXXXXX:log-group:/aws/lambda/{tool_name}",
         }
@@ -379,7 +380,9 @@ class TestGetLogGroup(TestCase):
         tool_key = "test-tool"
         log_group = self.usecase.get_log_group(self.project.uuid, self.agent.slug, tool_key)
         logger.info("Log group fetched", extra={"has_tool_name": bool(log_group.get("tool_name"))})
-        self.assertEqual(log_group.get("tool_name"), f"{tool_key}-{self.agent.id}")
+        expected_name = f"{tool_key}-{self.agent.id}"
+        self.assertEqual(log_group.get("tool_name"), expected_name)
+        self.assertEqual(log_group.get("lambda_name"), expected_name)
 
 
 class TestInlineAgentsConfiguration(TestCase):
