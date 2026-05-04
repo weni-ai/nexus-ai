@@ -86,6 +86,11 @@ def _configure_logfire_and_instrument_openai_agents() -> None:
 
     logfire.instrument_openai_agents()
     _logfire_openai_agents_instrumented_pid = os.getpid()
+    logger.info(
+        "OpenAI Agents OTel instrumentation applied pid=%s ENABLE_LOGFIRE_OPENAI_AGENTS=%s",
+        os.getpid(),
+        settings.ENABLE_LOGFIRE_OPENAI_AGENTS,
+    )
 
 
 @worker_process_init.connect

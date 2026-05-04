@@ -25,6 +25,14 @@ from inline_agents.backends.openai.entities import FinalResponse, HooksState
 logger = logging.getLogger(__name__)
 
 
+def format_otel_current_span_for_log() -> str:
+    """Compact OTEL current span ids for INFO diagnostics (Langfuse root vs Logfire spans)."""
+    ctx = trace.get_current_span().get_span_context()
+    if not ctx.is_valid:
+        return "otel_span=invalid"
+    return f"otel_trace_id={format(ctx.trace_id, '032x')} " f"otel_span_id={format(ctx.span_id, '016x')}"
+
+
 def _usage_dict_from_request_entry(entry: Any) -> Optional[Dict[str, int]]:
     """Build Langfuse usage_details from a single request_usage_entry (one LLM call)."""
     if entry is None:
@@ -360,6 +368,11 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         # When Logfire instrument_openai_agents is on, it creates an OTel span "Responses API with ..." that
         # Langfuse ingests. Do not create our own Langfuse generation or we get two spans (langfuse-sdk + logfire).
         if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
+            logger.info(
+                "[RunnerHooks] on_llm_start skip_langfuse_generation %s agent_slug=%s",
+                format_otel_current_span_for_log(),
+                _get_agent_slug(agent, self.trace_handler.hooks_state),
+            )
             return
         try:
             state = self.trace_handler.hooks_state

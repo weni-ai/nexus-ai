@@ -28,6 +28,7 @@ from inline_agents.backends.openai.hooks import (
     HooksState,
     RunnerHooks,
     SupervisorHooks,
+    format_otel_current_span_for_log,
 )
 from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from inline_agents.backends.openai.sessions import (
@@ -606,12 +607,28 @@ class OpenAIBackend(InlineAgentsBackend):
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
             trace_id_raw = f"trace_urn_{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}"
             trace_id = _sanitize_langfuse_id(trace_id_raw)
+            if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
+                logger.info(
+                    "[OpenAIBackend] agent_workflow after_langfuse_root_open %s agents_trace_id=%s project_uuid=%s",
+                    format_otel_current_span_for_log(),
+                    trace_id,
+                    project_uuid,
+                )
 
             with trace(workflow_name=project_uuid, trace_id=trace_id):
                 user_model_credentials = external_team.pop("user_model_credentials", {})
                 model_vendor = external_team.pop("model_vendor", "")
-                print(f"[DEBUG CREDS] backend before _set_openai_client: creds={user_model_credentials}, vendor={model_vendor}")
+                print(
+                    f"[DEBUG CREDS] backend before _set_openai_client: creds={user_model_credentials}, vendor={model_vendor}"
+                )
                 self._set_openai_client(user_model_credentials, model_vendor)
+                if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
+                    logger.info(
+                        "[OpenAIBackend] agent_workflow before_run_streamed %s agents_trace_id=%s project_uuid=%s",
+                        format_otel_current_span_for_log(),
+                        trace_id,
+                        project_uuid,
+                    )
                 result = client.run_streamed(
                     **external_team, session=session, hooks=runner_hooks, max_turns=settings.OPENAI_AGENTS_MAX_TURNS
                 )
@@ -697,6 +714,13 @@ class OpenAIBackend(InlineAgentsBackend):
 
                     return final_response
 
+                if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
+                    logger.info(
+                        "[OpenAIBackend] agent_workflow after_stream_events %s agents_trace_id=%s project_uuid=%s",
+                        format_otel_current_span_for_log(),
+                        trace_id,
+                        project_uuid,
+                    )
                 final_response = self._get_final_response(result)
 
                 skip_fmt = getattr(hooks_state, "skip_outgoing_dispatch", False)
@@ -863,22 +887,26 @@ class OpenAIBackend(InlineAgentsBackend):
         sentry_sdk.capture_exception(exception)
 
     def _set_openai_client(self, user_model_credentials: Dict[str, str], model_vendor: str) -> None:
-        print(f"[DEBUG CREDS] _set_openai_client called: creds_truthy={bool(user_model_credentials)}, vendor={model_vendor}")
+        print(
+            f"[DEBUG CREDS] _set_openai_client called: creds_truthy={bool(user_model_credentials)}, vendor={model_vendor}"
+        )
         if user_model_credentials and model_vendor.lower() == "openai":
             api_key = user_model_credentials.get("api_key", "")
             base_url = user_model_credentials.get("api_base", "")
-            print(f"[DEBUG CREDS] _set_openai_client INSIDE IF: api_key={repr(api_key[:8] if api_key else '')}, base_url={repr(base_url)}")
+            print(
+                f"[DEBUG CREDS] _set_openai_client INSIDE IF: api_key={repr(api_key[:8] if api_key else '')}, base_url={repr(base_url)}"
+            )
 
             if user_model_credentials.get("api_base", ""):
                 client = AsyncOpenAI(
                     base_url=base_url,
                     api_key=api_key,
                 )
-                print(f"[DEBUG CREDS] _set_openai_client -> set_default_openai_client with custom base_url")
+                print("[DEBUG CREDS] _set_openai_client -> set_default_openai_client with custom base_url")
                 set_default_openai_client(client)
                 return
 
             print(f"[DEBUG CREDS] _set_openai_client -> set_default_openai_key({repr(api_key[:8] if api_key else '')})")
             set_default_openai_key(api_key)
         else:
-            print(f"[DEBUG CREDS] _set_openai_client -> SKIPPED (no creds or vendor != openai)")
+            print("[DEBUG CREDS] _set_openai_client -> SKIPPED (no creds or vendor != openai)")
