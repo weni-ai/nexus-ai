@@ -360,6 +360,14 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         # When Logfire instrument_openai_agents is on, it creates an OTel span "Responses API with ..." that
         # Langfuse ingests. Do not create our own Langfuse generation or we get two spans (langfuse-sdk + logfire).
         if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
+            try:
+                span = trace.get_current_span()
+                model_name = _get_model_name_from_agent(agent)
+                span.set_attribute("gen_ai.system", "openai")
+                if model_name:
+                    span.set_attribute("gen_ai.request.model", model_name)
+            except Exception:
+                logger.info("[RunnerHooks] failed to set gen_ai attributes on current span")
             return
         try:
             state = self.trace_handler.hooks_state
@@ -392,6 +400,17 @@ class RunnerHooks(RunHooks):  # type: ignore[misc]
         context_data = context.context
         # Update our Langfuse generation (created in on_llm_start) with usage including cache
         # so cache_read_input_tokens appears in "Responses API with ...", not on the parent span.
+        if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
+            try:
+                span = trace.get_current_span()
+                model_name_from_response = getattr(response, "model", None) or (
+                    response.get("model") if isinstance(response, dict) else None
+                )
+                span.set_attribute("gen_ai.system", "openai")
+                if model_name_from_response:
+                    span.set_attribute("gen_ai.request.model", model_name_from_response)
+            except Exception:
+                logger.info("[RunnerHooks] failed to set gen_ai attributes on current span (on_llm_end)")
         try:
             usage_dict = None
             usage = getattr(context, "usage", None)
