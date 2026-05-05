@@ -18,7 +18,10 @@ from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
 from nexus.projects.channel_ops import channel_matches_default_preview
-from nexus.projects.simulation_model_cache import simulation_manager_model_redis_key
+from nexus.projects.simulation_model_cache import (
+    simulation_manager_model_redis_key,
+    simulation_manager_pipeline_version_redis_key,
+)
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from router.dispatcher import dispatch
@@ -64,6 +67,43 @@ def _get_simulation_manager_model(project_uuid: str, contact_urn: str) -> Option
         return None
 
 
+def _get_simulation_manager_pipeline_version(project_uuid: str, contact_urn: str) -> Optional[str]:
+    try:
+        raw = get_redis_read_client().get(simulation_manager_pipeline_version_redis_key(project_uuid, contact_urn))
+        if not raw:
+            return None
+        return raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+    except Exception:
+        logger.warning("Failed to read simulation manager pipeline version from Redis", exc_info=True)
+        return None
+
+
+def apply_simulation_manager_pipeline_version_override(
+    on_default_simulation_channel: bool,
+    project_uuid: str,
+    contact_urn: str,
+    base_version: Optional[str],
+) -> Optional[str]:
+    """Replace manager pipeline version with Redis value on default preview-channel traffic."""
+    if not on_default_simulation_channel or not project_uuid:
+        return base_version
+    cached = _get_simulation_manager_pipeline_version(project_uuid, contact_urn or "")
+    if cached is None:
+        return base_version
+    stripped = cached.strip()
+    if not stripped:
+        return base_version
+    urn_tail = (contact_urn or "")[-8:] if contact_urn else ""
+    logger.info(
+        "Simulation pipeline version override: project_uuid=%s, contact_urn_suffix=%s, "
+        "manager_pipeline_version=%s, source=cache",
+        project_uuid,
+        urn_tail,
+        stripped,
+    )
+    return stripped
+
+
 def apply_simulation_foundation_model_override(
     on_default_simulation_channel: bool,
     project_uuid: str,
@@ -77,7 +117,12 @@ def apply_simulation_foundation_model_override(
     effective = cached if cached else foundation_model
     urn_tail = (contact_urn or "")[-8:] if contact_urn else ""
     logger.info(
-        f"Simulation model override: project_uuid={project_uuid}, contact_urn_suffix={urn_tail}, foundation_model={effective}, manager_model_source={cached}",
+        "Simulation model override: project_uuid=%s, contact_urn_suffix=%s, "
+        "foundation_model=%s, manager_model_source=%s",
+        project_uuid,
+        urn_tail,
+        effective,
+        cached,
     )
     return effective
 
@@ -402,6 +447,9 @@ def _invoke_backend(
     message_conversation_log_uuid: Optional[str] = None,
     preview_websocket: bool = False,
     skip_conversation_sqs: bool = False,
+    *,
+    replace_manager_pipeline_version: bool = False,
+    manager_pipeline_version: Optional[str] = None,
 ) -> Tuple[str, bool]:
     """
     Invoke backend with cached data to avoid database queries.
@@ -416,6 +464,9 @@ def _invoke_backend(
 
     if supervisor_agent_uuid is not None:
         invoke_kwargs["supervisor_agent_uuid"] = supervisor_agent_uuid
+
+    if replace_manager_pipeline_version:
+        invoke_kwargs["manager_pipeline_version"] = manager_pipeline_version
 
     # Add non-cached parameters that come from the message/request
     invoke_kwargs.update(
@@ -456,7 +507,7 @@ def _invoke_backend(
     retry_jitter=True,
     max_retries=5,
 )
-def start_inline_agents(
+def start_inline_agents(  # noqa: C901
     self,
     message: Dict,
     preview: bool = False,
@@ -541,6 +592,12 @@ def start_inline_agents(
         foundation_model = apply_simulation_foundation_model_override(
             simulation_channel_effective, project_uuid or "", message.get("contact_urn") or "", foundation_model
         )
+        effective_manager_pipeline_version = apply_simulation_manager_pipeline_version_override(
+            simulation_channel_effective,
+            project_uuid or "",
+            message.get("contact_urn") or "",
+            project_dict.get("manager_pipeline_version"),
+        )
 
         # TODO: Logs
         message_obj = message_factory(
@@ -610,6 +667,8 @@ def start_inline_agents(
             message_conversation_log_uuid=message_conversation_log_uuid,
             preview_websocket=preview_websocket,
             skip_conversation_sqs=skip_sqs,
+            replace_manager_pipeline_version=True,
+            manager_pipeline_version=effective_manager_pipeline_version,
         )
 
         if (response is None or response == "") and not skip_dispatch:
