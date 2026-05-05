@@ -3,16 +3,23 @@ import os
 import sys
 from typing import Optional
 
-import logfire
-import nest_asyncio
-from celery import Celery, schedules
-from celery.signals import worker_ready
-from django.conf import settings
-from langfuse import get_client
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
+
+from nexus.celery_otel_bootstrap import (
+    bootstrap_celery_otel_before_django,
+    configure_logfire_openai_agents_otel,
+)
+
+# Before Django loads (django.setup installs a concrete OTEL TracerProvider early).
+bootstrap_celery_otel_before_django()
+
+import nest_asyncio  # noqa: E402
+from celery import Celery, schedules  # noqa: E402
+from celery.signals import worker_process_init, worker_ready  # noqa: E402
+from django.conf import settings  # noqa: E402
+from langfuse import get_client  # noqa: E402
 
 logger = logging.getLogger(__name__)
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
 app = Celery("nexus")
 app.config_from_object("django.conf:settings", namespace="CELERY")
@@ -61,16 +68,26 @@ if "test" in sys.argv or getattr(settings, "CELERY_ALWAYS_EAGER", False):
 nest_asyncio.apply()
 
 
+def _configure_logfire_and_instrument_openai_agents() -> None:
+    """Configure Logfire and instrument OpenAI Agents once per OS process.
+
+    Celery prefork runs tasks in forked pool workers: pool children need their own
+    instrumentation after fork (PID changes).
+    """
+    configure_logfire_openai_agents_otel(settings.ENABLE_LOGFIRE_OPENAI_AGENTS)
+
+
+@worker_process_init.connect
+def setup_logfire_in_pool_worker(sender, **kwargs) -> None:
+    """Prefork pool child: ensure Logfire instruments this process (tasks run here)."""
+    _configure_logfire_and_instrument_openai_agents()
+
+
 @worker_ready.connect
 def setup_logfire_and_langfuse(sender, **kwargs):
-    logfire.configure(
-        service_name="openai-agents",
-        send_to_logfire=False,
-    )
+    _configure_logfire_and_instrument_openai_agents()
 
     if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
-        logfire.instrument_openai_agents()
-
         try:
             langfuse = get_client()
             if langfuse.auth_check():
