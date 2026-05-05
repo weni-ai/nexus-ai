@@ -14,8 +14,16 @@ If we replace the OTEL proxy with a plain ``SDKTracerProvider`` **before**
 hit Logfire's **internal** provider while Langfuse's processor stays on the **global** SDK
 provider → shallow Langfuse traces (duplicate workflow rows, no Agent/LLM children).
 
-Order here: ``logfire.configure()`` first while the global tracer is still the default OTEL
-proxy (or unset), then ``get_client()`` so Langfuse and Logfire share one export pipeline.
+Order in each **task process**: ``logfire.configure()`` first while the global tracer is
+still the default OTEL proxy (or inherited from pre-Django bootstrap), then ``get_client()``
+so Langfuse and Logfire share one export pipeline.
+
+**Celery prefork:** Do **not** call ``get_client()`` in :func:`bootstrap_celery_otel_before_django`.
+That runs in the **main** worker process before pool children fork. Langfuse's
+``LangfuseSpanProcessor`` uses ``BatchSpanProcessor`` with a background export thread; after
+``fork()`` that thread is invalid in children, so Langfuse often ingests nothing while Logfire
+console output still looks fine. Use :func:`configure_logfire_openai_agents_otel` from
+``worker_process_init`` (each pool child) and ``worker_ready`` (parent / solo).
 
 Call :func:`bootstrap_celery_otel_before_django` from ``nexus/celery.py`` immediately after
 setting ``DJANGO_SETTINGS_MODULE`` and **before** ``from django.conf import settings``.
@@ -32,16 +40,26 @@ logger = logging.getLogger(__name__)
 _logfire_openai_agents_instrumented_pid: int | None = None
 
 
-def _env_bool_enabled(name: str, default: bool = False) -> bool:
-    """Match django-environ style truthy strings for deployment parity."""
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in ("1", "true", "yes", "on")
+def bootstrap_logfire_before_django() -> None:
+    """Set Logfire as the global OTEL provider before Django (no Langfuse, no instrument).
+
+    Establishes Logfire's tracer proxy before ``django.setup()`` without starting Langfuse
+    export threads in the prefork parent.
+    """
+    import logfire
+
+    logfire.configure(
+        service_name="openai-agents",
+        send_to_logfire=False,
+    )
 
 
 def configure_logfire_openai_agents_otel(enabled: bool) -> None:
-    """Configure Logfire and optionally instrument OpenAI Agents once per OS process."""
+    """Configure Logfire and optionally Langfuse + OpenAI Agents once per OS process.
+
+    Intended for Celery ``worker_process_init`` / ``worker_ready`` so Langfuse starts after
+    fork in prefork pool children.
+    """
     global _logfire_openai_agents_instrumented_pid
 
     import logfire
@@ -69,12 +87,11 @@ def configure_logfire_openai_agents_otel(enabled: bool) -> None:
 
 
 def bootstrap_celery_otel_before_django() -> None:
-    """Run Langfuse + Logfire setup before Django loads when running Celery."""
+    """Run Logfire-only setup before Django when running Celery (Langfuse deferred)."""
     _argv = " ".join(sys.argv).lower()
     if "celery" not in _argv:
         return
-    enabled = _env_bool_enabled("ENABLE_LOGFIRE_OPENAI_AGENTS")
     try:
-        configure_logfire_openai_agents_otel(enabled)
+        bootstrap_logfire_before_django()
     except Exception:
         logger.exception("Failed Celery OTEL bootstrap (pre-Django).")
