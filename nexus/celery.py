@@ -97,6 +97,15 @@ def _configure_logfire_and_instrument_openai_agents() -> None:
     _logfire_openai_agents_instrumented_pid = os.getpid()
 
 
+# Initialize tracing as early as possible in Celery processes.
+_argv = " ".join(sys.argv).lower()
+if "celery" in _argv:
+    try:
+        _configure_logfire_and_instrument_openai_agents()
+    except Exception:
+        logger.exception("Failed to initialize Logfire/Langfuse OTEL at Celery startup.")
+
+
 @worker_process_init.connect
 def setup_logfire_in_pool_worker(sender, **kwargs) -> None:
     """Prefork pool child: ensure Logfire instruments this process (tasks run here)."""
