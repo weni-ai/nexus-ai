@@ -73,6 +73,15 @@ def _configure_logfire_and_instrument_openai_agents() -> None:
     """
     global _logfire_openai_agents_instrumented_pid
 
+    # Ensure Langfuse installs its OpenTelemetry span processor before any OpenAI Agents/Logfire
+    # spans are created in this process. When initialization is delayed, spans can be emitted
+    # before the exporter is attached, resulting in missing nested spans in Langfuse.
+    if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
+        try:
+            get_client()
+        except Exception:
+            logger.exception("Failed to initialize Langfuse client for OTEL span processing.")
+
     logfire.configure(
         service_name="openai-agents",
         send_to_logfire=False,
