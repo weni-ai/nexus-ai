@@ -6,15 +6,10 @@ from typing import Optional
 import logfire
 import nest_asyncio
 from celery import Celery, schedules
-from celery.signals import worker_process_init, worker_ready
 from django.conf import settings
 from langfuse import get_client
 
 logger = logging.getLogger(__name__)
-
-# Per-process: prefork pool children must run instrument_openai_agents() after fork; the
-# main worker process only receives worker_ready. Solo pool has no children — worker_ready is enough.
-_logfire_openai_agents_instrumented_pid: Optional[int] = None
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
@@ -64,51 +59,16 @@ if "test" in sys.argv or getattr(settings, "CELERY_ALWAYS_EAGER", False):
 
 nest_asyncio.apply()
 
+logfire.configure(
+    service_name="openai-agents",
+    send_to_logfire=False,
+)
 
-def _configure_logfire_and_instrument_openai_agents() -> None:
-    """Configure Logfire and instrument OpenAI Agents once per OS process.
-
-    Celery prefork runs tasks in forked pool workers. worker_ready runs on the parent
-    consumer; pool children need their own instrumentation after fork.
-    """
-    global _logfire_openai_agents_instrumented_pid
-
-    logfire.configure(
-        service_name="openai-agents",
-        send_to_logfire=False,
-    )
-
-    if not settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
-        return
-
-    if _logfire_openai_agents_instrumented_pid == os.getpid():
-        return
-
+if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
     logfire.instrument_openai_agents()
-    _logfire_openai_agents_instrumented_pid = os.getpid()
-    logger.info(
-        "OpenAI Agents OTel instrumentation applied pid=%s ENABLE_LOGFIRE_OPENAI_AGENTS=%s",
-        os.getpid(),
-        settings.ENABLE_LOGFIRE_OPENAI_AGENTS,
-    )
+    langfuse = get_client()
 
-
-@worker_process_init.connect
-def setup_logfire_in_pool_worker(sender, **kwargs) -> None:
-    """Prefork pool child: ensure Logfire instruments this process (tasks run here)."""
-    _configure_logfire_and_instrument_openai_agents()
-
-
-@worker_ready.connect
-def setup_logfire_and_langfuse(sender, **kwargs):
-    _configure_logfire_and_instrument_openai_agents()
-
-    if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
-        try:
-            langfuse = get_client()
-            if langfuse.auth_check():
-                logger.info("Langfuse client is authenticated and ready!")
-            else:
-                logger.error("Langfuse authentication failed. Check credentials and host.")
-        except Exception:
-            logger.exception("Failed to connect to Langfuse, worker will continue without it.")
+    if langfuse.auth_check():
+        logger.info("Langfuse client is authenticated and ready!")
+    else:
+        logger.error("Langfuse authentication failed. Check credentials and host.")
