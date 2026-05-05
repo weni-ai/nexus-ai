@@ -657,6 +657,11 @@ def get_component_tools(formatter_tools_descriptions: dict | None = None):
     return tools
 
 
+def all_component_tool_names(formatter_tools_descriptions: dict | None = None) -> frozenset[str]:
+    """Names of tools returned by `get_component_tools` (for stripping supervisor JSON when components off)."""
+    return frozenset(str(t.name) for t in get_component_tools(formatter_tools_descriptions) if getattr(t, "name", None))
+
+
 # Classes for combined components (simple_text + another component)
 class SimpleTextWithQuickRepliesArgs(BaseModel):
     """Arguments for component that combines simple text + quick replies"""

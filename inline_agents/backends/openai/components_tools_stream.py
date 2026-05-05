@@ -82,8 +82,19 @@ def get_supervisor_component_tools_for_streaming_merge(
     return out
 
 
+def streaming_merge_tool_names(formatter_tools_descriptions: dict | None = None) -> frozenset[str]:
+    """Tool names injected by `get_supervisor_component_tools_for_streaming_merge` (for deduping DB tools)."""
+    names: set[str] = set()
+    for t in get_supervisor_component_tools_for_streaming_merge(formatter_tools_descriptions):
+        n = getattr(t, "name", None)
+        if n:
+            names.add(str(n))
+    return frozenset(names)
+
+
 __all__ = [
     "STREAMING_COMPONENT_ACK",
     "_STREAMING_NAMES",
     "get_supervisor_component_tools_for_streaming_merge",
+    "streaming_merge_tool_names",
 ]
