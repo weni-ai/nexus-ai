@@ -25,6 +25,12 @@ That runs in the **main** worker process before pool children fork. Langfuse's
 console output still looks fine. Use :func:`configure_logfire_openai_agents_otel` from
 ``worker_process_init`` (each pool child) and ``worker_ready`` (parent / solo).
 
+``inline_agents.backends`` registers ``OpenAIBackend()`` at import time, which calls
+``get_client()`` on the main process before workers fork. Pool children inherit a broken
+``LangfuseResourceManager`` singleton. When Logfire+Langfuse is enabled,
+:func:`configure_logfire_openai_agents_otel` resets Langfuse and replaces the registry's
+OpenAI backend so ``langfuse_c`` matches the post-fork client.
+
 Call :func:`bootstrap_celery_otel_before_django` from ``nexus/celery.py`` immediately after
 setting ``DJANGO_SETTINGS_MODULE`` and **before** ``from django.conf import settings``.
 """
@@ -54,6 +60,15 @@ def bootstrap_logfire_before_django() -> None:
     )
 
 
+def _refresh_openai_backend_after_langfuse_reinit() -> None:
+    """Replace import-time OpenAIBackend so ``langfuse_c`` is not a fork-stale client."""
+    from inline_agents.backends import BackendsRegistry
+    from inline_agents.backends.openai.backend import OpenAIBackend
+
+    BackendsRegistry._options["OpenAIBackend"] = OpenAIBackend()
+    BackendsRegistry._default_backend = BackendsRegistry._options["OpenAIBackend"]
+
+
 def configure_logfire_openai_agents_otel(enabled: bool) -> None:
     """Configure Logfire and optionally Langfuse + OpenAI Agents once per OS process.
 
@@ -65,6 +80,14 @@ def configure_logfire_openai_agents_otel(enabled: bool) -> None:
     import logfire
     from langfuse import get_client
 
+    if enabled:
+        try:
+            from langfuse._client.resource_manager import LangfuseResourceManager
+
+            LangfuseResourceManager.reset()
+        except Exception:
+            logger.exception("LangfuseResourceManager.reset() failed (post-fork re-init).")
+
     logfire.configure(
         service_name="openai-agents",
         send_to_logfire=False,
@@ -75,6 +98,11 @@ def configure_logfire_openai_agents_otel(enabled: bool) -> None:
             get_client()
         except Exception:
             logger.exception("Failed to initialize Langfuse client for OTEL span processing.")
+        else:
+            try:
+                _refresh_openai_backend_after_langfuse_reinit()
+            except Exception:
+                logger.exception("Failed to refresh OpenAIBackend after Langfuse re-init.")
 
     if not enabled:
         return
