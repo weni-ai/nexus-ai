@@ -28,6 +28,28 @@ def _env_bool_enabled(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _ensure_sdk_tracer_provider_when_still_proxy() -> None:
+    """Install a real SDK TracerProvider before Django locks OTEL (Logfire path only).
+
+    While the global provider is still ``ProxyTracerProvider``, ``django.setup()`` will
+    typically replace it with its own ``TracerProvider``. After that, subsequent libraries
+    cannot take ownership of the provider chain reliably.
+
+    Installing one SDK ``TracerProvider`` here (with ``service.name``) lets Langfuse attach
+    ``LangfuseSpanProcessor`` to the same provider Logfire instruments, and Django's later
+    ``set_tracer_provider`` call becomes a no-op (OTEL refuses overrides).
+    """
+    from opentelemetry import trace as otel_trace_api
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider as SDKTracerProvider
+
+    current = otel_trace_api.get_tracer_provider()
+    if not isinstance(current, otel_trace_api.ProxyTracerProvider):
+        return
+    resource = Resource.create({"service.name": "openai-agents"})
+    otel_trace_api.set_tracer_provider(SDKTracerProvider(resource=resource))
+
+
 def configure_logfire_openai_agents_otel(enabled: bool) -> None:
     """Configure Logfire and optionally instrument OpenAI Agents once per OS process."""
     global _logfire_openai_agents_instrumented_pid
@@ -36,11 +58,16 @@ def configure_logfire_openai_agents_otel(enabled: bool) -> None:
     from langfuse import get_client
 
     if enabled:
+        # Replace ProxyTracerProvider before Django so Langfuse attaches LangfuseSpanProcessor
+        # to this SDK provider; django.setup() cannot replace it afterward.
+        _ensure_sdk_tracer_provider_when_still_proxy()
         try:
             get_client()
         except Exception:
             logger.exception("Failed to initialize Langfuse client for OTEL span processing.")
 
+    # Logfire may log \"Overriding TracerProvider is not allowed\" if the SDK provider is
+    # already set; spans still merge onto the active provider.
     logfire.configure(
         service_name="openai-agents",
         send_to_logfire=False,
