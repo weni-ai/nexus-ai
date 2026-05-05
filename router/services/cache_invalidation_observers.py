@@ -49,6 +49,7 @@ class ProjectCacheInvalidationObserver(EventObserver):
             from nexus.usecases.guardrails.guardrails_usecase import GuardrailsUsecase
             from nexus.usecases.intelligences.get_by_uuid import get_project_and_content_base_data
             from router.services.cache_service import CacheService
+            from router.services.manager_pipeline_version import manager_pipeline_version_from_project
 
             cache_service = CacheService()
             project_uuid = str(project.uuid)
@@ -71,6 +72,7 @@ class ProjectCacheInvalidationObserver(EventObserver):
                     "default_supervisor_foundation_model": proj.default_supervisor_foundation_model,
                     "human_support": proj.human_support,
                     "human_support_prompt": proj.human_support_prompt,
+                    "manager_pipeline_version": manager_pipeline_version_from_project(proj),
                     "supervisor_agent_uuid": proj.manager_agent.uuid if proj.manager_agent else None,
                 }
 

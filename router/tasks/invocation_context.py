@@ -77,4 +77,5 @@ class CachedProjectData:
                 else None
             ),
             "supervisor_agent_uuid": self.project_dict.get("supervisor_agent_uuid"),
+            "manager_pipeline_version": self.project_dict.get("manager_pipeline_version"),
         }
