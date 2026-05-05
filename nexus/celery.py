@@ -3,20 +3,23 @@ import os
 import sys
 from typing import Optional
 
-import logfire
-import nest_asyncio
-from celery import Celery, schedules
-from celery.signals import worker_process_init, worker_ready
-from django.conf import settings
-from langfuse import get_client
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
+
+from nexus.celery_otel_bootstrap import (
+    bootstrap_celery_otel_before_django,
+    configure_logfire_openai_agents_otel,
+)
+
+# Before Django loads (django.setup installs a concrete OTEL TracerProvider early).
+bootstrap_celery_otel_before_django()
+
+import nest_asyncio  # noqa: E402
+from celery import Celery, schedules  # noqa: E402
+from celery.signals import worker_process_init, worker_ready  # noqa: E402
+from django.conf import settings  # noqa: E402
+from langfuse import get_client  # noqa: E402
 
 logger = logging.getLogger(__name__)
-
-# Per-process: prefork pool children must run instrument_openai_agents() after fork; the
-# main worker process only receives worker_ready. Solo pool has no children — worker_ready is enough.
-_logfire_openai_agents_instrumented_pid: Optional[int] = None
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
 app = Celery("nexus")
 app.config_from_object("django.conf:settings", namespace="CELERY")
@@ -68,42 +71,10 @@ nest_asyncio.apply()
 def _configure_logfire_and_instrument_openai_agents() -> None:
     """Configure Logfire and instrument OpenAI Agents once per OS process.
 
-    Celery prefork runs tasks in forked pool workers. worker_ready runs on the parent
-    consumer; pool children need their own instrumentation after fork.
+    Celery prefork runs tasks in forked pool workers: pool children need their own
+    instrumentation after fork (PID changes).
     """
-    global _logfire_openai_agents_instrumented_pid
-
-    # Ensure Langfuse installs its OpenTelemetry span processor before any OpenAI Agents/Logfire
-    # spans are created in this process. When initialization is delayed, spans can be emitted
-    # before the exporter is attached, resulting in missing nested spans in Langfuse.
-    if settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
-        try:
-            get_client()
-        except Exception:
-            logger.exception("Failed to initialize Langfuse client for OTEL span processing.")
-
-    logfire.configure(
-        service_name="openai-agents",
-        send_to_logfire=False,
-    )
-
-    if not settings.ENABLE_LOGFIRE_OPENAI_AGENTS:
-        return
-
-    if _logfire_openai_agents_instrumented_pid == os.getpid():
-        return
-
-    logfire.instrument_openai_agents()
-    _logfire_openai_agents_instrumented_pid = os.getpid()
-
-
-# Initialize tracing as early as possible in Celery processes.
-_argv = " ".join(sys.argv).lower()
-if "celery" in _argv:
-    try:
-        _configure_logfire_and_instrument_openai_agents()
-    except Exception:
-        logger.exception("Failed to initialize Logfire/Langfuse OTEL at Celery startup.")
+    configure_logfire_openai_agents_otel(settings.ENABLE_LOGFIRE_OPENAI_AGENTS)
 
 
 @worker_process_init.connect
