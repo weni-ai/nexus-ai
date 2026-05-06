@@ -232,8 +232,8 @@ class WorkflowTaskRevocationTestCase(SimpleTestCase):
 
         # Verify Celery control was called
         self.assertEqual(mock_celery_app.control.revoke.call_count, 2)
-        mock_celery_app.control.revoke.assert_any_call("task-1", terminate=True)
-        mock_celery_app.control.revoke.assert_any_call("task-2", terminate=True)
+        mock_celery_app.control.revoke.assert_any_call("task-1", terminate=False)
+        mock_celery_app.control.revoke.assert_any_call("task-2", terminate=False)
 
     @patch("nexus.celery.app")
     def test_revoke_workflow_tasks_empty(self, mock_celery_app):
@@ -384,7 +384,7 @@ class WorkflowMessageConcatenationTestCase(SimpleTestCase):
         self.assertEqual(final_message, "Legacy message\nNew message")
 
         # Legacy task should be revoked
-        mock_celery_app.control.revoke.assert_called_with("legacy-task-id", terminate=True)
+        mock_celery_app.control.revoke.assert_called_with("legacy-task-id", terminate=False)
 
 
 class LegacyPendingTasksTestCase(SimpleTestCase):

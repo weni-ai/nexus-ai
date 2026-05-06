@@ -467,6 +467,7 @@ class OpenAIBackend(InlineAgentsBackend):
                 runner_hooks,
                 hooks_state,
                 use_components,
+                message_uuid=message_conversation_log_uuid,
                 grpc_session=grpc_session,
                 formatter_agent_configurations=formatter_agent_configurations,
             )
@@ -716,12 +717,16 @@ class OpenAIBackend(InlineAgentsBackend):
         runner_hooks,
         hooks_state,
         use_components,
+        message_uuid: Optional[str] = None,
         grpc_session: Optional[StreamingSession] = None,
         formatter_agent_configurations=None,
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
-            trace_id_raw = f"trace_urn_{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}"
+            if message_uuid:
+                trace_id_raw = f"trace_msg_{message_uuid}"
+            else:
+                trace_id_raw = f"trace_urn_{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}"
             trace_id = _sanitize_langfuse_id(trace_id_raw)
 
             with trace(workflow_name=project_uuid, trace_id=trace_id):
