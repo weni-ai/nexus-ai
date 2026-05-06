@@ -641,6 +641,7 @@ def start_inline_agents(
             outgoing_created_at=pendulum.now().to_iso8601_string(),
             message_conversation_log_uuid=message_conversation_log_uuid,
             turn_id=turn_id,
+            celery_task_id=self.request.id,
         )
 
         # Superseded guard: if a newer message arrived while we were running, skip dispatch.
@@ -696,6 +697,7 @@ def start_inline_agents(
             outgoing_created_at=pendulum.now().to_iso8601_string(),
             message_conversation_log_uuid=message_conversation_log_uuid,
             turn_id=turn_id,
+            celery_task_id=self.request.id,
         )
         if preview or preview_websocket:
             return dispatch_preview(e.message, message_obj, broadcast, user_email, agents_backend, flows_user_email)
