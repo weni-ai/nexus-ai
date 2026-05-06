@@ -3,12 +3,13 @@ import os
 import sys
 from typing import Optional
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
-
 from nexus.celery_otel_bootstrap import (
     bootstrap_celery_otel_before_django,
     configure_logfire_openai_agents_otel,
 )
+
+# Ensure Django settings are available before importing Django modules.
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "nexus.settings")
 
 # Before Django loads (django.setup installs a concrete OTEL TracerProvider early).
 bootstrap_celery_otel_before_django()
