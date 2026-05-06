@@ -646,6 +646,9 @@ if not (128 <= AWS_LAMBDA_MEMORY_SIZE <= 10240):
         "AWS_LAMBDA_MEMORY_SIZE must be between 128 and 10240 (inclusive); " f"got {AWS_LAMBDA_MEMORY_SIZE}"
     )
 
+# Lambda log group configuration
+AWS_LAMBDA_LOG_GROUP = env.str("AWS_LAMBDA_LOG_GROUP", "")
+
 # Elastic APM Lambda configuration
 ELASTIC_APM_LAMBDA_ENABLED = env.bool("ELASTIC_APM_LAMBDA_ENABLED", False)
 ELASTIC_APM_LAMBDA_APM_SERVER = env.str("ELASTIC_APM_LAMBDA_APM_SERVER", "")
