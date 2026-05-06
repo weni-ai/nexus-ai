@@ -198,6 +198,7 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         outgoing_created_at=pendulum.now().to_iso8601_string(),
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
         turn_id=ctx.turn_id,
+        celery_task_id=ctx.task_id,
     )
 
     if (ctx.preview or ctx.preview_websocket) and ctx.broadcast:
@@ -377,6 +378,7 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
         outgoing_created_at=pendulum.now().to_iso8601_string(),
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
         turn_id=ctx.turn_id,
+        celery_task_id=ctx.task_id,
     )
 
     # Superseded guard: if a newer message arrived while we were running, skip dispatch.

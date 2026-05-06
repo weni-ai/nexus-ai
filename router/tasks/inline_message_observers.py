@@ -2,16 +2,50 @@
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 import sentry_sdk
 
 from nexus.event_domain.decorators import observer
 from nexus.event_domain.event_observer import EventObserver
 from router.services.sqs_producer import get_conversation_events_producer
+from router.tasks.redis_task_manager import RedisTaskManager
 from router.tasks.sqs_message_events import build_message_sent_event
 
 logger = logging.getLogger(__name__)
+
+
+def _should_emit_conversation_outgoing_sqs(
+    project_uuid: str,
+    contact_urn: str,
+    celery_task_id: Optional[str],
+) -> bool:
+    """
+    Emit ``message.sent`` only when this run is still the latest Celery task for the contact
+    (same superseded rule as ``dispatch`` / ``_should_dispatch_latest``).
+    """
+    if not celery_task_id or not project_uuid or not contact_urn:
+        return True
+
+    latest = RedisTaskManager().get_latest_task_id(project_uuid, contact_urn)
+    if latest is None:
+        logger.info(
+            "latest_task missing in Redis; emitting conversation outgoing SQS anyway "
+            "project_uuid=%s contact_urn=%s celery_task_id=%s",
+            project_uuid,
+            contact_urn,
+            celery_task_id,
+        )
+        return True
+
+    if str(latest) != str(celery_task_id):
+        logger.info(
+            "Skipping conversation outgoing SQS (superseded): celery_task_id=%s latest=%s",
+            celery_task_id,
+            latest,
+        )
+        return False
+    return True
 
 
 def _report_missing_required_sentry(
@@ -94,6 +128,13 @@ class InlineMessageReceivedMetricsObserver(EventObserver):
         **kwargs: Any,
     ) -> None:
         if preview or kwargs.get("skip_conversation_sqs"):
+            return
+
+        if not _should_emit_conversation_outgoing_sqs(
+            project_uuid,
+            contact_urn,
+            kwargs.get("celery_task_id"),
+        ):
             return
 
         message_conversation_log_uuid = kwargs.get("message_conversation_log_uuid")
