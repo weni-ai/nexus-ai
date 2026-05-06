@@ -3,7 +3,7 @@ import logging
 import uuid
 from typing import Dict, List
 from unittest import skip
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
@@ -12,7 +12,9 @@ from nexus.actions.api.views import (
     FlowsViewset,
     MessagePreviewView,
     SearchFlowView,
+    SimulationEndSessionView,
     SimulationManagerModelView,
+    SimulationManagerPipelineVersionView,
     TemplateActionView,
 )
 from nexus.actions.models import Flow
@@ -444,3 +446,81 @@ class SimulationActionsApiTestCase(TestCase):
         force_authenticate(request, user=self.user)
         response = SimulationManagerModelView.as_view()(request, project_uuid=str(self.project.uuid))
         self.assertEqual(response.status_code, 400)
+
+    def test_simulation_manager_pipeline_version_post_requires_contact_urn(self):
+        request = self.factory.post(
+            f"/{self.project.uuid}/simulation/manager-pipeline-version/",
+            data={"pipeline_version": "2.7"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = SimulationManagerPipelineVersionView.as_view()(request, project_uuid=str(self.project.uuid))
+        self.assertEqual(response.status_code, 400)
+
+    def test_simulation_manager_pipeline_version_post_requires_pipeline_version(self):
+        request = self.factory.post(
+            f"/{self.project.uuid}/simulation/manager-pipeline-version/",
+            data={"contact_urn": "ext:test"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = SimulationManagerPipelineVersionView.as_view()(request, project_uuid=str(self.project.uuid))
+        self.assertEqual(response.status_code, 400)
+
+    @patch("nexus.projects.api.permissions.has_external_general_project_permission", return_value=True)
+    @patch("nexus.actions.api.views.get_redis_write_client")
+    def test_simulation_manager_pipeline_version_post_sets_redis(self, mock_redis, _mock_perm):
+        mock_redis.return_value.setex = MagicMock()
+        request = self.factory.post(
+            f"/{self.project.uuid}/simulation/manager-pipeline-version/",
+            data={"contact_urn": "ext:sim-user", "pipeline_version": "2.7"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = SimulationManagerPipelineVersionView.as_view()(request, project_uuid=str(self.project.uuid))
+        self.assertEqual(response.status_code, 200)
+        mock_redis.return_value.setex.assert_called_once()
+        args, _kwargs = mock_redis.return_value.setex.call_args
+        self.assertIn(str(self.project.uuid), args[0])
+        self.assertEqual(args[2], "2.7")
+
+    @patch("nexus.projects.api.permissions.has_external_general_project_permission", return_value=True)
+    @patch("nexus.actions.api.views.manager_pipeline_version_from_project", return_value="2.6")
+    @patch("nexus.actions.api.views.get_redis_read_client")
+    def test_simulation_manager_pipeline_version_get_project_default_when_no_redis(
+        self, mock_redis_read, _mock_mpv, _mock_perm
+    ):
+        mock_redis_read.return_value.get.return_value = None
+        request = self.factory.get(
+            f"/{self.project.uuid}/simulation/manager-pipeline-version/?contact_urn=ext:sim",
+        )
+        force_authenticate(request, user=self.user)
+        response = SimulationManagerPipelineVersionView.as_view()(request, project_uuid=str(self.project.uuid))
+        response.render()
+        self.assertEqual(response.status_code, 200)
+        content = json.loads(response.content)
+        self.assertEqual(content.get("manager_pipeline_version"), "2.6")
+        self.assertEqual(content.get("source"), "project_default")
+
+    @patch("nexus.projects.api.permissions.has_external_general_project_permission", return_value=True)
+    @patch("nexus.actions.api.views.clear_simulation_manager_pipeline_version")
+    @patch("nexus.actions.api.views.clear_simulation_manager_model")
+    @patch("nexus.actions.api.views.FlowsRESTClient")
+    @patch("nexus.actions.api.views.BackendsRegistry.get_backend")
+    @patch("nexus.actions.api.views.projects.ProjectsUseCase")
+    def test_simulation_end_session_clears_pipeline_version_key(
+        self, mock_projects_uc, mock_get_backend, _mock_flows, mock_clear_model, mock_clear_pv, _mock_perm
+    ):
+        mock_projects_uc.return_value.get_agents_backend_by_project.return_value = "openai"
+        mock_backend = MagicMock()
+        mock_get_backend.return_value = mock_backend
+        request = self.factory.post(
+            f"/{self.project.uuid}/simulation/end-session/",
+            data={"contact_urn": "ext:endtest"},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = SimulationEndSessionView.as_view()(request, project_uuid=str(self.project.uuid))
+        self.assertEqual(response.status_code, 200)
+        mock_clear_model.assert_called_once()
+        mock_clear_pv.assert_called_once()

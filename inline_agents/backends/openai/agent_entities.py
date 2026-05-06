@@ -51,6 +51,71 @@ def _final_output_from_tool_dict(parsed: dict) -> tuple[bool, list]:
     return is_final, messages_sent
 
 
+def resolve_inline_openai_tool_use(
+    context: RunContextWrapper[Any],
+    tool_results: List[FunctionToolResult],
+    agent_label: str,
+) -> ToolsToFinalOutputResult:
+    """Shared tool-use behavior for OpenAI supervisor (entity + legacy tools.Supervisor)."""
+    n = len(tool_results) if tool_results else 0
+    _is_final_debug(f"A handler_enter agent={agent_label} tool_results_count={n}")
+
+    if not tool_results:
+        _is_final_debug("D return is_final_output=False (no tool_results)")
+        return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
+
+    hooks_state = getattr(context.context, "hooks_state", None)
+
+    for result in tool_results:
+        raw_out = result.output
+        tool_name = getattr(getattr(result, "tool", None), "name", "?")
+        _is_final_debug(
+            f"A tool={tool_name} raw_output_type={type(raw_out).__name__} raw_preview={_trunc_preview(raw_out)}"
+        )
+
+        parsed = AgentModel._try_parse_output(raw_out)
+
+        if isinstance(parsed, dict) and parsed.get("streaming_component_ack"):
+            _is_final_debug("D streaming_component_ack -> not final")
+            return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
+
+        if isinstance(parsed, list) and len(parsed) > 0 and isinstance(parsed[0], dict) and "msg" in parsed[0]:
+            _is_final_debug("D parsed=list of channel msg dicts -> final JSON string")
+            return ToolsToFinalOutputResult(
+                is_final_output=True,
+                final_output=json.dumps(parsed, ensure_ascii=False),
+            )
+
+        is_final, messages_sent = False, []
+        if isinstance(parsed, dict):
+            is_final, messages_sent = _final_output_from_tool_dict(parsed)
+            keys_preview = list(parsed.keys())
+            _is_final_debug(
+                f"B parsed=dict keys={keys_preview} is_final_output={is_final} has_messages_sent={bool(messages_sent)}"
+            )
+        else:
+            _is_final_debug(f"B parsed=non-dict type={type(parsed).__name__} preview={_trunc_preview(parsed)}")
+
+        if is_final:
+            messages_sent = messages_sent or []
+            if hooks_state is not None and agent_label == "Supervisor":
+                hooks_state.skip_outgoing_dispatch = True
+            _is_final_debug(
+                f"C is_final_output=True tool={tool_name} agent={agent_label}"
+                f"messages_sent_len={len(messages_sent)}"
+                f"skip_outgoing_dispatch_set={hooks_state is not None and agent_label == 'Supervisor'}"
+            )
+            payload = {"is_final_output": True, "messages_sent": messages_sent}
+            final_str = json.dumps(payload, ensure_ascii=False)
+            _is_final_debug(
+                f"D return ToolsToFinalOutputResult(is_final_output=True) final_preview={_trunc_preview(final_str)}"
+            )
+            return ToolsToFinalOutputResult(is_final_output=True, final_output=final_str)
+
+    _is_final_debug("D return is_final_output=False (no matching tool)")
+    return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
+
+
 class AgentModel:
     def get_model(self, model: str, user_model_credentials: Dict[str, Any]) -> LitellmModel | str:
         if "litellm" in model:
@@ -73,54 +138,7 @@ class AgentModel:
     def custom_tool_handler(
         self, context: RunContextWrapper[Any], tool_results: List[FunctionToolResult]
     ) -> ToolsToFinalOutputResult:
-        agent_label = type(self).__name__
-        n = len(tool_results) if tool_results else 0
-        _is_final_debug(f"A handler_enter agent={agent_label} tool_results_count={n}")
-
-        if not tool_results:
-            _is_final_debug("D return is_final_output=False (no tool_results)")
-            return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
-
-        hooks_state = getattr(context.context, "hooks_state", None)
-
-        for result in tool_results:
-            raw_out = result.output
-            tool_name = getattr(getattr(result, "tool", None), "name", "?")
-            _is_final_debug(
-                f"A tool={tool_name} raw_output_type={type(raw_out).__name__} raw_preview={_trunc_preview(raw_out)}"
-            )
-
-            parsed = self._try_parse_output(raw_out)
-            is_final, messages_sent = False, []
-            if isinstance(parsed, dict):
-                is_final, messages_sent = _final_output_from_tool_dict(parsed)
-                keys_preview = list(parsed.keys())
-                _is_final_debug(
-                    f"B parsed=dict keys={keys_preview} is_final_output={is_final} has_messages_sent={bool(messages_sent)}"
-                )
-            else:
-                _is_final_debug(f"B parsed=non-dict type={type(parsed).__name__} preview={_trunc_preview(parsed)}")
-
-            if is_final:
-                messages_sent = messages_sent or []
-                # Only the top-level manager run should set this; nested collaborator runs share
-                # hooks_state and would otherwise skip dispatch while the manager may still respond.
-                if hooks_state is not None and agent_label == "Supervisor":
-                    hooks_state.skip_outgoing_dispatch = True
-                _is_final_debug(
-                    f"C is_final_output=True tool={tool_name} agent={agent_label}"
-                    f"messages_sent_len={len(messages_sent)}"
-                    f"skip_outgoing_dispatch_set={hooks_state is not None and agent_label == 'Supervisor'}"
-                )
-                payload = {"is_final_output": True, "messages_sent": messages_sent}
-                final_str = json.dumps(payload, ensure_ascii=False)
-                _is_final_debug(
-                    f"D return ToolsToFinalOutputResult(is_final_output=True) final_preview={_trunc_preview(final_str)}"
-                )
-                return ToolsToFinalOutputResult(is_final_output=True, final_output=final_str)
-
-        _is_final_debug("D return is_final_output=False (no matching tool)")
-        return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
+        return resolve_inline_openai_tool_use(context, tool_results, type(self).__name__)
 
     @staticmethod
     def _try_parse_output(raw_output: Any) -> Any:

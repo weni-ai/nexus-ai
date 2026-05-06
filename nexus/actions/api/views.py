@@ -16,15 +16,18 @@ from nexus.actions.api.serializers import (
 )
 from nexus.actions.models import Flow, TemplateAction
 from nexus.authentication import AUTHENTICATION_CLASSES
+from nexus.internals.flows import FlowsRESTClient
 from nexus.orgs.permissions import is_super_user
 from nexus.projects.api.permissions import ProjectPermission
 from nexus.projects.exceptions import ProjectAuthorizationDenied
 from nexus.projects.permissions import has_external_general_project_permission
-from nexus.internals.flows import FlowsRESTClient
 from nexus.projects.simulation_model_cache import (
     SIMULATION_MANAGER_MODEL_TTL_SECONDS,
+    SIMULATION_MANAGER_PIPELINE_VERSION_TTL_SECONDS,
     clear_simulation_manager_model,
+    clear_simulation_manager_pipeline_version,
     simulation_manager_model_redis_key,
+    simulation_manager_pipeline_version_redis_key,
 )
 from nexus.usecases import projects
 from nexus.usecases.actions.create import (
@@ -57,6 +60,7 @@ from nexus.usecases.intelligences.exceptions import (
 )
 from router.entities import Message as UserMessage
 from router.entities import message_factory
+from router.services.manager_pipeline_version import manager_pipeline_version_from_project
 from router.tasks.invoke import start_inline_agents
 from router.tasks.tasks import start_route
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
@@ -288,6 +292,14 @@ class SimulationEndSessionView(APIView):
                 )
                 sentry_sdk.capture_exception(exc)
 
+            try:
+                clear_simulation_manager_pipeline_version(project_uuid, message_obj.contact_urn)
+            except Exception as exc:
+                logger.exception(
+                    "Redis simulation manager pipeline version clear exception after simulation end-session",
+                )
+                sentry_sdk.capture_exception(exc)
+
             return Response({"message": "Simulation session ended successfully"})
         except Exception as exc:
             logger.exception("Simulation end-session failed")
@@ -359,6 +371,71 @@ class SimulationManagerModelView(APIView):
             sentry_sdk.capture_exception(exc)
             return Response(
                 {"error": "Couldn't save simulation manager model"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class SimulationManagerPipelineVersionView(APIView):
+    permission_classes = [ProjectPermission]
+
+    def get(self, request, project_uuid):
+        contact_urn = request.query_params.get("contact_urn")
+        if not contact_urn:
+            return Response({"error": "contact_urn query parameter is required"}, status=400)
+
+        if not contact_urn.startswith("ext:"):
+            contact_urn = f"ext:{contact_urn}"
+
+        try:
+            project = projects.get_project_by_uuid(project_uuid)
+            key = simulation_manager_pipeline_version_redis_key(project_uuid, contact_urn)
+            cached = get_redis_read_client().get(key)
+            if cached:
+                version = cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
+                return Response({"manager_pipeline_version": version, "source": "cache"})
+            return Response(
+                {
+                    "manager_pipeline_version": manager_pipeline_version_from_project(project),
+                    "source": "project_default",
+                }
+            )
+        except Exception as exc:
+            logger.exception("Simulation manager pipeline version GET failed")
+            sentry_sdk.capture_exception(exc)
+            return Response(
+                {"error": "Couldn't load simulation manager pipeline version"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def post(self, request, project_uuid):
+        pipeline_version = request.data.get("pipeline_version")
+        contact_urn = request.data.get("contact_urn")
+        if pipeline_version is None or pipeline_version == "":
+            return Response({"error": "pipeline_version is required"}, status=400)
+        if not contact_urn:
+            return Response({"error": "contact_urn is required"}, status=400)
+
+        if not contact_urn.startswith("ext:"):
+            contact_urn = f"ext:{contact_urn}"
+
+        try:
+            key = simulation_manager_pipeline_version_redis_key(project_uuid, contact_urn)
+            get_redis_write_client().setex(
+                key,
+                SIMULATION_MANAGER_PIPELINE_VERSION_TTL_SECONDS,
+                str(pipeline_version),
+            )
+            return Response(
+                {
+                    "manager_pipeline_version": pipeline_version,
+                    "ttl_seconds": SIMULATION_MANAGER_PIPELINE_VERSION_TTL_SECONDS,
+                }
+            )
+        except Exception as exc:
+            logger.exception("Simulation manager pipeline version POST failed")
+            sentry_sdk.capture_exception(exc)
+            return Response(
+                {"error": "Couldn't save simulation manager pipeline version"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 

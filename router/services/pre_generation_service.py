@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Tuple
 
 from router.services.cache_service import CacheService
 from router.services.inline_agent_config_cache import inline_agent_config_dict_for_cache
+from router.services.manager_pipeline_version import manager_pipeline_version_from_project
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class PreGenerationService:
             "formatter_reasoning_summary": project.formatter_reasoning_summary,
             "formatter_send_only_assistant_message": project.formatter_send_only_assistant_message,
             "formatter_tools_descriptions": project.formatter_tools_descriptions,
+            "manager_pipeline_version": manager_pipeline_version_from_project(project),
             "supervisor_agent_uuid": project.manager_agent.uuid if project.manager_agent else None,
         }
 

@@ -1,6 +1,30 @@
+from types import SimpleNamespace
+
 from django.test import TestCase
 
+from router.services.manager_pipeline_version import manager_pipeline_version_from_project
 from router.tasks.invocation_context import CachedProjectData
+
+
+class TestManagerPipelineVersionFromProject(TestCase):
+    def test_none_when_no_manager_agent(self):
+        project = SimpleNamespace(manager_agent=None)
+        self.assertIsNone(manager_pipeline_version_from_project(project))
+
+    def test_reads_pipeline_version_from_extra_args(self):
+        agent = SimpleNamespace(manager_extra_args={"pipeline_version": "2.6"})
+        project = SimpleNamespace(manager_agent=agent)
+        self.assertEqual(manager_pipeline_version_from_project(project), "2.6")
+
+    def test_empty_string_becomes_none(self):
+        agent = SimpleNamespace(manager_extra_args={"pipeline_version": "  "})
+        project = SimpleNamespace(manager_agent=agent)
+        self.assertIsNone(manager_pipeline_version_from_project(project))
+
+    def test_non_dict_extra_args_returns_none(self):
+        agent = SimpleNamespace(manager_extra_args="bad")
+        project = SimpleNamespace(manager_agent=agent)
+        self.assertIsNone(manager_pipeline_version_from_project(project))
 
 
 class TestCachedProjectDataEdgeCases(TestCase):
@@ -210,3 +234,35 @@ class TestCachedProjectDataEdgeCases(TestCase):
         self.assertFalse(kwargs.get("rationale_switch", True))
         self.assertEqual(kwargs.get("conversation_turns_to_include"), 10)
         self.assertTrue(kwargs.get("exclude_previous_thinking_steps", False))
+
+    def test_get_invoke_kwargs_includes_manager_pipeline_version(self):
+        cached_data = CachedProjectData(
+            project_dict={"manager_pipeline_version": "2.6"},
+            content_base_dict={"uuid": "cb-uuid"},
+            team=[],
+            guardrails_config={},
+            inline_agent_config_dict=None,
+            instructions=[],
+            agent_data=None,
+            formatter_agent_configurations={},
+        )
+
+        kwargs = cached_data.get_invoke_kwargs(team=[])
+
+        self.assertEqual(kwargs.get("manager_pipeline_version"), "2.6")
+
+    def test_get_invoke_kwargs_manager_pipeline_version_defaults_none(self):
+        cached_data = CachedProjectData(
+            project_dict={},
+            content_base_dict={"uuid": "cb-uuid"},
+            team=[],
+            guardrails_config={},
+            inline_agent_config_dict=None,
+            instructions=[],
+            agent_data=None,
+            formatter_agent_configurations={},
+        )
+
+        kwargs = cached_data.get_invoke_kwargs(team=[])
+
+        self.assertIsNone(kwargs.get("manager_pipeline_version"))
