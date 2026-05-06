@@ -187,7 +187,7 @@ class AgentBuilderProjectDetailsView(APIView):
 
 
 class ConversationsProxyView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -223,10 +223,12 @@ class ConversationsProxyView(APIView):
 
                 return Response(
                     {
-                        "count": response.get("count"),
+                        "count": response.get("total_count", response.get("count")),
                         "next": next_url,
                         "previous": previous_url,
                         "results": serializer.data,
+                        "status_summary": response.get("status_summary"),
+                        "total_count": response.get("total_count"),
                     },
                     status=status.HTTP_200_OK,
                 )
@@ -352,7 +354,7 @@ class ConversationsProxyView(APIView):
 
 
 class ConversationDetailProxyView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

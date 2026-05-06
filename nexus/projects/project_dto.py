@@ -14,6 +14,7 @@ class ProjectCreationDTO:
     authorizations: list
     brain_on: bool = False
     indexer_database: str = Project.BEDROCK
+    inline_agent_switch: bool = True
 
 
 @dataclass

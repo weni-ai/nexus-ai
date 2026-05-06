@@ -98,8 +98,10 @@ class ConversationEventsSQSProducer:
         contact_urn = data["contact_urn"]
         channel_uuid = data["channel_uuid"]
 
-        correlation_id = _normalize_sqs_deduplication_id(payload.get("correlation_id") or str(uuid.uuid4()))
         event_type = payload.get("event_type", "message.received")
+        raw_correlation = payload.get("correlation_id") or str(uuid.uuid4())
+        dedup_source = f"{event_type}:{raw_correlation}"
+        message_deduplication_id = _normalize_sqs_deduplication_id(dedup_source)
 
         message_group_id = _fifo_message_group_id(project_uuid, channel_uuid, contact_urn)
         message_attributes = {
@@ -114,7 +116,7 @@ class ConversationEventsSQSProducer:
                 QueueUrl=self._queue_url,
                 MessageBody=json.dumps(payload, default=str),
                 MessageGroupId=message_group_id,
-                MessageDeduplicationId=correlation_id,
+                MessageDeduplicationId=message_deduplication_id,
                 MessageAttributes=message_attributes,
             )
             logger.debug("Sent conversation event to SQS: %s", event_type)

@@ -19,7 +19,9 @@ from nexus.inline_agents.api.official_agents_helpers import (
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     AgentSystemSerializer,
+    CurrentProviderSerializer,
     IntegratedAgentSerializer,
+    ModelProviderSerializer,
     OfficialAgentDetailSerializer,
     OfficialAgentListSerializer,
     OfficialAgentsAssignRequestSerializer,
@@ -27,7 +29,7 @@ from nexus.inline_agents.api.serializers import (
     ProjectCredentialsListSerializer,
     official_agent_modal_presentation_payload,
 )
-from nexus.inline_agents.backends.openai.models import ManagerAgent
+from nexus.inline_agents.backends.openai.models import ManagerAgent, ModelProvider, ProjectModelProvider
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
 from nexus.inline_agents.models import Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
@@ -44,9 +46,48 @@ from nexus.usecases.intelligences.get_by_uuid import (
     get_project_and_content_base_data,
 )
 from nexus.usecases.projects import get_project_by_uuid
+from nexus.usecases.projects.project_type_update_eda_observer import PROJECT_TYPE_UPDATE_EDA_EVENT
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.users.api.authentication import UserGlobalTokenAuthentication
 from router.entities import message_factory
+
+
+def _multi_agent_request_user_email(request) -> str:
+    """Prefer email from project-auth API (CombinedExternalProjectPermission), then Django user."""
+    external = getattr(request, "project_auth_user_email", None)
+    if isinstance(external, str):
+        stripped = external.strip()
+        if stripped:
+            return stripped
+
+    user = getattr(request, "user", None)
+    if user is None or getattr(user, "is_anonymous", True):
+        return ""
+
+    email = getattr(user, "email", None)
+    if isinstance(email, str):
+        return email.strip()
+
+    return ""
+
+
+def _parse_multi_agents_bool(raw) -> tuple[bool | None, str | None]:
+    """Coerce API input to bool. Returns (value, error_message)."""
+    if isinstance(raw, bool):
+        return raw, None
+
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized in ("true", "1", "yes", "on"):
+            return True, None
+        if normalized in ("false", "0", "no", "off", ""):
+            return False, None
+
+    if isinstance(raw, int) and raw in (0, 1):
+        return bool(raw), None
+
+    return None, "multi_agents must be a boolean"
+
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +325,47 @@ def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, cr
     return payload
 
 
+def _word_prefix_match_q(lookup: str, needle: str) -> Q:
+    """
+    Case-insensitive: needle matches as a prefix of the full string or of any token that
+    starts immediately after one of these separators: space, ``_``, ``(``, ``/``, ``[``.
+    Hyphen (``-``) is intentionally *not* a separator, so ``back`` does not match inside
+    ``non-backend`` via a ``-back`` token boundary.
+    Works on SQLite and PostgreSQL (no DB-specific regex).
+    """
+    if not needle:
+        return Q(pk__in=[])
+
+    q = Q(**{f"{lookup}__istartswith": needle})
+    for sep in (" ", "_", "(", "/", "["):
+        q |= Q(**{f"{lookup}__icontains": f"{sep}{needle}"})
+    return q
+
+
+def _official_agents_v1_name_filter_q(name_filter: str) -> Q:
+    """
+    Word-prefix search aligned with the list card title (_build_group_payload).
+
+    Grouped: if ``AgentGroupModal.agent_name`` is set, match only that (same as the UI).
+    Otherwise match ``AgentGroup.name``. Legacy (no group): ``Agent.name``.
+    """
+    needle = name_filter.strip()
+    if not needle:
+        return Q(pk__in=[])
+
+    modal_title_set = Q(group__modal__agent_name__isnull=False) & ~Q(group__modal__agent_name__exact="")
+    modal_title_unset = (
+        Q(group__modal__isnull=True) | Q(group__modal__agent_name__isnull=True) | Q(group__modal__agent_name__exact="")
+    )
+
+    grouped_match = Q(group__isnull=False) & (
+        (modal_title_set & _word_prefix_match_q("group__modal__agent_name", needle))
+        | (modal_title_unset & _word_prefix_match_q("group__name", needle))
+    )
+    legacy_match = Q(group__isnull=True) & _word_prefix_match_q("name", needle)
+    return grouped_match | legacy_match
+
+
 def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dict:
     """
     Consolidate agents that belong to the same group into a single entry with agents list.
@@ -329,7 +411,13 @@ class OfficialAgentsV1(APIView):
             "New agents (with group) are consolidated by group with consolidated systems, MCPs, and credentials. "
             "Each grouped agent includes a 'agents' array listing all available agents with their UUIDs, "
             "allowing the frontend to select which agent to view details for. "
-            "Optional filters: `type`, `group`, `category`, `system`. Use `project_uuid` to mark `assigned`."
+            "Optional filters: `type`, `group`, `category`, `system`. "
+            "Query `name` is a case-insensitive word-prefix match on the list title: legacy agents use "
+            "`Agent.name`; grouped agents use modal `agent_name` when set (same label as the UI), else "
+            "`AgentGroup.name` (not template `Agent.name`). A word starts at the beginning of the field or "
+            "after a separator among space, `_`, `(`, `[`, `/`. Hyphen `-` is not a separator, so hyphenated "
+            "text stays one word (for example, `back` does not match `non-backend`). Mid-word substrings do not "
+            "match. Use `project_uuid` to mark `assigned`."
         ),
         parameters=[
             OpenApiParameter(
@@ -353,7 +441,7 @@ class OfficialAgentsV1(APIView):
     )
     def get(self, request, *args, **kwargs):
         project_uuid = request.query_params.get("project_uuid")
-        name_filter = request.query_params.get("name")
+        name_filter = (request.query_params.get("name") or "").strip()
         type_filter = request.query_params.get("type")
         group_filter = request.query_params.get("group")
         category_filter = request.query_params.get("category")
@@ -374,7 +462,7 @@ class OfficialAgentsV1(APIView):
 
         agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
         if name_filter:
-            agents = agents.filter(name__icontains=name_filter)
+            agents = agents.filter(_official_agents_v1_name_filter_q(name_filter))
         if type_filter:
             agents = agents.filter(agent_type__slug__iexact=type_filter)
         if group_filter:
@@ -920,7 +1008,7 @@ class ActiveAgentsView(APIView):
 
         try:
             if assign:
-                _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
+                _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid, infer_mcp_metadata=True)
 
                 # Fire cache invalidation event for team update (agent assigned) (async observer)
                 notify_async(
@@ -1440,12 +1528,17 @@ class MultiAgentView(APIView):
             return Response({"error": str(e)}, status=500)
 
     def patch(self, request, project_uuid):
-        multi_agents = request.data.get("multi_agents")
-        if multi_agents is None:
+        multi_agents_raw = request.data.get("multi_agents")
+        if multi_agents_raw is None:
             return Response({"error": "multi_agents field is required"}, status=400)
+
+        multi_agents, parse_error = _parse_multi_agents_bool(multi_agents_raw)
+        if parse_error:
+            return Response({"error": parse_error}, status=400)
 
         try:
             project = Project.objects.get(uuid=project_uuid)
+            previous_inline_agent_switch = project.inline_agent_switch
 
             # AB 1.0 projects have inline_agent_switch=False and use BedrockBackend
             is_legacy_project_enabling = (
@@ -1465,6 +1558,14 @@ class MultiAgentView(APIView):
                 event="cache_invalidation:project",
                 project=project,
             )
+
+            if not previous_inline_agent_switch and multi_agents:
+                notify_async(
+                    event=PROJECT_TYPE_UPDATE_EDA_EVENT,
+                    project_uuid=str(project.uuid),
+                    user_email=_multi_agent_request_user_email(request),
+                    is_multi_agents=True,
+                )
 
             return Response({"message": "Project updated successfully", "multi_agents": multi_agents}, status=200)
         except Exception as e:
@@ -1558,7 +1659,7 @@ def set_project_manager_agent(project_uuid, manager_identifier: str):
             notify_async(event="cache_invalidation:project", project=project)
             return manager_identifier
     except ValueError:
-        pass  # ignoring error because it's not a deprecated manager agent
+        pass
 
     manager = ManagerAgent.objects.get(uuid=manager_identifier)
     project.manager_agent = manager
@@ -1665,3 +1766,122 @@ class AgentManagersView(APIView):
             data.update({"currentManager": current_manager_id})
 
         return Response(data=data)
+
+
+class ProjectModelProvidersView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        current = None
+        providers = ModelProvider.objects.select_related("manager_agent").all()
+        providers_data = ModelProviderSerializer(providers, many=True).data
+
+        try:
+            project_provider = ProjectModelProvider.objects.select_related("provider", "provider__manager_agent").get(
+                project=project, is_active=True
+            )
+
+            provider_schema = project_provider.provider.credentials
+            if not isinstance(provider_schema, list):
+                provider_schema = []
+
+            manager = project_provider.provider.manager_agent
+            model_name = manager.foundation_model if manager else ""
+
+            current = CurrentProviderSerializer(
+                {
+                    "uuid": project_provider.provider.uuid,
+                    "label": project_provider.provider.label,
+                    "model": model_name,
+                    "credentials": project_provider.masked_credentials(provider_schema),
+                }
+            ).data
+        except ProjectModelProvider.DoesNotExist:
+            current = None
+
+        return Response(data={"current": current, "providers": providers_data})
+
+    def post(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        provider_uuid = request.data.get("provider_uuid")
+        credentials = request.data.get("credentials", [])
+
+        if not provider_uuid:
+            return Response(data={"error": "provider_uuid is required"}, status=400)
+
+        try:
+            provider = ModelProvider.objects.select_related("manager_agent").get(uuid=provider_uuid)
+        except (ModelProvider.DoesNotExist, ValueError):
+            return Response(data={"error": "Provider not found"}, status=404)
+
+        if not provider.manager_agent:
+            return Response(data={"error": "Provider has no associated manager agent"}, status=400)
+
+        ProjectModelProvider.objects.filter(project=project, is_active=True).exclude(provider=provider).update(
+            is_active=False
+        )
+
+        project_provider, _ = ProjectModelProvider.objects.update_or_create(
+            project=project,
+            provider=provider,
+            defaults={"credentials": credentials, "is_active": True},
+        )
+        project_provider.encrypt_credentials()
+        project_provider.save()
+
+        project.manager_agent = provider.manager_agent
+        project.save()
+        notify_async(event="cache_invalidation:project", project=project)
+
+        return Response(data={"provider_uuid": str(provider.uuid)}, status=200)
+
+    def delete(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        updated = ProjectModelProvider.objects.filter(
+            project=project,
+            is_active=True,
+        ).update(is_active=False)
+
+        if not updated:
+            return Response(data={"error": "No active credentials found"}, status=404)
+
+        default_manager = ManagerAgent.objects.filter(default=True, public=True).order_by("created_on").last()
+        project.manager_agent = default_manager
+        project.save()
+        notify_async(event="cache_invalidation:project", project=project)
+
+        return Response(status=204)
+
+
+class ProjectEngineSourceView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission]
+
+    def get(self, request, project_uuid):
+        try:
+            project = get_project_by_uuid(project_uuid)
+        except ProjectDoesNotExist:
+            return Response(data={"error": "Project not found"}, status=404)
+
+        has_own = (
+            ProjectModelProvider.objects.filter(
+                project=project,
+                is_active=True,
+            )
+            .exclude(credentials=[])
+            .exists()
+        )
+
+        return Response(data={"engine_source": "OWN" if has_own else "STANDARD"})

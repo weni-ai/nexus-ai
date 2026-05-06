@@ -638,8 +638,22 @@ class TestTopicsViewSet(TestCase):
         request = self.factory.get(self.url)
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
+        mock_topics = [
+            {
+                "name": self.topic.name,
+                "uuid": str(self.topic.uuid),
+                "created_at": self.topic.created_at.isoformat(),
+                "description": self.topic.description,
+                "subtopic": [],
+            }
+        ]
+
         with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
-            response = self.view(request, project_uuid=str(self.project.uuid))
+            with mock.patch(
+                "nexus.internals.conversations.ConversationsRESTClient.get_topics",
+                return_value=mock_topics,
+            ):
+                response = self.view(request, project_uuid=str(self.project.uuid))
 
         self.assertEqual(response.status_code, 200)
 
@@ -649,7 +663,11 @@ class TestTopicsViewSet(TestCase):
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
         with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
-            response = self.view(request, project_uuid=invalid_project_uuid)
+            with mock.patch(
+                "nexus.internals.conversations.ConversationsRESTClient.get_topics",
+                return_value=[],
+            ):
+                response = self.view(request, project_uuid=invalid_project_uuid)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 0)
@@ -658,8 +676,22 @@ class TestTopicsViewSet(TestCase):
         request = self.factory.get(self.url)
         request.headers = {"Authorization": f"Bearer {self.external_token}"}
 
+        mock_topics = [
+            {
+                "name": self.topic.name,
+                "uuid": str(self.topic.uuid),
+                "created_at": self.topic.created_at.isoformat(),
+                "description": self.topic.description,
+                "subtopic": [],
+            }
+        ]
+
         with mock.patch("django.conf.settings.EXTERNAL_SUPERUSERS_TOKENS", [self.external_token]):
-            response = self.view(request, project_uuid=str(self.project.uuid))
+            with mock.patch(
+                "nexus.internals.conversations.ConversationsRESTClient.get_topics",
+                return_value=mock_topics,
+            ):
+                response = self.view(request, project_uuid=str(self.project.uuid))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)

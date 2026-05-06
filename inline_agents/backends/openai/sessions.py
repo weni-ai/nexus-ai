@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional
 
 import pendulum
 import redis
@@ -253,6 +253,34 @@ class RedisSession:  # type: ignore[misc]
 
     def clear_session(self):
         self.r.delete(self._key)
+
+
+def openai_session_base_id(project_uuid: str, sanitized_urn: str) -> str:
+    """Redis key prefix for supervisor + collaborator inline sessions (see make_session_factory)."""
+    return f"project-{project_uuid}-session-{sanitized_urn}"
+
+
+def delete_openai_inline_session_keys_for_contact(
+    write_client: redis.Redis,
+    project_uuid: str,
+    sanitized_urn: str,
+    collaborator_agent_slugs: Iterable[str],
+) -> int:
+    base_id = openai_session_base_id(project_uuid, sanitized_urn)
+    keys: list[str] = [base_id]
+    seen = {base_id}
+    for slug in collaborator_agent_slugs:
+        if not slug:
+            logger.warning(
+                f"Skipping deletion of session key for empty collaborator agent slug, "
+                f"project: {project_uuid}, contact: {sanitized_urn}"
+            )
+            continue
+        k = f"{base_id}:{slug}"
+        if k not in seen:
+            seen.add(k)
+            keys.append(k)
+    return int(write_client.delete(*keys))
 
 
 def make_session_factory(

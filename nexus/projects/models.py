@@ -47,7 +47,7 @@ class Project(BaseModel, SoftDeleteModel):
     human_support = models.BooleanField(default=False)
     human_support_prompt = models.TextField(null=True, blank=True)
     rationale_switch = models.BooleanField(default=False)
-    inline_agent_switch = models.BooleanField(default=False)
+    inline_agent_switch = models.BooleanField(default=True)
     use_components = models.BooleanField(default=False)
     default_supervisor_foundation_model = models.CharField(max_length=100, blank=True, null=True)
     default_collaborators_foundation_model = models.CharField(max_length=100, blank=True, null=True)

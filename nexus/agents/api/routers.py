@@ -11,6 +11,8 @@ from nexus.inline_agents.api.views import (
     MultiAgentView,
     OfficialAgentDetailV1,
     OfficialAgentsV1,
+    ProjectEngineSourceView,
+    ProjectModelProvidersView,
 )
 from nexus.inline_agents.api.views import ActiveAgentsView as ActiveInlineAgentsView
 from nexus.inline_agents.api.views import AgentsView as InlineAgentsView
@@ -69,4 +71,6 @@ urlpatterns = [
     path("reports", ReportView.as_view(), name="reports"),
     path("project/<project_uuid>/agents/<str:agent_uuid>", DeleteAgentView.as_view(), name="delete-agent"),
     path("project/<project_uuid>/managers", AgentManagersView.as_view(), name="project-agent-managers"),
+    path("project/<project_uuid>/model-providers", ProjectModelProvidersView.as_view(), name="project-model-providers"),
+    path("project/<project_uuid>/engine-source", ProjectEngineSourceView.as_view(), name="project-engine-source"),
 ]

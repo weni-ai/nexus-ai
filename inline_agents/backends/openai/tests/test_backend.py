@@ -1,11 +1,15 @@
+from unittest.mock import MagicMock, patch
+
 import pendulum
 import pytest
 from django.test import TestCase
 
 from inline_agents.backends.openai.backend import OpenAIBackend, OpenAISupervisorRepository
+from inline_agents.backends.openai.sessions import openai_session_base_id
 from inline_agents.backends.openai.tests.openai_factory import OpenAISupervisorFactory
 from nexus.inline_agents.backends.openai.models import ManagerAgent
 from nexus.inline_agents.backends.openai.repository import ManagerAgentRepository
+from nexus.inline_agents.models import Agent, IntegratedAgent
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 
 
@@ -650,3 +654,45 @@ class ManagerAgentRepositoryTestCase(TestCase):
 
         self.assertEqual(result["tools"], [])
         self.assertEqual(result["knowledge_bases"], [])
+
+
+class OpenAIBackendEndSessionTestCase(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory()
+        self.sanitized_urn = "ext_user_example_com"
+        self.backend = OpenAIBackend()
+
+    @patch("inline_agents.backends.openai.backend.sentry_sdk.capture_exception")
+    @patch("inline_agents.backends.openai.backend.get_redis_write_client")
+    @patch("nexus.inline_agents.models.IntegratedAgent.objects.filter", side_effect=RuntimeError("db down"))
+    def test_end_session_when_slug_query_fails_still_clears_supervisor_redis_key(
+        self, _mock_filter, mock_get_redis, _mock_sentry
+    ):
+        redis = MagicMock()
+        redis.delete.return_value = 1
+        mock_get_redis.return_value = redis
+        self.backend.end_session(str(self.project.uuid), self.sanitized_urn)
+        redis.delete.assert_called_once()
+        args = redis.delete.call_args[0]
+        base = openai_session_base_id(str(self.project.uuid), self.sanitized_urn)
+        self.assertEqual(args, (base,))
+
+    @patch("inline_agents.backends.openai.backend.get_redis_write_client")
+    def test_end_session_deletes_supervisor_and_collaborator_keys_in_one_redis_call(self, mock_get_redis):
+        agent = Agent.objects.create(
+            name="Collab Agent",
+            slug="collab-slug",
+            project=self.project,
+            instruction="i",
+            collaboration_instructions="c",
+            backend_foundation_models={"OpenAIBackend": "gpt-4"},
+        )
+        IntegratedAgent.objects.create(agent=agent, project=self.project, is_active=True)
+        redis = MagicMock()
+        redis.delete.return_value = 2
+        mock_get_redis.return_value = redis
+        self.backend.end_session(str(self.project.uuid), self.sanitized_urn)
+        redis.delete.assert_called_once()
+        args = redis.delete.call_args[0]
+        base = openai_session_base_id(str(self.project.uuid), self.sanitized_urn)
+        self.assertEqual(set(args), {base, f"{base}:collab-slug"})

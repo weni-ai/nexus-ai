@@ -57,6 +57,9 @@ class CreateLogUsecase:  # TODO: rename method
         return self.log
 
     def update_status(self, status: str, exception_text: str = None):
+        if self.message is None:
+            return None
+
         update_fields = ["status"]
         message = self.message
 
