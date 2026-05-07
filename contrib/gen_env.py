@@ -154,6 +154,7 @@ def generate_env():
         "SENTENX_UPDATE_TASK_TOKEN": "",
         "WENIGPT_COOKIE": "",
         "BILLING_REST_ENDPOINT": "",
+        "CONNECT_REST_ENDPOINT": "",
         "FEW_SHOT_CHATGPT": "",
         "AWS_BEDROCK_LARGE_DATASOURCE_ID": "",
         "AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID": "",
@@ -264,6 +265,7 @@ def generate_env():
         "TURN_SERVER_USERNAME": "",
         "TURN_SERVER_PASSWORD": "",
         "CONVERSATIONS_TOKEN": "",
+        "DEFAULT_ERROR_MESSAGES": "{}",
     }
 
     with open(env_path, "w") as configfile:
