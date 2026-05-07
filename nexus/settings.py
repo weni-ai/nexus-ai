@@ -668,6 +668,11 @@ PROJECTS_WITH_LARGE_DATASOURCE = env.list("PROJECTS_WITH_LARGE_DATASOURCE", [])
 
 WORKFLOW_ARCHITECTURE_PROJECTS = env.list("WORKFLOW_ARCHITECTURE_PROJECTS", default=[])
 
+# ManagerAgent UUIDs that must run the legacy ("2.6") inline-agent formatter pipeline.
+# Source of truth for the legacy/new code path; admins cannot change this from Django admin.
+# Configure via the LEGACY_MANAGER_AGENT_UUIDS env var (comma-separated UUIDs) per environment.
+LEGACY_MANAGER_AGENT_UUIDS = env.list("LEGACY_MANAGER_AGENT_UUIDS", default=[])
+
 
 def get_datasource_id(project_uuid: str | None) -> str:
     if project_uuid in PROJECTS_WITH_LARGE_DATASOURCE:

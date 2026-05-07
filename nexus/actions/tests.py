@@ -485,6 +485,49 @@ class SimulationActionsApiTestCase(TestCase):
         self.assertEqual(args[2], "2.7")
 
     @patch("nexus.projects.api.permissions.has_external_general_project_permission", return_value=True)
+    @patch("nexus.actions.api.views.is_legacy_manager_uuid", return_value=True)
+    @patch("nexus.actions.api.views.get_redis_write_client")
+    def test_simulation_manager_pipeline_version_post_accepts_legacy_uuid(
+        self, mock_redis, _mock_legacy, _mock_perm
+    ):
+        mock_redis.return_value.setex = MagicMock()
+        request = self.factory.post(
+            f"/{self.project.uuid}/simulation/manager-pipeline-version/",
+            data={
+                "contact_urn": "ext:sim-user",
+                "manager_agent_uuid": "21b405a4-b5a5-4cf5-bb5f-efce2620e834",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = SimulationManagerPipelineVersionView.as_view()(request, project_uuid=str(self.project.uuid))
+        self.assertEqual(response.status_code, 200)
+        mock_redis.return_value.setex.assert_called_once()
+        args, _kwargs = mock_redis.return_value.setex.call_args
+        self.assertEqual(args[2], "2.6")
+
+    @patch("nexus.projects.api.permissions.has_external_general_project_permission", return_value=True)
+    @patch("nexus.actions.api.views.is_legacy_manager_uuid", return_value=False)
+    @patch("nexus.actions.api.views.clear_simulation_manager_pipeline_version")
+    @patch("nexus.actions.api.views.get_redis_write_client")
+    def test_simulation_manager_pipeline_version_post_new_uuid_clears_override(
+        self, mock_redis, mock_clear, _mock_legacy, _mock_perm
+    ):
+        request = self.factory.post(
+            f"/{self.project.uuid}/simulation/manager-pipeline-version/",
+            data={
+                "contact_urn": "ext:sim-user",
+                "manager_agent_uuid": "65f8c6d7-7518-483d-a8f1-5b8e4132fb0a",
+            },
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        response = SimulationManagerPipelineVersionView.as_view()(request, project_uuid=str(self.project.uuid))
+        self.assertEqual(response.status_code, 200)
+        mock_redis.return_value.setex.assert_not_called()
+        mock_clear.assert_called_once()
+
+    @patch("nexus.projects.api.permissions.has_external_general_project_permission", return_value=True)
     @patch("nexus.actions.api.views.manager_pipeline_version_from_project", return_value="2.6")
     @patch("nexus.actions.api.views.get_redis_read_client")
     def test_simulation_manager_pipeline_version_get_project_default_when_no_redis(

@@ -60,7 +60,7 @@ from nexus.usecases.intelligences.exceptions import (
 )
 from router.entities import Message as UserMessage
 from router.entities import message_factory
-from router.services.manager_pipeline_version import manager_pipeline_version_from_project
+from router.services.manager_pipeline_version import is_legacy_manager_uuid, manager_pipeline_version_from_project
 from router.tasks.invoke import start_inline_agents
 from router.tasks.tasks import start_route
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
@@ -409,17 +409,39 @@ class SimulationManagerPipelineVersionView(APIView):
 
     def post(self, request, project_uuid):
         pipeline_version = request.data.get("pipeline_version")
+        manager_agent_uuid = request.data.get("manager_agent_uuid")
         contact_urn = request.data.get("contact_urn")
-        if pipeline_version is None or pipeline_version == "":
-            return Response({"error": "pipeline_version is required"}, status=400)
+
         if not contact_urn:
             return Response({"error": "contact_urn is required"}, status=400)
+        if (pipeline_version is None or pipeline_version == "") and not manager_agent_uuid:
+            return Response(
+                {"error": "pipeline_version or manager_agent_uuid is required"},
+                status=400,
+            )
 
         if not contact_urn.startswith("ext:"):
             contact_urn = f"ext:{contact_urn}"
 
+        # When manager_agent_uuid is provided, resolve it against the configured
+        # legacy UUID list and store the resulting pipeline token (or clear the
+        # override if the chosen manager is on the new pipeline).
+        if manager_agent_uuid and (pipeline_version is None or pipeline_version == ""):
+            from inline_agents.backends.openai.legacy_formatter_pipeline import LEGACY_PIPELINE_VERSION
+
+            pipeline_version = LEGACY_PIPELINE_VERSION if is_legacy_manager_uuid(manager_agent_uuid) else None
+
         try:
             key = simulation_manager_pipeline_version_redis_key(project_uuid, contact_urn)
+            if pipeline_version is None:
+                clear_simulation_manager_pipeline_version(project_uuid, contact_urn)
+                return Response(
+                    {
+                        "manager_pipeline_version": None,
+                        "manager_agent_uuid": manager_agent_uuid,
+                        "cleared": True,
+                    }
+                )
             get_redis_write_client().setex(
                 key,
                 SIMULATION_MANAGER_PIPELINE_VERSION_TTL_SECONDS,
@@ -428,6 +450,7 @@ class SimulationManagerPipelineVersionView(APIView):
             return Response(
                 {
                     "manager_pipeline_version": pipeline_version,
+                    "manager_agent_uuid": manager_agent_uuid,
                     "ttl_seconds": SIMULATION_MANAGER_PIPELINE_VERSION_TTL_SECONDS,
                 }
             )
