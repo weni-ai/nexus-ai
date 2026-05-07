@@ -18,7 +18,6 @@ from nexus.inline_agents.api.official_agents_helpers import (
 )
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
-    AgentSystemSerializer,
     CurrentProviderSerializer,
     IntegratedAgentSerializer,
     ModelProviderSerializer,
@@ -584,12 +583,9 @@ class OfficialAgentsV1(APIView):
 
         consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
 
-        all_systems = AgentSystem.objects.all()
-        systems_data = AgentSystemSerializer(all_systems, many=True).data
-
         response_data = {
             "legacy": consolidated_data.get("legacy", []),
-            "new": {"agents": consolidated_data.get("new", []), "available_systems": systems_data},
+            "new": {"agents": consolidated_data.get("new", [])},
         }
 
         return Response(response_data)

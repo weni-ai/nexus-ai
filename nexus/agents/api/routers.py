@@ -26,12 +26,18 @@ from nexus.inline_agents.api.views import VtexAppAgentsView as VtexAppInlineAgen
 from nexus.inline_agents.api.views import VtexAppOfficialAgentsView as VtexAppOfficialInlineAgentsView
 from nexus.inline_agents.api.views import VtexAppProjectCredentialsView as VtexAppInlineProjectCredentialsView
 from nexus.inline_agents.api.views import VTexAppTeamView as VtexAppInlineTeamView
+from nexus.inline_agents.api.views_official_extras import OfficialAvailableSystemsV1
 from nexus.reports.views import ReportView
 
 urlpatterns = [
     path("agents/push", PushInlineAgents.as_view(), name="push-agents"),
     path("agents/<str:agent_uuid>/projects", AgentProjectsView.as_view(), name="agent-projects"),
     path("v1/official/agents", OfficialAgentsV1.as_view(), name="v1-official-agents"),
+    path(
+        "v1/official/available-systems",
+        OfficialAvailableSystemsV1.as_view(),
+        name="v1-official-available-systems",
+    ),
     path("v1/official/agents/<str:identifier>", OfficialAgentDetailV1.as_view(), name="v1-official-agent-detail"),
     path("agents/teams/<project_uuid>", InlineTeamView.as_view(), name="teams"),
     path("agents/app-teams/<project_uuid>", VtexAppInlineTeamView.as_view(), name="vtex-teams"),

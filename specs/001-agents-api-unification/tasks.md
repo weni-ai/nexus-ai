@@ -49,10 +49,10 @@ endpoint.
 
 ### Implementation
 
-- [ ] T006 [US5] Implement `fetch_available_systems_payload()` delegating to existing `AgentSystemSerializer` patterns in `nexus/inline_agents/api/services/available_systems.py`
-- [ ] T007 [US5] Add `OfficialAvailableSystemsV1` APIView + `@extend_schema` in `nexus/inline_agents/api/views_official_extras.py` (create module) with `AUTHENTICATION_CLASSES` / `CombinedExternalProjectPermission` matching `OfficialAgentsV1`
-- [ ] T008 [US5] Register `path("v1/official/available-systems", OfficialAvailableSystemsV1.as_view(), name="v1-official-available-systems")` in `nexus/agents/api/routers.py`
-- [ ] T009 [US5] Remove embedded `available_systems` from `OfficialAgentsV1.get` response assembly in `nexus/inline_agents/api/views.py`
+- [x] T006 [US5] Implement `fetch_available_systems_payload()` delegating to existing `AgentSystemSerializer` patterns in `nexus/inline_agents/api/services/available_systems.py`
+- [x] T007 [US5] Add `OfficialAvailableSystemsV1` APIView + `@extend_schema` in `nexus/inline_agents/api/views_official_extras.py` (create module) with `AUTHENTICATION_CLASSES` / `CombinedExternalProjectPermission` matching `OfficialAgentsV1`
+- [x] T008 [US5] Register `path("v1/official/available-systems", OfficialAvailableSystemsV1.as_view(), name="v1-official-available-systems")` in `nexus/agents/api/routers.py`
+- [x] T009 [US5] Remove embedded `available_systems` from `OfficialAgentsV1.get` response assembly in `nexus/inline_agents/api/views.py`
 - [ ] T010 [US5] Implement typed pagination input (`page`, `page_size` max 20) + cache key builder + `list_official_catalog_page` in `nexus/inline_agents/api/services/official_catalog.py`
 - [ ] T011 [US5] Wire cache get/set and hook invalidation to existing `notify_async` events used for team/project invalidation in `nexus/inline_agents/api/services/official_catalog.py`
 - [ ] T012 [US5] Create `build_novo_retorno_group_row(...)` merging `_build_group_payload` + `OfficialAgentDetailSerializer` field rules (FR-005, FR-001a) in `nexus/inline_agents/api/serializers/catalog.py`
