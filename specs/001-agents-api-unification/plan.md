@@ -192,7 +192,7 @@ only includes `agent_routes` under `api/` — no change expected unless a new in
 
 ---
 
-## Security: C11 and FR-13 (`OFFICIAL_SMART_AGENT_EDITORS`)
+## Security: C11 and FR-013 (`OFFICIAL_SMART_AGENT_EDITORS`)
 
 | File | Change |
 |------|--------|

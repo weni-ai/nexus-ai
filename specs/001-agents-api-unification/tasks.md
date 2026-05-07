@@ -30,7 +30,7 @@
 **⚠️ CRITICAL**: Complete this phase before user story implementation.
 
 - [ ] T002 Create package `nexus/inline_agents/api/services/__init__.py` exporting public service callables per `specs/001-agents-api-unification/plan.md`
-- [ ] T003 Implement `user_may_create_official_or_custom_agent(email: str) -> bool` using **exact** normalized email equality against `settings.OFFICIAL_SMART_AGENT_EDITORS` in `nexus/inline_agents/api/services/agent_creation_policy.py`
+- [ ] T003 Implement **`user_may_create_agents(email: str) -> bool`** (official **or** custom) using **exact** normalized email equality against `settings.OFFICIAL_SMART_AGENT_EDITORS` in `nexus/inline_agents/api/services/agent_creation_policy.py`; export it from `nexus/inline_agents/api/services/__init__.py` per plan/research
 - [ ] T004 Replace substring `in` check in `PushAgents._check_can_edit_official_agent` with policy helper and extend checks to cover **custom** creation per FR-013 in `nexus/inline_agents/api/views.py`
 - [ ] T005 [P] Add type hints and unit tests for `agent_creation_policy` in `nexus/inline_agents/api/tests/test_agent_creation_policy.py` (create file if missing)
 
@@ -201,10 +201,10 @@ path fully migrated — **SP sum T001–T017**.
 |------|----|-----|
 | T001 | 1  | Branch verified; plan and spec conflict list empty or noted in PR description. |
 | T002 | 2  | `import nexus.inline_agents.api.services` works; package docstring lists modules. |
-| T003 | 3  | Unit test: allow-listed email exact match passes; substring false positive fails; non-listed denied. |
+| T003 | 3  | `user_may_create_agents` implemented and exported; unit tests cover exact match, substring false positive rejection, non-listed denial. |
 | T004 | 3  | `PushAgents` uses helper only; grep shows no `can_edit_email in user_email` in repo for this check. |
 | T005 | 3  | New test file runs green under project pytest. |
-| T006 | 2  | Service returns payload byte-identical to prior `AgentSystemSerializer(all, many=True).data` for same DB snapshot (test fixture). |
+| T006 | 2  | **`available_systems`** array inside envelope matches prior `AgentSystemSerializer(all, many=True).data` for same DB snapshot (test fixture). |
 | T007 | 3  | `GET /api/v1/official/available-systems` returns 200 + schema in Swagger. |
 | T008 | 1  | Route registered; name stable for reverse(). |
 | T009 | 2  | Official list JSON never contains top-level `available_systems`. |

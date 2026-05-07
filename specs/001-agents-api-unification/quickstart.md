@@ -30,8 +30,9 @@ curl -sS -H "Authorization: Bearer <token>" \
 
 ## Tests
 
+From the **repository root** (clone location on your machine):
+
 ```bash
-cd /home/ruan/codes/weni/nexus-ai
 poetry run pytest nexus/agents/api/test_agents_api.py -q --no-header -x
 ```
 

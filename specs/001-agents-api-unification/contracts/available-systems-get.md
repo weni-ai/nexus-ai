@@ -16,8 +16,23 @@ official agents list.
 
 ## Response body
 
-- **200**: JSON array or wrapped list of system objects compatible with existing
-  **`AgentSystemSerializer`** output (`slug`, `name`, `logo`, …).
+Single envelope (clients MUST parse this shape only):
+
+- **200**: JSON object:
+  - **`available_systems`** *(array)* — each element matches **`AgentSystemSerializer`** with
+    `many=True` (`slug`, `name`, `logo`, …), identical to the list formerly nested under
+    `GET /api/v1/official/agents` → `new.available_systems`.
+
+Example:
+
+```json
+{
+  "available_systems": [
+    { "slug": "...", "name": "...", "logo": "..." }
+  ]
+}
+```
+
 - **401** / **403**: Standard DRF error envelope.
 
 ## Caching

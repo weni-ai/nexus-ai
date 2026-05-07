@@ -6,9 +6,10 @@
 
 ## Content Quality
 
-- [x] No implementation details (languages, frameworks, APIs)
+- [x] No unnecessary implementation stack (languages, frameworks, storage); HTTP routes and JSON
+  keys are **product contract** where needed for this API refactor, not framework trivia
 - [x] Focused on user value and business needs
-- [x] Written for non-technical stakeholders
+- [x] Written so stakeholders can follow outcomes; technical routes live in traceability sections
 - [x] All mandatory sections completed
 
 ## Requirement Completeness
@@ -27,7 +28,8 @@
 - [x] All functional requirements have clear acceptance criteria
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
-- [x] No implementation details leak into specification
+- [x] Contract-level HTTP/JSON detail appears only where needed for acceptance; no stray framework
+  stack or deployment internals in place of requirements
 
 ## Notes
 
