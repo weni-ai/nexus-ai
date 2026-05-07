@@ -10,8 +10,9 @@
 
 ```bash
 # Replace host and token as appropriate
+# Non-superuser Bearer tokens MUST include project_uuid (same permission stack as official agents list).
 curl -sS -H "Authorization: Bearer <token>" \
-  "http://localhost:8000/api/v1/official/available-systems"
+  "http://localhost:8000/api/v1/official/available-systems?project_uuid=<project_uuid>"
 
 curl -sS -H "Authorization: Bearer <token>" \
   "http://localhost:8000/api/v1/official/agents?page=1&page_size=20&project_uuid=<uuid>"

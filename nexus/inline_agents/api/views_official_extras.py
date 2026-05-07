@@ -1,6 +1,6 @@
 """Official agents API endpoints kept separate from views.py to limit module size."""
 
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -11,7 +11,7 @@ from nexus.projects.api.permissions import CombinedExternalProjectPermission
 
 
 class OfficialAvailableSystemsV1(APIView):
-    """Global AgentSystem catalog."""
+    """AgentSystem catalog for official integrations (same data model as the former embedded list field)."""
 
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
@@ -21,8 +21,24 @@ class OfficialAvailableSystemsV1(APIView):
         summary="List agent integration systems",
         description=(
             "Returns all agent systems with slug, name, and logo URL (same payload previously "
-            "returned as ``new.available_systems`` on GET /api/v1/official/agents)."
+            "**Authorization:** Uses ``CombinedExternalProjectPermission``. With a normal "
+            "project-scoped Bearer token you MUST pass ``project_uuid`` as a query parameter "
+            "(same as GET /api/v1/official/agents) so ``ProjectPermission`` can resolve access. "
+            "Tokens listed in ``settings.EXTERNAL_SUPERUSERS_TOKENS`` may call this endpoint without "
+            "``project_uuid``."
         ),
+        parameters=[
+            OpenApiParameter(
+                name="project_uuid",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.UUID,
+                description=(
+                    "Project UUID for permission checks when using a non-superuser Bearer token. "
+                    "Omit only when using an external superuser token."
+                ),
+            ),
+        ],
         responses={
             200: OpenApiResponse(
                 description="Available systems",
