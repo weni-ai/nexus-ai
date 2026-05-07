@@ -109,6 +109,9 @@ def _initialize_workflow(ctx: WorkflowContext) -> None:
         f"[Workflow] Starting workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
     )
 
+    # Mark this workflow task as the latest for this contact so older runs can be suppressed at dispatch time.
+    ctx.task_manager.set_latest_task_id(ctx.project_uuid, ctx.contact_urn, ctx.task_id)
+
     # Send typing indicator (async, non-blocking)
     logger.info(f"[Workflow] Dispatching typing indicator for project {ctx.project_uuid}, contact {ctx.contact_urn}")
     notify_async(
@@ -195,6 +198,7 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         outgoing_created_at=pendulum.now().to_iso8601_string(),
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
         turn_id=ctx.turn_id,
+        celery_task_id=ctx.task_id,
     )
 
     if (ctx.preview or ctx.preview_websocket) and ctx.broadcast:
@@ -296,6 +300,8 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
     skip_conv_sqs = should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel)
     # Conversation SQS: same rules as start_inline_agents (Cases 1–3)
     if not skip_conv_sqs:
+        # Dedicated UUID for conversations/Dynamo incoming row (distinct from turn trace anchor).
+        incoming_message_id = str(uuid_lib.uuid4())
         received_event = build_message_received_event(
             project_uuid=ctx.project_uuid,
             contact_urn=ctx.contact_urn,
@@ -303,8 +309,8 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
             contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
             message_text=getattr(message_obj, "text", "") or ctx.message.get("text", ""),
             created_at=ctx.incoming_created_at,
-            message_id=ctx.turn_id,
-            correlation_id=ctx.turn_id,
+            message_id=incoming_message_id,
+            correlation_id=str(ctx.turn_id),
         )
         try:
             get_conversation_events_producer().send_event(received_event.to_dict())
@@ -372,7 +378,14 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
         outgoing_created_at=pendulum.now().to_iso8601_string(),
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
         turn_id=ctx.turn_id,
+        celery_task_id=ctx.task_id,
     )
+
+    # Superseded guard: if a newer message arrived while we were running, skip dispatch.
+    latest = ctx.task_manager.get_latest_task_id(ctx.project_uuid, ctx.contact_urn)
+    if not (latest and str(latest) == str(ctx.task_id)):
+        _invoke_is_final_debug("H workflow post_generation branch=superseded (skip dispatch)")
+        return True
 
     # Dispatch response
     if ctx.preview or ctx.preview_websocket:

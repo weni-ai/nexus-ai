@@ -434,10 +434,15 @@ class ConversationDetailProxyView(APIView):
         else:
             messages = messages_data if messages_data else []
 
+        conversation_uuid_value = response_data.get("conversation_uuid") or response_data.get("uuid")
+        ended_at_value = response_data.get("ended_at")
+        if ended_at_value is None:
+            ended_at_value = response_data.get("end_date")
+
         transformed = {
-            "conversation_uuid": str(response_data.get("uuid")),
+            "conversation_uuid": str(conversation_uuid_value) if conversation_uuid_value else None,
             "created_at": response_data.get("created_at"),
-            "ended_at": response_data.get("end_date"),
+            "ended_at": ended_at_value,
             "status": response_data.get("status"),
             "topic": topic,
             "channel_uuid": str(response_data.get("channel_uuid")) if response_data.get("channel_uuid") else None,

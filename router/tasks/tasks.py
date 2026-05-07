@@ -401,7 +401,8 @@ def start_route(self, message: Dict, preview: bool = False) -> bool:  # pragma: 
         if pending_response:
             # Revoke the previous task
             if pending_task_id:
-                celery_app.control.revoke(pending_task_id.decode("utf-8"), terminate=True)
+                # Avoid hard-killing in-flight tasks so they can flush traces/audit events.
+                celery_app.control.revoke(pending_task_id.decode("utf-8"), terminate=False)
 
             # Concatenate the previous message with the new one
             previous_message = pending_response.decode("utf-8")
@@ -469,7 +470,8 @@ def _initialize_and_handle_pending_response(message, task_id):
 
     if pending_response:
         if pending_task_id:
-            celery_app.control.revoke(pending_task_id.decode("utf-8"), terminate=True)
+            # Avoid hard-killing in-flight tasks so they can flush traces/audit events.
+            celery_app.control.revoke(pending_task_id.decode("utf-8"), terminate=False)
         previous_message = pending_response.decode("utf-8")
         concatenated_message = f"{previous_message}\n{message.text}"
         message.text = concatenated_message
