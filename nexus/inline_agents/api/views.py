@@ -97,6 +97,39 @@ SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
 class PushAgents(APIView):
     permission_classes = [IsAuthenticated]
 
+    def _can_user_manage_mcp_definitions(self, user_email: str) -> bool:
+        """
+        MCP definitions are shared across agents/projects. Only allow approved editors to
+        create/update MCPs via the CLI push endpoint.
+        """
+        if not isinstance(user_email, str):
+            return False
+        email = user_email.strip()
+        if not email:
+            return False
+
+        for allowed in settings.OFFICIAL_SMART_AGENT_EDITORS:
+            if isinstance(allowed, str) and allowed.strip() and allowed.strip() in email:
+                return True
+        return False
+
+    def _check_mcp_payload_requires_editor(self, agents: dict, user_email: str) -> str | None:
+        """
+        Returns the first agent key that tries to use mcp/mcps without permission.
+
+        Note: Update use case checks for key presence ("mcp" in agent_data), so we treat
+        key presence as an attempt to manage MCPs even when the value is empty.
+        """
+        if self._can_user_manage_mcp_definitions(user_email):
+            return None
+
+        for key, payload in (agents or {}).items():
+            if not isinstance(payload, dict):
+                continue
+            if "mcp" in payload or "mcps" in payload:
+                return key
+        return None
+
     def _validate_request(self, request):
         """Validate request data and return processed inputs"""
 
@@ -138,6 +171,19 @@ class PushAgents(APIView):
 
         logger.debug(f"Agents payload - agent_keys: {list(agents.keys()) if isinstance(agents, dict) else None}")
         logger.debug(f"Files payload - file_count: {len(files) if hasattr(files, '__len__') else None}")
+
+        mcp_agent_key = self._check_mcp_payload_requires_editor(agents=agents, user_email=request.user.email)
+        if mcp_agent_key is not None:
+            return Response(
+                {
+                    "error": (
+                        "Permission Error: You are not authorized to create or update MCP definitions via CLI push. "
+                        f"Remove 'mcp'/'mcps' from agent '{mcp_agent_key}'."
+                    )
+                },
+                status=403,
+            )
+
         official_agent_key = self._check_can_edit_official_agent(agents=agents, user_email=request.user.email)
         if official_agent_key is not None:
             return Response(
