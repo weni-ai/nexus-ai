@@ -104,12 +104,15 @@ class PushAgents(APIView):
         """
         if not isinstance(user_email, str):
             return False
-        email = user_email.strip()
+        email = user_email.strip().lower()
         if not email:
             return False
 
         for allowed in settings.OFFICIAL_SMART_AGENT_EDITORS:
-            if isinstance(allowed, str) and allowed.strip() and allowed.strip() in email:
+            if not isinstance(allowed, str):
+                continue
+            normalized_allowed = allowed.strip().lower()
+            if normalized_allowed and normalized_allowed == email:
                 return True
         return False
 
@@ -121,6 +124,9 @@ class PushAgents(APIView):
         key presence as an attempt to manage MCPs even when the value is empty.
         """
         if self._can_user_manage_mcp_definitions(user_email):
+            return None
+
+        if not isinstance(agents, dict):
             return None
 
         for key, payload in (agents or {}).items():
@@ -143,7 +149,15 @@ class PushAgents(APIView):
 
         logger.debug(f"InlineAgentsView payload - keys: {list(request.data.keys())}")
 
-        agents = json.loads(request.data.get("agents"))
+        raw_agents = request.data.get("agents")
+        if raw_agents is None:
+            raise ValueError("agents is required")
+
+        agents = json.loads(raw_agents)
+        if not isinstance(agents, dict):
+            raise ValueError("agents must be an object")
+        if "agents" not in agents or not isinstance(agents.get("agents"), dict):
+            raise ValueError("agents.agents must be an object")
         project_uuid = request.data.get("project_uuid")
 
         return files, agents, project_uuid
@@ -165,14 +179,19 @@ class PushAgents(APIView):
         agent_usecase = CreateAgentUseCase()
         update_agent_usecase = UpdateAgentUseCase()
 
-        files, agents, project_uuid = self._validate_request(request)
-
-        agents = agents["agents"]
+        try:
+            files, agents, project_uuid = self._validate_request(request)
+            agents = agents["agents"]
+        except (ValueError, TypeError, KeyError, json.JSONDecodeError) as e:
+            return Response({"error": str(e)}, status=400)
 
         logger.debug(f"Agents payload - agent_keys: {list(agents.keys()) if isinstance(agents, dict) else None}")
         logger.debug(f"Files payload - file_count: {len(files) if hasattr(files, '__len__') else None}")
 
-        mcp_agent_key = self._check_mcp_payload_requires_editor(agents=agents, user_email=request.user.email)
+        mcp_agent_key = self._check_mcp_payload_requires_editor(
+            agents=agents,
+            user_email=_multi_agent_request_user_email(request),
+        )
         if mcp_agent_key is not None:
             return Response(
                 {

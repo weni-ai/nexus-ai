@@ -180,6 +180,46 @@ class TestPushAgentsMcpGuard(TestCase):
         self.assertEqual(res.status_code, 403)
         self.assertIn("Remove 'mcp'/'mcps'", (res.json() or {}).get("error", ""))
 
+    @override_settings(OFFICIAL_SMART_AGENT_EDITORS=["user@example.com"])
+    def test_push_agents_rejects_mcp_key_even_if_user_is_allowlisted_but_email_blank(self):
+        self.user.email = ""
+        self.user.save(update_fields=["email"])
+
+        url = reverse("push-agents")
+        payload = {
+            "agents": {
+                "my_agent": {
+                    "name": "My agent",
+                    "description": "desc",
+                    "instructions": [],
+                    "guardrails": [],
+                    "tools": [],
+                    "mcp": [],
+                }
+            }
+        }
+
+        res = self.client.post(
+            url,
+            data={"agents": json.dumps(payload), "project_uuid": str(self.project.uuid)},
+            format="multipart",
+        )
+
+        self.assertEqual(res.status_code, 403)
+
+    def test_push_agents_invalid_agents_shape_returns_400(self):
+        url = reverse("push-agents")
+        payload = {"agents": []}
+
+        res = self.client.post(
+            url,
+            data={"agents": json.dumps(payload), "project_uuid": str(self.project.uuid)},
+            format="multipart",
+        )
+
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("agents.agents", (res.json() or {}).get("error", ""))
+
 
 class MockBedrockClient:
     def __init__(self):
