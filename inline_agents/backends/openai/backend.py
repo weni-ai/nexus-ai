@@ -42,6 +42,7 @@ from nexus.inline_agents.backends.openai.repository import (
     OpenAISupervisorRepository,
 )
 from nexus.inline_agents.models import InlineAgentsConfiguration
+from nexus.internals.connect import ConnectRESTClient
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_async
@@ -73,6 +74,16 @@ class OpenAIBackend(InlineAgentsBackend):
             return json.dumps(final_response, ensure_ascii=False)
         except TypeError:
             return str(final_response)
+
+    @staticmethod
+    def _get_default_error_message(project_uuid: str) -> str:
+        fallback_language = "en-us"
+        messages = getattr(settings, "DEFAULT_ERROR_MESSAGES", {})
+        try:
+            language = ConnectRESTClient().get_project_language(project_uuid)
+        except Exception:
+            language = fallback_language
+        return messages.get(language, messages.get(fallback_language, ""))
 
     def get_supervisor(
         self,
@@ -447,31 +458,40 @@ class OpenAIBackend(InlineAgentsBackend):
                 stream_support=stream_support,
             )
 
-        result = asyncio.run(
-            self._invoke_agents_async(
-                client,
-                external_team,
-                session,
-                session_id,
-                input_text,
-                contact_urn,
-                project_uuid,
-                channel_uuid,
-                user_email,
-                preview,
-                rationale_switch,
-                language,
-                turn_off_rationale,
-                msg_external_id,
-                supervisor_hooks,
-                runner_hooks,
-                hooks_state,
-                use_components,
-                message_uuid=message_conversation_log_uuid,
-                grpc_session=grpc_session,
-                formatter_agent_configurations=formatter_agent_configurations,
+        try:
+            result = asyncio.run(
+                self._invoke_agents_async(
+                    client,
+                    external_team,
+                    session,
+                    session_id,
+                    input_text,
+                    contact_urn,
+                    project_uuid,
+                    channel_uuid,
+                    user_email,
+                    preview,
+                    rationale_switch,
+                    language,
+                    turn_off_rationale,
+                    msg_external_id,
+                    supervisor_hooks,
+                    runner_hooks,
+                    hooks_state,
+                    use_components,
+                    grpc_session=grpc_session,
+                    formatter_agent_configurations=formatter_agent_configurations,
+                )
             )
-        )
+        except Exception as exc:
+            logger.error(
+                "[OpenAIBackend] Error in _invoke_agents_async, returning default message: %s",
+                exc,
+                exc_info=True,
+            )
+            sentry_sdk.capture_exception(exc)
+            default_message = self._get_default_error_message(project_uuid)
+            return InvokeAgentsResult(text=default_message, skip_dispatch=False)
 
         text = self._coerce_final_response_text(result)
         skip_dispatch = getattr(hooks_state, "skip_outgoing_dispatch", False)
