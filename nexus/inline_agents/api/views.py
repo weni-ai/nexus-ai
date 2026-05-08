@@ -26,6 +26,7 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentListSerializer,
     OfficialAgentsAssignRequestSerializer,
     OfficialAgentsAssignResponseSerializer,
+    OfficialAgentsV1ListEnvelopeSerializer,
     ProjectCredentialsListSerializer,
     official_agent_modal_presentation_payload,
 )
@@ -297,28 +298,15 @@ def get_all_credentials_for_group(group_slug: str) -> list:
 
 
 def _group_agents_by_slug(agents_queryset):
-    """Groups agents by their group slug, separating those without a group."""
+    """Group queryset agents by ``AgentGroup.slug``. Agents without a group are skipped."""
     from collections import defaultdict
 
     agents_by_group = defaultdict(list)
     for agent in agents_queryset:
-        if "concierge" in agent.slug.lower() and agent.group is None:
+        if not agent.group:
             continue
-
-        if agent.group:
-            agents_by_group[agent.group.slug].append(agent)
-        else:
-            agents_by_group[None].append(agent)
+        agents_by_group[agent.group.slug].append(agent)
     return agents_by_group
-
-
-def _process_legacy_agents(group_agents, project_uuid=None):
-    """Processes legacy agents (those without a group)."""
-    legacy_agents = []
-    for agent in group_agents:
-        serializer = OfficialAgentListSerializer(agent, context={"project_uuid": project_uuid})
-        legacy_agents.append(serializer.data)
-    return legacy_agents
 
 
 def _get_group_systems(group_slug):
@@ -387,23 +375,19 @@ def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, cr
     """Constructs the final payload for a grouped agent."""
     generic_name = base_agent.name
 
-    if base_agent.group:
-        try:
-            if base_agent.group.modal.agent_name:
-                generic_name = base_agent.group.modal.agent_name
-            else:
-                generic_name = base_agent.group.name
-        except Exception:
+    try:
+        if base_agent.group.modal.agent_name:
+            generic_name = base_agent.group.modal.agent_name
+        else:
             generic_name = base_agent.group.name
-    elif "(" in generic_name:
-        generic_name = generic_name.split("(")[0].strip()
+    except Exception:
+        generic_name = base_agent.group.name
 
     payload = {
         "group": group_slug,
         "name": generic_name,
         "slug": base_agent.slug,
         "description": base_agent.collaboration_instructions,
-        "type": (base_agent.agent_type.slug if getattr(base_agent, "agent_type", None) else ""),
         "category": (base_agent.category.slug if getattr(base_agent, "category", None) else ""),
         "systems": sorted(list(all_systems), key=lambda s: (0 if "vtex" in s.lower() else 1, s.lower())),
         "assigned": group_assigned,
@@ -442,8 +426,8 @@ def _official_agents_v1_name_filter_q(name_filter: str) -> Q:
     """
     Word-prefix search aligned with the list card title (_build_group_payload).
 
-    Grouped: if ``AgentGroupModal.agent_name`` is set, match only that (same as the UI).
-    Otherwise match ``AgentGroup.name``. Legacy (no group): ``Agent.name``.
+    When ``AgentGroupModal.agent_name`` is set, match only that (same as the UI).
+    Otherwise match ``AgentGroup.name``. Catalog includes only grouped official agents.
     """
     needle = name_filter.strip()
     if not needle:
@@ -454,44 +438,31 @@ def _official_agents_v1_name_filter_q(name_filter: str) -> Q:
         Q(group__modal__isnull=True) | Q(group__modal__agent_name__isnull=True) | Q(group__modal__agent_name__exact="")
     )
 
-    grouped_match = Q(group__isnull=False) & (
+    return Q(group__isnull=False) & (
         (modal_title_set & _word_prefix_match_q("group__modal__agent_name", needle))
         | (modal_title_unset & _word_prefix_match_q("group__name", needle))
     )
-    legacy_match = Q(group__isnull=True) & _word_prefix_match_q("name", needle)
-    return grouped_match | legacy_match
 
 
-def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dict:
-    """
-    Consolidate agents that belong to the same group into a single entry with agents list.
-    Returns a dict with 'legacy' and 'new' keys separating legacy agents from grouped agents.
-    For grouped agents, returns consolidated group data with a list of available agents.
-    """
+def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> list:
+    """One catalog row per official agent group (each row includes an inner ``agents`` list)."""
     agents_by_group = _group_agents_by_slug(agents_queryset)
-
-    legacy_agents = []
-    new_agents = []
+    rows = []
 
     for group_slug, group_agents in agents_by_group.items():
-        if group_slug is None:
-            legacy_agents.extend(_process_legacy_agents(group_agents, project_uuid))
-        else:
-            if not group_agents:
-                continue
+        if not group_slug or not group_agents:
+            continue
 
-            base_agent = group_agents[0]
-            group_assigned = _check_group_assignment(group_agents, project_uuid)
-            all_systems = _get_group_systems(group_slug)
-            credentials = _get_group_credentials(group_slug, all_systems)
-            agents_list = _build_agents_list(group_agents, project_uuid)
+        base_agent = group_agents[0]
+        group_assigned = _check_group_assignment(group_agents, project_uuid)
+        all_systems = _get_group_systems(group_slug)
+        credentials = _get_group_credentials(group_slug, all_systems)
+        agents_list = _build_agents_list(group_agents, project_uuid)
 
-            payload = _build_group_payload(
-                base_agent, group_slug, all_systems, group_assigned, credentials, agents_list
-            )
-            new_agents.append(payload)
+        payload = _build_group_payload(base_agent, group_slug, all_systems, group_assigned, credentials, agents_list)
+        rows.append(payload)
 
-    return {"legacy": legacy_agents, "new": new_agents}
+    return rows
 
 
 class OfficialAgentsV1(APIView):
@@ -502,15 +473,12 @@ class OfficialAgentsV1(APIView):
         operation_id="v1_official_agents_list",
         summary="List official agents",
         description=(
-            "Returns available official agents separated into 'legacy' and 'new' keys. "
-            "Legacy agents (without group) are returned individually. "
-            "New agents (with group) are consolidated by group with consolidated systems, MCPs, and credentials. "
-            "Each grouped agent includes a 'agents' array listing all available agents with their UUIDs, "
-            "allowing the frontend to select which agent to view details for. "
-            "Optional filters: `type`, `group`, `category`, `system`. "
-            "Query `name` is a case-insensitive word-prefix match on the list title: legacy agents use "
-            "`Agent.name`; grouped agents use modal `agent_name` when set (same label as the UI), else "
-            "`AgentGroup.name` (not template `Agent.name`). A word starts at the beginning of the field or "
+            "Returns available official agents in a single `groups` array (one row per agent group). "
+            "Each row includes an `agents` array listing "
+            "member agents and UUIDs, plus MCP and credential metadata for the group. "
+            "Optional filters: `type`, `group`, `category`, `system` (query params — not returned on rows). "
+            "Query `name` is a case-insensitive word-prefix match on the list title: modal `agent_name` when set "
+            "(same label as the UI), else `AgentGroup.name`. A word starts at the beginning of the field or "
             "after a separator among space, `_`, `(`, `[`, `/`. Hyphen `-` is not a separator, so hyphenated "
             "text stays one word (for example, `back` does not match `non-backend`). Mid-word substrings do not "
             "match. Use `project_uuid` to mark `assigned`."
@@ -529,7 +497,9 @@ class OfficialAgentsV1(APIView):
             OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
         ],
         responses={
-            200: OpenApiResponse(description="Agents list", response=OfficialAgentListSerializer),
+            200: OpenApiResponse(
+                description="Official catalog (groups)", response=OfficialAgentsV1ListEnvelopeSerializer
+            ),
             401: OpenApiResponse(description="Unauthorized"),
             403: OpenApiResponse(description="Forbidden"),
         },
@@ -544,7 +514,7 @@ class OfficialAgentsV1(APIView):
         system_filter = request.query_params.get("system")
 
         agents = (
-            Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
+            Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM, group__isnull=False)
             .select_related("group", "group__modal")
             .prefetch_related("systems")
         )
@@ -555,8 +525,6 @@ class OfficialAgentsV1(APIView):
             .values_list("display_skills", flat=True)[:1]
         )
         agents = agents.annotate(latest_display_skills=latest_version_skills)
-
-        agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
         if name_filter:
             agents = agents.filter(_official_agents_v1_name_filter_q(name_filter))
         if type_filter:
@@ -576,20 +544,21 @@ class OfficialAgentsV1(APIView):
             )
             # Fetch agents again without the systems filter to avoid queryset state issues
             agents = (
-                Agent.objects.filter(uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM)
+                Agent.objects.filter(
+                    uuid__in=agent_uuids, is_official=True, source_type=Agent.PLATFORM, group__isnull=False
+                )
                 .select_related("group", "group__modal")
                 .prefetch_related("systems")
             )
-            agents = agents.exclude(Q(slug__icontains="concierge") & Q(group__isnull=True))
 
-        consolidated_data = consolidate_grouped_agents(agents, project_uuid=project_uuid)
+        consolidated_groups = consolidate_grouped_agents(agents, project_uuid=project_uuid)
 
         all_systems = AgentSystem.objects.all()
         systems_data = AgentSystemSerializer(all_systems, many=True).data
 
         response_data = {
-            "legacy": consolidated_data.get("legacy", []),
-            "new": {"agents": consolidated_data.get("new", []), "available_systems": systems_data},
+            "groups": consolidated_groups,
+            "available_systems": systems_data,
         }
 
         return Response(response_data)
@@ -1017,11 +986,12 @@ class OfficialAgentDetailV1(APIView):
         operation_id="v1_official_agent_detail",
         summary="Get official agent details",
         description=(
-            "Returns details of the official agent, MCPs and expected credentials for the selected `system`. "
+            "Returns details for an official agent (member of a group): MCPs and expected credentials. "
             "MCPs are loaded from the database (configured via Django admin). "
             "Provide `project_uuid` to check if it is `assigned`. "
             "Provide `mcp` to get details for a specific MCP (returns single MCP object with credentials), "
-            "otherwise returns all available MCPs for the system (returns MCPs list without credentials)."
+            "otherwise returns all available MCPs (returns MCPs list without credentials). "
+            "The `systems` array in the body lists applicable system slugs."
         ),
         parameters=[
             OpenApiParameter(
@@ -1030,7 +1000,6 @@ class OfficialAgentDetailV1(APIView):
                 required=False,
                 type=OpenApiTypes.STR,
             ),
-            OpenApiParameter(name="system", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(name="group", location=OpenApiParameter.QUERY, required=False, type=OpenApiTypes.STR),
             OpenApiParameter(
                 name="mcp",
@@ -1056,12 +1025,11 @@ class OfficialAgentDetailV1(APIView):
     def get(self, request, *args, **kwargs):
         identifier = kwargs.get("identifier")
         project_uuid = request.query_params.get("project_uuid")
-        system = request.query_params.get("system")
         group = request.query_params.get("group")
         mcp = request.query_params.get("mcp")
 
         official_agent_qs = Agent.objects.select_related("group", "group__modal").filter(
-            is_official=True, source_type=Agent.PLATFORM
+            is_official=True, source_type=Agent.PLATFORM, group__isnull=False
         )
         try:
             agent = official_agent_qs.get(uuid=identifier)
@@ -1084,7 +1052,6 @@ class OfficialAgentDetailV1(APIView):
             agent,
             context={
                 "project_uuid": project_uuid,
-                "system": system,
                 "group": group,
                 "mcp": mcp,
             },

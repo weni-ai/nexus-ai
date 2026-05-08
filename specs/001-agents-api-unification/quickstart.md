@@ -22,7 +22,7 @@ curl -sS -H "Authorization: Bearer <token>" \
 | Removed / changed | Client action |
 |-------------------|---------------|
 | `GET /api/v1/official/agents/{identifier}` | Use list row payload only |
-| `legacy` / `new` keys on v1 official list | Parse flat `results` (or agreed key) only |
+| `legacy` / `new` keys on v1 official list | Use single top-level `groups` array (no split) |
 | `GET /api/agents/official/<project_uuid>/` | Use unified project catalog / v1 official per product mapping |
 | Embedded `available_systems` on v1 list | Call `/api/v1/official/available-systems` |
 | Team roster `id` | Read `slug` |

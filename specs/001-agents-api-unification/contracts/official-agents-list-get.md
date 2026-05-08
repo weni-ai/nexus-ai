@@ -14,7 +14,18 @@ retorno** row including data historically provided by **`GET /api/v1/official/ag
 | `page_size` | Integer ≥ 1, **≤ 20** (hard cap) |
 | `name`, `group`, `category`, `system`, … | Existing filters preserved where still applicable |
 
-## Response envelope (illustrative — finalize in OpenAPI)
+## Response envelope (illustrative — pagination added in US5 tasks)
+
+Current implementation returns:
+
+```json
+{
+  "groups": [],
+  "available_systems": []
+}
+```
+
+Target paginated shape (when wired):
 
 ```json
 {
@@ -25,7 +36,7 @@ retorno** row including data historically provided by **`GET /api/v1/official/ag
 }
 ```
 
-Each element of **`results`**:
+Each element of **`groups`** / **`results`** (catalog rows — one per **`AgentGroup`**):
 
 - Shares **identical** keys and nesting rules for list-only and “detail-equivalent” consumption.
 - Includes **`is_official`**, **`model`**, and **no** top-level **`type`** or **`system`** on the row

@@ -357,7 +357,6 @@ class OfficialAgentListSerializer(serializers.Serializer):
     uuid = serializers.UUIDField()
     name = serializers.CharField()
     description = serializers.CharField()
-    type = serializers.CharField()
     group = serializers.CharField(allow_null=True)
     category = serializers.CharField(allow_blank=True)
     systems = serializers.ListField(child=serializers.CharField(), allow_empty=True)
@@ -405,7 +404,6 @@ class OfficialAgentListSerializer(serializers.Serializer):
             "uuid": obj.uuid,
             "name": obj.name,
             "description": obj.collaboration_instructions,
-            "type": (obj.agent_type.slug if getattr(obj, "agent_type", None) else ""),
             "group": group_name,
             "category": (obj.category.slug if getattr(obj, "category", None) else ""),
             "systems": systems,
@@ -425,10 +423,8 @@ class OfficialAgentListSerializer(serializers.Serializer):
 class OfficialAgentDetailSerializer(serializers.Serializer):
     name = serializers.CharField()
     description = serializers.CharField()
-    type = serializers.CharField()
     group = serializers.CharField()
     category = serializers.CharField()
-    system = serializers.CharField()
     systems = serializers.ListField(child=serializers.CharField(), allow_empty=True)
     assigned = serializers.BooleanField()
     MCPs = serializers.ListField(child=serializers.DictField(), required=False)
@@ -438,12 +434,10 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
 
     def to_representation(self, obj):
         project_uuid = self.context.get("project_uuid")
-        system = self.context.get("system")
         mcp_name = self.context.get("mcp")
         group_name = _official_detail_group_name(obj, self.context.get("group"))
 
         available_systems = _official_detail_available_systems(group_name, obj)
-        selected_system = system or (available_systems[0] if available_systems else "")
         assigned = (
             IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=obj, is_active=True).exists()
             if project_uuid
@@ -455,10 +449,8 @@ class OfficialAgentDetailSerializer(serializers.Serializer):
         payload = {
             "name": _official_detail_display_name(obj, group_name),
             "description": obj.collaboration_instructions,
-            "type": (obj.agent_type.slug if getattr(obj, "agent_type", None) else ""),
             "group": group_name,
             "category": (obj.category.slug if getattr(obj, "category", None) else ""),
-            "system": selected_system,
             "systems": available_systems,
             "assigned": assigned,
             "credentials": creds,
@@ -496,6 +488,13 @@ class OfficialAgentsAssignResponseSerializer(serializers.Serializer):
     assigned_created = serializers.BooleanField(required=False)
     assigned_deleted = serializers.BooleanField(required=False)
     created_credentials = serializers.ListField(child=serializers.CharField(), required=False)
+
+
+class OfficialAgentsV1ListEnvelopeSerializer(serializers.Serializer):
+    """OpenAPI envelope for GET /api/v1/official/agents (one dict per agent group)."""
+
+    groups = serializers.ListField(child=serializers.DictField())
+    available_systems = serializers.ListField(child=serializers.DictField())
 
 
 class ProviderCredentialSerializer(serializers.Serializer):
