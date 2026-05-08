@@ -264,7 +264,6 @@ def generate_env():
         "TURN_SERVER_USERNAME": "",
         "TURN_SERVER_PASSWORD": "",
         "CONVERSATIONS_TOKEN": "",
-        "DEFAULT_ERROR_MESSAGES": "{}",
     }
 
     with open(env_path, "w") as configfile:

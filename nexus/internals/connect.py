@@ -1,13 +1,12 @@
 import logging
 
-import requests
 from django.conf import settings
 
 from nexus.internals import InternalAuthentication, RestClient
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_LANGUAGE = "en-us"
+DEFAULT_LANGUAGE = "pt-br"
 
 
 class ConnectRESTClient(RestClient):
@@ -27,8 +26,16 @@ class ConnectRESTClient(RestClient):
                 timeout=10,
             )
             response.raise_for_status()
-            return response.json().get("language", DEFAULT_LANGUAGE)
-        except (requests.exceptions.RequestException, ValueError, KeyError) as exc:
+            data = response.json()
+            if not isinstance(data, dict):
+                logger.warning(
+                    "Unexpected response type from Connect API for project %s: %s",
+                    project_uuid,
+                    type(data).__name__,
+                )
+                return DEFAULT_LANGUAGE
+            return data.get("language", DEFAULT_LANGUAGE)
+        except Exception as exc:
             logger.warning(
                 "Failed to fetch project language from Connect API for project %s: %s",
                 project_uuid,

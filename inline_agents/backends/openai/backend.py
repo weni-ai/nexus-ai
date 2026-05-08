@@ -479,10 +479,24 @@ class OpenAIBackend(InlineAgentsBackend):
                     runner_hooks,
                     hooks_state,
                     use_components,
+                    message_uuid=message_conversation_log_uuid,
                     grpc_session=grpc_session,
                     formatter_agent_configurations=formatter_agent_configurations,
                 )
             )
+
+            text = self._coerce_final_response_text(result)
+            skip_dispatch = getattr(hooks_state, "skip_outgoing_dispatch", False)
+            preview_txt = text[:200] + "..." if len(text) > 200 else text
+            _is_final_out_debug(f"F invoke_agents_return skip_dispatch={skip_dispatch} text_preview={preview_txt!r}")
+
+            if grpc_session and grpc_session.is_active:
+                try:
+                    grpc_session.send_completed(text)
+                except Exception as e:
+                    logger.error(f"gRPC completion failed: {e}", exc_info=True)
+
+            return InvokeAgentsResult(text=text, skip_dispatch=skip_dispatch)
         except Exception as exc:
             logger.error(
                 "[OpenAIBackend] Error in _invoke_agents_async, returning default message: %s",
@@ -492,26 +506,18 @@ class OpenAIBackend(InlineAgentsBackend):
             sentry_sdk.capture_exception(exc)
             default_message = self._get_default_error_message(project_uuid)
             return InvokeAgentsResult(text=default_message, skip_dispatch=False)
+        finally:
+            if grpc_session:
+                try:
+                    grpc_session.close()
+                except Exception as e:
+                    logger.error(f"gRPC session close failed: {e}", exc_info=True)
 
-        text = self._coerce_final_response_text(result)
-        skip_dispatch = getattr(hooks_state, "skip_outgoing_dispatch", False)
-        preview_txt = text[:200] + "..." if len(text) > 200 else text
-        _is_final_out_debug(f"F invoke_agents_return skip_dispatch={skip_dispatch} text_preview={preview_txt!r}")
-
-        # Send completed message through the persistent stream and close
-        if grpc_session and grpc_session.is_active:
-            try:
-                grpc_session.send_completed(text)
-            except Exception as e:
-                logger.error(f"gRPC completion failed: {e}", exc_info=True)
-            finally:
-                grpc_session.close()
-
-        # Close the client
-        if grpc_client:
-            grpc_client.close()
-
-        return InvokeAgentsResult(text=text, skip_dispatch=skip_dispatch)
+            if grpc_client:
+                try:
+                    grpc_client.close()
+                except Exception as e:
+                    logger.error(f"gRPC client close failed: {e}", exc_info=True)
 
     async def _run_formatter_agent_async(
         self,
