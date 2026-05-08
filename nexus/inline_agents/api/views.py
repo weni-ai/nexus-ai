@@ -3,6 +3,7 @@ import logging
 
 import pendulum
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count, OuterRef, Prefetch, Q, Subquery
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.permissions import BasePermission, IsAuthenticated
@@ -240,8 +241,7 @@ class PushAgents(APIView):
             return Response(
                 {
                     "error": (
-                        f"Permission Error: You are not authorized to edit an official "
-                        f"AI Agent {official_agent_key}"
+                        f"Permission Error: You are not authorized to edit an official AI Agent {official_agent_key}"
                     )
                 },
                 status=403,
@@ -374,14 +374,15 @@ def _build_agents_list(group_agents, project_uuid):
 def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, credentials, agents_list):
     """Constructs the final payload for a grouped agent."""
     generic_name = base_agent.name
-
+    group = base_agent.group
     try:
-        if base_agent.group.modal.agent_name:
-            generic_name = base_agent.group.modal.agent_name
+        modal = group.modal
+        if modal.agent_name:
+            generic_name = modal.agent_name
         else:
-            generic_name = base_agent.group.name
-    except Exception:
-        generic_name = base_agent.group.name
+            generic_name = group.name
+    except ObjectDoesNotExist:
+        generic_name = group.name
 
     payload = {
         "group": group_slug,
@@ -399,7 +400,7 @@ def _build_group_payload(base_agent, group_slug, all_systems, group_assigned, cr
     try:
         modal = base_agent.group.modal
         payload["presentation"] = official_agent_modal_presentation_payload(modal)
-    except Exception:
+    except ObjectDoesNotExist:
         pass
 
     return payload
