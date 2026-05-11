@@ -505,6 +505,13 @@ class OpenAIBackend(InlineAgentsBackend):
             )
             sentry_sdk.capture_exception(exc)
             default_message = self._get_default_error_message(project_uuid)
+
+            if grpc_session and grpc_session.is_active:
+                try:
+                    grpc_session.send_completed(default_message)
+                except Exception as e:
+                    logger.error(f"gRPC completion (default message) failed: {e}", exc_info=True)
+
             return InvokeAgentsResult(text=default_message, skip_dispatch=False)
         finally:
             if grpc_session:
