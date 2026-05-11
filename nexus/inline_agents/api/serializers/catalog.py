@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from itertools import groupby
 from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -10,7 +11,37 @@ from nexus.inline_agents.api.official_agents_helpers import (
     get_all_mcps_for_group,
     get_all_systems_for_group,
 )
+from nexus.inline_agents.api.serializers import (
+    agent_modal_about_locale_map,
+    integrated_agent_mcp_payload,
+    integrated_agent_skills_payload,
+)
 from nexus.inline_agents.models import Agent, IntegratedAgent
+
+
+def project_agent_assignment_map(
+    project_uuid: str,
+    *,
+    include_inactive_integrated: bool,
+) -> dict[int, tuple[bool, bool]]:
+    """One DB round-trip: ``agent_id`` -> ``(assigned, active)`` for my-agents / official list rows.
+
+    Semantics match ``AgentSerializer`` / ``build_row_from_project_agent`` when no preloaded map is passed.
+    """
+    rows = list(
+        IntegratedAgent.objects.filter(project__uuid=project_uuid)
+        .order_by("agent_id", "-is_active", "-id")
+        .values_list("agent_id", "is_active")
+    )
+    result: dict[int, tuple[bool, bool]] = {}
+    for agent_id, chunk in groupby(rows, key=lambda r: r[0]):
+        flags = [r[1] for r in chunk]
+        has_active = any(flags)
+        has_any = bool(flags)
+        assigned = has_any if include_inactive_integrated else has_active
+        active = flags[0]
+        result[agent_id] = (assigned, active)
+    return result
 
 
 def _catalog_display_name(agent: Agent) -> str:
@@ -86,7 +117,11 @@ def _mcps_for_standalone_agent(agent: Agent) -> list[dict[str, Any]]:
 
 
 def build_row_from_integrated(integrated: IntegratedAgent) -> dict[str, Any]:
-    """Team roster row: one ``IntegratedAgent`` as novo retorno."""
+    """Team roster row: one ``IntegratedAgent`` as novo retorno.
+
+    Keeps ``IntegratedAgentSerializer``-visible fields (``about``, ``mcp``, ``skills``, ``description``)
+    aligned with the legacy serializer contract.
+    """
     agent = integrated.agent
     group = getattr(agent, "group", None)
     group_slug = group.slug if group else None
@@ -99,8 +134,12 @@ def build_row_from_integrated(integrated: IntegratedAgent) -> dict[str, Any]:
         "group": group_slug,
         "name": _catalog_display_name(agent),
         "slug": agent.slug,
+        "id": agent.slug,
         "uuid": str(agent.uuid),
-        "about": _about_payload(agent),
+        "about": agent_modal_about_locale_map(agent),
+        "skills": integrated_agent_skills_payload(agent),
+        "description": agent.collaboration_instructions,
+        "mcp": integrated_agent_mcp_payload(integrated),
         "assigned": True,
         "active": integrated.is_active,
         "is_official": agent.is_official,
@@ -117,8 +156,13 @@ def build_row_from_project_agent(
     project_uuid: str | None,
     *,
     include_inactive_integrated: bool = False,
+    assignment_by_agent_id: dict[int, tuple[bool, bool]] | None = None,
 ) -> dict[str, Any]:
-    """My-agents / project catalog row for an ``Agent`` owned by the project."""
+    """My-agents / project catalog row for an ``Agent`` owned by the project.
+
+    Pass ``assignment_by_agent_id`` from ``project_agent_assignment_map`` when building many rows
+    for the same project to avoid N+1 queries on ``IntegratedAgent``.
+    """
     group = getattr(agent, "group", None)
     group_slug = group.slug if group else None
     systems = [s.slug for s in agent.systems.all()]
@@ -130,14 +174,17 @@ def build_row_from_project_agent(
     assigned = False
     active: bool | None = None
     if project_uuid:
-        qs_all = IntegratedAgent.objects.filter(project_id=project_uuid, agent=agent)
-        qs_active = qs_all.filter(is_active=True)
-        if include_inactive_integrated:
-            assigned = qs_all.exists()
+        if assignment_by_agent_id is not None:
+            assigned, active = assignment_by_agent_id.get(agent.pk, (False, False))
         else:
-            assigned = qs_active.exists()
-        integrated = qs_all.first()
-        active = integrated.is_active if integrated else False
+            qs_all = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent)
+            qs_active = qs_all.filter(is_active=True)
+            if include_inactive_integrated:
+                assigned = qs_all.exists()
+            else:
+                assigned = qs_active.exists()
+            integrated = qs_all.order_by("-is_active", "-id").first()
+            active = integrated.is_active if integrated else False
     else:
         active = None
 

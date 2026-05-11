@@ -53,6 +53,76 @@ def inline_agent_list_display_name(agent: Agent) -> str:
     return group.name
 
 
+def integrated_agent_skills_payload(agent: Agent) -> list:
+    """Display skills for team roster rows (matches ``IntegratedAgentSerializer.get_skills``)."""
+    if hasattr(agent, "latest_display_skills"):
+        return agent.latest_display_skills
+    if agent.current_version:
+        return agent.current_version.display_skills
+    return []
+
+
+def integrated_agent_mcp_payload(integrated: IntegratedAgent) -> dict | None:
+    """MCP payload from ``IntegratedAgent`` metadata (matches ``IntegratedAgentSerializer.get_mcp``)."""
+    if not integrated.metadata:
+        return None
+
+    mcp_name = integrated.metadata.get("mcp")
+    mcp_config = integrated.metadata.get("mcp_config", {})
+    system_slug = integrated.metadata.get("system")
+
+    if not mcp_name:
+        return None
+
+    config_with_labels: dict = {}
+
+    mcp = None
+    if system_slug:
+        try:
+            system_obj = AgentSystem.objects.get(slug__iexact=system_slug)
+            mcp = (
+                integrated.agent.mcps.filter(system=system_obj, name=mcp_name, is_active=True)
+                .select_related("system")
+                .prefetch_related("config_options")
+                .first()
+            )
+        except AgentSystem.DoesNotExist:
+            pass
+
+    if not mcp:
+        mcp = (
+            integrated.agent.mcps.filter(name=mcp_name, is_active=True)
+            .select_related("system")
+            .prefetch_related("config_options")
+            .first()
+        )
+
+    if mcp:
+        if mcp_config:
+            name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
+            for name, value in mcp_config.items():
+                label = name_to_label.get(name, name)
+                config_with_labels[label] = value
+        else:
+            config_with_labels = mcp_config
+
+        result: dict = {"name": mcp_name, "config": config_with_labels}
+        result["description"] = {
+            "en": (mcp.description_en or "").strip(),
+            "pt": (mcp.description_pt or "").strip(),
+            "es": (mcp.description_es or "").strip(),
+        }
+        if mcp.system:
+            result["system"] = {
+                "name": mcp.system.name,
+                "slug": mcp.system.slug,
+                "logo": mcp.system.logo.url if mcp.system.logo else None,
+            }
+        return result
+
+    return {"name": mcp_name, "config": mcp_config}
+
+
 class AgentSystemSerializer(serializers.ModelSerializer):
     logo = serializers.SerializerMethodField()
 
@@ -95,77 +165,14 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         return obj.agent.collaboration_instructions
 
     def get_skills(self, obj):
-        if hasattr(obj.agent, "latest_display_skills"):
-            return obj.agent.latest_display_skills
-        if obj.agent.current_version:
-            return obj.agent.current_version.display_skills
-        return []
+        return integrated_agent_skills_payload(obj.agent)
 
     def get_is_official(self, obj):
         return obj.agent.is_official
 
     def get_mcp(self, obj):
         """Return MCP name and config from IntegratedAgent metadata"""
-        if not obj.metadata:
-            return None
-
-        mcp_name = obj.metadata.get("mcp")
-        mcp_config = obj.metadata.get("mcp_config", {})
-        system_slug = obj.metadata.get("system")
-
-        if not mcp_name:
-            return None
-
-        config_with_labels = {}
-
-        # Try to find MCP with system if available in metadata, or fallback to name lookup
-        mcp = None
-        if system_slug:
-            try:
-                system_obj = AgentSystem.objects.get(slug__iexact=system_slug)
-                mcp = (
-                    obj.agent.mcps.filter(system=system_obj, name=mcp_name, is_active=True)
-                    .select_related("system")
-                    .prefetch_related("config_options")
-                    .first()
-                )
-            except AgentSystem.DoesNotExist:
-                pass
-
-        # Fallback: find MCP by name within agent's MCPs if not found via system
-        if not mcp:
-            mcp = (
-                obj.agent.mcps.filter(name=mcp_name, is_active=True)
-                .select_related("system")
-                .prefetch_related("config_options")
-                .first()
-            )
-
-        if mcp:
-            if mcp_config:
-                name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
-                for name, value in mcp_config.items():
-                    label = name_to_label.get(name, name)
-                    config_with_labels[label] = value
-            else:
-                config_with_labels = mcp_config
-
-            result = {"name": mcp_name, "config": config_with_labels}
-            result["description"] = {
-                "en": (mcp.description_en or "").strip(),
-                "pt": (mcp.description_pt or "").strip(),
-                "es": (mcp.description_es or "").strip(),
-            }
-            if mcp.system:
-                result["system"] = {
-                    "name": mcp.system.name,
-                    "slug": mcp.system.slug,
-                    "logo": mcp.system.logo.url if mcp.system.logo else None,
-                }
-        else:
-            result = {"name": mcp_name, "config": mcp_config}
-
-        return result
+        return integrated_agent_mcp_payload(obj)
 
 
 class AgentSerializer(serializers.ModelSerializer):

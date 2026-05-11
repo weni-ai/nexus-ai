@@ -30,6 +30,7 @@ from nexus.inline_agents.api.serializers import (
 from nexus.inline_agents.api.serializers.catalog import (
     build_row_from_integrated,
     build_row_from_project_agent,
+    project_agent_assignment_map,
 )
 from nexus.inline_agents.api.services.official_catalog import (
     bump_official_catalog_cache_generation,
@@ -724,7 +725,18 @@ class AgentsView(APIView):
             "mcps__config_options",
             "mcps__credential_templates",
         )
-        data = [build_row_from_project_agent(a, project_uuid, include_inactive_integrated=False) for a in agents]
+        assignment = (
+            project_agent_assignment_map(str(project_uuid), include_inactive_integrated=False) if project_uuid else None
+        )
+        data = [
+            build_row_from_project_agent(
+                a,
+                project_uuid,
+                include_inactive_integrated=False,
+                assignment_by_agent_id=assignment,
+            )
+            for a in agents
+        ]
         return Response(data)
 
 
@@ -859,7 +871,18 @@ class OfficialAgentsView(APIView):
             "mcps__config_options",
             "mcps__credential_templates",
         )
-        data = [build_row_from_project_agent(a, project_uuid, include_inactive_integrated=False) for a in agents]
+        assignment = (
+            project_agent_assignment_map(str(project_uuid), include_inactive_integrated=False) if project_uuid else None
+        )
+        data = [
+            build_row_from_project_agent(
+                a,
+                project_uuid,
+                include_inactive_integrated=False,
+                assignment_by_agent_id=assignment,
+            )
+            for a in agents
+        ]
         return Response(data)
 
 

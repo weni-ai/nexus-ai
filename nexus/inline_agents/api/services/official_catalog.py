@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import defaultdict
 from typing import Any
 
 from django.core.cache import cache
@@ -164,20 +165,25 @@ def list_official_catalog_page(
     page_slugs = ordered_slugs[start : start + page_size]
 
     results: list[dict[str, Any]] = []
-    for slug in page_slugs:
-        group_qs = (
+    if page_slugs:
+        page_agents = list(
             Agent.objects.filter(
-                group__slug=slug,
+                group__slug__in=page_slugs,
                 is_official=True,
                 source_type=Agent.PLATFORM,
             )
             .select_related("group", "group__modal")
             .prefetch_related("systems", "mcps", "mcps__system", "mcps__config_options", "mcps__credential_templates")
+            .order_by("group__name", "group__slug", "name", "uuid")
         )
-        group_agents = list(group_qs)
-        if not group_agents:
-            continue
-        results.append(build_official_group_row(group_agents, slug, project_uuid))
+        by_slug: dict[str, list[Agent]] = defaultdict(list)
+        for ag in page_agents:
+            by_slug[ag.group.slug].append(ag)
+        for slug in page_slugs:
+            group_agents = by_slug.get(slug) or []
+            if not group_agents:
+                continue
+            results.append(build_official_group_row(group_agents, slug, project_uuid))
 
     payload = {
         "count": total,
