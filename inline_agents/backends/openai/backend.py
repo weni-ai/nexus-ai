@@ -507,25 +507,16 @@ class OpenAIBackend(InlineAgentsBackend):
             default_message = self._get_default_error_message(project_uuid)
 
             if not preview:
-                try:
-                    err_client, err_session, _ = self._initialize_grpc_session(
-                        channel_uuid=channel_uuid,
-                        contact_urn=contact_urn,
-                        session_id=session_id,
-                        project_uuid=project_uuid,
-                        language=language,
-                        use_components=use_components_cached,
-                        stream_support=stream_support,
-                    )
-                    if err_session and err_session.is_active:
-                        err_session.send_delta(default_message)
-                        err_session.send_completed(default_message)
-                    if err_session:
-                        err_session.close()
-                    if err_client:
-                        err_client.close()
-                except Exception as grpc_err:
-                    logger.error("gRPC error-message session failed: %s", grpc_err, exc_info=True)
+                self._send_grpc_error_message(
+                    message=default_message,
+                    channel_uuid=channel_uuid,
+                    contact_urn=contact_urn,
+                    session_id=session_id,
+                    project_uuid=project_uuid,
+                    language=language,
+                    use_components=use_components_cached,
+                    stream_support=stream_support,
+                )
 
             return InvokeAgentsResult(text=default_message, skip_dispatch=False)
         finally:
@@ -725,6 +716,46 @@ class OpenAIBackend(InlineAgentsBackend):
             grpc_session.send_delta(delta_content)
         except Exception as e:
             logger.error(f"gRPC delta send failed: {e}", exc_info=True)
+
+    def _send_grpc_error_message(
+        self,
+        message: str,
+        channel_uuid: str,
+        contact_urn: str,
+        session_id: str,
+        project_uuid: str,
+        language: str,
+        use_components: bool,
+        stream_support: bool,
+    ):
+        """Create a fresh gRPC session to deliver an error message via delta + completed."""
+        err_client, err_session = None, None
+        try:
+            err_client, err_session, _ = self._initialize_grpc_session(
+                channel_uuid=channel_uuid,
+                contact_urn=contact_urn,
+                session_id=session_id,
+                project_uuid=project_uuid,
+                language=language,
+                use_components=use_components,
+                stream_support=stream_support,
+            )
+            if err_session and err_session.is_active:
+                err_session.send_delta(message)
+                err_session.send_completed(message)
+        except Exception as exc:
+            logger.error("gRPC error-message session failed: %s", exc, exc_info=True)
+        finally:
+            if err_session:
+                try:
+                    err_session.close()
+                except Exception as e:
+                    logger.debug("gRPC error-session close failed: %s", e)
+            if err_client:
+                try:
+                    err_client.close()
+                except Exception as e:
+                    logger.debug("gRPC error-client close failed: %s", e)
 
     def _process_delta_event(
         self,
