@@ -498,40 +498,6 @@ class VtexAppActiveAgentsViewSet(APIView):
         return Response({"assigned": False})
 
 
-class OfficialAgentsView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
-
-    def get(self, request, *args, **kwargs):
-        project_uuid = kwargs.get("project_uuid")
-        search = self.request.query_params.get("search")
-
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM)
-
-        if search:
-            query_filter = Q(display_name__icontains=search) | Q(agent_skills__display_name__icontains=search)
-            agents = agents.filter(query_filter).distinct("uuid")
-
-        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
-        return Response(serializer.data)
-
-
-class VtexAppOfficialAgentsView(APIView):
-    permission_classes = [InternalCommunicationPermission]
-
-    def get(self, request, *args, **kwargs):
-        project_uuid = kwargs.get("project_uuid")
-        search = self.request.query_params.get("search")
-
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.VTEX_APP)
-
-        if search:
-            query_filter = Q(display_name__icontains=search) | Q(agent_skills__display_name__icontains=search)
-            agents = agents.filter(query_filter).distinct("uuid")
-
-        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
-        return Response(serializer.data)
-
-
 class TeamView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission]
     serializer_class = ActiveAgentTeamSerializer

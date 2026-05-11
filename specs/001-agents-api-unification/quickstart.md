@@ -8,11 +8,10 @@
 
 ## Verify new read surfaces
 
+The dedicated **`available_systems`** read surface ships on branch **`feat/add-available-systems-endpoint`** (same route contract as `contracts/available-systems-get.md`); this branch does not register that URL.
+
 ```bash
 # Replace host and token as appropriate
-curl -sS -H "Authorization: Bearer <token>" \
-  "http://localhost:8000/api/v1/official/available-systems"
-
 curl -sS -H "Authorization: Bearer <token>" \
   "http://localhost:8000/api/v1/official/agents?page=1&page_size=20&project_uuid=<uuid>"
 ```
@@ -22,9 +21,9 @@ curl -sS -H "Authorization: Bearer <token>" \
 | Removed / changed | Client action |
 |-------------------|---------------|
 | `GET /api/v1/official/agents/{identifier}` | Use list row payload only |
-| `legacy` / `new` keys on v1 official list | Use single top-level `groups` array (no split) |
+| `legacy` / `new` keys on v1 official list | Use paginated envelope: `count`, `page`, `page_size`, `results` |
 | `GET /api/agents/official/<project_uuid>/` | Use unified project catalog / v1 official per product mapping |
-| Embedded `available_systems` on v1 list | Call `/api/v1/official/available-systems` |
+| Embedded `available_systems` on v1 list | Call the dedicated available-systems endpoint (see `feat/add-available-systems-endpoint`) |
 | Team roster `id` | Read `slug` |
 | Traces agent key | Prefer **`name`** for new spans (FR-012); update dashboards |
 

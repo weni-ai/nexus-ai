@@ -17,7 +17,6 @@ from nexus.inline_agents.models import (
     AgentSystem,
     IntegratedAgent,
     MCPConfigOption,
-    MCPCredentialTemplate,
     Version,
 )
 from nexus.inline_agents.models import Agent as InlineAgent
@@ -26,8 +25,8 @@ from nexus.usecases.users.tests.user_factory import UserFactory
 
 
 def _official_v1_grouped_rows(payload):
-    """Official v1 list: one row per agent group under ``groups``."""
-    return payload.get("groups", [])
+    """Official v1 list: paginated ``results`` (one row per agent group)."""
+    return payload.get("results", [])
 
 
 class AgentViewsetSetTestCase(TestCase):
@@ -121,87 +120,6 @@ class AgentViewsetSetTestCase(TestCase):
         content = json.loads(response.content)
         row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
         self.assertEqual(row["name"], "Product Concierge")
-
-    def test_get_my_agents_includes_mcp_definition(self):
-        system = AgentSystem.objects.create(name="Test MCP System", slug="test-mcp-system-my-agents-xyz")
-        mcp = MCP.objects.create(name="Test MCP", slug="test-mcp-my-agents-xyz", system=system)
-        MCPConfigOption.objects.create(
-            mcp=mcp,
-            name="REGION_TOGGLE",
-            label="Regionalization",
-            type=MCPConfigOption.SWITCH,
-            options=[],
-            is_required=False,
-            default_value=True,
-        )
-        MCPCredentialTemplate.objects.create(
-            mcp=mcp,
-            name="SYNERISE_API_TOKEN",
-            label="Synerise API Key",
-            placeholder="your-api-key-here",
-            is_confidential=True,
-        )
-        agent_with_mcp = InlineAgent.objects.create(
-            name="Concierge With MCP",
-            slug="concierge-mcp-my-agents-xyz",
-            instruction="x",
-            collaboration_instructions="y",
-            foundation_model="model:version",
-            project=self.project,
-        )
-        agent_with_mcp.mcps.add(mcp)
-
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
-        response = client.get(url)
-        response.render()
-        self.assertEqual(response.status_code, 200)
-        content = json.loads(response.content)
-        row = next(c for c in content if c.get("uuid") == str(agent_with_mcp.uuid))
-        self.assertIn("mcp_definition", row)
-        self.assertEqual(len(row["mcp_definition"]["config"]), 1)
-        self.assertEqual(row["mcp_definition"]["config"][0]["name"], "REGION_TOGGLE")
-        self.assertEqual(len(row["mcp_definition"]["credentials"]), 1)
-        self.assertEqual(row["mcp_definition"]["credentials"][0]["name"], "SYNERISE_API_TOKEN")
-        cred_names = {c["name"] for c in row["credentials"]}
-        self.assertNotIn("SYNERISE_API_TOKEN", cred_names)
-
-    def make_agents_official(self):
-        self.agent.is_official = True
-        self.agent.source_type = InlineAgent.PLATFORM
-        self.agent.save()
-        self.agent2.is_official = True
-        self.agent2.source_type = InlineAgent.PLATFORM
-        self.agent2.save()
-
-    def test_get_official_agents(self):
-        self.make_agents_official()
-
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-
-        url = reverse("official-agents", kwargs={"project_uuid": str(self.project.uuid)})
-        response = client.get(url)
-        response.render()
-        content = json.loads(response.content)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(content), 2)
-
-    def test_get_official_agents_with_search(self):
-        self.make_agents_official()
-        query_params = {"search": "information"}
-        url = reverse("official-agents", kwargs={"project_uuid": str(self.project.uuid)})
-        url = f"{url}?{urlencode(query_params)}"
-
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        response = client.get(url)
-        response.render()
-        content = json.loads(response.content)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(content), 1)
-        self.assertEqual(content[0].get("name"), "Information Analyst")
 
 
 class TeamViewsetSetTestCase(TestCase):
@@ -387,7 +305,7 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
-        mcp_payload = row["mcp_definition"]
+        mcp_payload = row["mcp"]
         self.assertEqual(mcp_payload["name"], "Team Catalog MCP")
         desc = mcp_payload["description"]
         self.assertEqual(desc["en"], "English MCP")
@@ -617,69 +535,6 @@ class AssignAgentViewTestCase(TestCase):
         self.assertIsNone(integrated_agent.metadata.get("mcp"))
         self.assertIsNone(integrated_agent.metadata.get("system"))
 
-    def test_assign_accepts_mcp_config_and_persists_to_integrated_agent_metadata(self):
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        url = reverse(
-            "assign-agents",
-            kwargs={
-                "project_uuid": str(self.project.uuid),
-                "agent_uuid": str(self.agent.uuid),
-            },
-        )
-        response = client.patch(
-            url,
-            {"assigned": True, "mcp_config": {"REGION_TOGGLE": True, "OTHER": "x"}},
-            format="json",
-        )
-        self.assertEqual(response.status_code, 200)
-
-        integrated_agent = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
-        self.assertEqual(
-            integrated_agent.metadata.get("mcp_config"),
-            {"REGION_TOGGLE": True, "OTHER": "x"},
-        )
-
-    def test_assign_mcp_config_replaces_existing_mcp_config(self):
-        IntegratedAgent.objects.create(
-            agent=self.agent,
-            project=self.project,
-            metadata={"mcp_config": {"KEEP": 1}},
-        )
-
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        url = reverse(
-            "assign-agents",
-            kwargs={
-                "project_uuid": str(self.project.uuid),
-                "agent_uuid": str(self.agent.uuid),
-            },
-        )
-        response = client.patch(
-            url,
-            {"assigned": True, "mcp_config": {"NEW": 2}},
-            format="json",
-        )
-        self.assertEqual(response.status_code, 200)
-
-        integrated_agent = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
-        self.assertEqual(integrated_agent.metadata.get("mcp_config"), {"NEW": 2})
-
-    def test_assign_rejects_non_object_mcp_config(self):
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        url = reverse(
-            "assign-agents",
-            kwargs={
-                "project_uuid": str(self.project.uuid),
-                "agent_uuid": str(self.agent.uuid),
-            },
-        )
-        response = client.patch(url, {"assigned": True, "mcp_config": ["invalid"]}, format="json")
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("json object", response.json().get("error", "").lower())
-
 
 class GroupUnassignmentTestCase(TestCase):
     """Regression: group unassignment must delete all IntegratedAgent rows in the group (active and inactive)."""
@@ -734,6 +589,40 @@ class GroupUnassignmentTestCase(TestCase):
         self.assertFalse(IntegratedAgent.objects.filter(pk=ia_active.pk).exists())
         self.assertFalse(IntegratedAgent.objects.filter(pk=ia_inactive.pk).exists())
         self.assertEqual(IntegratedAgent.objects.filter(project=target_project).count(), 0)
+
+
+class OfficialAgentsV1PaginationTestCase(TestCase):
+    """Pagination validation for GET /api/v1/official/agents."""
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_page_size_over_max_returns_400(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        client = APIClient()
+        client.force_authenticate(user=user)
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid), "page": "1", "page_size": "21"},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_page_below_one_returns_400(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        client = APIClient()
+        client.force_authenticate(user=user)
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid), "page": "0", "page_size": "10"},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(resp.status_code, 400)
 
 
 class OfficialAgentsV1NameFilterTestCase(TestCase):
@@ -997,10 +886,10 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
 
 
 class OfficialAgentsV1I18nPresentationTestCase(TestCase):
-    """Official list/detail APIs expose presentation and MCP description as nested locale maps (en/pt/es)."""
+    """Official v1 list exposes ``about``, ``conversation_example``, and MCP locale maps (en/pt/es)."""
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
-    def test_list_and_detail_include_locale_fields(self, mock_has_permission):
+    def test_list_includes_locale_fields(self, mock_has_permission):
         mock_has_permission.return_value = True
 
         target_project = ProjectFactory()
@@ -1069,29 +958,17 @@ class OfficialAgentsV1I18nPresentationTestCase(TestCase):
         self.assertEqual(list_resp.status_code, 200)
         listed = _official_v1_grouped_rows(list_resp.json())
         entry = next(a for a in listed if a.get("group") == group.slug)
-        pres = entry["presentation"]
-        self.assertEqual(pres["about"]["en"], "About EN")
-        self.assertEqual(pres["about"]["es"], "About ES")
-        self.assertEqual(pres["about"]["pt"], "About PT")
-        self.assertEqual(pres["conversation_example"]["en"][0]["text"], "EN")
-        self.assertEqual(pres["conversation_example"]["es"][0]["text"], "ES")
-        self.assertEqual(pres["conversation_example"]["pt"][0]["text"], "PT")
+        about = entry["about"]
+        self.assertEqual(about["en"], "About EN")
+        self.assertEqual(about["es"], "About ES")
+        self.assertEqual(about["pt"], "About PT")
+        cex = entry["conversation_example"]
+        self.assertEqual(cex["en"][0]["text"], "EN")
+        self.assertEqual(cex["es"][0]["text"], "ES")
+        self.assertEqual(cex["pt"][0]["text"], "PT")
 
-        detail_url = reverse("v1-official-agent-detail", kwargs={"identifier": group.slug})
-        detail_resp = client.get(
-            detail_url,
-            {"project_uuid": str(target_project.uuid)},
-            HTTP_AUTHORIZATION="Bearer test-token",
-        )
-        self.assertEqual(detail_resp.status_code, 200)
-        body = detail_resp.json()
-        dp = body["presentation"]
-        self.assertEqual(dp["about"]["en"], "About EN")
-        self.assertEqual(dp["about"]["pt"], "About PT")
-        self.assertEqual(dp["conversation_example"]["es"][0]["text"], "ES")
-
-        mcps_flat = body.get("MCPs") or []
-        self.assertTrue(mcps_flat, "expected MCPs in detail response")
+        mcps_flat = entry.get("mcps") or []
+        self.assertTrue(mcps_flat, "expected MCPs in list row")
         mcp_payload = next(m for m in mcps_flat if m["name"] == "Test MCP")
         desc = mcp_payload["description"]
         self.assertEqual(desc["en"], "Desc EN")

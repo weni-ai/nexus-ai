@@ -14,18 +14,7 @@ retorno** row including data historically provided by **`GET /api/v1/official/ag
 | `page_size` | Integer ≥ 1, **≤ 20** (hard cap) |
 | `name`, `group`, `category`, `system`, … | Existing filters preserved where still applicable |
 
-## Response envelope (illustrative — pagination added in US5 tasks)
-
-Current implementation returns:
-
-```json
-{
-  "groups": [],
-  "available_systems": []
-}
-```
-
-Target paginated shape (when wired):
+## Response envelope
 
 ```json
 {
@@ -36,11 +25,13 @@ Target paginated shape (when wired):
 }
 ```
 
-Each element of **`groups`** / **`results`** (catalog rows — one per **`AgentGroup`**):
+Global agent systems metadata (`{"available_systems": [...]}` per `contracts/available-systems-get.md`) is **not** embedded in this response (FR-006). That read surface is implemented on branch **`feat/add-available-systems-endpoint`**, not duplicated here.
+
+Each element of **`results`** (catalog rows — one per **`AgentGroup`**):
 
 - Shares **identical** keys and nesting rules for list-only and “detail-equivalent” consumption.
-- Includes **`is_official`**, **`model`**, and **no** top-level **`type`** or **`system`** on the row
-  envelope (FR-005).
+- Includes **`is_official`**, inner **`agents`** members with **`assigned`** / **`active`**, **`about`**, **`conversation_example`**, and **`mcps`** (config + credential template shape).
+- No top-level **`type`** on the row envelope; **`systems`** is the list of system slugs for the group (FR-005).
 - Does **not** embed global **`available_systems`** (FR-006).
 
 ## Removed behaviors
