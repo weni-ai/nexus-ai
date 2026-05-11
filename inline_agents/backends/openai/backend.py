@@ -518,6 +518,7 @@ class OpenAIBackend(InlineAgentsBackend):
                         stream_support=stream_support,
                     )
                     if err_session and err_session.is_active:
+                        err_session.send_delta(default_message)
                         err_session.send_completed(default_message)
                     if err_session:
                         err_session.close()
