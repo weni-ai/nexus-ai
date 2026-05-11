@@ -2,9 +2,10 @@ from unittest.mock import MagicMock, patch
 
 import pendulum
 import pytest
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from inline_agents.backends.openai.backend import OpenAIBackend, OpenAISupervisorRepository
+from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from inline_agents.backends.openai.sessions import openai_session_base_id
 from inline_agents.backends.openai.tests.openai_factory import OpenAISupervisorFactory
 from nexus.inline_agents.backends.openai.models import ManagerAgent
@@ -696,3 +697,167 @@ class OpenAIBackendEndSessionTestCase(TestCase):
         args = redis.delete.call_args[0]
         base = openai_session_base_id(str(self.project.uuid), self.sanitized_urn)
         self.assertEqual(set(args), {base, f"{base}:collab-slug"})
+
+
+_TEST_ERROR_MESSAGES = {
+    "en-us": "Sorry, I was unable to process your request. Try again.",
+    "pt-br": "Não foi possível processar sua solicitação. Tente novamente.",
+    "es": "No fue posible procesar su solicitud. Inténtelo de nuevo.",
+}
+
+
+@override_settings(DEFAULT_ERROR_MESSAGES=_TEST_ERROR_MESSAGES)
+class TestInvokeAgentsAsyncFailurePath(TestCase):
+    """Tests for the error-handling path when _invoke_agents_async raises."""
+
+    def setUp(self):
+        self.backend = OpenAIBackend()
+        self.project_uuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+    @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
+    def test_get_default_error_message_uses_project_language(self, mock_connect_cls):
+        mock_connect_cls.return_value.get_project_language.return_value = "pt-br"
+
+        result = self.backend._get_default_error_message(self.project_uuid)
+
+        self.assertEqual(result, _TEST_ERROR_MESSAGES["pt-br"])
+        mock_connect_cls.return_value.get_project_language.assert_called_once_with(self.project_uuid)
+
+    @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
+    def test_get_default_error_message_falls_back_on_connect_failure(self, mock_connect_cls):
+        mock_connect_cls.return_value.get_project_language.side_effect = RuntimeError("connect down")
+
+        result = self.backend._get_default_error_message(self.project_uuid)
+
+        self.assertEqual(result, _TEST_ERROR_MESSAGES["en-us"])
+
+    @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
+    def test_get_default_error_message_falls_back_on_unknown_language(self, mock_connect_cls):
+        mock_connect_cls.return_value.get_project_language.return_value = "xx-yy"
+
+        result = self.backend._get_default_error_message(self.project_uuid)
+
+        self.assertEqual(result, _TEST_ERROR_MESSAGES["en-us"])
+
+    @patch("inline_agents.backends.openai.backend.sentry_sdk")
+    @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
+    @patch("inline_agents.backends.openai.backend.save_inline_message_async")
+    @patch.object(OpenAIBackend, "_initialize_grpc_session", return_value=(None, None, None))
+    @patch.object(OpenAIBackend, "_ensure_conversation", return_value=None)
+    @patch.object(OpenAIBackend, "_get_data_lake_event_adapter", return_value=None)
+    @patch.object(OpenAIBackend, "_get_session", return_value=(MagicMock(), "session-id"))
+    @patch.object(OpenAIBackend, "_get_session_factory", return_value=MagicMock())
+    @patch.object(OpenAIBackend, "_get_event_manager_notify", return_value=lambda *a, **kw: None)
+    @patch.object(
+        OpenAIBackend,
+        "get_supervisor",
+        return_value={
+            "instruction": "",
+            "use_components": False,
+            "use_human_support": False,
+            "components_instructions": "",
+            "formatter_agent_components_instructions": "",
+            "components_instructions_up": "",
+            "human_support_instructions": "",
+            "tools": [],
+            "foundation_model": "gpt-4",
+            "knowledge_bases": [],
+            "prompt_override_configuration": {},
+            "default_instructions_for_collaborators": "",
+            "max_tokens": 4096,
+        },
+    )
+    @patch.object(OpenAIBackend, "_get_client")
+    def test_invoke_agents_returns_default_message_when_async_raises(
+        self,
+        mock_get_client,
+        _mock_get_supervisor,
+        _mock_event_notify,
+        _mock_session_factory,
+        _mock_session,
+        _mock_data_lake,
+        _mock_conversation,
+        _mock_grpc,
+        _mock_save_msg,
+        mock_connect_cls,
+        mock_sentry,
+    ):
+        mock_connect_cls.return_value.get_project_language.return_value = "es"
+
+        with patch("inline_agents.backends.openai.backend.asyncio.run", side_effect=RuntimeError("boom")):
+            result = self.backend.invoke_agents(
+                team=[],
+                input_text="hello",
+                project_uuid=self.project_uuid,
+                sanitized_urn="test_urn",
+                contact_fields="",
+                preview=True,
+            )
+
+        self.assertIsInstance(result, InvokeAgentsResult)
+        self.assertEqual(result.text, _TEST_ERROR_MESSAGES["es"])
+        self.assertFalse(result.skip_dispatch)
+        mock_sentry.capture_exception.assert_called_once()
+
+    @patch("inline_agents.backends.openai.backend.sentry_sdk")
+    @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
+    @patch("inline_agents.backends.openai.backend.save_inline_message_async")
+    @patch.object(OpenAIBackend, "_initialize_grpc_session")
+    @patch.object(OpenAIBackend, "_ensure_conversation", return_value=None)
+    @patch.object(OpenAIBackend, "_get_data_lake_event_adapter", return_value=None)
+    @patch.object(OpenAIBackend, "_get_session", return_value=(MagicMock(), "session-id"))
+    @patch.object(OpenAIBackend, "_get_session_factory", return_value=MagicMock())
+    @patch.object(OpenAIBackend, "_get_event_manager_notify", return_value=lambda *a, **kw: None)
+    @patch.object(
+        OpenAIBackend,
+        "get_supervisor",
+        return_value={
+            "instruction": "",
+            "use_components": False,
+            "use_human_support": False,
+            "components_instructions": "",
+            "formatter_agent_components_instructions": "",
+            "components_instructions_up": "",
+            "human_support_instructions": "",
+            "tools": [],
+            "foundation_model": "gpt-4",
+            "knowledge_bases": [],
+            "prompt_override_configuration": {},
+            "default_instructions_for_collaborators": "",
+            "max_tokens": 4096,
+        },
+    )
+    @patch.object(OpenAIBackend, "_get_client")
+    def test_invoke_agents_closes_grpc_on_failure(
+        self,
+        mock_get_client,
+        _mock_get_supervisor,
+        _mock_event_notify,
+        _mock_session_factory,
+        _mock_session,
+        _mock_data_lake,
+        _mock_conversation,
+        mock_grpc_init,
+        _mock_save_msg,
+        mock_connect_cls,
+        _mock_sentry,
+    ):
+        grpc_client = MagicMock()
+        grpc_session = MagicMock()
+        grpc_session.is_active = True
+        mock_grpc_init.return_value = (grpc_client, grpc_session, "msg-id")
+        mock_connect_cls.return_value.get_project_language.return_value = "en-us"
+
+        with patch("inline_agents.backends.openai.backend.asyncio.run", side_effect=RuntimeError("boom")):
+            result = self.backend.invoke_agents(
+                team=[],
+                input_text="hello",
+                project_uuid=self.project_uuid,
+                sanitized_urn="test_urn",
+                contact_fields="",
+                preview=False,
+            )
+
+        self.assertEqual(result.text, _TEST_ERROR_MESSAGES["en-us"])
+        grpc_session.close.assert_called_once()
+        grpc_client.close.assert_called_once()
