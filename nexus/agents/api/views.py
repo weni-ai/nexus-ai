@@ -6,6 +6,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from nexus.agents.api.inline_trace_response import remap_inline_traces_config_agent_names
 from nexus.agents.api.serializers import (
     ActiveAgentSerializer,
     ActiveAgentTeamSerializer,
@@ -679,6 +680,7 @@ class AgentTracesView(APIView):
         usecase = AgentUsecase()
         try:
             trace_data = usecase.get_inline_traces(project_uuid, log_id)
+            trace_data = remap_inline_traces_config_agent_names(trace_data, project_uuid=project_uuid)
             return Response(trace_data)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
