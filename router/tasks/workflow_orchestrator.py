@@ -109,9 +109,6 @@ def _initialize_workflow(ctx: WorkflowContext) -> None:
         f"[Workflow] Starting workflow {ctx.workflow_id}, project {ctx.project_uuid}, contact {ctx.contact_urn}"
     )
 
-    # Mark this workflow task as the latest for this contact so older runs can be suppressed at dispatch time.
-    ctx.task_manager.set_latest_task_id(ctx.project_uuid, ctx.contact_urn, ctx.task_id)
-
     # Send typing indicator (async, non-blocking)
     logger.info(f"[Workflow] Dispatching typing indicator for project {ctx.project_uuid}, contact {ctx.contact_urn}")
     notify_async(
@@ -198,7 +195,6 @@ def _handle_guardrails_block(ctx: WorkflowContext, error: UnsafeMessageException
         outgoing_created_at=pendulum.now().to_iso8601_string(),
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
         turn_id=ctx.turn_id,
-        celery_task_id=ctx.task_id,
     )
 
     if (ctx.preview or ctx.preview_websocket) and ctx.broadcast:
@@ -378,14 +374,7 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
         outgoing_created_at=pendulum.now().to_iso8601_string(),
         message_conversation_log_uuid=ctx.message_conversation_log_uuid,
         turn_id=ctx.turn_id,
-        celery_task_id=ctx.task_id,
     )
-
-    # Superseded guard: if a newer message arrived while we were running, skip dispatch.
-    latest = ctx.task_manager.get_latest_task_id(ctx.project_uuid, ctx.contact_urn)
-    if not (latest and str(latest) == str(ctx.task_id)):
-        _invoke_is_final_debug("H workflow post_generation branch=superseded (skip dispatch)")
-        return True
 
     # Dispatch response
     if ctx.preview or ctx.preview_websocket:
