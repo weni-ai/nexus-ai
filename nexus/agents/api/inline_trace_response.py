@@ -2,24 +2,50 @@
 
 from __future__ import annotations
 
+import logging
+import uuid
 from typing import Any
+
+from django.db.models import Q
+
+logger = logging.getLogger(__name__)
 
 MANAGER_TRACE_AGENT_NAME = "manager"
 
 
 def remap_inline_traces_config_agent_names(traces: list[Any], *, project_uuid: str | None) -> list[Any]:
-    """Replace ``trace.config.agentName`` slug with catalog display name when resolvable for ``project_uuid``."""
+    """Replace ``trace.config.agentName`` (collaborator id / slug) with the same list label as catalog/team APIs."""
     if not traces or not project_uuid:
         return traces
-    identifiers = _collect_config_agent_names(traces)
-    if not identifiers:
+    if not _is_valid_uuid_string(project_uuid):
         return traces
-    display_by_slug, display_ci = _load_display_names_by_slug(project_uuid, identifiers)
-    if not display_by_slug and not display_ci:
+    try:
+        identifiers = _collect_config_agent_names(traces)
+        if not identifiers:
+            return traces
+        display_by_slug, display_ci = _load_display_names_by_slug(project_uuid, identifiers)
+        if not display_by_slug and not display_ci:
+            return traces
+        for item in traces:
+            _remap_one_item(item, display_by_slug, display_ci)
         return traces
-    for item in traces:
-        _remap_one_item(item, display_by_slug, display_ci)
-    return traces
+    except Exception:
+        logger.exception(
+            "inline trace agentName remap skipped (returning raw traces)",
+            extra={"project_uuid": project_uuid},
+        )
+        return traces
+
+
+def _is_valid_uuid_string(value: str) -> bool:
+    s = value.strip()
+    if not s:
+        return False
+    try:
+        uuid.UUID(s)
+    except ValueError:
+        return False
+    return True
 
 
 def _collect_config_agent_names(traces: list[Any]) -> set[str]:
@@ -44,6 +70,18 @@ def _item_trace_config(item: Any) -> dict[str, Any] | None:
     return cfg if isinstance(cfg, dict) else None
 
 
+def _slug_iexact_or_q(lookup: str, tokens: set[str]) -> Q:
+    """OR of ``lookup__iexact`` for each token (trace casing may differ from DB slug casing)."""
+    if not tokens:
+        return Q(pk__in=[])
+    q = Q()
+    for t in tokens:
+        if not t:
+            continue
+        q |= Q(**{f"{lookup}__iexact": t})
+    return q
+
+
 def _load_display_names_by_slug(project_uuid: str, identifiers: set[str]) -> tuple[dict[str, str], dict[str, str]]:
     from nexus.inline_agents.api.serializers import inline_agent_list_display_name
     from nexus.inline_agents.models import Agent as InlineAgent
@@ -53,13 +91,15 @@ def _load_display_names_by_slug(project_uuid: str, identifiers: set[str]) -> tup
     if not wanted:
         return {}, {}
 
-    owned = InlineAgent.objects.filter(project__uuid=project_uuid, slug__in=wanted).select_related(
-        "group", "group__modal"
+    owned = (
+        InlineAgent.objects.filter(project__uuid=project_uuid)
+        .filter(_slug_iexact_or_q("slug", wanted))
+        .select_related("group", "group__modal")
     )
     int_ids = list(
-        IntegratedAgent.objects.filter(project__uuid=project_uuid, agent__slug__in=wanted).values_list(
-            "agent_id", flat=True
-        )
+        IntegratedAgent.objects.filter(project__uuid=project_uuid)
+        .filter(_slug_iexact_or_q("agent__slug", wanted))
+        .values_list("agent_id", flat=True)
     )
     integrated_qs = (
         InlineAgent.objects.filter(pk__in=int_ids).select_related("group", "group__modal")
