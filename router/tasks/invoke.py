@@ -363,9 +363,7 @@ def _manage_pending_task(task_manager: RedisTaskManager, message_obj, current_ta
     """
     pending_task_id = task_manager.get_pending_task_id(message_obj.project_uuid, message_obj.contact_urn)
     if pending_task_id and pending_task_id != current_task_id:
-        # Avoid hard-killing in-flight tasks so they can flush traces/audit events.
-        # Revoke without terminate prevents queued execution but does not SIGKILL a running task.
-        celery_app.control.revoke(pending_task_id, terminate=False)
+        celery_app.control.revoke(pending_task_id, terminate=True)
 
     final_message_text = task_manager.handle_pending_response(
         project_uuid=message_obj.project_uuid, contact_urn=message_obj.contact_urn, message_text=message_obj.text
@@ -373,15 +371,6 @@ def _manage_pending_task(task_manager: RedisTaskManager, message_obj, current_ta
 
     task_manager.store_pending_task_id(message_obj.project_uuid, message_obj.contact_urn, current_task_id)
     return final_message_text
-
-
-def _should_dispatch_latest(task_manager: RedisTaskManager, project_uuid: str, contact_urn: str, task_id: str) -> bool:
-    """
-    Superseded guard: only the latest task for a contact should dispatch a user-visible response.
-    Older in-flight tasks may still finish (and should flush traces/audit data), but should not dispatch.
-    """
-    latest = task_manager.get_latest_task_id(project_uuid, contact_urn)
-    return bool(latest and str(latest) == str(task_id))
 
 
 def _handle_task_error(
@@ -556,9 +545,6 @@ def start_inline_agents(  # noqa: C901
     task_manager = task_manager or get_task_manager()
 
     try:
-        # Mark this task as the latest for this contact so older runs can be suppressed at dispatch time.
-        task_manager.set_latest_task_id(project_uuid, message.get("contact_urn"), self.request.id)
-
         incoming_created_at = None  # Set right before _invoke_backend (same point as InlineAgentMessage save)
         turn_id = message.get("msg_event", {}).get("msg_external_id") or str(uuid.uuid4())
         TypingUsecase().send_typing_message(
@@ -686,6 +672,8 @@ def start_inline_agents(  # noqa: C901
         if (response is None or response == "") and not skip_dispatch:
             raise EmptyFinalResponseException("Final response is empty")
 
+        task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
+
         notify_async(
             event="inline_message:received",
             project_uuid=project_uuid,
@@ -700,18 +688,7 @@ def start_inline_agents(  # noqa: C901
             outgoing_created_at=pendulum.now().to_iso8601_string(),
             message_conversation_log_uuid=message_conversation_log_uuid,
             turn_id=turn_id,
-            celery_task_id=self.request.id,
         )
-
-        # Superseded guard: if a newer message arrived while we were running, skip dispatch.
-        if not _should_dispatch_latest(
-            task_manager, message_obj.project_uuid, message_obj.contact_urn, self.request.id
-        ):
-            _invoke_is_final_debug("H start_inline_agents branch=superseded (skip dispatch)")
-            return True
-
-        # Clear concatenation state only for the latest task (avoid racing with a newer run).
-        task_manager.clear_pending_tasks(message_obj.project_uuid, message_obj.contact_urn)
 
         if preview or preview_websocket:
             _invoke_is_final_debug("H start_inline_agents branch=dispatch_preview")
@@ -756,7 +733,6 @@ def start_inline_agents(  # noqa: C901
             outgoing_created_at=pendulum.now().to_iso8601_string(),
             message_conversation_log_uuid=message_conversation_log_uuid,
             turn_id=turn_id,
-            celery_task_id=self.request.id,
         )
         if preview or preview_websocket:
             return dispatch_preview(e.message, message_obj, broadcast, user_email, agents_backend, flows_user_email)
