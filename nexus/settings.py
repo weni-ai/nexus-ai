@@ -369,7 +369,17 @@ TRULENS_DATABASE_URL = env.str("TRULENS_DATABASE_URL", "sqlite:///default.sqlite
 
 FLOWS_REST_ENDPOINT = env.str("FLOWS_REST_ENDPOINT")
 BILLING_REST_ENDPOINT = env.str("BILLING_REST_ENDPOINT")
+CONNECT_REST_ENDPOINT = env.str("CONNECT_REST_ENDPOINT", "")
 CONVERSATIONS_REST_ENDPOINT = env.str("CONVERSATIONS_REST_ENDPOINT", "http://localhost:8000")
+
+DEFAULT_ERROR_MESSAGES = env.json(
+    "DEFAULT_ERROR_MESSAGES",
+    {
+        "en-us": "Sorry, I was unable to process your request. Try again.",
+        "pt-br": "Não foi possível processar sua solicitação. Tente novamente.",
+        "es": "No fue posible procesar su solicitud. Inténtelo de nuevo.",
+    },
+)
 CONVERSATIONS_TOKEN = env.str("CONVERSATIONS_TOKEN")
 CONVERSATIONS_AS_TOPICS_SOURCE = env.bool("CONVERSATIONS_AS_TOPICS_SOURCE", default=True)
 

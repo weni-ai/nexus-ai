@@ -212,11 +212,7 @@ def dispatch_preview(
         full_chunks=[],
         backend=agents_backend,
     )
-    ws_content = (
-        response_msg
-        if response_msg is not None
-        else {"type": "broadcast", "message": response, "fonts": []}
-    )
+    ws_content = response_msg if response_msg is not None else {"type": "broadcast", "message": response, "fonts": []}
     send_preview_message_to_websocket(
         project_uuid=message_obj.project_uuid,
         user_email=user_email,
@@ -574,6 +570,8 @@ def start_inline_agents(
         incoming_created_at = pendulum.now().to_iso8601_string()
 
         if not skip_sqs:
+            # Dedicated UUID for conversations/Dynamo incoming row (distinct from turn trace anchor).
+            incoming_message_id = str(uuid.uuid4())
             received_event = build_message_received_event(
                 project_uuid=project_uuid,
                 contact_urn=message_obj.contact_urn,
@@ -581,8 +579,8 @@ def start_inline_agents(
                 contact_name=message_obj.contact_name or "",
                 message_text=(message_obj.text or message.get("text", "")),
                 created_at=incoming_created_at,
-                message_id=turn_id,
-                correlation_id=turn_id,
+                message_id=incoming_message_id,
+                correlation_id=str(turn_id),
             )
             try:
                 get_conversation_events_producer().send_event(received_event.to_dict())

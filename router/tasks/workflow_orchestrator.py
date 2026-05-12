@@ -296,6 +296,8 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
     skip_conv_sqs = should_skip_conversation_sqs(ctx.preview, ctx.simulation_channel)
     # Conversation SQS: same rules as start_inline_agents (Cases 1–3)
     if not skip_conv_sqs:
+        # Dedicated UUID for conversations/Dynamo incoming row (distinct from turn trace anchor).
+        incoming_message_id = str(uuid_lib.uuid4())
         received_event = build_message_received_event(
             project_uuid=ctx.project_uuid,
             contact_urn=ctx.contact_urn,
@@ -303,8 +305,8 @@ def _run_generation(ctx: WorkflowContext) -> Tuple[str, bool]:
             contact_name=message_obj.contact_name or ctx.message.get("contact_name", ""),
             message_text=getattr(message_obj, "text", "") or ctx.message.get("text", ""),
             created_at=ctx.incoming_created_at,
-            message_id=ctx.turn_id,
-            correlation_id=ctx.turn_id,
+            message_id=incoming_message_id,
+            correlation_id=str(ctx.turn_id),
         )
         try:
             get_conversation_events_producer().send_event(received_event.to_dict())

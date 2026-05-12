@@ -154,6 +154,7 @@ def generate_env():
         "SENTENX_UPDATE_TASK_TOKEN": "",
         "WENIGPT_COOKIE": "",
         "BILLING_REST_ENDPOINT": "",
+        "CONNECT_REST_ENDPOINT": "",
         "FEW_SHOT_CHATGPT": "",
         "AWS_BEDROCK_LARGE_DATASOURCE_ID": "",
         "AWS_BEDROCK_SUPERVISOR_EXTERNAL_ID": "",

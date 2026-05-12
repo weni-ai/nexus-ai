@@ -210,7 +210,7 @@ def improve_subsequent_rationale(
         if previous_rationales:
             instruction_content += f"""
             <previous_thought>
-            {' '.join([f"- {r}" for r in previous_rationales])}
+            {" ".join([f"- {r}" for r in previous_rationales])}
             </previous_thought>
             """
 
