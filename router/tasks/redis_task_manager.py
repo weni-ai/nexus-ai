@@ -50,7 +50,6 @@ class RedisTaskManager(TaskManager):
 
     CACHE_TIMEOUT = 300  # 5 minutes in seconds
     WORKFLOW_CACHE_TIMEOUT = 600  # 10 minutes for workflow state
-    LATEST_TASK_CACHE_TIMEOUT = 600  # 10 minutes for superseded guard
 
     def __init__(self, redis_client: Optional[Redis] = None):
         if redis_client:
@@ -64,27 +63,6 @@ class RedisTaskManager(TaskManager):
         self.redis_client = self._write_client
         self.message_repository = RedisMessageRepository(self.redis_client)
         self._conversation_service = None
-
-    # ==================== Superseded Guard ====================
-
-    def _latest_task_key(self, project_uuid: str, contact_urn: str) -> str:
-        return f"latest_task:{project_uuid}:{contact_urn}"
-
-    def set_latest_task_id(self, project_uuid: str, contact_urn: str, task_id: str) -> None:
-        """
-        Track the most recent task id for a (project, contact) pair.
-        Used to prevent stale in-flight tasks from dispatching after a newer message arrives.
-        """
-        key = self._latest_task_key(project_uuid, contact_urn)
-        self._write_client.setex(key, self.LATEST_TASK_CACHE_TIMEOUT, str(task_id))
-
-    def get_latest_task_id(self, project_uuid: str, contact_urn: str) -> Optional[str]:
-        """Return the last stored task id for a (project, contact) pair."""
-        key = self._latest_task_key(project_uuid, contact_urn)
-        raw = self._read_client.get(key)
-        if not raw:
-            return None
-        return raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else str(raw)
 
     # ==================== Workflow State Management ====================
 
@@ -160,8 +138,7 @@ class RedisTaskManager(TaskManager):
         for phase, task_id in task_ids.items():
             if task_id and task_id != exclude_task_id:
                 try:
-                    # Avoid hard-killing in-flight tasks so they can flush traces/audit events.
-                    celery_app.control.revoke(task_id, terminate=False)
+                    celery_app.control.revoke(task_id, terminate=True)
                     revoked.append(task_id)
                     logger.info(f"[Workflow] Revoked task {task_id} (phase: {phase})")
                 except Exception as e:
@@ -271,8 +248,7 @@ class RedisTaskManager(TaskManager):
             # Only revoke if it's a different task (not a retry of the same task)
             if pending_task_id and pending_task_id != current_task_id:
                 try:
-                    # Avoid hard-killing in-flight tasks so they can flush traces/audit events.
-                    celery_app.control.revoke(pending_task_id, terminate=False)
+                    celery_app.control.revoke(pending_task_id, terminate=True)
                     logger.info(f"[Workflow] Revoked legacy task {pending_task_id}")
                 except Exception as e:
                     logger.warning(f"[Workflow] Failed to revoke legacy task: {e}")
