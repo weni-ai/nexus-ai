@@ -46,9 +46,48 @@ from nexus.usecases.intelligences.get_by_uuid import (
     get_project_and_content_base_data,
 )
 from nexus.usecases.projects import get_project_by_uuid
+from nexus.usecases.projects.project_type_update_eda_observer import PROJECT_TYPE_UPDATE_EDA_EVENT
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
 from nexus.users.api.authentication import UserGlobalTokenAuthentication
 from router.entities import message_factory
+
+
+def _multi_agent_request_user_email(request) -> str:
+    """Prefer email from project-auth API (CombinedExternalProjectPermission), then Django user."""
+    external = getattr(request, "project_auth_user_email", None)
+    if isinstance(external, str):
+        stripped = external.strip()
+        if stripped:
+            return stripped
+
+    user = getattr(request, "user", None)
+    if user is None or getattr(user, "is_anonymous", True):
+        return ""
+
+    email = getattr(user, "email", None)
+    if isinstance(email, str):
+        return email.strip()
+
+    return ""
+
+
+def _parse_multi_agents_bool(raw) -> tuple[bool | None, str | None]:
+    """Coerce API input to bool. Returns (value, error_message)."""
+    if isinstance(raw, bool):
+        return raw, None
+
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized in ("true", "1", "yes", "on"):
+            return True, None
+        if normalized in ("false", "0", "no", "off", ""):
+            return False, None
+
+    if isinstance(raw, int) and raw in (0, 1):
+        return bool(raw), None
+
+    return None, "multi_agents must be a boolean"
+
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +96,45 @@ SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
 
 class PushAgents(APIView):
     permission_classes = [IsAuthenticated]
+
+    def _can_user_manage_mcp_definitions(self, user_email: str) -> bool:
+        """
+        MCP definitions are shared across agents/projects. Only allow approved editors to
+        create/update MCPs via the CLI push endpoint.
+        """
+        if not isinstance(user_email, str):
+            return False
+        email = user_email.strip().lower()
+        if not email:
+            return False
+
+        for allowed in settings.OFFICIAL_SMART_AGENT_EDITORS:
+            if not isinstance(allowed, str):
+                continue
+            normalized_allowed = allowed.strip().lower()
+            if normalized_allowed and normalized_allowed == email:
+                return True
+        return False
+
+    def _check_mcp_payload_requires_editor(self, agents: dict, user_email: str) -> str | None:
+        """
+        Returns the first agent key that tries to use mcp/mcps without permission.
+
+        Note: Update use case checks for key presence ("mcp" in agent_data), so we treat
+        key presence as an attempt to manage MCPs even when the value is empty.
+        """
+        if self._can_user_manage_mcp_definitions(user_email):
+            return None
+
+        if not isinstance(agents, dict):
+            return None
+
+        for key, payload in (agents or {}).items():
+            if not isinstance(payload, dict):
+                continue
+            if "mcp" in payload or "mcps" in payload:
+                return key
+        return None
 
     def _validate_request(self, request):
         """Validate request data and return processed inputs"""
@@ -71,7 +149,15 @@ class PushAgents(APIView):
 
         logger.debug(f"InlineAgentsView payload - keys: {list(request.data.keys())}")
 
-        agents = json.loads(request.data.get("agents"))
+        raw_agents = request.data.get("agents")
+        if raw_agents is None:
+            raise ValueError("agents is required")
+
+        agents = json.loads(raw_agents)
+        if not isinstance(agents, dict):
+            raise ValueError("agents must be an object")
+        if "agents" not in agents or not isinstance(agents.get("agents"), dict):
+            raise ValueError("agents.agents must be an object")
         project_uuid = request.data.get("project_uuid")
 
         return files, agents, project_uuid
@@ -93,12 +179,30 @@ class PushAgents(APIView):
         agent_usecase = CreateAgentUseCase()
         update_agent_usecase = UpdateAgentUseCase()
 
-        files, agents, project_uuid = self._validate_request(request)
-
-        agents = agents["agents"]
+        try:
+            files, agents, project_uuid = self._validate_request(request)
+            agents = agents["agents"]
+        except (ValueError, TypeError, KeyError, json.JSONDecodeError) as e:
+            return Response({"error": str(e)}, status=400)
 
         logger.debug(f"Agents payload - agent_keys: {list(agents.keys()) if isinstance(agents, dict) else None}")
         logger.debug(f"Files payload - file_count: {len(files) if hasattr(files, '__len__') else None}")
+
+        mcp_agent_key = self._check_mcp_payload_requires_editor(
+            agents=agents,
+            user_email=_multi_agent_request_user_email(request),
+        )
+        if mcp_agent_key is not None:
+            return Response(
+                {
+                    "error": (
+                        "Permission Error: You are not authorized to create or update MCP definitions via CLI push. "
+                        f"Remove 'mcp'/'mcps' from agent '{mcp_agent_key}'."
+                    )
+                },
+                status=403,
+            )
+
         official_agent_key = self._check_can_edit_official_agent(agents=agents, user_email=request.user.email)
         if official_agent_key is not None:
             return Response(
@@ -1489,12 +1593,17 @@ class MultiAgentView(APIView):
             return Response({"error": str(e)}, status=500)
 
     def patch(self, request, project_uuid):
-        multi_agents = request.data.get("multi_agents")
-        if multi_agents is None:
+        multi_agents_raw = request.data.get("multi_agents")
+        if multi_agents_raw is None:
             return Response({"error": "multi_agents field is required"}, status=400)
+
+        multi_agents, parse_error = _parse_multi_agents_bool(multi_agents_raw)
+        if parse_error:
+            return Response({"error": parse_error}, status=400)
 
         try:
             project = Project.objects.get(uuid=project_uuid)
+            previous_inline_agent_switch = project.inline_agent_switch
 
             # AB 1.0 projects have inline_agent_switch=False and use BedrockBackend
             is_legacy_project_enabling = (
@@ -1514,6 +1623,14 @@ class MultiAgentView(APIView):
                 event="cache_invalidation:project",
                 project=project,
             )
+
+            if not previous_inline_agent_switch and multi_agents:
+                notify_async(
+                    event=PROJECT_TYPE_UPDATE_EDA_EVENT,
+                    project_uuid=str(project.uuid),
+                    user_email=_multi_agent_request_user_email(request),
+                    is_multi_agents=True,
+                )
 
             return Response({"message": "Project updated successfully", "multi_agents": multi_agents}, status=200)
         except Exception as e:

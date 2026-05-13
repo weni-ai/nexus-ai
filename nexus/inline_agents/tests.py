@@ -5,8 +5,10 @@ from unittest import skip
 from unittest.mock import Mock, patch
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.urls import reverse
 from django.utils.datastructures import MultiValueDict
+from rest_framework.test import APIClient
 
 from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentSystem, IntegratedAgent
 from nexus.usecases.inline_agents.assign import AssignAgentsUsecase
@@ -113,6 +115,110 @@ class TestAgentsUsecase(TestCase):
     def test_set_agent_active_not_found_raises(self):
         with self.assertRaises(IntegratedAgent.DoesNotExist):
             self.usecase.set_agent_active(str(self.agent.uuid), str(self.project.uuid), True)
+
+
+class TestPushAgentsMcpGuard(TestCase):
+    def setUp(self):
+        self.project = ProjectFactory(name="Router", brain_on=True)
+        self.user = self.project.created_by
+        self.user.email = "user@example.com"
+        self.user.save(update_fields=["email"])
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    @override_settings(OFFICIAL_SMART_AGENT_EDITORS=["editor@weni.ai"])
+    def test_push_agents_rejects_mcp_key_for_non_editor(self):
+        url = reverse("push-agents")
+        payload = {
+            "agents": {
+                "my_agent": {
+                    "name": "My agent",
+                    "description": "desc",
+                    "instructions": [],
+                    "guardrails": [],
+                    "tools": [],
+                    "mcp": [{"slug": "danger-mcp", "name": "Danger MCP"}],
+                }
+            }
+        }
+
+        res = self.client.post(
+            url,
+            data={"agents": json.dumps(payload), "project_uuid": str(self.project.uuid)},
+            format="multipart",
+        )
+
+        self.assertEqual(res.status_code, 403)
+        self.assertIn("MCP definitions", (res.json() or {}).get("error", ""))
+        self.assertFalse(MCP.objects.filter(slug="danger-mcp").exists())
+
+    @override_settings(OFFICIAL_SMART_AGENT_EDITORS=[])
+    def test_push_agents_rejects_mcp_key_when_email_missing(self):
+        self.user.email = ""
+        self.user.save(update_fields=["email"])
+
+        url = reverse("push-agents")
+        payload = {
+            "agents": {
+                "my_agent": {
+                    "name": "My agent",
+                    "description": "desc",
+                    "instructions": [],
+                    "guardrails": [],
+                    "tools": [],
+                    "mcps": [],
+                }
+            }
+        }
+
+        res = self.client.post(
+            url,
+            data={"agents": json.dumps(payload), "project_uuid": str(self.project.uuid)},
+            format="multipart",
+        )
+
+        self.assertEqual(res.status_code, 403)
+        self.assertIn("Remove 'mcp'/'mcps'", (res.json() or {}).get("error", ""))
+
+    @override_settings(OFFICIAL_SMART_AGENT_EDITORS=["user@example.com"])
+    def test_push_agents_rejects_mcp_key_even_if_user_is_allowlisted_but_email_blank(self):
+        self.user.email = ""
+        self.user.save(update_fields=["email"])
+
+        url = reverse("push-agents")
+        payload = {
+            "agents": {
+                "my_agent": {
+                    "name": "My agent",
+                    "description": "desc",
+                    "instructions": [],
+                    "guardrails": [],
+                    "tools": [],
+                    "mcp": [],
+                }
+            }
+        }
+
+        res = self.client.post(
+            url,
+            data={"agents": json.dumps(payload), "project_uuid": str(self.project.uuid)},
+            format="multipart",
+        )
+
+        self.assertEqual(res.status_code, 403)
+
+    def test_push_agents_invalid_agents_shape_returns_400(self):
+        url = reverse("push-agents")
+        payload = {"agents": []}
+
+        res = self.client.post(
+            url,
+            data={"agents": json.dumps(payload), "project_uuid": str(self.project.uuid)},
+            format="multipart",
+        )
+
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("agents.agents", (res.json() or {}).get("error", ""))
 
 
 class MockBedrockClient:
@@ -358,6 +464,7 @@ class MockLogGroupBedrockClient:
     def get_log_group(self, tool_name: str) -> dict:
         return {
             "tool_name": tool_name,
+            "lambda_name": tool_name,
             "log_group_name": f"/aws/lambda/{tool_name}",
             "log_group_arn": f"arn:aws:logs:region:XXXXXXXXX:log-group:/aws/lambda/{tool_name}",
         }
@@ -379,7 +486,9 @@ class TestGetLogGroup(TestCase):
         tool_key = "test-tool"
         log_group = self.usecase.get_log_group(self.project.uuid, self.agent.slug, tool_key)
         logger.info("Log group fetched", extra={"has_tool_name": bool(log_group.get("tool_name"))})
-        self.assertEqual(log_group.get("tool_name"), f"{tool_key}-{self.agent.id}")
+        expected_name = f"{tool_key}-{self.agent.id}"
+        self.assertEqual(log_group.get("tool_name"), expected_name)
+        self.assertEqual(log_group.get("lambda_name"), expected_name)
 
 
 class TestInlineAgentsConfiguration(TestCase):

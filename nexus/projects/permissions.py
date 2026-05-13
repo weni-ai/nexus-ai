@@ -13,7 +13,21 @@ def _is_authorized_response(response):
     return response.status_code != 404
 
 
-def _check_project_authorization(token: str, project_uuid: str, method: str) -> bool:
+def _user_email_from_authorization_payload(payload: dict) -> str | None:
+    """Reads email from the project authorization API `user` object when present."""
+    user = payload.get("user")
+    if isinstance(user, str):
+        stripped = user.strip()
+        return stripped or None
+    if isinstance(user, dict):
+        email = user.get("email")
+        if isinstance(email, str):
+            stripped = email.strip()
+            return stripped or None
+    return None
+
+
+def _check_project_authorization(token: str, project_uuid: str, method: str) -> tuple[bool, str | None]:
     base_url = settings.PROJECT_AUTH_API_BASE_URL
     url = f"{base_url}/v2/projects/{project_uuid}/authorization"
 
@@ -25,15 +39,18 @@ def _check_project_authorization(token: str, project_uuid: str, method: str) -> 
         if not _is_authorized_response(response):
             raise ProjectAuth.DoesNotExist("You do not have permission to perform this action.")
 
-        if method.upper() in SAFE_METHODS:
-            return True
+        data = response.json()
+        user_email = _user_email_from_authorization_payload(data)
 
-        project_authorization = response.json().get("project_authorization")
+        if method.upper() in SAFE_METHODS:
+            return True, user_email
+
+        project_authorization = data.get("project_authorization")
         if project_authorization == existing_roles.get("moderator"):
-            return True
+            return True, user_email
 
         if project_authorization == existing_roles.get("contributor"):
-            return method.upper() in ["POST", "PUT", "PATCH", "DELETE"]
+            return method.upper() in ["POST", "PUT", "PATCH", "DELETE"], user_email
 
         raise ProjectAuthorizationDenied("You do not have permission to perform this action.")
 
@@ -44,7 +61,10 @@ def _check_project_authorization(token: str, project_uuid: str, method: str) -> 
 def has_external_general_project_permission(request, project_uuid, method: str) -> bool:
     token = request.headers.get("Authorization")
     try:
-        return _check_project_authorization(token, project_uuid, method)
+        authorized, user_email = _check_project_authorization(token, project_uuid, method)
+        if user_email:
+            request.project_auth_user_email = user_email
+        return authorized
     except (requests.RequestException, ProjectAuth.DoesNotExist):
         # Only fall back to internal check if there was a request error or no external auth
         try:

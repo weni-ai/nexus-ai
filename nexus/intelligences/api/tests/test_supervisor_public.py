@@ -194,6 +194,8 @@ class TestSupervisorPublicAPI(TestCase):
             ],
             "next": None,
             "previous": None,
+            "total_count": 1,
+            "status_summary": {"0": 1, "1": 0, "2": 0, "3": 0, "4": 0},
         }
         mock_fetch_messages.return_value = [
             {"text": "hello", "source": "user", "created_at": "2026-04-01T12:00:01Z"},
@@ -212,12 +214,60 @@ class TestSupervisorPublicAPI(TestCase):
         self.assertEqual(data["results"][0]["contact_urn"], "whatsapp:5511999999999")
         self.assertEqual(data["results"][0]["messages"][0]["text"], "hello")
         self.assertEqual(data["status_summary"]["0"], 1)
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["page"], 1)
+        self.assertEqual(data["page_size"], 50)
+        self.assertEqual(data["total_pages"], 1)
+        self.assertIn("next", data)
+        self.assertIn("previous", data)
 
         mock_call.assert_called_once()
         call_kw = mock_call.call_args
         self.assertEqual(str(call_kw[0][0]), str(self.project.uuid))
         self.assertEqual(call_kw[0][1]["start_date"], "2026-03-27")
         mock_fetch_messages.assert_called_once()
+
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_fetch_conversation_messages")
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_call_conversations_api")
+    def test_v2_count_and_total_pages_from_upstream_total_count(self, mock_call, mock_fetch_messages):
+        mock_fetch_messages.return_value = []
+        mock_call.return_value = {
+            "results": [],
+            "next": "http://conv.example/api/v1/projects/x/conversations/?cursor=abc",
+            "previous": None,
+            "total_count": 250,
+            "status_summary": {"0": 250, "1": 0, "2": 0, "3": 0, "4": 0},
+        }
+        url = reverse(
+            "public-supervisor-conversations-v2",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+        response = self.client.get(f"{url}?page_size=100", HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(data["count"], 250)
+        self.assertEqual(data["total_pages"], 3)
+        self.assertEqual(data["status_summary"]["0"], 250)
+        self.assertEqual(data["page"], 1)
+
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_fetch_conversation_messages")
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_call_conversations_api")
+    def test_v2_page_query_echoed_like_v1(self, mock_call, mock_fetch_messages):
+        mock_fetch_messages.return_value = []
+        mock_call.return_value = {
+            "results": [],
+            "next": None,
+            "previous": None,
+            "total_count": 0,
+            "status_summary": {"0": 0, "1": 0, "2": 0, "3": 0, "4": 0},
+        }
+        url = reverse(
+            "public-supervisor-conversations-v2",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+        response = self.client.get(f"{url}?page=3", HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["page"], 3)
 
     @mock.patch.object(SupervisorPublicConversationsViewV2, "_fetch_conversation_messages")
     @mock.patch.object(SupervisorPublicConversationsViewV2, "_call_conversations_api")

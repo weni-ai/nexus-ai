@@ -44,6 +44,7 @@ from nexus.inline_agents.backends.openai.repository import (
     OpenAISupervisorRepository,
 )
 from nexus.inline_agents.models import InlineAgentsConfiguration
+from nexus.internals.connect import ConnectRESTClient
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.traces_observers.save_traces import save_inline_message_async
@@ -75,6 +76,16 @@ class OpenAIBackend(InlineAgentsBackend):
             return json.dumps(final_response, ensure_ascii=False)
         except TypeError:
             return str(final_response)
+
+    @staticmethod
+    def _get_default_error_message(project_uuid: str) -> str:
+        fallback_language = "en-us"
+        messages = getattr(settings, "DEFAULT_ERROR_MESSAGES", {})
+        try:
+            language = ConnectRESTClient().get_project_language(project_uuid)
+        except Exception:
+            language = fallback_language
+        return messages.get(language, messages.get(fallback_language, ""))
 
     def get_supervisor(
         self,
@@ -463,51 +474,80 @@ class OpenAIBackend(InlineAgentsBackend):
                 stream_support=stream_support,
             )
 
-        result = asyncio.run(
-            self._invoke_agents_async(
-                client,
-                external_team,
-                session,
-                session_id,
-                input_text,
-                contact_urn,
-                project_uuid,
-                channel_uuid,
-                user_email,
-                preview,
-                rationale_switch,
-                language,
-                turn_off_rationale,
-                msg_external_id,
-                supervisor_hooks,
-                runner_hooks,
-                hooks_state,
-                use_components_cached,
-                grpc_session=grpc_session,
-                formatter_agent_configurations=formatter_agent_configurations,
-                manager_pipeline_version=manager_pipeline_version,
+        try:
+            result = asyncio.run(
+                self._invoke_agents_async(
+                    client,
+                    external_team,
+                    session,
+                    session_id,
+                    input_text,
+                    contact_urn,
+                    project_uuid,
+                    channel_uuid,
+                    user_email,
+                    preview,
+                    rationale_switch,
+                    language,
+                    turn_off_rationale,
+                    msg_external_id,
+                    supervisor_hooks,
+                    runner_hooks,
+                    hooks_state,
+                    use_components_cached,
+                    message_uuid=message_conversation_log_uuid,
+                    grpc_session=grpc_session,
+                    formatter_agent_configurations=formatter_agent_configurations,
+                    manager_pipeline_version=manager_pipeline_version,
+                )
             )
-        )
 
-        text = self._coerce_final_response_text(result)
-        skip_dispatch = getattr(hooks_state, "skip_outgoing_dispatch", False)
-        preview_txt = text[:200] + "..." if len(text) > 200 else text
-        _is_final_out_debug(f"F invoke_agents_return skip_dispatch={skip_dispatch} text_preview={preview_txt!r}")
+            text = self._coerce_final_response_text(result)
+            skip_dispatch = getattr(hooks_state, "skip_outgoing_dispatch", False)
+            preview_txt = text[:200] + "..." if len(text) > 200 else text
+            _is_final_out_debug(f"F invoke_agents_return skip_dispatch={skip_dispatch} text_preview={preview_txt!r}")
 
-        # Send completed message through the persistent stream and close
-        if grpc_session and grpc_session.is_active:
-            try:
-                grpc_session.send_completed(text)
-            except Exception as e:
-                logger.error(f"gRPC completion failed: {e}", exc_info=True)
-            finally:
-                grpc_session.close()
+            if grpc_session and grpc_session.is_active:
+                try:
+                    grpc_session.send_completed(text)
+                except Exception as e:
+                    logger.error(f"gRPC completion failed: {e}", exc_info=True)
 
-        # Close the client
-        if grpc_client:
-            grpc_client.close()
+            return InvokeAgentsResult(text=text, skip_dispatch=skip_dispatch)
+        except Exception as exc:
+            logger.error(
+                "[OpenAIBackend] Error in _invoke_agents_async, returning default message: %s",
+                exc,
+                exc_info=True,
+            )
+            sentry_sdk.capture_exception(exc)
+            default_message = self._get_default_error_message(project_uuid)
 
-        return InvokeAgentsResult(text=text, skip_dispatch=skip_dispatch)
+            if not preview:
+                self._send_grpc_error_message(
+                    message=default_message,
+                    channel_uuid=channel_uuid,
+                    contact_urn=contact_urn,
+                    session_id=session_id,
+                    project_uuid=project_uuid,
+                    language=language,
+                    use_components=use_components_cached,
+                    stream_support=stream_support,
+                )
+
+            return InvokeAgentsResult(text=default_message, skip_dispatch=False)
+        finally:
+            if grpc_session:
+                try:
+                    grpc_session.close()
+                except Exception as e:
+                    logger.error(f"gRPC session close failed: {e}", exc_info=True)
+
+            if grpc_client:
+                try:
+                    grpc_client.close()
+                except Exception as e:
+                    logger.error(f"gRPC client close failed: {e}", exc_info=True)
 
     def _initialize_grpc_session(
         self,
@@ -578,6 +618,46 @@ class OpenAIBackend(InlineAgentsBackend):
             grpc_session.send_delta(delta_content)
         except Exception as e:
             logger.error(f"gRPC delta send failed: {e}", exc_info=True)
+
+    def _send_grpc_error_message(
+        self,
+        message: str,
+        channel_uuid: str,
+        contact_urn: str,
+        session_id: str,
+        project_uuid: str,
+        language: str,
+        use_components: bool,
+        stream_support: bool,
+    ):
+        """Create a fresh gRPC session to deliver an error message via delta + completed."""
+        err_client, err_session = None, None
+        try:
+            err_client, err_session, _ = self._initialize_grpc_session(
+                channel_uuid=channel_uuid,
+                contact_urn=contact_urn,
+                session_id=session_id,
+                project_uuid=project_uuid,
+                language=language,
+                use_components=use_components,
+                stream_support=stream_support,
+            )
+            if err_session and err_session.is_active:
+                err_session.send_delta(message)
+                err_session.send_completed(message)
+        except Exception as exc:
+            logger.error("gRPC error-message session failed: %s", exc, exc_info=True)
+        finally:
+            if err_session:
+                try:
+                    err_session.close()
+                except Exception as e:
+                    logger.debug("gRPC error-session close failed: %s", e)
+            if err_client:
+                try:
+                    err_client.close()
+                except Exception as e:
+                    logger.debug("gRPC error-client close failed: %s", e)
 
     def _process_delta_event(
         self,
@@ -726,13 +806,17 @@ class OpenAIBackend(InlineAgentsBackend):
         runner_hooks,
         hooks_state,
         use_components,
+        message_uuid: Optional[str] = None,
         grpc_session: Optional[StreamingSession] = None,
         formatter_agent_configurations: Optional[Dict[str, Any]] = None,
         manager_pipeline_version: Optional[str] = None,
     ):
         """Async wrapper to handle the streaming response"""
         with self.langfuse_c.start_as_current_span(name="OpenAI Agents trace: Agent workflow") as root_span:
-            trace_id_raw = f"trace_urn_{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}"
+            if message_uuid:
+                trace_id_raw = f"trace_msg_{message_uuid}"
+            else:
+                trace_id_raw = f"trace_urn_{contact_urn}_{pendulum.now().strftime('%Y%m%d_%H%M%S')}"
             trace_id = _sanitize_langfuse_id(trace_id_raw)
 
             with trace(workflow_name=project_uuid, trace_id=trace_id):

@@ -213,7 +213,9 @@ CACHES = {
 
 # Celery config
 
-CELERY_RESULT_BACKEND = None
+CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_RESULT_EXPIRES = 60
 CELERY_BROKER_URL = REDIS_URL
 CELERY_ACCEPT_CONTENT = ["application/json"]
 CELERY_RESULT_SERIALIZER = "json"
@@ -367,7 +369,17 @@ TRULENS_DATABASE_URL = env.str("TRULENS_DATABASE_URL", "sqlite:///default.sqlite
 
 FLOWS_REST_ENDPOINT = env.str("FLOWS_REST_ENDPOINT")
 BILLING_REST_ENDPOINT = env.str("BILLING_REST_ENDPOINT")
+CONNECT_REST_ENDPOINT = env.str("CONNECT_REST_ENDPOINT", "")
 CONVERSATIONS_REST_ENDPOINT = env.str("CONVERSATIONS_REST_ENDPOINT", "http://localhost:8000")
+
+DEFAULT_ERROR_MESSAGES = env.json(
+    "DEFAULT_ERROR_MESSAGES",
+    {
+        "en-us": "Sorry, I was unable to process your request. Try again.",
+        "pt-br": "Não foi possível processar sua solicitação. Tente novamente.",
+        "es": "No fue posible procesar su solicitud. Inténtelo de nuevo.",
+    },
+)
 CONVERSATIONS_TOKEN = env.str("CONVERSATIONS_TOKEN")
 CONVERSATIONS_AS_TOPICS_SOURCE = env.bool("CONVERSATIONS_AS_TOPICS_SOURCE", default=True)
 
@@ -643,6 +655,9 @@ if not (128 <= AWS_LAMBDA_MEMORY_SIZE <= 10240):
     raise ImproperlyConfigured(
         "AWS_LAMBDA_MEMORY_SIZE must be between 128 and 10240 (inclusive); " f"got {AWS_LAMBDA_MEMORY_SIZE}"
     )
+
+# Lambda log group configuration
+AWS_LAMBDA_LOG_GROUP = env.str("AWS_LAMBDA_LOG_GROUP", "")
 
 # Elastic APM Lambda configuration
 ELASTIC_APM_LAMBDA_ENABLED = env.bool("ELASTIC_APM_LAMBDA_ENABLED", False)
