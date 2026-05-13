@@ -286,9 +286,11 @@ class OpenAITeamAdapter(TeamAdapter):
                 get_supervisor_component_tools_for_streaming_merge,
             )
 
+            legacy_component_tool_name_set = all_component_tool_names(formatter_tools_descriptions)
             streaming_merge_tool_name_set = streaming_merge_tool_names(formatter_tools_descriptions)
+            names_to_strip = legacy_component_tool_name_set | streaming_merge_tool_name_set
             supervisor_tools = [
-                t for t in supervisor_tools if getattr(t, "name", None) not in streaming_merge_tool_name_set
+                t for t in supervisor_tools if getattr(t, "name", None) not in names_to_strip
             ]
             supervisor_tools.extend(
                 get_supervisor_component_tools_for_streaming_merge(formatter_tools_descriptions)
