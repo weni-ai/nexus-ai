@@ -1,3 +1,7 @@
+# Legacy
+# Used by the legacy ("2.6") manager + formatter LLM pipeline only. New manager
+# tools live in `components_tools_stream.py`. Do not import from here for the new path.
+
 import json
 import re
 import uuid
