@@ -38,47 +38,12 @@ class DataLakeEventService:
         channel_uuid: Optional[str] = None,
         conversation: Optional[object] = None,
     ) -> Optional[object]:
-        """Get conversation object from Conversation model or provided conversation object."""
-        # If conversation object is provided, use it directly
-        if conversation:
-            return conversation
+        """Return only a caller-supplied conversation object; do not load from Django ORM.
 
-        # Otherwise, query for it (channel_uuid is required for querying)
-        if not channel_uuid:
-            return None
-
-        try:
-            from nexus.intelligences.models import Conversation
-
-            conversation_obj = (
-                Conversation.objects.filter(
-                    project__uuid=project_uuid, contact_urn=contact_urn, channel_uuid=channel_uuid
-                )
-                .order_by("-created_at")
-                .first()
-            )
-
-            return conversation_obj
-        except Exception as e:
-            logger.warning(
-                f"Error retrieving conversation: {str(e)}. "
-                f"Project: {project_uuid}, Contact: {contact_urn}, Channel: {channel_uuid}"
-            )
-            # Log to Sentry for debugging
-            sentry_sdk.set_tag("project_uuid", project_uuid)
-            sentry_sdk.set_tag("contact_urn", contact_urn)
-            sentry_sdk.set_tag("channel_uuid", channel_uuid)
-            sentry_sdk.set_context(
-                "conversation_lookup",
-                {
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "channel_uuid": channel_uuid,
-                    "method": "_get_conversation",
-                },
-            )
-            sentry_sdk.capture_exception(e)
-            return None
+        AB 2.x inline traffic delegates conversation ownership to downstream consumers; the
+        data lake path must not re-hydrate rows via implicit ORM queries.
+        """
+        return conversation if conversation else None
 
     def _get_conversation_uuid(
         self,
@@ -103,8 +68,14 @@ class DataLakeEventService:
         channel_uuid: Optional[str] = None,
         agent_identifier: Optional[str] = None,
         conversation: Optional[object] = None,
+        message_conversation_log_uuid: Optional[str] = None,
     ) -> None:
-        """Enrich event metadata with agent_uuid, conversation_uuid and date fields."""
+        """Enrich event metadata with agent_uuid, optional legacy conversation fields, and handoff id.
+
+        AB 2.x inline: do not add ``conversation_uuid`` unless a legacy ORM ``conversation`` is passed.
+        When ``message_conversation_log_uuid`` is provided, it is copied into metadata for analytics
+        and correlation with conversation SQS (same id as ``message.sent`` message id where applicable).
+        """
         event_data.setdefault("metadata", {})
         metadata = event_data["metadata"]
 
@@ -126,6 +97,9 @@ class DataLakeEventService:
             # Add conversation_end_date if missing and end_date exists
             if "conversation_end_date" not in metadata and conversation_obj.end_date:
                 metadata["conversation_end_date"] = pendulum.instance(conversation_obj.end_date).to_iso8601_string()
+
+        if message_conversation_log_uuid and "message_conversation_log_uuid" not in metadata:
+            metadata["message_conversation_log_uuid"] = str(message_conversation_log_uuid)
 
         # Add agent_uuid if missing and agent_identifier is provided
         if "agent_uuid" not in metadata and agent_identifier:
@@ -155,6 +129,7 @@ class DataLakeEventService:
         channel_uuid: Optional[str] = None,
         agent_identifier: Optional[str] = None,
         conversation: Optional[object] = None,
+        message_conversation_log_uuid: Optional[str] = None,
     ) -> dict:
         """Prepare event data, enrich metadata, and validate using DTO."""
         # Set required fields (will be validated by DTO)
@@ -163,7 +138,7 @@ class DataLakeEventService:
         event_data.setdefault("date", pendulum.now("America/Sao_Paulo").to_iso8601_string())
         event_data.setdefault("event_name", "weni_nexus_data")
 
-        # Enrich metadata with agent_uuid and conversation_uuid
+        # Enrich metadata with agent_uuid and optional correlation ids
         self._enrich_metadata(
             event_data=event_data,
             project_uuid=project_uuid,
@@ -171,6 +146,7 @@ class DataLakeEventService:
             channel_uuid=channel_uuid,
             agent_identifier=agent_identifier,
             conversation=conversation,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
         # Validate using DTO (will raise ValueError if validation fails)
@@ -188,6 +164,7 @@ class DataLakeEventService:
         preview: bool = False,
         conversation: Optional[object] = None,
         skip_conversation_sqs: bool = False,
+        message_conversation_log_uuid: Optional[str] = None,
     ) -> None:
         """Process custom events using backend-specific extractor."""
         if preview:
@@ -211,6 +188,7 @@ class DataLakeEventService:
                         channel_uuid,
                         conversation=conversation,
                         skip_conversation_sqs=skip_conversation_sqs,
+                        sqs_correlation_id=message_conversation_log_uuid,
                     )
 
                 self.send_custom_event(
@@ -220,6 +198,7 @@ class DataLakeEventService:
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
                     conversation=conversation,
+                    message_conversation_log_uuid=message_conversation_log_uuid,
                 )
 
             except Exception as e:
@@ -242,6 +221,7 @@ class DataLakeEventService:
         channel_uuid: Optional[str] = None,
         agent_identifier: Optional[str] = None,
         conversation: Optional[object] = None,
+        message_conversation_log_uuid: Optional[str] = None,
     ) -> Optional[dict]:
         """Send a custom event to data lake after validation."""
         try:
@@ -256,6 +236,7 @@ class DataLakeEventService:
                 channel_uuid=channel_uuid,
                 agent_identifier=agent_identifier,
                 conversation=conversation,
+                message_conversation_log_uuid=message_conversation_log_uuid,
             )
 
             self.send_data_lake_event_task.delay(validated_event)
@@ -294,6 +275,7 @@ class DataLakeEventService:
         channel_uuid: Optional[str] = None,
         agent_identifier: Optional[str] = None,
         conversation: Optional[object] = None,
+        message_conversation_log_uuid: Optional[str] = None,
     ) -> Optional[dict]:
         """Send a validated event to data lake."""
         try:
@@ -310,6 +292,7 @@ class DataLakeEventService:
                 channel_uuid=channel_uuid,
                 agent_identifier=agent_identifier,
                 conversation=conversation,
+                message_conversation_log_uuid=message_conversation_log_uuid,
             )
 
             if use_delay:

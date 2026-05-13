@@ -440,6 +440,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         foundation_model: str = "",
         channel_uuid: Optional[str] = None,
         conversation: Optional[object] = None,
+        message_conversation_log_uuid: Optional[str] = None,
     ) -> Optional[dict]:
         if preview:
             return None
@@ -480,6 +481,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
                     conversation=conversation,
+                    message_conversation_log_uuid=message_conversation_log_uuid,
                 )
                 return validated_event
 
@@ -497,6 +499,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
                     conversation=conversation,
+                    message_conversation_log_uuid=message_conversation_log_uuid,
                 )
                 return validated_event
 
@@ -516,6 +519,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         preview: bool = False,
         conversation: Optional[object] = None,
         skip_conversation_sqs: bool = False,
+        message_conversation_log_uuid: Optional[str] = None,
     ):
         """Delegate custom event processing to the service."""
         trace_data = {
@@ -534,6 +538,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             preview=preview,
             conversation=conversation,
             skip_conversation_sqs=skip_conversation_sqs,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
     def to_data_lake_custom_event(
@@ -543,6 +548,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
         contact_urn: str,
         channel_uuid: Optional[str] = None,
         conversation: Optional[object] = None,
+        message_conversation_log_uuid: Optional[str] = None,
     ) -> Optional[dict]:
         """Send a single custom event to data lake (for direct event sending, not from traces)."""
         return self._event_service.send_custom_event(
@@ -551,6 +557,7 @@ class BedrockDataLakeEventAdapter(DataLakeEventAdapter):
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
             conversation=conversation,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
 

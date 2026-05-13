@@ -45,9 +45,10 @@ def messages(request: Request, message: MessageHTTPBody):
         )
 
         if project.inline_agent_switch:
-            logger.info("Starting Inline Agent")
+            # Start AB 2.x pipeline
             start_inline_agents.delay(message.dict(), user_email=message.user_email or "")
         else:
+            # Start AB 1.x pipeline
             start_route.delay(message.dict())
 
     finally:

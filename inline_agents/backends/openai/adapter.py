@@ -115,6 +115,7 @@ class OpenAITeamAdapter(TeamAdapter):
         session_factory,
         max_tokens: Dict[str, Optional[int]],
         skip_conversation_sqs: bool = False,
+        message_uuid: Optional[str] = None,
     ):
         agents_as_tools = []
         user_model_credentials: Dict[str, Any] = supervisor.get("user_model_credentials", {})
@@ -154,6 +155,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 msg_external_id=msg_external_id,
                 turn_off_rationale=turn_off_rationale,
                 skip_conversation_sqs=skip_conversation_sqs,
+                message_uuid=message_uuid,
             )
             model_settings = {"extra_args": collaborator_extra_args}
             if max_tokens_collaborator is not None:
@@ -261,6 +263,7 @@ class OpenAITeamAdapter(TeamAdapter):
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
             skip_conversation_sqs=skip_conversation_sqs,
+            message_uuid=getattr(supervisor_hooks.trace_handler, "message_uuid", None),
         )
 
         supervisor_tools = cls._get_tools(supervisor["tools"])
@@ -417,6 +420,7 @@ class OpenAITeamAdapter(TeamAdapter):
                 msg_external_id=msg_external_id,
                 turn_off_rationale=turn_off_rationale,
                 skip_conversation_sqs=skip_conversation_sqs,
+                message_uuid=getattr(supervisor_hooks.trace_handler, "message_uuid", None),
             )
 
             from agents import Agent, ModelSettings
@@ -1245,6 +1249,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         foundation_model: str = "",
         channel_uuid: Optional[str] = None,
         conversation: Optional[object] = None,
+        message_conversation_log_uuid: Optional[str] = None,
     ) -> Optional[dict]:
         if agent_data is None:
             agent_data = {}
@@ -1282,6 +1287,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
                     conversation=conversation,
+                    message_conversation_log_uuid=message_conversation_log_uuid,
                 )
                 return validated_event
 
@@ -1297,6 +1303,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
                     conversation=conversation,
+                    message_conversation_log_uuid=message_conversation_log_uuid,
                 )
                 return validated_event
 
@@ -1312,6 +1319,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
                     channel_uuid=channel_uuid,
                     agent_identifier=agent_identifier,
                     conversation=conversation,
+                    message_conversation_log_uuid=message_conversation_log_uuid,
                 )
                 return validated_event
 
@@ -1331,6 +1339,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         agent_name: str = "",
         conversation: Optional[object] = None,
         skip_conversation_sqs: bool = False,
+        message_conversation_log_uuid: Optional[str] = None,
     ):
         """Delegate custom event processing to the service."""
         trace_data = {"project_uuid": project_uuid, "contact_urn": contact_urn}
@@ -1344,6 +1353,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             preview=preview,
             conversation=conversation,
             skip_conversation_sqs=skip_conversation_sqs,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )
 
     def to_data_lake_custom_event(
@@ -1353,6 +1363,7 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
         contact_urn: str,
         channel_uuid: Optional[str] = None,
         conversation: Optional[object] = None,
+        message_conversation_log_uuid: Optional[str] = None,
     ) -> Optional[dict]:
         """Send a single custom event to data lake (for direct event sending, not from traces)."""
         return self._event_service.send_custom_event(
@@ -1361,4 +1372,5 @@ class OpenAIDataLakeEventAdapter(DataLakeEventAdapter):
             contact_urn=contact_urn,
             channel_uuid=channel_uuid,
             conversation=conversation,
+            message_conversation_log_uuid=message_conversation_log_uuid,
         )

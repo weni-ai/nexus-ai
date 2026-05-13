@@ -178,11 +178,13 @@ def build_csat_event(
     channel_uuid: str,
     value: str,
     contact_name: str = "System",
+    correlation_id: Optional[str] = None,
 ) -> SQSMessageEvent:
     """Build a CSAT event (piggybacks on message.received)."""
+    cid = correlation_id if correlation_id else str(uuid.uuid4())
     return SQSMessageEvent(
         event_type=EVENT_TYPE_MESSAGE_RECEIVED,
-        correlation_id=str(uuid.uuid4()),
+        correlation_id=cid,
         data=EventData(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
@@ -200,11 +202,13 @@ def build_nps_event(
     channel_uuid: str,
     value: str,
     contact_name: str = "System",
+    correlation_id: Optional[str] = None,
 ) -> SQSMessageEvent:
     """Build an NPS event (piggybacks on message.received)."""
+    cid = correlation_id if correlation_id else str(uuid.uuid4())
     return SQSMessageEvent(
         event_type=EVENT_TYPE_MESSAGE_RECEIVED,
-        correlation_id=str(uuid.uuid4()),
+        correlation_id=cid,
         data=EventData(
             project_uuid=project_uuid,
             contact_urn=contact_urn,
@@ -223,11 +227,13 @@ def build_custom_event(
     key: str,
     value: str,
     contact_name: str = "System",
+    correlation_id: Optional[str] = None,
 ) -> SQSMessageEvent:
     """Build a custom event (piggybacks on message.received)."""
+    cid = correlation_id if correlation_id else str(uuid.uuid4())
     return SQSMessageEvent(
         event_type=EVENT_TYPE_MESSAGE_RECEIVED,
-        correlation_id=str(uuid.uuid4()),
+        correlation_id=cid,
         data=EventData(
             project_uuid=project_uuid,
             contact_urn=contact_urn,

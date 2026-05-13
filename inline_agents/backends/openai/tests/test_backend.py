@@ -742,9 +742,7 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
 
     @patch("inline_agents.backends.openai.backend.sentry_sdk")
     @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
-    @patch("inline_agents.backends.openai.backend.save_inline_message_async")
     @patch.object(OpenAIBackend, "_initialize_grpc_session", return_value=(None, None, None))
-    @patch.object(OpenAIBackend, "_ensure_conversation", return_value=None)
     @patch.object(OpenAIBackend, "_get_data_lake_event_adapter", return_value=None)
     @patch.object(OpenAIBackend, "_get_session", return_value=(MagicMock(), "session-id"))
     @patch.object(OpenAIBackend, "_get_session_factory", return_value=MagicMock())
@@ -781,9 +779,7 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
         _mock_session_factory,
         _mock_session,
         _mock_data_lake,
-        _mock_conversation,
         _mock_grpc,
-        _mock_save_msg,
         mock_connect_cls,
         mock_sentry,
     ):
@@ -806,9 +802,7 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
 
     @patch("inline_agents.backends.openai.backend.sentry_sdk")
     @patch("inline_agents.backends.openai.backend.ConnectRESTClient")
-    @patch("inline_agents.backends.openai.backend.save_inline_message_async")
     @patch.object(OpenAIBackend, "_initialize_grpc_session")
-    @patch.object(OpenAIBackend, "_ensure_conversation", return_value=None)
     @patch.object(OpenAIBackend, "_get_data_lake_event_adapter", return_value=None)
     @patch.object(OpenAIBackend, "_get_session", return_value=(MagicMock(), "session-id"))
     @patch.object(OpenAIBackend, "_get_session_factory", return_value=MagicMock())
@@ -845,9 +839,7 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
         _mock_session_factory,
         _mock_session,
         _mock_data_lake,
-        _mock_conversation,
         mock_grpc_init,
-        _mock_save_msg,
         mock_connect_cls,
         _mock_sentry,
     ):

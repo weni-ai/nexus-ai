@@ -494,7 +494,7 @@ def start_inline_agents(
     task_manager = task_manager or get_task_manager()
 
     try:
-        incoming_created_at = None  # Set right before _invoke_backend (same point as InlineAgentMessage save)
+        incoming_created_at = None  # Set right before _invoke_backend (aligns with SQS message.received timestamp)
         turn_id = message.get("msg_event", {}).get("msg_external_id") or str(uuid.uuid4())
         TypingUsecase().send_typing_message(
             contact_urn=message.get("contact_urn"),
@@ -566,7 +566,7 @@ def start_inline_agents(
             agent_data=agent_cached,
         )
 
-        # Invoke backend (incoming saved inside backend via save_inline_message_async)
+        # Invoke backend; inbound handoff for AB 2.x is via conversation SQS above (not Django ORM)
         incoming_created_at = pendulum.now().to_iso8601_string()
 
         if not skip_sqs:

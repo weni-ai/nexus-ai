@@ -518,6 +518,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
         turn_off_rationale: bool = False,
         conversation: Optional[object] = None,
         skip_conversation_sqs: bool = False,
+        message_uuid: Optional[str] = None,
     ):
         self.trace_handler = TraceHandler(
             event_manager_notify=event_manager_notify,
@@ -530,6 +531,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
             msg_external_id=msg_external_id,
             turn_off_rationale=turn_off_rationale,
             hooks_state=hooks_state,
+            message_uuid=message_uuid,
         )
         self.agent_name = agent_name
         self.data_lake_event_adapter = data_lake_event_adapter
@@ -601,6 +603,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
             backend="openai",
             channel_uuid=context_data.contact.get("channel_uuid"),
             conversation=self.conversation,
+            message_conversation_log_uuid=self.trace_handler.message_uuid,
         )
 
     async def tool_started(self, context, agent, tool):
@@ -671,6 +674,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                     preview=self.preview,
                     conversation=self.conversation,
                     skip_conversation_sqs=self.skip_conversation_sqs,
+                    message_conversation_log_uuid=self.trace_handler.message_uuid,
                 )
             except Exception as e:
                 logger.error(f"Error calling custom_event_data in CollaboratorHooks: {str(e)}")
@@ -698,6 +702,7 @@ class CollaboratorHooks(AgentHooks):  # type: ignore[misc]
                 backend="openai",
                 channel_uuid=context_data.contact.get("channel_uuid"),
                 conversation=self.conversation,
+                message_conversation_log_uuid=self.trace_handler.message_uuid,
             )
         except Exception as e:
             logger.error(f"Error sending tool result event for tool '{tool.name}': {str(e)}")
@@ -887,6 +892,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                 backend="openai",
                 channel_uuid=context_data.contact.get("channel_uuid"),
                 conversation=self.conversation,
+                message_conversation_log_uuid=self.trace_handler.message_uuid,
             )
         except Exception as e:
             logger.error(f"Error sending tool result event for tool '{tool.name}': {str(e)}")
@@ -933,6 +939,7 @@ class SupervisorHooks(AgentHooks):  # type: ignore[misc]
                     preview=self.preview,
                     conversation=self.conversation,
                     skip_conversation_sqs=self.skip_conversation_sqs,
+                    message_conversation_log_uuid=self.trace_handler.message_uuid,
                 )
             except Exception as e:
                 logger.error(f"Error calling custom_event_data in SupervisorHooks: {str(e)}")

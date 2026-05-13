@@ -194,3 +194,7 @@ weni-scripts/
 # Celery
 
 celerybeat-schedule.*
+
+.cursor/
+.specify/
+specs/

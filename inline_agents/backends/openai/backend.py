@@ -45,7 +45,6 @@ from nexus.inline_agents.models import InlineAgentsConfiguration
 from nexus.internals.connect import ConnectRESTClient
 from nexus.projects.websockets.consumers import send_preview_message_to_websocket
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
-from router.traces_observers.save_traces import save_inline_message_async
 from router.utils.redis_clients import get_redis_read_client, get_redis_write_client
 
 logger = logging.getLogger(__name__)
@@ -188,59 +187,6 @@ class OpenAIBackend(InlineAgentsBackend):
             self._event_manager_notify = async_event_manager.notify
         return self._event_manager_notify
 
-    def _ensure_conversation(
-        self, project_uuid: str, contact_urn: str, contact_name: str, channel_uuid: str, preview: bool = False
-    ) -> Optional[object]:
-        """Ensure conversation exists and return it, or None if creation fails or channel_uuid is missing."""
-        # Don't create conversations in preview mode
-        if preview:
-            return None
-
-        if not channel_uuid:
-            # channel_uuid is None - log to Sentry for debugging
-            sentry_sdk.set_tag("project_uuid", project_uuid)
-            sentry_sdk.set_tag("contact_urn", contact_urn)
-            sentry_sdk.set_context(
-                "conversation_creation",
-                {
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "contact_name": contact_name,
-                    "channel_uuid": None,
-                    "backend": "openai",
-                    "reason": "channel_uuid is None",
-                },
-            )
-            sentry_sdk.capture_message(
-                "Conversation not created: channel_uuid is None (OpenAI backend)", level="warning"
-            )
-            return None
-
-        try:
-            from router.services.conversation_service import ConversationService
-
-            conversation_service = ConversationService()
-            return conversation_service.ensure_conversation_exists(
-                project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
-            )
-        except Exception as e:
-            # If conversation lookup/creation fails, continue without it but log to Sentry
-            sentry_sdk.set_tag("project_uuid", project_uuid)
-            sentry_sdk.set_tag("contact_urn", contact_urn)
-            sentry_sdk.set_tag("channel_uuid", channel_uuid)
-            sentry_sdk.set_context(
-                "conversation_creation",
-                {
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "contact_name": contact_name,
-                    "channel_uuid": channel_uuid,
-                    "backend": "openai",
-                },
-            )
-            sentry_sdk.capture_exception(e)
-            return None
-
     def invoke_agents(
         self,
         team: list[dict],
@@ -292,31 +238,10 @@ class OpenAIBackend(InlineAgentsBackend):
         )
         data_lake_event_adapter = self._get_data_lake_event_adapter()
 
-        # Ensure conversation exists and get it for data lake events (skip in preview mode)
-        conversation = self._ensure_conversation(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            contact_name=contact_name,
-            channel_uuid=channel_uuid,
-            preview=preview,
-        )
-
         hooks_state = HooksState(agents=team)
 
         message_conversation_log_uuid = kwargs.pop("message_conversation_log_uuid", None)
         skip_conversation_sqs = kwargs.pop("skip_conversation_sqs", False)
-
-        save_inline_message_async.delay(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            text=input_text,
-            preview=preview,
-            session_id=session_id,
-            source_type="user",
-            contact_name=contact_name,
-            channel_uuid=channel_uuid,
-            message_uuid=message_conversation_log_uuid,
-        )
 
         supervisor_hooks = SupervisorHooks(
             agent_name="manager",
@@ -332,7 +257,7 @@ class OpenAIBackend(InlineAgentsBackend):
             agents=team,
             hooks_state=hooks_state,
             data_lake_event_adapter=data_lake_event_adapter,
-            conversation=conversation,
+            conversation=None,
             use_components=use_components,
             message_uuid=message_conversation_log_uuid,
             skip_conversation_sqs=skip_conversation_sqs,

@@ -83,7 +83,11 @@ class MessageService:
         channel_uuid: str = None,
         contact_name: str = None,
     ) -> None:
-        """Add a message to existing conversation - matches original add_message_to_cache logic."""
+        """Add a message to existing conversation - matches original add_message_to_cache logic.
+
+        May still ensure a Django Conversation row when called from trace/rationale persistence paths;
+        user inbound from OpenAI/Bedrock inline backends no longer uses this for the AB 2.x router path.
+        """
         message = {"text": msg_text, "source": source, "created_at": self._get_current_timestamp()}
         self.message_repository.add_message(project_uuid, contact_urn, message, channel_uuid)
 

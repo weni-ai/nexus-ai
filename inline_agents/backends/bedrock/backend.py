@@ -18,7 +18,6 @@ from nexus.projects.websockets.consumers import (
 from nexus.usecases.inline_agents.typing import TypingUsecase
 from nexus.usecases.jwt.jwt_usecase import JWTUsecase
 from router.handler import PostMessageHandler
-from router.traces_observers.save_traces import save_inline_message_to_database
 
 from .adapter import BedrockDataLakeEventAdapter, BedrockTeamAdapter
 
@@ -57,59 +56,6 @@ class BedrockBackend(InlineAgentsBackend):
             self._data_lake_event_adapter = BedrockDataLakeEventAdapter()
         return self._data_lake_event_adapter
 
-    def _ensure_conversation(
-        self, project_uuid: str, contact_urn: str, contact_name: str, channel_uuid: str, preview: bool = False
-    ) -> Optional[object]:
-        """Ensure conversation exists and return it, or None if creation fails or channel_uuid is missing."""
-        # Don't create conversations in preview mode
-        if preview:
-            return None
-
-        if not channel_uuid:
-            # channel_uuid is None - log to Sentry for debugging
-            sentry_sdk.set_tag("project_uuid", project_uuid)
-            sentry_sdk.set_tag("contact_urn", contact_urn)
-            sentry_sdk.set_context(
-                "conversation_creation",
-                {
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "contact_name": contact_name,
-                    "channel_uuid": None,
-                    "backend": "bedrock",
-                    "reason": "channel_uuid is None",
-                },
-            )
-            sentry_sdk.capture_message(
-                "Conversation not created: channel_uuid is None (Bedrock backend)", level="warning"
-            )
-            return None
-
-        try:
-            from router.services.conversation_service import ConversationService
-
-            conversation_service = ConversationService()
-            return conversation_service.ensure_conversation_exists(
-                project_uuid=project_uuid, contact_urn=contact_urn, contact_name=contact_name, channel_uuid=channel_uuid
-            )
-        except Exception as e:
-            # If conversation lookup/creation fails, continue without it but log to Sentry
-            sentry_sdk.set_tag("project_uuid", project_uuid)
-            sentry_sdk.set_tag("contact_urn", contact_urn)
-            sentry_sdk.set_tag("channel_uuid", channel_uuid)
-            sentry_sdk.set_context(
-                "conversation_creation",
-                {
-                    "project_uuid": project_uuid,
-                    "contact_urn": contact_urn,
-                    "contact_name": contact_name,
-                    "channel_uuid": channel_uuid,
-                    "backend": "bedrock",
-                },
-            )
-            sentry_sdk.capture_exception(e)
-            return None
-
     def invoke_agents(
         self,
         team: dict,
@@ -143,15 +89,6 @@ class BedrockBackend(InlineAgentsBackend):
         # Set dependencies
         self._event_manager_notify = event_manager_notify or self._get_event_manager_notify()
         self._data_lake_event_adapter = data_lake_event_adapter or self._get_data_lake_event_adapter()
-
-        # Ensure conversation exists and get it for data lake events (skip in preview mode)
-        conversation = self._ensure_conversation(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            contact_name=contact_name,
-            channel_uuid=channel_uuid,
-            preview=preview,
-        )
 
         typing_usecase = TypingUsecase()
         typing_usecase.send_typing_message(
@@ -188,18 +125,7 @@ class BedrockBackend(InlineAgentsBackend):
         # Generate a session ID for websocket communication
         session_id = f"project-{project_uuid}-session-{sanitized_urn}"
         session_id = slugify(session_id)
-        log = save_inline_message_to_database(
-            project_uuid=project_uuid,
-            contact_urn=contact_urn,
-            text=input_text,
-            preview=preview,
-            session_id=session_id,
-            source_type="user",
-            contact_name=contact_name,
-            channel_uuid=channel_uuid,
-        )
         logger.debug("Session ID", extra={"session_id": session_id})
-        logger.debug("Log present", extra={"has_log": log is not None})
         logger.debug("External team built", extra={"agents_count": len(external_team.get("agents", []))})
 
         # Send initial status message for preview WebSocket fanout when user_email is provided
@@ -255,7 +181,7 @@ class BedrockBackend(InlineAgentsBackend):
                     channel_uuid=channel_uuid,
                     preview=preview,
                     collaborator_name=collaborator_name,
-                    conversation=conversation,
+                    conversation=None,
                     skip_conversation_sqs=skip_conversation_sqs,
                 )
 
@@ -269,7 +195,7 @@ class BedrockBackend(InlineAgentsBackend):
                     if collaborator_foundation_model
                     else supervisor.get("foundation_model", ""),
                     channel_uuid=channel_uuid,
-                    conversation=conversation,
+                    conversation=None,
                 )
 
                 if "rationale" in orchestration_trace:
