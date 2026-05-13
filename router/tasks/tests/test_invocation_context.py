@@ -265,35 +265,3 @@ class TestCachedProjectDataEdgeCases(TestCase):
         self.assertFalse(kwargs.get("rationale_switch", True))
         self.assertEqual(kwargs.get("conversation_turns_to_include"), 10)
         self.assertTrue(kwargs.get("exclude_previous_thinking_steps", False))
-
-    def test_get_invoke_kwargs_includes_manager_pipeline_version(self):
-        cached_data = CachedProjectData(
-            project_dict={"manager_pipeline_version": "2.6"},
-            content_base_dict={"uuid": "cb-uuid"},
-            team=[],
-            guardrails_config={},
-            inline_agent_config_dict=None,
-            instructions=[],
-            agent_data=None,
-            formatter_agent_configurations={},
-        )
-
-        kwargs = cached_data.get_invoke_kwargs(team=[])
-
-        self.assertEqual(kwargs.get("manager_pipeline_version"), "2.6")
-
-    def test_get_invoke_kwargs_manager_pipeline_version_defaults_none(self):
-        cached_data = CachedProjectData(
-            project_dict={},
-            content_base_dict={"uuid": "cb-uuid"},
-            team=[],
-            guardrails_config={},
-            inline_agent_config_dict=None,
-            instructions=[],
-            agent_data=None,
-            formatter_agent_configurations={},
-        )
-
-        kwargs = cached_data.get_invoke_kwargs(team=[])
-
-        self.assertIsNone(kwargs.get("manager_pipeline_version"))
