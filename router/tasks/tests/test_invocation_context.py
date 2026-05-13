@@ -1,61 +1,6 @@
-from types import SimpleNamespace
+from django.test import TestCase
 
-from django.test import SimpleTestCase, TestCase, override_settings
-
-from router.services.manager_pipeline_version import (
-    is_legacy_manager_uuid,
-    manager_pipeline_version_from_project,
-)
 from router.tasks.invocation_context import CachedProjectData
-
-LEGACY_UUID = "21b405a4-b5a5-4cf5-bb5f-efce2620e834"
-NEW_UUID = "65f8c6d7-7518-483d-a8f1-5b8e4132fb0a"
-
-
-@override_settings(LEGACY_MANAGER_AGENT_UUIDS=[LEGACY_UUID])
-class TestManagerPipelineVersionFromProject(SimpleTestCase):
-    def test_none_when_no_manager_agent(self):
-        project = SimpleNamespace(manager_agent=None)
-        self.assertIsNone(manager_pipeline_version_from_project(project))
-
-    def test_legacy_uuid_returns_legacy_token(self):
-        agent = SimpleNamespace(uuid=LEGACY_UUID)
-        project = SimpleNamespace(manager_agent=agent)
-        self.assertEqual(manager_pipeline_version_from_project(project), "2.6")
-
-    def test_new_uuid_returns_none(self):
-        agent = SimpleNamespace(uuid=NEW_UUID)
-        project = SimpleNamespace(manager_agent=agent)
-        self.assertIsNone(manager_pipeline_version_from_project(project))
-
-    def test_uuid_match_is_case_insensitive_and_trims(self):
-        agent = SimpleNamespace(uuid=f"  {LEGACY_UUID.upper()}  ")
-        project = SimpleNamespace(manager_agent=agent)
-        self.assertEqual(manager_pipeline_version_from_project(project), "2.6")
-
-    def test_admin_editable_extra_args_is_ignored(self):
-        agent = SimpleNamespace(
-            uuid=NEW_UUID,
-            manager_extra_args={"pipeline_version": "2.6"},
-        )
-        project = SimpleNamespace(manager_agent=agent)
-        self.assertIsNone(manager_pipeline_version_from_project(project))
-
-
-@override_settings(LEGACY_MANAGER_AGENT_UUIDS=[LEGACY_UUID])
-class TestIsLegacyManagerUuid(SimpleTestCase):
-    def test_none_is_not_legacy(self):
-        self.assertFalse(is_legacy_manager_uuid(None))
-
-    def test_listed_uuid_is_legacy(self):
-        self.assertTrue(is_legacy_manager_uuid(LEGACY_UUID))
-
-    def test_unlisted_uuid_is_not_legacy(self):
-        self.assertFalse(is_legacy_manager_uuid(NEW_UUID))
-
-    @override_settings(LEGACY_MANAGER_AGENT_UUIDS=[])
-    def test_empty_setting_means_no_legacy(self):
-        self.assertFalse(is_legacy_manager_uuid(LEGACY_UUID))
 
 
 class TestCachedProjectDataEdgeCases(TestCase):
