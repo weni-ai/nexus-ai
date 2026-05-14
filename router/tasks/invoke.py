@@ -15,6 +15,7 @@ from django.conf import settings
 
 from inline_agents.backends import BackendsRegistry
 from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
+from inline_agents.backends.openai.legacy_formatter_pipeline import is_new_pipeline_sentinel
 from nexus.celery import app as celery_app
 from nexus.events import notify_async
 from nexus.projects.channel_ops import channel_matches_default_preview
@@ -84,7 +85,6 @@ def apply_simulation_manager_pipeline_version_override(
     contact_urn: str,
     base_version: Optional[str],
 ) -> Optional[str]:
-    """Replace manager pipeline version with Redis value on default preview-channel traffic."""
     if not on_default_simulation_channel or not project_uuid:
         return base_version
     cached = _get_simulation_manager_pipeline_version(project_uuid, contact_urn or "")
@@ -94,6 +94,14 @@ def apply_simulation_manager_pipeline_version_override(
     if not stripped:
         return base_version
     urn_tail = (contact_urn or "")[-8:] if contact_urn else ""
+    if is_new_pipeline_sentinel(stripped):
+        logger.info(
+            "Simulation pipeline version override: project_uuid=%s, contact_urn_suffix=%s, "
+            "manager_pipeline_version=None, source=cache(sentinel)",
+            project_uuid,
+            urn_tail,
+        )
+        return None
     logger.info(
         "Simulation pipeline version override: project_uuid=%s, contact_urn_suffix=%s, "
         "manager_pipeline_version=%s, source=cache",

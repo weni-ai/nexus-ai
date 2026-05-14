@@ -379,6 +379,8 @@ class SimulationManagerPipelineVersionView(APIView):
     permission_classes = [ProjectPermission]
 
     def get(self, request, project_uuid):
+        from inline_agents.backends.openai.legacy_formatter_pipeline import is_new_pipeline_sentinel
+
         contact_urn = request.query_params.get("contact_urn")
         if not contact_urn:
             return Response({"error": "contact_urn query parameter is required"}, status=400)
@@ -392,6 +394,8 @@ class SimulationManagerPipelineVersionView(APIView):
             cached = get_redis_read_client().get(key)
             if cached:
                 version = cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
+                if is_new_pipeline_sentinel(version):
+                    return Response({"manager_pipeline_version": None, "source": "cache"})
                 return Response({"manager_pipeline_version": version, "source": "cache"})
             return Response(
                 {
@@ -408,6 +412,11 @@ class SimulationManagerPipelineVersionView(APIView):
             )
 
     def post(self, request, project_uuid):
+        from inline_agents.backends.openai.legacy_formatter_pipeline import (
+            LEGACY_PIPELINE_VERSION,
+            NEW_PIPELINE_SENTINEL,
+        )
+
         pipeline_version = request.data.get("pipeline_version")
         manager_agent_uuid = request.data.get("manager_agent_uuid")
         contact_urn = request.data.get("contact_urn")
@@ -423,16 +432,28 @@ class SimulationManagerPipelineVersionView(APIView):
         if not contact_urn.startswith("ext:"):
             contact_urn = f"ext:{contact_urn}"
 
-        # When manager_agent_uuid is provided, resolve it against the configured
-        # legacy UUID list and store the resulting pipeline token (or clear the
-        # override if the chosen manager is on the new pipeline).
+        store_new_pipeline_sentinel = False
         if manager_agent_uuid and (pipeline_version is None or pipeline_version == ""):
-            from inline_agents.backends.openai.legacy_formatter_pipeline import LEGACY_PIPELINE_VERSION
-
-            pipeline_version = LEGACY_PIPELINE_VERSION if is_legacy_manager_uuid(manager_agent_uuid) else None
+            if is_legacy_manager_uuid(manager_agent_uuid):
+                pipeline_version = LEGACY_PIPELINE_VERSION
+            else:
+                store_new_pipeline_sentinel = True
 
         try:
             key = simulation_manager_pipeline_version_redis_key(project_uuid, contact_urn)
+            if store_new_pipeline_sentinel:
+                get_redis_write_client().setex(
+                    key,
+                    SIMULATION_MANAGER_PIPELINE_VERSION_TTL_SECONDS,
+                    NEW_PIPELINE_SENTINEL,
+                )
+                return Response(
+                    {
+                        "manager_pipeline_version": None,
+                        "manager_agent_uuid": manager_agent_uuid,
+                        "ttl_seconds": SIMULATION_MANAGER_PIPELINE_VERSION_TTL_SECONDS,
+                    }
+                )
             if pipeline_version is None:
                 clear_simulation_manager_pipeline_version(project_uuid, contact_urn)
                 return Response(
