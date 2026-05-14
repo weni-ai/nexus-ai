@@ -5,6 +5,9 @@ Context objects for backend invocation to reduce parameter passing complexity.
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
+from inline_agents.backends.openai.legacy_formatter_pipeline import LEGACY_PIPELINE_VERSION
+from router.services.manager_pipeline_version import is_legacy_manager_uuid
+
 
 @dataclass
 class CachedProjectData:
@@ -56,6 +59,15 @@ class CachedProjectData:
 
     def get_invoke_kwargs(self, team: List[Dict]) -> Dict:
         """Get all kwargs for backend.invoke_agents() call, including team data."""
+        manager_pipeline_version = self.project_dict.get("manager_pipeline_version")
+        if "manager_pipeline_version" not in self.project_dict:
+            # Older cached project payloads (pre-field) omit this key; infer from the
+            # manager UUID so legacy managers in LEGACY_MANAGER_AGENT_UUIDS are not
+            # treated as new pipeline until the 24h cache entry expires.
+            mgr_uuid = self.project_dict.get("supervisor_agent_uuid")
+            if mgr_uuid is not None and is_legacy_manager_uuid(mgr_uuid):
+                manager_pipeline_version = LEGACY_PIPELINE_VERSION
+
         return {
             "team": team,
             "use_components": self.project_dict.get("use_components", False),
@@ -77,5 +89,5 @@ class CachedProjectData:
                 else None
             ),
             "supervisor_agent_uuid": self.project_dict.get("supervisor_agent_uuid"),
-            "manager_pipeline_version": self.project_dict.get("manager_pipeline_version"),
+            "manager_pipeline_version": manager_pipeline_version,
         }

@@ -76,8 +76,8 @@ def resolve_inline_openai_tool_use(
         parsed = AgentModel._try_parse_output(raw_out)
 
         if isinstance(parsed, dict) and parsed.get("streaming_component_ack"):
-            _is_final_debug("D streaming_component_ack -> not final")
-            return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
+            _is_final_debug("D streaming_component_ack -> not final; scan remaining tool results")
+            continue
 
         if isinstance(parsed, list) and len(parsed) > 0 and isinstance(parsed[0], dict) and "msg" in parsed[0]:
             _is_final_debug("D parsed=list of channel msg dicts -> final JSON string")

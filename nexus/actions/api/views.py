@@ -423,11 +423,6 @@ class SimulationManagerPipelineVersionView(APIView):
 
         if not contact_urn:
             return Response({"error": "contact_urn is required"}, status=400)
-        if (pipeline_version is None or pipeline_version == "") and not manager_agent_uuid:
-            return Response(
-                {"error": "pipeline_version or manager_agent_uuid is required"},
-                status=400,
-            )
 
         if not contact_urn.startswith("ext:"):
             contact_urn = f"ext:{contact_urn}"
