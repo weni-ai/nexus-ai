@@ -128,7 +128,10 @@ _QUICK_REPLIES_DESCRIPTION = (
     "DO NOT USE: If ANY option needs a description -> use create_list_message. "
     "If 4+ options -> use create_list_message.\n\n"
     "IMPORTANT: Do NOT include your response text in this tool. Write your full text "
-    "response normally — the buttons will be attached automatically."
+    "response normally - the buttons will be attached automatically.\n\n"
+    "ONE COMPONENT ONLY: Never call this tool together with another component tool in the same response.\n\n"
+    "header_text / footer: Leave null unless strictly needed. All greetings, explanations, and "
+    "instructions belong in your text output, not here."
 )
 
 _LIST_MESSAGE_DESCRIPTION = (
@@ -136,8 +139,11 @@ _LIST_MESSAGE_DESCRIPTION = (
     "USE WHEN: 4+ options (mandatory), OR 2-3 options with descriptions, OR options >20 chars.\n\n"
     "DO NOT USE: If 2-3 simple options without descriptions -> use create_quick_replies_message.\n\n"
     "IMPORTANT: Do NOT include your response text in this tool. Write your full text response "
-    "normally — the list will be attached automatically.\n\n"
-    "LIMITS: title <=24 chars, description <=72 chars, button_text <=20 chars"
+    "normally - the list will be attached automatically.\n\n"
+    "LIMITS: title <=24 chars, description <=72 chars, button_text <=20 chars\n\n"
+    "ONE COMPONENT ONLY: Never call this tool together with another component tool in the same response.\n\n"
+    "header_text / footer: Leave null unless strictly needed. All greetings, explanations, questions, "
+    "and instructions belong in your text output, not in header_text or footer."
 )
 
 _CTA_MESSAGE_DESCRIPTION = (
@@ -150,7 +156,10 @@ _CTA_MESSAGE_DESCRIPTION = (
     "IMPORTANT: Do NOT include the URL in your text output. Write your full text response naturally "
     "(describe the link, e.g. 'Access our portal:') and place the URL exclusively in this tool call. "
     "The button will be attached automatically below your text.\n\n"
-    "LIMITS: display_text <=20 chars"
+    "LIMITS: display_text <=20 chars\n\n"
+    "ONE COMPONENT ONLY: Never call this tool together with another component tool in the same response.\n\n"
+    "header_text / footer: Leave null unless strictly needed. All greetings, explanations, and "
+    "instructions belong in your text output, not in header_text or footer."
 )
 
 

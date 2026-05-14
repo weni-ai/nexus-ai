@@ -351,8 +351,6 @@ class OpenAIBackend(InlineAgentsBackend):
             message_uuid=message_conversation_log_uuid,
             skip_conversation_sqs=skip_conversation_sqs,
         )
-        if use_components_cached:
-            supervisor_hooks.save_components_trace = True
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
             preview=preview,
@@ -494,10 +492,11 @@ class OpenAIBackend(InlineAgentsBackend):
                     supervisor_hooks,
                     runner_hooks,
                     hooks_state,
-                    use_components,
+                    use_components_cached,
                     message_uuid=message_conversation_log_uuid,
                     grpc_session=grpc_session,
                     formatter_agent_configurations=formatter_agent_configurations,
+                    manager_pipeline_version=manager_pipeline_version,
                 )
             )
 

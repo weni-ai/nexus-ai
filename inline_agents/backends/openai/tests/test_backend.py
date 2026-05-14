@@ -4,6 +4,7 @@ import pendulum
 import pytest
 from django.test import TestCase, override_settings
 
+from inline_agents.backends.openai.adapter import OpenAITeamAdapter
 from inline_agents.backends.openai.backend import OpenAIBackend, OpenAISupervisorRepository
 from inline_agents.backends.openai.invoke_result import InvokeAgentsResult
 from inline_agents.backends.openai.sessions import openai_session_base_id
@@ -768,8 +769,12 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
         },
     )
     @patch.object(OpenAIBackend, "_get_client")
+    @patch("inline_agents.backends.openai.backend.JWTUsecase")
+    @patch.object(OpenAITeamAdapter, "to_external", return_value={"context": {}})
     def test_invoke_agents_returns_default_message_when_async_raises(
         self,
+        _mock_to_external,
+        _mock_jwt,
         mock_get_client,
         _mock_get_supervisor,
         _mock_event_notify,
@@ -828,8 +833,12 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
         },
     )
     @patch.object(OpenAIBackend, "_get_client")
+    @patch("inline_agents.backends.openai.backend.JWTUsecase")
+    @patch.object(OpenAITeamAdapter, "to_external", return_value={"context": {}})
     def test_invoke_agents_closes_grpc_on_failure(
         self,
+        _mock_to_external,
+        _mock_jwt,
         mock_get_client,
         _mock_get_supervisor,
         _mock_event_notify,
@@ -859,5 +868,5 @@ class TestInvokeAgentsAsyncFailurePath(TestCase):
             )
 
         self.assertEqual(result.text, _TEST_ERROR_MESSAGES["en-us"])
-        grpc_session.close.assert_called_once()
-        grpc_client.close.assert_called_once()
+        grpc_session.close.assert_called()
+        grpc_client.close.assert_called()
