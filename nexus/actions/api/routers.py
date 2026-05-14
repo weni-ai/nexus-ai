@@ -8,6 +8,7 @@ from .views import (
     SearchFlowView,
     SimulationEndSessionView,
     SimulationManagerModelView,
+    SimulationManagerPipelineVersionView,
     TemplateActionView,
 )
 
@@ -24,6 +25,10 @@ urlpatterns = [
     path("<project_uuid>/preview/", MessagePreviewView.as_view()),
     path("<project_uuid>/simulation/end-session/", SimulationEndSessionView.as_view()),
     path("<project_uuid>/simulation/manager-model/", SimulationManagerModelView.as_view()),
+    path(
+        "<project_uuid>/simulation/manager-pipeline-version/",
+        SimulationManagerPipelineVersionView.as_view(),
+    ),
     path("<project_uuid>/generate-action-name/", GenerateActionNameView.as_view()),
     path("<project_uuid>/", include(template_action_router.urls)),
 ]

@@ -1,3 +1,7 @@
+# Legacy
+# Used by the legacy ("2.6") manager + formatter LLM pipeline only. New manager
+# tools live in `components_tools_stream.py`. Do not import from here for the new path.
+
 import json
 import re
 import uuid
@@ -655,6 +659,11 @@ def get_component_tools(formatter_tools_descriptions: dict | None = None):
             if tool_description:
                 tools[index].description = tool_description
     return tools
+
+
+def all_component_tool_names(formatter_tools_descriptions: dict | None = None) -> frozenset[str]:
+    """Names of tools returned by `get_component_tools` (for stripping supervisor JSON when components off)."""
+    return frozenset(str(t.name) for t in get_component_tools(formatter_tools_descriptions) if getattr(t, "name", None))
 
 
 # Classes for combined components (simple_text + another component)
