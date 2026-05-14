@@ -377,6 +377,16 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
     )
 
     # Dispatch response
+    if skip_dispatch:
+        _invoke_is_final_debug("H workflow post_generation branch=skip_dispatch (no dispatch)")
+        if ctx.preview or ctx.preview_websocket:
+            ws_content = {"type": "broadcast", "message": response, "fonts": []}
+            send_preview_message_to_websocket(
+                project_uuid=message_obj.project_uuid,
+                user_email=ctx.user_email,
+                message_data={"type": "preview", "content": ws_content},
+            )
+        return True
     if ctx.preview or ctx.preview_websocket:
         _invoke_is_final_debug("H workflow post_generation branch=dispatch_preview")
         return dispatch_preview(
@@ -387,9 +397,6 @@ def _run_post_generation(ctx: WorkflowContext, response: str, skip_dispatch: boo
             ctx.agents_backend,
             ctx.flows_user_email,
         )
-    if skip_dispatch:
-        _invoke_is_final_debug("H workflow post_generation branch=skip_dispatch (no dispatch)")
-        return True
     _invoke_is_final_debug("H workflow post_generation branch=dispatch")
     return dispatch(
         llm_response=response,

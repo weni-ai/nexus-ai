@@ -698,12 +698,19 @@ def start_inline_agents(  # noqa: C901
             turn_id=turn_id,
         )
 
+        if skip_dispatch:
+            _invoke_is_final_debug("H start_inline_agents branch=skip_dispatch (no dispatch)")
+            if preview or preview_websocket:
+                ws_content = {"type": "broadcast", "message": response, "fonts": []}
+                send_preview_message_to_websocket(
+                    project_uuid=message_obj.project_uuid,
+                    user_email=user_email,
+                    message_data={"type": "preview", "content": ws_content},
+                )
+            return True
         if preview or preview_websocket:
             _invoke_is_final_debug("H start_inline_agents branch=dispatch_preview")
             return dispatch_preview(response, message_obj, broadcast, user_email, agents_backend, flows_user_email)
-        if skip_dispatch:
-            _invoke_is_final_debug("H start_inline_agents branch=skip_dispatch (no dispatch)")
-            return True
         _invoke_is_final_debug("H start_inline_agents branch=dispatch")
         return dispatch(
             llm_response=response,
