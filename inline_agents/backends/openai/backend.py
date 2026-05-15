@@ -351,6 +351,10 @@ class OpenAIBackend(InlineAgentsBackend):
             message_uuid=message_conversation_log_uuid,
             skip_conversation_sqs=skip_conversation_sqs,
         )
+
+        if use_components_cached:
+            supervisor_hooks.save_components_trace = True
+
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
             preview=preview,
