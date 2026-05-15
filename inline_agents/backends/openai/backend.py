@@ -258,10 +258,18 @@ class OpenAIBackend(InlineAgentsBackend):
             hooks_state=hooks_state,
             data_lake_event_adapter=data_lake_event_adapter,
             conversation=None,
-            use_components=use_components,
+            use_components=use_components_cached,
             message_uuid=message_conversation_log_uuid,
             skip_conversation_sqs=skip_conversation_sqs,
         )
+        # Persist inline traces for component projects on manager end. Without this,
+        # paths that skip the formatter (e.g. streaming tools + skip_outgoing_dispatch)
+        # never set save_components_trace, so save_trace_data never runs and
+        # agents/traces/ returns empty. Legacy paths that still run the formatter
+        # may save twice (manager raw output, then formatter); the second save
+        # carries the final formatted agent_response.
+        if use_components_cached:
+            supervisor_hooks.save_components_trace = True
         runner_hooks = RunnerHooks(
             supervisor_name="manager",
             preview=preview,
