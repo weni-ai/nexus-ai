@@ -194,7 +194,7 @@ class OfficialAgentsV1(APIView):
             "available-systems endpoint when wired in your deployment. "
             "Optional filters: `type`, `group`, `category`, `system`. "
             "`name` matches modal catalog title or `AgentGroup.name` (word-prefix rules). "
-            "`project_uuid` drives `assigned` / `active` on rows and inner `agents`."
+            "`project_uuid` drives `assigned` / `active` on each group row."
         ),
         parameters=[
             OpenApiParameter(

@@ -11,12 +11,29 @@ from nexus.inline_agents.api.official_agents_helpers import (
     get_all_mcps_for_group,
     get_all_systems_for_group,
 )
-from nexus.inline_agents.api.serializers import (
-    agent_modal_about_locale_map,
-    integrated_agent_mcp_payload,
-    integrated_agent_skills_payload,
-)
 from nexus.inline_agents.models import Agent, IntegratedAgent
+
+# Canonical catalog row (novo retorno) — same keys on every list surface.
+# Official v1: one row per ``AgentGroup`` (group view). My-agents / project official: one row per ``Agent``.
+CATALOG_ROW_KEYS: frozenset[str] = frozenset(
+    {
+        "group",
+        "name",
+        "slug",
+        "uuid",
+        "about",
+        "assigned",
+        "active",
+        "is_official",
+        "category",
+        "systems",
+        "mcps",
+        "conversation_example",
+    }
+)
+
+# Backward-compatible alias for tests/imports.
+CATALOG_AGENT_ROW_KEYS = CATALOG_ROW_KEYS
 
 
 def project_agent_assignment_map(
@@ -26,7 +43,7 @@ def project_agent_assignment_map(
 ) -> dict[int, tuple[bool, bool]]:
     """One DB round-trip: ``agent_id`` -> ``(assigned, active)`` for my-agents / official list rows.
 
-    Semantics match ``AgentSerializer`` / ``build_row_from_project_agent`` when no preloaded map is passed.
+    Semantics match ``build_row_from_project_agent`` when no preloaded map is passed.
     """
     rows = list(
         IntegratedAgent.objects.filter(project__uuid=project_uuid)
@@ -116,39 +133,47 @@ def _mcps_for_standalone_agent(agent: Agent) -> list[dict[str, Any]]:
     return _sort_mcps([_serialize_mcp(m) for m in mcps])
 
 
-def build_row_from_integrated(integrated: IntegratedAgent) -> dict[str, Any]:
-    """Team roster row: one ``IntegratedAgent`` as novo retorno.
+def _mcps_for_agent(agent: Agent, group_slug: str | None) -> list[dict[str, Any]]:
+    if group_slug:
+        return _flatten_group_mcps(group_slug)
+    return _mcps_for_standalone_agent(agent)
 
-    Keeps ``IntegratedAgentSerializer``-visible fields (``about``, ``mcp``, ``skills``, ``description``)
-    aligned with the legacy serializer contract.
-    """
-    agent = integrated.agent
+
+def _build_catalog_row(
+    agent: Agent,
+    *,
+    assigned: bool,
+    active: bool | None,
+    systems: list[str] | None = None,
+    mcps: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Single novo retorno row (group view on v1 official, agent view on my-agents / team)."""
     group = getattr(agent, "group", None)
     group_slug = group.slug if group else None
-    systems = [s.slug for s in agent.systems.all()]
-    if group_slug:
-        mcps = _flatten_group_mcps(group_slug)
-    else:
-        mcps = _mcps_for_standalone_agent(agent)
     return {
         "group": group_slug,
         "name": _catalog_display_name(agent),
         "slug": agent.slug,
-        "id": agent.slug,
         "uuid": str(agent.uuid),
-        "about": agent_modal_about_locale_map(agent),
-        "skills": integrated_agent_skills_payload(agent),
-        "description": agent.collaboration_instructions,
-        "mcp": integrated_agent_mcp_payload(integrated),
-        "assigned": True,
-        "active": integrated.is_active,
+        "about": _about_payload(agent),
+        "assigned": assigned,
+        "active": active,
         "is_official": agent.is_official,
         "category": _category_slug(agent),
-        "systems": systems,
-        "mcps": mcps,
+        "systems": systems if systems is not None else [s.slug for s in agent.systems.all()],
+        "mcps": mcps if mcps is not None else _mcps_for_agent(agent, group_slug),
         "conversation_example": _conversation_example_payload(agent),
-        "agents": None,
     }
+
+
+def build_row_from_integrated(integrated: IntegratedAgent) -> dict[str, Any]:
+    """Team roster row — same novo retorno as my-agents / official project list."""
+    agent = integrated.agent
+    project_uuid = str(integrated.project.uuid) if integrated.project_id else None
+    row = build_row_from_project_agent(agent, project_uuid, include_inactive_integrated=False)
+    row["assigned"] = True
+    row["active"] = integrated.is_active
+    return row
 
 
 def build_row_from_project_agent(
@@ -158,19 +183,11 @@ def build_row_from_project_agent(
     include_inactive_integrated: bool = False,
     assignment_by_agent_id: dict[int, tuple[bool, bool]] | None = None,
 ) -> dict[str, Any]:
-    """My-agents / project catalog row for an ``Agent`` owned by the project.
+    """Catalog row for one ``Agent`` (my-agents, project official list, team).
 
     Pass ``assignment_by_agent_id`` from ``project_agent_assignment_map`` when building many rows
     for the same project to avoid N+1 queries on ``IntegratedAgent``.
     """
-    group = getattr(agent, "group", None)
-    group_slug = group.slug if group else None
-    systems = [s.slug for s in agent.systems.all()]
-    if group_slug:
-        mcps = _flatten_group_mcps(group_slug)
-    else:
-        mcps = _mcps_for_standalone_agent(agent)
-
     assigned = False
     active: bool | None = None
     if project_uuid:
@@ -185,28 +202,12 @@ def build_row_from_project_agent(
                 assigned = qs_active.exists()
             integrated = qs_all.order_by("-is_active", "-id").first()
             active = integrated.is_active if integrated else False
-    else:
-        active = None
 
-    return {
-        "group": group_slug,
-        "name": _catalog_display_name(agent),
-        "slug": agent.slug,
-        "uuid": str(agent.uuid),
-        "about": _about_payload(agent),
-        "assigned": assigned,
-        "active": active,
-        "is_official": agent.is_official,
-        "category": _category_slug(agent),
-        "systems": systems,
-        "mcps": mcps,
-        "conversation_example": _conversation_example_payload(agent),
-        "agents": None,
-    }
+    return _build_catalog_row(agent, assigned=assigned, active=active)
 
 
 def _integrated_assignment_flags(project_uuid: str | None, agent_uuids: list) -> tuple[bool, bool | None]:
-    """``assigned`` = any active IA; ``active`` = any IA exists with states as in product rules."""
+    """``assigned`` = any active IA; ``active`` reflects integration state for the group."""
     if not project_uuid or not agent_uuids:
         return False, None
     qs = IntegratedAgent.objects.filter(project__uuid=project_uuid, agent__uuid__in=agent_uuids)
@@ -222,59 +223,24 @@ def _integrated_assignment_flags(project_uuid: str | None, agent_uuids: list) ->
     return assigned, active
 
 
-def _member_row(agent: Agent, project_uuid: str | None) -> dict[str, Any]:
-    assigned = False
-    active: bool | None = None
-    if project_uuid:
-        ia = (
-            IntegratedAgent.objects.filter(project__uuid=project_uuid, agent=agent)
-            .order_by("-is_active", "-id")
-            .first()
-        )
-        if ia:
-            active = ia.is_active
-            assigned = ia.is_active
-    systems = [s.slug for s in agent.systems.all()]
-    return {
-        "uuid": str(agent.uuid),
-        "name": agent.name,
-        "slug": agent.slug,
-        "systems": systems,
-        "assigned": assigned,
-        "active": active,
-    }
-
-
 def build_official_group_row(
     group_agents: list[Agent],
     group_slug: str,
     project_uuid: str | None,
 ) -> dict[str, Any]:
-    """One catalog row per official ``AgentGroup`` (novo retorno)."""
+    """One catalog row per official ``AgentGroup`` (same field set as per-agent rows, no nested ``agents``)."""
     group_agents = sorted(group_agents, key=lambda a: (a.name, str(a.uuid)))
     base = group_agents[0]
-    display_name = _catalog_display_name(base)
     systems_sorted = sorted(
         get_all_systems_for_group(group_slug),
         key=lambda s: (0 if "vtex" in str(s).lower() else 1, str(s).lower()),
     )
     agent_uuids = [a.uuid for a in group_agents]
     assigned, active = _integrated_assignment_flags(project_uuid, agent_uuids)
-    mcps = _flatten_group_mcps(group_slug)
-    inner_agents = [_member_row(a, project_uuid) for a in group_agents]
-
-    return {
-        "group": group_slug,
-        "name": display_name,
-        "slug": base.slug,
-        "uuid": str(base.uuid),
-        "about": _about_payload(base),
-        "assigned": assigned,
-        "active": active,
-        "is_official": base.is_official,
-        "category": _category_slug(base),
-        "systems": systems_sorted,
-        "mcps": mcps,
-        "conversation_example": _conversation_example_payload(base),
-        "agents": inner_agents,
-    }
+    return _build_catalog_row(
+        base,
+        assigned=assigned,
+        active=active,
+        systems=systems_sorted,
+        mcps=_flatten_group_mcps(group_slug),
+    )

@@ -239,18 +239,21 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = next(a for a in content["agents"] if a.get("uuid") == str(agent_grouped.uuid))
+        self.assertEqual(row["name"], "Catalog")
         about = row["about"]
         self.assertEqual(about["en"], "About EN")
         self.assertEqual(about["pt"], "About PT")
         self.assertEqual(about["es"], "About ES")
         self.assertNotIn("presentation", row)
+        self.assertNotIn("mcp", row)
+        self.assertNotIn("skills", row)
 
-    def test_get_team_about_null_without_group(self):
+    def test_get_team_about_matches_catalog_shape_without_group(self):
         agent = InlineAgent.objects.create(
             name="No Group Agent",
             slug="no_group_team_agent",
             instruction="Test",
-            collaboration_instructions="Test",
+            collaboration_instructions="Team about fallback",
             foundation_model="model:version",
             project=self.project,
         )
@@ -264,10 +267,12 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = content["agents"][0]
-        self.assertIsNone(row.get("about"))
+        self.assertEqual(row["about"]["en"], "Team about fallback")
+        self.assertIsNone(row["about"]["pt"])
+        self.assertIsNone(row["about"]["es"])
 
     def test_get_team_mcp_description_locale_map(self):
-        """Teams API returns MCP description as en/pt/es map (not a single collapsed string)."""
+        """Team rows expose MCPs in ``mcps`` with localized description (same as catalog APIs)."""
         system = AgentSystem.objects.create(name="Team MCP System", slug="team-mcp-sys-unique")
         mcp = MCP.objects.create(
             name="Team Catalog MCP",
@@ -305,8 +310,7 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
-        mcp_payload = row["mcp"]
-        self.assertEqual(mcp_payload["name"], "Team Catalog MCP")
+        mcp_payload = next(m for m in row["mcps"] if m["name"] == "Team Catalog MCP")
         desc = mcp_payload["description"]
         self.assertEqual(desc["en"], "English MCP")
         self.assertEqual(desc["pt"], "Portuguese MCP")
@@ -977,6 +981,83 @@ class OfficialAgentsV1I18nPresentationTestCase(TestCase):
         cfg_by_name = {c["name"]: c for c in mcp_payload["config"]}
         self.assertTrue(cfg_by_name["REQ_FIELD"]["is_required"])
         self.assertFalse(cfg_by_name["OPT_FIELD"]["is_required"])
+
+
+class CatalogRowKeyParityTestCase(TestCase):
+    """My-agents, team, project official, and v1 official group rows share the same catalog keys."""
+
+    def setUp(self):
+        from nexus.inline_agents.api.serializers.catalog import CATALOG_ROW_KEYS
+
+        self.expected_keys = CATALOG_ROW_KEYS
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.group = AgentGroup.objects.create(name="Parity Group", slug="parity-group-unique", shared_config={})
+        AgentGroupModal.objects.create(group=self.group, agent_name="Parity Display")
+        self.agent = InlineAgent.objects.create(
+            name="Parity Template",
+            slug="parity-agent-unique",
+            instruction="i",
+            collaboration_instructions="about en",
+            foundation_model="m:v",
+            project=self.project,
+            group=self.group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=self.agent)
+        IntegratedAgent.objects.create(agent=self.agent, project=self.project)
+
+    def _assert_catalog_row_keys(self, row: dict) -> None:
+        self.assertEqual(frozenset(row.keys()), self.expected_keys)
+        self.assertNotIn("agents", row)
+
+    def test_my_agents_team_and_official_project_share_row_keys(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        project_uuid = str(self.project.uuid)
+
+        my_resp = client.get(reverse("my-agents", kwargs={"project_uuid": project_uuid}))
+        my_resp.render()
+        my_row = next(r for r in json.loads(my_resp.content) if r["uuid"] == str(self.agent.uuid))
+
+        team_resp = client.get(reverse("teams", kwargs={"project_uuid": project_uuid}))
+        team_resp.render()
+        team_row = next(r for r in json.loads(team_resp.content)["agents"] if r["uuid"] == str(self.agent.uuid))
+
+        official_resp = client.get(reverse("official-agents", kwargs={"project_uuid": project_uuid}))
+        official_resp.render()
+        official_row = next(r for r in json.loads(official_resp.content) if r["uuid"] == str(self.agent.uuid))
+
+        for row in (my_row, team_row, official_row):
+            self._assert_catalog_row_keys(row)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_v1_official_group_row_matches_custom_agent_row_keys(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        owner = ProjectFactory()
+        self.agent.project = owner
+        self.agent.save(update_fields=["project"])
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        project_uuid = str(self.project.uuid)
+
+        my_resp = client.get(reverse("my-agents", kwargs={"project_uuid": project_uuid}))
+        my_resp.render()
+        my_row = next(r for r in json.loads(my_resp.content) if r["uuid"] == str(self.agent.uuid))
+
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"project_uuid": project_uuid, "group": self.group.slug},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(resp.status_code, 200)
+        group_row = next(r for r in _official_v1_grouped_rows(resp.json()) if r["group"] == self.group.slug)
+        self._assert_catalog_row_keys(group_row)
+        self.assertEqual(group_row["name"], "Parity Display")
+        self.assertEqual(frozenset(group_row.keys()), frozenset(my_row.keys()))
 
 
 class TestCommunicateInternallyPermission(TestCase):
