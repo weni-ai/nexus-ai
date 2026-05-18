@@ -676,6 +676,108 @@ class AssignAgentViewTestCase(TestCase):
         self.assertIn("json object", response.json().get("error", "").lower())
 
 
+class AssignAgentCredentialsTestCase(TestCase):
+    """PATCH assign uses the same credentials contract as POST /api/v1/official/agents."""
+
+    def setUp(self):
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.system = AgentSystem.objects.create(name="Cred System", slug="assign-cred-system-unique")
+        self.mcp = MCP.objects.create(
+            name="Assign Cred MCP",
+            slug="assign-cred-mcp-unique",
+            system=self.system,
+        )
+        MCPCredentialTemplate.objects.create(
+            mcp=self.mcp,
+            name="api_token",
+            label="API token",
+            placeholder="Token",
+            is_confidential=True,
+        )
+        self.agent = InlineAgent.objects.create(
+            name="Cred Assign Agent",
+            slug="assign-cred-agent-unique",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="model:version",
+            project=self.project,
+        )
+        self.agent.systems.add(self.system)
+        self.agent.mcps.add(self.mcp)
+        Version.objects.create(skills=[], display_skills=[], agent=self.agent)
+
+    def test_patch_assign_with_credentials_creates_project_credentials(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "assign-agents",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        body = {
+            "assigned": True,
+            "system": self.system.slug,
+            "mcp": self.mcp.name,
+            "credentials": [
+                {
+                    "name": "api_token",
+                    "label": "API token",
+                    "placeholder": "Token",
+                    "is_confidential": True,
+                    "value": "secret-value",
+                }
+            ],
+        }
+        response = client.patch(url, body, format="json")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["assigned"])
+        self.assertIn("api_token", data.get("created_credentials", []))
+
+        integrated = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
+        self.assertEqual(integrated.metadata.get("mcp"), self.mcp.name)
+        self.assertEqual(integrated.metadata.get("system"), self.system.slug)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_v1_official_list_group_includes_credentials_templates(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        owner = ProjectFactory()
+        group = AgentGroup.objects.create(name="Cred Group", slug="assign-cred-group-unique", shared_config={})
+        official_agent = InlineAgent.objects.create(
+            name="Official Cred Agent",
+            slug="official-cred-agent-unique",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="m",
+            project=owner,
+            group=group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        official_agent.systems.add(self.system)
+        official_agent.mcps.add(self.mcp)
+        group.mcps.add(self.mcp)
+        Version.objects.create(skills=[], display_skills=[], agent=official_agent)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"group": group.slug},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(resp.status_code, 200)
+        groups = resp.json().get("new", {}).get("agents", [])
+        row = next(g for g in groups if g.get("group") == group.slug)
+        creds = row.get("credentials") or []
+        self.assertEqual(len(creds), 1)
+        self.assertEqual(creds[0]["name"], "api_token")
+
+
 class GroupUnassignmentTestCase(TestCase):
     """Regression: group unassignment must delete all IntegratedAgent rows in the group (active and inactive)."""
 

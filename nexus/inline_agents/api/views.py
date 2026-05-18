@@ -12,10 +12,8 @@ from rest_framework.views import APIView
 from inline_agents.backends import BackendsRegistry
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import notify_async
-from nexus.inline_agents.api.official_agents_helpers import (
-    get_all_mcps_for_group,
-    get_mcps_for_agent_system,
-)
+from nexus.inline_agents.api.mixins import OfficialAgentAssignmentMixin
+from nexus.inline_agents.api.official_agents_helpers import get_all_mcps_for_group
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
     AgentSystemSerializer,
@@ -239,8 +237,7 @@ class PushAgents(APIView):
             return Response(
                 {
                     "error": (
-                        f"Permission Error: You are not authorized to edit an official "
-                        f"AI Agent {official_agent_key}"
+                        f"Permission Error: You are not authorized to edit an official AI Agent {official_agent_key}"
                     )
                 },
                 status=403,
@@ -494,7 +491,7 @@ def consolidate_grouped_agents(agents_queryset, project_uuid: str = None) -> dic
     return {"legacy": legacy_agents, "new": new_agents}
 
 
-class OfficialAgentsV1(APIView):
+class OfficialAgentsV1(OfficialAgentAssignmentMixin, APIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [CombinedExternalProjectPermission]
 
@@ -727,21 +724,6 @@ class OfficialAgentsV1(APIView):
             return Response({"error": error_msg}, status=400)
         return None
 
-    def _update_agent_metadata(self, integrated_agent, mcp, mcp_config, system):
-        """Updates metadata for the integrated agent."""
-        if not (mcp or mcp_config or system):
-            return
-
-        if not integrated_agent.metadata:
-            integrated_agent.metadata = {}
-        if mcp:
-            integrated_agent.metadata["mcp"] = mcp
-        if mcp_config:
-            _store_mcp_config_value_on_metadata(integrated_agent.metadata, mcp_config)
-        if system:
-            integrated_agent.metadata["system"] = system
-        integrated_agent.save(update_fields=["metadata"])
-
     def _handle_group_unassignment(self, project_uuid, group_slug):
         """Handles unassignment of all agents in a group (active and inactive)."""
         integrated_agents_in_group = IntegratedAgent.objects.filter(
@@ -823,160 +805,6 @@ class OfficialAgentsV1(APIView):
             return {"assigned": True, "assigned_created": created, "real_agent_uuid": real_agent_uuid}
         except ValueError as e:
             return Response({"error": str(e)}, status=404)
-
-    def _handle_credentials(
-        self,
-        agent: Agent,
-        project: Project,
-        credentials_data: list,
-        system: str | None,
-        mcp: str | None = None,
-    ) -> dict | Response:
-        system_normalized = system.lower() if system else None
-
-        invalid_system = self._validate_system(agent, system_normalized)
-        if invalid_system:
-            return invalid_system
-
-        # Validate MCP if provided
-        if mcp and system_normalized:
-            mcp_error = self._validate_mcp(agent, system_normalized, mcp)
-            if mcp_error:
-                return mcp_error
-
-        expected_templates = self._get_expected_templates(agent, system_normalized, mcp)
-        names_error = self._validate_credentials_names(credentials_data, expected_templates, system)
-        if names_error:
-            return names_error
-
-        fields_error = self._validate_credentials_fields(credentials_data)
-        if fields_error:
-            return fields_error
-
-        payload = self._format_credentials_payload(credentials_data)
-        created = CreateAgentUseCase().create_credentials(agent, project, payload)
-        return {"created_credentials": created}
-
-    def _validate_system(self, agent: Agent, system: str | None) -> Response | None:
-        available = list(AgentSystem.objects.filter(agents__uuid=agent.uuid).values_list("slug", flat=True).distinct())
-        if system:
-            system_lower = system.lower()
-            available_lower = [s.lower() for s in available]
-            if system_lower not in available_lower:
-                return Response({"error": "Invalid system"}, status=422)
-        return None
-
-    def _get_expected_templates(self, agent: Agent, system: str | None, mcp: str | None = None) -> list:
-        if not system or not mcp:
-            return []
-
-        # If agent has a group, search across all agents in the group
-        group_slug = agent.group.slug if getattr(agent, "group", None) else None
-
-        # Use existing helper to find MCPs
-        if group_slug:
-            all_group_mcps = get_all_mcps_for_group(group_slug)
-            mcps = []
-            for sys_key, sys_mcps in all_group_mcps.items():
-                if sys_key.lower() == system.lower():
-                    mcps = sys_mcps
-                    break
-        else:
-            mcps = get_mcps_for_agent_system(agent.slug, system)
-
-        # Find the specific MCP and return its credentials
-        if not mcps:
-            return []
-
-        target_mcp = next((m for m in mcps if m.get("name") == mcp), None)
-        if target_mcp:
-            return target_mcp.get("credentials", [])
-
-        return []
-
-    def _validate_mcp(self, agent: Agent, system: str, mcp: str) -> Response | None:
-        """Validate that the MCP exists for the given agent and system."""
-        system_lower = system.lower() if system else None
-
-        # If agent has a group, get MCPs from all agents in the group
-        group_slug = agent.group.slug if getattr(agent, "group", None) else None
-        if group_slug:
-            all_group_mcps = get_all_mcps_for_group(group_slug)
-            mcps = None
-            for sys_key in all_group_mcps.keys():
-                if sys_key.lower() == system_lower:
-                    mcps = all_group_mcps[sys_key]
-                    break
-            if mcps is None:
-                mcps = []
-        else:
-            mcps = get_mcps_for_agent_system(agent.slug, system_lower)
-
-        if not isinstance(mcps, list):
-            return Response({"error": "Invalid MCP configuration"}, status=422)
-
-        available_mcp_names = [m.get("name") for m in mcps if isinstance(m, dict) and m.get("name")]
-        if mcp not in available_mcp_names:
-            return Response({"error": "Invalid MCP", "available_mcps": available_mcp_names}, status=422)
-        return None
-
-    def _validate_credentials_names(
-        self, credentials_data: list, expected_templates: list, system: str | None
-    ) -> Response | None:
-        if not system:
-            return None
-        if system and not expected_templates:
-            return Response({"error": "Credentials template not found for system"}, status=422)
-        expected_names = {tpl.get("name") for tpl in expected_templates}
-        provided_names = {item.get("name") for item in credentials_data}
-        missing = sorted(list(expected_names - provided_names))
-        extra = sorted(list(provided_names - expected_names))
-        if missing:
-            return Response({"error": "Missing credentials", "missing": missing}, status=422)
-        if extra:
-            return Response({"error": "Unexpected credentials", "extra": extra}, status=422)
-        return None
-
-    def _validate_credentials_fields(self, credentials_data: list) -> Response | None:
-        for item in credentials_data:
-            name = item.get("name")
-            label = item.get("label")
-            placeholder = item.get("placeholder")
-            is_confidential = item.get("is_confidential", True)
-            value = item.get("value")
-
-            if not isinstance(name, str) or not name:
-                return Response({"error": "Invalid credential name"}, status=422)
-            if not isinstance(label, str) or not label:
-                return Response({"error": f"Invalid label for {name}"}, status=422)
-            if placeholder is not None and not isinstance(placeholder, str):
-                return Response({"error": f"Invalid placeholder for {name}"}, status=422)
-            if not isinstance(is_confidential, bool):
-                return Response({"error": f"Invalid is_confidential for {name}"}, status=422)
-            if value is not None and not isinstance(value, str):
-                return Response({"error": f"Invalid value type for {name}"}, status=422)
-        return None
-
-    def _format_credentials_payload(self, credentials_data: list) -> dict:
-        payload = {}
-        for cred_item in credentials_data:
-            payload.update(
-                {
-                    cred_item.get("name"): {
-                        "label": cred_item.get("label"),
-                        "placeholder": cred_item.get("placeholder"),
-                        "is_confidential": cred_item.get("is_confidential", True),
-                        "value": cred_item.get("value"),
-                    }
-                }
-            )
-        return payload
-
-    def _get_project_or_response(self, project_uuid):
-        try:
-            return Project.objects.get(uuid=project_uuid)
-        except Project.DoesNotExist:
-            return Response({"error": "Project not found"}, status=404)
 
     def _resolve_agent_fallback(self, group_slug, system, mcp, agent_uuid=None):
         if agent_uuid:
@@ -1092,52 +920,87 @@ class OfficialAgentDetailV1(APIView):
         return Response(serializer.data)
 
 
-class ActiveAgentsView(APIView):
+class ActiveAgentsView(OfficialAgentAssignmentMixin, APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="project_assign_agent",
+        summary="Assign agent to project and/or configure credentials",
+        description=(
+            "Same assign and credentials contract as ``POST /api/v1/official/agents``. "
+            "Body may include ``assigned``, ``credentials``, ``system``, ``mcp``, and ``mcp_config``. "
+            "Agent is identified by the URL ``agent_uuid``."
+        ),
+        request=OfficialAgentsAssignRequestSerializer,
+        responses={
+            200: OpenApiResponse(description="Operation performed", response=OfficialAgentsAssignResponseSerializer),
+            400: OpenApiResponse(description="Bad request"),
+            404: OpenApiResponse(description="Not found"),
+            422: OpenApiResponse(description="Unprocessable Entity"),
+        },
+        tags=["Agents"],
+    )
     def patch(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         agent_uuid = kwargs.get("agent_uuid")
-        assign: bool = request.data.get("assigned")
+        assigned = request.data.get("assigned")
+        credentials_data = request.data.get("credentials", [])
+        system = request.data.get("system")
+        mcp = request.data.get("mcp")
         mcp_config = request.data.get("mcp_config") if "mcp_config" in request.data else None
         if mcp_config is not None and not isinstance(mcp_config, dict):
             return Response({"error": "mcp_config must be a JSON object"}, status=400)
 
+        project = self._get_project_or_response(project_uuid)
+        if isinstance(project, Response):
+            return project
+
+        try:
+            agent = Agent.objects.get(uuid=agent_uuid)
+        except Agent.DoesNotExist:
+            return Response({"error": "Agent not found"}, status=404)
+
+        result: dict = {}
         usecase = AssignAgentsUsecase()
 
         try:
-            if assign:
-                _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid, infer_mcp_metadata=True)
-
-                if mcp_config is not None:
-                    _replace_integrated_agent_mcp_config(integrated_agent, mcp_config)
-                    notify_async(
-                        event="cache_invalidation:project",
-                        project=integrated_agent.project,
+            if assigned is not None:
+                if assigned:
+                    explicit_metadata = bool(mcp or system or mcp_config)
+                    created, integrated_agent = usecase.assign_agent(
+                        agent_uuid,
+                        project_uuid,
+                        infer_mcp_metadata=not explicit_metadata,
                     )
+                    if explicit_metadata:
+                        self._update_agent_metadata(integrated_agent, mcp, mcp_config, system)
+                    result["assigned"] = True
+                    result["active"] = integrated_agent.is_active
+                    if created:
+                        result["assigned_created"] = True
+                else:
+                    usecase.unassign_agent(agent_uuid, project_uuid)
+                    result["assigned"] = False
 
-                # Fire cache invalidation event for team update (agent assigned) (async observer)
                 notify_async(
                     event="cache_invalidation:team",
                     project_uuid=project_uuid,
                 )
 
-                return Response(
-                    {"assigned": True, "active": integrated_agent.is_active},
-                    status=200,
+            if credentials_data:
+                creds_result = self._handle_credentials(agent, project, credentials_data, system, mcp)
+                if isinstance(creds_result, Response):
+                    return creds_result
+                result.update(creds_result)
+                notify_async(
+                    event="cache_invalidation:project",
+                    project=project,
                 )
 
-            usecase.unassign_agent(agent_uuid, project_uuid)
-
-            # Fire cache invalidation event for team update (agent unassigned) (async observer)
-            notify_async(
-                event="cache_invalidation:team",
-                project_uuid=project_uuid,
-            )
-
-            return Response({"assigned": False}, status=200)
         except ValueError as e:
             return Response({"error": str(e)}, status=404)
+
+        return Response(result or {"message": "No changes applied"}, status=200)
 
 
 class AgentsView(APIView):
