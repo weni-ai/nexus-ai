@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 
 import pendulum
 from django.conf import settings
@@ -649,12 +650,18 @@ class OfficialAgentsV1(OfficialAgentAssignmentMixin, APIView):
         if isinstance(project, Response):
             return project
 
+        body_serializer = OfficialAgentsAssignRequestSerializer(data=request.data)
+        if not body_serializer.is_valid():
+            return Response(body_serializer.errors, status=400)
+        validated = body_serializer.validated_data
+
         result = {}
         agent = None
-        assigned = request.data.get("assigned")
-        credentials_data = request.data.get("credentials", [])
-        system = request.data.get("system")
-        mcp = request.data.get("mcp")
+        assigned = validated.get("assigned")
+        credentials_data = validated.get("credentials") or []
+        system = validated.get("system")
+        mcp = validated.get("mcp")
+        mcp_config = validated.get("mcp_config") or {}
 
         if assigned is not None:
             assignment_result = self._handle_assignment(
@@ -662,7 +669,7 @@ class OfficialAgentsV1(OfficialAgentAssignmentMixin, APIView):
                 assigned,
                 group_slug,
                 mcp,
-                request.data.get("mcp_config", {}),
+                mcp_config,
                 system,
                 agent_uuid,
             )
@@ -943,21 +950,30 @@ class ActiveAgentsView(OfficialAgentAssignmentMixin, APIView):
     def patch(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         agent_uuid = kwargs.get("agent_uuid")
-        assigned = request.data.get("assigned")
-        credentials_data = request.data.get("credentials", [])
-        system = request.data.get("system")
-        mcp = request.data.get("mcp")
-        mcp_config = request.data.get("mcp_config") if "mcp_config" in request.data else None
-        if mcp_config is not None and not isinstance(mcp_config, dict):
-            return Response({"error": "mcp_config must be a JSON object"}, status=400)
+
+        body_serializer = OfficialAgentsAssignRequestSerializer(data=request.data)
+        if not body_serializer.is_valid():
+            return Response(body_serializer.errors, status=400)
+        validated = body_serializer.validated_data
+
+        assigned = validated.get("assigned")
+        credentials_data = validated.get("credentials") or []
+        system = validated.get("system")
+        mcp = validated.get("mcp")
+        mcp_config = validated.get("mcp_config") or {}
 
         project = self._get_project_or_response(project_uuid)
         if isinstance(project, Response):
             return project
 
         try:
+            uuid.UUID(str(agent_uuid).strip())
+        except (ValueError, TypeError, AttributeError):
+            return Response({"error": "Invalid agent_uuid"}, status=400)
+
+        try:
             agent = Agent.objects.get(uuid=agent_uuid)
-        except Agent.DoesNotExist:
+        except (Agent.DoesNotExist, ValueError):
             return Response({"error": "Agent not found"}, status=404)
 
         result: dict = {}

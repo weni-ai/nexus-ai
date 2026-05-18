@@ -707,6 +707,53 @@ class AssignAgentCredentialsTestCase(TestCase):
         self.agent.mcps.add(self.mcp)
         Version.objects.create(skills=[], display_skills=[], agent=self.agent)
 
+    def test_patch_invalid_project_uuid_returns_400(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "assign-agents",
+            kwargs={
+                "project_uuid": "not-a-uuid",
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {"assigned": True}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("project_uuid", response.json().get("error", "").lower())
+
+    def test_patch_assigned_string_false_unassigns(self):
+        IntegratedAgent.objects.create(agent=self.agent, project=self.project, is_active=True)
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "assign-agents",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(url, {"assigned": "false"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["assigned"])
+        self.assertFalse(IntegratedAgent.objects.filter(agent=self.agent, project=self.project).exists())
+
+    def test_patch_credentials_not_a_list_returns_400(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        url = reverse(
+            "assign-agents",
+            kwargs={
+                "project_uuid": str(self.project.uuid),
+                "agent_uuid": str(self.agent.uuid),
+            },
+        )
+        response = client.patch(
+            url,
+            {"assigned": True, "credentials": "not-a-list", "system": self.system.slug, "mcp": self.mcp.name},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
     def test_patch_assign_with_credentials_creates_project_credentials(self):
         client = APIClient()
         client.force_authenticate(user=self.user)

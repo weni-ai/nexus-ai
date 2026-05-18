@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from rest_framework.response import Response
 
 from nexus.inline_agents.api.official_agents_helpers import get_all_mcps_for_group, get_mcps_for_agent_system
@@ -34,6 +36,10 @@ class OfficialAgentAssignmentMixin:
         system: str | None,
         mcp: str | None = None,
     ) -> dict | Response:
+        shape_error = self._validate_credentials_list_shape(credentials_data)
+        if shape_error:
+            return shape_error
+
         system_normalized = system.lower() if system else None
 
         invalid_system = self._validate_system(agent, system_normalized)
@@ -130,7 +136,18 @@ class OfficialAgentAssignmentMixin:
             return Response({"error": "Unexpected credentials", "extra": extra}, status=422)
         return None
 
+    def _validate_credentials_list_shape(self, credentials_data) -> Response | None:
+        if not isinstance(credentials_data, list):
+            return Response({"error": "credentials must be a list"}, status=422)
+        for index, item in enumerate(credentials_data):
+            if not isinstance(item, dict):
+                return Response({"error": f"credentials[{index}] must be an object"}, status=422)
+        return None
+
     def _validate_credentials_fields(self, credentials_data: list) -> Response | None:
+        shape_error = self._validate_credentials_list_shape(credentials_data)
+        if shape_error:
+            return shape_error
         for item in credentials_data:
             name = item.get("name")
             label = item.get("label")
@@ -166,6 +183,12 @@ class OfficialAgentAssignmentMixin:
         return payload
 
     def _get_project_or_response(self, project_uuid):
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=400)
+        try:
+            uuid.UUID(str(project_uuid).strip())
+        except (ValueError, TypeError, AttributeError):
+            return Response({"error": "Invalid project_uuid"}, status=400)
         try:
             return Project.objects.get(uuid=project_uuid)
         except Project.DoesNotExist:
