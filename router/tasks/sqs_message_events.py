@@ -15,12 +15,15 @@ EVENT_TYPE_MESSAGE_RECEIVED = "message.received"
 EVENT_TYPE_MESSAGE_SENT = "message.sent"
 
 
-def sqs_response_text_from_agent_output(response: str, *, skip_dispatch: bool) -> str:
+def sqs_response_text_from_agent_output(  # noqa: C901
+    response: str, *, skip_dispatch: bool
+) -> str:
     """
     Text used in message.sent (via notify_async → observers) for SQS.
 
     When skip_dispatch is True, agent output is often JSON with is_final_output and messages_sent;
-    we join messages_sent[].text with newlines for the conversation microservice. Otherwise
+    we join messages_sent[].text with newlines for the conversation microservice. JSON arrays of
+    merge-style channel messages (each item may contain msg.text) are handled the same way. Otherwise
     return response unchanged.
     """
     if not skip_dispatch or not (response or "").strip():
@@ -29,20 +32,33 @@ def sqs_response_text_from_agent_output(response: str, *, skip_dispatch: bool) -
         parsed = json.loads(response)
     except (json.JSONDecodeError, TypeError):
         return response
+    if isinstance(parsed, list):
+        text_lines: list[str] = []
+        for channel_msg in parsed:
+            if not isinstance(channel_msg, dict):
+                continue
+            msg_payload = channel_msg.get("msg")
+            if isinstance(msg_payload, dict):
+                line = str(msg_payload.get("text", "")).strip()
+                if line:
+                    text_lines.append(line)
+        if text_lines:
+            return "\n".join(text_lines)
+        return response
     if not isinstance(parsed, dict):
         return response
     messages_sent = parsed.get("messages_sent")
     if not isinstance(messages_sent, list):
         return response
-    parts: list[str] = []
-    for item in messages_sent:
-        if isinstance(item, dict):
-            t = str(item.get("text", "")).strip()
-            if t:
-                parts.append(t)
-    if not parts:
+    text_lines: list[str] = []
+    for sent_item in messages_sent:
+        if isinstance(sent_item, dict):
+            line = str(sent_item.get("text", "")).strip()
+            if line:
+                text_lines.append(line)
+    if not text_lines:
         return response
-    return "\n".join(parts)
+    return "\n".join(text_lines)
 
 
 @dataclass(frozen=True)

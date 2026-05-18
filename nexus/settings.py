@@ -656,6 +656,9 @@ if not (128 <= AWS_LAMBDA_MEMORY_SIZE <= 10240):
         "AWS_LAMBDA_MEMORY_SIZE must be between 128 and 10240 (inclusive); " f"got {AWS_LAMBDA_MEMORY_SIZE}"
     )
 
+# Lambda log group configuration
+AWS_LAMBDA_LOG_GROUP = env.str("AWS_LAMBDA_LOG_GROUP", "")
+
 # Elastic APM Lambda configuration
 ELASTIC_APM_LAMBDA_ENABLED = env.bool("ELASTIC_APM_LAMBDA_ENABLED", False)
 ELASTIC_APM_LAMBDA_APM_SERVER = env.str("ELASTIC_APM_LAMBDA_APM_SERVER", "")
@@ -674,6 +677,11 @@ PROJECTS_WITH_SPECIAL_SESSION_ID = env.list("PROJECTS_WITH_SPECIAL_SESSION_ID", 
 PROJECTS_WITH_LARGE_DATASOURCE = env.list("PROJECTS_WITH_LARGE_DATASOURCE", [])
 
 WORKFLOW_ARCHITECTURE_PROJECTS = env.list("WORKFLOW_ARCHITECTURE_PROJECTS", default=[])
+
+# ManagerAgent UUIDs that must run the legacy ("2.6") inline-agent formatter pipeline.
+# Source of truth for the legacy/new code path; admins cannot change this from Django admin.
+# Configure via the LEGACY_MANAGER_AGENT_UUIDS env var (comma-separated UUIDs) per environment.
+LEGACY_MANAGER_AGENT_UUIDS = env.list("LEGACY_MANAGER_AGENT_UUIDS", default=[])
 
 
 def get_datasource_id(project_uuid: str | None) -> str:

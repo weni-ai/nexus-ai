@@ -48,3 +48,17 @@ class TestSqsResponseTextFromAgentOutput(unittest.TestCase):
             sqs_response_text_from_agent_output(raw, skip_dispatch=True),
             raw,
         )
+
+    def test_skip_dispatch_true_merge_style_list_of_channel_msgs(self):
+        raw = json.dumps([{"msg": {"text": " Line one "}}, {"msg": {"text": "Two"}}], ensure_ascii=False)
+        self.assertEqual(
+            sqs_response_text_from_agent_output(raw, skip_dispatch=True),
+            "Line one\nTwo",
+        )
+
+    def test_skip_dispatch_true_merge_list_non_msg_entries_skipped(self):
+        raw = json.dumps([{"msg": {"text": "a"}}, {"other": 1}], ensure_ascii=False)
+        self.assertEqual(
+            sqs_response_text_from_agent_output(raw, skip_dispatch=True),
+            "a",
+        )
