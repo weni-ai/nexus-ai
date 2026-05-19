@@ -17,12 +17,16 @@ from nexus.inline_agents.models import (
     AgentSystem,
     IntegratedAgent,
     MCPConfigOption,
-    MCPCredentialTemplate,
     Version,
 )
 from nexus.inline_agents.models import Agent as InlineAgent
 from nexus.usecases.projects.tests.project_factory import ProjectFactory
 from nexus.usecases.users.tests.user_factory import UserFactory
+
+
+def _official_v1_grouped_rows(payload):
+    """Official v1 list: paginated ``results`` (one row per agent group)."""
+    return payload.get("results", [])
 
 
 class AgentViewsetSetTestCase(TestCase):
@@ -116,87 +120,6 @@ class AgentViewsetSetTestCase(TestCase):
         content = json.loads(response.content)
         row = next(c for c in content if c.get("uuid") == str(agent_grouped.uuid))
         self.assertEqual(row["name"], "Product Concierge")
-
-    def test_get_my_agents_includes_mcp_definition(self):
-        system = AgentSystem.objects.create(name="Test MCP System", slug="test-mcp-system-my-agents-xyz")
-        mcp = MCP.objects.create(name="Test MCP", slug="test-mcp-my-agents-xyz", system=system)
-        MCPConfigOption.objects.create(
-            mcp=mcp,
-            name="REGION_TOGGLE",
-            label="Regionalization",
-            type=MCPConfigOption.SWITCH,
-            options=[],
-            is_required=False,
-            default_value=True,
-        )
-        MCPCredentialTemplate.objects.create(
-            mcp=mcp,
-            name="SYNERISE_API_TOKEN",
-            label="Synerise API Key",
-            placeholder="your-api-key-here",
-            is_confidential=True,
-        )
-        agent_with_mcp = InlineAgent.objects.create(
-            name="Concierge With MCP",
-            slug="concierge-mcp-my-agents-xyz",
-            instruction="x",
-            collaboration_instructions="y",
-            foundation_model="model:version",
-            project=self.project,
-        )
-        agent_with_mcp.mcps.add(mcp)
-
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        url = reverse("my-agents", kwargs={"project_uuid": str(self.project.uuid)})
-        response = client.get(url)
-        response.render()
-        self.assertEqual(response.status_code, 200)
-        content = json.loads(response.content)
-        row = next(c for c in content if c.get("uuid") == str(agent_with_mcp.uuid))
-        self.assertIn("mcp_definition", row)
-        self.assertEqual(len(row["mcp_definition"]["config"]), 1)
-        self.assertEqual(row["mcp_definition"]["config"][0]["name"], "REGION_TOGGLE")
-        self.assertEqual(len(row["mcp_definition"]["credentials"]), 1)
-        self.assertEqual(row["mcp_definition"]["credentials"][0]["name"], "SYNERISE_API_TOKEN")
-        cred_names = {c["name"] for c in row["credentials"]}
-        self.assertNotIn("SYNERISE_API_TOKEN", cred_names)
-
-    def make_agents_official(self):
-        self.agent.is_official = True
-        self.agent.source_type = InlineAgent.PLATFORM
-        self.agent.save()
-        self.agent2.is_official = True
-        self.agent2.source_type = InlineAgent.PLATFORM
-        self.agent2.save()
-
-    def test_get_official_agents(self):
-        self.make_agents_official()
-
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-
-        url = reverse("official-agents", kwargs={"project_uuid": str(self.project.uuid)})
-        response = client.get(url)
-        response.render()
-        content = json.loads(response.content)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(content), 2)
-
-    def test_get_official_agents_with_search(self):
-        self.make_agents_official()
-        query_params = {"search": "information"}
-        url = reverse("official-agents", kwargs={"project_uuid": str(self.project.uuid)})
-        url = f"{url}?{urlencode(query_params)}"
-
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        response = client.get(url)
-        response.render()
-        content = json.loads(response.content)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(content), 1)
-        self.assertEqual(content[0].get("name"), "Information Analyst")
 
 
 class TeamViewsetSetTestCase(TestCase):
@@ -316,18 +239,21 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = next(a for a in content["agents"] if a.get("uuid") == str(agent_grouped.uuid))
+        self.assertEqual(row["name"], "Catalog")
         about = row["about"]
         self.assertEqual(about["en"], "About EN")
         self.assertEqual(about["pt"], "About PT")
         self.assertEqual(about["es"], "About ES")
         self.assertNotIn("presentation", row)
+        self.assertNotIn("mcp", row)
+        self.assertNotIn("skills", row)
 
-    def test_get_team_about_null_without_group(self):
+    def test_get_team_about_matches_catalog_shape_without_group(self):
         agent = InlineAgent.objects.create(
             name="No Group Agent",
             slug="no_group_team_agent",
             instruction="Test",
-            collaboration_instructions="Test",
+            collaboration_instructions="Team about fallback",
             foundation_model="model:version",
             project=self.project,
         )
@@ -341,10 +267,12 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = content["agents"][0]
-        self.assertIsNone(row.get("about"))
+        self.assertEqual(row["about"]["en"], "Team about fallback")
+        self.assertIsNone(row["about"]["pt"])
+        self.assertIsNone(row["about"]["es"])
 
     def test_get_team_mcp_description_locale_map(self):
-        """Teams API returns MCP description as en/pt/es map (not a single collapsed string)."""
+        """Team rows expose MCPs in ``mcps`` with localized description (same as catalog APIs)."""
         system = AgentSystem.objects.create(name="Team MCP System", slug="team-mcp-sys-unique")
         mcp = MCP.objects.create(
             name="Team Catalog MCP",
@@ -382,8 +310,7 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
-        mcp_payload = row["mcp_definition"]
-        self.assertEqual(mcp_payload["name"], "Team Catalog MCP")
+        mcp_payload = next(m for m in row["mcps"] if m["name"] == "Team Catalog MCP")
         desc = mcp_payload["description"]
         self.assertEqual(desc["en"], "English MCP")
         self.assertEqual(desc["pt"], "Portuguese MCP")
@@ -612,69 +539,6 @@ class AssignAgentViewTestCase(TestCase):
         self.assertIsNone(integrated_agent.metadata.get("mcp"))
         self.assertIsNone(integrated_agent.metadata.get("system"))
 
-    def test_assign_accepts_mcp_config_and_persists_to_integrated_agent_metadata(self):
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        url = reverse(
-            "assign-agents",
-            kwargs={
-                "project_uuid": str(self.project.uuid),
-                "agent_uuid": str(self.agent.uuid),
-            },
-        )
-        response = client.patch(
-            url,
-            {"assigned": True, "mcp_config": {"REGION_TOGGLE": True, "OTHER": "x"}},
-            format="json",
-        )
-        self.assertEqual(response.status_code, 200)
-
-        integrated_agent = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
-        self.assertEqual(
-            integrated_agent.metadata.get("mcp_config"),
-            {"REGION_TOGGLE": True, "OTHER": "x"},
-        )
-
-    def test_assign_mcp_config_replaces_existing_mcp_config(self):
-        IntegratedAgent.objects.create(
-            agent=self.agent,
-            project=self.project,
-            metadata={"mcp_config": {"KEEP": 1}},
-        )
-
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        url = reverse(
-            "assign-agents",
-            kwargs={
-                "project_uuid": str(self.project.uuid),
-                "agent_uuid": str(self.agent.uuid),
-            },
-        )
-        response = client.patch(
-            url,
-            {"assigned": True, "mcp_config": {"NEW": 2}},
-            format="json",
-        )
-        self.assertEqual(response.status_code, 200)
-
-        integrated_agent = IntegratedAgent.objects.get(agent=self.agent, project=self.project)
-        self.assertEqual(integrated_agent.metadata.get("mcp_config"), {"NEW": 2})
-
-    def test_assign_rejects_non_object_mcp_config(self):
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        url = reverse(
-            "assign-agents",
-            kwargs={
-                "project_uuid": str(self.project.uuid),
-                "agent_uuid": str(self.agent.uuid),
-            },
-        )
-        response = client.patch(url, {"assigned": True, "mcp_config": ["invalid"]}, format="json")
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("json object", response.json().get("error", "").lower())
-
 
 class GroupUnassignmentTestCase(TestCase):
     """Regression: group unassignment must delete all IntegratedAgent rows in the group (active and inactive)."""
@@ -731,8 +595,42 @@ class GroupUnassignmentTestCase(TestCase):
         self.assertEqual(IntegratedAgent.objects.filter(project=target_project).count(), 0)
 
 
+class OfficialAgentsV1PaginationTestCase(TestCase):
+    """Pagination validation for GET /api/v1/official/agents."""
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_page_size_over_max_returns_400(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        client = APIClient()
+        client.force_authenticate(user=user)
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid), "page": "1", "page_size": "21"},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_page_below_one_returns_400(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        target_project = ProjectFactory()
+        user = target_project.created_by
+        client = APIClient()
+        client.force_authenticate(user=user)
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"project_uuid": str(target_project.uuid), "page": "0", "page_size": "10"},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(resp.status_code, 400)
+
+
 class OfficialAgentsV1NameFilterTestCase(TestCase):
-    """GET /api/v1/official/agents `name` matches group title for grouped agents and Agent.name for legacy."""
+    """GET /api/v1/official/agents `name` matches modal catalog title or AgentGroup.name."""
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_grouped_matches_group_name_not_template_agent_name(self, mock_has_permission):
@@ -768,7 +666,7 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(ok.status_code, 200)
-        groups = [a["group"] for a in ok.json()["new"]["agents"]]
+        groups = [a["group"] for a in _official_v1_grouped_rows(ok.json())]
         self.assertIn(group.slug, groups)
 
         no_match = client.get(
@@ -777,7 +675,7 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(no_match.status_code, 200)
-        self.assertEqual(no_match.json()["new"]["agents"], [])
+        self.assertEqual(_official_v1_grouped_rows(no_match.json()), [])
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_grouped_matches_modal_agent_name_when_set(self, mock_has_permission):
@@ -813,7 +711,7 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(resp.status_code, 200)
-        groups = [a["group"] for a in resp.json()["new"]["agents"]]
+        groups = [a["group"] for a in _official_v1_grouped_rows(resp.json())]
         self.assertIn(group.slug, groups)
 
         miss_internal = client.get(
@@ -822,7 +720,7 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(miss_internal.status_code, 200)
-        self.assertNotIn(group.slug, [a["group"] for a in miss_internal.json()["new"]["agents"]])
+        self.assertNotIn(group.slug, [a["group"] for a in _official_v1_grouped_rows(miss_internal.json())])
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_grouped_modal_title_does_not_fall_back_to_group_name(self, mock_has_permission):
@@ -858,7 +756,7 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(no_order.status_code, 200)
-        self.assertNotIn(group.slug, [a["group"] for a in no_order.json()["new"]["agents"]])
+        self.assertNotIn(group.slug, [a["group"] for a in _official_v1_grouped_rows(no_order.json())])
 
         yes_pay = client.get(
             list_url,
@@ -866,49 +764,7 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(yes_pay.status_code, 200)
-        self.assertIn(group.slug, [a["group"] for a in yes_pay.json()["new"]["agents"]])
-
-    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
-    def test_legacy_without_group_matches_agent_name(self, mock_has_permission):
-        mock_has_permission.return_value = True
-
-        target_project = ProjectFactory()
-        user = target_project.created_by
-        owner_project = ProjectFactory()
-
-        legacy = InlineAgent.objects.create(
-            name="Standalone Recorder",
-            slug="official-name-filter-legacy-unique",
-            instruction="i",
-            collaboration_instructions="c",
-            foundation_model="m",
-            project=owner_project,
-            group=None,
-            is_official=True,
-            source_type=InlineAgent.PLATFORM,
-        )
-        Version.objects.create(skills=[], display_skills=[], agent=legacy)
-
-        client = APIClient()
-        client.force_authenticate(user=user)
-        list_url = reverse("v1-official-agents")
-
-        hit = client.get(
-            list_url,
-            {"project_uuid": str(target_project.uuid), "name": "standalone"},
-            HTTP_AUTHORIZATION="Bearer test-token",
-        )
-        self.assertEqual(hit.status_code, 200)
-        legacy_uuids = [a["uuid"] for a in hit.json()["legacy"]]
-        self.assertIn(str(legacy.uuid), legacy_uuids)
-
-        miss = client.get(
-            list_url,
-            {"project_uuid": str(target_project.uuid), "name": "no_such_substring_xyz"},
-            HTTP_AUTHORIZATION="Bearer test-token",
-        )
-        self.assertEqual(miss.status_code, 200)
-        self.assertEqual(miss.json()["legacy"], [])
+        self.assertIn(group.slug, [a["group"] for a in _official_v1_grouped_rows(yes_pay.json())])
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_name_prefix_does_not_match_mid_word_substring(self, mock_has_permission):
@@ -943,7 +799,7 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertNotIn(group.slug, [a["group"] for a in resp.json()["new"]["agents"]])
+        self.assertNotIn(group.slug, [a["group"] for a in _official_v1_grouped_rows(resp.json())])
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_name_prefix_matches_start_of_second_word(self, mock_has_permission):
@@ -953,18 +809,21 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
         user = target_project.created_by
         owner_project = ProjectFactory()
 
-        legacy = InlineAgent.objects.create(
-            name="VTEX Order Helper",
-            slug="official-name-prefix-second-word",
+        group = AgentGroup.objects.create(
+            name="VTEX Order Helper", slug="official-name-prefix-second-word-group", shared_config={}
+        )
+        agent = InlineAgent.objects.create(
+            name="Template Agent",
+            slug="official-name-prefix-second-word-agent",
             instruction="i",
             collaboration_instructions="c",
             foundation_model="m",
             project=owner_project,
-            group=None,
+            group=group,
             is_official=True,
             source_type=InlineAgent.PLATFORM,
         )
-        Version.objects.create(skills=[], display_skills=[], agent=legacy)
+        Version.objects.create(skills=[], display_skills=[], agent=agent)
 
         client = APIClient()
         client.force_authenticate(user=user)
@@ -975,7 +834,7 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(str(legacy.uuid), [a["uuid"] for a in resp.json()["legacy"]])
+        self.assertIn(group.slug, [a["group"] for a in _official_v1_grouped_rows(resp.json())])
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_name_prefix_backend_not_feedback_recorder(self, mock_has_permission):
@@ -1001,18 +860,21 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
         )
         Version.objects.create(skills=[], display_skills=[], agent=fb_agent)
 
-        be_legacy = InlineAgent.objects.create(
-            name="Backend Agent",
-            slug="official-name-prefix-backend-agent",
+        backend_group = AgentGroup.objects.create(
+            name="Backend Agent", slug="official-name-prefix-backend-group", shared_config={}
+        )
+        backend_agent = InlineAgent.objects.create(
+            name="Backend Catalog Agent",
+            slug="official-name-prefix-backend-catalog-agent",
             instruction="i",
             collaboration_instructions="c",
             foundation_model="m",
             project=owner_project,
-            group=None,
+            group=backend_group,
             is_official=True,
             source_type=InlineAgent.PLATFORM,
         )
-        Version.objects.create(skills=[], display_skills=[], agent=be_legacy)
+        Version.objects.create(skills=[], display_skills=[], agent=backend_agent)
 
         client = APIClient()
         client.force_authenticate(user=user)
@@ -1023,15 +885,15 @@ class OfficialAgentsV1NameFilterTestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertNotIn(fb_group.slug, [a["group"] for a in resp.json()["new"]["agents"]])
-        self.assertIn(str(be_legacy.uuid), [a["uuid"] for a in resp.json()["legacy"]])
+        self.assertNotIn(fb_group.slug, [a["group"] for a in _official_v1_grouped_rows(resp.json())])
+        self.assertIn(backend_group.slug, [a["group"] for a in _official_v1_grouped_rows(resp.json())])
 
 
 class OfficialAgentsV1I18nPresentationTestCase(TestCase):
-    """Official list/detail APIs expose presentation and MCP description as nested locale maps (en/pt/es)."""
+    """Official v1 list exposes ``about``, ``conversation_example``, and MCP locale maps (en/pt/es)."""
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
-    def test_list_and_detail_include_locale_fields(self, mock_has_permission):
+    def test_list_includes_locale_fields(self, mock_has_permission):
         mock_has_permission.return_value = True
 
         target_project = ProjectFactory()
@@ -1098,32 +960,19 @@ class OfficialAgentsV1I18nPresentationTestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(list_resp.status_code, 200)
-        self.assertNotIn("available_systems", list_resp.json()["new"])
-        listed = list_resp.json()["new"]["agents"]
+        listed = _official_v1_grouped_rows(list_resp.json())
         entry = next(a for a in listed if a.get("group") == group.slug)
-        pres = entry["presentation"]
-        self.assertEqual(pres["about"]["en"], "About EN")
-        self.assertEqual(pres["about"]["es"], "About ES")
-        self.assertEqual(pres["about"]["pt"], "About PT")
-        self.assertEqual(pres["conversation_example"]["en"][0]["text"], "EN")
-        self.assertEqual(pres["conversation_example"]["es"][0]["text"], "ES")
-        self.assertEqual(pres["conversation_example"]["pt"][0]["text"], "PT")
+        about = entry["about"]
+        self.assertEqual(about["en"], "About EN")
+        self.assertEqual(about["es"], "About ES")
+        self.assertEqual(about["pt"], "About PT")
+        cex = entry["conversation_example"]
+        self.assertEqual(cex["en"][0]["text"], "EN")
+        self.assertEqual(cex["es"][0]["text"], "ES")
+        self.assertEqual(cex["pt"][0]["text"], "PT")
 
-        detail_url = reverse("v1-official-agent-detail", kwargs={"identifier": group.slug})
-        detail_resp = client.get(
-            detail_url,
-            {"project_uuid": str(target_project.uuid)},
-            HTTP_AUTHORIZATION="Bearer test-token",
-        )
-        self.assertEqual(detail_resp.status_code, 200)
-        body = detail_resp.json()
-        dp = body["presentation"]
-        self.assertEqual(dp["about"]["en"], "About EN")
-        self.assertEqual(dp["about"]["pt"], "About PT")
-        self.assertEqual(dp["conversation_example"]["es"][0]["text"], "ES")
-
-        mcps_flat = body.get("MCPs") or []
-        self.assertTrue(mcps_flat, "expected MCPs in detail response")
+        mcps_flat = entry.get("mcps") or []
+        self.assertTrue(mcps_flat, "expected MCPs in list row")
         mcp_payload = next(m for m in mcps_flat if m["name"] == "Test MCP")
         desc = mcp_payload["description"]
         self.assertEqual(desc["en"], "Desc EN")
@@ -1172,7 +1021,7 @@ class OfficialAvailableSystemsV1TestCase(TestCase):
         self.assertEqual(response.status_code, 403)
 
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
-    def test_official_agents_list_new_object_has_no_available_systems(self, mock_has_permission):
+    def test_official_agents_list_has_no_embedded_available_systems(self, mock_has_permission):
         mock_has_permission.return_value = True
 
         target_project = ProjectFactory()
@@ -1187,9 +1036,86 @@ class OfficialAvailableSystemsV1TestCase(TestCase):
             HTTP_AUTHORIZATION="Bearer test-token",
         )
         self.assertEqual(resp.status_code, 200)
-        new_payload = resp.json()["new"]
-        self.assertNotIn("available_systems", new_payload)
-        self.assertIn("agents", new_payload)
+        body = resp.json()
+        self.assertNotIn("available_systems", body)
+        self.assertIn("results", body)
+
+
+class CatalogRowKeyParityTestCase(TestCase):
+    """My-agents, team, project official, and v1 official group rows share the same catalog keys."""
+
+    def setUp(self):
+        from nexus.inline_agents.api.serializers.catalog import CATALOG_ROW_KEYS
+
+        self.expected_keys = CATALOG_ROW_KEYS
+        self.project = ProjectFactory()
+        self.user = self.project.created_by
+        self.group = AgentGroup.objects.create(name="Parity Group", slug="parity-group-unique", shared_config={})
+        AgentGroupModal.objects.create(group=self.group, agent_name="Parity Display")
+        self.agent = InlineAgent.objects.create(
+            name="Parity Template",
+            slug="parity-agent-unique",
+            instruction="i",
+            collaboration_instructions="about en",
+            foundation_model="m:v",
+            project=self.project,
+            group=self.group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        Version.objects.create(skills=[], display_skills=[], agent=self.agent)
+        IntegratedAgent.objects.create(agent=self.agent, project=self.project)
+
+    def _assert_catalog_row_keys(self, row: dict) -> None:
+        self.assertEqual(frozenset(row.keys()), self.expected_keys)
+        self.assertNotIn("agents", row)
+
+    def test_my_agents_team_and_official_project_share_row_keys(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        project_uuid = str(self.project.uuid)
+
+        my_resp = client.get(reverse("my-agents", kwargs={"project_uuid": project_uuid}))
+        my_resp.render()
+        my_row = next(r for r in json.loads(my_resp.content) if r["uuid"] == str(self.agent.uuid))
+
+        team_resp = client.get(reverse("teams", kwargs={"project_uuid": project_uuid}))
+        team_resp.render()
+        team_row = next(r for r in json.loads(team_resp.content)["agents"] if r["uuid"] == str(self.agent.uuid))
+
+        official_resp = client.get(reverse("official-agents", kwargs={"project_uuid": project_uuid}))
+        official_resp.render()
+        official_row = next(r for r in json.loads(official_resp.content) if r["uuid"] == str(self.agent.uuid))
+
+        for row in (my_row, team_row, official_row):
+            self._assert_catalog_row_keys(row)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_v1_official_group_row_matches_custom_agent_row_keys(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        owner = ProjectFactory()
+        self.agent.project = owner
+        self.agent.save(update_fields=["project"])
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        project_uuid = str(self.project.uuid)
+
+        my_resp = client.get(reverse("my-agents", kwargs={"project_uuid": project_uuid}))
+        my_resp.render()
+        my_row = next(r for r in json.loads(my_resp.content) if r["uuid"] == str(self.agent.uuid))
+
+        list_url = reverse("v1-official-agents")
+        resp = client.get(
+            list_url,
+            {"project_uuid": project_uuid, "group": self.group.slug},
+            HTTP_AUTHORIZATION="Bearer test-token",
+        )
+        self.assertEqual(resp.status_code, 200)
+        group_row = next(r for r in _official_v1_grouped_rows(resp.json()) if r["group"] == self.group.slug)
+        self._assert_catalog_row_keys(group_row)
+        self.assertEqual(group_row["name"], "Parity Display")
+        self.assertEqual(frozenset(group_row.keys()), frozenset(my_row.keys()))
 
 
 class TestCommunicateInternallyPermission(TestCase):
