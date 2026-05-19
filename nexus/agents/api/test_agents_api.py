@@ -162,42 +162,6 @@ class AgentViewsetSetTestCase(TestCase):
         cred_names = {c["name"] for c in row["credentials"]}
         self.assertNotIn("SYNERISE_API_TOKEN", cred_names)
 
-    def make_agents_official(self):
-        self.agent.is_official = True
-        self.agent.source_type = InlineAgent.PLATFORM
-        self.agent.save()
-        self.agent2.is_official = True
-        self.agent2.source_type = InlineAgent.PLATFORM
-        self.agent2.save()
-
-    def test_get_official_agents(self):
-        self.make_agents_official()
-
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-
-        url = reverse("official-agents", kwargs={"project_uuid": str(self.project.uuid)})
-        response = client.get(url)
-        response.render()
-        content = json.loads(response.content)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(content), 2)
-
-    def test_get_official_agents_with_search(self):
-        self.make_agents_official()
-        query_params = {"search": "information"}
-        url = reverse("official-agents", kwargs={"project_uuid": str(self.project.uuid)})
-        url = f"{url}?{urlencode(query_params)}"
-
-        client = APIClient()
-        client.force_authenticate(user=self.user)
-        response = client.get(url)
-        response.render()
-        content = json.loads(response.content)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(content), 1)
-        self.assertEqual(content[0].get("name"), "Information Analyst")
-
 
 class TeamViewsetSetTestCase(TestCase):
     def setUp(self) -> None:

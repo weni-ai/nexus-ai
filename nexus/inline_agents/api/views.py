@@ -239,8 +239,7 @@ class PushAgents(APIView):
             return Response(
                 {
                     "error": (
-                        f"Permission Error: You are not authorized to edit an official "
-                        f"AI Agent {official_agent_key}"
+                        f"Permission Error: You are not authorized to edit an official AI Agent {official_agent_key}"
                     )
                 },
                 status=403,
@@ -1259,30 +1258,6 @@ class TeamView(APIView):
 
         data = {"manager": {"external_id": ""}, "agents": serializer.data}
         return Response(data)
-
-
-class OfficialAgentsView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
-
-    def get(self, request, *args, **kwargs):
-        # TODO: filter skills
-        project_uuid = kwargs.get("project_uuid")
-        search = self.request.query_params.get("search")
-
-        agents = _prefetch_inline_agent_mcp_credentials(
-            Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).select_related("group", "group__modal")
-        )
-
-        if search:
-            query_filter = (
-                Q(name__icontains=search)
-                | Q(group__name__icontains=search)
-                | Q(group__modal__agent_name__icontains=search)
-            )
-            agents = agents.filter(query_filter).distinct("uuid")
-
-        serializer = AgentSerializer(agents, many=True, context={"project_uuid": project_uuid})
-        return Response(serializer.data)
 
 
 class ProjectCredentialsView(APIView):
