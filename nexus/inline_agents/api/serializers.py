@@ -237,19 +237,21 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         return result
 
 
-def _resolve_agent_mcp(agent: Agent, mcp_name: str, system_slug: str | None):
+def _resolve_agent_mcp(agent: Agent, mcp_name: str, system_slug: str | None) -> tuple:
+    """Return (mcp, resolved AgentSystem | None) using at most one system lookup."""
+    system_obj = None
+    if system_slug:
+        try:
+            system_obj = AgentSystem.objects.get(slug__iexact=system_slug)
+        except AgentSystem.DoesNotExist:
+            pass
+
     mcp_qs = (
         agent.mcps.filter(name=mcp_name, is_active=True).select_related("system").prefetch_related("config_options")
     )
-    if not system_slug:
-        return mcp_qs.first()
-
-    try:
-        system_obj = AgentSystem.objects.get(slug__iexact=system_slug)
-    except AgentSystem.DoesNotExist:
-        return mcp_qs.first()
-
-    return mcp_qs.filter(system=system_obj).first() or mcp_qs.first()
+    if system_obj:
+        return mcp_qs.filter(system=system_obj).first() or mcp_qs.first(), system_obj
+    return mcp_qs.first(), None
 
 
 def _labeled_mcp_config(mcp, mcp_config: dict) -> dict:
@@ -267,15 +269,12 @@ def _mcp_description_locale_map(mcp) -> dict:
     }
 
 
-def _system_display_name(mcp, system_slug: str | None) -> str | None:
+def _system_display_name(mcp, system_obj: AgentSystem | None) -> str | None:
     if mcp and mcp.system:
         return mcp.system.name
-    if not system_slug:
-        return None
-    try:
-        return AgentSystem.objects.get(slug__iexact=system_slug).name
-    except AgentSystem.DoesNotExist:
-        return None
+    if system_obj:
+        return system_obj.name
+    return None
 
 
 def team_roster_mcp_payload(integrated: IntegratedAgent) -> dict | None:
@@ -289,13 +288,13 @@ def team_roster_mcp_payload(integrated: IntegratedAgent) -> dict | None:
 
     mcp_config = integrated.metadata.get("mcp_config", {})
     system_slug = integrated.metadata.get("system")
-    mcp = _resolve_agent_mcp(integrated.agent, mcp_name, system_slug)
+    mcp, system_obj = _resolve_agent_mcp(integrated.agent, mcp_name, system_slug)
 
     result: dict = {"name": mcp_name, "config": _labeled_mcp_config(mcp, mcp_config) if mcp else mcp_config}
     if mcp:
         result["description"] = _mcp_description_locale_map(mcp)
 
-    system_name = _system_display_name(mcp, system_slug)
+    system_name = _system_display_name(mcp, system_obj)
     if system_name:
         result["system"] = system_name
     return result
