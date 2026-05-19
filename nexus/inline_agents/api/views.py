@@ -1,6 +1,5 @@
 import json
 import logging
-import uuid
 
 import pendulum
 from django.conf import settings
@@ -925,98 +924,6 @@ class OfficialAgentDetailV1(APIView):
             },
         )
         return Response(serializer.data)
-
-
-class ActiveAgentsView(OfficialAgentAssignmentMixin, APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        operation_id="project_assign_agent",
-        summary="Assign agent to project and/or configure credentials",
-        description=(
-            "Same assign and credentials contract as ``POST /api/v1/official/agents``. "
-            "Body may include ``assigned``, ``credentials``, ``system``, ``mcp``, and ``mcp_config``. "
-            "Agent is identified by the URL ``agent_uuid``."
-        ),
-        request=OfficialAgentsAssignRequestSerializer,
-        responses={
-            200: OpenApiResponse(description="Operation performed", response=OfficialAgentsAssignResponseSerializer),
-            400: OpenApiResponse(description="Bad request"),
-            404: OpenApiResponse(description="Not found"),
-            422: OpenApiResponse(description="Unprocessable Entity"),
-        },
-        tags=["Agents"],
-    )
-    def patch(self, request, *args, **kwargs):
-        project_uuid = kwargs.get("project_uuid")
-        agent_uuid = kwargs.get("agent_uuid")
-
-        body_serializer = OfficialAgentsAssignRequestSerializer(data=request.data)
-        if not body_serializer.is_valid():
-            return Response(body_serializer.errors, status=400)
-        validated = body_serializer.validated_data
-
-        assigned = validated.get("assigned")
-        credentials_data = validated.get("credentials") or []
-        system = validated.get("system")
-        mcp = validated.get("mcp")
-        mcp_config = validated.get("mcp_config") or {}
-
-        project = self._get_project_or_response(project_uuid)
-        if isinstance(project, Response):
-            return project
-
-        try:
-            uuid.UUID(str(agent_uuid).strip())
-        except (ValueError, TypeError, AttributeError):
-            return Response({"error": "Invalid agent_uuid"}, status=400)
-
-        try:
-            agent = Agent.objects.get(uuid=agent_uuid)
-        except (Agent.DoesNotExist, ValueError):
-            return Response({"error": "Agent not found"}, status=404)
-
-        result: dict = {}
-        usecase = AssignAgentsUsecase()
-
-        try:
-            if assigned is not None:
-                if assigned:
-                    explicit_metadata = bool(mcp or system or mcp_config)
-                    created, integrated_agent = usecase.assign_agent(
-                        agent_uuid,
-                        project_uuid,
-                        infer_mcp_metadata=not explicit_metadata,
-                    )
-                    if explicit_metadata:
-                        self._update_agent_metadata(integrated_agent, mcp, mcp_config, system)
-                    result["assigned"] = True
-                    result["active"] = integrated_agent.is_active
-                    if created:
-                        result["assigned_created"] = True
-                else:
-                    usecase.unassign_agent(agent_uuid, project_uuid)
-                    result["assigned"] = False
-
-                notify_async(
-                    event="cache_invalidation:team",
-                    project_uuid=project_uuid,
-                )
-
-            if credentials_data:
-                creds_result = self._handle_credentials(agent, project, credentials_data, system, mcp)
-                if isinstance(creds_result, Response):
-                    return creds_result
-                result.update(creds_result)
-                notify_async(
-                    event="cache_invalidation:project",
-                    project=project,
-                )
-
-        except ValueError as e:
-            return Response({"error": str(e)}, status=404)
-
-        return Response(result or {"message": "No changes applied"}, status=200)
 
 
 class AgentsView(APIView):
