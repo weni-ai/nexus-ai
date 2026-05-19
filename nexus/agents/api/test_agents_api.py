@@ -1274,3 +1274,63 @@ class RationaleViewTestCase(TestCase):
         # Verify the change was persisted
         self.team.refresh_from_db()
         self.assertFalse(self.team.metadata["rationale"])
+
+
+class InlineTraceResponseRemapTestCase(TestCase):
+    """API-only remap of ``trace.config.agentName`` (slug → list display name)."""
+
+    def test_remap_leaves_manager_unchanged_and_resolves_agent_slug(self):
+        from nexus.agents.api.inline_trace_response import remap_inline_traces_config_agent_names
+
+        project = ProjectFactory()
+        InlineAgent.objects.create(
+            name="Template VTEX (catalog)",
+            slug="product_concierge_catalog",
+            instruction="i",
+            collaboration_instructions="collab",
+            foundation_model="m:v",
+            project=project,
+        )
+        traces = [
+            {"trace": {"config": {"agentName": "manager", "type": "x", "toolName": ""}, "trace": {}}},
+            {"trace": {"config": {"agentName": "product_concierge_catalog", "type": "y", "toolName": ""}, "trace": {}}},
+        ]
+        out = remap_inline_traces_config_agent_names(traces, project_uuid=str(project.uuid))
+        self.assertEqual(out[0]["trace"]["config"]["agentName"], "manager")
+        self.assertEqual(out[1]["trace"]["config"]["agentName"], "Template VTEX")
+
+    def test_remap_invalid_project_uuid_leaves_slugs_unchanged(self):
+        from nexus.agents.api.inline_trace_response import remap_inline_traces_config_agent_names
+
+        project = ProjectFactory()
+        InlineAgent.objects.create(
+            name="Template VTEX (catalog)",
+            slug="product_concierge_catalog",
+            instruction="i",
+            collaboration_instructions="collab",
+            foundation_model="m:v",
+            project=project,
+        )
+        traces = [
+            {"trace": {"config": {"agentName": "product_concierge_catalog", "type": "y", "toolName": ""}, "trace": {}}},
+        ]
+        out = remap_inline_traces_config_agent_names(traces, project_uuid="not-a-uuid")
+        self.assertEqual(out[0]["trace"]["config"]["agentName"], "product_concierge_catalog")
+
+    def test_remap_resolves_slug_when_trace_casing_differs_from_db(self):
+        from nexus.agents.api.inline_trace_response import remap_inline_traces_config_agent_names
+
+        project = ProjectFactory()
+        InlineAgent.objects.create(
+            name="Template VTEX (catalog)",
+            slug="product_concierge_catalog",
+            instruction="i",
+            collaboration_instructions="collab",
+            foundation_model="m:v",
+            project=project,
+        )
+        traces = [
+            {"trace": {"config": {"agentName": "Product_Concierge_Catalog", "type": "y", "toolName": ""}, "trace": {}}},
+        ]
+        out = remap_inline_traces_config_agent_names(traces, project_uuid=str(project.uuid))
+        self.assertEqual(out[0]["trace"]["config"]["agentName"], "Template VTEX")
