@@ -237,6 +237,101 @@ class IntegratedAgentSerializer(serializers.ModelSerializer):
         return result
 
 
+def _resolve_agent_mcp(agent: Agent, mcp_name: str, system_slug: str | None):
+    mcp_qs = (
+        agent.mcps.filter(name=mcp_name, is_active=True).select_related("system").prefetch_related("config_options")
+    )
+    if not system_slug:
+        return mcp_qs.first()
+
+    try:
+        system_obj = AgentSystem.objects.get(slug__iexact=system_slug)
+    except AgentSystem.DoesNotExist:
+        return mcp_qs.first()
+
+    return mcp_qs.filter(system=system_obj).first() or mcp_qs.first()
+
+
+def _labeled_mcp_config(mcp, mcp_config: dict) -> dict:
+    if not mcp_config:
+        return mcp_config
+    name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
+    return {name_to_label.get(name, name): value for name, value in mcp_config.items()}
+
+
+def _mcp_description_locale_map(mcp) -> dict:
+    return {
+        "en": (mcp.description_en or "").strip(),
+        "pt": (mcp.description_pt or "").strip(),
+        "es": (mcp.description_es or "").strip(),
+    }
+
+
+def _system_display_name(mcp, system_slug: str | None) -> str | None:
+    if mcp and mcp.system:
+        return mcp.system.name
+    if not system_slug:
+        return None
+    try:
+        return AgentSystem.objects.get(slug__iexact=system_slug).name
+    except AgentSystem.DoesNotExist:
+        return None
+
+
+def team_roster_mcp_payload(integrated: IntegratedAgent) -> dict | None:
+    """MCP block for GET /api/agents/teams — ``system`` is the display name only."""
+    if not integrated.metadata:
+        return None
+
+    mcp_name = integrated.metadata.get("mcp")
+    if not mcp_name:
+        return None
+
+    mcp_config = integrated.metadata.get("mcp_config", {})
+    system_slug = integrated.metadata.get("system")
+    mcp = _resolve_agent_mcp(integrated.agent, mcp_name, system_slug)
+
+    result: dict = {"name": mcp_name, "config": _labeled_mcp_config(mcp, mcp_config) if mcp else mcp_config}
+    if mcp:
+        result["description"] = _mcp_description_locale_map(mcp)
+
+    system_name = _system_display_name(mcp, system_slug)
+    if system_name:
+        result["system"] = system_name
+    return result
+
+
+class TeamRosterAgentSerializer(serializers.ModelSerializer):
+    """GET /api/agents/teams/{project_uuid} agent rows."""
+
+    class Meta:
+        model = IntegratedAgent
+        fields = ["uuid", "slug", "name", "about", "is_official", "mcp", "active"]
+
+    active = serializers.BooleanField(source="is_active", read_only=True)
+    uuid = serializers.UUIDField(source="agent.uuid")
+    slug = serializers.SerializerMethodField()
+    name = serializers.SerializerMethodField()
+    about = serializers.SerializerMethodField()
+    is_official = serializers.SerializerMethodField()
+    mcp = serializers.SerializerMethodField()
+
+    def get_slug(self, obj):
+        return obj.agent.slug
+
+    def get_name(self, obj):
+        return inline_agent_list_display_name(obj.agent)
+
+    def get_about(self, obj):
+        return agent_modal_about_locale_map(obj.agent)
+
+    def get_is_official(self, obj):
+        return obj.agent.is_official
+
+    def get_mcp(self, obj):
+        return team_roster_mcp_payload(obj)
+
+
 class AgentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Agent

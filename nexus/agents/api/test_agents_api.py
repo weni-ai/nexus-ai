@@ -215,9 +215,14 @@ class TeamViewsetSetTestCase(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(content["agents"]), 1)
-        self.assertEqual(content["agents"][0].get("uuid"), str(agent.uuid))
-        self.assertEqual(content["agents"][0].get("name"), agent.name)
-        self.assertTrue(content["agents"][0].get("active", True))
+        row = content["agents"][0]
+        self.assertEqual(row.get("uuid"), str(agent.uuid))
+        self.assertEqual(row.get("slug"), agent.slug)
+        self.assertEqual(row.get("name"), agent.name)
+        self.assertTrue(row.get("active", True))
+        self.assertNotIn("id", row)
+        self.assertNotIn("skills", row)
+        self.assertNotIn("description", row)
 
     def test_get_team_excludes_inactive_integrated_agents(self):
         """Agents with is_active=False on IntegratedAgent do not appear in team list."""
@@ -346,8 +351,9 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
-        mcp_payload = row["mcp_definition"]
+        mcp_payload = row["mcp"]
         self.assertEqual(mcp_payload["name"], "Team Catalog MCP")
+        self.assertEqual(mcp_payload["system"], system.name)
         desc = mcp_payload["description"]
         self.assertEqual(desc["en"], "English MCP")
         self.assertEqual(desc["pt"], "Portuguese MCP")

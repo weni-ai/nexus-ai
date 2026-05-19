@@ -27,6 +27,7 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignRequestSerializer,
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
+    TeamRosterAgentSerializer,
     official_agent_modal_presentation_payload,
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent, ModelProvider, ProjectModelProvider
@@ -1254,7 +1255,7 @@ class TeamView(APIView):
         project_uuid = kwargs.get("project_uuid")
         usecase = GetInlineAgentsUsecase()
         agents = usecase.get_active_agents(project_uuid)
-        serializer = IntegratedAgentSerializer(agents, many=True)
+        serializer = TeamRosterAgentSerializer(agents, many=True)
 
         data = {"manager": {"external_id": ""}, "agents": serializer.data}
         return Response(data)
