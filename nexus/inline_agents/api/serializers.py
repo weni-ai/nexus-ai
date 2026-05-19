@@ -135,6 +135,12 @@ class AgentSystemSerializer(serializers.ModelSerializer):
         return s3FileDatabase().create_presigned_url(obj.logo.name)
 
 
+class OfficialAvailableSystemsEnvelopeSerializer(serializers.Serializer):
+    """Envelope for GET /api/v1/official/available-systems (OpenAPI)."""
+
+    available_systems = AgentSystemSerializer(many=True, read_only=True)
+
+
 class IntegratedAgentSerializer(serializers.ModelSerializer):
     class Meta:
         model = IntegratedAgent
