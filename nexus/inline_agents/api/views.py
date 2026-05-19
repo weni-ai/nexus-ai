@@ -3,7 +3,7 @@ import logging
 
 import pendulum
 from django.conf import settings
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Count, OuterRef, Prefetch, Q, Subquery
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -31,7 +31,7 @@ from nexus.inline_agents.api.serializers import (
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent, ModelProvider, ProjectModelProvider
 from nexus.inline_agents.backends.openai.models import OpenAISupervisor as DeprecatedManagerAgent
-from nexus.inline_agents.models import Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
+from nexus.inline_agents.models import MCP, Agent, AgentCredential, AgentGroup, AgentSystem, IntegratedAgent, Version
 from nexus.projects.api.permissions import CombinedExternalProjectPermission, ProjectPermission
 from nexus.projects.api.serializers import ProjectMinimalSerializer
 from nexus.projects.exceptions import ProjectDoesNotExist
@@ -92,6 +92,37 @@ def _parse_multi_agents_bool(raw) -> tuple[bool | None, str | None]:
 logger = logging.getLogger(__name__)
 
 SKILL_FILE_SIZE_LIMIT = settings.SKILL_FILE_SIZE_LIMIT
+
+_INLINE_AGENT_MCP_PREFETCH = Prefetch(
+    "mcps",
+    queryset=MCP.objects.filter(is_active=True)
+    .select_related("system")
+    .prefetch_related("config_options", "credential_templates")
+    .order_by("order", "name"),
+)
+
+
+def _prefetch_inline_agent_mcp_credentials(queryset):
+    return queryset.prefetch_related(_INLINE_AGENT_MCP_PREFETCH, "agentcredential_set")
+
+
+def _store_mcp_config_value_on_metadata(metadata: dict, mcp_config: dict) -> None:
+    """Assign ``metadata['mcp_config']`` to a shallow copy of ``mcp_config`` (shared write shape).
+
+    Callers differ on *when* to invoke this:
+    - Official assign uses ``if mcp_config:`` (truthy), so ``{}`` is skipped and prior DB value is unchanged.
+    - Custom assign uses ``if mcp_config is not None`` after validating a dict, so explicit ``{}`` clears.
+    """
+
+    metadata["mcp_config"] = dict(mcp_config)
+
+
+def _replace_integrated_agent_mcp_config(integrated_agent: IntegratedAgent, mcp_config: dict) -> None:
+    """Full replace of ``integrated_agent.metadata['mcp_config']`` (including explicit empty ``{}``)."""
+    if integrated_agent.metadata is None:
+        integrated_agent.metadata = {}
+    _store_mcp_config_value_on_metadata(integrated_agent.metadata, mcp_config)
+    integrated_agent.save(update_fields=["metadata"])
 
 
 class PushAgents(APIView):
@@ -706,7 +737,7 @@ class OfficialAgentsV1(APIView):
         if mcp:
             integrated_agent.metadata["mcp"] = mcp
         if mcp_config:
-            integrated_agent.metadata["mcp_config"] = mcp_config
+            _store_mcp_config_value_on_metadata(integrated_agent.metadata, mcp_config)
         if system:
             integrated_agent.metadata["system"] = system
         integrated_agent.save(update_fields=["metadata"])
@@ -1068,12 +1099,22 @@ class ActiveAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         agent_uuid = kwargs.get("agent_uuid")
         assign: bool = request.data.get("assigned")
+        mcp_config = request.data.get("mcp_config") if "mcp_config" in request.data else None
+        if mcp_config is not None and not isinstance(mcp_config, dict):
+            return Response({"error": "mcp_config must be a JSON object"}, status=400)
 
         usecase = AssignAgentsUsecase()
 
         try:
             if assign:
                 _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid, infer_mcp_metadata=True)
+
+                if mcp_config is not None:
+                    _replace_integrated_agent_mcp_config(integrated_agent, mcp_config)
+                    notify_async(
+                        event="cache_invalidation:project",
+                        project=integrated_agent.project,
+                    )
 
                 # Fire cache invalidation event for team update (agent assigned) (async observer)
                 notify_async(
@@ -1106,7 +1147,9 @@ class AgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
+        agents = _prefetch_inline_agent_mcp_credentials(
+            Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
+        )
 
         if search:
             query_filter = (
@@ -1226,8 +1269,8 @@ class OfficialAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).select_related(
-            "group", "group__modal"
+        agents = _prefetch_inline_agent_mcp_credentials(
+            Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).select_related("group", "group__modal")
         )
 
         if search:
@@ -1352,12 +1395,22 @@ class VtexAppActiveAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         agent_uuid = kwargs.get("agent_uuid")
         assign: bool = request.data.get("assigned")
+        mcp_config = request.data.get("mcp_config") if "mcp_config" in request.data else None
+        if mcp_config is not None and not isinstance(mcp_config, dict):
+            return Response({"error": "mcp_config must be a JSON object"}, status=400)
 
         usecase = AssignAgentsUsecase()
 
         try:
             if assign:
-                usecase.assign_agent(agent_uuid, project_uuid)
+                _, integrated_agent = usecase.assign_agent(agent_uuid, project_uuid)
+
+                if mcp_config is not None:
+                    _replace_integrated_agent_mcp_config(integrated_agent, mcp_config)
+                    notify_async(
+                        event="cache_invalidation:project",
+                        project=integrated_agent.project,
+                    )
 
                 # Fire cache invalidation event for team update (agent assigned)
                 notify_async(
@@ -1387,7 +1440,9 @@ class VtexAppAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
+        agents = _prefetch_inline_agent_mcp_credentials(
+            Agent.objects.filter(project__uuid=project_uuid).select_related("group", "group__modal")
+        )
 
         if search:
             query_filter = (
@@ -1411,8 +1466,8 @@ class VtexAppOfficialAgentsView(APIView):
         project_uuid = kwargs.get("project_uuid")
         search = self.request.query_params.get("search")
 
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.VTEX_APP).select_related(
-            "group", "group__modal"
+        agents = _prefetch_inline_agent_mcp_credentials(
+            Agent.objects.filter(is_official=True, source_type=Agent.VTEX_APP).select_related("group", "group__modal")
         )
 
         if search:
