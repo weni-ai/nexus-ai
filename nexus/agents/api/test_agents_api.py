@@ -1293,3 +1293,22 @@ class InlineTraceResponseRemapTestCase(TestCase):
         ]
         out = remap_inline_traces_config_agent_names(traces, project_uuid=str(project.uuid))
         self.assertEqual(out[0]["trace"]["config"]["agentName"], "Template VTEX")
+
+    def test_remap_flat_websocket_trace_payload(self):
+        from nexus.agents.api.inline_trace_response import remap_inline_trace_for_preview_websocket
+
+        project = ProjectFactory()
+        InlineAgent.objects.create(
+            name="Template VTEX (catalog)",
+            slug="product_concierge_catalog",
+            instruction="i",
+            collaboration_instructions="collab",
+            foundation_model="m:v",
+            project=project,
+        )
+        trace = {
+            "config": {"agentName": "product_concierge_catalog", "type": "y", "toolName": ""},
+            "trace": {},
+        }
+        out = remap_inline_trace_for_preview_websocket(trace, project_uuid=str(project.uuid))
+        self.assertEqual(out["config"]["agentName"], "Template VTEX")

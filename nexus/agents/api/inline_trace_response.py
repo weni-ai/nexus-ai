@@ -1,4 +1,4 @@
-"""Read-time shaping of inline trace payloads for API responses only (storage unchanged)."""
+"""Read-time shaping of inline trace payloads for API and preview WebSocket (storage unchanged)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,14 @@ from django.db.models import Q
 logger = logging.getLogger(__name__)
 
 MANAGER_TRACE_AGENT_NAME = "manager"
+
+
+def remap_inline_trace_for_preview_websocket(trace: Any, *, project_uuid: str | None) -> Any:
+    """Remap ``config.agentName`` on a single trace payload sent via preview simulation WebSocket."""
+    if not isinstance(trace, dict):
+        return trace
+    remap_inline_traces_config_agent_names([trace], project_uuid=project_uuid)
+    return trace
 
 
 def remap_inline_traces_config_agent_names(traces: list[Any], *, project_uuid: str | None) -> list[Any]:
@@ -64,9 +72,9 @@ def _item_trace_config(item: Any) -> dict[str, Any] | None:
     if not isinstance(item, dict):
         return None
     outer = item.get("trace")
-    if not isinstance(outer, dict):
-        return None
-    cfg = outer.get("config")
+    if isinstance(outer, dict) and isinstance(outer.get("config"), dict):
+        return outer["config"]
+    cfg = item.get("config")
     return cfg if isinstance(cfg, dict) else None
 
 
