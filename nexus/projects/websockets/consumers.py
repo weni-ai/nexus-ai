@@ -6,6 +6,7 @@ from asgiref.sync import async_to_sync
 from channels.generic.websocket import WebsocketConsumer
 from channels.layers import get_channel_layer
 
+from nexus.agents.api.inline_trace_response import remap_inline_trace_for_preview_websocket
 from nexus.projects.exceptions import ProjectDoesNotExist
 from nexus.projects.permissions import has_project_permission
 from nexus.usecases.projects.projects_use_case import ProjectsUseCase
@@ -144,9 +145,20 @@ class PreviewConsumer(WebsocketConsumer):
         self.send(text_data=json.dumps({"type": mtype.get(message_type, message_type), "message": message}))
 
 
+def _maybe_remap_preview_trace_message(project_uuid, message_data):
+    if not isinstance(message_data, dict) or message_data.get("type") != "trace_update":
+        return message_data
+    trace = message_data.get("trace")
+    if trace is None:
+        return message_data
+    message_data = {**message_data, "trace": remap_inline_trace_for_preview_websocket(trace, project_uuid=project_uuid)}
+    return message_data
+
+
 def send_preview_message_to_websocket(project_uuid, message_data, user_email):
     channel_layer = get_channel_layer()
     room_name = f"preview_{project_uuid}_{sanitize_user_email(user_email)}"
+    message_data = _maybe_remap_preview_trace_message(project_uuid, message_data)
 
     async_to_sync(channel_layer.group_send)(
         room_name,
@@ -164,6 +176,7 @@ async def send_preview_message_to_websocket_async(project_uuid, message_data, us
     """
     channel_layer = get_channel_layer()
     room_name = f"preview_{project_uuid}_{sanitize_user_email(user_email)}"
+    message_data = _maybe_remap_preview_trace_message(project_uuid, message_data)
 
     await channel_layer.group_send(
         room_name,
