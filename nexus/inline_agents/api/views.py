@@ -23,9 +23,9 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignResponseSerializer,
     OfficialAgentsV1CatalogPageSerializer,
     ProjectCredentialsListSerializer,
-    TeamRosterAgentSerializer,
 )
 from nexus.inline_agents.api.serializers.catalog import (
+    build_row_from_integrated,
     build_row_from_project_agent,
     project_agent_assignment_map,
 )
@@ -629,13 +629,16 @@ class TeamView(APIView):
         agents = usecase.get_active_agents(project_uuid).prefetch_related(
             "agent__group",
             "agent__group__modal",
+            "agent__category",
+            "agent__systems",
             "agent__mcps",
             "agent__mcps__system",
             "agent__mcps__config_options",
+            "agent__mcps__credential_templates",
         )
-        serializer = TeamRosterAgentSerializer(agents, many=True)
+        rows = [build_row_from_integrated(ia) for ia in agents]
 
-        data = {"manager": {"external_id": ""}, "agents": serializer.data}
+        data = {"manager": {"external_id": ""}, "agents": rows}
         return Response(data)
 
 
