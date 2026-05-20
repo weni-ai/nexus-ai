@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from inline_agents.backends import BackendsRegistry
 from nexus.authentication import AUTHENTICATION_CLASSES
 from nexus.events import notify_async
+from nexus.inline_agents.api.catalog_rows import build_row_from_integrated
 from nexus.inline_agents.api.official_agents_helpers import (
     get_all_mcps_for_group,
     get_mcps_for_agent_system,
@@ -27,7 +28,6 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignRequestSerializer,
     OfficialAgentsAssignResponseSerializer,
     ProjectCredentialsListSerializer,
-    TeamRosterAgentSerializer,
     official_agent_modal_presentation_payload,
 )
 from nexus.inline_agents.backends.openai.models import ManagerAgent, ModelProvider, ProjectModelProvider
@@ -1254,10 +1254,19 @@ class TeamView(APIView):
     def get(self, request, *args, **kwargs):
         project_uuid = kwargs.get("project_uuid")
         usecase = GetInlineAgentsUsecase()
-        agents = usecase.get_active_agents(project_uuid)
-        serializer = TeamRosterAgentSerializer(agents, many=True)
+        agents = usecase.get_active_agents(project_uuid).prefetch_related(
+            "agent__group",
+            "agent__group__modal",
+            "agent__category",
+            "agent__systems",
+            "agent__mcps",
+            "agent__mcps__system",
+            "agent__mcps__config_options",
+            "agent__mcps__credential_templates",
+        )
+        rows = [build_row_from_integrated(ia) for ia in agents]
 
-        data = {"manager": {"external_id": ""}, "agents": serializer.data}
+        data = {"manager": {"external_id": ""}, "agents": rows}
         return Response(data)
 
 
