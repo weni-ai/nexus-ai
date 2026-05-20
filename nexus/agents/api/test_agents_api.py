@@ -184,8 +184,7 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertNotIn("skills", row)
         self.assertNotIn("description", row)
         self.assertNotIn("mcp", row)
-        self.assertIn("mcps", row)
-        self.assertTrue(row["assigned"])
+        self.assertIsNone(row["mcps"])
 
     def test_get_team_excludes_inactive_integrated_agents(self):
         """Agents with is_active=False on IntegratedAgent do not appear in team list."""
@@ -254,7 +253,7 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertEqual(about["pt"], "About PT")
         self.assertEqual(about["es"], "About ES")
         self.assertNotIn("presentation", row)
-        self.assertIn("mcps", row)
+        self.assertIsNone(row["mcps"])
         self.assertNotIn("mcp", row)
         self.assertNotIn("skills", row)
 
@@ -277,12 +276,10 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = content["agents"][0]
-        self.assertEqual(row["about"]["en"], "Test")
-        self.assertIsNone(row["about"]["pt"])
-        self.assertIsNone(row["about"]["es"])
+        self.assertIsNone(row.get("about"))
 
     def test_get_team_mcp_description_locale_map(self):
-        """Team rows expose ``mcps`` with localized description (catalog list shape)."""
+        """Team rows expose only the configured MCP inside ``mcps`` (one-element array)."""
         system = AgentSystem.objects.create(name="Team MCP System", slug="team-mcp-sys-unique")
         mcp = MCP.objects.create(
             name="Team Catalog MCP",
@@ -320,9 +317,10 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = next(a for a in content["agents"] if a.get("uuid") == str(agent.uuid))
-        self.assertTrue(row["assigned"])
-        mcp_payload = next(m for m in row["mcps"] if m["name"] == "Team Catalog MCP")
-        self.assertEqual(mcp_payload["system"], system.slug)
+        self.assertEqual(len(row["mcps"]), 1)
+        mcp_payload = row["mcps"][0]
+        self.assertEqual(mcp_payload["name"], "Team Catalog MCP")
+        self.assertEqual(mcp_payload["system"], system.name)
         desc = mcp_payload["description"]
         self.assertEqual(desc["en"], "English MCP")
         self.assertEqual(desc["pt"], "Portuguese MCP")
