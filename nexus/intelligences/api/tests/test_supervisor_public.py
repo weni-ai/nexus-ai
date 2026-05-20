@@ -453,3 +453,31 @@ class TestSupervisorPublicAPI(TestCase):
         self.assertEqual(upstream_params["end_date"], "2026-04-20T23:59:59Z")
         self.assertEqual(upstream_params["status"], "1")
         self.assertEqual(upstream_params["cursor"], "opaque-token")
+
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_fetch_conversation_messages")
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_call_conversations_api")
+    def test_v2_start_end_take_precedence_over_start_date_end_date(self, mock_call, mock_fetch_messages):
+        mock_fetch_messages.return_value = []
+        mock_call.return_value = {
+            "results": [],
+            "next": None,
+            "previous": None,
+            "total_count": 1,
+            "status_summary": {"0": 0, "1": 1, "2": 0, "3": 0, "4": 0},
+        }
+
+        url = reverse(
+            "public-supervisor-conversations-v2",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+        response = self.client.get(
+            f"{url}?start=2026-04-10T00:00:00Z&end=2026-04-15T23:59:59Z"
+            f"&start_date=2026-04-01T00:00:00Z&end_date=2026-04-20T23:59:59Z&status=1",
+            HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_call.assert_called_once()
+        upstream_params = mock_call.call_args[0][1]
+        self.assertEqual(upstream_params["start_date"], "2026-04-10T00:00:00Z")
+        self.assertEqual(upstream_params["end_date"], "2026-04-15T23:59:59Z")
