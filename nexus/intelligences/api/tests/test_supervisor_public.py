@@ -390,3 +390,66 @@ class TestSupervisorPublicAPI(TestCase):
         next_link = response.json()["next"]
         self.assertIn("cursor=opaque-token", next_link)
         self.assertIn(f"/public/v2/{self.project.uuid}/supervisor/conversations", next_link)
+
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_fetch_conversation_messages")
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_call_conversations_api")
+    def test_v2_next_link_uses_public_start_end_param_names(self, mock_call, mock_fetch_messages):
+        mock_fetch_messages.return_value = []
+        mock_call.return_value = {
+            "results": [],
+            "next": (
+                f"https://conversations.internal/api/v1/projects/{self.project.uuid}/conversations/"
+                f"?cursor=opaque-token&page_size=50"
+                f"&start_date=2026-04-01T00%3A00%3A00Z&end_date=2026-04-20T23%3A59%3A59Z&status=1"
+            ),
+            "previous": None,
+            "total_count": 501,
+            "status_summary": {"0": 0, "1": 501, "2": 0, "3": 0, "4": 0},
+        }
+
+        url = reverse(
+            "public-supervisor-conversations-v2",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+        response = self.client.get(
+            f"{url}?start=2026-04-01T00:00:00Z&end=2026-04-20T23:59:59Z&status=1",
+            HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        next_link = response.json()["next"]
+        self.assertIn("start=2026-04-01T00%3A00%3A00Z", next_link)
+        self.assertIn("end=2026-04-20T23%3A59%3A59Z", next_link)
+        self.assertNotIn("start_date=", next_link)
+        self.assertNotIn("end_date=", next_link)
+
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_fetch_conversation_messages")
+    @mock.patch.object(SupervisorPublicConversationsViewV2, "_call_conversations_api")
+    def test_v2_cursor_request_with_start_date_end_date_forwards_date_filters(self, mock_call, mock_fetch_messages):
+        mock_fetch_messages.return_value = []
+        mock_call.return_value = {
+            "results": [],
+            "next": None,
+            "previous": None,
+            "total_count": 501,
+            "status_summary": {"0": 0, "1": 501, "2": 0, "3": 0, "4": 0},
+        }
+
+        url = reverse(
+            "public-supervisor-conversations-v2",
+            kwargs={"project_uuid": str(self.project.uuid)},
+        )
+        response = self.client.get(
+            f"{url}?cursor=opaque-token&page_size=50"
+            f"&start_date=2026-04-01T00:00:00Z&end_date=2026-04-20T23:59:59Z&status=1",
+            HTTP_AUTHORIZATION=f"ApiKey {self.raw_token}",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["count"], 501)
+        mock_call.assert_called_once()
+        upstream_params = mock_call.call_args[0][1]
+        self.assertEqual(upstream_params["start_date"], "2026-04-01T00:00:00Z")
+        self.assertEqual(upstream_params["end_date"], "2026-04-20T23:59:59Z")
+        self.assertEqual(upstream_params["status"], "1")
+        self.assertEqual(upstream_params["cursor"], "opaque-token")
