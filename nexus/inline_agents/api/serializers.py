@@ -277,8 +277,8 @@ def _system_display_name(mcp, system_obj: AgentSystem | None) -> str | None:
     return None
 
 
-def team_roster_mcp_payload(integrated: IntegratedAgent) -> dict | None:
-    """MCP block for GET /api/agents/teams — ``system`` is the display name only."""
+def team_roster_selected_mcp_payload(integrated: IntegratedAgent) -> dict | None:
+    """Selected MCP for one integrated agent (from assignment metadata), not the full agent catalog."""
     if not integrated.metadata:
         return None
 
@@ -300,12 +300,18 @@ def team_roster_mcp_payload(integrated: IntegratedAgent) -> dict | None:
     return result
 
 
+def team_roster_mcps_payload(integrated: IntegratedAgent) -> list | None:
+    """Configured MCP only: one-element array when selected, ``null`` when none."""
+    selected = team_roster_selected_mcp_payload(integrated)
+    return [selected] if selected else None
+
+
 class TeamRosterAgentSerializer(serializers.ModelSerializer):
     """GET /api/agents/teams/{project_uuid} agent rows."""
 
     class Meta:
         model = IntegratedAgent
-        fields = ["uuid", "slug", "name", "about", "is_official", "mcp", "active"]
+        fields = ["uuid", "slug", "name", "about", "is_official", "mcps", "active"]
 
     active = serializers.BooleanField(source="is_active", read_only=True)
     uuid = serializers.UUIDField(source="agent.uuid")
@@ -313,7 +319,7 @@ class TeamRosterAgentSerializer(serializers.ModelSerializer):
     name = serializers.SerializerMethodField()
     about = serializers.SerializerMethodField()
     is_official = serializers.SerializerMethodField()
-    mcp = serializers.SerializerMethodField()
+    mcps = serializers.SerializerMethodField()
 
     def get_slug(self, obj):
         return obj.agent.slug
@@ -327,8 +333,8 @@ class TeamRosterAgentSerializer(serializers.ModelSerializer):
     def get_is_official(self, obj):
         return obj.agent.is_official
 
-    def get_mcp(self, obj):
-        return team_roster_mcp_payload(obj)
+    def get_mcps(self, obj):
+        return team_roster_mcps_payload(obj)
 
 
 class AgentSerializer(serializers.ModelSerializer):
