@@ -23,9 +23,9 @@ from nexus.inline_agents.api.serializers import (
     OfficialAgentsAssignResponseSerializer,
     OfficialAgentsV1CatalogPageSerializer,
     ProjectCredentialsListSerializer,
+    TeamRosterAgentSerializer,
 )
 from nexus.inline_agents.api.serializers.catalog import (
-    build_row_from_integrated,
     build_row_from_project_agent,
     project_agent_assignment_map,
 )
@@ -627,57 +627,15 @@ class TeamView(APIView):
         project_uuid = kwargs.get("project_uuid")
         usecase = GetInlineAgentsUsecase()
         agents = usecase.get_active_agents(project_uuid).prefetch_related(
-            "agent__systems",
+            "agent__group",
+            "agent__group__modal",
             "agent__mcps",
             "agent__mcps__system",
             "agent__mcps__config_options",
-            "agent__mcps__credential_templates",
         )
-        rows = [build_row_from_integrated(ia) for ia in agents]
+        serializer = TeamRosterAgentSerializer(agents, many=True)
 
-        data = {"manager": {"external_id": ""}, "agents": rows}
-        return Response(data)
-
-
-class OfficialAgentsView(APIView):
-    permission_classes = [IsAuthenticated, ProjectPermission]
-
-    def get(self, request, *args, **kwargs):
-        # TODO: filter skills
-        project_uuid = kwargs.get("project_uuid")
-        search = self.request.query_params.get("search")
-
-        agents = Agent.objects.filter(is_official=True, source_type=Agent.PLATFORM).select_related(
-            "group", "group__modal"
-        )
-
-        if search:
-            query_filter = (
-                Q(name__icontains=search)
-                | Q(group__name__icontains=search)
-                | Q(group__modal__agent_name__icontains=search)
-            )
-            agents = agents.filter(query_filter).distinct("uuid")
-
-        agents = agents.prefetch_related(
-            "systems",
-            "mcps",
-            "mcps__system",
-            "mcps__config_options",
-            "mcps__credential_templates",
-        )
-        assignment = (
-            project_agent_assignment_map(str(project_uuid), include_inactive_integrated=False) if project_uuid else None
-        )
-        data = [
-            build_row_from_project_agent(
-                a,
-                project_uuid,
-                include_inactive_integrated=False,
-                assignment_by_agent_id=assignment,
-            )
-            for a in agents
-        ]
+        data = {"manager": {"external_id": ""}, "agents": serializer.data}
         return Response(data)
 
 
