@@ -264,13 +264,9 @@ class OfficialAgentListSerializer(serializers.Serializer):
         if group_name:
             agent_mcps = get_all_mcps_for_group(group_name)
 
-        has_multiple_mcps = False
-
-        for system_slug in systems:
-            system_mcps = agent_mcps.get(system_slug, [])
-            if isinstance(system_mcps, list) and len(system_mcps) > 1:
-                has_multiple_mcps = True
-                break
+        has_multiple_mcps = any(
+            isinstance(system_mcps, list) and len(system_mcps) > 1 for system_mcps in agent_mcps.values()
+        )
 
         credentials = []
 

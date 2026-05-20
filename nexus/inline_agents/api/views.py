@@ -15,6 +15,7 @@ from nexus.events import notify_async
 from nexus.inline_agents.api.official_agents_helpers import (
     get_all_mcps_for_group,
     get_mcps_for_agent_system,
+    group_mcps_for_system,
 )
 from nexus.inline_agents.api.serializers import (
     AgentSerializer,
@@ -529,12 +530,7 @@ class OfficialAgentsV1(APIView):
 
         # Use existing helper to find MCPs
         if group_slug:
-            all_group_mcps = get_all_mcps_for_group(group_slug)
-            mcps = []
-            for sys_key, sys_mcps in all_group_mcps.items():
-                if sys_key.lower() == system.lower():
-                    mcps = sys_mcps
-                    break
+            mcps = group_mcps_for_system(get_all_mcps_for_group(group_slug), system)
         else:
             mcps = get_mcps_for_agent_system(agent.slug, system)
 
@@ -555,14 +551,7 @@ class OfficialAgentsV1(APIView):
         # If agent has a group, get MCPs from all agents in the group
         group_slug = agent.group.slug if getattr(agent, "group", None) else None
         if group_slug:
-            all_group_mcps = get_all_mcps_for_group(group_slug)
-            mcps = None
-            for sys_key in all_group_mcps.keys():
-                if sys_key.lower() == system_lower:
-                    mcps = all_group_mcps[sys_key]
-                    break
-            if mcps is None:
-                mcps = []
+            mcps = group_mcps_for_system(get_all_mcps_for_group(group_slug), system)
         else:
             mcps = get_mcps_for_agent_system(agent.slug, system_lower)
 

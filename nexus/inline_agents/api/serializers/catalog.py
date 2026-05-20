@@ -8,6 +8,8 @@ from django.core.exceptions import ObjectDoesNotExist
 from nexus.inline_agents.api.official_agents_helpers import (
     _serialize_mcp,
     _sort_mcps,
+    _sort_systems,
+    _system_bucket_sort_key,
     get_all_mcps_for_group,
     get_all_systems_for_group,
 )
@@ -119,7 +121,7 @@ def _conversation_example_payload(agent: Agent) -> dict[str, Any] | None:
 def _flatten_group_mcps(group_slug: str) -> list[dict[str, Any]]:
     by_system = get_all_mcps_for_group(group_slug)
     out: list[dict[str, Any]] = []
-    for system_slug in sorted(by_system.keys(), key=lambda s: (0 if str(s).lower() == "vtex" else 1, str(s).lower())):
+    for system_slug in sorted(by_system.keys(), key=_system_bucket_sort_key):
         out.extend(by_system[system_slug])
     return _sort_mcps(out)
 
@@ -137,6 +139,12 @@ def _mcps_for_agent(agent: Agent, group_slug: str | None) -> list[dict[str, Any]
     if group_slug:
         return _flatten_group_mcps(group_slug)
     return _mcps_for_standalone_agent(agent)
+
+
+def _catalog_systems_value(systems: list[str] | None, agent: Agent) -> list[str] | None:
+    """Row-level ``systems``: ``null`` when there are no slugs (not ``[]`` or ``no_system``)."""
+    slugs = systems if systems is not None else [s.slug for s in agent.systems.all()]
+    return slugs if slugs else None
 
 
 def _build_catalog_row(
@@ -160,7 +168,7 @@ def _build_catalog_row(
         "active": active,
         "is_official": agent.is_official,
         "category": _category_slug(agent),
-        "systems": systems if systems is not None else [s.slug for s in agent.systems.all()],
+        "systems": _catalog_systems_value(systems, agent),
         "mcps": mcps if mcps is not None else _mcps_for_agent(agent, group_slug),
         "conversation_example": _conversation_example_payload(agent),
     }
@@ -231,10 +239,7 @@ def build_official_group_row(
     """One catalog row per official ``AgentGroup`` (same field set as per-agent rows, no nested ``agents``)."""
     group_agents = sorted(group_agents, key=lambda a: (a.name, str(a.uuid)))
     base = group_agents[0]
-    systems_sorted = sorted(
-        get_all_systems_for_group(group_slug),
-        key=lambda s: (0 if "vtex" in str(s).lower() else 1, str(s).lower()),
-    )
+    systems_sorted = _sort_systems(get_all_systems_for_group(group_slug))
     agent_uuids = [a.uuid for a in group_agents]
     assigned, active = _integrated_assignment_flags(project_uuid, agent_uuids)
     return _build_catalog_row(
