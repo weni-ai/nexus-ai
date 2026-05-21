@@ -529,6 +529,63 @@ class OfficialAgentsV1AssignCredentialsTestCase(TestCase):
             kwargs["HTTP_AUTHORIZATION"] = "Bearer test-token"
         return client.post(url, body, **kwargs)
 
+    def _post_v1_assign_group(self, client, project_uuid, group_slug, body, *, auth_header=True):
+        url = reverse("v1-official-agents")
+        url = f"{url}?project_uuid={project_uuid}&group={group_slug}"
+        kwargs = {"format": "json"}
+        if auth_header:
+            kwargs["HTTP_AUTHORIZATION"] = "Bearer test-token"
+        return client.post(url, body, **kwargs)
+
+    @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
+    def test_post_assign_accepts_blank_system_for_group_mcp_without_agent_system(self, mock_has_permission):
+        mock_has_permission.return_value = True
+        owner = ProjectFactory()
+        group = AgentGroup.objects.create(
+            name="Feedback",
+            slug="feedback-blank-system-assign",
+            shared_config={},
+        )
+        mcp = MCP.objects.create(
+            name="CSAT (Customer Satisfaction Score)",
+            slug="csat-blank-system-mcp-unique",
+            system=None,
+        )
+        group.mcps.add(mcp)
+        official_agent = InlineAgent.objects.create(
+            name="Feedback Agent",
+            slug="feedback-blank-system-agent",
+            instruction="i",
+            collaboration_instructions="c",
+            foundation_model="model:version",
+            project=owner,
+            group=group,
+            is_official=True,
+            source_type=InlineAgent.PLATFORM,
+        )
+        official_agent.mcps.add(mcp)
+        Version.objects.create(skills=[], display_skills=[], agent=official_agent)
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        response = self._post_v1_assign_group(
+            client,
+            str(self.project.uuid),
+            group.slug,
+            {
+                "assigned": True,
+                "system": "",
+                "mcp": mcp.name,
+                "mcp_config": {},
+                "credentials": [],
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.json())
+        self.assertTrue(response.json()["assigned"])
+        integrated = IntegratedAgent.objects.get(agent=official_agent, project=self.project)
+        self.assertEqual(integrated.metadata.get("mcp"), mcp.name)
+        self.assertNotIn("system", integrated.metadata)
+
     @mock.patch("nexus.projects.api.permissions.has_external_general_project_permission")
     def test_post_invalid_project_uuid_returns_400(self, mock_has_permission):
         mock_has_permission.return_value = True
