@@ -451,10 +451,15 @@ class OfficialAgentsAssignRequestSerializer(serializers.Serializer):
     """
 
     assigned = serializers.BooleanField(required=False)
-    system = serializers.CharField(required=False)
+    system = serializers.CharField(required=False, allow_blank=True)
     mcp = serializers.CharField(required=False)
     mcp_config = serializers.DictField(required=False)
     credentials = serializers.ListField(child=CredentialItemSerializer(), required=False)
+
+    def validate_system(self, value):
+        if value == "":
+            return None
+        return value
 
 
 class OfficialAgentsAssignResponseSerializer(serializers.Serializer):
