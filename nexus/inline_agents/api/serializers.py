@@ -27,6 +27,17 @@ def agent_modal_about_locale_map(agent: Agent) -> dict | None:
         return None
 
 
+def team_roster_about_locale_map(agent: Agent) -> dict | None:
+    """About for team roster: group modal when present, else collaboration instructions in ``en``."""
+    modal_about = agent_modal_about_locale_map(agent)
+    if modal_about is not None:
+        return modal_about
+    text = (agent.collaboration_instructions or "").strip()
+    if not text:
+        return None
+    return {"en": text, "pt": None, "es": None}
+
+
 def official_agent_modal_presentation_payload(modal) -> dict:
     """Presentation for official agent APIs; locale maps for frontend (DB fields unchanged)."""
     return {
@@ -254,9 +265,9 @@ def _resolve_agent_mcp(agent: Agent, mcp_name: str, system_slug: str | None) -> 
     return mcp_qs.first(), None
 
 
-def _labeled_mcp_config(mcp, mcp_config: dict) -> dict:
+def _labeled_mcp_config(mcp, mcp_config: dict) -> dict | None:
     if not mcp_config:
-        return mcp_config
+        return None
     name_to_label = {opt.name: opt.label for opt in mcp.config_options.all()}
     return {name_to_label.get(name, name): value for name, value in mcp_config.items()}
 
@@ -290,7 +301,11 @@ def team_roster_selected_mcp_payload(integrated: IntegratedAgent) -> dict | None
     system_slug = integrated.metadata.get("system")
     mcp, system_obj = _resolve_agent_mcp(integrated.agent, mcp_name, system_slug)
 
-    result: dict = {"name": mcp_name, "config": _labeled_mcp_config(mcp, mcp_config) if mcp else mcp_config}
+    if mcp:
+        config = _labeled_mcp_config(mcp, mcp_config)
+    else:
+        config = None if not mcp_config else mcp_config
+    result: dict = {"name": mcp_name, "config": config}
     if mcp:
         result["description"] = _mcp_description_locale_map(mcp)
 
@@ -328,7 +343,7 @@ class TeamRosterAgentSerializer(serializers.ModelSerializer):
         return inline_agent_list_display_name(obj.agent)
 
     def get_about(self, obj):
-        return agent_modal_about_locale_map(obj.agent)
+        return team_roster_about_locale_map(obj.agent)
 
     def get_is_official(self, obj):
         return obj.agent.is_official

@@ -225,6 +225,10 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertNotIn("description", row)
         self.assertNotIn("mcp", row)
         self.assertIsNone(row["mcps"])
+        self.assertEqual(
+            row["about"],
+            {"en": "Test Agent Description", "pt": None, "es": None},
+        )
 
     def test_get_team_excludes_inactive_integrated_agents(self):
         """Agents with is_active=False on IntegratedAgent do not appear in team list."""
@@ -294,12 +298,12 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertNotIn("presentation", row)
         self.assertIsNone(row["mcps"])
 
-    def test_get_team_about_null_without_group(self):
+    def test_get_team_about_from_collaboration_instructions_without_group(self):
         agent = InlineAgent.objects.create(
             name="No Group Agent",
             slug="no_group_team_agent",
             instruction="Test",
-            collaboration_instructions="Test",
+            collaboration_instructions="Custom agent about text",
             foundation_model="model:version",
             project=self.project,
         )
@@ -313,7 +317,10 @@ class TeamViewsetSetTestCase(TestCase):
         response.render()
         content = json.loads(response.content)
         row = content["agents"][0]
-        self.assertIsNone(row.get("about"))
+        self.assertEqual(
+            row["about"],
+            {"en": "Custom agent about text", "pt": None, "es": None},
+        )
 
     def test_get_team_mcp_description_locale_map(self):
         """Team rows expose only the configured MCP inside ``mcps`` (one-element array)."""
@@ -357,6 +364,7 @@ class TeamViewsetSetTestCase(TestCase):
         self.assertEqual(len(row["mcps"]), 1)
         mcp_payload = row["mcps"][0]
         self.assertEqual(mcp_payload["name"], "Team Catalog MCP")
+        self.assertIsNone(mcp_payload["config"])
         self.assertEqual(mcp_payload["system"], system.name)
         desc = mcp_payload["description"]
         self.assertEqual(desc["en"], "English MCP")
