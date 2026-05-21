@@ -108,3 +108,20 @@ class ConversationsRESTClient(RestClient):
             url = urljoin(self.base_url, next_url) if next_url else None
 
         return all_results
+
+    def export_conversations_csv(self, project_uuid: str, target_date: str | None = None):
+        """
+        POST export endpoint; returns the raw requests.Response (CSV body + headers).
+        """
+        endpoint = f"/api/v1/projects/{project_uuid}/conversations/export/"
+        payload = {}
+        if target_date is not None:
+            payload["target_date"] = target_date
+        response = requests.post(
+            self._get_url(endpoint),
+            headers={**self.headers, "Content-Type": "application/json"},
+            json=payload,
+            timeout=120,
+        )
+        response.raise_for_status()
+        return response
