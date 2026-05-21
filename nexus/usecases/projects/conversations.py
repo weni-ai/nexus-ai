@@ -83,6 +83,10 @@ class ConversationsUsecase:
             serializer.is_valid(raise_exception=True)
             return serializer.data
 
+    def export_conversations_csv(self, project_uuid: str, target_date: str | None = None):
+        """POST CSV export; returns raw requests.Response (body + headers)."""
+        return self.client.export_conversations_csv(project_uuid, target_date=target_date)
+
     def extract_error_message(self, response):
         """Extract error message from HTTP response."""
         error_message = str(response)
