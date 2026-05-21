@@ -13,7 +13,7 @@ class ConversationsRESTClient(RestClient):
 
     def _get_url(self, endpoint: str) -> str:
         assert endpoint.startswith("/"), "the endpoint needs to start with: /"
-        return self.base_url + endpoint
+        return self.base_url.rstrip("/") + endpoint
 
     @property
     def headers(self):

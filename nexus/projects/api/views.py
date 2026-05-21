@@ -357,6 +357,10 @@ class ConversationsProxyView(APIView):
 class ConversationsExportProxyView(APIView):
     permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usecase = ConversationsUsecase()
+
     def post(self, request, *args, **kwargs):
         """
         Proxy endpoint to export conversations CSV from the Conversations service.
@@ -385,21 +389,16 @@ class ConversationsExportProxyView(APIView):
             return self._handle_generic_error(e, project_uuid)
 
     def _call_conversations_export(self, project_uuid, payload):
-        base_url = settings.CONVERSATIONS_REST_ENDPOINT.rstrip("/")
-        endpoint = f"/api/v1/projects/{project_uuid}/conversations/export/"
-        url = base_url + endpoint
-        headers = {
-            "Authorization": f"Bearer {settings.CONVERSATIONS_TOKEN}",
-            "Content-Type": "application/json",
-        }
-        response = requests.post(url, headers=headers, json=payload, timeout=120)
-        response.raise_for_status()
-        return response
+        return self.usecase.export_conversations_csv(
+            project_uuid,
+            target_date=payload.get("target_date"),
+        )
 
     def _build_csv_response(self, upstream):
         response = HttpResponse(
             upstream.content,
             content_type=upstream.headers.get("Content-Type", "text/csv; charset=utf-8"),
+            status=upstream.status_code,
         )
         for header in ("Content-Disposition", "X-Export-Row-Count", "X-Export-Target-Date"):
             if header in upstream.headers:
