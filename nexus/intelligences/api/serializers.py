@@ -52,6 +52,74 @@ class ContentBaseTextSerializer(serializers.ModelSerializer):
         fields = ["text", "uuid"]
 
 
+class ContentBaseTextListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentBaseText
+        fields = ["uuid", "title", "last_updated_at"]
+
+
+class ContentBaseTextDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContentBaseText
+        fields = ["uuid", "title", "last_updated_at", "text"]
+
+
+class InlineContentBaseTextWriteSerializer(serializers.Serializer):
+    text = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    title = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=100)
+
+    def validate(self, attrs):
+        is_create = self.context.get("is_create", False)
+        initial = getattr(self, "initial_data", None) or {}
+
+        if is_create:
+            text = attrs.get("text")
+            if text is None or not str(text).strip():
+                raise serializers.ValidationError({"text": "This field may not be blank."})
+            attrs["text"] = str(text).strip()
+
+            title = attrs.get("title")
+            if title is None or not str(title).strip():
+                attrs["title"] = "Untitled"
+            else:
+                attrs["title"] = str(title).strip()[:100]
+            return attrs
+
+        if not initial:
+            raise serializers.ValidationError("At least one of text or title is required.")
+
+        has_text_key = "text" in initial
+        has_title_key = "title" in initial
+        if not has_text_key and not has_title_key:
+            raise serializers.ValidationError("At least one of text or title is required.")
+
+        effective_change = False
+
+        if has_text_key:
+            text = attrs.get("text")
+            if text is None or not str(text).strip():
+                raise serializers.ValidationError({"text": "This field may not be blank."})
+            attrs["text"] = str(text).strip()
+            effective_change = True
+        else:
+            attrs.pop("text", None)
+
+        if has_title_key:
+            title = attrs.get("title")
+            if title is None or not str(title).strip():
+                attrs.pop("title", None)
+            else:
+                attrs["title"] = str(title).strip()[:100]
+                effective_change = True
+        else:
+            attrs.pop("title", None)
+
+        if not effective_change:
+            raise serializers.ValidationError("At least one of text or title is required.")
+
+        return attrs
+
+
 class ContentBaseFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContentBaseFile

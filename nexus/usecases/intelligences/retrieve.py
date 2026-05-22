@@ -20,7 +20,6 @@ from .get_by_uuid import (
     get_by_contentbasetext_uuid,
     get_by_intelligence_uuid,
     get_default_content_base_by_project,
-    get_integrated_intelligence_by_project,
 )
 
 
@@ -75,11 +74,11 @@ class RetrieveContentBaseTextUseCase:
             raise IntelligencePermissionDenied()
         return get_by_contentbasetext_uuid(contentbasetext_uuid)
 
-    def get_inline_contentbasetext(self, project_uuid: str):
-        integrated_intelligence = get_integrated_intelligence_by_project(project_uuid)
-        intelligence = integrated_intelligence.intelligence
-        content_base = intelligence.contentbases.first()
-        return ContentBaseText.objects.get(content_base=content_base)
+    def get_inline_contentbasetext(self, project_uuid: str, contentbasetext_uuid: str):
+        from nexus.usecases.intelligences.get_by_uuid import get_default_content_base_by_project
+
+        content_base = get_default_content_base_by_project(project_uuid)
+        return ContentBaseText.objects.get(uuid=contentbasetext_uuid, content_base=content_base)
 
 
 class RetrieveContentBaseFileUseCase:

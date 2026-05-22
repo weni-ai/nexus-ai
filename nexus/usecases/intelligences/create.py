@@ -127,12 +127,18 @@ class CreateContentBaseTextUseCase:
             raise IntelligencePermissionDenied()
 
         contentbase = intelligences.get_by_contentbase_uuid(content_base_dto.uuid)
+        from django.utils import timezone as django_timezone
+
+        now = django_timezone.now()
+        title = content_base_text_dto.title if content_base_text_dto.title else "Untitled"
         contentbasetext = ContentBaseText.objects.create(
             text=content_base_text_dto.text,
             content_base=contentbase,
             created_by=user,
             file=content_base_text_dto.file,
             file_name=content_base_text_dto.file_name,
+            title=title,
+            last_updated_at=now,
         )
         return contentbasetext
 
