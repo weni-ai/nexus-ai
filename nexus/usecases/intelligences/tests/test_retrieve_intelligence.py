@@ -83,6 +83,30 @@ class TestRetrieveContentBaseUseCase(TestCase):
             self.usecase.get_default_by_project(project_uuid=self.project.uuid, user_email=self.user.email)
 
 
+class TestRetrieveInlineContentBaseTextUseCase(TestCase):
+    def setUp(self):
+        self.integrated = IntegratedIntelligenceFactory()
+        self.integrated.intelligence.is_router = True
+        self.integrated.intelligence.save(update_fields=["is_router"])
+        self.project = self.integrated.project
+        self.router = ContentBaseFactory(
+            intelligence=self.integrated.intelligence,
+            created_by=self.integrated.created_by,
+            is_router=True,
+        )
+        self.contentbasetext = ContentBaseTextFactory(
+            content_base=self.router, created_by=self.integrated.created_by
+        )
+        self.usecase = RetrieveContentBaseTextUseCase()
+
+    def test_get_inline_contentbasetext_by_uuid(self):
+        retrieved = self.usecase.get_inline_contentbasetext(
+            project_uuid=str(self.project.uuid),
+            contentbasetext_uuid=str(self.contentbasetext.uuid),
+        )
+        self.assertEqual(retrieved.uuid, self.contentbasetext.uuid)
+
+
 class TestRetrieveContentBaseTextUseCase(TestCase):
     def setUp(self):
         self.contentbasetext = ContentBaseTextFactory()
