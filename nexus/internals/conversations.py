@@ -87,6 +87,20 @@ class ConversationsRESTClient(RestClient):
             timeout=45,
         )
         response.raise_for_status()
+        return response
+
+    def post_flows_db_cohort_reconcile(self, project_uuid: str, payload: dict):
+        """
+        Queue async Flows vs DB cohort reconcile on the conversations service (202 + job_id).
+        ``payload`` must include recipient_email, flows_api_token, date_start, date_end, etc.
+        """
+        endpoint = f"/api/v1/projects/{project_uuid}/flows-db-cohort/"
+        response = requests.post(
+            self._get_url(endpoint),
+            headers={**self.headers, "Content-Type": "application/json"},
+            json=payload,
+            timeout=60,
+        )
         return response.json()
 
     def get_topics(self, project_uuid: str):

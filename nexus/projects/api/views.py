@@ -529,3 +529,89 @@ class ConversationDetailProxyView(APIView):
         )
         self.usecase.send_to_sentry(project_uuid, None, error_message, None, exception=e)
         return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class FlowsDbCohortReconcileProxyView(APIView):
+    """
+    Queue Flows vs DB cohort reconcile on the conversations service.
+    Injects ``recipient_email`` from the authenticated Nexus user.
+    """
+
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usecase = ConversationsUsecase()
+
+    def post(self, request, *args, **kwargs):
+        project_uuid = kwargs.get("project_uuid")
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        recipient_email = getattr(request.user, "email", None)
+        if not recipient_email:
+            return Response(
+                {"error": "Authenticated user has no email address"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        payload = dict(request.data)
+        payload.pop("recipient_email", None)
+        payload["recipient_email"] = recipient_email
+
+        try:
+            upstream = self.usecase.queue_flows_db_cohort_reconcile(project_uuid, payload)
+            try:
+                body = upstream.json()
+            except ValueError:
+                body = {"detail": upstream.text or upstream.reason}
+            return Response(body, status=upstream.status_code)
+        except requests.exceptions.HTTPError as e:
+            return self._handle_http_error(e, project_uuid)
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            requests.exceptions.RequestException,
+            Exception,
+        ) as e:
+            return self._handle_generic_error(e, project_uuid)
+
+    def _handle_http_error(self, e, project_uuid):
+        status_code = e.response.status_code if e.response else 500
+        try:
+            error_message, error_details = self.usecase.extract_error_message(e.response)
+        except Exception:
+            error_message = str(e)
+            error_details = None
+
+        if status_code != 404:
+            self.usecase.send_to_sentry(project_uuid, status_code, error_message, error_details, exception=e)
+
+        if status_code == 400:
+            return Response(error_details or {"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
+        if status_code == 404:
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+        if status_code == 502:
+            return Response(error_details or {"error": error_message}, status=status.HTTP_502_BAD_GATEWAY)
+        if status_code == 504:
+            return Response(error_details or {"error": error_message}, status=status.HTTP_504_GATEWAY_TIMEOUT)
+
+        logger.error(
+            "Flows DB cohort proxy error for project %s: status=%s message=%s",
+            project_uuid,
+            status_code,
+            error_message,
+            exc_info=True,
+        )
+        return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _handle_generic_error(self, e, project_uuid):
+        error_message = str(e)
+        logger.error(
+            "Flows DB cohort proxy error for project %s: %s",
+            project_uuid,
+            error_message,
+            exc_info=True,
+        )
+        self.usecase.send_to_sentry(project_uuid, None, error_message, None, exception=e)
+        return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

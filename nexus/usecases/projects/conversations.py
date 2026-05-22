@@ -101,6 +101,12 @@ class ConversationsUsecase:
 
         return error_message, error_details
 
+    def queue_flows_db_cohort_reconcile(self, project_uuid: str, payload: dict):
+        """
+        Queue reconcile on conversations MS. Returns the raw ``requests.Response`` (expect 202).
+        """
+        return self.client.post_flows_db_cohort_reconcile(project_uuid, payload)
+
     def send_to_sentry(self, project_uuid, status_code, error_message, error_details, exception=None):
         """Centralized method to send error information to Sentry."""
         sentry_sdk.set_tag("project_uuid", project_uuid)
