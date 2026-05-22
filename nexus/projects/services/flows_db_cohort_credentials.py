@@ -9,7 +9,7 @@ _CACHE_PREFIX = "flows_db_cohort:token:"
 
 
 def _default_ttl() -> int:
-    hard = int(getattr(settings, "FLOWS_DB_COHORT_EMAIL_CELERY_TIME_LIMIT", 3600))
+    hard = int(getattr(settings, "FLOWS_DB_COHORT_TASK_TIME_LIMIT", 3600))
     return hard + 300
 
 

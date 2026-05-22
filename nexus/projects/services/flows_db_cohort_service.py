@@ -15,20 +15,20 @@ from nexus.internals.conversations import ConversationsRESTClient
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_FLOWS_BASE_URL = "https://flows.weni.ai/api/v2/events.json"
 MAX_RECONCILE_DAY_SECONDS = 86_400
+FLOWS_EVENTS_PATH = "/api/v2/events.json"
 
 
-def _flows_base_url() -> str:
-    return getattr(settings, "FLOWS_EVENTS_API_URL", DEFAULT_FLOWS_BASE_URL)
+def _flows_events_url() -> str:
+    """Build events API URL from ``FLOWS_REST_ENDPOINT`` (same base as other Flows clients)."""
+    base = str(getattr(settings, "FLOWS_REST_ENDPOINT", "") or "").rstrip("/")
+    if not base:
+        base = "https://flows.weni.ai"
+    return f"{base}{FLOWS_EVENTS_PATH}"
 
 
-def _flows_http_timeout() -> int:
-    return int(getattr(settings, "FLOWS_DB_COHORT_FLOWS_HTTP_TIMEOUT", 300))
-
-
-def _cohort_http_timeout() -> int:
-    return int(getattr(settings, "FLOWS_DB_COHORT_COHORT_HTTP_TIMEOUT", 300))
+def _http_timeout() -> int:
+    return int(getattr(settings, "FLOWS_DB_COHORT_HTTP_TIMEOUT", 300))
 
 
 def _format_api_instant(dt: pendulum.DateTime) -> str:
@@ -133,7 +133,7 @@ def fetch_db_cohort_export(
         date_start=cfg["date_start"],
         date_end=cfg["date_end"],
         apply_terminal_cohort_filter=bool(cfg.get("apply_terminal_cohort_filter", True)),
-        timeout=_cohort_http_timeout(),
+        timeout=_http_timeout(),
     )
 
 
@@ -167,7 +167,7 @@ def _validate_flows_pagination_params(cfg: dict[str, Any]) -> tuple[str, int, in
 
 def _read_flows_events_page(url: str, req: Request) -> list[Any]:
     try:
-        with urlopen(req, timeout=_flows_http_timeout()) as resp:
+        with urlopen(req, timeout=_http_timeout()) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
         try:
             payload = json.loads(raw)
@@ -255,7 +255,7 @@ def fetch_flows_cohort(cfg: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[
     if cfg.get("use_date_end", True):
         base_params["date_end"] = cfg["date_end"]
 
-    flows_base_url = _flows_base_url()
+    flows_base_url = _flows_events_url()
     auth_prefix = (cfg.get("authorization_prefix") or "Token").strip()
 
     cohort, page_idx, counts = _collect_flow_cohort_pages(

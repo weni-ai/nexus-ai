@@ -41,7 +41,7 @@ class TestFlowsDbCohortReconcileProxyView(_PermissionTestBase):
         self.assertEqual(recipient, self.authorized_user.email)
         self.assertEqual(cfg["project"], str(self.project_uuid))
         self.assertNotIn("flows_api_token", cfg)
-        mock_store_token.assert_called_once_with(task_id, "secret", timeout=3900)
+        mock_store_token.assert_called_once_with(task_id, "secret", timeout=3900)  # TASK_TIME_LIMIT 3600 + 300
 
     def test_internal_permission_grants_access_when_project_denied(self, mock_apply_async):
         mock_apply_async.return_value = mock.Mock(id="celery-job-internal")

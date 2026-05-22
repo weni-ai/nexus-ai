@@ -580,8 +580,8 @@ class FlowsDbCohortReconcileProxyView(APIView):
         cfg = _flows_db_cohort_build_cfg(project_uuid, data)
         flows_api_token = cfg.pop("flows_api_token")
 
-        celery_soft = int(getattr(django_settings, "FLOWS_DB_COHORT_EMAIL_CELERY_SOFT_TIME_LIMIT", 3500))
-        celery_hard = int(getattr(django_settings, "FLOWS_DB_COHORT_EMAIL_CELERY_TIME_LIMIT", 3600))
+        celery_hard = int(getattr(django_settings, "FLOWS_DB_COHORT_TASK_TIME_LIMIT", 3600))
+        celery_soft = max(celery_hard - 100, 60)
 
         from uuid import uuid4
 
