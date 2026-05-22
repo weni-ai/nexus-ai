@@ -578,12 +578,21 @@ class FlowsDbCohortReconcileProxyView(APIView):
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
         cfg = _flows_db_cohort_build_cfg(project_uuid, data)
+        flows_api_token = cfg.pop("flows_api_token")
 
         celery_soft = int(getattr(django_settings, "FLOWS_DB_COHORT_EMAIL_CELERY_SOFT_TIME_LIMIT", 3500))
         celery_hard = int(getattr(django_settings, "FLOWS_DB_COHORT_EMAIL_CELERY_TIME_LIMIT", 3600))
 
-        async_res = reconcile_flows_db_cohort_email_task.apply_async(
+        from uuid import uuid4
+
+        from nexus.projects.services.flows_db_cohort_credentials import store_flows_api_token
+
+        job_id = str(uuid4())
+        store_flows_api_token(job_id, flows_api_token, timeout=celery_hard + 300)
+
+        reconcile_flows_db_cohort_email_task.apply_async(
             args=[cfg, recipient_email],
+            task_id=job_id,
             soft_time_limit=celery_soft,
             time_limit=celery_hard,
         )
@@ -591,7 +600,7 @@ class FlowsDbCohortReconcileProxyView(APIView):
         return Response(
             {
                 "status": "queued",
-                "job_id": async_res.id,
+                "job_id": job_id,
                 "project_id": str(project_uuid),
                 "recipient_email": recipient_email,
                 "requested_range": {

@@ -16,8 +16,9 @@ class TestFlowsDbCohortReconcileProxyView(_PermissionTestBase):
         self.view = FlowsDbCohortReconcileProxyView.as_view()
         self.url = f"/api/v2/{self.project_uuid}/flows-db-cohort"
 
-    def test_project_permission_queues_local_task(self, mock_apply_async):
-        mock_apply_async.return_value = mock.Mock(id="celery-job-abc")
+    @mock.patch("nexus.projects.services.flows_db_cohort_credentials.store_flows_api_token")
+    def test_project_permission_queues_local_task(self, mock_store_token, mock_apply_async):
+        mock_apply_async.return_value = mock.Mock()
 
         request = self.factory.post(
             self.url,
@@ -32,13 +33,15 @@ class TestFlowsDbCohortReconcileProxyView(_PermissionTestBase):
         response = self.view(request, project_uuid=self.project_uuid)
 
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
-        self.assertEqual(response.data["job_id"], "celery-job-abc")
+        task_id = mock_apply_async.call_args.kwargs["task_id"]
+        self.assertEqual(response.data["job_id"], task_id)
         self.assertEqual(response.data["recipient_email"], self.authorized_user.email)
         mock_apply_async.assert_called_once()
-        cfg, recipient = mock_apply_async.call_args[0][0]
+        cfg, recipient = mock_apply_async.call_args.kwargs["args"]
         self.assertEqual(recipient, self.authorized_user.email)
         self.assertEqual(cfg["project"], str(self.project_uuid))
-        self.assertEqual(cfg["flows_api_token"], "secret")
+        self.assertNotIn("flows_api_token", cfg)
+        mock_store_token.assert_called_once_with(task_id, "secret", timeout=3900)
 
     def test_internal_permission_grants_access_when_project_denied(self, mock_apply_async):
         mock_apply_async.return_value = mock.Mock(id="celery-job-internal")

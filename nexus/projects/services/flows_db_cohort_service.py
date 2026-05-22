@@ -62,7 +62,7 @@ def parse_api_utc(s: str) -> pendulum.DateTime:
     if not raw:
         raise ValueError("empty datetime")
     try:
-        return pendulum.parse(raw).in_timezone("UTC")
+        return pendulum.parse(raw, tz="UTC").in_timezone("UTC")
     except Exception as e:
         raise ValueError(f"bad datetime: {s}") from e
 
@@ -172,11 +172,16 @@ def _read_flows_events_page(url: str, req: Request) -> list[Any]:
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError as e:
-            logger.warning("[flows_db_cohort] Invalid JSON from Flows url=%s body=%s", url, raw[:500])
+            logger.warning(
+                "[flows_db_cohort] Invalid JSON from Flows url=%s response_bytes=%s",
+                url,
+                len(raw),
+            )
             raise URLError(f"Invalid JSON response from Flows: {e}") from e
     except HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace") if e.fp else ""
-        logger.warning("[flows_db_cohort] HTTPError %s url=%s body=%s", e.code, url, body[:500])
+        if e.fp:
+            e.read()
+        logger.warning("[flows_db_cohort] HTTPError %s url=%s", e.code, url)
         raise
     except URLError as e:
         logger.warning("[flows_db_cohort] URLError url=%s err=%s", url, e)
