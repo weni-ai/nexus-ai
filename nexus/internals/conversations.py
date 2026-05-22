@@ -87,7 +87,7 @@ class ConversationsRESTClient(RestClient):
             timeout=45,
         )
         response.raise_for_status()
-        return response
+        return response.json()
 
     def post_flows_db_cohort_reconcile(self, project_uuid: str, payload: dict):
         """
@@ -101,7 +101,8 @@ class ConversationsRESTClient(RestClient):
             json=payload,
             timeout=60,
         )
-        return response.json()
+        response.raise_for_status()
+        return response
 
     def get_topics(self, project_uuid: str):
         """Fetch all topics for a project, iterating through all pages."""
