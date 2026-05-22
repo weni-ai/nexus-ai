@@ -1,0 +1,9 @@
+<p>Flows vs database reconciliation finished.</p>
+<p><strong>Overall status:</strong> {{ report.overall_status }}</p>
+<ul>
+  <li><strong>Project:</strong> {{ report.project_id }}</li>
+  <li><strong>Range:</strong> {{ report.requested_range.from_inclusive }} – {{ report.requested_range.to_inclusive }}</li>
+  <li><strong>Days processed:</strong> {{ report.days_in_range }}</li>
+</ul>
+<p><strong>Report (JSON):</strong></p>
+<pre>{{ report_json }}</pre>

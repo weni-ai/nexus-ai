@@ -1,43 +1,23 @@
 from unittest import mock
-from uuid import uuid4
 
+from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import force_authenticate
 
 from nexus.projects.api.tests.test_conversations_proxy_permissions import _PermissionTestBase
 from nexus.projects.api.views import FlowsDbCohortReconcileProxyView
 
-QUEUED_RESPONSE = {
-    "status": "queued",
-    "job_id": "celery-job-abc",
-    "project_id": str(uuid4()),
-    "recipient_email": "owner@example.com",
-    "requested_range": {
-        "from_inclusive": "2026-01-10T00:00:00Z",
-        "to_inclusive": "2026-01-10T23:59:59Z",
-    },
-}
 
-
-def _build_post_response(json_data, status_code=202):
-    resp = mock.Mock()
-    resp.status_code = status_code
-    resp.json.return_value = json_data
-    resp.text = ""
-    resp.reason = "Accepted"
-    resp.raise_for_status.return_value = None
-    return resp
-
-
-@mock.patch("nexus.internals.conversations.ConversationsRESTClient.post_flows_db_cohort_reconcile")
+@mock.patch("nexus.projects.tasks.reconcile_flows_db_cohort_email_task.apply_async")
+@override_settings(CELERY_TASK_ALWAYS_EAGER=False)
 class TestFlowsDbCohortReconcileProxyView(_PermissionTestBase):
     def setUp(self):
         super().setUp()
         self.view = FlowsDbCohortReconcileProxyView.as_view()
         self.url = f"/api/v2/{self.project_uuid}/flows-db-cohort"
 
-    def test_project_permission_grants_access(self, mock_post):
-        mock_post.return_value = _build_post_response({**QUEUED_RESPONSE, "project_id": self.project_uuid})
+    def test_project_permission_queues_local_task(self, mock_apply_async):
+        mock_apply_async.return_value = mock.Mock(id="celery-job-abc")
 
         request = self.factory.post(
             self.url,
@@ -52,13 +32,16 @@ class TestFlowsDbCohortReconcileProxyView(_PermissionTestBase):
         response = self.view(request, project_uuid=self.project_uuid)
 
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
-        mock_post.assert_called_once()
-        _project_uuid, payload = mock_post.call_args[0]
-        self.assertEqual(payload["recipient_email"], self.authorized_user.email)
-        self.assertIn("flows_api_token", payload)
+        self.assertEqual(response.data["job_id"], "celery-job-abc")
+        self.assertEqual(response.data["recipient_email"], self.authorized_user.email)
+        mock_apply_async.assert_called_once()
+        cfg, recipient = mock_apply_async.call_args[0][0]
+        self.assertEqual(recipient, self.authorized_user.email)
+        self.assertEqual(cfg["project"], str(self.project_uuid))
+        self.assertEqual(cfg["flows_api_token"], "secret")
 
-    def test_internal_permission_grants_access_when_project_denied(self, mock_post):
-        mock_post.return_value = _build_post_response({**QUEUED_RESPONSE, "project_id": self.project_uuid})
+    def test_internal_permission_grants_access_when_project_denied(self, mock_apply_async):
+        mock_apply_async.return_value = mock.Mock(id="celery-job-internal")
 
         request = self.factory.post(
             self.url,
@@ -73,11 +56,9 @@ class TestFlowsDbCohortReconcileProxyView(_PermissionTestBase):
         response = self.view(request, project_uuid=self.project_uuid)
 
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
-        mock_post.assert_called_once()
-        _project_uuid, payload = mock_post.call_args[0]
-        self.assertEqual(payload["recipient_email"], self.internal_user.email)
+        mock_apply_async.assert_called_once()
 
-    def test_no_permission_returns_403(self, mock_post):
+    def test_no_permission_returns_403(self, mock_apply_async):
         request = self.factory.post(
             self.url,
             {
@@ -91,9 +72,9 @@ class TestFlowsDbCohortReconcileProxyView(_PermissionTestBase):
         response = self.view(request, project_uuid=self.project_uuid)
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        mock_post.assert_not_called()
+        mock_apply_async.assert_not_called()
 
-    def test_unauthenticated_returns_401(self, mock_post):
+    def test_unauthenticated_returns_401(self, mock_apply_async):
         request = self.factory.post(
             self.url,
             {
@@ -106,4 +87,22 @@ class TestFlowsDbCohortReconcileProxyView(_PermissionTestBase):
         response = self.view(request, project_uuid=self.project_uuid)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        mock_post.assert_not_called()
+        mock_apply_async.assert_not_called()
+
+    def test_user_without_email_returns_400(self, mock_apply_async):
+        request = self.factory.post(
+            self.url,
+            {
+                "flows_api_token": "secret",
+                "date_start": "2026-01-10T00:00:00Z",
+                "date_end": "2026-01-10T23:59:59Z",
+            },
+            format="json",
+        )
+        user = self.authorized_user
+        user.email = ""
+        force_authenticate(request, user=user)
+        response = self.view(request, project_uuid=self.project_uuid)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_apply_async.assert_not_called()

@@ -1,0 +1,7 @@
+Flows vs database reconciliation failed.
+
+Project: {{ project_id }}
+Range: {{ date_start }} – {{ date_end }}
+
+Error:
+{{ error_message }}
