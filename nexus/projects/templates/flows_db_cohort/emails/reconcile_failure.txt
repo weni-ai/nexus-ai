@@ -1,7 +1,11 @@
-Flows vs database reconciliation failed.
+Olá,
 
-Project: {{ project_id }}
-Range: {{ date_start }} – {{ date_end }}
+Não foi possível concluir a reconciliação entre Flows e o banco de conversas.
 
-Error:
+Projeto: {{ project_id }}
+Período: {{ date_start }} – {{ date_end }}
+
+Erro:
 {{ error_message }}
+
+A equipe técnica foi notificada automaticamente para investigar o problema.

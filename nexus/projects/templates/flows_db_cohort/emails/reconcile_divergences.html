@@ -1,0 +1,16 @@
+<p>Olá,</p>
+<p>A reconciliação entre Flows e o banco de conversas encontrou <strong>divergências</strong> no período abaixo.</p>
+<ul>
+  <li><strong>Projeto:</strong> {{ project_id }}</li>
+  <li><strong>Período:</strong> {{ range_from }} – {{ range_to }}</li>
+  <li><strong>Dias analisados:</strong> {{ days_in_range }}</li>
+</ul>
+{% for item in divergent_days %}
+<h3>Dia {{ item.day }}</h3>
+<ul>
+  {% for line in item.bullets %}
+  <li>{{ line }}</li>
+  {% endfor %}
+</ul>
+{% endfor %}
+<p>Revise os itens acima e trate as inconsistências indicadas. A equipe técnica dispõe do relatório completo no Sentry para análise detalhada.</p>

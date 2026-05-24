@@ -1,9 +1,0 @@
-Flows vs database reconciliation finished.
-
-Overall status: {{ report.overall_status }}
-Project: {{ report.project_id }}
-Range: {{ report.requested_range.from_inclusive }} – {{ report.requested_range.to_inclusive }}
-Days processed: {{ report.days_in_range }}
-
-Report (JSON):
-{{ report_json }}

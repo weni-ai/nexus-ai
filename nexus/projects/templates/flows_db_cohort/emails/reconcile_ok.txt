@@ -1,0 +1,11 @@
+Olá,
+
+A reconciliação entre os eventos de classificação do Flows e as conversas registradas no banco foi concluída para o período informado.
+
+Resultado: não foram identificadas divergências entre Flows e banco de dados (IDs ausentes em um dos lados ou diferença de início/fim das conversas).
+
+Projeto: {{ project_id }}
+Período analisado: {{ range_from }} – {{ range_to }}
+Dias analisados: {{ days_in_range }}
+
+Nenhuma ação é necessária com base nesta verificação.
