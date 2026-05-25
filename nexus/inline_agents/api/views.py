@@ -806,9 +806,16 @@ class OfficialAgentsV1(OfficialAgentAssignmentMixin, APIView):
                 return Response({"error": str(e)}, status=404)
 
         try:
+            from nexus.usecases.inline_agents.assign import resolve_assignment_mcp_fields
+
+            agent = Agent.objects.prefetch_related(_INLINE_AGENT_MCP_PREFETCH).get(uuid=real_agent_uuid)
+            mcp, mcp_config, system = resolve_assignment_mcp_fields(agent, mcp, mcp_config, system)
+
             created, integrated_agent = usecase.assign_agent(real_agent_uuid, project_uuid)
             self._update_agent_metadata(integrated_agent, mcp, mcp_config, system)
             return {"assigned": True, "assigned_created": created, "real_agent_uuid": real_agent_uuid}
+        except Agent.DoesNotExist:
+            return Response({"error": "Agent not found"}, status=404)
         except ValueError as e:
             return Response({"error": str(e)}, status=404)
 

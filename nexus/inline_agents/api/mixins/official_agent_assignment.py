@@ -18,14 +18,14 @@ class OfficialAgentAssignmentMixin:
     def _update_agent_metadata(self, integrated_agent, mcp, mcp_config, system) -> None:
         if not (mcp or mcp_config or system):
             return
-        if not integrated_agent.metadata:
-            integrated_agent.metadata = {}
+        metadata = dict(integrated_agent.metadata or {})
         if mcp:
-            integrated_agent.metadata["mcp"] = mcp
-        if mcp_config:
-            integrated_agent.metadata["mcp_config"] = mcp_config
+            metadata["mcp"] = mcp
+        if mcp_config is not None:
+            metadata["mcp_config"] = dict(mcp_config)
         if system:
-            integrated_agent.metadata["system"] = system
+            metadata["system"] = system
+        integrated_agent.metadata = metadata
         integrated_agent.save(update_fields=["metadata"])
 
     def _handle_credentials(
