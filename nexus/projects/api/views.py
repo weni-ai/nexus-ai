@@ -5,6 +5,7 @@ from uuid import UUID
 import requests
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import HttpResponse
 from rest_framework import serializers, status, views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -350,6 +351,91 @@ class ConversationsProxyView(APIView):
         error_message = str(e)
         logger.error(f"Error fetching conversations for project {project_uuid}: {error_message}", exc_info=True)
         self.usecase.send_to_sentry(project_uuid, None, error_message, None, exception=e)
+        return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ConversationsExportProxyView(APIView):
+    permission_classes = [IsAuthenticated, ProjectPermission | InternalCommunicationPermission]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usecase = ConversationsUsecase()
+
+    def post(self, request, *args, **kwargs):
+        """
+        Proxy endpoint to export conversations CSV from the Conversations service.
+        Authenticated users need project permission; the upstream call uses CONVERSATIONS_TOKEN.
+        """
+        project_uuid = kwargs.get("project_uuid")
+        if not project_uuid:
+            return Response({"error": "project_uuid is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        payload = {}
+        target_date = request.data.get("target_date")
+        if target_date is not None:
+            payload["target_date"] = target_date
+
+        try:
+            upstream = self._call_conversations_export(project_uuid, payload)
+            return self._build_csv_response(upstream)
+        except requests.exceptions.HTTPError as e:
+            return self._handle_http_error(e, project_uuid)
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            requests.exceptions.RequestException,
+            Exception,
+        ) as e:
+            return self._handle_generic_error(e, project_uuid)
+
+    def _call_conversations_export(self, project_uuid, payload):
+        return self.usecase.export_conversations_csv(
+            project_uuid,
+            target_date=payload.get("target_date"),
+        )
+
+    def _build_csv_response(self, upstream):
+        response = HttpResponse(
+            upstream.content,
+            content_type=upstream.headers.get("Content-Type", "text/csv; charset=utf-8"),
+            status=upstream.status_code,
+        )
+        for header in ("Content-Disposition", "X-Export-Row-Count", "X-Export-Target-Date"):
+            if header in upstream.headers:
+                response[header] = upstream.headers[header]
+        return response
+
+    def _handle_http_error(self, e, project_uuid):
+        if e.response is None:
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+            body = {"error": "Internal server error"}
+        else:
+            status_code = e.response.status_code
+            content_type = e.response.headers.get("Content-Type", "")
+            if "application/json" in content_type:
+                try:
+                    body = e.response.json()
+                except ValueError:
+                    body = {"error": "Internal server error"}
+            else:
+                body = {"error": "Internal server error"}
+
+        logger.error(
+            "Conversations export failed for project %s: status_code=%s body=%s",
+            project_uuid,
+            status_code,
+            body,
+            exc_info=True,
+        )
+        return Response(body, status=status_code)
+
+    def _handle_generic_error(self, e, project_uuid):
+        logger.error(
+            "Error exporting conversations for project %s: %s",
+            project_uuid,
+            e,
+            exc_info=True,
+        )
         return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
