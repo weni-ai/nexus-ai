@@ -10,6 +10,7 @@ from nexus.inline_agents.api.official_agents_helpers import (
 )
 from nexus.inline_agents.models import Agent, AgentCredential, AgentSystem, IntegratedAgent
 from nexus.task_managers.file_database.s3_file_database import s3FileDatabase
+from nexus.usecases.inline_agents.assign import infer_single_active_mcp_selection
 
 
 def agent_modal_about_locale_map(agent: Agent) -> dict | None:
@@ -293,12 +294,19 @@ def team_roster_selected_mcp_payload(integrated: IntegratedAgent) -> dict | None
     if not integrated.metadata:
         return None
 
+    mcp_config = integrated.metadata.get("mcp_config") or {}
     mcp_name = integrated.metadata.get("mcp")
+    system_slug = integrated.metadata.get("system")
+
+    if not mcp_name and mcp_config:
+        inferred_mcp, inferred_system = infer_single_active_mcp_selection(integrated.agent)
+        if inferred_mcp:
+            mcp_name = inferred_mcp
+            if not system_slug and inferred_system:
+                system_slug = inferred_system
+
     if not mcp_name:
         return None
-
-    mcp_config = integrated.metadata.get("mcp_config", {})
-    system_slug = integrated.metadata.get("system")
     mcp, system_obj = _resolve_agent_mcp(integrated.agent, mcp_name, system_slug)
 
     if mcp:
@@ -326,13 +334,14 @@ class TeamRosterAgentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = IntegratedAgent
-        fields = ["uuid", "slug", "name", "about", "is_official", "mcps", "active"]
+        fields = ["uuid", "slug", "name", "about", "group", "is_official", "mcps", "active"]
 
     active = serializers.BooleanField(source="is_active", read_only=True)
     uuid = serializers.UUIDField(source="agent.uuid")
     slug = serializers.SerializerMethodField()
     name = serializers.SerializerMethodField()
     about = serializers.SerializerMethodField()
+    group = serializers.SerializerMethodField()
     is_official = serializers.SerializerMethodField()
     mcps = serializers.SerializerMethodField()
 
@@ -344,6 +353,11 @@ class TeamRosterAgentSerializer(serializers.ModelSerializer):
 
     def get_about(self, obj):
         return team_roster_about_locale_map(obj.agent)
+
+    def get_group(self, obj):
+        if getattr(obj.agent, "group_id", None):
+            return obj.agent.group.slug
+        return None
 
     def get_is_official(self, obj):
         return obj.agent.is_official

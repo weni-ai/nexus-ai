@@ -6,6 +6,22 @@ from nexus.inline_agents.models import MCP, Agent, AgentCredential, IntegratedAg
 from nexus.projects.models import Project
 
 
+def infer_single_active_mcp_selection(agent: Agent) -> tuple[str | None, str | None]:
+    """Return (mcp_name, system_slug) when the agent has exactly one active MCP."""
+    prefetched = getattr(agent, "_prefetched_objects_cache", {}).get("mcps")
+    if prefetched is None:
+        mcps = list(agent.mcps.filter(is_active=True).select_related("system"))
+    else:
+        mcps = [mcp for mcp in prefetched if mcp.is_active]
+
+    if len(mcps) != 1:
+        return None, None
+
+    mcp = mcps[0]
+    system_slug = mcp.system.slug if mcp.system_id else None
+    return mcp.name, system_slug
+
+
 def _apply_unique_mcp_metadata_to_integrated_agent(integrated_agent: IntegratedAgent, agent: Agent) -> bool:
     """When the agent has exactly one active MCP, set metadata mcp/system (same keys as v1 official assign)."""
     prefetched = getattr(agent, "_prefetched_objects_cache", {}).get("mcps")
