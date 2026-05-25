@@ -89,6 +89,32 @@ class ConversationsRESTClient(RestClient):
         response.raise_for_status()
         return response.json()
 
+    def get_reconcile_cohort(
+        self,
+        project_uuid: str,
+        *,
+        date_start: str,
+        date_end: str,
+        apply_terminal_cohort_filter: bool = True,
+        timeout: int = 300,
+    ) -> dict:
+        """
+        Fetch DB cohort rows for Flows reconcile (internal conversations endpoint).
+        """
+        endpoint = f"/api/v1/projects/{project_uuid}/reconcile-cohort/"
+        response = requests.get(
+            self._get_url(endpoint),
+            headers=self.headers,
+            params={
+                "date_start": date_start,
+                "date_end": date_end,
+                "apply_terminal_cohort_filter": apply_terminal_cohort_filter,
+            },
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+
     def get_topics(self, project_uuid: str):
         """Fetch all topics for a project, iterating through all pages."""
         endpoint = f"/api/v1/projects/{project_uuid}/topics/"
